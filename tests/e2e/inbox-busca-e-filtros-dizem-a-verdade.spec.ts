@@ -134,5 +134,26 @@ test("trocar de aba logo após digitar NÃO volta à aba anterior", async ({ pag
 test('a aba "Fechadas" mostra número', async ({ page }) => {
   // Ela existia sem contador nenhum. Num inbox antigo é o número que diz o
   // tamanho do arquivo, e a ausência fazia a aba parecer um lugar vazio.
+  //
+  // ⚠️ O badge NÃO mostra zero, e isso é deliberado — vale para todas as abas,
+  // senão cada aba vazia carregaria um zero. Então o teste precisa criar a sua
+  // conversa fechada: torcer para o ambiente ter uma é o que fazia este caso
+  // reprovar um produto correto em banco fresco.
+  //
+  // E ele CRIA a sua em vez de fechar uma existente. Este Supabase é
+  // compartilhado entre frentes; fechar conversa alheia muda o mundo de outra
+  // spec, e o estrago apareceria longe daqui.
+  const aberta = await page.request.post("/api/v1/conversations/open-with-contact", {
+    data: { phone_number: `+5511${Date.now().toString().slice(-9)}`, name: "Arquivo do teste" },
+  });
+  expect(aberta.ok(), await aberta.text()).toBe(true);
+  const { data: conversa } = await aberta.json();
+
+  const fechada = await page.request.patch(`/api/v1/conversations/${conversa.id}`, {
+    data: { status: "closed" },
+  });
+  expect(fechada.ok(), await fechada.text()).toBe(true);
+
+  await page.reload();
   await expect(page.getByRole("tab", { name: /Fechadas/i })).toHaveText(/\d/);
 });
