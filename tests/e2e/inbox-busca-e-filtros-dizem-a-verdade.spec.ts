@@ -33,6 +33,21 @@ import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 
 const CAMPO_DE_BUSCA = "Buscar conversas";
 
+/**
+ * ⏱️ 60s, e o número saiu de MEDIÇÃO — não de chute.
+ *
+ * O `beforeEach` loga com MFA, e o helper de login espera a próxima janela do
+ * TOTP quando o código anterior já foi usado: até 30 segundos parados antes de a
+ * tela fazer qualquer coisa. O teto padrão do Playwright são 30s e ele mede o
+ * teste INTEIRO, login incluso — então a espera do relógio consome a prova.
+ *
+ * No CI de 2026-09-13 as durações foram 4.1s · 29.7s · 29.7s · 30.7s✘ · 6.3s ·
+ * 22.1s · 30.8s✘ · 6.6s. Os dois vermelhos estouraram o teto com a asserção mal
+ * tendo começado, e o mesmo caso passou em 6.3s quando a janela do TOTP caiu a
+ * favor. Não é o produto: é o relógio.
+ */
+test.describe.configure({ timeout: 60_000 });
+
 test.beforeEach(async ({ page }) => {
   await loginComoAdmin(page, lerCreds());
   await page.goto("/app/inbox");
@@ -147,9 +162,12 @@ test('a aba "Fechadas" mostra número', async ({ page }) => {
     data: { phone_number: `+5511${Date.now().toString().slice(-9)}`, name: "Arquivo do teste" },
   });
   expect(aberta.ok(), await aberta.text()).toBe(true);
+  // `open-with-contact` devolve `{ conversation_id, contact_id }` — NAO um `id`.
+  // Supor `id` produzia `invalid input syntax for type uuid: "undefined"`, e o
+  // erro chegava como 500 do banco, longe da causa. Medido no CI em 2026-09-13.
   const { data: conversa } = await aberta.json();
 
-  const fechada = await page.request.patch(`/api/v1/conversations/${conversa.id}`, {
+  const fechada = await page.request.patch(`/api/v1/conversations/${conversa.conversation_id}`, {
     data: { status: "closed" },
   });
   expect(fechada.ok(), await fechada.text()).toBe(true);
