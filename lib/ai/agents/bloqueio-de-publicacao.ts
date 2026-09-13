@@ -80,7 +80,7 @@ export type MotivoDeBloqueio =
   | { codigo: "numero_desconectado"; estado: string };
 
 /**
- * O canal está de pé? O banco grava `WORKING` em maiúsculas (é o enum do WAHA) e
+ * O canal está de pé? O banco grava `WORKING` em maiúsculas (é o enum do provider do canal) e
  * parte do produto normaliza para minúsculas — as duas formas são o mesmo estado,
  * e exigir só uma delas reprovaria um número que está atendendo.
  */
