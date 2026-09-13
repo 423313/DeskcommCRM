@@ -30,7 +30,7 @@ const DIR_CRON = join(RAIZ, "app", "api", "v1", "cron");
 // do cron à internet da VPS. A cerca continua a mesma; só a fonte da verdade do
 // "o que roda" mudou de arquivo.
 const CRONTAB = join(RAIZ, "docker", "scheduler", "entrypoint.sh");
-const VERCEL_JSON = join(RAIZ, "vercel.json");
+const VERCEL_TS = join(RAIZ, "vercel.ts");
 
 /** As rotas que existem, lidas do disco — não de uma lista mantida à mão. */
 function rotasNoCodigo(): string[] {
@@ -78,24 +78,15 @@ describe("rotas de cron × agendamento no self-host", () => {
   });
 });
 
-function rotasNoVercelJson(): string[] {
-  const raw = JSON.parse(readFileSync(VERCEL_JSON, "utf8")) as {
-    crons?: { path: string }[];
-  };
-  return [
-    ...new Set(
-      (raw.crons ?? []).map((c) => {
-        const nome = c.path.match(/\/api\/v1\/cron\/([a-z0-9-]+)/)?.[1];
-        if (!nome) throw new Error(`cron path fora do contrato: ${c.path}`);
-        return nome;
-      }),
-    ),
-  ].sort();
+function rotasNoVercelTs(): string[] {
+  const fonte = readFileSync(VERCEL_TS, "utf8");
+  const achadas = fonte.matchAll(/path:\s*"\/api\/v1\/cron\/([a-z0-9-]+)"/g);
+  return [...new Set([...achadas].map((m) => m[1]!))].sort();
 }
 
 describe("rotas de cron × agendamento no Vercel Pro", () => {
-  it("vercel.json agenda as mesmas rotas do scheduler", () => {
-    expect(rotasNoVercelJson()).toEqual(rotasAgendadas());
+  it("vercel.ts agenda as mesmas rotas do scheduler", () => {
+    expect(rotasNoVercelTs()).toEqual(rotasAgendadas());
   });
 
   it("documenta o CRON_SECRET da Vercel — senão o Pro agenda e a rota responde 403", () => {
