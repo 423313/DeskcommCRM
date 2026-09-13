@@ -60,6 +60,32 @@ interface Props {
 export function InboxFilters({ value, onChange }: Props) {
   const t = useT();
   const [searchInput, setSearchInput] = useState(value.search);
+  /**
+   * O campo escuta o valor de FORA — e só ele.
+   *
+   * O estado do campo é próprio porque o debounce mora nele. O preço era não
+   * saber quando o filtro morria por outro caminho: "Limpar filtros" zerava a
+   * busca aplicada e deixava o termo escrito na tela, mostrando uma busca que
+   * não valia mais — a mesma mentira de tela que esta entrega existe para matar.
+   *
+   * A ref guarda o que ESTE campo propagou. Valor de fora diferente dela = a
+   * mudança veio de outro lugar, e o campo adota. Igual = foi o próprio campo, e
+   * adotar atropelaria quem continuou digitando.
+   *
+   * ⚠️ O QUE O TESTE ALCANÇA, E O QUE NÃO. Tirar este efeito reprova o primeiro
+   * caso de `tests/unit/limpar-filtros-limpa-o-campo.test.tsx` — medido. Já a
+   * marca lá embaixo, no timer, NÃO é alcançada por teste determinístico: ela
+   * defende a corrida entre o timer disparar e este efeito rodar, e nessa fresta
+   * o teste nunca consegue digitar. Medido também: sabotá-la deixa os dois casos
+   * verdes. Está escrito aqui em vez de fingir cobertura que não existe.
+   */
+  const propagado = useRef(value.search);
+  useEffect(() => {
+    if (value.search !== propagado.current) {
+      propagado.current = value.search;
+      setSearchInput(value.search);
+    }
+  }, [value.search]);
   const { data: channels } = useChannelSessions({ refetchInterval: 30_000 });
   const { activeOrg } = useAuth();
   const { data: tagVocabulary } = useConversationTagVocabulary(activeOrg?.orgId ?? null);
@@ -134,6 +160,11 @@ export function InboxFilters({ value, onChange }: Props) {
     const t = setTimeout(() => {
       const atual = valorRef.current;
       if (searchInput !== atual.search) {
+        // Marca ANTES de propagar: se o efeito de sincronização rodar depois de
+        // a pessoa ter digitado mais uma tecla, ele veria o valor que ESTE campo
+        // acabou de mandar e o adotaria por cima do que já está na tela. Sem
+        // teste que alcance — ver o aviso no efeito lá em cima.
+        propagado.current = searchInput;
         onChangeRef.current({ ...atual, search: searchInput });
       }
     }, 250);
