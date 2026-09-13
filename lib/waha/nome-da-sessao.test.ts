@@ -12,7 +12,7 @@ describe("nome da sessão WAHA", () => {
 
   it("o nome novo cabe no DTO e no pattern do WAHA", () => {
     const nome = nomeWahaNovo(ORG, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-    expect(nome).toBe("org_52d2a0d0b31d4563a9431411da81728f_aaaaaaaabbbbcccc");
+    expect(nome).toBe("org_52d2a0d0_aaaaaaaabbbbccccddddeeeeeeeeeeee");
     expect(nome.length).toBeLessThanOrEqual(TETO_NOME_WAHA);
     expect(cabeNoWaha(nome)).toBe(true);
   });

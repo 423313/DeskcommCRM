@@ -16,9 +16,9 @@ export function cabeNoWaha(nome: string): boolean {
   return nome.length <= TETO_NOME_WAHA && PADRAO_NOME_WAHA.test(nome);
 }
 
-/** `org_` + org sem hífen (32) + `_` + 16 hex = 53, abaixo do teto. */
+/** Mesmo formato da 0232 no banco: `org_` + 8 hex da org + `_` + uuid sem hífen = 45. */
 export function nomeWahaNovo(orgId: string, uniq = randomUUID()): string {
-  const org = orgId.replaceAll("-", "");
-  const sufixo = uniq.replaceAll("-", "").slice(0, 16);
+  const org = orgId.replaceAll("-", "").slice(0, 8);
+  const sufixo = uniq.replaceAll("-", "");
   return `org_${org}_${sufixo}`;
 }
