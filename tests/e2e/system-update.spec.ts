@@ -337,7 +337,13 @@ test("quando a atualização falha, a tela nomeia a versão certa, mostra o log 
   await loginWithTotp(page, creds.users.dono!.email, creds.dono_totp!.secret);
   await page.goto("/app/settings/atualizacao");
   await page.getByRole("button", { name: /atualizar agora/i }).click();
-  await expect(page.getByRole("heading", { name: /atualizando para a versão 1\.1\.0/i })).toBeVisible();
+  // ⛔ NÃO é "Atualizando para a versão 1.1.0". O clique registra um PEDIDO; quem
+  // executa é o agente no host, que confere de poucos em poucos minutos — e a
+  // tela passou a dizer isso com todas as letras em vez de afirmar trabalho que
+  // ainda não começou. A versão de destino continua nomeada, que é o que este
+  // teste vigia.
+  await expect(page.getByRole("heading", { name: /pedido enviado/i })).toBeVisible();
+  await expect(page.getByText(/Anotei o pedido de atualizar para a versão/)).toContainText("1.1.0");
 
   // ── Falha COM rollback ─────────────────────────────────────────────────────
   const primeiro = await heartbeat(request, { latest_version: "1.1.0" });
@@ -388,7 +394,7 @@ test("quando a atualização falha, a tela nomeia a versão certa, mostra o log 
   await heartbeat(request, { current_version: "1.1.0", latest_version: "1.2.0" });
   await page.reload();
   await page.getByRole("button", { name: /atualizar agora/i }).click();
-  await expect(page.getByRole("heading", { name: /atualizando para a versão 1\.2\.0/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /pedido enviado/i })).toBeVisible();
 
   const segundo = await heartbeat(request, { current_version: "1.1.0", latest_version: "1.2.0" });
   expect(segundo.data.update_requested).toBe(true);
@@ -419,7 +425,7 @@ test("quando a atualização falha, a tela nomeia a versão certa, mostra o log 
   await page.getByRole("button", { name: /atualizar agora/i }).click();
   // Espera a tela confirmar o pedido antes de bater o heartbeat: sem isso, o
   // agente simulado corre com o POST do clique e não acha run nenhum.
-  await expect(page.getByRole("heading", { name: /atualizando para a versão 1\.2\.0/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /pedido enviado/i })).toBeVisible();
   const terceiro = await heartbeat(request, { current_version: "1.1.0", latest_version: "1.2.0" });
   await runResult(
     request,
