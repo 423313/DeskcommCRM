@@ -382,6 +382,17 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 
+if (env.NODE_ENV === "production") {
+  const vercelCron = process.env.CRON_SECRET?.trim();
+  if (vercelCron) {
+    // ponytail: Vercel Cron só manda Bearer CRON_SECRET. Sem copiar, o Pro
+    // agenda e a rota responde 403. Teto: se os dois segredos precisarem ser
+    // distintos, as rotas passam a aceitar os dois numa lista — INTERNAL_SECRET
+    // continua valendo como fallback nas rotas.
+    env.INTERNAL_CRON_SECRET = vercelCron;
+  }
+}
+
 // Soft warning for env-gated AI keys (worker degrades gracefully but operators
 // should know when the bot is silent for config reasons).
 // `OPENROUTER_API_KEY` entra na condição porque `isAiGatewayConfigured()`
