@@ -464,6 +464,41 @@ test.describe("datas do compromisso seguem idioma e fuso próprios", () => {
   });
 });
 
+test("ir para a Agenda pelo menu apaga o cliente da conversa — \"Novo agendamento\" não herda", async ({
+  page,
+}) => {
+  // ⛔ O DEFEITO RELATADO (instalação real, 2026-09-12): "Novo agendamento"
+  // abria com um contato JÁ selecionado, herdado de uma abertura anterior
+  // feita a partir da conversa dele. Quem não reparasse marcaria o compromisso
+  // no nome de outra pessoa — o campo parece preenchido de propósito.
+  //
+  // ⚠️ O gesto tem de ser a NAVEGAÇÃO PELO MENU, não `page.goto`: recarregar a
+  // página remonta o componente e zeraria o estado por acidente, verdejando o
+  // teste com o defeito de pé. `/app/agenda?contato=…` e `/app/agenda` são a
+  // MESMA rota do App Router — só a query muda, e é por isso que o cliente
+  // sobrevivia.
+  //
+  // O irmão desta prova é o caso acima ("Inbox marca cliente/conversa"), que
+  // exige o contrário: fechar o painel para navegar a grade NÃO pode perder o
+  // cliente que a conversa deu. Os dois juntos são a regra inteira.
+  const f = await fixture(),
+    p = await person(f, "Cliente que não pode vazar");
+  await inbound(f, p, "Preciso marcar uma consulta");
+  await login(page, f.email);
+  await page.goto(`/app/inbox/${p.conversation}`);
+  await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
+  await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();
+  await expect(page.getByLabel("Quem será atendido")).toHaveValue(p.contact);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("painel-de-marcacao")).toBeHidden();
+
+  await page.getByRole("link", { name: "Agenda", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/app\/agenda$/);
+  await page.getByRole("button", { name: /novo agendamento/i }).click();
+  await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();
+  await expect(page.getByLabel("Quem será atendido")).toHaveValue("");
+});
+
 test("gestão configura prazos e gatilho; falta inicia uma vez e resposta interrompe", async ({
   page,
 }) => {
