@@ -13,21 +13,54 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { agendaStallGate } from "./before-send";
+import { agendaStallGate, type GateContext } from "./before-send";
+import { PACING_DEFAULTS } from "../pacing/defaults";
+import { SPINNING_DEFAULTS } from "../spinning/defaults";
 import { temFerramentaDeAgenda } from "../agent/inbound-turn";
 
 // As duas frases medidas em produção que deram origem ao gate.
 const PROMESSA = "Vou verificar o horário e já te aviso!";
 const CONFIRMOU = "Prontinho, seu horário está confirmado para quinta!";
 
+/**
+ * `baseCtx` é próprio deste arquivo, pela mesma razão escrita em
+ * `tests/unit/gate-agenda-stall.test.ts`: sem fixture compartilhada de
+ * `GateContext`, para um gate não herdar o contexto calibrado para outro.
+ *
+ * A versão original deste helper devolvia `{ agenda, body } as Parameters<…>[0]`,
+ * e o `tsc` recusava (TS2352, "neither type sufficiently overlaps"). O cast
+ * escondia duas coisas ao mesmo tempo: faltavam `now`, `optedOut`, `provider` e
+ * mais nove campos obrigatórios, e sobrava `body` DENTRO de `agenda`, que a
+ * interface não tem. O defeito não apareceu no CI do PR porque a execução dele
+ * nunca chegou a rodar — foi a medição do lote que o revelou.
+ */
 function ctx(over: {
   active: boolean;
   podeMarcar: boolean;
   toolCalledThisTurn: boolean;
   body: string;
-}) {
-  // O gate só lê `agenda` e `body`; o resto do GateContext não participa.
-  return { agenda: over, body: over.body } as Parameters<typeof agendaStallGate.evaluate>[0];
+}): GateContext {
+  const { body, ...agenda } = over;
+  return {
+    now: new Date("2026-09-14T12:00:00Z"),
+    body,
+    optedOut: false,
+    provider: "waha",
+    pacing: {
+      knobs: PACING_DEFAULTS,
+      state: { lastSentAt: null, sentToday: 0, numberActivatedAt: null },
+      crmDailyLimit: null,
+    },
+    spinning: { knobs: SPINNING_DEFAULTS, window: [] },
+    promise: { table: null },
+    semanticPromise: null,
+    disclosure: { template: null, isFirstOutbound: false, mode: "inject" },
+    lgpd: null,
+    casesEnabled: false,
+    hasOpenCase: false,
+    openedCaseThisTurn: false,
+    agenda,
+  };
 }
 
 describe("temFerramentaDeAgenda", () => {
