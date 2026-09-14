@@ -18,12 +18,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { audit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { GET } from "./route";
 
 vi.mock("@/lib/auth/requirePlatformAdmin", () => ({ requirePlatformAdmin: vi.fn() }));
+vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+
+const USER = "11111111-1111-4111-8111-111111111111";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const OUTRA_ORG = "33333333-3333-4333-8333-333333333333";
@@ -112,7 +116,8 @@ function chamar(id: string) {
 
 beforeEach(() => {
   vi.mocked(requirePlatformAdmin).mockReset();
-  vi.mocked(requirePlatformAdmin).mockResolvedValue({} as never);
+  vi.mocked(requirePlatformAdmin).mockResolvedValue({ user: { id: USER } } as never);
+  vi.mocked(audit).mockClear();
   vi.mocked(createAdminClient).mockReset();
   vi.mocked(createAdminClient).mockReturnValue(banco() as never);
 });
@@ -221,5 +226,29 @@ describe("GET /api/v1/admin/tenants/[id]/agents", () => {
     const corpo = await res.json();
 
     expect(corpo.data.agents).toEqual([]);
+  });
+
+  it("audita a leitura com o ator real e a organização visitada", async () => {
+    await chamar(ORG);
+
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "platform_admin.tenant_agents_viewed",
+        actorUserId: USER,
+        actingAsPlatformAdmin: true,
+        bypassedRls: true,
+        organizationId: ORG,
+        resourceType: "organization",
+        resourceId: ORG,
+      }),
+    );
+  });
+
+  it("não audita quando a guarda recusa", async () => {
+    vi.mocked(requirePlatformAdmin).mockRejectedValue(new Error("nope"));
+
+    await chamar(ORG);
+
+    expect(vi.mocked(audit)).not.toHaveBeenCalled();
   });
 });

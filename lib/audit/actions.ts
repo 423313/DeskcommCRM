@@ -494,6 +494,10 @@ export const AUDIT_ACTIONS = [
   // um bloqueio não há como saber nem uma coisa nem outra.
   "voice.opt_in_changed",
   "voice.session_unpaired",
+  // Visão de plataforma sobre o agente de um cliente (fase A da spec 19). Entra
+  // porque toda leitura de `admin/` é auditada neste repo — e porque aqui o
+  // operador enxerga o agente publicado na organização de outra pessoa.
+  "platform_admin.tenant_agents_viewed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

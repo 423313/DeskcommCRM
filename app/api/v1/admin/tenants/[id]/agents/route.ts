@@ -25,7 +25,8 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { audit } from "@/lib/audit";
+import { requirePlatformAdmin, type PlatformAdminContext } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const paramsSchema = z.object({ id: z.string().uuid() });
@@ -65,8 +66,9 @@ export interface TenantAgentsResponse {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = randomUUID();
 
+  let adminCtx: PlatformAdminContext;
   try {
-    await requirePlatformAdmin();
+    adminCtx = await requirePlatformAdmin();
   } catch {
     return fail("forbidden", "Platform admin required", 403, { requestId });
   }
@@ -147,6 +149,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       published_version_id: id,
       published_version: id ? (versoes[id] ?? null) : null,
     };
+  });
+
+  // Toda leitura de `admin/` é auditada neste repo, e o motivo vale aqui: o
+  // operador acabou de olhar o agente que atende os clientes de outra pessoa.
+  void audit({
+    action: "platform_admin.tenant_agents_viewed",
+    actorUserId: adminCtx.user.id,
+    actingAsPlatformAdmin: true,
+    bypassedRls: true,
+    organizationId: orgId,
+    resourceType: "organization",
+    resourceId: orgId,
+    requestId,
+    metadata: { agents: lista.length },
   });
 
   return ok<TenantAgentsResponse>({ organization_id: orgId, agents: lista }, { requestId });
