@@ -8,6 +8,179 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.23.0] — 2026-09-14
+
+### Adicionado
+
+- **A navegação responde na hora, e a atualização para quando o backup falha** Clicar numa aba do menu deixou de parecer que a tela travou. Uma barra fina
+  aparece no topo no instante do clique e acompanha o carregamento, então você
+  sabe que o sistema ouviu — antes, entre o clique e a página aparecer não havia
+  sinal nenhum, e a reação natural era clicar de novo.
+
+  As telas de dentro do sistema também abrem mais rápido: as consultas que toda
+  página precisa fazer (quem é você, de qual empresa, quais conexões estão fora do
+  ar) passaram a ser feitas ao mesmo tempo em vez de uma esperando a outra, e
+  deixaram de ser repetidas dentro da mesma página. No banco, as buscas de
+  histórico por contato e por conexão ganharam índices — quem tem muita mensagem
+  guardada sente a diferença nas telas de conversa e no expurgo de dados da LGPD.
+
+  O `update.sh` ficou mais cuidadoso com os seus dados. Quando o backup preventivo
+  falha, a atualização agora PARA: se você estiver acompanhando pelo terminal, ela
+  pergunta e só segue se você digitar `CONTINUAR`; se for o agente do servidor
+  atualizando sozinho, ela cancela e avisa. Antes ela esperava oito segundos e
+  seguia sem backup. O `restore.sh` passou a devolver também as sessões do
+  WhatsApp guardadas no backup, não só o banco — restaurar deixou de exigir parear
+  o QR Code de novo.
+
+  E duas portas ficaram mais firmes: subir imagem para cabeçalho de modelo do
+  WhatsApp agora confere o conteúdo do arquivo, não o rótulo que o navegador
+  mandou (um SVG renomeado para `.png` entrava e agora é recusado), e passou a
+  exigir permissão de atendente; as rotas internas de manutenção comparam a senha
+  de acesso em tempo constante.
+
+  Contribuição de @maugarciasa.
+
+- **As automações agora enxergam a agenda** O motor de automações já sabia mandar WhatsApp, esperar, checar condição e
+  registrar o que fez. O que ele não enxergava era a agenda: nenhum dos gatilhos
+  disponíveis vinha de um horário marcado. Quem queria avisar a cliente que o
+  horário foi confirmado tinha o motor, tinha o envio, e não tinha o fato.
+
+  Quatro gatilhos novos aparecem no seletor de automações:
+
+  - Quando um horário for marcado
+  - Quando um horário pendente for confirmado
+  - Quando um horário for remarcado
+  - Quando um horário for cancelado
+
+  As condições podem filtrar pelo tipo de atendimento (com "contém", então
+  "Manutenção" pega todas as manutenções) e pelas tags do contato. As ações são as
+  mesmas de sempre, a de mandar mensagem no WhatsApp inclusive.
+
+  Quem já tem automações não precisa fazer nada: as regras existentes continuam
+  como estavam.
+
+- **Outro sistema já pode enviar mensagem pelo seu WhatsApp, usando um token** Até agora, enviar uma mensagem pela API exigia estar logado no navegador. Um
+  sistema externo não conseguia, mesmo com um token válido: a porta respondia
+  "não autenticado" antes de olhar o token.
+
+  Enviar uma mensagem e abrir uma conversa a partir de um telefone passam a
+  aceitar também um token de servidor, o mesmo que já era usado para consultar
+  contatos. A organização continua saindo do token, nunca do que foi enviado no
+  pedido, então um token de uma empresa não alcança a conversa de outra. Token
+  de leitura continua sem poder enviar.
+
+  Quem usa o sistema pela tela não vê diferença nenhuma.
+
+- **O atendimento aberto pelo assistente diz do que trata** Na lista de atendimentos, cada item agora começa dizendo o assunto: horário,
+  dúvida, algo deu errado, pagamento, acesso. O assistente classifica ao abrir.
+
+  Serve para quem abre a fila separar antes de ler — "alguém quer marcar horário"
+  e "alguém está reclamando" pedem pessoas e pressas diferentes.
+
+  A lista de assuntos é curta de propósito. O detalhe do pedido continua no título
+  e no resumo, escritos com as palavras do próprio cliente; o assunto é só para
+  triar.
+
+  Atendimentos abertos antes desta versão aparecem como "Outro".
+
+- **O pedido que ninguém confirmou solta o horário** Quando um tipo de atendimento pede confirmação, o pedido do cliente já reserva o
+  horário: ele some da lista de horários livres e ninguém mais consegue marcar ali.
+  É o que faz o modo "o cliente pede, uma pessoa confirma" funcionar.
+
+  Faltava o outro lado disso. Um pedido que ninguém abriu segurava a agenda para
+  sempre, e o efeito era igualzinho ao de agenda cheia: o próximo cliente ouvia
+  "não tenho horário" por causa de um pedido esquecido.
+
+  Agora existe um prazo. Passado ele sem decisão, o horário volta a ser oferecido.
+  O padrão é 24 horas, e dá para mudar em Agenda, no mesmo lugar dos outros prazos.
+
+  Duas coisas que **não** acontecem quando o prazo vence: o cliente não recebe
+  nenhum aviso, e o pedido dele continua na fila para ser atendido. O que expira é
+  a reserva do horário, não o pedido.
+
+### Corrigido
+
+- **"Novo agendamento" deixa de vir com o cliente da vez anterior, e a lista de horários volta a rolar** Duas coisas na tela de agendamento, medidas numa instalação real.
+
+  **O compromisso podia nascer no nome da pessoa errada.** Quem abrisse "Marcar compromisso" de dentro de uma conversa e depois fosse à **Agenda pelo menu** encontrava o campo **Quem será atendido** já preenchido com aquele cliente. O campo parece preenchido de propósito; não há o que estranhar na tela. Agora o painel abre com o cliente que a **página** carrega: vindo do menu, ele abre em **"Compromisso pessoal, sem cliente"**; vindo do link da conversa, ele continua abrindo com aquele cliente, mesmo que você feche o painel para navegar o calendário até a semana certa.
+
+  **A lista de horários voltou a rolar.** Numa correção anterior, o painel perdeu o limite de altura para que a janela parasse de **cortar os botões** em telas baixas — e, sem limite, a lista de horários passou a crescer sem fim: um tipo de 45 minutos rende treze horários e uma janela maior que a tela. Agora a lista tem limite próprio, proporcional à altura da janela, e rola dentro de si em telas de computador. No celular nada muda: quem rola continua sendo a janela inteira.
+
+  Nada muda para quem opera: sem passo manual, sem mexer em configuração.
+
+- **A agenda no celular abre no dia, e dá para criar cliente sem sair da marcação** Quem abre a agenda no celular via a semana inteira espremida: sete colunas em
+  uma tela de 360 pixels davam cerca de 44 pixels por dia, e errar o toque era o
+  normal. Agora o celular abre no dia, com a coluna ocupando a tela toda — o alvo
+  do toque ficou quase cinco vezes mais largo. No computador nada muda: a semana
+  continua inteira.
+
+  Duas coisas que não funcionavam passam a funcionar:
+
+  Tocar num compromisso abre o detalhe dele. Antes o toque não fazia nada, e só
+  dava para abrir vindo do histórico ou do radar.
+
+  Quando você busca um cliente que ainda não está cadastrado, aparece um "Criar"
+  com o nome que você digitou. O cadastro abre ali mesmo e o cliente volta já
+  escolhido. Antes era preciso abandonar a marcação, ir até Contatos, cadastrar,
+  voltar e começar de novo.
+
+- **Token de servidor não alcança mais a conversa de outra empresa** A porta de saída de mensagem do sistema conferia só o número da conversa, nunca
+  a empresa dona dela. Para quem envia pela tela isso nunca foi problema: o banco
+  já filtra por empresa nesse caminho. Mas quem envia por token de servidor — o
+  agente de IA por MCP, e agora as integrações — entra por um caminho em que esse
+  filtro do banco não existe, e o único cuidado possível é o do próprio sistema.
+  Ele faltava.
+
+  Na prática: um token de uma empresa, com o número de uma conversa de outra,
+  gravava e disparava a mensagem pelo WhatsApp da segunda. Agora a conversa de
+  outra empresa responde "não encontrada", e nada é gravado.
+
+  Quem usa o sistema pela tela não vê diferença nenhuma.
+
+- **Gravar espera o servidor em vez de dizer "Erro inesperado"** Ação que grava e passava de 10 segundos virava "Erro inesperado" na tela
+  enquanto o servidor terminava e gravava. Agora espera 30. Leitura segue em 10.
+
+- **O sistema não fica mais preso em "Algo deu errado" quando o Supabase repete requisições antigas** Uma instalação inteira ficou dois dias mostrando "Algo deu errado" em todas as
+  telas. O banco estava saudável; o que travou foi a camada de API do Supabase: o
+  gateway dela repetia sem parar oito requisições antigas do motor de follow-up
+  que terminavam em erro, e essas repetições ocuparam todas as conexões da API.
+  Sem conexão livre, a API não conseguia nem se preparar para atender, e passou a
+  responder "indisponível" para tudo, inclusive para a tela inicial.
+
+  Agora o banco reconhece uma requisição que o gateway está repetindo há mais de
+  cinco minutos e a recusa de um jeito que o gateway não repete. O loop morre na
+  hora e a API volta sozinha. Nada muda para quem usa o sistema, e você não
+  precisa fazer nada ao atualizar: a proteção entra com o próprio `update.sh`.
+
+- **Logo escuro/colorido não some mais no tema escuro** Um logo pensado para fundo claro (a maioria do que se sobe em `/admin/marca`
+  e `/app/settings/marca`) ficava ilegível no tema escuro: o fundo da barra
+  lateral e da tela de entrada é quase preto (`--color-surface` escuro), e um
+  logo escuro sobre quase-preto não tem contraste nenhum.
+
+  Agora a barra lateral, a tela de entrada e a prévia da própria tela de marca
+  mostram o logo sobre um chip branco arredondado quando o tema é escuro — a
+  mesma lógica que já existe para o texto dos botões, aplicada ao logo. No tema
+  claro nada muda: o chip só aparece quando o fundo por trás dele é escuro.
+
+  Quem já tinha um logo pensado para fundo escuro (raro, mas possível) passa a
+  ver uma moldura branca de sobra em vez de nada — troca aceita, porque o pior
+  caso "moldura desnecessária" é sempre melhor que o pior caso "logo invisível".
+
+- **O identificador da conexão de WhatsApp nasce num lugar só e cabe no limite** O botão "Conectar novo WhatsApp", na Central de Conexões, falhava sempre com "Falha na comunicação
+  com o WhatsApp (WAHA)". O identificador interno que o sistema manda para o WhatsApp saía com 69
+  caracteres, e o WhatsApp recusa acima de 54, então a conexão nem chegava a ser criada do outro lado
+  e o card ficava em "Parado" pedindo reparo. O onboarding escapava porque montava o identificador
+  curto por conta própria, num segundo lugar do código.
+
+  A versão anterior já corrigiu o identificador no banco e arrumou as conexões paradas que ainda
+  tinham o nome longo. Agora o formato curto é um só, usado pelas duas telas — onboarding e
+  Conexões —, e o sistema confere o limite antes de falar com o WhatsApp: se o identificador ainda
+  estiver longo, ele é trocado na hora **apenas** quando o número nunca chegou a ser pareado; num
+  número que já pareou, a conexão para com um aviso próprio em vez de trocar o identificador — trocar
+  ali desligaria o sistema do WhatsApp que está no ar e exigiria um QR novo.
+
+  Nada muda para quem já tem número conectado.
+
 ## [1.22.0] — 2026-09-14
 
 ### Adicionado
@@ -4208,7 +4381,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.22.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.23.0...HEAD
+[1.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.19.0...v1.20.0
