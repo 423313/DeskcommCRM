@@ -48,9 +48,15 @@ descrito nas skills `deskcomm-cliente-novo` e `deskcomm-metricas`.
    `duplicateAgentWithVersion` resolve a versão de origem **dentro da mesma organização**
    (`pickSourceVersion(admin, orgId, agentId)`). Copiar de uma organização-modelo para a organização
    do cliente é uma mudança real numa função compartilhada, não reuso puro. Ver §3.
-6. **A agência hospeda.** O console opera N organizações numa instalação da agência — um tenant por
-   cliente —, e não uma instalação por cliente com console local (dono do produto, 2026-09-13). Se
-   um cliente exigir hospedar os próprios dados, isso é outra spec, não uma variação desta.
+6. **Quem hospeda — EM ABERTO, e a §1.2 anterior contradizia a doutrina do repo.** A v0.1 fechou "a
+   agência hospeda N organizações numa instalação". A referência de agência do **próprio repo** diz
+   o contrário: _"Se a agência opera vários clientes, o modelo suportado é **uma instalação por
+   cliente** (VPS + Supabase + domínio próprios). Várias organizações numa instalação só existe
+   para quem administra a plataforma inteira."_ — e dá o motivo: _"misturar clientes numa VPS
+   mistura número, marca e risco"_. Enquanto isso não for decidido, a §4 descreve a hipótese de uma
+   instalação. Divergir da doutrina é decisão do dono do produto, com o custo escrito. Ver §7.
+   Custo a considerar junto: o plano grátis do Supabase permite **2 projetos por usuário**, então o
+   modelo de uma instalação por cliente encarece a partir do terceiro cliente.
 7. **O aceite diz o que NÃO avaliou.** A avaliação existente avalia **texto**, e devolve a lista
    explícita dos gates que dependem do turno real (§3). Veredito que parece completo e não é seria
    pior que veredito nenhum — é a regra escrita no próprio módulo.
@@ -203,11 +209,13 @@ Todos observáveis por terceiro. "Está implementado" não é aceite.
 
 Não invente nenhuma destas:
 
-1. **Preço e SLA.** Nenhum número existe em lugar nenhum do repo; o primeiro cliente real define.
-2. **Limite da carteira.** Quantos clientes um operador precisa ver sem paginação — a tela deve
-   aguentar o número real, e esse número ainda não existe.
-
-A decisão sobre **quem hospeda** saiu desta lista em 2026-09-13: está fechada na §1.2, item 6.
+1. **Quem hospeda.** Uma instalação por cliente (o modelo que a doutrina do repo declara) ou N
+   organizações numa instalação da agência (o que a §4 descreve)? A doutrina responde a primeira e
+   dá o motivo — misturar clientes numa VPS mistura número, marca e risco. Divergir disso é decisão
+   do dono do produto, e o custo vai escrito junto: Supabase grátis = 2 projetos por usuário.
+2. **Preço e SLA.** Nenhum número existe em lugar nenhum do repo; o primeiro cliente real define.
+3. **Limite da carteira.** Quantos clientes um operador deve conseguir ver sem paginação — a tela
+   deve aguentar o número real, e esse número ainda não existe.
 
 ---
 
