@@ -24177,6 +24177,26 @@ revoke all on function public.fn_decrypt_oauth(bytea) from public, anon, authent
 grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 
 notify pgrst, 'reload schema';
+-- ---- rascunho de agente sem número de WhatsApp (migration 0239) ----
+--
+-- `channel_session_id` era NOT NULL, e o editor exigia o número para SALVAR.
+-- Instalação nova não tem nenhuma linha em `channel_sessions` (o aparelho é
+-- pareado outro dia), então o dono escrevia o prompt do atendente e não
+-- conseguia guardar nada. Escolher o número é requisito para ATENDER.
+--
+-- Publicar sem número continua recusado por `fn_publish_ai_agent_version`
+-- (`channel_session_not_found`: o select por id nulo não acha linha), e o runtime
+-- só executa `ai_agents.published_version_id` — rascunho sem número é invisível
+-- para o atendimento por construção.
+--
+-- Idempotente e sem backfill: `drop not null` em coluna já anulável é no-op, e
+-- afrouxar a restrição não invalida nenhuma linha existente.
+alter table public.ai_agent_versions
+  alter column channel_session_id drop not null;
+
+comment on column public.ai_agent_versions.channel_session_id is
+  'Por qual número este agente atende. NULL = ainda não escolhido (rascunho legítimo de quem não pareou o WhatsApp). Publicar com NULL é recusado por fn_publish_ai_agent_version (channel_session_not_found).';
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
