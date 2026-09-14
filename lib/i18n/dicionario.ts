@@ -37,6 +37,10 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Versão publicada": { es: "Versión publicada" },
+  "Publicado em": { es: "Publicado el" },
+  "Nenhum agente publicado": { es: "Ningún agente publicado" },
+  "Não foi possível carregar o agente do tenant. Tente recarregar a página.": { es: "No se pudo cargar el agente del tenant. Intenta recargar la página." },
   "números de teste autorizados": { es: "números de prueba autorizados" },
   "1 número de teste autorizado": { es: "1 número de prueba autorizado" },
   "Nenhum número autorizado — a IA não responde ninguém neste canal.": {
@@ -552,6 +556,61 @@ export const DICIONARIO: Traducoes = {
   "Dados da empresa, retenção de mídia, DPO. Admin only.": {
     es: "Datos de la empresa, retención de medios, DPO. Solo administradores.",
   },
+
+  // ─── Hub de IA (NavHub: seções, rótulos e descrições) ───
+  "Montar o agente": { es: "Configurar el agente" },
+  "Ensinar o agente": { es: "Enseñar al agente" },
+  "Acompanhar o agente": { es: "Acompañar al agente" },
+  "Tudo que define quem atende por você — e como acompanhar o que ele faz.": {
+    es: "Todo lo que define quién atiende por ti — y cómo seguir lo que hace.",
+  },
+  "Quem atende por você: instruções, modelo, ferramentas e publicação.": {
+    es: "Quién atiende por ti: instrucciones, modelo, herramientas y publicación.",
+  },
+  "Como o agente retoma uma conversa que esfriou, para nenhuma morrer no silêncio.": {
+    es: "Cómo el agente retoma una conversación que se enfrió, para que ninguna muera en silencio.",
+  },
+  "Qual agente pega qual conversa, e quando o humano assume.": {
+    es: "Qué agente toma cada conversación y cuándo interviene una persona.",
+  },
+  Credenciais: { es: "Credenciales" },
+  "A chave do provedor de IA que os agentes usam para pensar.": {
+    es: "La clave del proveedor de IA que los agentes usan para pensar.",
+  },
+  Provedores: { es: "Proveedores" },
+  "Qual inteligência atende cada parte do sistema — e o que acontece se ela falhar.": {
+    es: "Qué inteligencia atiende cada parte del sistema y qué ocurre si falla.",
+  },
+  Conhecimento: { es: "Conocimiento" },
+  "Os materiais que o agente consulta antes de responder sobre o seu negócio.": {
+    es: "Los materiales que el agente consulta antes de responder sobre tu negocio.",
+  },
+  Memória: { es: "Memoria" },
+  "O que o agente já aprendeu sobre a sua operação e reaproveita.": {
+    es: "Lo que el agente ya aprendió sobre tu operación y vuelve a utilizar.",
+  },
+  Skills: { es: "Skills" },
+  "As ações que o agente pode executar sozinho durante o atendimento.": {
+    es: "Las acciones que el agente puede ejecutar por sí solo durante la atención.",
+  },
+  "Os atendimentos que o agente conduziu, do início ao desfecho.": {
+    es: "Las atenciones que el agente condujo, desde el inicio hasta el desenlace.",
+  },
+  "O que a IA encontrou e precisa de uma decisão sua.": {
+    es: "Lo que la IA encontró y necesita una decisión tuya.",
+  },
+  Alertas: { es: "Alertas" },
+  "Melhorias que a IA sugere para si mesma, esperando sua decisão.": {
+    es: "Mejoras que la IA se propone a sí misma mientras espera tu decisión.",
+  },
+  "O que a IA fez — e, quando falhou, o que aconteceu e o que fazer.": {
+    es: "Lo que hizo la IA y, cuando falló, qué ocurrió y qué hacer.",
+  },
+  "Uso e orçamento": { es: "Uso y presupuesto" },
+  "Quanto a IA consumiu e qual é o teto de gasto do mês.": {
+    es: "Cuánto consumió la IA y cuál es el límite de gasto del mes.",
+  },
+
   // ─── Hub do CRM (NavHub: seções e subtítulo) ───
   //
   // As duas seções são a régua que decide o menu, escrita por extenso: o que se
@@ -7814,6 +7873,9 @@ export const DICIONARIO: Traducoes = {
     es: "no conseguí extraer texto de este PDF. Si son solo imágenes escaneadas, no hay ninguna letra para leer — envía una versión con texto seleccionable.",
   },
   "o arquivo não tem texto nenhum para indexar": { es: "el archivo no tiene ningún texto para indexar" },
+  "não consegui ler este arquivo como texto: os bytes não formam Markdown nem texto puro. Salve o material em UTF-8 (ou ANSI) e envie de novo — se o arquivo não for de texto, envie PDF.": {
+    es: "no conseguí leer este archivo como texto: los bytes no forman Markdown ni texto puro. Guarda el material en UTF-8 (o ANSI) y envíalo de nuevo — si el archivo no es de texto, envía PDF.",
+  },
   "Não é possível desativar o agent default da organização.": { es: "No es posible desactivar el agent default de la organización." },
   "Não é possível revogar o último admin do tenant.": { es: "No es posible revocar al último admin del tenant." },
   "O WhatsApp (WAHA) não está configurado neste ambiente (faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY) — sem ele o número não pode ser desconectado do aparelho.": { es: "El WhatsApp (WAHA) no está configurado en este ambiente (faltan WAHA_API_BASE_URL y/o WAHA_API_KEY) — sin él el número no puede ser desconectado del aparato." },
@@ -8460,6 +8522,40 @@ export const DICIONARIO: Traducoes = {
   "RAG must hit": { es: "RAG debe coincidir" },
   "Regex input block": { es: "Bloqueo de entrada por regex" },
   "Contact flag": { es: "Marca de contacto" },
+  "Falha ao avançar:": { es: "Error al avanzar:" },
+  "Nuvemshop": { es: "Nuvemshop" },
+  "Billing": { es: "Facturación" },
+  "API Tokens": { es: "Tokens de API" },
+  "As colunas de cada funil, o vocabulário do negócio e os motivos de perda.": { es: "Las columnas de cada embudo, el vocabulario del negocio y los motivos de pérdida." },
+  "As conversas de WhatsApp, com você e a IA atendendo lado a lado.": { es: "Las conversaciones de WhatsApp, contigo y la IA atendiendo lado a lado." },
+  "As pessoas do outro lado da conversa e seu histórico.": { es: "Las personas del otro lado de la conversación y su historial." },
+  "Avise outros sistemas quando algo acontecer aqui dentro.": { es: "Avisa a otros sistemas cuando algo ocurra aquí dentro." },
+  "Conectar a conta de anúncios para ler o desempenho das campanhas.": { es: "Conectar la cuenta de anuncios para leer el rendimiento de las campañas." },
+  "Conecte a loja para trazer pedidos e clientes para dentro do CRM.": { es: "Conecta la tienda para traer pedidos y clientes al CRM." },
+  "Devolver ao anúncio as vendas que ele trouxe, para ele aprender a procurar mais clientes parecidos.": { es: "Devolver al anuncio las ventas que trajo, para que aprenda a buscar más clientes parecidos." },
+  "Funil e performance por atendente nos últimos 30 dias.": { es: "Embudo y rendimiento por agente en los últimos 30 días." },
+  "O catálogo da loja, com o preço que o atendente de IA responde.": { es: "El catálogo de la tienda, con el precio que responde el agente de IA." },
+  "O que se pode marcar, quanto dura, onde acontece e quem atende.": { es: "Qué se puede agendar, cuánto dura, dónde ocurre y quién atiende." },
+  "Quanto custou cada resultado das campanhas que trazem gente para cá.": { es: "Cuánto costó cada resultado de las campañas que traen gente aquí." },
+  "Quem esfriou e ainda está aberto — o que corre risco de morrer sem resposta.": { es: "Quién se enfrió y sigue abierto — lo que corre riesgo de morir sin respuesta." },
+  "Quem fez o quê, quando — o histórico que não se apaga.": { es: "Quién hizo qué, cuándo — el historial que no se borra." },
+  "Relatório do que a equipe e os agentes fizeram no período: quanto, quem e de que tipo.": { es: "Informe de lo que el equipo y los agentes hicieron en el período: cuánto, quién y de qué tipo." },
+  "Scripts salvos para responder mais rápido, seus ou da equipe.": { es: "Scripts guardados para responder más rápido, tuyos o del equipo." },
+  "Se o agente está melhorando, onde ele erra e o que falta ensinar.": { es: "Si el agente está mejorando, dónde se equivoca y qué falta enseñar." },
+  "Seus funis de venda — clique em um para abrir o quadro de clientes.": { es: "Tus embudos de venta — haz clic en uno para abrir el tablero de clientes." },
+  "Seus números de WhatsApp: por QR ou canal oficial da Meta, com saúde, reconexão e templates.": { es: "Tus números de WhatsApp: por QR o canal oficial de Meta, con salud, reconexión y plantillas." },
+  "Agendamento criado.": { es: "Cita creada." },
+  "Agendamento remarcado.": { es: "Cita reprogramada." },
+  "Agendamento cancelado.": { es: "Cita cancelada." },
+  "Marcado como realizado.": { es: "Marcado como realizado." },
+  "Marcado como falta — o horário volta a ficar livre.": { es: "Marcado como inasistencia — el horario vuelve a quedar libre." },
+  "Mídia": { es: "Multimedia" },
+  "Tenant suspenso com sucesso": { es: "Tenant suspendido con éxito" },
+  "Erro ao suspender tenant": { es: "Error al suspender el tenant" },
+  "Tenant reativado com sucesso": { es: "Tenant reactivado con éxito" },
+  "Erro ao reativar tenant": { es: "Error al reactivar el tenant" },
+  "Incidente resolvido com sucesso": { es: "Incidente resuelto con éxito" },
+  "Erro ao resolver incidente": { es: "Error al resolver el incidente" },
 };
 
 /**
