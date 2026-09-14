@@ -456,6 +456,7 @@ export const AUDIT_ACTIONS = [
   "fidelidade.ponto_dado",
   "fidelidade.ponto_resgatado",
   "financeiro.recorrencia_gerada",
+  "comanda.faturada_em_lote",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta

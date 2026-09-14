@@ -24878,6 +24878,19 @@ comment on table public.recurring_entries is
 comment on column public.recurring_entries.day_of_month is
   'Dia do mês, 1 a 31. O que não existe no mês cai no último dia dele — pular deixaria de cobrar o aluguel em fevereiro.';
 
+-- ---- preco do tipo de evento (migration 0249) ----
+-- O catálogo de serviços JÁ é o de tipos de agendamento (decisão da 0240), e
+-- faltava o preço. Sem ele o balcão digita valor a cada item e o faturamento
+-- em lote é impossível. NULLABLE: nem todo negócio tem preço fixo, e vazio
+-- significa "digite na hora", que é o comportamento de antes desta migration.
+-- É SEMENTE, nunca preço final — o item congela o seu próprio valor.
+alter table public.calendar_event_types
+  add column if not exists default_price_cents bigint
+  check (default_price_cents is null or default_price_cents >= 0);
+
+comment on column public.calendar_event_types.default_price_cents is
+  'Preço padrão do serviço, em centavos. Vazio = digite na hora. É SEMENTE do item da comanda, nunca o preço dele: o item guarda o seu próprio unit_price_cents, congelado na inclusão.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

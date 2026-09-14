@@ -6266,6 +6266,17 @@ export const DICIONARIO: Traducoes = {
   },
   "Nenhum lançamento recorrente.": { es: "Ningún asiento recurrente." },
   "Remover lançamento recorrente": { es: "Quitar asiento recurrente" },
+  "Preço padrão": { es: "Precio estándar" },
+  "digite na hora": { es: "escribe en el momento" },
+  "Opcional. Vira o valor sugerido na comanda, e pode ser mudado lá.": {
+    es: "Opcional. Es el valor sugerido en la comanda, y se puede cambiar allí.",
+  },
+  "Atendimentos sem comanda": { es: "Atenciones sin comanda" },
+  "Já aconteceram e ninguém faturou. Marque o que quer cobrar.": {
+    es: "Ya ocurrieron y nadie facturó. Marca lo que quieres cobrar.",
+  },
+  "sem preço no serviço": { es: "sin precio en el servicio" },
+  "Faturar": { es: "Facturar" },
   "Faturamento": { es: "Facturación" },
   "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.": {
     es: "Cuánto entró, de qué forma, y cuánto tiene que recibir cada persona.",

@@ -20,6 +20,8 @@ import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { formatCents, parseReaisToCents } from "@/lib/money";
 
+import { AtendimentosSemComanda, type Pendente } from "./_pendentes";
+
 type Item = {
   id: string;
   description: string;
@@ -47,7 +49,7 @@ type Comanda = {
 };
 
 type Forma = { id: string; name: string; account_id: string | null };
-type Tipo = { id: string; name: string };
+type Tipo = { id: string; name: string; default_price_cents: number | null };
 
 const ROTULO_DO_STATUS: Record<Comanda["status"], string> = {
   open: "Aberta",
@@ -92,6 +94,10 @@ export function Comandas({
 
   const recarregar = () => {
     void qc.invalidateQueries({ queryKey: ["comandas"] });
+    // A lista de pendentes encolhe a cada comanda aberta a partir de um
+    // agendamento. Sem invalidar, o atendimento recém-faturado continuaria
+    // oferecido para faturar de novo.
+    void qc.invalidateQueries({ queryKey: ["comandas", "pendentes"] });
     // A finalização dá o ponto de fidelidade. Sem invalidar, o saldo ao lado do
     // número da comanda continuaria mostrando o de antes da venda.
     void qc.invalidateQueries({ queryKey: ["fidelidade"] });
@@ -137,6 +143,20 @@ export function Comandas({
   const estornar = useMutation({
     mutationFn: (corpo: Record<string, unknown>) =>
       apiClient.post(`/api/v1/financeiro/comandas/${abertaId}/estornar`, corpo),
+    onSuccess: recarregar,
+    onError: showApiError,
+  });
+
+  const pendentes = useQuery({
+    queryKey: ["comandas", "pendentes"],
+    enabled: podeLancar,
+    queryFn: async () =>
+      (await apiClient.get<{ data: Pendente[] }>("/api/v1/financeiro/comandas/pendentes")).data,
+  });
+
+  const faturarLote = useMutation({
+    mutationFn: (corpo: { appointment_ids: string[]; payment_method_id: string }) =>
+      apiClient.post("/api/v1/financeiro/comandas/faturar-lote", corpo),
     onSuccess: recarregar,
     onError: showApiError,
   });
@@ -190,6 +210,14 @@ export function Comandas({
             <li className="p-2 text-sm text-text-muted">{t("Nenhuma comanda ainda.")}</li>
           ) : null}
         </ul>
+
+        <AtendimentosSemComanda
+          pendentes={pendentes.data ?? []}
+          formas={formas.data ?? []}
+          podeLancar={podeLancar}
+          pendenteDeEnvio={faturarLote.isPending}
+          onFaturar={(corpo) => faturarLote.mutate(corpo)}
+        />
       </section>
 
       <section className="min-h-0 overflow-y-auto rounded-md border border-border p-3">
@@ -329,8 +357,14 @@ function FormularioDeItem({
             // A descrição acompanha o serviço escolhido, e continua editável: o
             // que vai para a linha da venda é o TEXTO, congelado, porque o nome
             // do serviço muda e a venda de ontem não.
-            const nome = tipos.find((x) => x.id === e.target.value)?.name;
-            if (nome) setDescricao(nome);
+            const escolhido = tipos.find((x) => x.id === e.target.value);
+            if (escolhido?.name) setDescricao(escolhido.name);
+            // O preço padrão é SEMENTE, e por isso só preenche quando existe e
+            // não sobrescreve o que alguém já digitou: quem digitou um valor
+            // antes de escolher o serviço tinha um motivo.
+            if (escolhido?.default_price_cents != null && preco.trim() === "") {
+              setPreco((escolhido.default_price_cents / 100).toFixed(2));
+            }
           }}
           className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
         >

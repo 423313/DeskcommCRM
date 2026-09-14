@@ -3207,6 +3207,7 @@ export type Database = {
           position: number
           reminder_enabled: boolean
           reminder_minutes_before: number
+          default_price_cents: number | null
           reminder_template_name: string | null
           requires_confirmation: boolean
           slot_interval_minutes: number | null
@@ -3232,6 +3233,7 @@ export type Database = {
           position?: number
           reminder_enabled?: boolean
           reminder_minutes_before?: number
+          default_price_cents?: number | null
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
@@ -3257,6 +3259,7 @@ export type Database = {
           position?: number
           reminder_enabled?: boolean
           reminder_minutes_before?: number
+          default_price_cents?: number | null
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
