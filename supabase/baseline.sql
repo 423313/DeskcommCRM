@@ -24769,6 +24769,29 @@ create index if not exists commission_rules_org_ativas_idx
 comment on column public.commission_rules.is_active is
   'Regra em vigor. Inativa em vez de apagar: o percentual já aplicado está congelado no item, e o que se perderia é a resposta a "por que aquela comanda saiu com este percentual".';
 
+-- ---- saldo de fidelidade (migration 0246) ----
+-- O saldo é sum(points) do livro-razão, somado NO BANCO: o PostgREST corta em
+-- 1000 linhas sem avisar, e saldo truncado vira prêmio negado a quem tinha
+-- direito. Por CLIENTE, nunca agregado — o total geral esconde erros que se
+-- compensam.
+create or replace function public.fn_saldo_de_fidelidade(p_org uuid, p_contact uuid)
+returns integer
+language sql
+stable
+set search_path = public
+as $$
+  select coalesce(sum(points), 0)::integer
+    from public.loyalty_ledger
+   where organization_id = p_org
+     and contact_id = p_contact;
+$$;
+
+revoke execute on function public.fn_saldo_de_fidelidade(uuid, uuid) from public, anon;
+grant  execute on function public.fn_saldo_de_fidelidade(uuid, uuid) to authenticated, service_role;
+
+comment on function public.fn_saldo_de_fidelidade(uuid, uuid) is
+  'Saldo de pontos de um contato: sum(points) do livro-razão. Soma no banco porque o PostgREST corta em 1000 linhas sem avisar, e saldo truncado vira prêmio negado a quem tinha direito.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

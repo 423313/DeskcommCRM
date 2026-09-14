@@ -92,6 +92,9 @@ export function Comandas({
 
   const recarregar = () => {
     void qc.invalidateQueries({ queryKey: ["comandas"] });
+    // A finalização dá o ponto de fidelidade. Sem invalidar, o saldo ao lado do
+    // número da comanda continuaria mostrando o de antes da venda.
+    void qc.invalidateQueries({ queryKey: ["fidelidade"] });
   };
 
   const abrir = useMutation({
@@ -141,6 +144,20 @@ export function Comandas({
   const comanda = detalhe.data ?? null;
   const moeda = comanda?.currency ?? "BRL";
 
+  // O saldo de pontos do cliente, ao lado da comanda dele. Sem isto, quem está
+  // no balcão teria de abrir a ficha em outra tela para saber se o prêmio já
+  // pode ser dado — e, na prática, não perguntaria.
+  const fidelidade = useQuery({
+    queryKey: ["fidelidade", comanda?.contact_id],
+    enabled: Boolean(comanda?.contact_id),
+    queryFn: async () =>
+      (
+        await apiClient.get<{ data: { saldo: number } }>(
+          `/api/v1/financeiro/fidelidade?contact_id=${comanda?.contact_id}`,
+        )
+      ).data,
+  });
+
   return (
     <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[320px_1fr]">
       <section className="flex min-h-0 flex-col gap-2">
@@ -185,6 +202,11 @@ export function Comandas({
                 {t("Comanda")} #{comanda.number}
               </h2>
               <span className="text-sm text-text-muted">
+                {comanda.contact_id && fidelidade.data ? (
+                  <span className="mr-2" data-testid="saldo-de-fidelidade">
+                    {fidelidade.data.saldo} {t("ponto(s)")}
+                  </span>
+                ) : null}
                 {t(ROTULO_DO_STATUS[comanda.status])}
                 {comanda.reversed_at ? ` · ${t("estornada")}` : ""}
               </span>
@@ -246,6 +268,7 @@ export function Comandas({
                 onFinalizar={(corpo) => finalizar.mutate(corpo)}
                 onCancelar={() => alterar.mutate({ cancel: true })}
                 pendente={finalizar.isPending}
+                temContato={Boolean(comanda.contact_id)}
               />
             ) : null}
 
@@ -354,15 +377,24 @@ function Fechamento({
   onFinalizar,
   onCancelar,
   pendente,
+  temContato,
 }: {
   formas: Forma[];
   onFinalizar: (corpo: Record<string, unknown>) => void;
   onCancelar: () => void;
   pendente: boolean;
+  temContato: boolean;
 }) {
   const t = useT();
   const [formaId, setFormaId] = useState("");
+  const [pontos, setPontos] = useState("");
   const escolhida = formas.find((f) => f.id === formaId);
+
+  // O ponto de fidelidade só existe se a comanda tem cliente: `loyalty_ledger`
+  // exige `contact_id`, e oferecer o campo numa comanda avulsa seria um controle
+  // que aceita número e não guarda nada.
+  const pontosNumero = Number(pontos);
+  const pontosValidos = pontos === "" || (Number.isInteger(pontosNumero) && pontosNumero >= 0);
 
   return (
     <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
@@ -383,9 +415,28 @@ function Fechamento({
         </select>
       </label>
 
+      {temContato ? (
+        <label className="flex flex-col gap-1 text-xs text-text-muted">
+          {t("Pontos de fidelidade")}
+          <input
+            value={pontos}
+            inputMode="numeric"
+            placeholder="0"
+            data-testid="pontos-de-fidelidade"
+            onChange={(e) => setPontos(e.target.value)}
+            className="w-24 rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+          />
+        </label>
+      ) : null}
+
       <Button
-        onClick={() => onFinalizar({ payment_method_id: formaId })}
-        disabled={!formaId || pendente}
+        onClick={() =>
+          onFinalizar({
+            payment_method_id: formaId,
+            loyalty_points: temContato && pontos !== "" ? pontosNumero : 0,
+          })
+        }
+        disabled={!formaId || pendente || !pontosValidos}
         data-testid="finalizar-comanda"
       >
         {t("Finalizar")}

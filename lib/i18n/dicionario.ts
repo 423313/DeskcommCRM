@@ -6244,6 +6244,8 @@ export const DICIONARIO: Traducoes = {
   "Remover regra": { es: "Quitar regla" },
   "alguém": { es: "alguien" },
   "um serviço": { es: "un servicio" },
+  "Pontos de fidelidade": { es: "Puntos de fidelidad" },
+  "ponto(s)": { es: "punto(s)" },
   "Faturamento": { es: "Facturación" },
   "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.": {
     es: "Cuánto entró, de qué forma, y cuánto tiene que recibir cada persona.",
