@@ -1,6 +1,7 @@
 "use client";
 import { AgendasConectadas } from "@/components/agenda/AgendasConectadas";
 import { PrazosDePresenca } from "@/components/agenda/PrazosDePresenca";
+import { DiasBloqueados } from "@/components/agenda/DiasBloqueados";
 
 import { useT } from "@/hooks/i18n/useT";
 
@@ -195,6 +196,7 @@ export function TiposDeAgendamentoClient({
     <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="tipos-de-agendamento-config">
       {podeConfigurarGoogle && <AgendasConectadas />}
       <PrazosDePresenca podeEditar={podeEditar}/>
+      <DiasBloqueados podeEditar={podeEditar}/>
       {podeEditar ? (
         <div>
           {criando ? (

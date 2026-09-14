@@ -347,6 +347,13 @@ export const DICIONARIO: Traducoes = {
   Canais: { es: "Canales" },
   Análise: { es: "Análisis" },
   Organização: { es: "Organización" },
+  "o dia todo": { es: "todo el día" },
+  "Dias sem atendimento": { es: "Días sin atención" },
+  "Feriado, férias, viagem. Nesses dias o sistema deixa de oferecer horários — e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.": { es: "Feriado, vacaciones, viaje. En esos días el sistema deja de ofrecer horarios — y lo que ya estaba agendado sigue agendado, para que decidas qué hacer con cada uno." },
+  "Ex.: feriado": { es: "Ej.: feriado" },
+  "Fechar este dia": { es: "Cerrar este día" },
+  "Nenhum dia fechado daqui para a frente.": { es: "Ningún día cerrado de aquí en adelante." },
+  "aberto excepcionalmente": { es: "abierto excepcionalmente" },
 
   // ─── Navegação (a barra lateral, presente em toda tela) ───
   Inbox: { es: "Inbox" },
