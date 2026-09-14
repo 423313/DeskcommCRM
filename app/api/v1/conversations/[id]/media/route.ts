@@ -14,7 +14,6 @@ import { extFromMime, MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
 import { transcodificarNotaDeVoz } from "@/lib/messaging/media/voice-transcode";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +28,6 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   const requestId = randomUUID();
   const { id: conversationId } = await ctx.params;
-  const supabase = await createClient();
 
   // spec 13 §4: escrita é agent+ (viewer é read-only). Esta rota era a ÚNICA de
   // escrita em conversations/[id]/* sem o gate — e como a policy de SELECT deixa
@@ -48,8 +46,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // O ramo do token não carrega idioma de usuário: cai no padrão do produto.
   const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
   const activeOrg = { orgId: authz.organizationId };
+  // O client vem de `authz`, não de `createClient()`: no ramo do token NÃO HÁ
+  // cookie de sessão, então um client de sessão seria anônimo e a RLS devolveria
+  // zero linha — a conversa existente viraria 404 e o upload por token, que é a
+  // capacidade que este PR entrega, nunca funcionaria. Quem protege aqui é o
+  // filtro explícito de `organization_id` logo abaixo, que vale nos dois ramos.
+  const supabase = authz.supabase;
 
-  // RLS + filtro explícito: a conversa precisa ser da org ativa.
+  // RLS (no ramo da sessão) + filtro explícito: a conversa precisa ser da org ativa.
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
     .select("id")
