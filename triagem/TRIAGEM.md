@@ -428,6 +428,26 @@ isso funcionar, e cada uma já falhou quando ausente:
 2. **Conflito de apêndice resolve-se ficando com OS DOIS LADOS** (`dicionario.ts`, `baseline.sql`,
    `MANIFEST.md`, `lib/audit/actions.ts`, as listas de `e2e.yml`). Se o arquivo não for de
    apêndice, **pare e resolva à mão** — um `Sidebar.tsx` no meio disso é conflito semântico.
+
+   **Duas armadilhas desta resolução, as duas pagas em 14/09:**
+
+   **(a) Ela não vale quando os dois lados acrescentam a MESMA chave.** O #744 e o #806 traduziram
+   as mesmas 24 entradas do dicionário; ficar com os dois produziu propriedades repetidas e
+   `TS1117`. Num arquivo de 8 mil linhas isso não se vê lendo o diff — quem vê é o `tsc`. Depois de
+   resolver por apêndice, **rode o typecheck antes de seguir**, e ao deduplicar prove que nada
+   sumiu com o nome normalizado (`"Alertas"` e `Alertas` são a mesma propriedade; comparar com
+   aspas acusa seis chaves "perdidas" que são justamente as duplicatas).
+
+   **(b) O laço que aborta o merge desfaz também o que já tinha resolvido.** Se o script resolve o
+   arquivo A e recusa o B, o `git merge --abort` leva o A junto. Ao refazer o merge à mão para
+   tratar o B, é fácil dar `git add` no A **ainda cru** — e commitar marcador de conflito. Foi o que
+   aconteceu: 16 linhas de `<<<<<<<` no `AGENTS.md`, pegas por
+   `tests/unit/sem-marcador-de-conflito.test.ts` e não pela minha releitura. Depois de qualquer
+   merge refeito à mão, o controle é uma linha:
+
+   ```bash
+   git grep -n '^<<<<<<<\|^>>>>>>>' -- . && echo "PARE: marcador versionado"
+   ```
 3. **Meça se o merge ACONTECEU, não se houve conflito.** `git diff --diff-filter=U` vazio quer
    dizer "sem conflito agora" — inclusive quando o merge sequer foi tentado porque um hook
    bloqueou o commit anterior. A medida certa é o `HEAD` ter andado:
