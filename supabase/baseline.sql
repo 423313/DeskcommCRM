@@ -24019,9 +24019,9 @@ create trigger trg_org_voice_calls_set_updated_at
 
 notify pgrst, 'reload schema';
 
--- ---- Registro não nasce `pending` (migration 0239) ----
+-- ---- Registro não nasce `pending` (migration 0244) ----
 --
--- Racional completo no cabeçalho da migration 0239. Em uma linha: tipo de evento
+-- Racional completo no cabeçalho da migration 0244. Em uma linha: tipo de evento
 -- que ninguém consome não é fila — é registro, e a linha nasce `done`.
 --
 -- O defeito medido (issue #753): `event_log.status` nasce `pending` e nenhum
@@ -24178,7 +24178,7 @@ revoke all on function public.fn_decrypt_oauth(bytea) from public, anon, authent
 grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 
 notify pgrst, 'reload schema';
--- ---- rascunho de agente sem número de WhatsApp (migration 0239) ----
+-- ---- rascunho de agente sem número de WhatsApp (migration 0244) ----
 --
 -- `channel_session_id` era NOT NULL, e o editor exigia o número para SALVAR.
 -- Instalação nova não tem nenhuma linha em `channel_sessions` (o aparelho é
@@ -24231,6 +24231,33 @@ begin
     execute 'alter role authenticated set lock_timeout = ''4s''';
   end if;
 end $$;
+-- ---- tags de conversa em uso (migration 0244) ----
+-- O seletor de etiqueta do Inbox oferece as etiquetas EM USO, e nao so a lista
+-- curada a mao. `security INVOKER` de proposito: a funcao recebe a organizacao
+-- por ARGUMENTO e e concedida a `authenticated`, entao `definer` aqui seria
+-- leitura cross-tenant (o mesmo aviso esta no comentario de
+-- `fn_gasto_de_ia_do_mes`). Sob invoker quem isola e a RLS de `conversations`.
+-- Idempotente por construcao: `create or replace` + `revoke`/`grant`.
+create or replace function public.fn_tags_de_conversa_em_uso(p_org uuid)
+returns table (tag text)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select distinct t
+  from public.conversations c, unnest(c.tags) as t
+  where c.organization_id = p_org
+    and c.tags is not null
+  order by t
+  limit 200;
+$$;
+
+-- As DUAS origens de EXECUTE: o ALTER DEFAULT PRIVILEGES do baseline (que da a
+-- anon) e o grant a PUBLIC que o Postgres da ao criar. Revogar uma so deixa a
+-- funcao alcancavel pela anon key, que vai para o browser.
+revoke execute on function public.fn_tags_de_conversa_em_uso(uuid) from public, anon;
+grant  execute on function public.fn_tags_de_conversa_em_uso(uuid) to authenticated, service_role;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
