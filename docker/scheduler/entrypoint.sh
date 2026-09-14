@@ -80,6 +80,7 @@ CRONS="
 # antes em avisar entre 30 e 45 minutos antes. Barato: só olha compromisso
 # confirmado, futuro e ainda não avisado.
 */5 * * * *|45|api/v1/cron/agenda-reminder
+*/15 * * * *|45|api/v1/cron/agenda-expira-pendentes
 */15 * * * *|60|api/v1/cron/risk-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
 17 * * * *|60|api/v1/cron/contact-proposals-watcher

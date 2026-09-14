@@ -347,6 +347,8 @@ export const DICIONARIO: Traducoes = {
   Canais: { es: "Canales" },
   Análise: { es: "Análisis" },
   Organização: { es: "Organización" },
+  "Soltar o horário de um pedido não confirmado após (minutos)": { es: "Liberar el horario de una solicitud no confirmada después de (minutos)" },
+  "Vale só para tipos de atendimento que pedem confirmação. Enquanto o pedido espera, o horário fica reservado e ninguém mais o pega; passado o prazo sem decisão, ele volta a ser oferecido. O cliente não é avisado, e o pedido continua na fila.": { es: "Vale solo para tipos de atención que piden confirmación. Mientras la solicitud espera, el horario queda reservado y nadie más lo toma; pasado el plazo sin decisión, vuelve a ofrecerse. El cliente no recibe aviso, y la solicitud sigue en la fila." },
 
   // ─── Navegação (a barra lateral, presente em toda tela) ───
   Inbox: { es: "Inbox" },

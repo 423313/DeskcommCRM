@@ -23992,6 +23992,58 @@ create trigger trg_org_voice_calls_set_updated_at
 
 notify pgrst, 'reload schema';
 
+-- ---- agenda: prazo de expiração do pedido não confirmado (migration 0239) ----
+--
+-- `fn_agenda_settings` ENUMERA as chaves aceitas e rejeita extras, então o campo
+-- novo precisa dela recriada — senão a tela salva e recebe 22023. Opcional de
+-- propósito: toda organização já instalada tem duas chaves, e exigir a terceira
+-- quebraria o PATCH de uma aba aberta antes da atualização. Ausente = default do
+-- lado TypeScript (1440 minutos). Nenhum backfill: a ausência já é estado válido.
+create or replace function public.fn_agenda_settings(p_org uuid, p_config jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null
+     or not public.fn_role_at_least(p_org, 'manager')
+     or not public.fn_support_write_allowed(p_org) then
+    raise exception 'agenda_settings_forbidden' using errcode = '42501';
+  end if;
+
+  if jsonb_typeof(p_config->'confirmation_delay_minutes') is distinct from 'number'
+     or jsonb_typeof(p_config->'unknown_protection_minutes') is distinct from 'number'
+     or (p_config - 'confirmation_delay_minutes'
+                  - 'unknown_protection_minutes'
+                  - 'pending_expires_after_minutes') <> '{}'::jsonb
+     or (p_config->>'confirmation_delay_minutes' ~ '^[0-9]{1,5}$') is not true
+     or (p_config->>'unknown_protection_minutes' ~ '^[0-9]{1,5}$') is not true
+     or (p_config->>'confirmation_delay_minutes')::int not between 1 and 10080
+     or (p_config->>'unknown_protection_minutes')::int not between 1 and 10080
+     or (p_config->>'unknown_protection_minutes')::int
+        < (p_config->>'confirmation_delay_minutes')::int
+  then
+    raise exception 'agenda_settings_invalid' using errcode = '22023';
+  end if;
+
+  if p_config ? 'pending_expires_after_minutes' then
+    if jsonb_typeof(p_config->'pending_expires_after_minutes') is distinct from 'number'
+       or (p_config->>'pending_expires_after_minutes' ~ '^[0-9]{1,5}$') is not true
+       or (p_config->>'pending_expires_after_minutes')::int not between 15 and 10080
+    then
+      raise exception 'agenda_settings_invalid' using errcode = '22023';
+    end if;
+  end if;
+
+  update public.organizations
+     set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{agenda}', p_config, true)
+   where id = p_org;
+  if not found then
+    raise exception 'organization_not_found' using errcode = 'P0002';
+  end if;
+  return p_config;
+end; $$;
+revoke all on function public.fn_agenda_settings(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.fn_agenda_settings(uuid, jsonb) to authenticated;
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
