@@ -8,8 +8,8 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { extFromMime, MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
 import { transcodificarNotaDeVoz } from "@/lib/messaging/media/voice-transcode";
@@ -36,13 +36,18 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // o viewer enxergar toda conversa da org, o papel mais fraco do tenant tinha
   // escrita irrestrita no bucket (50 MB por arquivo, com service_role). A irmã
   // claim/route.ts:35 é o modelo literal.
-  const authz = await requireRole("agent", { requestId, resource: "conversation_media" });
+  // Sessão de navegador OU token de servidor: é o primeiro passo do envio de
+  // mídia, e quem envia por token precisa subir o arquivo antes de mandar.
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "conversation_media",
+    role: "agent",
+    scope: "mcp:write",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const user = authz.user;
-  const authUser = await loadAuthUser();
-  const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
-  if (!activeOrg) return fail("no_active_org", t("No active organization."), 403, { requestId });
+  // O ramo do token não carrega idioma de usuário: cai no padrão do produto.
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
+  const activeOrg = { orgId: authz.organizationId };
 
   // RLS + filtro explícito: a conversa precisa ser da org ativa.
   const { data: conv, error: convErr } = await supabase
