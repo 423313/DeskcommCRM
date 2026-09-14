@@ -60,7 +60,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (activeOrg) {
     const admin = createAdminClient();
-    // Consultas essenciais da organização e MFA disparadas em paralelo para cortar latência na troca de abas:
+    /**
+     * As quatro consultas que TODA página de `/app` paga, disparadas juntas.
+     *
+     * Elas eram sequenciais e independentes: cada uma esperava a anterior sem
+     * precisar do resultado dela, e a soma aparecia como a tela que não reage ao
+     * clique. Em paralelo, o custo passa a ser o da mais lenta.
+     *
+     * Duas consequências que valem estar escritas, porque não são acidente:
+     *
+     *  - `listarConexoesCaidas` e `requiresMfa` agora rodam ANTES dos `redirect`
+     *    de onboarding e de suspensão. Quem vai ser redirecionado paga duas
+     *    consultas a mais — um caminho raro, que termina numa navegação de
+     *    qualquer forma. O caminho normal, que é todo render de todo usuário,
+     *    deixa de pagar três esperas em fila.
+     *  - A consulta das conexões continua morando no seam
+     *    (`lib/channels/health`), não aqui: tela que monta o select de
+     *    `channel_sessions` à mão foi o que deixou três seletores oferecendo
+     *    canal arquivado (invariante `canais-selecionaveis`), e de quebra o
+     *    filtro de estados fica LITERALMENTE o mesmo que decide o aviso da
+     *    Central. Vigiado por
+     *    `tests/unit/faixa-de-conexao-caida-vem-do-seam.test.tsx`, que EXECUTA
+     *    este layout — a cerca anterior lia o texto-fonte e reprovava esta
+     *    refatoração sem que nada tivesse quebrado.
+     */
     const [orgRes, conexoes, isEnrolled, mfaRequired] = await Promise.all([
       admin
         .from("organizations")
@@ -120,6 +143,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // como se cria uma regressão invisível. E, com o logo no mesmo objeto, uma
     // condição só (a do nome) faria a organização que definiu apenas a cor
     // arrastar junto um `logoUrl` que ela não escolheu.
+    //
+    // `origens` é a resposta de `primeiroDefinido` (`lib/branding/resolve.ts`),
+    // que ignora valor vazio e desce: quando ele diz "organizacao", o valor é
+    // não-vazio e já veio trimado — por isso a barra lateral nunca recebe `""`
+    // desta origem.
+    //
+    // `origens.logoUrl === "organizacao"` passou a ser ALCANÇÁVEL na onda do
+    // upload: `camadaDaOrganizacao` declara o logo a partir de
+    // `settings.branding.logo_path`. A condição foi escrita aqui uma onda ANTES
+    // do produtor existir, de propósito — foi o que fez o upload por organização
+    // ser só a camada, sem mais uma passada pela casca inteira.
     const marcaDoTenant = {
       ...(marca.origens.nome === "organizacao" ? { nome: marca.name } : {}),
       ...(marca.origens.logoUrl === "organizacao" && marca.logoUrl !== null
