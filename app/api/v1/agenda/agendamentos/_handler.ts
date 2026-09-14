@@ -27,10 +27,15 @@ import { horariosLivresDaOrg } from "@/lib/agenda/consulta";
 import {
   atividadeDaTransicao,
   autorParaTimeline,
+  gatilhoDaTransicao,
   type SituacaoAnterior,
   type Transicao,
 } from "@/lib/agenda/laco";
-import { ALVO_DE_VINCULO_DO_AGENDAMENTO, VINCULO_DE_AGENDAMENTO } from "@/lib/agenda/tipos";
+import {
+  ALVO_DE_VINCULO_DO_AGENDAMENTO,
+  ENTIDADE_DO_AGENDAMENTO,
+  VINCULO_DE_AGENDAMENTO,
+} from "@/lib/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
@@ -207,6 +212,7 @@ export async function marcarAgendamentoHandler(
     appointmentId: criado.id,
     contactId: input.contact_id ?? null,
     atividade: atividadeDaTransicao(null, transicao),
+    gatilho: gatilhoDaTransicao(null, transicao),
     transicao,
     fusoDoCompromisso: criado.time_zone,
     nomeDoTipo: tipo.name,
@@ -361,6 +367,7 @@ export async function alterarAgendamentoHandler(
       appointmentId: atual.id as string,
       contactId: (atual.contact_id as string | null) ?? null,
       atividade: atividadeDaTransicao(atual.status as SituacaoAnterior, transicao),
+      gatilho: gatilhoDaTransicao(atual.status as SituacaoAnterior, transicao),
       transicao,
       fusoDoCompromisso: String(salvo.time_zone),
       nomeDoTipo: "Agendamento",
@@ -417,6 +424,7 @@ export async function cancelarAgendamentoHandler(
     appointmentId: atual.id as string,
     contactId: (atual.contact_id as string | null) ?? null,
     atividade: atividadeDaTransicao(atual.status as SituacaoAnterior, "cancelled"),
+    gatilho: gatilhoDaTransicao(atual.status as SituacaoAnterior, "cancelled"),
     transicao: "cancelled",
     fusoDoCompromisso: atual.time_zone as string,
     nomeDoTipo: "Agendamento",
@@ -526,6 +534,8 @@ async function fecharOLaco(
     appointmentId: string;
     contactId: string | null;
     atividade: string | null;
+    /** Gatilho de automação, ou `null` quando a transição não é notícia para uma regra. */
+    gatilho: string | null;
     transicao: Transicao;
     fusoDoCompromisso: string;
     nomeDoTipo: string;
@@ -533,6 +543,42 @@ async function fecharOLaco(
   },
 ): Promise<void> {
   // Pendência Google é derivada da revisão publicável; não emite evento sem consumer.
+
+  // O gatilho de automação, ANTES de qualquer early-return. Ele não depende de
+  // haver negócio aberto: uma regra de "avise a cliente que confirmou" vale
+  // igual para quem não tem lead nenhum — e todo o resto desta função é sobre a
+  // timeline do lead, que é outra pergunta.
+  //
+  // Fire-and-forget, como a atividade: falhar em emitir NÃO pode desfazer um
+  // compromisso que já está gravado. O consumidor é o motor de regras
+  // (`lib/automation/engine.ts`), que casa por `trigger_event`.
+  if (args.gatilho) {
+    const { error } = await supabase.from("event_log").insert({
+      organization_id: ctx.organization_id,
+      event_type: args.gatilho,
+      entity_kind: ENTIDADE_DO_AGENDAMENTO,
+      entity_id: args.appointmentId,
+      payload: {
+        appointment_id: args.appointmentId,
+        contact_id: args.contactId,
+        event_type_name: args.nomeDoTipo,
+        time_zone: args.fusoDoCompromisso,
+        transicao: args.transicao,
+      },
+      // `request_id` sem o prefixo `rule:` de propósito: ele correlaciona com o
+      // audit log e NÃO aciona o anti-loop do motor, que só barra o que uma
+      // regra causou.
+      metadata: { request_id: ctx.requestId },
+    });
+    if (error) {
+      logger.error("[agenda] gatilho de automação não foi emitido", {
+        appointment_id: args.appointmentId,
+        organization_id: ctx.organization_id,
+        gatilho: args.gatilho,
+        error: error.message,
+      });
+    }
+  }
 
   const leadId = args.contactId ? await leadAtivoDoContato(supabase, ctx, args.contactId) : null;
 
