@@ -45,11 +45,11 @@ export interface ChamadoDetalhado extends ChamadoDaLista {
 }
 
 const COLUNAS_LISTA =
-  "id, title, summary, blocker, status, opened_at, conversation_id, " +
+  "id, title, summary, blocker, status, kind, opened_at, conversation_id, " +
   "conversations:conversation_id(contacts:contact_id(name, phone_number))";
 
 const COLUNAS_DETALHE =
-  "id, title, summary, blocker, status, source, opened_at, closed_at, conversation_id, " +
+  "id, title, summary, blocker, status, kind, source, opened_at, closed_at, conversation_id, " +
   "conversations:conversation_id(contacts:contact_id(name, phone_number))";
 
 interface LinhaComContato {

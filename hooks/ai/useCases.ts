@@ -30,6 +30,10 @@ export interface CaseListItem {
   summary: string;
   blocker: string;
   status: CaseStatus;
+  /** Do que o caso trata. `string` e não a união: vocabulário ABERTO no banco,
+   *  então um clone pode trazer valor que este build não conhece — quem resolve
+   *  é `tipoDeCasoLabel`, que cai no genérico em vez de quebrar a tela. */
+  kind: string;
   opened_at: string;
   conversation_id: string;
   contact_name: string | null;
