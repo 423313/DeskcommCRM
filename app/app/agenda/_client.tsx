@@ -19,6 +19,7 @@ import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agen
 import { EmptyAgenda } from "@/components/empty";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
+import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
 import { Button } from "@/components/ui/button";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -100,9 +101,33 @@ export function AgendaClient({
   // O compromisso criado NESTA abertura do painel. Serve para levar a grade até
   // ele quando o painel fechar por qualquer caminho — ver `ancoraAoFecharPainel`.
   const [marcadoEm, setMarcadoEm] = React.useState<string | null>(null);
-  const [contactId,setContactId]=React.useState("");
-  const [conversationId,setConversationId]=React.useState("");
-  const onContext=React.useCallback((contact:string,conversation:string)=>{setContactId(contact);setConversationId(conversation);setMarcando(true);},[]);
+  // QUEM SERÁ ATENDIDO. A regra inteira — e por que ela não é "limpar ao
+  // fechar" — está em `lib/agenda/vinculo-da-marcacao.ts`. Em uma frase: o
+  // painel abre com o vínculo que a ROTA carrega (`?contato=…&conversa=…`, o
+  // link "Marcar compromisso" do Inbox), e o que a pessoa escolhe dentro dele
+  // vive só enquanto ele está aberto.
+  const {
+    vinculo,
+    registrarRota: registrarVinculoDaRota,
+    reiniciar: reiniciarVinculo,
+    escolher: escolherVinculo,
+  } = useVinculoDaMarcacao();
+  const contactId = vinculo.contact;
+  const conversationId = vinculo.conversation;
+  const onContext = React.useCallback(
+    (contact: string, conversation: string) => {
+      // Só abre sozinho quando a rota TROUXE um cliente: a chamada sem cliente
+      // é a que avisa que a página deixou de ter contexto, e ela não é um
+      // pedido para marcar nada.
+      if (registrarVinculoDaRota({ contact, conversation })) setMarcando(true);
+    },
+    [registrarVinculoDaRota],
+  );
+  /** Abrir o painel do zero: o vínculo volta a ser o da rota, nunca o da vez anterior. */
+  const abrirMarcacao = React.useCallback(() => {
+    reiniciarVinculo();
+    setMarcando(true);
+  }, [reiniciarVinculo]);
   // O horário que veio de um CLIQUE NA GRADE. Preenchido, o painel abre já em
   // "confirmando" naquele instante; vazio, ele abre pedindo o dia, como sempre.
   const [horarioEscolhido, setHorarioEscolhido] = React.useState<HorarioLivre | null>(null);
@@ -354,7 +379,7 @@ export function AgendaClient({
             // escreveu, e vai anotada no PR.
             data-testid="novo-agendamento"
             title={tipo ? undefined : t("Cadastre um tipo de agendamento para começar")}
-            onClick={() => setMarcando(true)}
+            onClick={abrirMarcacao}
           >
             <CalendarPlus size={16} weight="bold" aria-hidden />
             <span>{t("Novo agendamento")}</span>
@@ -459,13 +484,17 @@ export function AgendaClient({
             // reparasse marcaria o compromisso no nome de outra pessoa — e o
             // campo parece preenchido de propósito, então não há o que estranhar.
             //
-            // É exatamente o raciocínio do comentário acima, aplicado a três
-            // campos e esquecido nestes dois. Vazio é um estado legítimo aqui
-            // ("Compromisso pessoal, sem cliente"), e vir vazio é o degrau
-            // seguro: um campo em branco a pessoa vê; um campo com o cliente
-            // errado, não.
-            setContactId("");
-            setConversationId("");
+            // ⚠️ MAS NÃO É `setContactId("")`, e o `e2e` mediu a diferença:
+            // limpar no fechamento apaga também o contexto que a CONVERSA
+            // acabou de dar — `agenda-google-meet.spec.ts:196` e
+            // `agenda-presenca-recuperacao.spec.ts:312` reprovaram com
+            // `contact_id: null`, porque as duas fecham o painel só para
+            // navegar a grade até a semana certa, como uma pessoa faz.
+            //
+            // `reiniciarVinculo()` devolve o vínculo da ROTA: vazio quando a
+            // pessoa está na Agenda sem contexto (o defeito relatado), e o
+            // cliente da conversa quando ela chegou pelo link do Inbox.
+            reiniciarVinculo();
             // ⛔ E LEVAR A GRADE ATÉ O QUE ACABOU DE NASCER.
             //
             // "Ver na agenda" já fazia isto; fechar no X, clicar fora ou apertar
@@ -516,7 +545,7 @@ export function AgendaClient({
           <SheetHeader>
             <SheetTitle>{remarcandoId ? t("Remarcar agendamento") : t("Novo agendamento")}</SheetTitle>
           </SheetHeader>
-            {!remarcandoId?<VinculoDaMarcacao contactId={contactId} conversationId={conversationId} onChange={(contact,conversation)=>{setContactId(contact);setConversationId(conversation);}}/>:null}
+            {!remarcandoId?<VinculoDaMarcacao contactId={contactId} conversationId={conversationId} onChange={(contact,conversation)=>escolherVinculo({contact,conversation})}/>:null}
           {tiposIniciais.length > 1 && (
             <div className="mt-4" data-testid="tipos-de-agendamento">
               <p className="mb-2 text-xs font-medium text-text-muted">{t("Tipo de agendamento")}</p>
@@ -853,7 +882,9 @@ export function AgendaClient({
         onMarcarEm={(instante) => {
           setHorarioEscolhido({ instante, rotulo: format(new Date(instante), "HH:mm") });
           setRemarcandoId(null);
-          setMarcando(true);
+          // `abrirMarcacao` e não `setMarcando(true)`: clicar num bloco livre
+          // abre uma marcação NOVA, e ela nasce com o vínculo da rota.
+          abrirMarcacao();
         }}
         className="min-h-0 flex-1"
       />
