@@ -24658,6 +24658,95 @@ create unique index if not exists sales_agendamento_unico_idx
   on public.sales (organization_id, appointment_id)
   where appointment_id is not null and status <> 'cancelled';
 
+-- ---- relatório financeiro (migration 0244) ----
+-- Agrega NO BANCO: o PostgREST corta em 1000 linhas sem avisar, e somar na
+-- aplicação devolve um número menor com cara de certo (medido nesta base:
+-- R$ 141.436,00 em vez de R$ 641.103,60). Invoker, para a RLS de cada tabela
+-- continuar valendo.
+create or replace function public.fn_relatorio_financeiro(
+  p_org uuid,
+  p_de date,
+  p_ate date
+)
+returns jsonb
+language sql
+stable
+set search_path = public
+as $$
+  with lancamentos as (
+    select direction, amount_cents
+      from public.financial_entries
+     where organization_id = p_org
+       and status = 'paid'
+       and entry_date between p_de and p_ate
+  ),
+  comandas as (
+    select status, total_cents, reversed_at, payment_method_id
+      from public.sales
+     where organization_id = p_org
+       and finalized_at is not null
+       and finalized_at::date between p_de and p_ate
+  ),
+  por_forma as (
+    select coalesce(pm.name, 'Sem forma') as nome,
+           count(*)                       as quantidade,
+           sum(c.total_cents)             as total_cents
+      from comandas c
+      left join public.payment_methods pm
+        on pm.id = c.payment_method_id and pm.organization_id = p_org
+     group by 1
+  ),
+  por_profissional as (
+    -- A comissão do período é a das comandas finalizadas nele, e `reversed` fica
+    -- de fora: ela existiu, continua registrada, e não é mais devida.
+    select co.attendant_user_id,
+           count(*)              as itens,
+           sum(co.amount_cents)  as comissao_cents
+      from public.commissions co
+      join public.sale_items si
+        on si.id = co.sale_item_id and si.organization_id = p_org
+      join public.sales s
+        on s.id = si.sale_id and s.organization_id = p_org
+     where co.organization_id = p_org
+       and co.status <> 'reversed'
+       and s.finalized_at is not null
+       and s.finalized_at::date between p_de and p_ate
+     group by 1
+  )
+  select jsonb_build_object(
+    'de', p_de,
+    'ate', p_ate,
+    'entradas_cents', coalesce((select sum(amount_cents) from lancamentos where direction = 'in'), 0),
+    'saidas_cents',   coalesce((select sum(amount_cents) from lancamentos where direction = 'out'), 0),
+    'saldo_cents',    coalesce((select sum(case when direction = 'in' then amount_cents else -amount_cents end) from lancamentos), 0),
+    'comandas_finalizadas', (select count(*) from comandas),
+    'comandas_estornadas',  (select count(*) from comandas where reversed_at is not null),
+    'faturado_cents',       coalesce((select sum(total_cents) from comandas), 0),
+    -- Ticket médio sobre comanda finalizada. `nullif` porque um mês sem venda
+    -- dividiria por zero, e o erro chegaria à tela como falha do relatório.
+    'ticket_medio_cents',   coalesce((select sum(total_cents) / nullif(count(*), 0) from comandas), 0),
+    'por_forma', coalesce((
+      select jsonb_agg(jsonb_build_object('nome', nome, 'quantidade', quantidade, 'total_cents', total_cents)
+             order by total_cents desc)
+        from por_forma
+    ), '[]'::jsonb),
+    'por_profissional', coalesce((
+      select jsonb_agg(jsonb_build_object('attendant_user_id', attendant_user_id, 'itens', itens, 'comissao_cents', comissao_cents)
+             order by comissao_cents desc)
+        from por_profissional
+    ), '[]'::jsonb)
+  );
+$$;
+
+-- Nasce exposta pelas DUAS origens: o `ALTER DEFAULT PRIVILEGES` do baseline
+-- concede a `anon` toda função criada depois dele, e o Postgres concede a PUBLIC
+-- ao criar. Revogar uma não remove a outra.
+revoke execute on function public.fn_relatorio_financeiro(uuid, date, date) from public, anon;
+grant  execute on function public.fn_relatorio_financeiro(uuid, date, date) to authenticated, service_role;
+
+comment on function public.fn_relatorio_financeiro(uuid, date, date) is
+  'Agregados do faturamento num período. Agrega no banco de propósito: o PostgREST corta em 1000 linhas sem avisar, e somar na aplicação devolve um número menor com cara de certo. Invoker: a RLS de cada tabela continua valendo.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

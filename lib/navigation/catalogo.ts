@@ -516,6 +516,22 @@ export const NAV_CATALOG = [
   // lista as cinco (`hubSections`), então as duas continuam a um clique, com a
   // frase que explica para que servem. O ⌘K também as acha por nome.
   {
+    // A terceira ponta do módulo financeiro: Configurações › Financeiro descreve
+    // para onde o dinheiro vai, CRM › Comandas é onde o dia acontece, e aqui se
+    // responde a pergunta do fim do mês.
+    //
+    // Fora do sidebar de propósito: é consulta periódica, não uso diário, e o
+    // hub de Análise é onde ela se encontra sem disputar pixel com o que se abre
+    // toda hora.
+    href: "/app/faturamento",
+    label: "Faturamento",
+    description: "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.",
+    icon: "ChartBar",
+    group: "analise",
+    section: "Dinheiro",
+    minRole: "viewer",
+  },
+  {
     href: "/app/metrics",
     label: "Desempenho",
     description: "Funil e performance por atendente nos últimos 30 dias.",
