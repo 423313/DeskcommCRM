@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { audit } from "@/lib/audit";
 import type { WahaClient } from "@/lib/waha/client";
 import { WahaSessionError } from "@/lib/waha/client";
+import { cabeNoWaha, nomeWahaNovo } from "@/lib/waha/nome-da-sessao";
 
 const channelSchema = z.object({
   id: z.string().uuid(), organization_id: z.string().uuid(), waha_session_name: z.string(),
@@ -53,12 +54,14 @@ export async function connectWahaChannel(authDb: SupabaseClient, serviceDb: Supa
     return result.data;
   }
   try {
-    if (input.restart) await waha.stopSession(channel.waha_session_name);
-    const creation = await waha.createSession(channel.waha_session_name);
+    const nome = await alinharNomeAoTetoWaha(serviceDb, channel);
+    channel.waha_session_name = nome;
+    if (input.restart) await waha.stopSession(nome);
+    const creation = await waha.createSession(nome);
     created = creation.created;
     if (created) await finish("remote_created");
-    const remote = await waha.startExistingSession(channel.waha_session_name);
-    if (remote.name !== channel.waha_session_name || !["STARTING", "SCAN_QR_CODE", "WORKING"].includes(remote.status)) {
+    const remote = await waha.startExistingSession(nome);
+    if (remote.name !== nome || !["STARTING", "SCAN_QR_CODE", "WORKING"].includes(remote.status)) {
       throw new Error("connection_postcondition_failed");
     }
     const persisted = channelSchema.parse(await finish(remote.status));
@@ -75,6 +78,24 @@ export async function connectWahaChannel(authDb: SupabaseClient, serviceDb: Supa
     throw new ChannelConnectionError(code, 502, cause instanceof WahaSessionError
       ? { operation: cause.operation, http_status: cause.httpStatus } : undefined);
   }
+}
+
+/**
+ * WAHA recusa nome >54 no create (HTTP 400). Canal WORKING não se renomeia:
+ * se alguém pareou num WAHA sem o teto, trocar o nome desconecta o aparelho.
+ */
+export async function alinharNomeAoTetoWaha(
+  db: SupabaseClient,
+  channel: { id: string; organization_id: string; waha_session_name: string; status?: string },
+): Promise<string> {
+  if (cabeNoWaha(channel.waha_session_name) || channel.status === "WORKING") {
+    return channel.waha_session_name;
+  }
+  const novo = nomeWahaNovo(channel.organization_id);
+  const { error } = await db.from("channel_sessions").update({ waha_session_name: novo })
+    .eq("organization_id", channel.organization_id).eq("id", channel.id);
+  if (error) throw new ChannelConnectionError("connection_repair_required", 502);
+  return novo;
 }
 
 /** Ações manuais aguardam apenas a reserva em execução; FAILED é recuperável. */

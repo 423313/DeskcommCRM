@@ -65,4 +65,23 @@ describe("conexão recuperável", () => {
     expect((await connectWahaChannel(f.db, f.db, f.transport, f.input)).replay).toBe(true);
     expect(f.transport.createSession).not.toHaveBeenCalled();expect(f.transport.deleteSession).not.toHaveBeenCalled();
   });
+  it("nome acima de 54 chars é encurtado antes do create — senão o WAHA responde 400", async () => {
+    const longo = `org_${org.replaceAll("-", "")}_${key.replaceAll("-", "")}`;
+    expect(longo.length).toBe(69);
+    const curto = { ...channel, waha_session_name: longo };
+    const f = fixture();
+    const nomes: string[] = [];
+    const thenable = { eq() { return this; }, then(ok: (v: { error: null }) => unknown) { return Promise.resolve({ error: null }).then(ok); } };
+    Object.assign(f.db, { from: () => ({ update: (row: { waha_session_name: string }) => { nomes.push(row.waha_session_name); return thenable; } }) });
+    vi.mocked(f.db.rpc).mockImplementation(((name: string, args?: Record<string, unknown>) => {
+      if (name === "fn_reserve_channel_connection") return Promise.resolve({ data: { channel: curto, receipt_id: key, lease_token: key, replay: false }, error: null });
+      return Promise.resolve({ data: { ...curto, waha_session_name: nomes[0], status: args?.p_status }, error: null });
+    }) as never);
+    f.transport.createSession.mockImplementation(async (n: string) => ({ created: true, session: { name: n, status: "STOPPED" } }));
+    f.transport.startExistingSession.mockImplementation(async (n: string) => ({ name: n, status: "SCAN_QR_CODE" }));
+    const result = await connectWahaChannel(f.db, f.db, f.transport, f.input);
+    expect(nomes[0]!.length).toBeLessThanOrEqual(54);
+    expect(f.transport.createSession).toHaveBeenCalledWith(nomes[0]);
+    expect(result.channel.status).toBe("SCAN_QR_CODE");
+  });
 });

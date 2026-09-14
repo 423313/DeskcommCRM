@@ -30,11 +30,12 @@ describe("reserva WAHA preserva pré-go-live da main", () => {
     await pool.query("insert into user_organizations(organization_id,user_id,role,accepted_at) values($1,$2,'admin',now())",[org,actor]);
     const first=await reserve(org,key,onboarding);
     expect(first.channel.organization_id).toBe(org);
+    expect(first.channel.waha_session_name.length).toBeLessThanOrEqual(54);
+    expect(first.channel.waha_session_name).toMatch(/^[a-zA-Z0-9_-]+$/);
     expect(first.channel.metadata).toEqual({...metadataInicialDoCanal(),...(onboarding?{onboarding:true}:{})});
     // O WAHA (devlikeapro/waha:latest-2026.7.2) valida `name` de sessão com
     // @MaxLength(54). `org_<32>_<32>` = 69 tomava 400 em todo POST /api/sessions.
     expect(first.channel.waha_session_name).toMatch(/^org_[0-9a-f]{8}_[0-9a-f]{32}$/);
-    expect(first.channel.waha_session_name.length).toBeLessThanOrEqual(54);
     await pool.query("select fn_finish_channel_connection($1,$2,$3,'FAILED','connection_repair_required')",[org,first.receipt_id,first.lease_token]);
     // Mudança explícita do operador não pode ser desfeita por retry de conexão.
     const mode=onboarding?"pre_go_live":"open";
