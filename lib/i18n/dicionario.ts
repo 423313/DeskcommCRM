@@ -6324,6 +6324,10 @@ export const DICIONARIO: Traducoes = {
   "O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.": { es: "Qué se puede agendar, cuánto dura y quién atiende. Esto es lo que la pantalla de agendar y el agente de IA le ofrecen al cliente." },
   "Avisar o cliente antes do compromisso, pelo WhatsApp": { es: "Avisar al cliente antes de la cita, por WhatsApp" },
   "Quantos minutos antes": { es: "Cuántos minutos antes" },
+  "E de novo, quantos minutos antes": { es: "Y de nuevo, cuántos minutos antes" },
+  "Opcional. Até 3, separados por vírgula. Ex.: 180 avisa de novo 3 horas antes.": {
+    es: "Opcional. Hasta 3, separados por coma. Ej.: 180 avisa de nuevo 3 horas antes.",
+  },
   "avisa o cliente": { es: "avisa al cliente" },
   "antes": { es: "antes" },
   "O lembrete precisa sair pelo menos 15 minutos antes do compromisso.": { es: "El recordatorio debe salir al menos 15 minutos antes de la cita." },
