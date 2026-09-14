@@ -8,6 +8,86 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.20.0] — 2026-09-12
+
+### Adicionado
+
+- **Falta sem retorno depois da régua de recuperação vira aviso na Central** Quando um cliente falta a um compromisso e a equipe confirma a falta, o sistema já matricula
+  esse contato num fluxo de recuperação — as mensagens de reengajamento que tentam remarcar. Até
+  agora, se a régua inteira era enviada e o cliente **nunca respondia**, o fluxo simplesmente
+  terminava: o card ficava parado na mesma etapa e ninguém era avisado de que a recuperação tinha
+  esgotado.
+
+  Agora, quando isso acontece, abre um aviso na Central de avisos apontando para o compromisso —
+  "Cliente faltou e não respondeu à recuperação" —, para alguém decidir o próximo passo e mover o
+  card no funil. É um aviso por falta (o mesmo compromisso remarcado gera uma falta nova, e um
+  aviso novo); reprocessar não duplica.
+
+  O construtor de fluxo não move etapa por conta própria de propósito — faltar a uma visita não é
+  o negócio esfriando, e quem decide isso continua sendo uma pessoa.
+
+- **A aba Membros mostra os convites enviados, com status e ações** A tela **Equipe › Membros** ganhou uma seção **Convites**. Antes, um convite pendente só aparecia numa lista efêmera dentro do modal "Convidar membros", que sumia ao fechar — não havia onde ver se um convite foi enviado, se o e-mail saiu, se expirou ou se foi ignorado.
+
+  Agora cada convite mostra e-mail, papel e perfil de interface; o status (**Pendente / Aceito / Expirado / Revogado**); a data de envio e a de expiração; e quem enviou o convite. Quando o e-mail **não saiu** — instalação sem serviço de e-mail configurado, por exemplo — a linha avisa e oferece o link do convite para copiar ali mesmo, em vez de o admin achar que enviou.
+
+  Administradores podem **reenviar**, **copiar o link** e **revogar** cada convite; gerentes veem a lista. Revogar passa a impedir o aceite mesmo com o link ainda dentro da validade.
+
+  Tudo escopado por organização (RLS). Nada muda para quem já roda: a atualização cria a tabela `team_invites` sozinha, sem edição de `.env` nem de compose.
+
+- **O modelo de IA padrão da organização passa a ter tela** O padrão de IA da organização decide o modelo de **todo ponto que não tem escolha própria** — numa instalação nova, 24 dos 25.
+
+  Ele existia no banco e já era usado para decidir cada ponto, mas não aparecia em
+  lugar nenhum: não dava para ver qual era, e muito menos trocar sem mexer no
+  banco à mão.
+
+  Agora ele aparece em **Agente de IA › Provedores**, junto com os pontos, e pode
+  ser trocado ali. A troca confere se o modelo existe no catálogo daquele provedor
+  antes de gravar — um erro de digitação viraria o padrão da organização e
+  derrubaria todos os pontos que herdam dele de uma vez.
+
+  A escrita preserva o resto das configurações da organização (a marca e a
+  política de verificação em duas etapas moram no mesmo lugar) e fica registrada
+  no histórico de auditoria.
+
+  Você não precisa fazer nada para adotar. Quem nunca mexeu continua no padrão de
+  sempre; o que muda é que agora dá para ver e escolher.
+
+### Corrigido
+
+- **O instalador não para mais em "Ativando as automações" numa VPS nova** Numa VPS recém-criada o root ainda não tem agendamento nenhum, e o instalador parava logo depois de **"chave de cifra ativa no banco"**, sem mensagem de erro, mostrando **"A instalação parou"** — com o CRM já no ar e os contêineres saudáveis. Rodar o instalador de novo contornava, o que fazia o problema parecer fantasma.
+
+  O que acontecia: o comando que lê as tarefas agendadas "reclama" quando não há nenhuma, e essa reclamação derrubava o script inteiro. A ironia é que a tarefa **já tinha sido gravada** nesse ponto — a instalação estava correta e parecia ter quebrado.
+
+  Agora ele agenda as automações e o agente de atualização direto, na primeira rodada. Quem já instalou não precisa fazer nada.
+
+  **Achado por duas pessoas no mesmo dia, sem que uma soubesse da outra: @luiscgc91 e @rafaelbatistazz**, as duas instalando numa VPS limpa. As duas escreveram exatamente a mesma correção. A descrição acima é a do @rafaelbatistazz, que nomeia o que se vê na tela.
+
+- **Áudio, foto, vídeo e documento recebidos pelo WhatsApp oficial agora aparecem** Quem usa o canal **oficial do WhatsApp** (a API da Meta) recebia a mensagem, mas
+  **não o arquivo**: o áudio, a foto, o vídeo ou o documento simplesmente não
+  apareciam na conversa — e nada na tela dizia que havia algo ali.
+
+  A causa: o aviso que a Meta manda não traz o arquivo, traz um código para
+  buscá-lo. O sistema guardava a mensagem e descartava o código, então não havia
+  como ir atrás do arquivo depois.
+
+  Agora o código é guardado, o arquivo é baixado em segundo plano e passa a
+  aparecer na conversa como qualquer outra mídia. O download só aceita o endereço
+  de mídia da própria Meta, por conexão segura.
+
+  Você não precisa fazer nada para adotar. Mensagens novas passam a trazer a mídia
+  a partir desta versão; as antigas, que perderam o código, não têm como ser
+  recuperadas.
+
+  Achado e corrigido por um contribuidor de fora.
+
+- **O aviso de risco da chamada de voz deixa de ser pulável** A tela de **Configurações › Segurança** pede, com uma caixa obrigatória, que quem administra declare que leu o aviso e **aceita o risco de o WhatsApp bloquear a conta** antes de ligar a chamada de voz.
+
+  Só que dava para pular: quem fosse direto a **Conexões** e escaneasse o código conectava o segundo aparelho **sem passar pelo aviso**. Desligar sempre funcionou de verdade — desconecta o aparelho na hora; o que não existia era a exigência de **ligar**.
+
+  Agora conectar o aparelho e fazer uma ligação exigem que a chamada de voz esteja ligada para a empresa. Quem tentar antes recebe uma mensagem clara dizendo que um administrador precisa ligá-la na tela — e não um erro técnico.
+
+  Quem já tinha ligado pela tela não vê diferença nenhuma.
+
 ## [1.19.0] — 2026-09-11
 
 ### Adicionado
@@ -3566,7 +3646,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.19.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.20.0...HEAD
+[1.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.18.1...v1.19.0
 [1.18.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.17.0...v1.18.0
