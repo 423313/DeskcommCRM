@@ -40,7 +40,9 @@ import type { ChannelAdapter, ChannelSendResult } from '../channel-adapter';
 
 import { withFields, type Logger } from '../obs/logger';
 import {
+  corpoDaMensagem,
   getLeadContext,
+  type CorpoDaMensagemRow,
   type LeadContext,
   type LeadContextMessage,
   type LeadContextResult,
@@ -450,6 +452,17 @@ const inboundTurnPayloadSchema = z
  * entrar entre o despacho e o turno, e o agente passa a responder ao registro
  * errado. A resposta deve sempre usar esta linha canônica.
  *
+ * ⚠️ Ela é COMPOSTA pelo mesmo caminho do histórico (`corpoDaMensagem`), nunca
+ * pela coluna `body` crua. Áudio e foto chegam do WhatsApp sem legenda — `body`
+ * NULL e o conteúdo no derivado (transcrição/visão, gravado DEPOIS pelo
+ * `workers/media-derive-worker.ts`: é essa a corrida que se mede aqui) ou no
+ * marcador `[tipo]`. Lida crua, a linha canônica valia `''` enquanto o histórico
+ * logo abaixo mostrava o texto do cliente — e os DOIS lados do defeito saem
+ * daqui: a abertura anunciava "não há texto utilizável" sobre uma mensagem que
+ * tem texto, e a barreira do falso-vazio desarmava, porque
+ * `claimsCurrentInboundIsEmpty` devolve `false` quando o texto canônico é `''`.
+ * (issue #617)
+ *
  * Exportada só para o teste: o recorte (org + conversa + id + `direction`) é o
  * que impede um id de outra conversa — ou uma outbound — de virar "a mensagem
  * atual", e um recorte não se prova lendo a chamada.
@@ -458,8 +471,8 @@ export async function loadInboundBodyForJob(
   db: Queryable,
   input: { tenantId: string; conversationId: string; inboundMessageId: string },
 ): Promise<string | null> {
-  const result = await db.query<{ body: string | null }>(
-    `select body
+  const result = await db.query<CorpoDaMensagemRow>(
+    `select type, body, media_url, media_storage_path, media_derived_text
        from messages
       where organization_id = $1
         and conversation_id = $2
@@ -469,7 +482,7 @@ export async function loadInboundBodyForJob(
     [input.tenantId, input.conversationId, input.inboundMessageId],
   );
   const row = result.rows[0];
-  return row === undefined ? null : (row.body ?? '');
+  return row === undefined ? null : corpoDaMensagem(row);
 }
 
 /** Conteúdo do checkpoint — o modelo devolve, o Zod valida, o Postgres guarda. */
