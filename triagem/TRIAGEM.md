@@ -540,6 +540,24 @@ git diff --name-only <base>..HEAD -- supabase/migrations/ | grep '\.sql$' \
   | sed -E 's/.*_([0-9]{4})_.*/\1/' | sort | uniq -c | awk '$1>1{print "DUPLICADO: "$2}'
 ```
 
+**São TRÊS artefatos que acompanham o nome do arquivo, não dois.** O MANIFEST e o rótulo do
+apêndice no `baseline.sql` estão nos lugares onde se procura. O terceiro não: **teste que cita o
+caminho da migration**. Ele guarda o conteúdo do arquivo lendo-o do disco, e o vermelho chega como
+`ENOENT: no such file or directory` — que não se parece com renumeração incompleta.
+
+Varra a classe, não a instância — num trem com sete renumerações, o grep custa um segundo:
+
+```bash
+for n in <lista dos NNNN que você mexeu>; do grep -rl "$n" tests lib app; done
+```
+
+E confira as duas dimensões depois, porque `NNNN` único não garante timestamp único:
+
+```bash
+ls supabase/migrations/*.sql | sed -E 's#.*/([0-9]+)_.*#\1#' | sort | uniq -d   # timestamps
+ls supabase/migrations/*.sql | sed -E 's/.*_([0-9]{4})_.*/\1/' | sort | uniq -d  # NNNN
+```
+
 ---
 
 ## 4. Complemento — o que os gates não provam
@@ -1144,6 +1162,24 @@ A regra "um worktree por agente" (modo de falha 5) tem um custo que ninguém tin
 `node_modules` real — obrigatório, porque symlink quebra o Turbopack —, **cada worktree pesa 1,2 a
 2,5 GB**. Quinze deles encheram o disco no meio da fila, e `ENOSPC` derruba build, agente e
 `gh` de uma vez, com mensagem que não parece falta de espaço.
+
+**Num trem de lotes a regra muda, e o gatilho é outro.** O worktree de um lote NÃO pode ser
+removido quando o PR dele é mergeado — o lote seguinte é montado em cima dele. O que se acumula é
+pior: cada `pnpm build` deixa **1,0 a 1,3 GB** de cache do Turbopack em `.next/`, e num trem de cinco
+lotes isso soma mais que os `node_modules`.
+
+Medido em 14/09: o disco chegou a **170 MB livres** e o `build` do lote 5 morreu com
+
+```
+failed to write to file `.../.next/cache/turbopack/.../00000031.sst`: No space left on device
+```
+
+— que **não se parece com falta de espaço** quando lido no meio de um log de build, e é fácil
+confundir com defeito do lote. Remover os worktrees já entregues devolveu 6 GB; apagar os `.next/`
+devolveu mais 2,4 GB.
+
+O gatilho certo no trem: **remova o worktree de um lote quando a VERSÃO dele estiver publicada**, não
+quando o PR entrar — e apague o `.next/` de qualquer lote que você não vá reconstruir agora.
 
 Remova o worktree assim que o PR dele for mergeado — não ao fim da sessão:
 
