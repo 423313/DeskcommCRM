@@ -26,6 +26,11 @@ const config: VercelConfig = {
     { path: "/api/v1/cron/channel-health", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/agenda-google-push", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/agenda-reminder", schedule: "*/5 * * * *" },
+    // Entraram na `main` depois que este PR foi escrito (lotes 3 e 4+5 da
+    // triagem de 14/set). O gate `cron-routes-scheduled` compara este
+    // inventário com o do scheduler e reprova quando eles divergem.
+    { path: "/api/v1/cron/agenda-expira-pendentes", schedule: "*/15 * * * *" },
+    { path: "/api/v1/cron/case-stale-watcher", schedule: "7 * * * *" },
     { path: "/api/v1/cron/contact-avatars", schedule: "*/10 * * * *" },
     { path: "/api/v1/cron/agenda-google-refresh", schedule: "*/10 * * * *" },
     { path: "/api/v1/cron/agenda-google-sync", schedule: "*/15 * * * *" },
