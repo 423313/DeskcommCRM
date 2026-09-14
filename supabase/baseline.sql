@@ -20227,12 +20227,14 @@ begin
   end if;
  end if;
  if new.appointment_revision is not null and new.status in ('active','waiting_reply','paused_handoff','paused_manual') then
+  -- P0001, não 40001: 40001 é serialization_failure e o cliente retenta para
+  -- sempre. followup_stale é permanente. Medido: 6000 erros/min, CPU 100%, 24h.
   if old.status not in ('active','waiting_reply','paused_handoff','paused_manual') or not exists(
    select 1 from public.calendar_appointments a join public.appointment_recovery_receipts r
     on r.organization_id=a.organization_id and r.appointment_id=a.id and r.appointment_revision=a.revision
    where a.organization_id=new.organization_id and a.id=new.appointment_id and a.revision=new.appointment_revision
     and a.status='no_show' and a.contact_id=new.contact_id and r.result='started' and r.invalidated_at is null
-  ) then raise exception 'followup_stale' using errcode='40001'; end if;
+  ) then raise exception 'followup_stale' using errcode='P0001'; end if;
  end if;
  new.revision:=old.revision+1; return new;
 end; $$;
@@ -20451,11 +20453,11 @@ returns bigint language plpgsql security definer set search_path=public as $$
 declare current public.followup_enrollments; patched public.followup_enrollments; contact uuid;
 begin
  select contact_id into contact from public.followup_enrollments where id=p_id and organization_id=p_org;
- if not found then raise exception 'followup_stale' using errcode='40001'; end if;
+ if not found then raise exception 'followup_stale' using errcode='P0001'; end if;
  perform public.fn_service_lock(p_org,contact);
  select * into current from public.followup_enrollments where id=p_id and organization_id=p_org for update;
- if current.contact_id is distinct from contact or current.revision is distinct from p_revision then raise exception 'followup_stale' using errcode='40001'; end if;
- if p_patch->>'status' in ('active','waiting_reply') and current.appointment_revision is not null and not public.fn_appointment_enrollment_current(p_org,p_id,current.current_node_id) then raise exception 'followup_stale' using errcode='40001'; end if;
+ if current.contact_id is distinct from contact or current.revision is distinct from p_revision then raise exception 'followup_stale' using errcode='P0001'; end if;
+ if p_patch->>'status' in ('active','waiting_reply') and current.appointment_revision is not null and not public.fn_appointment_enrollment_current(p_org,p_id,current.current_node_id) then raise exception 'followup_stale' using errcode='P0001'; end if;
  select * into patched from jsonb_populate_record(current,p_patch);
  update public.followup_enrollments set status=patched.status,current_node_id=patched.current_node_id,next_eval_at=patched.next_eval_at,
   claimed_until=patched.claimed_until,attempts=patched.attempts,last_error=patched.last_error,steps_taken=patched.steps_taken,
