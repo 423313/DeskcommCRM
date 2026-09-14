@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 
+import { RegrasDeComissao, type Pessoa, type Regra, type Servico } from "./_comissao";
+
 type Conta = {
   id: string;
   name: string;
@@ -44,6 +46,18 @@ export function CatalogoFinanceiro({ podeEditar }: { podeEditar: boolean }) {
   const contas = useCatalogo<Conta>("contas");
   const formas = useCatalogo<Forma>("formas_de_pagamento");
   const planos = useCatalogo<Plano>("planos_de_conta");
+  const regras = useCatalogo<Regra>("regras_de_comissao");
+
+  // A regra guarda IDs; a lista precisa de nomes. Buscar aqui evita que o
+  // catálogo genérico no servidor tenha de conhecer equipe e agenda.
+  const pessoas = useQuery({
+    queryKey: ["team", "assignable"],
+    queryFn: async () => (await apiClient.get<{ data: Pessoa[] }>("/api/v1/team/assignable")).data,
+  });
+  const servicos = useQuery({
+    queryKey: ["agenda", "tipos"],
+    queryFn: async () => (await apiClient.get<{ data: Servico[] }>("/api/v1/agenda/tipos")).data,
+  });
 
   const invalidar = (tipo: string) =>
     void qc.invalidateQueries({ queryKey: ["financeiro", "catalogo", tipo] });
@@ -256,6 +270,16 @@ export function CatalogoFinanceiro({ podeEditar }: { podeEditar: boolean }) {
           aoRemover={(id) => inativar.mutate({ tipo: "planos_de_conta", id })}
         />
       </section>
+
+      <RegrasDeComissao
+        regras={regras.data ?? []}
+        pessoas={pessoas.data ?? []}
+        servicos={servicos.data ?? []}
+        podeEditar={podeEditar}
+        carregando={regras.isLoading}
+        onCriar={(corpo) => criar.mutate({ tipo: "regras_de_comissao", corpo })}
+        onInativar={(id) => inativar.mutate({ tipo: "regras_de_comissao", id })}
+      />
     </div>
   );
 }

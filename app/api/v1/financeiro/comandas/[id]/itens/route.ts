@@ -55,10 +55,15 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     return fail("conflict", "Só comanda aberta recebe item.", 409, { requestId });
   }
 
+  // Só regra EM VIGOR. Uma regra inativada continua na tabela para explicar o
+  // percentual de uma comanda antiga (é o motivo de ela inativar em vez de
+  // sumir), e deixá-la participar da resolução de hoje faria "desligar a regra"
+  // não desligar nada.
   const { data: regras } = await supabase
     .from("commission_rules")
     .select("attendant_user_id, event_type_id, percent")
-    .eq("organization_id", org);
+    .eq("organization_id", org)
+    .eq("is_active", true);
 
   const percent = percentualDaComissao(regras ?? [], {
     attendantUserId: lido.data.attendant_user_id ?? null,

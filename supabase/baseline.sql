@@ -24747,6 +24747,28 @@ grant  execute on function public.fn_relatorio_financeiro(uuid, date, date) to a
 comment on function public.fn_relatorio_financeiro(uuid, date, date) is
   'Agregados do faturamento num período. Agrega no banco de propósito: o PostgREST corta em 1000 linhas sem avisar, e somar na aplicação devolve um número menor com cara de certo. Invoker: a RLS de cada tabela continua valendo.';
 
+-- ---- regra de comissao inativa (migration 0245) ----
+-- A regra entra no catálogo financeiro genérico, que espera `is_active`.
+-- Antes disto não havia porta nenhuma para cadastrar uma regra, e toda
+-- comissão nascia 0% em toda instalação. Inativar e não apagar preserva a
+-- resposta a "por que aquela comanda saiu com este percentual".
+-- `name` é o rótulo que a pessoa lê na lista ("Ana em manicure"). Ele é
+-- redundante com os dois alvos, e a redundância é deliberada: o catálogo
+-- genérico exige um nome em toda entidade, e derivá-lo no servidor produziria um
+-- texto que ninguém pode corrigir quando ficar ambíguo.
+alter table public.commission_rules
+  add column if not exists name text not null default 'Regra de comissão';
+
+alter table public.commission_rules
+  add column if not exists is_active boolean not null default true;
+
+create index if not exists commission_rules_org_ativas_idx
+  on public.commission_rules (organization_id, event_type_id, attendant_user_id)
+  where is_active;
+
+comment on column public.commission_rules.is_active is
+  'Regra em vigor. Inativa em vez de apagar: o percentual já aplicado está congelado no item, e o que se perderia é a resposta a "por que aquela comanda saiu com este percentual".';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

@@ -18,6 +18,11 @@ export const ENTIDADES_DO_CATALOGO = {
   contas: "financial_accounts",
   formas_de_pagamento: "payment_methods",
   planos_de_conta: "account_plans",
+  // A REGRA DE COMISSÃO entra aqui, e não numa rota própria, porque é a mesma
+  // coisa que as três acima: política que o negócio escreve uma vez e o dia a
+  // dia consome. Sem esta linha ela não tinha porta nenhuma — e `sale_items`
+  // resolve o percentual a partir dela, então toda comissão nascia 0%.
+  regras_de_comissao: "commission_rules",
 } as const;
 
 export type EntidadeDoCatalogo = keyof typeof ENTIDADES_DO_CATALOGO;
@@ -62,10 +67,33 @@ export const planoDeContaSchema = z.object({
   direction: z.enum(DIRECOES),
 });
 
+/**
+ * A regra de comissão.
+ *
+ * `name` existe porque o catálogo genérico o exige em toda entidade, e aqui ele
+ * é o rótulo que a pessoa lê na lista ("Ana em manicure"). O que decide a
+ * comissão são os outros três campos.
+ *
+ * Pelo menos um alvo é obrigatório, e o CHECK do banco diz o mesmo: uma regra
+ * sem pessoa E sem serviço seria a regra "de tudo", que é outra coisa e mora em
+ * outro lugar.
+ */
+export const regraDeComissaoSchema = z
+  .object({
+    name: nome,
+    attendant_user_id: z.string().uuid().nullish(),
+    event_type_id: z.string().uuid().nullish(),
+    percent: z.number().min(0).max(100),
+  })
+  .refine((v) => Boolean(v.attendant_user_id) || Boolean(v.event_type_id), {
+    message: "Escolha ao menos uma pessoa ou um serviço.",
+  });
+
 export const SCHEMA_POR_ENTIDADE = {
   contas: contaSchema,
   formas_de_pagamento: formaDePagamentoSchema,
   planos_de_conta: planoDeContaSchema,
+  regras_de_comissao: regraDeComissaoSchema,
 } as const;
 
 /** As colunas que cada entidade devolve. */
@@ -73,6 +101,8 @@ export const COLUNAS_POR_ENTIDADE: Record<EntidadeDoCatalogo, string> = {
   contas: "id, name, kind, opening_balance_cents, currency, is_active, created_at",
   formas_de_pagamento: "id, name, account_id, is_active, created_at",
   planos_de_conta: "id, name, direction, is_active, created_at",
+  regras_de_comissao:
+    "id, name, attendant_user_id, event_type_id, percent, is_active, created_at",
 };
 
 /** O que a tela chama cada coisa. Nunca o nome da tabela. */
@@ -80,6 +110,7 @@ export const ROTULO_DA_ENTIDADE: Record<EntidadeDoCatalogo, string> = {
   contas: "Conta",
   formas_de_pagamento: "Forma de pagamento",
   planos_de_conta: "Plano de contas",
+  regras_de_comissao: "Regra de comissão",
 };
 
 export function ehEntidadeDoCatalogo(v: string): v is EntidadeDoCatalogo {

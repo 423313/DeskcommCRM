@@ -413,6 +413,8 @@ export type Database = {
           id: string
           organization_id: string
           percent: number
+          name: string
+          is_active: boolean
         }
         Insert: {
           attendant_user_id?: string | null
@@ -421,6 +423,8 @@ export type Database = {
           id?: string
           organization_id: string
           percent: number
+          name?: string
+          is_active?: boolean
         }
         Update: {
           attendant_user_id?: string | null
@@ -429,6 +433,8 @@ export type Database = {
           id?: string
           organization_id?: string
           percent?: number
+          name?: string
+          is_active?: boolean
         }
         Relationships: [
           {

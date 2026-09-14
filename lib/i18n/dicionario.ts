@@ -6223,6 +6223,27 @@ export const DICIONARIO: Traducoes = {
   "pago": { es: "pagado" },
   "Pagar": { es: "Pagar" },
   "Remover lançamento": { es: "Quitar asiento" },
+  "Comissão": { es: "Comisión" },
+  "Quanto cada pessoa recebe por atendimento. Sem regra, a comissão é zero.": {
+    es: "Cuánto recibe cada persona por atención. Sin regla, la comisión es cero.",
+  },
+  "A regra mais específica vence: pessoa e serviço vence pessoa, que vence serviço. Não é o maior percentual que ganha.": {
+    es: "Gana la regla más específica: persona y servicio vence a persona, que vence a servicio. No gana el porcentaje más alto.",
+  },
+  "Pessoa": { es: "Persona" },
+  "Qualquer pessoa": { es: "Cualquier persona" },
+  "Qualquer serviço": { es: "Cualquier servicio" },
+  "Percentual": { es: "Porcentaje" },
+  "Adicionar regra": { es: "Agregar regla" },
+  "Escolha ao menos uma pessoa ou um serviço.": {
+    es: "Elige al menos una persona o un servicio.",
+  },
+  "Nenhuma regra de comissão. Todo item entra com zero.": {
+    es: "Ninguna regla de comisión. Todo ítem entra con cero.",
+  },
+  "Remover regra": { es: "Quitar regla" },
+  "alguém": { es: "alguien" },
+  "um serviço": { es: "un servicio" },
   "Faturamento": { es: "Facturación" },
   "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.": {
     es: "Cuánto entró, de qué forma, y cuánto tiene que recibir cada persona.",
