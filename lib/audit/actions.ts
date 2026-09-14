@@ -450,6 +450,9 @@ export const AUDIT_ACTIONS = [
   "comanda.item_removido",
   "comanda.finalizada",
   "comanda.estornada",
+  "financeiro.lancamento_criado",
+  "financeiro.lancamento_pago",
+  "financeiro.lancamento_removido",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta

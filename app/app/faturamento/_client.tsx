@@ -11,12 +11,15 @@
  * ela é uma razão entre dois números que já vieram somados — não uma segunda
  * apuração dos mesmos dados.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { formatCents } from "@/lib/money";
+
+import { ListaDeLancamentos, type Conta, type Lancamento } from "./_lancamentos";
 
 type Forma = { nome: string; quantidade: number; total_cents: number };
 type Profissional = { attendant_user_id: string | null; itens: number; comissao_cents: number };
@@ -40,8 +43,9 @@ type Pessoa = { user_id: string; name: string | null; email: string | null };
 const hoje = () => new Date().toISOString().slice(0, 10);
 const primeiroDoMes = () => `${hoje().slice(0, 7)}-01`;
 
-export function Faturamento() {
+export function Faturamento({ podeLancar }: { podeLancar: boolean }) {
   const t = useT();
+  const qc = useQueryClient();
   const [de, setDe] = useState(primeiroDoMes);
   const [ate, setAte] = useState(hoje);
 
@@ -67,6 +71,50 @@ export function Faturamento() {
     const p = (equipe.data ?? []).find((x) => x.user_id === id);
     return p?.name ?? p?.email ?? t("Sem responsável");
   };
+
+  const lancamentos = useQuery({
+    queryKey: ["lancamentos", de, ate],
+    queryFn: async () =>
+      (
+        await apiClient.get<{ data: Lancamento[] }>(
+          `/api/v1/financeiro/lancamentos?de=${de}&ate=${ate}`,
+        )
+      ).data,
+  });
+
+  const contas = useQuery({
+    queryKey: ["financeiro", "catalogo", "contas"],
+    queryFn: async () =>
+      (await apiClient.get<{ data: Conta[] }>("/api/v1/financeiro/catalogo/contas")).data,
+  });
+
+  // O RELATÓRIO ENTRA NA INVALIDAÇÃO junto com a lista, e não só ela: lançar uma
+  // saída muda o saldo do período, e deixar o cartão com o número velho seria a
+  // tela se contradizendo a três centímetros de distância.
+  const recarregar = () => {
+    void qc.invalidateQueries({ queryKey: ["lancamentos"] });
+    void qc.invalidateQueries({ queryKey: ["relatorio", "financeiro"] });
+  };
+
+  const criar = useMutation({
+    mutationFn: (corpo: Record<string, unknown>) =>
+      apiClient.post("/api/v1/financeiro/lancamentos", corpo),
+    onSuccess: recarregar,
+    onError: showApiError,
+  });
+
+  const pagar = useMutation({
+    mutationFn: (id: string) =>
+      apiClient.patch(`/api/v1/financeiro/lancamentos/${id}`, { pay: true }),
+    onSuccess: recarregar,
+    onError: showApiError,
+  });
+
+  const remover = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/api/v1/financeiro/lancamentos/${id}`),
+    onSuccess: recarregar,
+    onError: showApiError,
+  });
 
   const r = relatorio.data;
 
@@ -163,6 +211,15 @@ export function Faturamento() {
           </Tabela>
         </>
       ) : null}
+
+      <ListaDeLancamentos
+        lancamentos={lancamentos.data ?? []}
+        contas={contas.data ?? []}
+        podeLancar={podeLancar}
+        onCriar={(corpo) => criar.mutate(corpo)}
+        onPagar={(id) => pagar.mutate(id)}
+        onRemover={(id) => remover.mutate(id)}
+      />
     </div>
   );
 }
