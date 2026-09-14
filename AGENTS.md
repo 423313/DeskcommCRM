@@ -228,7 +228,13 @@ itens envelhecem em ritmos diferentes, e o cabeçalho passava a mentir por todos
   declara as duas variáveis do Upstash como `required()` e o app não sobe sem elas
   (`grep -n UPSTASH lib/env.ts`). O que cai para a memória é Redis **inalcançável** com a
   variável presente, e aí o limite passa a ser por processo.
-- `Idempotency-Key` implementado em **1** rota, apesar de o contrato prometer nos POSTs de criação.
+- `Idempotency-Key` é lido por **4** rotas e o contrato promete nos POSTs de criação. Há duas
+  implementações com recibo (`lgpd/requests/[id]/approve` e `admin/tenants`) e, desde este
+  commit, uma reutilizável em `lib/api/idempotency.ts`, aplicada em `message-templates`.
+  Reconte antes de citar: `grep -rln 'Idempotency-Key' app/api/v1 --include='route.ts'`.
+  **A corrida entre duas requisições simultâneas com a mesma chave segue aberta** —
+  `idempotency_keys.status_code` e `.response_body` são `NOT NULL`, então não há onde gravar
+  "em curso"; fechar exige mudança de schema. Ver issue #778.
 - **`.env.example` está completo** — medido em 2026-08-14: das 45 chaves de `lib/env.ts`, a
   única ausente é `NODE_ENV`, que não é configuração do operador. Esta linha dizia que faltavam
   6, "incluindo 3 secrets"; os três (`IMPERSONATE_COOKIE_SECRET`, `INTERNAL_CRON_SECRET`,
