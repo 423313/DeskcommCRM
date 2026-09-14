@@ -16,18 +16,21 @@
 
 ## 0. Decisões que NÃO são do agente
 
-Estas quatro não têm resposta escrita em nenhum lugar do repositório. **Não invente nenhuma
-delas** — a doutrina proíbe preencher lacuna com suposição plausível:
+Estas decisões não tinham resposta escrita em nenhum lugar do repositório. **Não invente nenhuma
+delas** — a doutrina proíbe preencher lacuna com suposição plausível. Três seguem abertas:
 
-| Decisão                                                                | Estado                                                               | Quem decide     |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------- | --------------- |
-| Unidade de cobrança (retainer por cliente operado, consumo ou licença) | **EM ABERTO**                                                        | dono do produto |
-| Mercado e idioma de entrada                                            | **EM ABERTO**                                                        | dono do produto |
-| Preço, SLA e prazo de resposta                                         | **EM ABERTO** — nenhum número existe                                 | dono do produto |
-| Certificações SOC 2 / ISO 27001                                        | **FORA DE ESCOPO** por decisão escrita, "conforme demanda comercial" | dono do produto |
+| Decisão                         | Estado                                                                         | Quem decide     |
+| ------------------------------- | ------------------------------------------------------------------------------ | --------------- |
+| Unidade de cobrança             | **DECIDIDO em 2026-09-13: retainer por cliente operado** — ver §1.2 da spec 19 | dono do produto |
+| Mercado e idioma de entrada     | **EM ABERTO**                                                                  | dono do produto |
+| Preço, SLA e prazo de resposta  | **EM ABERTO** — nenhum número existe                                           | dono do produto |
+| Certificações SOC 2 / ISO 27001 | **FORA DE ESCOPO** por decisão escrita, "conforme demanda comercial"           | dono do produto |
 
-Sem a primeira linha resolvida, todo o resto fica ambíguo: a unidade de cobrança decide se o
-trabalho é um console de agência ou um medidor de consumo.
+A primeira linha foi fechada em 2026-09-13 e é a que destrava o resto: **retainer por cliente
+operado**. O trabalho imediato passa a ser o console de agência
+(`docs/specs/19-spec-console-de-agencia.md`), e não um medidor de consumo — cobrar por consumo
+exigiria construir medidor → fatura antes do primeiro real, e hoje não existe nenhuma tabela de
+plano, fatura ou assinatura no schema.
 
 ---
 
@@ -129,10 +132,12 @@ A regra que vale sobre todas, escrita pelo plano de fusão que antecedeu esta:
 > _"O projeto anterior falhou por UM motivo: tudo foi validado contra testes, mocks e dados de
 > replay — nada contra a realidade."_
 
-1. **Escrever a fronteira e a unidade de cobrança.** Enquanto a §0 estiver aberta, nenhuma fase
-   seguinte tem critério de "pronto".
-2. **Um cliente real**: WhatsApp real, agente respondendo, dinheiro real. Não é demo.
-3. **Console de agência**, com um operador usando de verdade.
+1. ✅ **Fronteira e unidade de cobrança escritas** (2026-09-13). A unidade é retainer por cliente
+   operado; a lei está nesta doutrina e o trabalho seguinte está em
+   `docs/specs/19-spec-console-de-agencia.md`.
+2. ⏳ **Um cliente real**: WhatsApp real, agente respondendo, dinheiro real. Não é demo. **Nada
+   depois desta linha avança sem ela.**
+3. **Console de agência**, com um operador usando de verdade (spec 19).
 4. **Pacotes de agente por nicho**, derivados do que a fase 3 provou.
 5. **Aceite por cliente** como condição de entrega e de cobrança.
 
