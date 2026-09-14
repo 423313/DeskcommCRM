@@ -259,6 +259,21 @@ function orfaos(
     .sort();
 }
 
+/**
+ * Escapa TODOS os metacaracteres de regex, não só o ponto.
+ *
+ * A versão anterior era `tipo.replace(/\./g, "\\.")`, e o CodeQL a marcou como
+ * `js/incomplete-sanitization` (high): ela não escapa a própria barra invertida.
+ * Aqui `tipo` vem de uma constante literal deste arquivo, então não há entrada
+ * hostil e a severidade não se traduz em risco — mas o defeito **prático** é
+ * outro e é real: no dia em que um tipo de evento nascer com `+`, `(` ou `?` no
+ * nome, o regex passa a casar outra coisa, e um teste de cerca que casa outra
+ * coisa é pior que teste nenhum — ele fica verde afirmando o que não mediu.
+ */
+function escaparParaRegex(texto: string): string {
+  return texto.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 describe("evento-fato (registro) não fica `pending`", () => {
   describe("guardas de vacuidade (sem elas, verde por não medir nada)", () => {
     it("a varredura acha emissões nos dois lados", () => {
@@ -368,7 +383,7 @@ describe("evento-fato (registro) não fica `pending`", () => {
         // declaração aqui passaria a ser uma anistia.
         const achado = onde.some((f) =>
           new RegExp(
-            `insert\\s+into\\s+event_log[\\s\\S]{0,300}?'${tipo.replace(/\./g, "\\.")}'[\\s\\S]{0,120}?'done'`,
+            `insert\\s+into\\s+event_log[\\s\\S]{0,300}?'${escaparParaRegex(tipo)}'[\\s\\S]{0,120}?'done'`,
           ).test(readFileSync(join(RAIZ, f), "utf8")),
         );
         expect(achado, `${tipo} já não nasce 'done' em ${onde.join(" / ")} — ${porque}`).toBe(true);
