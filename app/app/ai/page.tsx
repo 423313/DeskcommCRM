@@ -23,6 +23,7 @@ export default async function AiHubPage() {
       interfaceSettings={activeOrg?.interface_settings}
       title="Agente de IA"
       subtitle="Tudo que define quem atende por você — e como acompanhar o que ele faz."
+      locale={user.idioma}
     />
   );
 }
