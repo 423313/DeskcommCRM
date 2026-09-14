@@ -23,6 +23,8 @@ import { ListaDeLancamentos, type Conta, type Lancamento } from "./_lancamentos"
 
 type Forma = { nome: string; quantidade: number; total_cents: number };
 type Profissional = { attendant_user_id: string | null; itens: number; comissao_cents: number };
+type Servico = { nome: string; quantidade: number; total_cents: number };
+type Cliente = { contact_id: string; comandas: number; total_cents: number };
 
 type Relatorio = {
   de: string;
@@ -36,6 +38,8 @@ type Relatorio = {
   ticket_medio_cents: number;
   por_forma: Forma[];
   por_profissional: Profissional[];
+  por_servico: Servico[];
+  por_cliente: Cliente[];
 };
 
 type Pessoa = { user_id: string; name: string | null; email: string | null };
@@ -70,6 +74,23 @@ export function Faturamento({ podeLancar }: { podeLancar: boolean }) {
     if (!id) return t("Sem responsável");
     const p = (equipe.data ?? []).find((x) => x.user_id === id);
     return p?.name ?? p?.email ?? t("Sem responsável");
+  };
+
+  // Os nomes dos clientes, pelo mesmo motivo dos da equipe: o relatório devolve
+  // id, e resolver aqui evita que a função no banco precise conhecer contatos.
+  const contatos = useQuery({
+    queryKey: ["contacts", "para-relatorio"],
+    queryFn: async () =>
+      (
+        await apiClient.get<{ data: Array<{ id: string; display_name: string | null; name: string | null }> }>(
+          "/api/v1/contacts?limit=100",
+        )
+      ).data,
+  });
+
+  const nomeDoContato = (id: string) => {
+    const c = (contatos.data ?? []).find((x) => x.id === id);
+    return c?.display_name ?? c?.name ?? t("Cliente");
   };
 
   const lancamentos = useQuery({
@@ -193,6 +214,30 @@ export function Faturamento({ podeLancar }: { podeLancar: boolean }) {
                   {r.faturado_cents > 0
                     ? `${Math.round((f.total_cents / r.faturado_cents) * 100)}%`
                     : "—"}
+                </td>
+              </tr>
+            ))}
+          </Tabela>
+
+          <Tabela titulo={t("Serviços que mais faturaram")} vazio={t("Nenhum item no período.")}>
+            {r.por_servico.map((sv) => (
+              <tr key={sv.nome} className="border-b border-border/60">
+                <td className="py-1">{sv.nome}</td>
+                <td className="py-1 text-right text-text-muted">{sv.quantidade}</td>
+                <td className="py-1 text-right tabular-nums" colSpan={2}>
+                  {formatCents(sv.total_cents, "BRL")}
+                </td>
+              </tr>
+            ))}
+          </Tabela>
+
+          <Tabela titulo={t("Clientes que mais gastaram")} vazio={t("Nenhum cliente no período.")}>
+            {r.por_cliente.map((c) => (
+              <tr key={c.contact_id} className="border-b border-border/60">
+                <td className="py-1">{nomeDoContato(c.contact_id)}</td>
+                <td className="py-1 text-right text-text-muted">{c.comandas}</td>
+                <td className="py-1 text-right tabular-nums" colSpan={2}>
+                  {formatCents(c.total_cents, "BRL")}
                 </td>
               </tr>
             ))}

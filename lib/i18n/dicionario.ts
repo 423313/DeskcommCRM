@@ -6246,6 +6246,10 @@ export const DICIONARIO: Traducoes = {
   "um serviço": { es: "un servicio" },
   "Pontos de fidelidade": { es: "Puntos de fidelidad" },
   "ponto(s)": { es: "punto(s)" },
+  "Serviços que mais faturaram": { es: "Servicios que más facturaron" },
+  "Nenhum item no período.": { es: "Ningún ítem en el período." },
+  "Clientes que mais gastaram": { es: "Clientes que más gastaron" },
+  "Nenhum cliente no período.": { es: "Ningún cliente en el período." },
   "Faturamento": { es: "Facturación" },
   "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.": {
     es: "Cuánto entró, de qué forma, y cuánto tiene que recibir cada persona.",

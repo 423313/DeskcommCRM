@@ -24658,11 +24658,16 @@ create unique index if not exists sales_agendamento_unico_idx
   on public.sales (organization_id, appointment_id)
   where appointment_id is not null and status <> 'cancelled';
 
--- ---- relatório financeiro (migration 0244) ----
+-- ---- relatório financeiro (migrations 0244 + 0247) ----
 -- Agrega NO BANCO: o PostgREST corta em 1000 linhas sem avisar, e somar na
 -- aplicação devolve um número menor com cara de certo (medido nesta base:
 -- R$ 141.436,00 em vez de R$ 641.103,60). Invoker, para a RLS de cada tabela
 -- continuar valendo.
+--
+-- O corpo abaixo é o da 0247, que ACRESCENTOU `por_servico` e `por_cliente`
+-- sem mudar a assinatura. O apêndice guarda o estado final, nunca as duas
+-- versões empilhadas — senão quem lê o baseline vê a definição antiga
+-- primeiro e conclui que ela é a que vale.
 create or replace function public.fn_relatorio_financeiro(
   p_org uuid,
   p_de date,
@@ -24681,7 +24686,7 @@ as $$
        and entry_date between p_de and p_ate
   ),
   comandas as (
-    select status, total_cents, reversed_at, payment_method_id
+    select id, status, total_cents, reversed_at, payment_method_id, contact_id
       from public.sales
      where organization_id = p_org
        and finalized_at is not null
@@ -24697,20 +24702,37 @@ as $$
      group by 1
   ),
   por_profissional as (
-    -- A comissão do período é a das comandas finalizadas nele, e `reversed` fica
-    -- de fora: ela existiu, continua registrada, e não é mais devida.
     select co.attendant_user_id,
            count(*)              as itens,
            sum(co.amount_cents)  as comissao_cents
       from public.commissions co
       join public.sale_items si
         on si.id = co.sale_item_id and si.organization_id = p_org
-      join public.sales s
-        on s.id = si.sale_id and s.organization_id = p_org
+      join comandas s on s.id = si.sale_id
      where co.organization_id = p_org
        and co.status <> 'reversed'
-       and s.finalized_at is not null
-       and s.finalized_at::date between p_de and p_ate
+     group by 1
+  ),
+  por_servico as (
+    -- Agrupa pela DESCRIÇÃO congelada no item, e não pelo nome atual do tipo de
+    -- evento. É o que o cliente comprou, com o nome que tinha na hora — e é o
+    -- único agrupamento que continua verdadeiro depois de alguém renomear um
+    -- serviço. O item avulso (sem `event_type_id`) entra por aqui também, em vez
+    -- de sumir do relatório.
+    select si.description       as nome,
+           sum(si.quantity)     as quantidade,
+           sum(si.total_cents)  as total_cents
+      from public.sale_items si
+      join comandas s on s.id = si.sale_id
+     where si.organization_id = p_org
+     group by 1
+  ),
+  por_cliente as (
+    select c.contact_id,
+           count(*)             as comandas,
+           sum(c.total_cents)   as total_cents
+      from comandas c
+     where c.contact_id is not null
      group by 1
   )
   select jsonb_build_object(
@@ -24722,8 +24744,6 @@ as $$
     'comandas_finalizadas', (select count(*) from comandas),
     'comandas_estornadas',  (select count(*) from comandas where reversed_at is not null),
     'faturado_cents',       coalesce((select sum(total_cents) from comandas), 0),
-    -- Ticket médio sobre comanda finalizada. `nullif` porque um mês sem venda
-    -- dividiria por zero, e o erro chegaria à tela como falha do relatório.
     'ticket_medio_cents',   coalesce((select sum(total_cents) / nullif(count(*), 0) from comandas), 0),
     'por_forma', coalesce((
       select jsonb_agg(jsonb_build_object('nome', nome, 'quantidade', quantidade, 'total_cents', total_cents)
@@ -24734,18 +24754,22 @@ as $$
       select jsonb_agg(jsonb_build_object('attendant_user_id', attendant_user_id, 'itens', itens, 'comissao_cents', comissao_cents)
              order by comissao_cents desc)
         from por_profissional
+    ), '[]'::jsonb),
+    'por_servico', coalesce((
+      select jsonb_agg(jsonb_build_object('nome', nome, 'quantidade', quantidade, 'total_cents', total_cents)
+             order by total_cents desc)
+        from (select * from por_servico order by total_cents desc limit 10) t
+    ), '[]'::jsonb),
+    'por_cliente', coalesce((
+      select jsonb_agg(jsonb_build_object('contact_id', contact_id, 'comandas', comandas, 'total_cents', total_cents)
+             order by total_cents desc)
+        from (select * from por_cliente order by total_cents desc limit 10) t
     ), '[]'::jsonb)
   );
 $$;
 
--- Nasce exposta pelas DUAS origens: o `ALTER DEFAULT PRIVILEGES` do baseline
--- concede a `anon` toda função criada depois dele, e o Postgres concede a PUBLIC
--- ao criar. Revogar uma não remove a outra.
 revoke execute on function public.fn_relatorio_financeiro(uuid, date, date) from public, anon;
 grant  execute on function public.fn_relatorio_financeiro(uuid, date, date) to authenticated, service_role;
-
-comment on function public.fn_relatorio_financeiro(uuid, date, date) is
-  'Agregados do faturamento num período. Agrega no banco de propósito: o PostgREST corta em 1000 linhas sem avisar, e somar na aplicação devolve um número menor com cara de certo. Invoker: a RLS de cada tabela continua valendo.';
 
 -- ---- regra de comissao inativa (migration 0245) ----
 -- A regra entra no catálogo financeiro genérico, que espera `is_active`.
