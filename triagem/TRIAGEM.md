@@ -540,6 +540,24 @@ git diff --name-only <base>..HEAD -- supabase/migrations/ | grep '\.sql$' \
   | sed -E 's/.*_([0-9]{4})_.*/\1/' | sort | uniq -c | awk '$1>1{print "DUPLICADO: "$2}'
 ```
 
+**São TRÊS artefatos que acompanham o nome do arquivo, não dois.** O MANIFEST e o rótulo do
+apêndice no `baseline.sql` estão nos lugares onde se procura. O terceiro não: **teste que cita o
+caminho da migration**. Ele guarda o conteúdo do arquivo lendo-o do disco, e o vermelho chega como
+`ENOENT: no such file or directory` — que não se parece com renumeração incompleta.
+
+Varra a classe, não a instância — num trem com sete renumerações, o grep custa um segundo:
+
+```bash
+for n in <lista dos NNNN que você mexeu>; do grep -rl "$n" tests lib app; done
+```
+
+E confira as duas dimensões depois, porque `NNNN` único não garante timestamp único:
+
+```bash
+ls supabase/migrations/*.sql | sed -E 's#.*/([0-9]+)_.*#\1#' | sort | uniq -d   # timestamps
+ls supabase/migrations/*.sql | sed -E 's/.*_([0-9]{4})_.*/\1/' | sort | uniq -d  # NNNN
+```
+
 ---
 
 ## 4. Complemento — o que os gates não provam
