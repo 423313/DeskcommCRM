@@ -39,7 +39,7 @@ import {
 } from "../../scripts/lib/gate-ativacao";
 
 const RAIZ = process.cwd();
-const MIGRATION = "supabase/migrations/20260914150000_0241_acesso_da_ia_volta_a_trilha_do_operador.sql";
+const MIGRATION = "supabase/migrations/20260914210000_0251_acesso_da_ia_volta_a_trilha_do_operador.sql";
 const SCRIPT = "scripts/ativar-gate-elegibilidade-ia.ts";
 const TTL_MS = 21 * 86_400_000;
 /** O mesmo telefone-exemplo que o produto mostra na tela. */
