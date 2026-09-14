@@ -1145,6 +1145,24 @@ A regra "um worktree por agente" (modo de falha 5) tem um custo que ninguém tin
 2,5 GB**. Quinze deles encheram o disco no meio da fila, e `ENOSPC` derruba build, agente e
 `gh` de uma vez, com mensagem que não parece falta de espaço.
 
+**Num trem de lotes a regra muda, e o gatilho é outro.** O worktree de um lote NÃO pode ser
+removido quando o PR dele é mergeado — o lote seguinte é montado em cima dele. O que se acumula é
+pior: cada `pnpm build` deixa **1,0 a 1,3 GB** de cache do Turbopack em `.next/`, e num trem de cinco
+lotes isso soma mais que os `node_modules`.
+
+Medido em 14/09: o disco chegou a **170 MB livres** e o `build` do lote 5 morreu com
+
+```
+failed to write to file `.../.next/cache/turbopack/.../00000031.sst`: No space left on device
+```
+
+— que **não se parece com falta de espaço** quando lido no meio de um log de build, e é fácil
+confundir com defeito do lote. Remover os worktrees já entregues devolveu 6 GB; apagar os `.next/`
+devolveu mais 2,4 GB.
+
+O gatilho certo no trem: **remova o worktree de um lote quando a VERSÃO dele estiver publicada**, não
+quando o PR entrar — e apague o `.next/` de qualquer lote que você não vá reconstruir agora.
+
 Remova o worktree assim que o PR dele for mergeado — não ao fim da sessão:
 
 ```bash
