@@ -24258,6 +24258,197 @@ $$;
 -- funcao alcancavel pela anon key, que vai para o browser.
 revoke execute on function public.fn_tags_de_conversa_em_uso(uuid) from public, anon;
 grant  execute on function public.fn_tags_de_conversa_em_uso(uuid) to authenticated, service_role;
+-- ---- Índices em FKs de mensagens e runs (migration 0247) ----
+create index if not exists idx_messages_contact_id
+  on public.messages (contact_id)
+  where contact_id is not null;
+
+create index if not exists idx_messages_channel_session_id
+  on public.messages (channel_session_id)
+  where channel_session_id is not null;
+
+create index if not exists idx_ai_agent_runs_contact_id
+  on public.ai_agent_runs (contact_id)
+  where contact_id is not null;
+
+create index if not exists idx_ai_agent_runs_channel_session_id
+  on public.ai_agent_runs (channel_session_id)
+  where channel_session_id is not null;
+
+create index if not exists idx_ai_agent_runs_conversation_id
+  on public.ai_agent_runs (conversation_id)
+  where conversation_id is not null;
+
+create index if not exists idx_ai_agent_runs_inbound_message_id
+  on public.ai_agent_runs (inbound_message_id)
+  where inbound_message_id is not null;
+
+create index if not exists idx_ai_agent_runs_outbound_message_id
+  on public.ai_agent_runs (outbound_message_id)
+  where outbound_message_id is not null;
+-- ---- o caso tem assunto: agent_cases.kind (migration 0248) ----
+-- `agent_cases.kind` — do que o caso trata, para quem tria a fila.
+--
+-- POR QUE: hoje o assunto de um caso vive só em texto livre (`title`, `summary`,
+-- `blocker`). Com a fila curta isso basta — dá para ler tudo. Com volume, não:
+-- quem abre a fila quer separar "alguém quer marcar horário" de "alguém está
+-- reclamando" antes de ler qualquer coisa, porque as duas pedem pessoas e
+-- urgências diferentes.
+--
+-- Medido no CRM de origem: 102 pedidos em poucos meses, distribuídos em
+-- agendamento 53, atendimento humano 33, remarcação 4, pagamento 4, curso 3,
+-- cancelamento 2, dúvida 2, outro 1. A triagem por assunto era o que a tela de
+-- lá oferecia, e é o que falta aqui.
+--
+-- ⚠️ SEM CHECK, DE PROPÓSITO — e isto é a doutrina de vocabulário ABERTO do
+-- CLAUDE.md, não descuido. O vocabulário útil muda com o negócio: clínica tem
+-- "remarcação", loja tem "troca". Um CHECK fixo aqui obrigaria uma migration
+-- por nicho, e faria o `update.sh` de um clone com valor próprio quebrar. Quem
+-- prende o vocabulário é a constante `TIPOS_DE_CASO` no TypeScript, e o emissor
+-- usa ela — nunca string literal. A coluna fica FORA do invariante
+-- `vocabulario-banco-x-typescript`, que só cobre coluna que JÁ tem CHECK.
+--
+-- `default 'outro'` e `not null`: caso antigo não fica com buraco, e caso novo
+-- sem classificação cai no genérico em vez de num nulo que toda tela precisa
+-- tratar. Nenhum backfill: o default resolve as linhas existentes na hora.
+
+alter table public.agent_cases
+  add column if not exists kind text not null default 'outro';
+
+comment on column public.agent_cases.kind is
+  'Do que o caso trata, para triagem. Vocabulário ABERTO (sem CHECK): a lista vigente é TIPOS_DE_CASO em lib/ai/case-copy.ts, e quem escreve usa a constante. Valor desconhecido cai no rótulo genérico da tela, nunca quebra.';
+
+-- A fila é sempre lida por organização e por status; o assunto é o terceiro
+-- corte. Parcial nos abertos porque é neles que se tria — resolvido vira
+-- histórico, e histórico se consulta inteiro.
+create index if not exists agent_cases_org_status_kind_idx
+  on public.agent_cases (organization_id, kind)
+  where status in ('awaiting_human', 'awaiting_lead');
+
+-- ---- agenda: prazo de expiração do pedido não confirmado (migration 0249) ----
+--
+-- `fn_agenda_settings` ENUMERA as chaves aceitas e rejeita extras, então o campo
+-- novo precisa dela recriada — senão a tela salva e recebe 22023. Opcional de
+-- propósito: toda organização já instalada tem duas chaves, e exigir a terceira
+-- quebraria o PATCH de uma aba aberta antes da atualização. Ausente = default do
+-- lado TypeScript (1440 minutos). Nenhum backfill: a ausência já é estado válido.
+--
+-- ⚠️ ESTA VERSÃO É DERIVADA DA QUE ESTÁ EM VIGOR, NÃO REESCRITA DO ZERO — e o
+-- portão de MFA da linha abaixo é o motivo. Ele entrou pela migration 0229
+-- (`0229_mfa_e_lgpd_agenda`), e uma reescrita a partir do corpo ANTIGO o
+-- apagaria sem deixar rastro: `create or replace` não avisa o que sumiu, o
+-- espelho migration↔baseline continua fiel (fiel carregando o defeito), e o
+-- `update.sh` de quem já rodava REMOVERIA a proteção que ele tinha. Recriar
+-- função aqui é sempre derivar da que está em vigor.
+create or replace function public.fn_agenda_settings(p_org uuid, p_config jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null
+     or not public.fn_role_at_least(p_org, 'manager')
+     or not public.fn_support_write_allowed(p_org) then
+    raise exception 'agenda_settings_forbidden' using errcode = '42501';
+  end if;
+
+  -- Portão de MFA (migration 0229). Prazos de agenda são configuração que muda
+  -- o comportamento do produto para a organização inteira.
+  if not public.fn_session_mfa_proven() then
+    raise exception 'agenda_mfa_required' using errcode = '42501';
+  end if;
+
+  if jsonb_typeof(p_config->'confirmation_delay_minutes') is distinct from 'number'
+     or jsonb_typeof(p_config->'unknown_protection_minutes') is distinct from 'number'
+     or (p_config - 'confirmation_delay_minutes'
+                  - 'unknown_protection_minutes'
+                  - 'pending_expires_after_minutes') <> '{}'::jsonb
+     or (p_config->>'confirmation_delay_minutes' ~ '^[0-9]{1,5}$') is not true
+     or (p_config->>'unknown_protection_minutes' ~ '^[0-9]{1,5}$') is not true
+     or (p_config->>'confirmation_delay_minutes')::int not between 1 and 10080
+     or (p_config->>'unknown_protection_minutes')::int not between 1 and 10080
+     or (p_config->>'unknown_protection_minutes')::int
+        < (p_config->>'confirmation_delay_minutes')::int
+  then
+    raise exception 'agenda_settings_invalid' using errcode = '22023';
+  end if;
+
+  if p_config ? 'pending_expires_after_minutes' then
+    if jsonb_typeof(p_config->'pending_expires_after_minutes') is distinct from 'number'
+       or (p_config->>'pending_expires_after_minutes' ~ '^[0-9]{1,5}$') is not true
+       or (p_config->>'pending_expires_after_minutes')::int not between 15 and 10080
+    then
+      raise exception 'agenda_settings_invalid' using errcode = '22023';
+    end if;
+  end if;
+
+  update public.organizations
+     set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{agenda}', p_config, true)
+   where id = p_org;
+  if not found then
+    raise exception 'organization_not_found' using errcode = 'P0002';
+  end if;
+  return p_config;
+end; $$;
+revoke all on function public.fn_agenda_settings(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.fn_agenda_settings(uuid, jsonb) to authenticated;
+-- ---- guarda contra replay do gateway do Supabase (migration 0250) ----
+-- O gateway entre o Cloudflare e o PostgREST reexecuta resposta 5xx sem limite.
+-- Um `raise ... errcode='40001'` (conflito benigno) vira HTTP 500 no PostgREST;
+-- 8 requisições de dois dias antes, reexecutadas ~280×/s cada, ocuparam o pool
+-- inteiro, o schema cache não carregou e TODA requisição virou 503 PGRST002 —
+-- o produto inteiro em "Algo deu errado" (2026-09-11). Este hook responde 409 a
+-- requisição cujo `sb-request-id` (UUIDv7) tem mais de 5 minutos: 4xx não é
+-- reexecutado. Idempotente: `create or replace`, grants e `alter role` repetíveis.
+create or replace function public.fn_pgrst_recusar_replay_do_gateway()
+returns void
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  rid text;
+  aceito_ha interval;
+begin
+  rid := coalesce(nullif(current_setting('request.headers', true), '')::jsonb ->> 'sb-request-id', '');
+  -- Só UUIDv7 (versão 7 no 3º grupo) carrega instante; qualquer outro formato passa.
+  if rid !~ '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-' then
+    return;
+  end if;
+  aceito_ha := now() - to_timestamp((('x' || replace(left(rid, 13), '-', ''))::bit(48)::bigint) / 1000.0);
+  if aceito_ha > interval '5 minutes' then
+    raise exception 'gateway_replay'
+      using errcode = 'PT409',
+            detail  = format('sb-request-id %s foi aceito pelo gateway há %s', rid, aceito_ha),
+            hint    = 'A requisição original já expirou; esta é uma reexecução do gateway de uma resposta 5xx antiga.';
+  end if;
+exception
+  when sqlstate 'PT409' then
+    raise;
+  when others then
+    -- A guarda nunca derruba uma requisição por defeito próprio (cabeçalho fora do esperado etc.).
+    return;
+end;
+$$;
+
+comment on function public.fn_pgrst_recusar_replay_do_gateway() is
+  'pgrst.db_pre_request: responde 409 a requisição que o gateway do Supabase reexecuta há >5 min (sb-request-id UUIDv7 velho), para não alimentar o loop de retry de 5xx que esgota o pool do PostgREST.';
+
+-- Roda sob o papel da REQUISIÇÃO (anon/authenticated/service_role), então os três
+-- precisam de EXECUTE; sem isso a própria guarda vira "permission denied" → 5xx.
+-- Não é definer e não lê nada além dos GUCs da requisição: expô-la não amplia nada.
+revoke all on function public.fn_pgrst_recusar_replay_do_gateway() from public, anon;
+grant execute on function public.fn_pgrst_recusar_replay_do_gateway() to anon, authenticated, service_role;
+
+-- O papel `authenticator` só existe onde há PostgREST (Supabase). No Postgres
+-- descartável do `test:db` não existe, e um ALTER ROLE sem guarda derrubaria o
+-- install fresco (ON_ERROR_STOP=1).
+do $$
+begin
+  if to_regrole('authenticator') is not null then
+    execute $c$alter role authenticator set pgrst.db_pre_request = 'public.fn_pgrst_recusar_replay_do_gateway'$c$;
+  end if;
+end $$;
+
+notify pgrst, 'reload config';
+notify pgrst, 'reload schema';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
