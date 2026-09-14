@@ -433,10 +433,30 @@ export const AUDIT_ACTIONS = [
   "agenda.tipo_criado",
   "agenda.tipo_alterado",
   "agenda.tipo_desativado",
+  // Ligar de volta um tipo que alguém desligou é ato de gestão e tem verbo
+  // próprio: como `agenda.tipo_alterado { campos: ["is_active"] }` ele seria,
+  // na trilha, indistinguível de "mudaram a duração".
+  "agenda.tipo_reativado",
   // A rodada que AVISOU alguém do próprio compromisso. Mensagem que saiu para o
   // telefone de um cliente é efeito, e efeito audita — mas só a rodada que
   // enviou: a que varreu e não achou ninguém a avisar não é mutação.
   "agenda.lembrete_enviado",
+  // Fechar ou abrir um dia muda quem consegue marcar, e a pergunta que aparece
+  // depois é sempre "quem fechou esse dia?". O bloqueio em si pode ser apagado
+  // (é regra vigente, não fato histórico); estas linhas é que guardam a autoria.
+  "agenda.dia_bloqueado",
+  "agenda.dia_aberto",
+  "agenda.bloqueio_removido",
+  // A cobrança de um caso parado. Audita a RODADA que avisou, não cada caso:
+  // o que se quer responder depois é "o sistema cobrou?", e uma linha por caso
+  // faria do audit log a própria fila.
+  "ai.caso_parado_cobrado",
+  // Um pedido não confirmado soltou o horário que estava segurando. Audita
+  // porque é CANCELAMENTO — o compromisso deixa de existir para quem o pediu —,
+  // e sem esta linha a única explicação para o horário ter voltado a aparecer
+  // seria "sumiu". Só a rodada que expirou alguma coisa; varredura vazia não é
+  // mutação.
+  "agenda.pendente_expirado",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta
@@ -495,6 +515,16 @@ export const AUDIT_ACTIONS = [
   // um bloqueio não há como saber nem uma coisa nem outra.
   "voice.opt_in_changed",
   "voice.session_unpaired",
+
+  // A exclusão de contato que NÃO completou (issue #752). A ausência de
+  // `contact.deleted` não distinguia "ninguém excluiu" de "tentei, um vínculo
+  // RESTRICT barrou e o contato ficou de pé" — e as duas coisas contam a mesma
+  // história incompleta quando a única linha que o painel tem para olhar é a do
+  // sucesso. `metadata.motivo` separa `vinculo_restrict` de `falha_ao_apagar` e
+  // `metadata.apagados` diz o que já tinha saído quando parou — que é
+  // exatamente o que faltou no incidente: o histórico foi destruído ANTES do
+  // erro, sem rastro de nada.
+  "contact.delete_blocked",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

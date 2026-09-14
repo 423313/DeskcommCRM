@@ -10118,6 +10118,7 @@ alter table public.agent_inbox_items
     -- mesma razão de midia_nao_lida/conhecimento_nao_indexado. Entra NESTA
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
+    'case_stale',
     'other'
   ));
 
@@ -18957,8 +18958,25 @@ begin
     insert into public.user_organizations(organization_id, user_id, role, invited_by, invited_at, accepted_at, interface_settings)
       values (p_org, p_user, p_role, p_invited_by, p_invited_at, now(), p_interface_settings) returning * into m;
   end if;
+
+  -- O DONO ASSUMIU. Só o vínculo MARCADO como provisório sai, e só ele.
+  if p_role = 'admin' then
+    delete from public.attendant_availability av
+      where av.organization_id = p_org
+        and av.user_id <> p_user
+        and exists (select 1 from public.user_organizations uo
+                     where uo.organization_id = p_org and uo.user_id = av.user_id
+                       and uo.provisional_until_handover);
+
+    delete from public.user_organizations uo
+      where uo.organization_id = p_org
+        and uo.provisional_until_handover
+        and uo.user_id <> p_user;
+  end if;
+
   return jsonb_build_object('id', m.id, 'changed', true);
 end $$;
+
 revoke all on function public.fn_accept_team_invite(uuid, uuid, text, uuid, timestamptz, timestamptz, jsonb) from public, anon, authenticated;
 grant execute on function public.fn_accept_team_invite(uuid, uuid, text, uuid, timestamptz, timestamptz, jsonb) to service_role;
 
@@ -18979,6 +18997,7 @@ declare
   prior public.idempotency_keys%rowtype;
   org public.organizations%rowtype;
   result jsonb;
+  dono_e_outra_pessoa boolean;
 begin
   if not exists (select 1 from public.platform_admins where user_id = p_actor
     and revoked_at is null and scope = 'full') then
@@ -18998,15 +19017,22 @@ begin
     end if;
     return prior.response_body || jsonb_build_object('created', false);
   end if;
+
+  -- A MESMA comparação que já decidia `interface_settings`, agora com nome e
+  -- guardada. Era ela que sabia a resposta e não a anotava em lugar nenhum.
+  dono_e_outra_pessoa := lower(p_request->>'owner_email') is distinct from
+    (select lower(email) from auth.users where id = p_actor);
+
   insert into public.organizations(display_name, slug, legal_name, cnpj, status, settings, created_by)
     values (p_request->>'display_name', p_request->>'slug', coalesce(nullif(p_request->>'legal_name', ''), p_request->>'display_name'),
       p_request->>'cnpj', 'active', jsonb_build_object('plan', p_request->>'plan'), p_actor)
     returning * into org;
-  insert into public.user_organizations(organization_id, user_id, role, accepted_at, interface_settings)
-    values (org.id, p_actor, 'admin', now(), case when lower(p_request->>'owner_email') =
-      (select lower(email) from auth.users where id = p_actor)
-      then coalesce(p_request->'owner_interface_settings', '{"preset":"completa"}'::jsonb)
-      else '{"preset":"completa"}'::jsonb end);
+  insert into public.user_organizations(organization_id, user_id, role, accepted_at, interface_settings, provisional_until_handover)
+    values (org.id, p_actor, 'admin', now(),
+      case when dono_e_outra_pessoa
+        then '{"preset":"completa"}'::jsonb
+        else coalesce(p_request->'owner_interface_settings', '{"preset":"completa"}'::jsonb) end,
+      dono_e_outra_pessoa);
   result := jsonb_build_object('id', org.id, 'slug', org.slug, 'display_name', org.display_name,
     'invite_id', gen_random_uuid(), 'issued_at', floor(extract(epoch from now()))::bigint);
   insert into public.idempotency_keys(organization_id, key, endpoint, request_hash, status_code, response_body, tenant_creation_trusted)
@@ -19014,6 +19040,7 @@ begin
       decode(p_hash, 'hex'), 201, result, true);
   return result || jsonb_build_object('created', true);
 end $$;
+
 revoke all on function public.fn_create_tenant_with_owner(uuid, uuid, jsonb, text) from public, anon, authenticated;
 grant execute on function public.fn_create_tenant_with_owner(uuid, uuid, jsonb, text) to service_role;
 
@@ -23990,7 +24017,7 @@ create trigger trg_org_voice_calls_set_updated_at
   before update on public.org_voice_calls
   for each row execute function public.fn_set_updated_at();
 
--- ---- aniversário do contato (migration 0242) ----
+-- ---- aniversário do contato (migration 0252) ----
 -- `contacts.birthdate` existia e não acionava nada. `birthday_md` é o mês e o
 -- dia num inteiro (914 = 14 de setembro), gerado e armazenado, para a varredura
 -- diária buscar por igualdade em vez de varrer a tabela.
@@ -24013,6 +24040,437 @@ create index if not exists contacts_org_aniversario_idx
 comment on column public.contacts.birthday_md is
   'Mês e dia do aniversário num inteiro (914 = 14 de setembro), derivado de birthdate. Existe para a varredura diária do cron contact-birthdays poder buscar por igualdade em vez de varrer a tabela.';
 
+notify pgrst, 'reload schema';
+
+-- ---- Registro não nasce `pending` (migration 0239) ----
+--
+-- Racional completo no cabeçalho da migration 0244. Em uma linha: tipo de evento
+-- que ninguém consome não é fila — é registro, e a linha nasce `done`.
+--
+-- O defeito medido (issue #753): `event_log.status` nasce `pending` e nenhum
+-- drain seleciona tipo sem handler (`drain.ts` filtra por
+-- `event_type in (handlers)`; o drain do agent-engine filtra
+-- `ai_agent.dispatch_requested`), então o registro acaba a vida `pending` — 626
+-- linhas em 8 tipos na instalação da issue, indistinguíveis de fila entupida.
+--
+-- A lista mora no BANCO porque é o banco que escreve o status: quem emitir um
+-- tipo novo sem consumidor cai em
+-- `tests/unit/evento-de-fato-nao-fica-pendente.test.ts`, que lê a lista daqui e
+-- a cobra exaustiva em relação ao que o código emite.
+create or replace function public.fn_event_log_e_registro(p_event_type text)
+returns boolean
+language sql
+immutable
+set search_path to 'public', 'pg_temp'
+as $$
+  select p_event_type = any (array[
+    -- IA e agente
+    'ai.responded',
+    'ai_agent.created',
+    'ai_agent.published',
+    'ai_agent.run_completed',
+    'ai_agent.run_failed',
+    'ai_agent.run_started',
+    -- agente (harness) — o motor registra quando não há negócio para pendurar
+    'agent.activity_unrouted',
+    -- canal e conversa
+    'channel_session.status_changed',
+    'conversation.claimed',
+    'conversation.transferred',
+    'whatsapp.chat_id_not_recognized',
+    'whatsapp.conversation_mark_failed',
+    -- contato, lead, organização e plataforma
+    'contact.anonymized',
+    'contact.created',
+    'contact.deleted',
+    'contact.updated',
+    'crm.activity_write_failed',
+    'incident.resolved',
+    'lead.bulk_assigned',
+    'lead.bulk_deleted',
+    'lead.bulk_tagged',
+    'lead.reopened',
+    'lead.risk_backlog_seeded',
+    'lead.updated',
+    'org.updated',
+    'tenant.onboarded',
+    'tenant.reactivated',
+    'tenant.suspended',
+    'user.profile_updated',
+    -- mensagem
+    'message.failed',
+    'message.outbound',
+    'message.sending',
+    'message.sent',
+    -- LGPD
+    'lgpd.export_delivered',
+    'lgpd.export_generated',
+    'lgpd.redact_applied',
+    'lgpd.redact_failed'
+  ]::text[]);
+$$;
+
+-- Mesma ACL de `fn_log_event` (migration 0034): função pura de leitura, útil no
+-- SQL editor de uma instalação, e nunca alcançável pela anon key.
+revoke all on function public.fn_event_log_e_registro(text) from public, anon;
+grant execute on function public.fn_event_log_e_registro(text) to authenticated, service_role;
+
+create or replace function public.fn_event_log_marca_registro()
+returns trigger
+language plpgsql
+set search_path to 'public', 'pg_temp'
+as $$
+begin
+  -- Só o que nasce `pending`: quem escolhe status na origem não é reescrito
+  -- (o agent-engine insere `ai_agent.dispatch_requested` e
+  -- `agent.operator_turn` com o status que quer).
+  if new.status = 'pending' and public.fn_event_log_e_registro(new.event_type) then
+    new.status := 'done';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.fn_event_log_marca_registro() from public, anon;
+grant execute on function public.fn_event_log_marca_registro() to service_role;
+
+drop trigger if exists trg_event_log_marca_registro on public.event_log;
+create trigger trg_event_log_marca_registro
+  before insert on public.event_log
+  for each row
+  execute function public.fn_event_log_marca_registro();
+
+-- Backfill do estoque: só os tipos da lista, e só `pending` — `processing`
+-- (claim perdido, dono é o reaper do drain) e `dead` (erro de consumidor) são
+-- outra história, com outro dono.
+update public.event_log
+   set status = 'done'
+ where status = 'pending'
+   and public.fn_event_log_e_registro(event_type);
+-- ---- Credencial de enfeite não derruba a leitura (migration 0240) ----
+--
+-- Racional completo no cabeçalho da migration 0252. Em uma linha: não tente
+-- decifrar o que não pode ser cifra — devolva null, que é o contrato que os
+-- leitores já tratam (`lib/webhooks/secrets.ts`).
+--
+-- O defeito medido (issue #754): `fn_decrypt_oauth` chamava `pgp_sym_decrypt` em
+-- QUALQUER bytea, e o schema grava byte de enfeite onde ainda não há credencial
+-- (as colunas cifradas são NOT NULL — `Buffer.from([0])` nas rotas que criam
+-- sessão, conforme `lib/waha/webhook-auth.ts` já documenta). Resultado: 500
+-- permanente em 10-30% das chamadas do RPC, nos mesmos registros.
+--
+-- Medido nesta VPS antes do fix: `\x00` => 39000, bytea vazio => 39000, pacote
+-- de verdade => decifra, NULL => NULL. O menor pacote que `fn_encrypt_oauth`
+-- produz tem 66 bytes, e pacote PGP começa com o bit 7 ligado (o real: 0xC3) —
+-- são as duas condições da guarda. A ordem importa: `get_byte()` em bytea vazio
+-- estoura (`index 0 out of valid range`).
+create or replace function public.fn_decrypt_oauth(ciphertext bytea) returns text
+    language plpgsql security definer
+    set search_path to 'public', 'private', 'extensions', 'pg_temp'
+    as $$
+declare
+  k text := private.fn_oauth_key();
+begin
+  -- 1. Sem valor não há credencial (comportamento que a função já tinha).
+  if ciphertext is null then
+    return null;
+  end if;
+
+  -- 2. Curto demais para ser pacote deste par: o menor que fn_encrypt_oauth
+  --    produz (texto vazio, aes256) tem 66 bytes — medido. Abaixo disso é
+  --    sentinela (`\x00`, o byte de enfeite das rotas de sessão), bytea vazio,
+  --    lixo ou truncamento.
+  if octet_length(ciphertext) < 66 then
+    return null;
+  end if;
+
+  -- 3. Pacote PGP começa com o bit 7 ligado (o real medido: 0xC3). Sem cara de
+  --    pacote é JSON em claro, hex ou texto — e o tamanho sozinho não pega isso.
+  --    Esta linha vem DEPOIS da de tamanho de propósito: `get_byte()` em bytea
+  --    vazio estoura com `index 0 out of valid range, 0..-1` — medido.
+  if get_byte(ciphertext, 0) < 128 then
+    return null;
+  end if;
+
+  -- Daqui para baixo só chega pacote de verdade: se não abrir, é chave mestra
+  -- trocada ou dado corrompido, e isso tem de aparecer.
+  return pgp_sym_decrypt(ciphertext, k);
+end$$;
+
+revoke all on function public.fn_decrypt_oauth(bytea) from public, anon, authenticated;
+grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
+
+notify pgrst, 'reload schema';
+-- ---- rascunho de agente sem número de WhatsApp (migration 0241) ----
+--
+-- `channel_session_id` era NOT NULL, e o editor exigia o número para SALVAR.
+-- Instalação nova não tem nenhuma linha em `channel_sessions` (o aparelho é
+-- pareado outro dia), então o dono escrevia o prompt do atendente e não
+-- conseguia guardar nada. Escolher o número é requisito para ATENDER.
+--
+-- Publicar sem número continua recusado por `fn_publish_ai_agent_version`
+-- (`channel_session_not_found`: o select por id nulo não acha linha), e o runtime
+-- só executa `ai_agents.published_version_id` — rascunho sem número é invisível
+-- para o atendimento por construção.
+--
+-- Idempotente e sem backfill: `drop not null` em coluna já anulável é no-op, e
+-- afrouxar a restrição não invalida nenhuma linha existente.
+alter table public.ai_agent_versions
+  alter column channel_session_id drop not null;
+
+comment on column public.ai_agent_versions.channel_session_id is
+  'Por qual número este agente atende. NULL = ainda não escolhido (rascunho legítimo de quem não pareou o WhatsApp). Publicar com NULL é recusado por fn_publish_ai_agent_version (channel_session_not_found).';
+-- ---- aviso de caso parado: índice do watcher (migration 0242) ----
+--
+-- O VOCABULÁRIO do kind (case_stale) mora no bloco único da constraint, lá em
+-- cima — aqui só o índice. Reconstruir a constraint num segundo bloco faria as
+-- duas listas divergirem, e é o que 
+-- reprova.
+--
+-- Parcial em status=open porque é a única pergunta do watcher ("existe aviso
+-- aberto para este caso?") e porque avisos resolvidos viram a maioria das
+-- linhas com o tempo.
+create index if not exists agent_inbox_items_case_stale_aberto_idx
+  on public.agent_inbox_items (organization_id, ref_id)
+  where kind = 'case_stale' and status = 'open';
+-- ---- chamada de API tem PRAZO para esperar uma trava (migration 0243) ----
+-- `lock_timeout` é 0 por padrão no Postgres: esperar para sempre. O cliente HTTP
+-- desiste em 10s, mas a consulta continua viva segurando a fila, e o clique
+-- seguinte empilha atrás. Medido em produção: 10 chamadas simultâneas de
+-- "Enviar link ao cliente", Postgres a 357% de CPU.
+--
+-- No PAPEL e não na função: `authenticator` é usado em TODA requisição da API, e
+-- `set role` não reinicia parâmetros de sessão. Cobre as sete funções que a
+-- varredura achou com a mesma forma, e as que ainda não existem.
+-- `service_role` fica de fora: trabalho de fundo pode esperar.
+--
+-- Idempotente: `alter role ... set` sobrescreve.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'authenticator') then
+    execute 'alter role authenticator set lock_timeout = ''4s''';
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    execute 'alter role authenticated set lock_timeout = ''4s''';
+  end if;
+end $$;
+-- ---- tags de conversa em uso (migration 0244) ----
+-- O seletor de etiqueta do Inbox oferece as etiquetas EM USO, e nao so a lista
+-- curada a mao. `security INVOKER` de proposito: a funcao recebe a organizacao
+-- por ARGUMENTO e e concedida a `authenticated`, entao `definer` aqui seria
+-- leitura cross-tenant (o mesmo aviso esta no comentario de
+-- `fn_gasto_de_ia_do_mes`). Sob invoker quem isola e a RLS de `conversations`.
+-- Idempotente por construcao: `create or replace` + `revoke`/`grant`.
+create or replace function public.fn_tags_de_conversa_em_uso(p_org uuid)
+returns table (tag text)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select distinct t
+  from public.conversations c, unnest(c.tags) as t
+  where c.organization_id = p_org
+    and c.tags is not null
+  order by t
+  limit 200;
+$$;
+
+-- As DUAS origens de EXECUTE: o ALTER DEFAULT PRIVILEGES do baseline (que da a
+-- anon) e o grant a PUBLIC que o Postgres da ao criar. Revogar uma so deixa a
+-- funcao alcancavel pela anon key, que vai para o browser.
+revoke execute on function public.fn_tags_de_conversa_em_uso(uuid) from public, anon;
+grant  execute on function public.fn_tags_de_conversa_em_uso(uuid) to authenticated, service_role;
+-- ---- Índices em FKs de mensagens e runs (migration 0247) ----
+create index if not exists idx_messages_contact_id
+  on public.messages (contact_id)
+  where contact_id is not null;
+
+create index if not exists idx_messages_channel_session_id
+  on public.messages (channel_session_id)
+  where channel_session_id is not null;
+
+create index if not exists idx_ai_agent_runs_contact_id
+  on public.ai_agent_runs (contact_id)
+  where contact_id is not null;
+
+create index if not exists idx_ai_agent_runs_channel_session_id
+  on public.ai_agent_runs (channel_session_id)
+  where channel_session_id is not null;
+
+create index if not exists idx_ai_agent_runs_conversation_id
+  on public.ai_agent_runs (conversation_id)
+  where conversation_id is not null;
+
+create index if not exists idx_ai_agent_runs_inbound_message_id
+  on public.ai_agent_runs (inbound_message_id)
+  where inbound_message_id is not null;
+
+create index if not exists idx_ai_agent_runs_outbound_message_id
+  on public.ai_agent_runs (outbound_message_id)
+  where outbound_message_id is not null;
+-- ---- o caso tem assunto: agent_cases.kind (migration 0248) ----
+-- `agent_cases.kind` — do que o caso trata, para quem tria a fila.
+--
+-- POR QUE: hoje o assunto de um caso vive só em texto livre (`title`, `summary`,
+-- `blocker`). Com a fila curta isso basta — dá para ler tudo. Com volume, não:
+-- quem abre a fila quer separar "alguém quer marcar horário" de "alguém está
+-- reclamando" antes de ler qualquer coisa, porque as duas pedem pessoas e
+-- urgências diferentes.
+--
+-- Medido no CRM de origem: 102 pedidos em poucos meses, distribuídos em
+-- agendamento 53, atendimento humano 33, remarcação 4, pagamento 4, curso 3,
+-- cancelamento 2, dúvida 2, outro 1. A triagem por assunto era o que a tela de
+-- lá oferecia, e é o que falta aqui.
+--
+-- ⚠️ SEM CHECK, DE PROPÓSITO — e isto é a doutrina de vocabulário ABERTO do
+-- CLAUDE.md, não descuido. O vocabulário útil muda com o negócio: clínica tem
+-- "remarcação", loja tem "troca". Um CHECK fixo aqui obrigaria uma migration
+-- por nicho, e faria o `update.sh` de um clone com valor próprio quebrar. Quem
+-- prende o vocabulário é a constante `TIPOS_DE_CASO` no TypeScript, e o emissor
+-- usa ela — nunca string literal. A coluna fica FORA do invariante
+-- `vocabulario-banco-x-typescript`, que só cobre coluna que JÁ tem CHECK.
+--
+-- `default 'outro'` e `not null`: caso antigo não fica com buraco, e caso novo
+-- sem classificação cai no genérico em vez de num nulo que toda tela precisa
+-- tratar. Nenhum backfill: o default resolve as linhas existentes na hora.
+
+alter table public.agent_cases
+  add column if not exists kind text not null default 'outro';
+
+comment on column public.agent_cases.kind is
+  'Do que o caso trata, para triagem. Vocabulário ABERTO (sem CHECK): a lista vigente é TIPOS_DE_CASO em lib/ai/case-copy.ts, e quem escreve usa a constante. Valor desconhecido cai no rótulo genérico da tela, nunca quebra.';
+
+-- A fila é sempre lida por organização e por status; o assunto é o terceiro
+-- corte. Parcial nos abertos porque é neles que se tria — resolvido vira
+-- histórico, e histórico se consulta inteiro.
+create index if not exists agent_cases_org_status_kind_idx
+  on public.agent_cases (organization_id, kind)
+  where status in ('awaiting_human', 'awaiting_lead');
+
+-- ---- agenda: prazo de expiração do pedido não confirmado (migration 0249) ----
+--
+-- `fn_agenda_settings` ENUMERA as chaves aceitas e rejeita extras, então o campo
+-- novo precisa dela recriada — senão a tela salva e recebe 22023. Opcional de
+-- propósito: toda organização já instalada tem duas chaves, e exigir a terceira
+-- quebraria o PATCH de uma aba aberta antes da atualização. Ausente = default do
+-- lado TypeScript (1440 minutos). Nenhum backfill: a ausência já é estado válido.
+--
+-- ⚠️ ESTA VERSÃO É DERIVADA DA QUE ESTÁ EM VIGOR, NÃO REESCRITA DO ZERO — e o
+-- portão de MFA da linha abaixo é o motivo. Ele entrou pela migration 0229
+-- (`0229_mfa_e_lgpd_agenda`), e uma reescrita a partir do corpo ANTIGO o
+-- apagaria sem deixar rastro: `create or replace` não avisa o que sumiu, o
+-- espelho migration↔baseline continua fiel (fiel carregando o defeito), e o
+-- `update.sh` de quem já rodava REMOVERIA a proteção que ele tinha. Recriar
+-- função aqui é sempre derivar da que está em vigor.
+create or replace function public.fn_agenda_settings(p_org uuid, p_config jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null
+     or not public.fn_role_at_least(p_org, 'manager')
+     or not public.fn_support_write_allowed(p_org) then
+    raise exception 'agenda_settings_forbidden' using errcode = '42501';
+  end if;
+
+  -- Portão de MFA (migration 0229). Prazos de agenda são configuração que muda
+  -- o comportamento do produto para a organização inteira.
+  if not public.fn_session_mfa_proven() then
+    raise exception 'agenda_mfa_required' using errcode = '42501';
+  end if;
+
+  if jsonb_typeof(p_config->'confirmation_delay_minutes') is distinct from 'number'
+     or jsonb_typeof(p_config->'unknown_protection_minutes') is distinct from 'number'
+     or (p_config - 'confirmation_delay_minutes'
+                  - 'unknown_protection_minutes'
+                  - 'pending_expires_after_minutes') <> '{}'::jsonb
+     or (p_config->>'confirmation_delay_minutes' ~ '^[0-9]{1,5}$') is not true
+     or (p_config->>'unknown_protection_minutes' ~ '^[0-9]{1,5}$') is not true
+     or (p_config->>'confirmation_delay_minutes')::int not between 1 and 10080
+     or (p_config->>'unknown_protection_minutes')::int not between 1 and 10080
+     or (p_config->>'unknown_protection_minutes')::int
+        < (p_config->>'confirmation_delay_minutes')::int
+  then
+    raise exception 'agenda_settings_invalid' using errcode = '22023';
+  end if;
+
+  if p_config ? 'pending_expires_after_minutes' then
+    if jsonb_typeof(p_config->'pending_expires_after_minutes') is distinct from 'number'
+       or (p_config->>'pending_expires_after_minutes' ~ '^[0-9]{1,5}$') is not true
+       or (p_config->>'pending_expires_after_minutes')::int not between 15 and 10080
+    then
+      raise exception 'agenda_settings_invalid' using errcode = '22023';
+    end if;
+  end if;
+
+  update public.organizations
+     set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{agenda}', p_config, true)
+   where id = p_org;
+  if not found then
+    raise exception 'organization_not_found' using errcode = 'P0002';
+  end if;
+  return p_config;
+end; $$;
+revoke all on function public.fn_agenda_settings(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.fn_agenda_settings(uuid, jsonb) to authenticated;
+-- ---- guarda contra replay do gateway do Supabase (migration 0250) ----
+-- O gateway entre o Cloudflare e o PostgREST reexecuta resposta 5xx sem limite.
+-- Um `raise ... errcode='40001'` (conflito benigno) vira HTTP 500 no PostgREST;
+-- 8 requisições de dois dias antes, reexecutadas ~280×/s cada, ocuparam o pool
+-- inteiro, o schema cache não carregou e TODA requisição virou 503 PGRST002 —
+-- o produto inteiro em "Algo deu errado" (2026-09-11). Este hook responde 409 a
+-- requisição cujo `sb-request-id` (UUIDv7) tem mais de 5 minutos: 4xx não é
+-- reexecutado. Idempotente: `create or replace`, grants e `alter role` repetíveis.
+create or replace function public.fn_pgrst_recusar_replay_do_gateway()
+returns void
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  rid text;
+  aceito_ha interval;
+begin
+  rid := coalesce(nullif(current_setting('request.headers', true), '')::jsonb ->> 'sb-request-id', '');
+  -- Só UUIDv7 (versão 7 no 3º grupo) carrega instante; qualquer outro formato passa.
+  if rid !~ '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-' then
+    return;
+  end if;
+  aceito_ha := now() - to_timestamp((('x' || replace(left(rid, 13), '-', ''))::bit(48)::bigint) / 1000.0);
+  if aceito_ha > interval '5 minutes' then
+    raise exception 'gateway_replay'
+      using errcode = 'PT409',
+            detail  = format('sb-request-id %s foi aceito pelo gateway há %s', rid, aceito_ha),
+            hint    = 'A requisição original já expirou; esta é uma reexecução do gateway de uma resposta 5xx antiga.';
+  end if;
+exception
+  when sqlstate 'PT409' then
+    raise;
+  when others then
+    -- A guarda nunca derruba uma requisição por defeito próprio (cabeçalho fora do esperado etc.).
+    return;
+end;
+$$;
+
+comment on function public.fn_pgrst_recusar_replay_do_gateway() is
+  'pgrst.db_pre_request: responde 409 a requisição que o gateway do Supabase reexecuta há >5 min (sb-request-id UUIDv7 velho), para não alimentar o loop de retry de 5xx que esgota o pool do PostgREST.';
+
+-- Roda sob o papel da REQUISIÇÃO (anon/authenticated/service_role), então os três
+-- precisam de EXECUTE; sem isso a própria guarda vira "permission denied" → 5xx.
+-- Não é definer e não lê nada além dos GUCs da requisição: expô-la não amplia nada.
+revoke all on function public.fn_pgrst_recusar_replay_do_gateway() from public, anon;
+grant execute on function public.fn_pgrst_recusar_replay_do_gateway() to anon, authenticated, service_role;
+
+-- O papel `authenticator` só existe onde há PostgREST (Supabase). No Postgres
+-- descartável do `test:db` não existe, e um ALTER ROLE sem guarda derrubaria o
+-- install fresco (ON_ERROR_STOP=1).
+do $$
+begin
+  if to_regrole('authenticator') is not null then
+    execute $c$alter role authenticator set pgrst.db_pre_request = 'public.fn_pgrst_recusar_replay_do_gateway'$c$;
+  end if;
+end $$;
+
+notify pgrst, 'reload config';
 notify pgrst, 'reload schema';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
@@ -24089,3 +24547,19 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+
+
+-- ---- Criador provisório sai na entrega (migration 0237) ----
+-- As duas funções acima já saíram com a regra; aqui fica só a COLUNA, que é
+-- o dado que faltava. Idempotente. NÃO há expurgo retroativo, de propósito:
+-- vínculo antigo não tem a marca, e deduzi-la foi o erro que a primeira
+-- versão desta regra cometeu (ver o cabeçalho da migration).
+alter table public.user_organizations
+  add column if not exists provisional_until_handover boolean not null default false;
+
+comment on column public.user_organizations.provisional_until_handover is
+  'Este vínculo existe só para a organização não nascer vazia, e sai quando o '
+  'dono assumir. Gravado APENAS por fn_create_tenant_with_owner, e apenas '
+  'quando o tenant foi criado para OUTRA pessoa (owner_email <> e-mail de quem '
+  'cria). Nunca deduzir este valor depois: a ausência dele foi o que fez a '
+  'primeira versão desta regra expulsar alguém da própria empresa.';

@@ -54,13 +54,57 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // EPIC-02: gate /app/* on completed onboarding.
   // EPIC-11: gate /app/* on org not being suspended (S-11.08).
+  let conexoesCaidas: ConexaoCaida[] = [];
+  let enrolled = false;
+  let needsMfaGate = false;
+
   if (activeOrg) {
     const admin = createAdminClient();
-    const { data: orgRow } = await admin
-      .from("organizations")
-      .select("onboarded_at, status, settings")
-      .eq("id", activeOrg.orgId)
-      .maybeSingle();
+    /**
+     * As quatro consultas que TODA página de `/app` paga, disparadas juntas.
+     *
+     * Elas eram sequenciais e independentes: cada uma esperava a anterior sem
+     * precisar do resultado dela, e a soma aparecia como a tela que não reage ao
+     * clique. Em paralelo, o custo passa a ser o da mais lenta.
+     *
+     * Duas consequências que valem estar escritas, porque não são acidente:
+     *
+     *  - `listarConexoesCaidas` e `requiresMfa` agora rodam ANTES dos `redirect`
+     *    de onboarding e de suspensão. Quem vai ser redirecionado paga duas
+     *    consultas a mais — um caminho raro, que termina numa navegação de
+     *    qualquer forma. O caminho normal, que é todo render de todo usuário,
+     *    deixa de pagar três esperas em fila.
+     *  - A consulta das conexões continua morando no seam
+     *    (`lib/channels/health`), não aqui: tela que monta o select de
+     *    `channel_sessions` à mão foi o que deixou três seletores oferecendo
+     *    canal arquivado (invariante `canais-selecionaveis`), e de quebra o
+     *    filtro de estados fica LITERALMENTE o mesmo que decide o aviso da
+     *    Central. Vigiado por
+     *    `tests/unit/faixa-de-conexao-caida-vem-do-seam.test.tsx`, que EXECUTA
+     *    este layout — a cerca anterior lia o texto-fonte e reprovava esta
+     *    refatoração sem que nada tivesse quebrado.
+     */
+    const [orgRes, conexoes, isEnrolled, mfaRequired] = await Promise.all([
+      admin
+        .from("organizations")
+        .select("onboarded_at, status, settings")
+        .eq("id", activeOrg.orgId)
+        .maybeSingle(),
+      listarConexoesCaidas(admin, activeOrg.orgId),
+      isMfaEnrolled(),
+      requiresMfa(
+        activeOrg.role,
+        user.is_platform_admin,
+        user.id,
+        activeOrg.orgId,
+      ),
+    ]);
+
+    const orgRow = orgRes.data;
+    conexoesCaidas = conexoes;
+    enrolled = isEnrolled;
+    needsMfaGate = mfaRequired;
+
     if (orgRow && !orgRow.onboarded_at && !user.support) redirect("/onboarding");
     if (orgRow?.status === "suspended") redirect("/account-suspended");
     // G4-02: expõe visibility_mode ao client (inbox decide visões visíveis).
@@ -119,16 +163,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (Object.keys(marcaDoTenant).length > 0) {
       activeOrg = { ...activeOrg, marca: marcaDoTenant };
     }
+  } else {
+    const [isEnrolled, mfaRequired] = await Promise.all([
+      isMfaEnrolled(),
+      requiresMfa(undefined, user.is_platform_admin, user.id, undefined),
+    ]);
+    enrolled = isEnrolled;
+    needsMfaGate = mfaRequired;
   }
-
-  // A conexão caiu? A consulta mora no seam (`lib/channels/health`), não aqui:
-  // tela que monta o select de `channel_sessions` à mão foi o que deixou três
-  // seletores oferecendo canal arquivado, e o invariante `canais-selecionaveis`
-  // existe por causa disso. De quebra, o filtro de estados fica LITERALMENTE o
-  // mesmo que decide o aviso da Central — duas listas divergiriam com o tempo.
-  const conexoesCaidas: ConexaoCaida[] = activeOrg
-    ? await listarConexoesCaidas(createAdminClient(), activeOrg.orgId)
-    : [];
 
   // Read sidebar collapsed state SSR to avoid flash.
   const store = await cookies();
@@ -139,15 +181,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     expiresAt: user.support.expires_at, accessMode: user.support.access_mode,
   } : null;
 
-  const enrolled = await isMfaEnrolled();
-  // A decisão deixou de ser uma constante de papel: ela lê a política de quem
-  // pode exigir (a plataforma e a empresa). Ver `lib/auth/politica-mfa.ts`.
-  const needsMfaGate = await requiresMfa(
-    activeOrg?.role,
-    user.is_platform_admin,
-    user.id,
-    activeOrg?.orgId,
-  );
   const shell = (
     <VoiceCallProvider>
       <AppShell sidebarCollapsed={collapsed}>{children}</AppShell>
