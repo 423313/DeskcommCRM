@@ -81,6 +81,9 @@ CRONS="
 # confirmado, futuro e ainda não avisado.
 */5 * * * *|45|api/v1/cron/agenda-reminder
 */15 * * * *|60|api/v1/cron/risk-watcher
+# O CASO PARADO. De hora em hora, e não a cada 5 minutos: o prazo é de 24h, e
+# uma varredura mais frequente só gastaria consulta para descobrir o mesmo nada.
+7 * * * *|60|api/v1/cron/case-stale-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
 0 12 * * *|60|api/v1/cron/lgpd-sla-watcher

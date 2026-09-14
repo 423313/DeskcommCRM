@@ -10118,6 +10118,7 @@ alter table public.agent_inbox_items
     -- mesma razão de midia_nao_lida/conhecimento_nao_indexado. Entra NESTA
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
+    'case_stale',
     'other'
   ));
 
@@ -24123,9 +24124,9 @@ update public.event_log
    set status = 'done'
  where status = 'pending'
    and public.fn_event_log_e_registro(event_type);
--- ---- Credencial de enfeite não derruba a leitura (migration 0240) ----
+-- ---- Credencial de enfeite não derruba a leitura (migration 0242) ----
 --
--- Racional completo no cabeçalho da migration 0240. Em uma linha: não tente
+-- Racional completo no cabeçalho da migration 0242. Em uma linha: não tente
 -- decifrar o que não pode ser cifra — devolva null, que é o contrato que os
 -- leitores já tratam (`lib/webhooks/secrets.ts`).
 --
@@ -24196,7 +24197,19 @@ alter table public.ai_agent_versions
 
 comment on column public.ai_agent_versions.channel_session_id is
   'Por qual número este agente atende. NULL = ainda não escolhido (rascunho legítimo de quem não pareou o WhatsApp). Publicar com NULL é recusado por fn_publish_ai_agent_version (channel_session_not_found).';
-
+-- ---- aviso de caso parado: índice do watcher (migration 0242) ----
+--
+-- O VOCABULÁRIO do kind (case_stale) mora no bloco único da constraint, lá em
+-- cima — aqui só o índice. Reconstruir a constraint num segundo bloco faria as
+-- duas listas divergirem, e é o que 
+-- reprova.
+--
+-- Parcial em status=open porque é a única pergunta do watcher ("existe aviso
+-- aberto para este caso?") e porque avisos resolvidos viram a maioria das
+-- linhas com o tempo.
+create index if not exists agent_inbox_items_case_stale_aberto_idx
+  on public.agent_inbox_items (organization_id, ref_id)
+  where kind = 'case_stale' and status = 'open';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
