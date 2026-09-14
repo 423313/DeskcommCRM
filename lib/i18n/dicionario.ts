@@ -556,6 +556,61 @@ export const DICIONARIO: Traducoes = {
   "Dados da empresa, retenção de mídia, DPO. Admin only.": {
     es: "Datos de la empresa, retención de medios, DPO. Solo administradores.",
   },
+
+  // ─── Hub de IA (NavHub: seções, rótulos e descrições) ───
+  "Montar o agente": { es: "Configurar el agente" },
+  "Ensinar o agente": { es: "Enseñar al agente" },
+  "Acompanhar o agente": { es: "Acompañar al agente" },
+  "Tudo que define quem atende por você — e como acompanhar o que ele faz.": {
+    es: "Todo lo que define quién atiende por ti — y cómo seguir lo que hace.",
+  },
+  "Quem atende por você: instruções, modelo, ferramentas e publicação.": {
+    es: "Quién atiende por ti: instrucciones, modelo, herramientas y publicación.",
+  },
+  "Como o agente retoma uma conversa que esfriou, para nenhuma morrer no silêncio.": {
+    es: "Cómo el agente retoma una conversación que se enfrió, para que ninguna muera en silencio.",
+  },
+  "Qual agente pega qual conversa, e quando o humano assume.": {
+    es: "Qué agente toma cada conversación y cuándo interviene una persona.",
+  },
+  Credenciais: { es: "Credenciales" },
+  "A chave do provedor de IA que os agentes usam para pensar.": {
+    es: "La clave del proveedor de IA que los agentes usan para pensar.",
+  },
+  Provedores: { es: "Proveedores" },
+  "Qual inteligência atende cada parte do sistema — e o que acontece se ela falhar.": {
+    es: "Qué inteligencia atiende cada parte del sistema y qué ocurre si falla.",
+  },
+  Conhecimento: { es: "Conocimiento" },
+  "Os materiais que o agente consulta antes de responder sobre o seu negócio.": {
+    es: "Los materiales que el agente consulta antes de responder sobre tu negocio.",
+  },
+  Memória: { es: "Memoria" },
+  "O que o agente já aprendeu sobre a sua operação e reaproveita.": {
+    es: "Lo que el agente ya aprendió sobre tu operación y vuelve a utilizar.",
+  },
+  Skills: { es: "Skills" },
+  "As ações que o agente pode executar sozinho durante o atendimento.": {
+    es: "Las acciones que el agente puede ejecutar por sí solo durante la atención.",
+  },
+  "Os atendimentos que o agente conduziu, do início ao desfecho.": {
+    es: "Las atenciones que el agente condujo, desde el inicio hasta el desenlace.",
+  },
+  "O que a IA encontrou e precisa de uma decisão sua.": {
+    es: "Lo que la IA encontró y necesita una decisión tuya.",
+  },
+  Alertas: { es: "Alertas" },
+  "Melhorias que a IA sugere para si mesma, esperando sua decisão.": {
+    es: "Mejoras que la IA se propone a sí misma mientras espera tu decisión.",
+  },
+  "O que a IA fez — e, quando falhou, o que aconteceu e o que fazer.": {
+    es: "Lo que hizo la IA y, cuando falló, qué ocurrió y qué hacer.",
+  },
+  "Uso e orçamento": { es: "Uso y presupuesto" },
+  "Quanto a IA consumiu e qual é o teto de gasto do mês.": {
+    es: "Cuánto consumió la IA y cuál es el límite de gasto del mes.",
+  },
+
   // ─── Hub do CRM (NavHub: seções e subtítulo) ───
   //
   // As duas seções são a régua que decide o menu, escrita por extenso: o que se
