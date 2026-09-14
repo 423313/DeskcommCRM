@@ -440,6 +440,12 @@ export const AUDIT_ACTIONS = [
   // telefone de um cliente é efeito, e efeito audita — mas só a rodada que
   // enviou: a que varreu e não achou ninguém a avisar não é mutação.
   "agenda.lembrete_enviado",
+  // Fechar ou abrir um dia muda quem consegue marcar, e a pergunta que aparece
+  // depois é sempre "quem fechou esse dia?". O bloqueio em si pode ser apagado
+  // (é regra vigente, não fato histórico); estas linhas é que guardam a autoria.
+  "agenda.dia_bloqueado",
+  "agenda.dia_aberto",
+  "agenda.bloqueio_removido",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta
