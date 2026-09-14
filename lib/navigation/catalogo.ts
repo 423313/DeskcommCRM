@@ -247,6 +247,22 @@ export const NAV_CATALOG = [
     // na navegação" — a porta existia, era outra.
   },
   {
+    // O BALCÃO. Fica em CRM, e não em Configurações, porque é uso diário de quem
+    // está com a cliente na frente — a tela irmã, em Configurações › Financeiro,
+    // é onde o negócio se descreve uma vez.
+    //
+    // `viewer` porque conferir o que foi lançado no dia não é privilégio de
+    // quem lança; o que a RLS impede é ele escrever.
+    href: "/app/comandas",
+    label: "Comandas",
+    description: "O que foi feito, por quem, e quanto o cliente paga.",
+    icon: "Receipt",
+    group: "crm",
+    section: "O dia a dia da venda",
+    sidebar: true,
+    minRole: "viewer",
+  },
+  {
     // O catálogo financeiro: contas, formas de pagamento e plano de contas.
     //
     // Fica em "Sua empresa" pelo mesmo motivo dos tipos de agendamento — é onde
