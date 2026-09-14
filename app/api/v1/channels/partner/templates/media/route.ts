@@ -38,7 +38,19 @@ export const dynamic = "force-dynamic";
 /** A revisão leva até 24h; a margem tem de caber num feriado. */
 const VALIDADE_SEGUNDOS = 7 * 24 * 60 * 60;
 
-/** Só imagem, e só os formatos que a plataforma aceita no cabeçalho. */
+/**
+ * Só imagem, e só os formatos que a plataforma aceita no cabeçalho.
+ *
+ * Recusar aqui é melhor que deixar subir: o arquivo iria para o storage, a
+ * definição seria criada, e a recusa chegaria horas depois falando de um
+ * formato que o operador escolheu porque a tela deixou.
+ *
+ * O conjunto é consultado DUAS vezes, e as duas importam: contra o `type` que o
+ * navegador declarou (barato, descarta o engano honesto) e contra o tipo
+ * FAREJADO nos bytes (`farejarTipo`), que é o que decide. O rótulo é do cliente
+ * e mente quando quer — um SVG renomeado para `.png` passava pela primeira
+ * peneira e chegava ao storage com `contentType: image/png`.
+ */
 const TIPOS = new Set(["image/jpeg", "image/png"]);
 const TAMANHO_MAX = 5 * 1024 * 1024;
 
