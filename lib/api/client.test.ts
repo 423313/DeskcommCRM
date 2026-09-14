@@ -123,6 +123,63 @@ describe("apiClient", () => {
     expect(e.message).not.toMatch(/aborted without reason/i);
     expect(e.message).toMatch(/\d+ms/);
   }, 10_000);
+
+  /**
+   * Timeout numa ESCRITA não é "não aconteceu" — é "não sei".
+   *
+   * O servidor não cancela o trabalho quando o cliente desiste: ele termina e
+   * devolve para ninguém. Retentar executa a escrita de novo.
+   *
+   * Medido (issue #783): "Testar agente" leva ~14,5s de modelo contra um
+   * timeout padrão de 10s. Um clique virava até TRÊS execuções completas do
+   * LLM, as três pagas, nenhuma devolvida à tela.
+   */
+  function abortaSempre() {
+    return (_url: string, init: { signal: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+      });
+  }
+
+  it("t9: POST que estoura o tempo NÃO é repetido — a escrita pode ter acontecido", async () => {
+    fetchMock.mockImplementation(abortaSempre());
+
+    await apiClient.post("/x", { a: 1 }, { timeoutMs: 5 }).catch(() => undefined);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("t9b: PATCH e DELETE seguem a mesma regra", async () => {
+    for (const chamar of [
+      () => apiClient.patch("/x", { a: 1 }, { timeoutMs: 5 }),
+      () => apiClient.delete("/x", { timeoutMs: 5 }),
+    ]) {
+      fetchMock.mockClear();
+      fetchMock.mockImplementation(abortaSempre());
+      await chamar().catch(() => undefined);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("t10: GET que estoura o tempo CONTINUA sendo repetido — ler de novo é barato e seguro", async () => {
+    fetchMock.mockImplementation(abortaSempre());
+
+    await apiClient.get("/x", { timeoutMs: 5 }).catch(() => undefined);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("t11: 429 num POST segue retentando — ali o servidor DISSE que não processou", async () => {
+    // A regra nova é sobre incerteza, não sobre método: um 429 é resposta, e
+    // resposta não deixa dúvida sobre o que aconteceu.
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(429, { error: {} }, { "Retry-After": "0" }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { ok: true } }));
+
+    await apiClient.post("/x", { a: 1 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 /**

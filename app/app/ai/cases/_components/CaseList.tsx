@@ -2,6 +2,7 @@
 
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatDistanceToNowStrict } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,16 @@ import { CaseDetail } from "./CaseDetail";
 export function CaseList() {
   const t = useT();
   const [tab, setTab] = useState<"open" | "resolved">("open");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Deep link: o aviso "um atendimento espera decisão" na Central manda para cá
+  // com o id do caso. Sem isto ele abriria a LISTA, e quem clicou teria que
+  // caçar de qual caso o aviso falava — um aviso que não leva ao seu assunto é
+  // meio aviso. Só o valor INICIAL: clicar na lista continua mandando, e a URL
+  // não vira estado a sincronizar.
+  // `?.` porque o hook devolve null fora de um contexto de navegação (o que
+  // acontece em teste e em render estático). Sem a guarda, a tela inteira
+  // quebra com "Cannot read properties of null".
+  const idDaUrl = useSearchParams()?.get("caso") ?? null;
+  const [selectedId, setSelectedId] = useState<string | null>(idDaUrl);
   const { data, isLoading } = useCases(tab);
 
   return (
