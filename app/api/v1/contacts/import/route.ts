@@ -138,6 +138,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   const candidatos: Array<{ linha: number; contato: Record<string, unknown> }> = [];
   const errors: LinhaErro[] = [];
   const vistosNoArquivo = new Set<string>();
+  // Declarado ANTES do laço de validação: a repetição dentro do arquivo é
+  // contada lá, e a colisão com o banco aqui embaixo — os dois somam no mesmo
+  // número, porque para quem importa "duplicado" é uma coisa só.
+  let skippedDuplicates = 0;
 
   for (let i = 0; i < dataRows.length; i++) {
     const linha = i + 2; // 1-based contando o cabeçalho — bate com o editor de planilhas.
@@ -150,11 +154,37 @@ export async function POST(req: NextRequest): Promise<Response> {
       errors.push({ linha, motivo: t("CPF inválido: ") + `"${contato.cpf}"` });
       continue;
     }
-    const chave = contato.phone_number ?? `email:${(contato.email as string).toLowerCase()}`;
-    if (vistosNoArquivo.has(chave)) {
-      continue; // repetido DENTRO do arquivo — conta como duplicado, sem ruído de erro.
+    /**
+     * ⚠️ AS VARIANTES, e não o telefone cru.
+     *
+     * A dedup contra o BANCO (mais abaixo) usa `phoneLookupVariants` — a mesma
+     * regra que trata o nono dígito. Esta, aqui dentro do arquivo, usava o valor
+     * literal: duas grafias do MESMO número na mesma planilha
+     * (`+5541999998888` e `+554199998888`) passavam as duas pela checagem
+     * interna, e a segunda só era barrada se o banco já tivesse a primeira — o
+     * que não acontece quando as duas são novas. Resultado: contato duplicado
+     * criado pela importação, que é o que o importador existe para evitar.
+     *
+     * Duas dedups com réguas diferentes é o defeito; agora é a mesma régua.
+     */
+    const chaves =
+      typeof contato.phone_number === "string"
+        ? phoneLookupVariants(contato.phone_number).map((v) => `tel:${v}`)
+        : [`email:${(contato.email as string).toLowerCase()}`];
+
+    if (chaves.some((k) => vistosNoArquivo.has(k))) {
+      // ⚠️ CONTA. O comentário anterior aqui dizia "conta como duplicado" e o
+      // código NÃO contava: o `continue` seco fazia a linha sumir de
+      // `imported`, de `skipped_duplicates` e de `errors` ao mesmo tempo.
+      //
+      // Medido numa importação real de 647 clientes: o relatório dizia "500
+      // linhas, 487 duplicadas, 0 erros" e não dizia nada sobre as outras 13.
+      // Quem importa uma base de clientes precisa fechar a conta — sem isso não
+      // há como distinguir "o resto era repetido" de "o resto se perdeu".
+      skippedDuplicates += 1;
+      continue;
     }
-    vistosNoArquivo.add(chave);
+    for (const k of chaves) vistosNoArquivo.add(k);
 
     const parsed = contactCreateSchema.safeParse({ ...contato, source: SOURCE_IMPORT_CSV });
     if (!parsed.success) {
@@ -169,7 +199,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     const resumo: ImportSummary = {
       total_linhas: dataRows.length,
       imported: 0,
-      skipped_duplicates: 0,
+      // Não é zero: uma planilha inteira de linhas repetidas chega aqui com
+      // `candidatos` vazio e `skippedDuplicates` cheio. Zerar seria dizer
+      // "nenhuma duplicada" justamente no caso em que todas eram.
+      skipped_duplicates: skippedDuplicates,
       errors,
     };
     return ok(resumo, { requestId });
@@ -213,7 +246,6 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   // ─── Insert linha a linha com desfecho individual ─────────────────────────
   let imported = 0;
-  let skippedDuplicates = 0;
 
   for (const { linha, contato } of candidatos) {
     const phone = contato.phone_number as string | undefined;
