@@ -436,6 +436,12 @@ export const AUDIT_ACTIONS = [
   // telefone de um cliente é efeito, e efeito audita — mas só a rodada que
   // enviou: a que varreu e não achou ninguém a avisar não é mutação.
   "agenda.lembrete_enviado",
+  // Um pedido não confirmado soltou o horário que estava segurando. Audita
+  // porque é CANCELAMENTO — o compromisso deixa de existir para quem o pediu —,
+  // e sem esta linha a única explicação para o horário ter voltado a aparecer
+  // seria "sumiu". Só a rodada que expirou alguma coisa; varredura vazia não é
+  // mutação.
+  "agenda.pendente_expirado",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta
