@@ -1,6 +1,6 @@
-import pg from 'pg';
 import { pathToFileURL } from 'node:url';
 import { once } from 'node:events';
+import { connectEventsDatabase } from './connection.mjs';
 
 // Reclamar trabalho local é seguro: efeito e conclusão compartilham transação.
 // `sending`/`uncertain` ficam fora da recuperação automática, mesmo com lease vencido.
@@ -35,11 +35,10 @@ export async function finishLocal(client, receipt) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.once('message', async ({ databaseUrl, schema, eventId, mode }) => {
-    const client = new pg.Client({ connectionString: databaseUrl,
-      options: `-c search_path=${schema},pg_catalog -c statement_timeout=5000` });
+  process.once('message', async ({ context, schema, eventId, mode }) => {
+    let client;
     try {
-      await client.connect();
+      client = await connectEventsDatabase(context,schema);
       const receipt = await claim(client, eventId, 'local-a', mode === 'crash' ? 200 : 5000);
       if (!receipt) throw new Error('Nenhum recibo disponível para o subprocesso.');
       if (mode === 'crash') {
@@ -57,7 +56,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       }
     } catch (error) {
       process.send({ error: error.message });
-      await client.end();
+      await client?.end();
       process.disconnect();
       process.exitCode = 1;
     }

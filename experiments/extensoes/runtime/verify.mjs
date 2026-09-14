@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { runProbe } from './probe.mjs';
+import { RUNTIME_REPO_ROOT, validateRuntimeWorkspace, writeRuntimeReport } from './workspace.mjs';
 
-const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
-const evidenceDir = resolve(process.argv[2] ?? join(repoRoot, '.superpowers/evidence/extensoes-bancada'));
+if (process.argv.length > 2) throw new Error('verify não aceita destino alternativo de evidência.');
+const { repoRoot, evidenceDir } = await validateRuntimeWorkspace({ repoRoot: RUNTIME_REPO_ROOT,
+  evidenceDir: join(RUNTIME_REPO_ROOT, '.superpowers/evidence/extensoes-bancada') });
 const report = await runProbe({ repoRoot, evidenceDir });
-await mkdir(evidenceDir, { recursive: true });
-await writeFile(join(evidenceDir, 'runtime-report.json'), `${JSON.stringify(report, null, 2)}\n`);
+await writeRuntimeReport({ repoRoot, evidenceDir }, report);
 assert.equal(report.id, 'runtime');
 assert.equal(report.status, 'passed', JSON.stringify(report.checks.filter((check) => !check.passed)));
 for (const id of ['valid', 'cross_org', 'missing_grant', 'filesystem', 'network', 'fuel', 'memory_initial', 'memory',
@@ -20,7 +19,4 @@ assert.equal(report.measurements.warm_call_ms.n, 50);
 assert.equal(report.measurements.concurrent.tasks, 8);
 assert.equal(report.measurements.concurrent.maximum_active, 2);
 assert.equal(report.measurements.container_comparison.status, 'blocked');
-const absent = await runProbe({ repoRoot, evidenceDir: join(evidenceDir, 'intentionally-absent') });
-assert.equal(absent.status, 'blocked');
-assert.equal(absent.checks.length, 0);
 process.stdout.write(`${JSON.stringify({ status: report.status, checks: report.checks.length, evidence: join(evidenceDir, 'runtime-report.json') })}\n`);

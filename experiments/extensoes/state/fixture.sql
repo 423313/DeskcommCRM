@@ -72,19 +72,30 @@ do $$ declare t text; begin
 end $$;
 grant insert,update,delete on bench_state.rls_canary to bench_state_tenant_a,bench_state_tenant_b;
 
+-- Política única para escrita, admissão e entrega. v2 é aditivo; v3 quebra v1/v2.
+create function bench_state.contract_compatible(p_contract int,p_schema int) returns boolean
+language sql immutable set search_path=pg_catalog as $$
+  select coalesce((p_contract=1 and p_schema in (1,2))
+    or (p_contract=2 and p_schema=2) or (p_contract=3 and p_schema=3),false)
+$$;
+
 create function bench_state.write_record(p_version int,p_id text,p_subject text,p_amount bigint,p_note text,p_label text default null)
 returns void language plpgsql security definer set search_path=pg_catalog,bench_state as $$
 declare org uuid:=bench_state.tenant_id(); ver int;
 begin
   select schema_version into ver from bench_state.installation where id=1 for share;
-  if p_version not in (1,2) or ver>2 or p_version>ver then raise exception using errcode='P0001',message='contract_incompatible'; end if;
+  if not bench_state.contract_compatible(p_version,ver) then raise exception using errcode='P0001',message='contract_incompatible'; end if;
   perform 1 from bench_state.activation where organization_id=org and active and can_write for update;
   if not found then raise exception using errcode='P0001',message='extension_inactive_or_grant_missing'; end if;
   perform 1 from bench_state.subjects where organization_id=org and id=p_subject and not erased for update;
   if not found then raise exception using errcode='P0001',message='subject_erased'; end if;
-  insert into bench_state.records(organization_id,id,subject_id,amount_cents,legacy_note)
-    values(org,p_id,p_subject,p_amount,p_note);
-  if p_version=2 then
+  if p_version=3 then
+    execute 'insert into bench_state.records(organization_id,id,subject_id,amount_minor,legacy_note) values($1,$2,$3,$4,$5)' using org,p_id,p_subject,p_amount,p_note;
+  else
+    insert into bench_state.records(organization_id,id,subject_id,amount_cents,legacy_note)
+      values(org,p_id,p_subject,p_amount,p_note);
+  end if;
+  if p_version>=2 then
     execute 'update bench_state.records set label=$1 where organization_id=$2 and id=$3' using p_label,org,p_id;
   end if;
 end $$;
@@ -94,7 +105,7 @@ returns void language plpgsql security definer set search_path=pg_catalog,bench_
 declare org uuid:=bench_state.tenant_id(); ver int; rev int;
 begin
   select schema_version into ver from bench_state.installation where id=1 for share;
-  if p_version not in (1,2) or p_version>ver or ver>2 then raise exception using errcode='P0001',message='contract_incompatible'; end if;
+  if not bench_state.contract_compatible(p_version,ver) then raise exception using errcode='P0001',message='contract_incompatible'; end if;
   select privacy_revision into rev from bench_state.subjects where organization_id=org and id=p_subject and not erased for update;
   if not found then raise exception using errcode='P0001',message='subject_erased'; end if;
   insert into bench_state.jobs values(org,p_id,p_subject,p_version,rev,p_payload,'pending','execute_pinned_contract');
@@ -139,6 +150,7 @@ begin
   update bench_state.copies set payload='{"redacted":true}' where organization_id=org and subject_id=p_id;
 end $$;
 
+-- O efeito consome o job persistido; p_payload é só a cópia apresentada pela entrega.
 -- Mesmo uma cópia antiga carregada em memória antes do erase passa por esta guarda.
 create function bench_state.deliver_job(p_id text,p_payload jsonb) returns void
 language plpgsql security definer set search_path=pg_catalog,bench_state as $$
@@ -151,9 +163,18 @@ begin
   select * into subject from bench_state.subjects where organization_id=org and id=job.subject_id for update;
   if subject.erased or subject.privacy_revision<>job.privacy_revision then raise exception using errcode='P0001',message='privacy_revision_stale'; end if;
   if not exists(select 1 from bench_state.activation where organization_id=org and active and can_write) then raise exception using errcode='P0001',message='extension_inactive_or_grant_missing'; end if;
-  if job.contract_version<>ver then raise exception using errcode='P0001',message='contract_incompatible'; end if;
+  if not bench_state.contract_compatible(job.contract_version,ver) then raise exception using errcode='P0001',message='contract_incompatible'; end if;
   if job.status<>'pending' then raise exception using errcode='P0001',message='job_not_pending'; end if;
-  update bench_state.subjects set display_name=p_payload->>'name' where organization_id=org and id=job.subject_id;
+  if p_payload is distinct from job.payload then raise exception using errcode='P0001',message='job_payload_mismatch'; end if;
+  case job.payload->>'kind'
+    when 'record' then
+      perform bench_state.write_record(job.contract_version,job.payload->>'record_id',job.subject_id,
+        (case when job.contract_version=3 then job.payload->>'amount_minor' else job.payload->>'amount_cents' end)::bigint,
+        job.payload->>'note',job.payload->>'label');
+    when 'subject_name' then
+      update bench_state.subjects set display_name=job.payload->>'name' where organization_id=org and id=job.subject_id;
+    else raise exception using errcode='P0001',message='job_kind_unknown';
+  end case;
   update bench_state.jobs set status='done',next_step='none' where organization_id=org and id=p_id;
 end $$;
 

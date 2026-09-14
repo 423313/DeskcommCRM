@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile, rm, access } from 'node:fs/promises';
+import { readFile, writeFile, rm, access } from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { performance } from 'node:perf_hooks';
-import pg from 'pg';
-import { assertBenchDatabase, childEnvironment } from '../common.mjs';
+import { childEnvironment, connectBenchDatabase } from '../common.mjs';
 
 const A = '00000000-0000-4000-8000-00000000000a';
 const B = '00000000-0000-4000-8000-00000000000b';
@@ -25,6 +24,7 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
       'Remoção real de fixture executável é medida; atualização real do CRM, catálogo desligado e armazenamento privado externo não são medidos.',
       'Nomes e payloads são sintéticos; a declaração de campos pessoais é revisada manualmente e não descobre cópias desconhecidas.',
       'Papéis de conexão por tenant são instrumentos de teste, não proposta de autenticação para produção.',
+      'Privacidade mede entrega positiva e replay sequencial após erase; não mede disputa simultânea entre entrega e anonimização.',
     ],
   };
   const clients = new Set();
@@ -33,10 +33,7 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
   let currentCheck = 'setup';
   const check = (id, name, observed) => report.checks.push({ id, name, passed: true, observed });
   const connect = async (role) => {
-    const url = new URL(databaseUrl);
-    if (role) { url.username = role; url.password = ''; }
-    const client = new pg.Client({ connectionString: url.href, connectionTimeoutMillis: 3000, application_name: 'extensoes_state_probe' });
-    await client.connect();
+    const client = await connectBenchDatabase({ databaseUrl, repoRoot, evidenceDir }, role ? { user: role } : {});
     clients.add(client);
     await client.query("set statement_timeout='5s'");
     await client.query("set idle_in_transaction_session_timeout='15s'");
@@ -70,8 +67,6 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
       throw new Error('A bancada exige DSN loopback sem opções que redirecionem o host');
     }
     assert.ok(repoRoot && evidenceDir, 'repoRoot e evidenceDir são obrigatórios');
-    await assertBenchDatabase({ databaseUrl, repoRoot, evidenceDir });
-    await mkdir(evidenceDir, { recursive: true });
     admin = await connect();
     const meta = (await admin.query('select version() as version,current_database() as database,host(inet_server_addr()) as address')).rows[0];
     assert.ok(['127.0.0.1', '::1'].includes(meta.address), 'Servidor deve estar em loopback');
@@ -111,7 +106,7 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
 
     currentCheck = 'old_job_schema';
     await a.query("select bench_state.write_record(1,'v1-before','subject',100,'nota antiga')");
-    await a.query("select bench_state.admit_job('old-job','subject',1,'{\"amount_cents\":250}')");
+    await a.query("select bench_state.admit_job('old-job','subject',1,$1)", [{ kind: 'record', record_id: 'drained-old-job', amount_cents: 250, note: 'drenado com v1' }]);
     await admin.query(await readFile(path.join(fixtureDir, 'additive.sql'), 'utf8'));
     await a.query("select bench_state.write_record(1,'v1-after','subject',200,'nota v1')");
     await a.query("select bench_state.write_record(2,'v2-after','subject',300,'nota v2','rotulo')");
@@ -127,13 +122,27 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
     await reject(admin, incompatible, [], 'P0001', 'old_jobs_require_drain_or_cancel');
     const nextStep = (await a.query("select next_step from bench_state.jobs where id='old-job'")).rows[0].next_step;
     await admin.query("update bench_state.jobs set status='pending',next_step='host: draining pinned v1' where id='old-job'");
-    await a.query("select bench_state.write_record(1,'drained-old-job','subject',250,'drenado com v1')");
-    await admin.query("update bench_state.jobs set status='done',next_step='none' where id='old-job'");
+    const persistedJob = (await a.query("select contract_version,payload,status from bench_state.jobs where id='old-job'")).rows[0];
+    assert.equal(persistedJob.contract_version, 1);
+    assert.equal(persistedJob.status, 'pending');
+    assert.equal((await a.query('select * from bench_state.records where id=$1', [persistedJob.payload.record_id])).rowCount, 0);
+    await a.query("select bench_state.deliver_job('old-job',$1)", [persistedJob.payload]);
+    const drainedJob = (await a.query("select status,next_step from bench_state.jobs where id='old-job'")).rows[0];
+    const drainedRecord = (await a.query('select amount_cents,legacy_note from bench_state.records where id=$1', [persistedJob.payload.record_id])).rows[0];
+    assert.deepEqual(drainedJob, { status: 'done', next_step: 'none' });
+    assert.equal(drainedRecord.amount_cents, String(persistedJob.payload.amount_cents));
+    assert.equal(drainedRecord.legacy_note, persistedJob.payload.note);
     await admin.query(incompatible);
-    assert.equal((await a.query("select amount_minor from bench_state.records where id='drained-old-job'")).rows[0].amount_minor, '250');
+    const retainedAmount = (await a.query('select amount_minor from bench_state.records where id=$1', [persistedJob.payload.record_id])).rows[0].amount_minor;
+    assert.equal(retainedAmount, String(persistedJob.payload.amount_cents));
     await reject(a, "select bench_state.write_record(1,'too-late','subject',1,null)", [], 'P0001', 'contract_incompatible');
     await reject(a, "select bench_state.admit_job('too-late','subject',1,'{}')", [], 'P0001', 'contract_incompatible');
-    check('old_job_schema', 'Contratos antigos, evolução aditiva e drenagem', { oldReadRows: oldRows.length, newReadRows: newRows.length, additiveWrites: [1, 2], incompatibleDeniedPending: true, incompatibleDeniedSuspended: true, nextStep, drainedAmountMinor: 250, lateOldAdmissionDenied: true });
+    const currentPayload = { kind: 'record', record_id: 'v3-delivery', amount_minor: 400, note: 'contrato v3', label: 'v3' };
+    await a.query("select bench_state.admit_job('current-job','subject',3,$1)", [currentPayload]);
+    await a.query("select bench_state.deliver_job('current-job',$1)", [currentPayload]);
+    assert.equal((await a.query('select amount_minor from bench_state.records where id=$1', [currentPayload.record_id])).rows[0].amount_minor, String(currentPayload.amount_minor));
+    assert.equal((await a.query("select status from bench_state.jobs where id='current-job'")).rows[0].status, 'done');
+    check('old_job_schema', 'Contratos antigos, evolução aditiva e drenagem', { oldReadRows: oldRows.length, newReadRows: newRows.length, additiveWrites: [1, 2], incompatibleDeniedPending: true, incompatibleDeniedSuspended: true, nextStep, deliveryPath: 'deliver_job', consumedContractVersion: persistedJob.contract_version, deliveredJobStatus: drainedJob.status, effectMatchesStoredPayload: true, drainedAmountMinor: Number(retainedAmount), lateOldAdmissionDenied: true });
 
     currentCheck = 'deactivation_race';
     // Controle negativo: checar em uma transação e escrever depois permite TOCTOU.
@@ -170,10 +179,15 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
     await writeFile(executable, 'process.stdout.write("fixture-executed");\n', { mode: 0o700 });
     assert.equal((await promisify(execFile)(process.execPath, [executable], { env: childEnvironment() })).stdout, 'fixture-executed');
     const pii = 'COPIA_PESSOAL_SINTETICA_019';
-    const oldPayload = { name: pii, nested: { name: pii } };
-    await admin.query('update bench_state.subjects set display_name=$1 where organization_id=$2', [pii, A]);
+    const oldPayload = { kind: 'subject_name', name: pii, nested: { name: pii } };
+    await admin.query('update bench_state.activation set active=true,can_write=true,revision=revision+1 where organization_id=$1', [A]);
+    assert.notEqual((await a.query("select display_name from bench_state.subjects where id='subject'")).rows[0].display_name, pii);
+    await a.query("select bench_state.admit_job('privacy-positive','subject',3,$1)", [oldPayload]);
+    await a.query("select bench_state.deliver_job('privacy-positive',$1)", [oldPayload]);
+    assert.equal((await a.query("select display_name from bench_state.subjects where id='subject'")).rows[0].display_name, pii);
+    assert.deepEqual((await a.query("select status,next_step from bench_state.jobs where id='privacy-positive'")).rows[0], { status: 'done', next_step: 'none' });
     await admin.query('update bench_state.records set legacy_note=$1,label=$1 where organization_id=$2', [pii, A]);
-    await admin.query("insert into bench_state.jobs values($1,'privacy-job','subject',3,1,$2,'pending','execute')", [A, oldPayload]);
+    await a.query("select bench_state.admit_job('privacy-job','subject',3,$1)", [oldPayload]);
     for (const kind of ['outbox', 'receipt', 'invocation', 'result']) {
       await admin.query("insert into bench_state.copies values($1,$2,'subject',$2,$3)", [A, kind, oldPayload]);
     }
@@ -198,7 +212,7 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
     assert.deepEqual((await a.query("select created_at from bench_state.effects where id='committed-before-disable'")).rows[0].created_at, timestampBefore);
     const inventory = (await admin.query('select * from bench_state.inventory order by relation_name')).rows;
     await writeFile(path.join(evidenceDir, 'state-redacted-export.json'), JSON.stringify({ inventory, redacted }, null, 2));
-    check('privacy_after_removal', 'Histórico, exportação e anonimização sem executável', { executableRemoved: true, hostReconnected: true, exportedCopyKinds: exported.copies.map(copy => copy.kind), inventory, erasedRevision: redacted.subject.privacy_revision, staleReplayDenied: true, organizationBPreserved: true, historicalTimestampPreserved: true });
+    check('privacy_after_removal', 'Histórico, exportação e anonimização sem executável', { executableRemoved: true, hostReconnected: true, positiveDeliveryPath: 'deliver_job', positiveDeliveryChangedSubject: true, positiveJobStatus: 'done', exportedCopyKinds: exported.copies.map(copy => copy.kind), inventory, erasedRevision: redacted.subject.privacy_revision, staleReplayDenied: true, replayOrdering: 'sequential_after_erase', organizationBPreserved: true, historicalTimestampPreserved: true });
 
     currentCheck = 'resumable_operation';
     await admin.query('update bench_state.activation set active=true,can_write=true,revision=revision+1 where organization_id=$1', [A]);

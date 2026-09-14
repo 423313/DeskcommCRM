@@ -23,23 +23,67 @@ O parâmetro `databaseUrl` do contrato comum é ignorado por esta frente.
 
 ## Reprodução
 
-Com o ambiente virtual da bancada já preparado com `wasmtime==48.0.0`:
+Com o ambiente virtual da bancada já preparado com `wasmtime==48.0.0` e
+executável Python regular (`python -m venv --copies` na criação):
 
 ```bash
 node experiments/extensoes/runtime/verify.mjs
 pnpm exec eslint experiments/extensoes/runtime/*.mjs
+node --test experiments/extensoes/runtime/workspace.test.mjs
 ```
 
 O primeiro comando executa Wasmtime de fato, valida o contrato e grava todas as
 amostras em `.superpowers/evidence/extensoes-bancada/runtime-report.json`.
-Ele também verifica que a ausência do venv produz `blocked`, sem controles aprovados.
-Um caminho alternativo de evidência pode ser passado como primeiro argumento;
-o Python é sempre procurado em `<evidenceDir>/venv/bin/python`.
+O verificador **não aceita argumento de diretório alternativo**. Raiz e evidências
+precisam corresponder à worktree do próprio módulo e à sua área marcada
+`.superpowers/evidence/extensoes-bancada`. O Python é procurado somente em
+`<evidenceDir>/venv/bin/python`. O teste de propriedade usa áreas sintéticas para
+verificar que venv ausente produz `blocked` apenas dentro de uma área própria;
+contexto externo ou simbólico é recusado antes de executar ou escrever.
 
 A integração usa `runProbe({ repoRoot, evidenceDir, databaseUrl })` exportado em
 `experiments/extensoes/runtime/probe.mjs`. Erros inesperados produzem `failed`.
 `passed` cobre os controles executados; o objeto separado
 `measurements.container_comparison.status` continua `blocked`.
+
+## Correção da fronteira de evidências — revisão F5
+
+**CONFIRMADO em 2026-09-14:** treze testes focados passaram, sem repetir os quatorze
+controles Wasmtime já aceitos pela revisão. A raiz confiável deriva da localização
+de `workspace.mjs`; nenhum parâmetro permite trocá-la. O caminho informado deve ser
+exatamente a área canônica, com propriedade conferida por `ensureOwnedWorkspace`.
+Os caminhos existentes são inspecionados antes que essa política crie diretórios
+ou marcador. Os diretórios até o venv, seu executável Python, o script do probe,
+o marcador e o relatório não podem ser links simbólicos. Cada novo subprocesso
+repete o preflight; venv ausente é diferente de venv desviado.
+
+O relatório é escrito em temporário exclusivo de nome aleatório, aberto com
+`O_EXCL | O_NOFOLLOW`, sincronizado e renomeado. O destino é inspecionado antes da
+escrita e novamente antes da substituição. O teste confirmou troca do inode do
+arquivo próprio, modo `0600`, JSON completo e ausência de temporário restante.
+
+As provas criam duas worktrees **sintéticas** em diretório temporário exclusivo.
+A segunda contém uma sentinela de relatório e um falso Python que deixaria um
+marcador caso executado. Caminho externo, raiz alheia, marcador alheio e links
+simbólicos foram recusados sem alterar a sentinela nem criar o marcador de execução.
+A API instalada e o CLI também foram exercitados contra esse destino sintético.
+Nenhuma pasta ou evidência real de outra sessão foi usada como alvo.
+
+Política de venv: o interpretador dentro da bancada deve ser arquivo regular.
+O venv desta worktree originalmente tinha os links normais do Python; após
+conferir sua propriedade e o destino conhecido dos três links, eles foram
+substituídos por cópias via `venv --copies`, preservando as dependências.
+Um smoke test pelo caminho validado confirmou o pin 48.0.0 e a chamada válida
+retornando 41. Essa escolha evita uma exceção de link que pudesse executar um
+venv externo acidentalmente. Ela não torna o interpretador independente das
+bibliotecas do Python instalado no sistema.
+
+**Limite:** as verificações recusam caminhos já desviados e os reconferem antes
+das operações, mas não são isolamento contra outro processo local malicioso com
+o mesmo usuário que substitua diretórios entre `lstat` e a operação seguinte.
+Não há `openat`/descritor de diretório ancorado para toda a árvore nem auditoria
+recursiva dos pacotes do venv. A fronteira do guest Wasm permanece a descrita no
+ensaio original; F5 trata de propriedade e desvio acidental de evidências locais.
 
 ## Parâmetros experimentais
 

@@ -4,6 +4,7 @@ import { request } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { runtimeExecutablePaths } from './workspace.mjs';
 
 const PROCESS_TIMEOUT_MS = 10_000;
 const HOST_TIMEOUT_MS = 750;
@@ -114,8 +115,14 @@ async function dockerAvailability() {
 }
 
 export async function runProbe({ repoRoot, evidenceDir }) {
-  const python = join(evidenceDir, 'venv/bin/python');
-  const script = join(repoRoot, 'experiments/extensoes/runtime/wasm_probe.py');
+  // Rejeição de contexto acontece antes de iniciar subprocesso ou produzir relatório.
+  const context = { repoRoot, evidenceDir };
+  const { available } = await runtimeExecutablePaths(context);
+  const run = async (mode) => {
+    const paths = await runtimeExecutablePaths(context);
+    if (!paths.available) throw new Error('Python próprio indisponível antes da execução.');
+    return execute(paths.python, paths.script, mode);
+  };
   const report = {
     id: 'runtime', status: 'blocked', environment: { platform: `${process.platform}-${process.arch}`, node: process.version },
     checks: [], measurements: {}, limitations: [
@@ -127,20 +134,20 @@ export async function runProbe({ repoRoot, evidenceDir }) {
       'Parâmetros e medições são do ensaio, sem SLA de produto; carga curta não mede saturação nem noisy neighbor.',
     ],
   };
-  try { await access(python); } catch {
+  if (!available) {
     report.limitations.push('Wasmtime indisponível: preparar evidenceDir/venv com wasmtime==48.0.0.');
     return report;
   }
   try {
-    const suiteProcess = await execute(python, script, 'suite');
+    const suiteProcess = await run('suite');
     const suite = decode(suiteProcess);
     report.checks.push(...suite.checks);
     Object.assign(report.environment, suite.environment);
     report.checks.push({ id: 'version', name: 'Usar versão fixada do Wasmtime', passed: suite.environment.wasmtime === '48.0.0', observed: suite.environment.wasmtime });
     Object.assign(report.measurements, suite.measurements, { suite_process_ms: suiteProcess.duration_ms, limits: { ...suite.limits,
       process_timeout_ms: PROCESS_TIMEOUT_MS, host_timeout_ms: HOST_TIMEOUT_MS, protocol_output_bytes: MAX_PROTOCOL_BYTES, concurrency: CONCURRENCY } });
-    const stuck = await execute(python, script, 'host-hang');
-    const recovery = decode(await execute(python, script, 'valid'));
+    const stuck = await run('host-hang');
+    const recovery = decode(await run('valid'));
     report.checks.push({ id: 'host_timeout', name: 'Encerrar processo com chamada do host travada',
       passed: stuck.killReason === 'host_timeout' && stuck.signal === 'SIGKILL' && stuck.pidGone && recovery.value === 41,
       observed: { kill_reason: stuck.killReason, signal: stuck.signal, pid_gone: stuck.pidGone,
@@ -148,7 +155,7 @@ export async function runProbe({ repoRoot, evidenceDir }) {
     const cold = [];
     const coldInternal = [];
     for (let index = 0; index < 5; index += 1) {
-      const result = await execute(python, script, 'valid');
+      const result = await run('valid');
       const parsed = decode(result);
       if (parsed.value !== 41) throw new Error('cold execution returned wrong value');
       cold.push(result.duration_ms);
@@ -167,7 +174,7 @@ export async function runProbe({ repoRoot, evidenceDir }) {
         active += 1;
         peakActive = Math.max(peakActive, active);
         try {
-          const result = await execute(python, script, 'valid');
+          const result = await run('valid');
           concurrent.push({ ...decode(result), process_ms: result.duration_ms });
         } finally { active -= 1; }
       }

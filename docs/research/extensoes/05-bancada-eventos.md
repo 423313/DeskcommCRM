@@ -33,10 +33,14 @@ seguem pendentes de ambiente completo.
 Cada execução cria `bench_events_<uuid>` e o conserva para inspeção. Não há DROP,
 TRUNCATE, alteração de `public`, reinício de Docker ou leitura de `.env`. O DSN
 precisa corresponder ao cluster dedicado criado pela bancada. Antes de criar qualquer
-schema, `assertBenchDatabase` verifica o DSN contra o marcador da worktree e consulta
-identidade interna, diretório de dados, proprietário e nome do banco. Loopback sozinho
-não basta para autorizar a execução. Subprocessos recebem apenas ambiente mínimo e
-o contexto sintético por IPC, sem herdar credenciais do shell.
+schema, `connectBenchDatabase` verifica o DSN contra o marcador da worktree e atesta
+o próprio cliente conectado, que será usado pelo ensaio. Não há uma conexão de
+checagem separada seguida por outra não atestada. `connectEventsDatabase` aplica
+`search_path` e timeout somente depois desse retorno; origem, consumidores, observador,
+receiver e subprocessos usam esse caminho. A fábrica comum fixa os parâmetros de
+conexão, sem fallback para credenciais do ambiente. Loopback sozinho não basta para
+autorizar a execução. Subprocessos recebem apenas ambiente mínimo e o contexto
+sintético completo por IPC, sem herdar credenciais do shell.
 
 ## Desenho anterior à medição
 
@@ -110,6 +114,21 @@ const report = await runProbe({ databaseUrl, repoRoot, evidenceDir });
 Saídas: `events-report.json` e `events-applied-0239.sql`. Ausência do DSN retorna
 `blocked`; erro inesperado retorna `failed`, nunca sucesso. `passed` exige todas as
 verificações executadas verdes e continua limitado ao escopo de mecanismo descrito.
+
+A integração da fábrica de conexões tem verificação dirigida independente:
+
+```sh
+node --test experiments/extensoes/events/connection.test.mjs
+```
+
+Ela abre os quatro clientes físicos, confere suas identidades e schemas, executa
+um worker real com contexto válido, recusa contexto divergente em outro subprocesso
+e grava um efeito via receiver HTTP real, consultado pelo observador independente.
+Não repete o benchmark nem reclassifica suas medições históricas.
+
+Na integração F1/F4, essa verificação passou (1 teste, 0 falhas); evidência em
+`.superpowers/evidence/extensoes-bancada/events-connection-test.tap`. A revisão anterior
+do mecanismo e a fotografia das 29 verificações continuam com suas datas e escopos.
 
 ## Consequência arquitetural
 

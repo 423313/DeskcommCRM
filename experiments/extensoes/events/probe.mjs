@@ -1,4 +1,3 @@
-import pg from 'pg';
 import { randomUUID, createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,7 +8,8 @@ import { createServer, request } from 'node:http';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { claim, finishLocal } from './worker.mjs';
-import { assertBenchDatabase, readContext, childEnvironment, writeJsonAtomic } from '../common.mjs';
+import { readContext, childEnvironment, writeJsonAtomic } from '../common.mjs';
+import { connectEventsDatabase } from './connection.mjs';
 
 const ORG = '00000000-0000-4000-8000-000000000001';
 const ORG_OTHER = '00000000-0000-4000-8000-000000000002';
@@ -49,7 +49,7 @@ async function fanout(client, eventId) {
   }
 }
 
-function startChild(databaseUrl, schema, eventId, mode) {
+function startChild(context, schema, eventId, mode) {
   const child = fork(fileURLToPath(new URL('./worker.mjs', import.meta.url)), [],
     { stdio: ['ignore', 'ignore', 'pipe', 'ipc'], execArgv: [], env: childEnvironment() });
   const exit = once(child, 'exit');
@@ -62,7 +62,7 @@ function startChild(databaseUrl, schema, eventId, mode) {
       if (value.error) reject(new Error(value.error)); else resolve(value);
     });
   });
-  child.send({ databaseUrl, schema, eventId, mode });
+  child.send({ context, schema, eventId, mode });
   return { child, message, exit };
 }
 
@@ -128,7 +128,7 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
       'Lease recupera apenas efeito local atômico. Resultado externo incerto exige consulta ao receptor ou tarefa humana; não há exatamente uma vez externo.',
       'Latência inclui cliente Node, round-trip loopback e commit; amostra local pequena, sem carga de produção ou orçamento de desempenho aprovado.'
     ] };
-  let pool;
+  const context = { databaseUrl, repoRoot, evidenceDir };
   const clients = [];
   let schema;
   try {
@@ -140,15 +140,11 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
     const url = new URL(databaseUrl);
     if (!['postgres:','postgresql:'].includes(url.protocol) || !['127.0.0.1','[::1]'].includes(url.hostname)
         || url.search || url.hash) throw new Error('Banco deve usar IP literal de loopback, sem opções de URL.');
-    await assertBenchDatabase({ databaseUrl, repoRoot, evidenceDir });
     schema = `bench_events_${randomUUID().replaceAll('-','')}`;
-    pool = new pg.Pool({ connectionString: databaseUrl, max: 8,
-      connectionTimeoutMillis: 3000,
-      options: `-c search_path=${schema},pg_catalog -c statement_timeout=${PLAN.statementTimeoutMs}` });
-    const client = await pool.connect(); clients.push(client);
-    const other = await pool.connect(); clients.push(other);
-    const observer = await pool.connect(); clients.push(observer);
-    const receiverDb = await pool.connect(); clients.push(receiverDb);
+    const client = await connectEventsDatabase(context,schema,PLAN.statementTimeoutMs); clients.push(client);
+    const other = await connectEventsDatabase(context,schema,PLAN.statementTimeoutMs); clients.push(other);
+    const observer = await connectEventsDatabase(context,schema,PLAN.statementTimeoutMs); clients.push(observer);
+    const receiverDb = await connectEventsDatabase(context,schema,PLAN.statementTimeoutMs); clients.push(receiverDb);
     report.environment.postgres = (await client.query('select version() as version')).rows[0].version;
     report.environment.schema = schema;
     await client.query(`create schema ${schema}`);
@@ -224,12 +220,12 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
         { receipts:receipts.rowCount, simultaneousClaims:claimed.length, localEffects:effects.rows[0].n, duplicateAccepted:duplicate });
 
       const crashEvent = await insertEvent(client); await fanout(client,crashEvent.id);
-      const crashed = startChild(databaseUrl,schema,crashEvent.id,'crash');
+      const crashed = startChild(context,schema,crashEvent.id,'crash');
       const old = await crashed.message;
       crashed.child.kill('SIGKILL');
       const exit = await crashed.exit;
       await delay(PLAN.localLeaseMs+50);
-      const resumed = startChild(databaseUrl,schema,crashEvent.id,'resume');
+      const resumed = startChild(context,schema,crashEvent.id,'resume');
       const reclaimed = await resumed.message;
       const staleAccepted = await finishLocal(client,old.receipt);
       const beforeFinish = (await client.query('select state from receipts where id=$1',[old.receipt.id])).rows[0].state;
@@ -266,8 +262,10 @@ export async function runProbe({ databaseUrl, repoRoot, evidenceDir }) {
     report.status = 'failed';
   } finally {
     // Conservar o schema dá evidência auditável; nunca tocar public ou schema alheio.
-    for (const client of clients) { try { await client.query('rollback'); } catch { /* conexão perdida */ } client.release(); }
-    if (pool) await pool.end();
+    for (const client of clients) {
+      try { await client.query('rollback'); } catch { /* conexão perdida */ }
+      await client.end();
+    }
     report.completedAt = new Date().toISOString();
     if (evidenceDir) {
       await mkdir(evidenceDir,{recursive:true});
