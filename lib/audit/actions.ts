@@ -436,6 +436,10 @@ export const AUDIT_ACTIONS = [
   // telefone de um cliente é efeito, e efeito audita — mas só a rodada que
   // enviou: a que varreu e não achou ninguém a avisar não é mutação.
   "agenda.lembrete_enviado",
+  // A cobrança de um caso parado. Audita a RODADA que avisou, não cada caso:
+  // o que se quer responder depois é "o sistema cobrou?", e uma linha por caso
+  // faria do audit log a própria fila.
+  "ai.caso_parado_cobrado",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta
