@@ -13,16 +13,22 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { agendaStallGate, type GateContext } from "./before-send";
-import { PACING_DEFAULTS } from "../pacing/defaults";
-import { SPINNING_DEFAULTS } from "../spinning/defaults";
-import { temFerramentaDeAgenda } from "../agent/inbound-turn";
+import { agendaStallGate, type GateContext } from "@/lib/agent-engine/guardrails/before-send";
+import { PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
+import { SPINNING_DEFAULTS } from "@/lib/agent-engine/spinning/defaults";
+import { temFerramentaDeAgenda } from "@/lib/agent-engine/agent/inbound-turn";
 
 // As duas frases medidas em produção que deram origem ao gate.
 const PROMESSA = "Vou verificar o horário e já te aviso!";
 const CONFIRMOU = "Prontinho, seu horário está confirmado para quinta!";
 
 /**
+ * Este arquivo mora em `tests/unit/` e não ao lado do gate por uma razão
+ * mecânica: montar um `GateContext` exige dar um valor a `provider`, e
+ * `scripts/lint-channels.ts` proíbe nomear provider dentro de `lib/` (ROOTS =
+ * app, lib, components, workers). O teste irmão do MESMO gate,
+ * `tests/unit/gate-agenda-stall.test.ts`, já mora aqui pelo mesmo motivo.
+ *
  * `baseCtx` é próprio deste arquivo, pela mesma razão escrita em
  * `tests/unit/gate-agenda-stall.test.ts`: sem fixture compartilhada de
  * `GateContext`, para um gate não herdar o contexto calibrado para outro.
