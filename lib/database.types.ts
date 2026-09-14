@@ -519,6 +519,7 @@ export type Database = {
           origin: string
           paid_at: string | null
           reverses_entry_id: string | null
+          recurring_entry_id: string | null
           sale_id: string | null
           status: string
           updated_at: string
@@ -538,6 +539,7 @@ export type Database = {
           origin?: string
           paid_at?: string | null
           reverses_entry_id?: string | null
+          recurring_entry_id?: string | null
           sale_id?: string | null
           status?: string
           updated_at?: string
@@ -557,6 +559,7 @@ export type Database = {
           origin?: string
           paid_at?: string | null
           reverses_entry_id?: string | null
+          recurring_entry_id?: string | null
           sale_id?: string | null
           status?: string
           updated_at?: string
@@ -642,6 +645,67 @@ export type Database = {
             foreignKeyName: "loyalty_ledger_sale_id_fkey"
             columns: ["sale_id"]
             referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_entries: {
+        Row: {
+          account_id: string
+          account_plan_id: string | null
+          amount_cents: number
+          created_at: string
+          created_by_user_id: string | null
+          currency: string
+          day_of_month: number
+          direction: string
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          account_plan_id?: string | null
+          amount_cents: number
+          created_at?: string
+          created_by_user_id?: string | null
+          currency?: string
+          day_of_month: number
+          direction: string
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          account_plan_id?: string | null
+          amount_cents?: number
+          created_at?: string
+          created_by_user_id?: string | null
+          currency?: string
+          day_of_month?: number
+          direction?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_entries_account_id_fkey"
+            columns: ["account_id"]
+            referencedRelation: "financial_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]

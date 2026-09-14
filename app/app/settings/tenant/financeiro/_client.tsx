@@ -15,6 +15,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 
 import { RegrasDeComissao, type Pessoa, type Regra, type Servico } from "./_comissao";
+import { Recorrencias, type Recorrencia } from "./_recorrencias";
 
 type Conta = {
   id: string;
@@ -47,6 +48,7 @@ export function CatalogoFinanceiro({ podeEditar }: { podeEditar: boolean }) {
   const formas = useCatalogo<Forma>("formas_de_pagamento");
   const planos = useCatalogo<Plano>("planos_de_conta");
   const regras = useCatalogo<Regra>("regras_de_comissao");
+  const recorrencias = useCatalogo<Recorrencia>("recorrencias");
 
   // A regra guarda IDs; a lista precisa de nomes. Buscar aqui evita que o
   // catálogo genérico no servidor tenha de conhecer equipe e agenda.
@@ -279,6 +281,15 @@ export function CatalogoFinanceiro({ podeEditar }: { podeEditar: boolean }) {
         carregando={regras.isLoading}
         onCriar={(corpo) => criar.mutate({ tipo: "regras_de_comissao", corpo })}
         onInativar={(id) => inativar.mutate({ tipo: "regras_de_comissao", id })}
+      />
+
+      <Recorrencias
+        recorrencias={recorrencias.data ?? []}
+        contas={(contas.data ?? []).map((c) => ({ id: c.id, name: c.name }))}
+        podeEditar={podeEditar}
+        carregando={recorrencias.isLoading}
+        onCriar={(corpo) => criar.mutate({ tipo: "recorrencias", corpo })}
+        onInativar={(id) => inativar.mutate({ tipo: "recorrencias", id })}
       />
     </div>
   );

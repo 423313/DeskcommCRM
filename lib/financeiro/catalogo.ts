@@ -23,6 +23,9 @@ export const ENTIDADES_DO_CATALOGO = {
   // dia consome. Sem esta linha ela não tinha porta nenhuma — e `sale_items`
   // resolve o percentual a partir dela, então toda comissão nascia 0%.
   regras_de_comissao: "commission_rules",
+  // O MOLDE do lançamento que se repete. Entra aqui pelo mesmo motivo das
+  // outras: é o que o negócio define uma vez e o cron consome todo mês.
+  recorrencias: "recurring_entries",
 } as const;
 
 export type EntidadeDoCatalogo = keyof typeof ENTIDADES_DO_CATALOGO;
@@ -89,11 +92,29 @@ export const regraDeComissaoSchema = z
     message: "Escolha ao menos uma pessoa ou um serviço.",
   });
 
+/**
+ * O molde recorrente.
+ *
+ * `day_of_month` aceita até 31 mesmo sabendo que onze meses não têm o dia: quem
+ * paga no último dia do mês escreve 31, e é o cron que resolve a queda para o
+ * último dia existente. Recusar aqui obrigaria a pessoa a escolher 28 e receber
+ * a cobrança três dias antes onze vezes por ano.
+ */
+export const recorrenciaSchema = z.object({
+  name: nome,
+  account_id: z.string().uuid(),
+  account_plan_id: z.string().uuid().nullish(),
+  direction: z.enum(DIRECOES),
+  amount_cents: z.number().int().min(1).max(1_000_000_000),
+  day_of_month: z.number().int().min(1).max(31),
+});
+
 export const SCHEMA_POR_ENTIDADE = {
   contas: contaSchema,
   formas_de_pagamento: formaDePagamentoSchema,
   planos_de_conta: planoDeContaSchema,
   regras_de_comissao: regraDeComissaoSchema,
+  recorrencias: recorrenciaSchema,
 } as const;
 
 /** As colunas que cada entidade devolve. */
@@ -103,6 +124,8 @@ export const COLUNAS_POR_ENTIDADE: Record<EntidadeDoCatalogo, string> = {
   planos_de_conta: "id, name, direction, is_active, created_at",
   regras_de_comissao:
     "id, name, attendant_user_id, event_type_id, percent, is_active, created_at",
+  recorrencias:
+    "id, name, account_id, account_plan_id, direction, amount_cents, day_of_month, is_active, created_at",
 };
 
 /** O que a tela chama cada coisa. Nunca o nome da tabela. */
@@ -111,6 +134,7 @@ export const ROTULO_DA_ENTIDADE: Record<EntidadeDoCatalogo, string> = {
   formas_de_pagamento: "Forma de pagamento",
   planos_de_conta: "Plano de contas",
   regras_de_comissao: "Regra de comissão",
+  recorrencias: "Lançamento recorrente",
 };
 
 export function ehEntidadeDoCatalogo(v: string): v is EntidadeDoCatalogo {

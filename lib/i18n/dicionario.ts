@@ -6250,6 +6250,22 @@ export const DICIONARIO: Traducoes = {
   "Nenhum item no período.": { es: "Ningún ítem en el período." },
   "Clientes que mais gastaram": { es: "Clientes que más gastaron" },
   "Nenhum cliente no período.": { es: "Ningún cliente en el período." },
+  "Todo mês": { es: "Todos los meses" },
+  "Aluguel, internet, contador. O sistema abre a conta no dia certo.": {
+    es: "Alquiler, internet, contador. El sistema abre la cuenta el día correcto.",
+  },
+  "Nasce como conta a pagar, nunca como paga: o sistema sabe que vence, não sabe se você pagou.": {
+    es: "Nace como cuenta por pagar, nunca como pagada: el sistema sabe que vence, no sabe si pagaste.",
+  },
+  "Nome do lançamento": { es: "Nombre del asiento" },
+  "Ex.: Aluguel": { es: "Ej.: Alquiler" },
+  "Escolha a conta": { es: "Elige la cuenta" },
+  "Dia do mês": { es: "Día del mes" },
+  "Nos meses mais curtos, cai no último dia do mês.": {
+    es: "En los meses más cortos, cae en el último día del mes.",
+  },
+  "Nenhum lançamento recorrente.": { es: "Ningún asiento recurrente." },
+  "Remover lançamento recorrente": { es: "Quitar asiento recurrente" },
   "Faturamento": { es: "Facturación" },
   "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.": {
     es: "Cuánto entró, de qué forma, y cuánto tiene que recibir cada persona.",

@@ -24816,6 +24816,68 @@ grant  execute on function public.fn_saldo_de_fidelidade(uuid, uuid) to authenti
 comment on function public.fn_saldo_de_fidelidade(uuid, uuid) is
   'Saldo de pontos de um contato: sum(points) do livro-razão. Soma no banco porque o PostgREST corta em 1000 linhas sem avisar, e saldo truncado vira prêmio negado a quem tinha direito.';
 
+-- ---- lancamento recorrente (migration 0248) ----
+-- O molde de um lançamento que se repete todo mês. Não movimenta dinheiro:
+-- quem nasce é uma linha PENDENTE em `financial_entries`. Nasce pendente e
+-- nunca paga — o sistema sabe que a conta vence, não sabe se alguém pagou.
+--
+-- A idempotência é do BANCO (índice único por molde e competência), e não de
+-- uma flag de "último gerado": esta resolveria o caso comum e falharia
+-- exatamente no que importa, duas execuções simultâneas.
+create table if not exists public.recurring_entries (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+
+  name text not null,
+  account_id uuid not null references public.financial_accounts(id) on delete restrict,
+  account_plan_id uuid references public.account_plans(id) on delete restrict,
+
+  direction text not null check (direction in ('in', 'out')),
+  amount_cents bigint not null check (amount_cents > 0),
+  currency text not null default 'BRL' check (char_length(currency) = 3),
+
+  -- 1 a 31. O que não existe no mês cai no último dia dele.
+  day_of_month integer not null check (day_of_month between 1 and 31),
+
+  -- Inativa-se, não se apaga: o molde explica os lançamentos que ele gerou.
+  is_active boolean not null default true,
+
+  created_by_user_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists recurring_entries_org_ativas_idx
+  on public.recurring_entries (organization_id)
+  where is_active;
+
+alter table public.financial_entries
+  add column if not exists recurring_entry_id uuid
+  references public.recurring_entries(id) on delete set null;
+
+-- A GARANTIA de que a mesma competência não nasce duas vezes. Parcial porque a
+-- imensa maioria dos lançamentos não vem de molde nenhum.
+create unique index if not exists financial_entries_recorrencia_competencia_idx
+  on public.financial_entries (recurring_entry_id, entry_date)
+  where recurring_entry_id is not null;
+
+alter table public.recurring_entries enable row level security;
+drop policy if exists tenant_isolation_recurring_entries_all on public.recurring_entries;
+create policy tenant_isolation_recurring_entries_all on public.recurring_entries
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (
+    public.fn_is_platform_admin()
+    or (organization_id in (select public.fn_user_org_ids())
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+revoke all on public.recurring_entries from anon;
+
+comment on table public.recurring_entries is
+  'O molde de um lançamento que se repete todo mês. Não movimenta dinheiro: quem nasce é uma linha pendente em financial_entries. Mudar o molde não reescreve o que já foi gerado.';
+comment on column public.recurring_entries.day_of_month is
+  'Dia do mês, 1 a 31. O que não existe no mês cai no último dia dele — pular deixaria de cobrar o aluguel em fevereiro.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
