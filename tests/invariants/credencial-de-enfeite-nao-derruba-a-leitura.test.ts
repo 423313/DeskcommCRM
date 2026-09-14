@@ -51,6 +51,20 @@ const comChave = (script: string, chave = CHAVE) => `
   ${script}
 `;
 
+/**
+ * O SQLSTATE só aparece no stderr do psql se a gente PEDIR. A verbosidade
+ * padrão imprime severidade + mensagem + contexto e **omite o código**, então
+ * `toContain("39000")` falhava contra um erro que estava lá e certo:
+ *
+ *   ERROR:  Wrong key or corrupt data
+ *   CONTEXT:  PL/pgSQL function fn_decrypt_oauth(bytea) line 28 at RETURN
+ *
+ * Asserir a MENSAGEM sozinha seria o conserto barato e o errado: a mensagem é
+ * texto do pgcrypto e pode mudar de versão; o código de classe não. Então se
+ * pede o código, em vez de desistir dele.
+ */
+const comCodigo = (script: string) => `\\set VERBOSITY verbose\n${script}`;
+
 /** stderr do psql quando o script estoura (ON_ERROR_STOP=1 derruba o processo). */
 function erroDe(fn: () => unknown): string {
   try {
@@ -106,12 +120,12 @@ describe("#754 — a leitura de credencial não é derrubada por valor que não 
 
   it("cifra de verdade com a chave errada AINDA levanta — não vira null silencioso", () => {
     const stderr = erroDe(() =>
-      sql(`
+      sql(comCodigo(`
         select set_config('app.nuvemshop_oauth_key', '${CHAVE}', false);
         create temp table ct_0754 as select public.fn_encrypt_oauth('segredo') as ct;
         select set_config('app.nuvemshop_oauth_key', '${OUTRA_CHAVE}', false);
         select public.fn_decrypt_oauth(ct) from ct_0754;
-      `),
+      `)),
     );
     expect(stderr, "a chave errada passou batido: a guarda engoliu uma cifra de verdade").toContain(
       "Wrong key or corrupt data",
@@ -122,8 +136,10 @@ describe("#754 — a leitura de credencial não é derrubada por valor que não 
   it("lixo com cara de pacote (bit 7 ligado) também levanta — a guarda não é rede de tudo", () => {
     const stderr = erroDe(() =>
       sql(
-        comChave(
-          `select public.fn_decrypt_oauth(('\\xC3' || repeat('00', 100))::bytea);`,
+        comCodigo(
+          comChave(
+            `select public.fn_decrypt_oauth(('\\xC3' || repeat('00', 100))::bytea);`,
+          ),
         ),
       ),
     );
