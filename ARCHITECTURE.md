@@ -29,7 +29,7 @@ Detalhes: [`docs/specs/01-spec-platform-base.md`](docs/specs/01-spec-platform-ba
 - Wrappers `ok()` / `fail()` em `lib/api/wrappers.ts`.
 - Auth dual: cookie session (frontend) ou `Authorization: Bearer tok_...` (server-to-server).
 - `X-Request-Id` em toda response, injetado em `proxy.ts` e correlacionado com o audit log.
-- `Idempotency-Key` é o contrato pretendido para POSTs de criação; **implementado hoje em 1 rota** (`lgpd/requests/[id]/approve`). Ver [`docs/current-state.md`](docs/current-state.md) §4.
+- `Idempotency-Key` é o contrato para POSTs de criação; duas rotas gravam recibo (`lgpd/requests/[id]/approve` e `admin/tenants`) e existe o helper reutilizável `lib/api/idempotency.ts`, aplicado em `message-templates`. Ainda **não** cobre as demais rotas de criação, e não fecha a corrida entre requisições simultâneas com a mesma chave (exige mudança de schema — issue #778). Meça em vez de citar: `grep -rln 'Idempotency-Key' app/api/v1 --include='route.ts'`.
 - Detalhes: [`docs/specs/01-spec-platform-base.md`](docs/specs/01-spec-platform-base.md) §API.
 
 ## Fluxo de uma requisição
@@ -67,16 +67,16 @@ pelos 10 endpoints em `app/api/v1/cron/`. Contrato: [`docs/specs/07-spec-events-
 
 ## Integrações externas
 
-| Serviço | Uso | Onde | Falta ⇒ |
-|---|---|---|---|
-| **Supabase** | Postgres + Auth + Realtime + Storage | `lib/supabase/{browser,server,admin}.ts` | app não sobe (obrigatório sempre) |
-| **WAHA Plus** (NOWEB) | WhatsApp: envio, recebimento, sessões multi-número | `lib/waha/` | canal indisponível; obrigatório em produção |
-| **Upstash Redis** | rate limit + debounce de RAG | `lib/ai/dispatcher/rate-limit.ts`, `lib/ai/rag/debounce.ts` | degrada para memória com `warn` |
-| **Vercel AI Gateway** | LLM + embeddings (`@ai-sdk/anthropic\|openai\|google`) | `lib/ai/` | agente não responde |
-| **Nuvemshop** | e-commerce: pedidos, produtos, webhooks LGPD | `lib/nuvemshop/` | opcional (`NUVEMSHOP_ENABLED`) |
-| **Sentry** | erros + performance, `beforeSend` higieniza PII | `sentry.*.config.ts`, `instrumentation*.ts` | opcional |
-| **Resend** | e-mail transacional (convite de time) | `lib/email/` | opcional — o convite cai em copy-to-clipboard |
-| **MCP** | CRM exposto como tools para agentes | `app/api/mcp/`, `lib/mcp/` | — |
+| Serviço               | Uso                                                    | Onde                                                        | Falta ⇒                                       |
+| --------------------- | ------------------------------------------------------ | ----------------------------------------------------------- | --------------------------------------------- |
+| **Supabase**          | Postgres + Auth + Realtime + Storage                   | `lib/supabase/{browser,server,admin}.ts`                    | app não sobe (obrigatório sempre)             |
+| **WAHA Plus** (NOWEB) | WhatsApp: envio, recebimento, sessões multi-número     | `lib/waha/`                                                 | canal indisponível; obrigatório em produção   |
+| **Upstash Redis**     | rate limit + debounce de RAG                           | `lib/ai/dispatcher/rate-limit.ts`, `lib/ai/rag/debounce.ts` | degrada para memória com `warn`               |
+| **Vercel AI Gateway** | LLM + embeddings (`@ai-sdk/anthropic\|openai\|google`) | `lib/ai/`                                                   | agente não responde                           |
+| **Nuvemshop**         | e-commerce: pedidos, produtos, webhooks LGPD           | `lib/nuvemshop/`                                            | opcional (`NUVEMSHOP_ENABLED`)                |
+| **Sentry**            | erros + performance, `beforeSend` higieniza PII        | `sentry.*.config.ts`, `instrumentation*.ts`                 | opcional                                      |
+| **Resend**            | e-mail transacional (convite de time)                  | `lib/email/`                                                | opcional — o convite cai em copy-to-clipboard |
+| **MCP**               | CRM exposto como tools para agentes                    | `app/api/mcp/`, `lib/mcp/`                                  | —                                             |
 
 ## Hardening
 
