@@ -76,7 +76,6 @@ Turno do agente de IA: inbound WhatsApp → HMAC + idempotência → `event_log`
 disparar. Entrada do turno em `lib/agent-engine/agent/inbound-turn.ts`; diagrama em
 `docs/architecture/agent-turn.html`.
 
-<<<<<<< HEAD
 | Path | O quê |
 |---|---|
 | `app/api/v1/` | Route handlers REST (versionado por path) — **reconte, não cite**: `git ls-files 'app/api/v1/**/route.ts' \| wc -l` (e `git ls-files 'app/api/**/route.ts' \| wc -l` para o total de `app/api/**`) |
@@ -90,10 +89,8 @@ disparar. Entrada do turno em `lib/agent-engine/agent/inbound-turn.ts`; diagrama
 | `workers/` | workers de `event_log` + crons |
 | `supabase/migrations/` | schema versionado · `supabase/baseline.sql` = o que o self-host aplica |
 | `proxy.ts` | middleware do Next 16 (auth de borda, `X-Request-Id`) |
-=======
 Idempotência de worker: `unique (organization_id, external_id)` + captura de `code === '23505'`.
 Contrato completo em [`docs/specs/07-spec-events-workers.md`](docs/specs/07-spec-events-workers.md).
->>>>>>> refs/tri/814
 
 ## Key Directories
 
@@ -125,7 +122,6 @@ Contrato completo em [`docs/specs/07-spec-events-workers.md`](docs/specs/07-spec
 pnpm install          # deps (frozen-lockfile no CI)
 pnpm dev              # dev server
 pnpm build            # next build
-<<<<<<< HEAD
 pnpm lint             # eslint
 pnpm typecheck        # tsc --noEmit (estrito)
 pnpm test:unit        # vitest — EXCLUI tests/invariants, tests/e2e e tests/journeys (lista viva em vitest.config.ts → exclude)
@@ -134,7 +130,6 @@ pnpm test:e2e         # Playwright (PRECISA de app rodando + banco semeado)
 pnpm gov:verify       # typecheck + lint + lint:channels + lint:role-rank + test:unit
                       # ← verificação única atual; o encadeamento real sai de:
                       #   node -e "console.log(require('./package.json').scripts['gov:verify'])"
-=======
 pnpm lint             # eslint (flat config)
 pnpm typecheck        # tsc --noEmit -p tsconfig.typecheck.json
 pnpm test:unit        # vitest run — EXCLUI tests/e2e, tests/invariants, tests/journeys
@@ -142,7 +137,6 @@ pnpm test:db          # invariantes de banco + gate do baseline (PRECISA de Dock
 pnpm test:e2e         # Playwright (PRECISA de app buildado + .env.e2e)
 pnpm test:shell       # scripts do kit self-host (bash)
 pnpm gov:verify       # typecheck + lint + lint:channels + lint:role-rank + test:unit
->>>>>>> refs/tri/814
 ```
 
 ⚠️ **`pnpm gov:verify` não cobre tudo.** Ele omite `test:db`, `test:e2e` **e** `test:shell`.
@@ -150,7 +144,6 @@ Se a mudança toca schema/RLS/tabela tenant-aware, rode `pnpm test:db`. Se toca 
 usuário, rode `pnpm test:e2e` com evidência visual. Se toca `Dockerfile*`, `docker-compose*` ou
 `hostgator-setup-kit/`, rode `pnpm test:shell` — é o único gate que exercita o kit.
 
-<<<<<<< HEAD
 **O que o CI cobre.** `.github/workflows/ci.yml`: `verify` = os passos do job, na ordem —
 typecheck, lint, `lint:channels`, `test:unit` e `test:shell` hoje, e `pnpm lint` sozinho **não**
 cobre os dois últimos (liste em vez de acreditar nesta linha:
@@ -163,7 +156,6 @@ data de ativação não é auditável pelo repositório, e a lista viva está lo
 comando ao lado. **Não há número aqui de propósito**: esta linha já afirmou uma contagem exata
 de specs e "a única de fora", e as duas envelheceram — a suíte cresce toda semana e a lista de
 exceções muda com ela. Quem fica de fora é o que a própria variável declara; leia, não confie:
-=======
 O CI tem cinco checks obrigatórios na `main`: `verify`, `build-and-size`, `invariants`, `e2e`,
 `imagens-ok`. Não confie nesta lista — reconte antes de citar:
 
@@ -174,7 +166,6 @@ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
 
 `e2e` roda três partes em paralelo; as specs de fora estão declaradas, **com motivo escrito**, em
 `FORA_DO_CI` dentro de `.github/workflows/e2e.yml`. Leia em vez de supor:
->>>>>>> refs/tri/814
 
 ```bash
 git show origin/main:.github/workflows/e2e.yml | grep -A4 'FORA_DO_CI:'
@@ -187,9 +178,7 @@ o Claude Code lê o espelho em `.claude/skills/`). Carregue o guia quando o pedi
 a pessoa não saiba que ele existe — `tests/unit/skills-embutidas.test.ts` exige que este arquivo
 cite cada um:
 
-<<<<<<< HEAD
 **Os cinco são checks obrigatórios** na branch protection da `main` — medido em 2026-08-14 @ `741c4ec8` (o comando exige permissão de **admin** no repositório: com token de contribuidor ele devolve `404`, medido em 2026-09-13):
-=======
 | Situação                                                                            | Guia                    |
 | ----------------------------------------------------------------------------------- | ----------------------- |
 | Instalar, atualizar ou consertar a instalação numa VPS; domínio, Supabase, WhatsApp | `deskcomm-instalar`     |
@@ -198,7 +187,6 @@ cite cada um:
 | O agente responde errado, passa tudo para humano, não usa a agenda; afinar o prompt | `deskcomm-prompt`       |
 | Contribuir: corrigir bug, abrir ou atualizar PR, migration, conflito com a `main`   | `deskcomm-contribuir`   |
 | Escrever ou revisar código aqui                                                     | `deskcomm-doutrina`     |
->>>>>>> refs/tri/814
 
 O gate de arquitetura de qualquer peça que atende pessoas é a skill `sistema-vivo` (lei em
 [`docs/doctrine/sistema-vivo.md`](docs/doctrine/sistema-vivo.md)).
@@ -251,7 +239,6 @@ no `.env` são semente e piso de rollback. Fora do DOM (e-mail, ícone, `issuer`
 `app/layout.tsx` e um throw ali é 500 em todas as telas. O PDF de LGPD não leva marca: ele nomeia
 o controlador (`organizations.legal_name`) e o DPO.
 
-<<<<<<< HEAD
 - **`supabase/baseline.sql`** — é o que o `install.sh`/`update.sh` do self-host aplicam.
   Toda mudança de schema tem que aparecer aqui **como apêndice idempotente**, senão
   não chega em quem instalou. Ver doutrina de Migrations em `CLAUDE.md`.
@@ -268,7 +255,6 @@ o controlador (`organizations.legal_name`) e o DPO.
 - **`docker-compose.traefik.yml`** — numa VPS que já tem proxy reverso próprio
   (Hostinger, Coolify, Dokploy…), é o único lugar que dá ao contêiner `app` as labels
   de roteamento. Todo `up -d` leva os **dois** arquivos de compose:
-=======
 **Anti-patterns proibidos** — string que deveria ser FK; duplicação sem source of truth declarado;
 feature nomeando um provider de canal (gate `pnpm lint:channels`); tela nova sem porta declarada em
 `lib/navigation/registry.ts` (gate `tests/unit/navegacao-completude.test.ts`); `getSession()` no
@@ -314,7 +300,6 @@ server; segredo em query string; `throw` cru na borda da API.
   referenciada com tag fixa, nunca republicada (WAHA é licenciado). Bump de versão não pode exigir
   edição manual de arquivo na VPS.
 - **Deploy em VPS com proxy próprio** — todo `up -d` leva os **dois** arquivos de compose:
->>>>>>> refs/tri/814
   `docker compose -f docker-compose.prod.yml -f docker-compose.traefik.yml --env-file .env up -d app`.
   Esquecer o segundo `-f` recria o contêiner sem labels: o domínio inteiro responde `404` com o
   contêiner `healthy` (o healthcheck é um probe TCP interno). Runbook:
@@ -325,11 +310,9 @@ server; segredo em query string; `throw` cru na borda da API.
 
 ## Testing & QA
 
-<<<<<<< HEAD
 - `lib/database.types.ts` (gerado do schema Supabase — o tamanho de hoje sai de `wc -l lib/database.types.ts`)
 - `graphify-out/` (grafo de conhecimento local; ignorado pelo git e **ausente num clone fresco** — só existe depois de rodar `/graphify .`)
 - `pnpm-lock.yaml`, `tsconfig.tsbuildinfo`, `next-env.d.ts`, `.next/`
-=======
 | Camada                        | Comando              | O que cobre                                                                    |
 | ----------------------------- | -------------------- | ------------------------------------------------------------------------------ |
 | Unit (vitest, jsdom)          | `pnpm test:unit`     | `tests/unit/**` + todo `*.test.ts(x)` ao lado do código. Timeout 15s por teste |
@@ -337,7 +320,6 @@ server; segredo em query string; `throw` cru na borda da API.
 | E2E (Playwright + axe-core)   | `pnpm test:e2e`      | Jornadas reais contra app buildado e o banco do `baseline.sql`                 |
 | Kit self-host (bash)          | `pnpm test:shell`    | `scripts` do kit, `install.sh`, `update.sh` — o único gate do kit              |
 | Jornadas de canal             | `pnpm test:journeys` | `tests/journeys/` (config Playwright própria)                                  |
->>>>>>> refs/tri/814
 
 Convenções: teste ao lado do código (`lib/foo/bar.test.ts`) ou em `tests/{unit,api,invariants,e2e}`.
 `tests/e2e/**` e `tests/invariants/**` são **excluídos** do vitest de propósito — não os mova para
@@ -355,7 +337,6 @@ pela tela como um usuário leigo faria, em ambiente fresco estilo VPS, com evid�
 `curl` não conta como prova de UX. Mapa de jornadas:
 [`docs/testing/user-journey-map.md`](docs/testing/user-journey-map.md).
 
-<<<<<<< HEAD
 Cada linha abaixo traz o comando que a mede — **rode o comando em vez de citar número**. Este
 bloco já foi datado num SHA uma vez e não funcionou: os itens envelhecem em ritmos diferentes, e o
 cabeçalho passava a mentir por todos eles.
@@ -370,14 +351,12 @@ cabeçalho passava a mentir por todos eles.
   que originou a discussão, está **fechada** e o título dela descreve um estado que já não vale.
   Quantas existem: `ls tests/e2e/*.spec.ts | wc -l`. Quantas ficam fora:
   `git show origin/main:.github/workflows/e2e.yml | grep -A4 'FORA_DO_CI:'`.
-=======
 **Antes de declarar pronto**, siga a **Definition of Done de [`CLAUDE.md`](CLAUDE.md)** — não
 confie na memória, conte lá:
 
 ```bash
 sed -n '/^## Definition of Done/,/^Um staff engineer/p' CLAUDE.md | grep -cE '^[0-9]+\. '
 ```
->>>>>>> refs/tri/814
 
 Em resumo: typecheck/lint zerados, testes relevantes verdes, RLS testada se tocou tabela
 tenant-aware, `audit()` se houve mutação, Zod em todo input externo, migration + baseline +
@@ -385,7 +364,6 @@ MANIFEST de tripla se mudou schema, prova visual se mudou UI, `pnpm test:shell` 
 Living System Checklist respondido (lei em `docs/doctrine/sistema-vivo.md`) e mapa vivo em
 `docs/architecture/` atualizado para peça nova.
 
-<<<<<<< HEAD
 ## Limitações conhecidas
 
 Cada item abaixo carrega o comando que o mede — item sem comando é suspeito de estar podre,
@@ -488,7 +466,6 @@ Este repositório tem PRDs, specs, regras de negócio e doutrina escritos
 Se a regra não está escrita, diga que não está e pergunte — não preencha a lacuna com
 suposição plausível. Ao documentar, marque o que é `CONFIRMADO` (provado por código) e o
 que é `INFERIDO`.
-=======
 **Release** — mudança de comportamento visível a quem opera uma VPS traz o fragmento em
 `.changes/` declarando o **efeito no operador** (`nada_mudou` / `capacidade_nova` / `exige_acao`),
 nunca o número. O número é calculado a partir do conjunto; confira com `pnpm release:conferir` e
@@ -500,7 +477,6 @@ ação manual aparece sob "⚠️ Requer atenção".
 escritos. Nunca invente regra de negócio, número, SLA ou comportamento de produto. Se a regra não
 está escrita, diga que não está e pergunte. Ao documentar, marque o que é **CONFIRMADO** (provado
 por código) e o que é **INFERIDO**.
->>>>>>> refs/tri/814
 
 <!-- BEGIN:nextjs-agent-rules -->
 
