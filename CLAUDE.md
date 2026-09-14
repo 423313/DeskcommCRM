@@ -422,7 +422,17 @@ Ao mexer em schema, RLS, RBAC, atribuição, escopo, roteamento, follow-up, webh
 
 Processo padrão (siga sempre):
 
-1. **Arquivo versionado** em `supabase/migrations/` com o padrão do repo: `<timestamp>_<NNNN>_<slug>.sql` (ex.: `20260706210000_0027_whatsapp_conversation_unification.sql`). `NNNN` é o próximo número sequencial (veja o último em `ls supabase/migrations/`).
+1. **Arquivo versionado** em `supabase/migrations/` com o padrão do repo: `<timestamp>_<NNNN>_<slug>.sql` (ex.: `20260706210000_0027_whatsapp_conversation_unification.sql`). `NNNN` é o próximo número sequencial — e **não** é o do último arquivo da listagem:
+
+   ```bash
+   ls supabase/migrations/ | grep -oE '_[0-9]{4}_' | tr -d _ | sort -n | tail -1
+   ```
+
+   O nome do arquivo começa pelo **timestamp**, e timestamp e `NNNN` podem discordar: em
+   09/09/2026 o `ls | tail -1` devolvia o `_0230_` (timestamp de 07/09) enquanto o maior `NNNN`
+   era `_0231_` (timestamp de 05/09). Um contribuidor externo seguiu a instrução antiga ao pé da
+   letra, escolheu `0231`, e o `manifest-x-migrations` reprovou o PR dele por colisão — a
+   instrução é que estava errada, não ele. Ordene pelo número, nunca pela listagem.
 2. **Idempotente sempre que possível**: `add column if not exists`, `create ... if not exists`, `create or replace function`. Uma migration deve poder ser re-aplicada sem quebrar nem duplicar efeito.
 3. **Portável em `psql` puro** (clones podem não usar o MCP/CLI Supabase): **sem** `create temporary table ... on commit drop` fora de transação explícita; **sem** `BEGIN`/`COMMIT` explícito (o runner já envolve em transação, como as demais migrations). Prefira CTEs, subqueries de janela e colunas-mapa (ex.: `is_merged_into`) a temp tables.
 4. **Data migrations genéricas**: se a migration corrige/deduplica dados, escreva pensando em QUALQUER banco de clone (não hardcode IDs do seu tenant). Repointe FKs conferindo o catálogo (`information_schema` FK map) para não perder histórico.
@@ -444,6 +454,16 @@ Processo padrão (siga sempre):
 ---
 
 ## Skills relevantes a usar (Claude Code)
+
+**Guias embutidos neste repositório** (`.claude/skills/`, espelho gerado de `.agents/skills/` — a
+mesma tabela vale para Codex, Cursor, OpenCode e Antigravity; ver `AGENTS.md`):
+
+- `deskcomm-instalar` — instalar, atualizar ou consertar a instalação numa VPS
+- `deskcomm-cliente-novo` — configurar o CRM para um cliente ou nicho (agentes, roteadores, follow-ups, conhecimento)
+- `deskcomm-metricas` — desempenho, conversão, custo de IA, funil, relatório
+- `deskcomm-prompt` — afinar o prompt de um agente que não performa
+- `deskcomm-contribuir` — o espelho da triagem, antes do PR; fica quieto para o mantenedor
+- `deskcomm-doutrina` — as três regras que mais custam, antes de escrever código
 
 - `superpowers:brainstorming` — antes de implementar feature não-trivial
 - `superpowers:writing-plans` — pra task com mais de 1 etapa de DB/API
@@ -475,7 +495,17 @@ Antes de declarar uma task pronta:
 11. **Mudança de schema saiu como migration versionada + linha no MANIFEST** (ver Doutrina de Migrations) — clones conseguem atualizar
 12. **Se tocou UI/fluxo de usuário: provado pela tela como um leigo faria**, em ambiente fresco estilo VPS, com evidência visual (ver Doutrina de QA Visual com Recursos Reais) — curl não conta
 13. **Living System Checklist respondido** (lei em `docs/doctrine/sistema-vivo.md`; racional no manual `docs/doctrine/sistema-vivo/`) — a feature não é ilha: tem entrada + saída, emite atividade/log, aparece na tela, tem porta na navegação, tem mecanismo anti-morte, **declara seu laço de retorno** (invariante 7 — o que muda no sistema quando ela erra), e o mapa vivo (`docs/architecture/`) reflete peça nova com ≥2 arestas. Resposta que não **nomeia o artefato concreto** (consumidor real, tela real, log real) não conta
-14. **Tela nova tem porta** — declarada em `lib/navigation/registry.ts` com seu grupo, ou na allowlist de `tests/unit/navegacao-completude.test.ts` **com justificativa escrita**. Ter tela e ser alcançável são coisas diferentes: o CI reprova tela que existe mas em que só se chega digitando a URL
+14. **Tela nova tem porta** — declarada em **`lib/navigation/catalogo.ts`** (no `NAV_CATALOG`, com seu grupo), ou na allowlist de `tests/unit/navegacao-completude.test.ts` **com justificativa escrita**. Ter tela e ser alcançável são coisas diferentes: o CI reprova tela que existe mas em que só se chega digitando a URL.
+
+    ⚠️ Esta linha dizia `lib/navigation/registry.ts`, e quem a seguisse abria um
+    arquivo **sem um único lugar onde declarar**: o `registry.ts` só deriva
+    (`NAV_DESTINATIONS` sai de `NAV_CATALOG`) e reexporta. Ele é a FACE do
+    módulo — é dele que o teste importa, e por isso o engano é fácil. Quem
+    declara é o catálogo. Para conferir sem acreditar nesta linha:
+
+    ```bash
+    grep -c 'href:' lib/navigation/catalogo.ts lib/navigation/registry.ts
+    ```
 15. **Se tocou Dockerfile, compose ou setup kit: a mudança chega a quem já instalou** (lei em `docs/doctrine/packaging.md`) — nenhum serviço de produção ficou `build:`-only; variável nova tem default que não quebra `.env` antigo; a atualização não pede edição manual de arquivo; e, se mudou o que a imagem contém, o `update.sh` alcança essa peça. Rode `pnpm test:shell` — é o único gate que exercita o kit
 16. **Se o PR muda comportamento, procure a afirmação de estado sobre esse comportamento.** Só
     sobre o que você mudou, e só nos documentos de autoridade — não saia caçando pelo repo. A

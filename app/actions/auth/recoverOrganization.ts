@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureTenantForUser } from "@/lib/auth/provision";
 import { decidirConviteDoSignup } from "@/lib/auth/convite-no-signup";
 import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
+import { acessoFoiRevogado } from "@/lib/auth/vinculo-revogado";
 import { organizationNameSchema } from "@/lib/auth/schemas";
 import { audit } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
@@ -21,7 +22,8 @@ export type RecoverOrganizationResult =
         | "rate_limited"
         | "invite_pending"
         | "somente_convite"
-        | "provision_failed";
+        | "provision_failed"
+        | "access_revoked";
     };
 
 /**
@@ -71,6 +73,24 @@ export async function recoverOrganization(name: string): Promise<RecoverOrganiza
     data: { user: authUser },
   } = await supabase.auth.getUser();
   if (!authUser) return { ok: false, error: "provision_failed" };
+
+  // QUEM PERDEU O ACESSO NÃO É UM VISITANTE NOVO. Esta ação existe para a
+  // pessoa cujo provisionamento FALHOU no primeiro acesso — não para quem teve
+  // o vínculo retirado por um administrador. Sem esta guarda, revogar alguém
+  // lhe dava, na prática, um tenant próprio dentro da mesma instalação.
+  //
+  // Medido em 2026-09-10: um membro revogado chegou até este formulário e só
+  // foi barrado porque ainda tinha `invite_token` no `user_metadata` — acidente,
+  // não guarda —, recebendo de volta "convite pendente ou inválido", que não
+  // era a verdade sobre o que tinha acontecido com ele.
+  if (await acessoFoiRevogado(authUser.id)) {
+    void audit({
+      action: "auth.signup_provision_recusado",
+      actorUserId: authUser.id,
+      metadata: { motivo: "acesso_revogado" },
+    });
+    return { ok: false, error: "access_revoked" };
+  }
 
   const decisao = decidirConviteDoSignup(authUser);
   if (decisao.tipo !== "provisionar") {

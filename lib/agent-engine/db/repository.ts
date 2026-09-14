@@ -26,6 +26,7 @@ export type { InboxRefKind } from '@/lib/ai/inbox-destino';
  * kind numa migration adiciona aqui na mesma mudança.
  */
 export type InboxKind =
+  | 'case_stale'
   | 'appointment_outcome_required'
   | 'appointment_recovery_review'
   | 'qr_rescan'
@@ -66,6 +67,11 @@ export type InboxKind =
   // nenhum trecho foi gravado. UM kind e não dois, porque quem lê a Central
   // quer saber que o material não entrou — o porquê é o corpo do aviso.
   | 'conhecimento_nao_indexado'
+  // (migration 0232) Chamada de voz que TOCOU e ninguém atendeu — inbound
+  // encerrada sem nunca ter passado por `connected`. O `end_reason` do upstream
+  // não distingue "tocou e ninguém pegou" de "o operador recusou", e para quem
+  // lê a Central os dois pedem a mesma coisa: alguém precisa ligar de volta.
+  | 'voice_call_missed'
   | 'other';
 
 export interface InboxItemRow {
