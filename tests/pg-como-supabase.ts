@@ -127,10 +127,26 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
     return this;
   }
 
-  /** Presentes para ESTOURAR: o código que os usar precisa de implementação real. */
-  in(): never {
-    return naoImplementado("in");
+  /**
+   * `in` — QUINTA vez que o `naoImplementado` se paga, e desta vez o estouro
+   * veio de um PR de contribuidor: a cascata de LGPD passou a cancelar a régua
+   * do contato anonimizado com `.in("status", STATUS_DA_REGUA_VIVA)`
+   * (`lib/lgpd/cascata.ts:221`), e o invariante que exercita a anonimização
+   * estourou aqui em vez de ficar verde.
+   *
+   * O que teria acontecido com um `in` que devolvesse vazio: "nenhuma régua
+   * viva" é o desfecho natural de uma lista vazia, então o teste passaria
+   * afirmando que a cascata cancelou a régua — sem ela ter cancelado nada.
+   *
+   * `= any($n)` e não `in ($1,$2,…)` porque a lista é um parâmetro só: número
+   * variável de placeholders reabriria a porta de montar SQL por concatenação.
+   */
+  in(coluna: string, valores: readonly unknown[]): this {
+    this.filtros.push(["= any", coluna, [...valores]]);
+    return this;
   }
+
+  /** Presentes para ESTOURAR: o código que os usar precisa de implementação real. */
   neq(): never {
     return naoImplementado("neq");
   }
@@ -139,6 +155,9 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
     const valores: unknown[] = [];
     const onde = this.filtros.map(([op, c, v]) => {
       valores.push(v);
+      // `= any` recebe o array inteiro num placeholder só; os demais operadores
+      // são infixos comuns.
+      if (op === "= any") return `"${c}" = any($${valores.length})`;
       return `"${c}" ${op} $${valores.length}`;
     });
     let texto = `select ${colunasSql(this.colunas)} from public."${this.tabela}"`;

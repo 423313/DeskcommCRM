@@ -286,7 +286,24 @@ async function request<T>(
       if (opts.signal?.aborted) {
         throw err;
       }
-      // Network error / timeout — retry
+      // ⚠️ TIMEOUT NUMA ESCRITA NÃO É "não aconteceu" — é "não sei".
+      //
+      // O servidor não cancela o trabalho quando o cliente desiste: ele termina
+      // e devolve para ninguém. Retentar ali executa a escrita DE NOVO, e o
+      // `Idempotency-Key` que este cliente estampa só protege quem o honra —
+      // hoje, poucas rotas.
+      //
+      // Medido (issue #783): "Testar agente" leva ~14,5s de modelo e o timeout
+      // padrão é 10s. Um clique virava até TRÊS execuções completas do LLM, as
+      // três pagas, nenhuma devolvida à tela — que mostrava só um toast de erro
+      // enquanto os créditos iam embora em triplo.
+      //
+      // Erro de REDE (servidor inalcançável) é indistinguível de timeout aqui,
+      // e some no mesmo balde de propósito: na dúvida sobre uma escrita, não
+      // repetir é a direção segura. Leitura (GET) segue retentando.
+      if (MUTATING_METHODS.has(method)) {
+        throw err;
+      }
       lastError = err;
       if (attempt < MAX_ATTEMPTS) {
         await sleep(backoffMs(attempt), opts.signal);

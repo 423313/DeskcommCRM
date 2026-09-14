@@ -506,7 +506,9 @@ export async function revertToVersionAction(
     credential_id: string;
     tool_ids: string[];
     trigger_config: Record<string, unknown> | null;
-    channel_session_id: string;
+    // Nulo desde a 0239: a versão de origem pode ser um rascunho de quem ainda
+    // não conectou o WhatsApp, e duplicá-la copia o "sem número" adiante.
+    channel_session_id: string | null;
     max_steps: number;
     token_budget: number;
     cost_budget_cents: number;

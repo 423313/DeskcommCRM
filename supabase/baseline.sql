@@ -10118,6 +10118,7 @@ alter table public.agent_inbox_items
     -- mesma razão de midia_nao_lida/conhecimento_nao_indexado. Entra NESTA
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
+    'case_stale',
     'other'
   ));
 
@@ -18957,8 +18958,25 @@ begin
     insert into public.user_organizations(organization_id, user_id, role, invited_by, invited_at, accepted_at, interface_settings)
       values (p_org, p_user, p_role, p_invited_by, p_invited_at, now(), p_interface_settings) returning * into m;
   end if;
+
+  -- O DONO ASSUMIU. Só o vínculo MARCADO como provisório sai, e só ele.
+  if p_role = 'admin' then
+    delete from public.attendant_availability av
+      where av.organization_id = p_org
+        and av.user_id <> p_user
+        and exists (select 1 from public.user_organizations uo
+                     where uo.organization_id = p_org and uo.user_id = av.user_id
+                       and uo.provisional_until_handover);
+
+    delete from public.user_organizations uo
+      where uo.organization_id = p_org
+        and uo.provisional_until_handover
+        and uo.user_id <> p_user;
+  end if;
+
   return jsonb_build_object('id', m.id, 'changed', true);
 end $$;
+
 revoke all on function public.fn_accept_team_invite(uuid, uuid, text, uuid, timestamptz, timestamptz, jsonb) from public, anon, authenticated;
 grant execute on function public.fn_accept_team_invite(uuid, uuid, text, uuid, timestamptz, timestamptz, jsonb) to service_role;
 
@@ -18979,6 +18997,7 @@ declare
   prior public.idempotency_keys%rowtype;
   org public.organizations%rowtype;
   result jsonb;
+  dono_e_outra_pessoa boolean;
 begin
   if not exists (select 1 from public.platform_admins where user_id = p_actor
     and revoked_at is null and scope = 'full') then
@@ -18998,15 +19017,22 @@ begin
     end if;
     return prior.response_body || jsonb_build_object('created', false);
   end if;
+
+  -- A MESMA comparação que já decidia `interface_settings`, agora com nome e
+  -- guardada. Era ela que sabia a resposta e não a anotava em lugar nenhum.
+  dono_e_outra_pessoa := lower(p_request->>'owner_email') is distinct from
+    (select lower(email) from auth.users where id = p_actor);
+
   insert into public.organizations(display_name, slug, legal_name, cnpj, status, settings, created_by)
     values (p_request->>'display_name', p_request->>'slug', coalesce(nullif(p_request->>'legal_name', ''), p_request->>'display_name'),
       p_request->>'cnpj', 'active', jsonb_build_object('plan', p_request->>'plan'), p_actor)
     returning * into org;
-  insert into public.user_organizations(organization_id, user_id, role, accepted_at, interface_settings)
-    values (org.id, p_actor, 'admin', now(), case when lower(p_request->>'owner_email') =
-      (select lower(email) from auth.users where id = p_actor)
-      then coalesce(p_request->'owner_interface_settings', '{"preset":"completa"}'::jsonb)
-      else '{"preset":"completa"}'::jsonb end);
+  insert into public.user_organizations(organization_id, user_id, role, accepted_at, interface_settings, provisional_until_handover)
+    values (org.id, p_actor, 'admin', now(),
+      case when dono_e_outra_pessoa
+        then '{"preset":"completa"}'::jsonb
+        else coalesce(p_request->'owner_interface_settings', '{"preset":"completa"}'::jsonb) end,
+      dono_e_outra_pessoa);
   result := jsonb_build_object('id', org.id, 'slug', org.slug, 'display_name', org.display_name,
     'invite_id', gen_random_uuid(), 'issued_at', floor(extract(epoch from now()))::bigint);
   insert into public.idempotency_keys(organization_id, key, endpoint, request_hash, status_code, response_body, tenant_creation_trusted)
@@ -19014,6 +19040,7 @@ begin
       decode(p_hash, 'hex'), 201, result, true);
   return result || jsonb_build_object('created', true);
 end $$;
+
 revoke all on function public.fn_create_tenant_with_owner(uuid, uuid, jsonb, text) from public, anon, authenticated;
 grant execute on function public.fn_create_tenant_with_owner(uuid, uuid, jsonb, text) to service_role;
 
@@ -23992,6 +24019,246 @@ create trigger trg_org_voice_calls_set_updated_at
 
 notify pgrst, 'reload schema';
 
+-- ---- Registro não nasce `pending` (migration 0239) ----
+--
+-- Racional completo no cabeçalho da migration 0244. Em uma linha: tipo de evento
+-- que ninguém consome não é fila — é registro, e a linha nasce `done`.
+--
+-- O defeito medido (issue #753): `event_log.status` nasce `pending` e nenhum
+-- drain seleciona tipo sem handler (`drain.ts` filtra por
+-- `event_type in (handlers)`; o drain do agent-engine filtra
+-- `ai_agent.dispatch_requested`), então o registro acaba a vida `pending` — 626
+-- linhas em 8 tipos na instalação da issue, indistinguíveis de fila entupida.
+--
+-- A lista mora no BANCO porque é o banco que escreve o status: quem emitir um
+-- tipo novo sem consumidor cai em
+-- `tests/unit/evento-de-fato-nao-fica-pendente.test.ts`, que lê a lista daqui e
+-- a cobra exaustiva em relação ao que o código emite.
+create or replace function public.fn_event_log_e_registro(p_event_type text)
+returns boolean
+language sql
+immutable
+set search_path to 'public', 'pg_temp'
+as $$
+  select p_event_type = any (array[
+    -- IA e agente
+    'ai.responded',
+    'ai_agent.created',
+    'ai_agent.published',
+    'ai_agent.run_completed',
+    'ai_agent.run_failed',
+    'ai_agent.run_started',
+    -- agente (harness) — o motor registra quando não há negócio para pendurar
+    'agent.activity_unrouted',
+    -- canal e conversa
+    'channel_session.status_changed',
+    'conversation.claimed',
+    'conversation.transferred',
+    'whatsapp.chat_id_not_recognized',
+    'whatsapp.conversation_mark_failed',
+    -- contato, lead, organização e plataforma
+    'contact.anonymized',
+    'contact.created',
+    'contact.deleted',
+    'contact.updated',
+    'crm.activity_write_failed',
+    'incident.resolved',
+    'lead.bulk_assigned',
+    'lead.bulk_deleted',
+    'lead.bulk_tagged',
+    'lead.reopened',
+    'lead.risk_backlog_seeded',
+    'lead.updated',
+    'org.updated',
+    'tenant.onboarded',
+    'tenant.reactivated',
+    'tenant.suspended',
+    'user.profile_updated',
+    -- mensagem
+    'message.failed',
+    'message.outbound',
+    'message.sending',
+    'message.sent',
+    -- LGPD
+    'lgpd.export_delivered',
+    'lgpd.export_generated',
+    'lgpd.redact_applied',
+    'lgpd.redact_failed'
+  ]::text[]);
+$$;
+
+-- Mesma ACL de `fn_log_event` (migration 0034): função pura de leitura, útil no
+-- SQL editor de uma instalação, e nunca alcançável pela anon key.
+revoke all on function public.fn_event_log_e_registro(text) from public, anon;
+grant execute on function public.fn_event_log_e_registro(text) to authenticated, service_role;
+
+create or replace function public.fn_event_log_marca_registro()
+returns trigger
+language plpgsql
+set search_path to 'public', 'pg_temp'
+as $$
+begin
+  -- Só o que nasce `pending`: quem escolhe status na origem não é reescrito
+  -- (o agent-engine insere `ai_agent.dispatch_requested` e
+  -- `agent.operator_turn` com o status que quer).
+  if new.status = 'pending' and public.fn_event_log_e_registro(new.event_type) then
+    new.status := 'done';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.fn_event_log_marca_registro() from public, anon;
+grant execute on function public.fn_event_log_marca_registro() to service_role;
+
+drop trigger if exists trg_event_log_marca_registro on public.event_log;
+create trigger trg_event_log_marca_registro
+  before insert on public.event_log
+  for each row
+  execute function public.fn_event_log_marca_registro();
+
+-- Backfill do estoque: só os tipos da lista, e só `pending` — `processing`
+-- (claim perdido, dono é o reaper do drain) e `dead` (erro de consumidor) são
+-- outra história, com outro dono.
+update public.event_log
+   set status = 'done'
+ where status = 'pending'
+   and public.fn_event_log_e_registro(event_type);
+-- ---- Credencial de enfeite não derruba a leitura (migration 0240) ----
+--
+-- Racional completo no cabeçalho da migration 0242. Em uma linha: não tente
+-- decifrar o que não pode ser cifra — devolva null, que é o contrato que os
+-- leitores já tratam (`lib/webhooks/secrets.ts`).
+--
+-- O defeito medido (issue #754): `fn_decrypt_oauth` chamava `pgp_sym_decrypt` em
+-- QUALQUER bytea, e o schema grava byte de enfeite onde ainda não há credencial
+-- (as colunas cifradas são NOT NULL — `Buffer.from([0])` nas rotas que criam
+-- sessão, conforme `lib/waha/webhook-auth.ts` já documenta). Resultado: 500
+-- permanente em 10-30% das chamadas do RPC, nos mesmos registros.
+--
+-- Medido nesta VPS antes do fix: `\x00` => 39000, bytea vazio => 39000, pacote
+-- de verdade => decifra, NULL => NULL. O menor pacote que `fn_encrypt_oauth`
+-- produz tem 66 bytes, e pacote PGP começa com o bit 7 ligado (o real: 0xC3) —
+-- são as duas condições da guarda. A ordem importa: `get_byte()` em bytea vazio
+-- estoura (`index 0 out of valid range`).
+create or replace function public.fn_decrypt_oauth(ciphertext bytea) returns text
+    language plpgsql security definer
+    set search_path to 'public', 'private', 'extensions', 'pg_temp'
+    as $$
+declare
+  k text := private.fn_oauth_key();
+begin
+  -- 1. Sem valor não há credencial (comportamento que a função já tinha).
+  if ciphertext is null then
+    return null;
+  end if;
+
+  -- 2. Curto demais para ser pacote deste par: o menor que fn_encrypt_oauth
+  --    produz (texto vazio, aes256) tem 66 bytes — medido. Abaixo disso é
+  --    sentinela (`\x00`, o byte de enfeite das rotas de sessão), bytea vazio,
+  --    lixo ou truncamento.
+  if octet_length(ciphertext) < 66 then
+    return null;
+  end if;
+
+  -- 3. Pacote PGP começa com o bit 7 ligado (o real medido: 0xC3). Sem cara de
+  --    pacote é JSON em claro, hex ou texto — e o tamanho sozinho não pega isso.
+  --    Esta linha vem DEPOIS da de tamanho de propósito: `get_byte()` em bytea
+  --    vazio estoura com `index 0 out of valid range, 0..-1` — medido.
+  if get_byte(ciphertext, 0) < 128 then
+    return null;
+  end if;
+
+  -- Daqui para baixo só chega pacote de verdade: se não abrir, é chave mestra
+  -- trocada ou dado corrompido, e isso tem de aparecer.
+  return pgp_sym_decrypt(ciphertext, k);
+end$$;
+
+revoke all on function public.fn_decrypt_oauth(bytea) from public, anon, authenticated;
+grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
+
+notify pgrst, 'reload schema';
+-- ---- rascunho de agente sem número de WhatsApp (migration 0241) ----
+--
+-- `channel_session_id` era NOT NULL, e o editor exigia o número para SALVAR.
+-- Instalação nova não tem nenhuma linha em `channel_sessions` (o aparelho é
+-- pareado outro dia), então o dono escrevia o prompt do atendente e não
+-- conseguia guardar nada. Escolher o número é requisito para ATENDER.
+--
+-- Publicar sem número continua recusado por `fn_publish_ai_agent_version`
+-- (`channel_session_not_found`: o select por id nulo não acha linha), e o runtime
+-- só executa `ai_agents.published_version_id` — rascunho sem número é invisível
+-- para o atendimento por construção.
+--
+-- Idempotente e sem backfill: `drop not null` em coluna já anulável é no-op, e
+-- afrouxar a restrição não invalida nenhuma linha existente.
+alter table public.ai_agent_versions
+  alter column channel_session_id drop not null;
+
+comment on column public.ai_agent_versions.channel_session_id is
+  'Por qual número este agente atende. NULL = ainda não escolhido (rascunho legítimo de quem não pareou o WhatsApp). Publicar com NULL é recusado por fn_publish_ai_agent_version (channel_session_not_found).';
+-- ---- aviso de caso parado: índice do watcher (migration 0242) ----
+--
+-- O VOCABULÁRIO do kind (case_stale) mora no bloco único da constraint, lá em
+-- cima — aqui só o índice. Reconstruir a constraint num segundo bloco faria as
+-- duas listas divergirem, e é o que 
+-- reprova.
+--
+-- Parcial em status=open porque é a única pergunta do watcher ("existe aviso
+-- aberto para este caso?") e porque avisos resolvidos viram a maioria das
+-- linhas com o tempo.
+create index if not exists agent_inbox_items_case_stale_aberto_idx
+  on public.agent_inbox_items (organization_id, ref_id)
+  where kind = 'case_stale' and status = 'open';
+-- ---- chamada de API tem PRAZO para esperar uma trava (migration 0243) ----
+-- `lock_timeout` é 0 por padrão no Postgres: esperar para sempre. O cliente HTTP
+-- desiste em 10s, mas a consulta continua viva segurando a fila, e o clique
+-- seguinte empilha atrás. Medido em produção: 10 chamadas simultâneas de
+-- "Enviar link ao cliente", Postgres a 357% de CPU.
+--
+-- No PAPEL e não na função: `authenticator` é usado em TODA requisição da API, e
+-- `set role` não reinicia parâmetros de sessão. Cobre as sete funções que a
+-- varredura achou com a mesma forma, e as que ainda não existem.
+-- `service_role` fica de fora: trabalho de fundo pode esperar.
+--
+-- Idempotente: `alter role ... set` sobrescreve.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'authenticator') then
+    execute 'alter role authenticator set lock_timeout = ''4s''';
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    execute 'alter role authenticated set lock_timeout = ''4s''';
+  end if;
+end $$;
+-- ---- tags de conversa em uso (migration 0244) ----
+-- O seletor de etiqueta do Inbox oferece as etiquetas EM USO, e nao so a lista
+-- curada a mao. `security INVOKER` de proposito: a funcao recebe a organizacao
+-- por ARGUMENTO e e concedida a `authenticated`, entao `definer` aqui seria
+-- leitura cross-tenant (o mesmo aviso esta no comentario de
+-- `fn_gasto_de_ia_do_mes`). Sob invoker quem isola e a RLS de `conversations`.
+-- Idempotente por construcao: `create or replace` + `revoke`/`grant`.
+create or replace function public.fn_tags_de_conversa_em_uso(p_org uuid)
+returns table (tag text)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select distinct t
+  from public.conversations c, unnest(c.tags) as t
+  where c.organization_id = p_org
+    and c.tags is not null
+  order by t
+  limit 200;
+$$;
+
+-- As DUAS origens de EXECUTE: o ALTER DEFAULT PRIVILEGES do baseline (que da a
+-- anon) e o grant a PUBLIC que o Postgres da ao criar. Revogar uma so deixa a
+-- funcao alcancavel pela anon key, que vai para o browser.
+revoke execute on function public.fn_tags_de_conversa_em_uso(uuid) from public, anon;
+grant  execute on function public.fn_tags_de_conversa_em_uso(uuid) to authenticated, service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -24066,3 +24333,19 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+
+
+-- ---- Criador provisório sai na entrega (migration 0237) ----
+-- As duas funções acima já saíram com a regra; aqui fica só a COLUNA, que é
+-- o dado que faltava. Idempotente. NÃO há expurgo retroativo, de propósito:
+-- vínculo antigo não tem a marca, e deduzi-la foi o erro que a primeira
+-- versão desta regra cometeu (ver o cabeçalho da migration).
+alter table public.user_organizations
+  add column if not exists provisional_until_handover boolean not null default false;
+
+comment on column public.user_organizations.provisional_until_handover is
+  'Este vínculo existe só para a organização não nascer vazia, e sai quando o '
+  'dono assumir. Gravado APENAS por fn_create_tenant_with_owner, e apenas '
+  'quando o tenant foi criado para OUTRA pessoa (owner_email <> e-mail de quem '
+  'cria). Nunca deduzir este valor depois: a ausência dele foi o que fez a '
+  'primeira versão desta regra expulsar alguém da própria empresa.';

@@ -49,7 +49,7 @@ pelo dono da VPS. Como o número é decidido: [`docs/doctrine/versionamento.md`]
 
 | Path | O quê |
 |---|---|
-| `app/api/v1/` | 166 route handlers REST (versionado por path) — 169 contando `app/api/**` |
+| `app/api/v1/` | Route handlers REST (versionado por path) — **reconte, não cite**: `git ls-files 'app/api/v1/**/route.ts' \| wc -l` (e `git ls-files 'app/api/**/route.ts' \| wc -l` para o total de `app/api/**`) |
 | `app/api/internal/`, `app/api/mcp/`, `app/api/v1/cron/` | superfícies não-cookie (secret/bearer próprio) |
 | `app/app/` | UI autenticada do tenant · `app/admin/` UI de plataforma |
 | `app/actions/` | Server Actions (auth, onboarding, team, settings) |
@@ -69,22 +69,28 @@ pnpm dev              # dev server
 pnpm build            # next build
 pnpm lint             # eslint
 pnpm typecheck        # tsc --noEmit (estrito)
-pnpm test:unit        # vitest — EXCLUI tests/invariants e tests/e2e
+pnpm test:unit        # vitest — EXCLUI tests/invariants, tests/e2e e tests/journeys (lista viva em vitest.config.ts → exclude)
 pnpm test:db          # invariantes de banco + gate do baseline (PRECISA de Docker)
 pnpm test:e2e         # Playwright (PRECISA de app rodando + banco semeado)
-pnpm gov:verify       # typecheck + lint + test:unit  ← verificação única atual
+pnpm gov:verify       # typecheck + lint + lint:channels + lint:role-rank + test:unit
+                      # ← verificação única atual; o encadeamento real sai de:
+                      #   node -e "console.log(require('./package.json').scripts['gov:verify'])"
 ```
 
 ⚠️ **`pnpm gov:verify` NÃO cobre tudo.** Ele omite `test:db` e `test:e2e`. Se sua
 mudança toca schema, RLS ou UI, `gov:verify` verde **não** é prova — rode `pnpm test:db`
 (exige Docker) e/ou `pnpm test:e2e` você mesmo. Ver [`docs/harness-audit.md`](docs/harness-audit.md).
 
-**O que o CI cobre.** `.github/workflows/ci.yml`: `verify` = typecheck + lint + test:unit;
+**O que o CI cobre.** `.github/workflows/ci.yml`: `verify` = os passos do job, na ordem —
+typecheck, lint, `lint:channels`, `test:unit` e `test:shell` hoje, e `pnpm lint` sozinho **não**
+cobre os dois últimos (liste em vez de acreditar nesta linha:
+`awk '/^  verify:/,/^  invariants:/' .github/workflows/ci.yml | grep -A1 'name:'`);
 `invariants` = `pnpm test:db` (isolamento RLS + invariantes de governança contra Postgres
 efêmero pg15). `.github/workflows/perf.yml`: `build-and-size` = `pnpm build`.
 `.github/workflows/e2e.yml` roda as specs Playwright contra um Supabase local de verdade com
-o `baseline.sql` aplicado — o mesmo banco que o self-hoster tem. **É check obrigatório desde
-2026-08-08.** **Não há número aqui de propósito**: esta linha já afirmou uma contagem exata
+o `baseline.sql` aplicado — o mesmo banco que o self-hoster tem. **É check obrigatório** — a
+data de ativação não é auditável pelo repositório, e a lista viva está logo abaixo, com o
+comando ao lado. **Não há número aqui de propósito**: esta linha já afirmou uma contagem exata
 de specs e "a única de fora", e as duas envelheceram — a suíte cresce toda semana e a lista de
 exceções muda com ela. Quem fica de fora é o que a própria variável declara; leia, não confie:
 
@@ -100,7 +106,7 @@ de instalação fresca. `followup-journey`, `webhooks` e `capacidades-do-agente`
 `.github/workflows/publish-image.yml`: `imagens-ok` = as três imagens Docker constroem. **Obrigatório
 desde 2026-08-13.**
 
-**Os cinco são checks obrigatórios** na branch protection da `main` — medido em 2026-08-14 @ `741c4ec8`:
+**Os cinco são checks obrigatórios** na branch protection da `main` — medido em 2026-08-14 @ `741c4ec8` (o comando exige permissão de **admin** no repositório: com token de contribuidor ele devolve `404`, medido em 2026-09-13):
 
 ```console
 $ gh api repos/melgarafael/DeskcommCRM/branches/main/protection --jq '.required_status_checks.contexts|join(", ")'
@@ -137,8 +143,11 @@ verify, build-and-size, invariants, e2e, imagens-ok
   Toda mudança de schema tem que aparecer aqui **como apêndice idempotente**, senão
   não chega em quem instalou. Ver doutrina de Migrations em `CLAUDE.md`.
 - **`supabase/migrations/*.sql` já aplicadas** — nunca edite. Corrija com migration nova.
-- **`lib/supabase/admin.ts`** — service role **bypassa RLS**. 89 rotas o usam; toda
-  query precisa filtrar `organization_id` manualmente, resolvido de fonte confiável
+- **`lib/supabase/admin.ts`** — service role **bypassa RLS**. Boa parte dos handlers de
+  `app/api/**` o usa — reconte em vez de citar:
+  `grep -rl createAdminClient app/api --include='route.ts' | wc -l` contra
+  `git ls-files 'app/api/**/route.ts' | wc -l`. Toda query precisa filtrar
+  `organization_id` manualmente, resolvido de fonte confiável
   (cookie/JWT/webhook secret/path token), **nunca do body**.
 - **`lib/auth/public-paths.ts`** — adicionar path aqui remove a checagem de auth de borda.
   Só com guard próprio dentro da rota.
@@ -153,8 +162,8 @@ verify, build-and-size, invariants, e2e, imagens-ok
 
 ## Arquivos GERADOS — não editar à mão
 
-- `lib/database.types.ts` (6.1k linhas — gerado do schema Supabase)
-- `graphify-out/` (grafo de conhecimento; regenerado por `/graphify .`)
+- `lib/database.types.ts` (gerado do schema Supabase — o tamanho de hoje sai de `wc -l lib/database.types.ts`)
+- `graphify-out/` (grafo de conhecimento local; ignorado pelo git e **ausente num clone fresco** — só existe depois de rodar `/graphify .`)
 - `pnpm-lock.yaml`, `tsconfig.tsbuildinfo`, `next-env.d.ts`, `.next/`
 
 ## Como validar uma alteração
@@ -174,15 +183,18 @@ verify, build-and-size, invariants, e2e, imagens-ok
 
 ## Testes existentes (CONFIRMADO)
 
-Medido em 2026-08-14 @ `741c4ec8`, com o comando ao lado de cada número:
+Cada linha abaixo traz o comando que a mede — **rode o comando em vez de citar número**. Este
+bloco já foi datado num SHA uma vez e não funcionou: os itens envelhecem em ritmos diferentes, e o
+cabeçalho passava a mentir por todos eles.
 
-- **257** arquivos de teste unitário em `tests/unit/` (`git ls-files 'tests/unit/*.test.ts' 'tests/unit/*.test.tsx' | wc -l`). O repo tem **491** arquivos `*.test.ts(x)` no total (`git ls-files '*.test.ts' '*.test.tsx' | wc -l`) — a diferença vive junto ao código, fora de `tests/`, e também roda em `test:unit`.
+- Arquivos de teste em `tests/unit/` (`git ls-files 'tests/unit/*.test.ts' 'tests/unit/*.test.tsx' | wc -l`). O total do repositório sai de `git ls-files '*.test.ts' '*.test.tsx' | wc -l` — a diferença vive junto ao código, fora de `tests/`, e também roda em `test:unit`.
 - Arquivos de invariante de banco em `tests/invariants/` — RLS/isolamento cross-tenant, RBAC,
   governança (G1–G6). Excluídos do `test:unit` de propósito; rodam via `pnpm test:db` **e no job
   `invariants` do CI**. Quantos: `git ls-files 'tests/invariants/*.test.ts' | wc -l`.
 - Specs Playwright em `tests/e2e/`, quase todas no CI (via `e2e.yml`, **obrigatório**). As que
   ficam de fora estão declaradas em `FORA_DO_CI`, **com o motivo escrito ao lado**. Esta linha
-  já afirmou "menos uma" depois de deixarem de ser uma — por isso não conta mais. Ver issue #63.
+  já afirmou "menos uma" depois de deixarem de ser uma — por isso não conta mais. A issue #63,
+  que originou a discussão, está **fechada** e o título dela descreve um estado que já não vale.
   Quantas existem: `ls tests/e2e/*.spec.ts | wc -l`. Quantas ficam fora:
   `git show origin/main:.github/workflows/e2e.yml | grep -A4 'FORA_DO_CI:'`.
 
@@ -192,21 +204,37 @@ Medido em 2026-08-14 @ `741c4ec8`, com o comando ao lado de cada número:
 > O que continua vigiado por gate é o que importa — `tests/unit/e2e-cobertura-completa.test.ts`
 > reprova toda spec nova que não esteja em `SPECS_PARTE_*` ou em `FORA_DO_CI` com motivo escrito.
 
-## Limitações conhecidas (estado em 2026-07-29, contra `origin/main` @ 789dfa6)
+## Limitações conhecidas
 
-- **1 das 46 specs E2E segue fora do CI** (`vps-fresh-onboarding`), e o `e2e` **é** check
-  obrigatório desde 2026-08-08. Ou seja: um PR que quebre o `e2e` não entra — mas a jornada de
+Cada item abaixo carrega o comando que o mede — item sem comando é suspeito de estar podre,
+e a régua da casa é medir antes de repassar. Datar o bloco inteiro num SHA foi abandonado: os
+itens envelhecem em ritmos diferentes, e o cabeçalho passava a mentir por todos eles.
+(O SHA `789dfa6`, que ficava aqui, ficou para trás — meça com
+`git rev-list --count 789dfa6..origin/main`.)
+
+- **As specs E2E fora do CI são exatamente as declaradas em `FORA_DO_CI`** — hoje
+  `vps-fresh-onboarding` é a P0 entre elas —, e o `e2e` **é** check obrigatório. Ou seja: um PR
+  que quebre o `e2e` não entra — mas a jornada de
   instalação fresca, que é o produto que se vende, continua sem gate. Se você mexeu nela, a
-  prova é sua. *(Corrigido em 2026-08-14; a redação anterior — "4 das 32, não-obrigatório" —
-  mudava a régua de qualquer triagem que a lesse.)*
+  prova é sua. O número e a contagem que ficavam aqui eram de uma fotografia de agosto, e o
+  disco já tinha mudado desde então.
 - Rate limit HTTP: `lib/auth/rate-limit.ts` cobre **login, signup, recuperação de senha e
   aceite de convite** (contando por IP **e** por identificador hasheado); `checkRateLimit` cobre
   o webhook de captação e o dispatcher de IA. **Crons e MCP seguem sem.** Meça antes de agir:
   `grep -rln 'authRateLimited\|checkRateLimit(' app lib --include='*.ts' --include='*.tsx'`.
   Esta linha dizia "existe em 2 pontos; login e signup estão sem" — era o estado anterior à
   issue #64, e o `docs/threat-model.md` ainda carrega a versão velha, com nota de reauditoria.
-- Fallback do rate limit é **em memória** — sem Upstash configurado o limite é por processo.
-- `Idempotency-Key` implementado em **1** rota, apesar de o contrato prometer nos POSTs de criação.
+- Fallback do rate limit é **em memória** — mas o gatilho não é "sem Upstash": `lib/env.ts`
+  declara as duas variáveis do Upstash como `required()` e o app não sobe sem elas
+  (`grep -n UPSTASH lib/env.ts`). O que cai para a memória é Redis **inalcançável** com a
+  variável presente, e aí o limite passa a ser por processo.
+- `Idempotency-Key` é lido por **4** rotas e o contrato promete nos POSTs de criação. Há duas
+  implementações com recibo (`lgpd/requests/[id]/approve` e `admin/tenants`) e, desde este
+  commit, uma reutilizável em `lib/api/idempotency.ts`, aplicada em `message-templates`.
+  Reconte antes de citar: `grep -rln 'Idempotency-Key' app/api/v1 --include='route.ts'`.
+  **A corrida entre duas requisições simultâneas com a mesma chave segue aberta** —
+  `idempotency_keys.status_code` e `.response_body` são `NOT NULL`, então não há onde gravar
+  "em curso"; fechar exige mudança de schema. Ver issue #778.
 - **`.env.example` está completo** — medido em 2026-08-14: das 45 chaves de `lib/env.ts`, a
   única ausente é `NODE_ENV`, que não é configuração do operador. Esta linha dizia que faltavam
   6, "incluindo 3 secrets"; os três (`IMPERSONATE_COOKIE_SECRET`, `INTERNAL_CRON_SECRET`,
@@ -214,7 +242,9 @@ Medido em 2026-08-14 @ `741c4ec8`, com o comando ao lado de cada número:
   DoD) — a regra continua valendo, o que caiu foi a dívida.
 - `lib/auth/invite-token.ts` cai em `"dev-fallback"` como secret HMAC se nenhum secret existir
   (inalcançável em produção, porque `INTERNAL_SECRET` é obrigatório e derruba o boot).
-- **89 dos 169 handlers de `app/api/**` usam service role** — sem gate automático para o filtro de
+- **Boa parte dos handlers de `app/api/**` usa service role** — reconte:
+  `grep -rl createAdminClient app/api --include='route.ts' | wc -l` contra
+  `git ls-files 'app/api/**/route.ts' | wc -l`. Não há gate automático para o filtro de
   `organization_id`. Escrevendo handler novo, o filtro é responsabilidade sua.
 - Detalhes e prioridade: [`docs/harness-audit.md`](docs/harness-audit.md),
   [`docs/current-state.md`](docs/current-state.md) e [`docs/threat-model.md`](docs/threat-model.md).
