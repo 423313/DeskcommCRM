@@ -2201,6 +2201,7 @@ export type Database = {
           organization_id: string
           owner_user_id: string | null
           reminder_sent_at: string | null
+          reminder_sent_offsets_minutes: number[]
           rescheduled_from_id: string | null
           source: string
           starts_at: string
@@ -2266,6 +2267,7 @@ export type Database = {
           organization_id: string
           owner_user_id?: string | null
           reminder_sent_at?: string | null
+          reminder_sent_offsets_minutes?: number[]
           rescheduled_from_id?: string | null
           source?: string
           starts_at: string
@@ -2331,6 +2333,7 @@ export type Database = {
           organization_id?: string
           owner_user_id?: string | null
           reminder_sent_at?: string | null
+          reminder_sent_offsets_minutes?: number[]
           rescheduled_from_id?: string | null
           source?: string
           starts_at?: string
@@ -2621,6 +2624,7 @@ export type Database = {
           position: number
           reminder_enabled: boolean
           reminder_minutes_before: number
+          reminder_extra_offsets_minutes: number[]
           reminder_template_name: string | null
           requires_confirmation: boolean
           slot_interval_minutes: number | null
@@ -2646,6 +2650,7 @@ export type Database = {
           position?: number
           reminder_enabled?: boolean
           reminder_minutes_before?: number
+          reminder_extra_offsets_minutes?: number[]
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
@@ -2671,6 +2676,7 @@ export type Database = {
           position?: number
           reminder_enabled?: boolean
           reminder_minutes_before?: number
+          reminder_extra_offsets_minutes?: number[]
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null

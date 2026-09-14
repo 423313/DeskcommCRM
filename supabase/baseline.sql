@@ -23990,6 +23990,70 @@ create trigger trg_org_voice_calls_set_updated_at
   before update on public.org_voice_calls
   for each row execute function public.fn_set_updated_at();
 
+
+-- ---- lembrete em degraus (migration 0241) ----
+-- Um tipo de evento passa a ter mais de um lembrete: `reminder_minutes_before`
+-- segue sendo o degrau principal e `reminder_extra_offsets_minutes` guarda os
+-- ADICIONAIS. Vazio = um lembrete só, que é o comportamento anterior — por isso
+-- o update de um clone não precisa decidir nada.
+--
+-- O carimbo por degrau é o que torna o segundo aviso possível: com
+-- `reminder_sent_at` como filtro, quem recebeu o de um dia nunca voltaria para
+-- receber o de três horas. O backfill abaixo marca o degrau principal onde já
+-- havia carimbo, senão a primeira varredura depois da atualização reenviaria
+-- lembrete para todo compromisso já avisado.
+alter table public.calendar_event_types
+  add column if not exists reminder_extra_offsets_minutes integer[] not null default '{}';
+
+alter table public.calendar_appointments
+  add column if not exists reminder_sent_offsets_minutes integer[] not null default '{}';
+
+create or replace function public.fn_degraus_de_lembrete_validos(p_degraus integer[])
+returns boolean
+language sql
+immutable
+as $$
+  select coalesce(array_length(p_degraus, 1), 0) <= 3
+     and coalesce(bool_and(x between 15 and 10080), true)
+    from unnest(coalesce(p_degraus, '{}'::integer[])) as x;
+$$;
+
+revoke execute on function public.fn_degraus_de_lembrete_validos(integer[]) from public, anon;
+grant execute on function public.fn_degraus_de_lembrete_validos(integer[]) to authenticated, service_role;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'calendar_event_types_extras_na_faixa'
+       and conrelid = 'public.calendar_event_types'::regclass
+  ) then
+    update public.calendar_event_types
+       set reminder_extra_offsets_minutes = '{}'
+     where not public.fn_degraus_de_lembrete_validos(reminder_extra_offsets_minutes);
+
+    alter table public.calendar_event_types
+      add constraint calendar_event_types_extras_na_faixa
+      check (public.fn_degraus_de_lembrete_validos(reminder_extra_offsets_minutes));
+  end if;
+end $$;
+
+update public.calendar_appointments a
+   set reminder_sent_offsets_minutes = array[t.reminder_minutes_before]
+  from public.calendar_event_types t
+ where a.event_type_id = t.id
+   and a.reminder_sent_at is not null
+   and coalesce(array_length(a.reminder_sent_offsets_minutes, 1), 0) = 0;
+
+comment on column public.calendar_event_types.reminder_extra_offsets_minutes is
+  'Degraus ADICIONAIS de lembrete, em minutos antes do compromisso. Os degraus efetivos são reminder_minutes_before mais estes. Vazio = um lembrete só, o comportamento anterior.';
+
+comment on column public.calendar_appointments.reminder_sent_offsets_minutes is
+  'Quais degraus de lembrete já saíram para este compromisso. É a autoridade sobre o que falta enviar — reminder_sent_at guarda apenas o instante do último envio e NÃO deve ser usado como filtro.';
+
+comment on column public.calendar_appointments.reminder_sent_at is
+  'Instante do último lembrete enviado. Informativo: quem decide o que ainda falta enviar é reminder_sent_offsets_minutes.';
+
 notify pgrst, 'reload schema';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
