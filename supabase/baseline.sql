@@ -24258,6 +24258,34 @@ $$;
 -- funcao alcancavel pela anon key, que vai para o browser.
 revoke execute on function public.fn_tags_de_conversa_em_uso(uuid) from public, anon;
 grant  execute on function public.fn_tags_de_conversa_em_uso(uuid) to authenticated, service_role;
+-- ---- Índices em FKs de mensagens e runs (migration 0247) ----
+create index if not exists idx_messages_contact_id
+  on public.messages (contact_id)
+  where contact_id is not null;
+
+create index if not exists idx_messages_channel_session_id
+  on public.messages (channel_session_id)
+  where channel_session_id is not null;
+
+create index if not exists idx_ai_agent_runs_contact_id
+  on public.ai_agent_runs (contact_id)
+  where contact_id is not null;
+
+create index if not exists idx_ai_agent_runs_channel_session_id
+  on public.ai_agent_runs (channel_session_id)
+  where channel_session_id is not null;
+
+create index if not exists idx_ai_agent_runs_conversation_id
+  on public.ai_agent_runs (conversation_id)
+  where conversation_id is not null;
+
+create index if not exists idx_ai_agent_runs_inbound_message_id
+  on public.ai_agent_runs (inbound_message_id)
+  where inbound_message_id is not null;
+
+create index if not exists idx_ai_agent_runs_outbound_message_id
+  on public.ai_agent_runs (outbound_message_id)
+  where outbound_message_id is not null;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
