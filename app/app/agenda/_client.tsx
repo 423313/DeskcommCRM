@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { EntradaDaAgenda } from "@/components/agenda/EntradaDaAgenda";
 import { VinculoDaMarcacao } from "@/components/agenda/VinculoDaMarcacao";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
@@ -95,6 +97,7 @@ export function AgendaClient({
 }) {
   const localeDaData = useLocaleDeData();
   const t = useT();
+  const router = useRouter();
   const [marcando, setMarcando] = React.useState(false);
   const [contactId,setContactId]=React.useState("");
   const [conversationId,setConversationId]=React.useState("");
@@ -134,6 +137,26 @@ export function AgendaClient({
   const [tipoId, setTipoId] = React.useState<string | null>(() => tiposIniciais[0]?.id ?? null);
   const tipo = tiposIniciais.find((t) => t.id === tipoId) ?? tiposIniciais[0] ?? null;
   const [visao, setVisao] = React.useState<VisaoDaAgenda>("semana");
+  /**
+   * No CELULAR a agenda abre no DIA, não na semana.
+   *
+   * Duas razões, e a segunda é consequência da primeira. A semana em 360px é
+   * ilegível — por isso a grade esconde as outras colunas abaixo de `md`. Mas o
+   * passo de navegação da semana é de SETE dias: quem visse um dia só e tocasse
+   * em avançar pularia a semana inteira, sem alcançar os outros seis. Abrindo no
+   * dia, o passo é 1 e cada toque anda um dia.
+   *
+   * Em `useEffect`, e não no estado inicial, porque `window` não existe no
+   * servidor: decidir a visão na primeira renderização faria o HTML do servidor
+   * discordar do cliente. Roda uma vez, na montagem, então não desfaz escolha
+   * de quem trocou a visão depois.
+   */
+  React.useEffect(() => {
+    // O aviso da regra é justo em geral; aqui trocar a visão É o ponto do efeito.
+    // A largura só existe no cliente, e decidir antes divergiria da hidratação.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (window.matchMedia("(max-width: 767px)").matches) setVisao("dia");
+  }, []);
   const [isolada, setIsolada] = React.useState<string | null>(null);
   const [ancora, setAncora] = React.useState(() => new Date());
 
@@ -825,6 +848,13 @@ export function AgendaClient({
           setRemarcandoId(null);
           setMarcando(true);
         }}
+        /* Tocar num card abre o detalhe. A prop já atravessava `AgendaInterativa`
+           e `GradeDaAgenda` e chegava `undefined` aqui: o toque não fazia nada, e
+           o detalhe só abria por `?compromisso=`, que apenas o Histórico e o Radar
+           linkavam. Reusa o MESMO parâmetro que `EntradaDaAgenda` já lê — e `push`,
+           não `replace`, porque é o que o Histórico faz com `<Link>` e é o que faz
+           o botão voltar do celular fechar o detalhe. */
+        onAbrirAgendamento={(id) => router.push(`/app/agenda?compromisso=${id}`)}
         className="min-h-0 flex-1"
       />
 
