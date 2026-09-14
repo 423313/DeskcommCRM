@@ -241,7 +241,7 @@ describe("presença e recuperação transacionais", () => {
         r.enrollment_id,
         e.revision,
       ]),
-    ).rejects.toMatchObject({ code: "40001" });
+    ).rejects.toMatchObject({ message: "followup_stale" });
   });
   it("histórico e saída não cancelam; entrada certificada antes do consumer impede início", async () => {
     await stopFlows();
