@@ -98,7 +98,7 @@ Preferir agregação local e relatos sem ligação longitudinal para o primeiro 
 
 ## Laços de retorno e provas que faltam
 
-**PROPOSTO:** falha de instalação mantém a versão anterior e oferece correção visível. Falha repetida de execução pausa aquela capacidade, preserva demanda e entrega contexto a um responsável. A retomada exige corrigir causa ou reconhecer condição; não apenas limpar o alerta. Usar a [Central de Avisos](../../architecture/central-avisos.architecture.json), auditoria e timeline existentes como destinos a integrar, com entrada pelo registro de navegação. São integrações propostas, ainda não implementadas.
+**PROPOSTO:** falha de instalação mantém a versão anterior e oferece correção visível. Falha repetida de execução pausa aquela capacidade, preserva demanda e entrega contexto a um responsável. A retomada exige corrigir causa ou reconhecer condição; não apenas limpar o alerta. Usar a [Central de Avisos na referência desta pesquisa](https://github.com/melgarafael/DeskcommCRM/blob/25edc35b05c8d522e2bfe313863e6003f47b8f56/docs/architecture/central-avisos.architecture.json), auditoria e timeline existentes como destinos a integrar, com entrada pelo registro de navegação. São integrações propostas, ainda não implementadas.
 
 Antes de abrir publicação externa, faltam estas provas:
 
