@@ -8356,6 +8356,10 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível confirmar o link": { es: "No se pudo confirmar el enlace" },
   "Solicitação de link cancelada": { es: "Solicitud de enlace cancelada" },
   "Link não enviado ainda.": { es: "Enlace aún no enviado." },
+  "O envio do link ainda não foi autorizado.": { es: "El envío del enlace aún no ha sido autorizado." },
+  "Este atendimento está ocupado neste instante. Aguarde alguns segundos e tente de novo.": {
+    es: "Esta atención está ocupada en este momento. Espera unos segundos e inténtalo de nuevo.",
+  },
   "Envio autorizado: aguardando o link ficar pronto.": { es: "Envío autorizado: esperando a que el enlace esté listo." },
   "Link aguardando envio nesta conversa.": { es: "Enlace pendiente de envío en esta conversación." },
   "Link enviado na conversa autorizada.": { es: "Enlace enviado en la conversación autorizada." },

@@ -24210,6 +24210,27 @@ comment on column public.ai_agent_versions.channel_session_id is
 create index if not exists agent_inbox_items_case_stale_aberto_idx
   on public.agent_inbox_items (organization_id, ref_id)
   where kind = 'case_stale' and status = 'open';
+-- ---- chamada de API tem PRAZO para esperar uma trava (migration 0243) ----
+-- `lock_timeout` é 0 por padrão no Postgres: esperar para sempre. O cliente HTTP
+-- desiste em 10s, mas a consulta continua viva segurando a fila, e o clique
+-- seguinte empilha atrás. Medido em produção: 10 chamadas simultâneas de
+-- "Enviar link ao cliente", Postgres a 357% de CPU.
+--
+-- No PAPEL e não na função: `authenticator` é usado em TODA requisição da API, e
+-- `set role` não reinicia parâmetros de sessão. Cobre as sete funções que a
+-- varredura achou com a mesma forma, e as que ainda não existem.
+-- `service_role` fica de fora: trabalho de fundo pode esperar.
+--
+-- Idempotente: `alter role ... set` sobrescreve.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'authenticator') then
+    execute 'alter role authenticator set lock_timeout = ''4s''';
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    execute 'alter role authenticated set lock_timeout = ''4s''';
+  end if;
+end $$;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
