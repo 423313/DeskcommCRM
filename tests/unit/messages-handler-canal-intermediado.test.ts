@@ -176,11 +176,17 @@ function makeSupabase(linhaCompleta: Row) {
         return {
           select: (cols: string) => {
             estado.selects.push(cols);
-            return {
-              eq: () => ({
-                maybeSingle: async () => ({ data: projetar(linhaCompleta, cols), error: null }),
-              }),
+              // Encadeável SEM LIMITE de propósito: a consulta da conversa filtra
+              // por id E por `organization_id` (este handler também roda com o
+              // client de service role, que bypassa RLS). Um dublê que fixa a
+              // quantidade de `eq` quebra quando a consulta ganha o filtro que
+              // fecha o vazamento entre organizações — com um erro que não fala
+              // do comportamento sob teste.
+            const cadeia: Record<string, unknown> = {
+              eq: () => cadeia,
+              maybeSingle: async () => ({ data: projetar(linhaCompleta, cols), error: null }),
             };
+            return cadeia;
           },
           update: () => ({ eq: async () => ({ error: null }) }),
         };
