@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { connectWahaChannel } from "./connect-waha";
+import { connectWahaChannel, renomearSessaoParaOTeto } from "./connect-waha";
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 const org = "20000000-0000-4000-8000-000000000001";
 const key = "20000000-0000-4000-8000-000000000002";
@@ -162,5 +162,40 @@ describe("nome de sessão fora do teto do WAHA", () => {
     expect((await connectWahaChannel(f.db, f.db, f.transport, f.input)).channel.status).toBe("SCAN_QR_CODE");
     expect(f.transport.startExistingSession).toHaveBeenCalledWith(nome);
     expect(f.renomeios).toEqual([]);
+  });
+});
+
+/**
+ * A decisão em memória (`podeRenomearSessaoDoWaha`) e a guarda no WHERE do
+ * UPDATE são DOIS caminhos com a mesma saída — e por isso apagar um deixa os
+ * testes do caminho de conectar verdes. Estes casos chamam o UPDATE direto,
+ * sem passar pela decisão, que é o único jeito de a guarda do WHERE ser vigiada
+ * de fato.
+ */
+describe("renomearSessaoParaOTeto — a guarda também mora no WHERE", () => {
+  const alvo = { id: key, organization_id: org, waha_session_name: NOME_LEGADO };
+
+  it("linha PAREADA não casa no UPDATE: ninguém é renomeado e a função recusa", async () => {
+    const f = fixture({ waha_session_name: NOME_LEGADO, phone_number: "5511999990000", status: "STOPPED" });
+    await expect(renomearSessaoParaOTeto(f.db, alvo)).rejects.toMatchObject({
+      code: "connection_session_name_too_long", status: 409,
+      technical: { renomeio_recusado: true },
+    });
+    expect(f.renomeios).toEqual([]);
+  });
+
+  it("linha WORKING não casa no UPDATE", async () => {
+    const f = fixture({ waha_session_name: NOME_LEGADO, phone_number: null, status: "WORKING" });
+    // A reserva sobrescreve o status com STARTING, então aqui o `neq` precisa
+    // ver o estado da TABELA — que é o que este dublê guarda.
+    await expect(renomearSessaoParaOTeto(f.db, alvo)).rejects.toMatchObject({ code: "connection_session_name_too_long" });
+    expect(f.renomeios).toEqual([]);
+  });
+
+  it("linha que nunca pareou casa e recebe o nome novo", async () => {
+    const f = fixture({ waha_session_name: NOME_LEGADO, phone_number: null, status: "FAILED" });
+    const novo = await renomearSessaoParaOTeto(f.db, alvo);
+    expect(novo).toMatch(/^org_[0-9a-f]{8}_[0-9a-f]{32}$/);
+    expect(f.renomeios).toEqual([novo]);
   });
 });
