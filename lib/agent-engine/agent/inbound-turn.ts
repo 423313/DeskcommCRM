@@ -1,4 +1,5 @@
 import { setExecutionAgentOperation } from '@/lib/atendimento/fronteira-server';
+import { TIPOS_DE_CASO, TIPOS_DE_CASO_PARA_A_IA } from "@/lib/ai/case-copy";
 import { DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
 import { applyPreviewPolicy, previewGateContext, type TurnPreview } from './preview';
 import { claimOfJob } from '../queue/claim';
@@ -336,6 +337,19 @@ export const AGENT_TOOL_DEFS = {
         title: z.string().describe('título curto, ex.: "Liberar acesso ao painel"'),
         summary: z.string().describe('o que o lead precisa, em pt-br'),
         blocker: z.string().describe('por que você não consegue resolver sozinho'),
+        // O assunto serve para quem TRIA a fila separar antes de ler. O detalhe
+        // continua no título e no resumo — este campo não os substitui, e por
+        // isso a lista é curta: muitas opções produzem classificação
+        // inconsistente, e aí o filtro atrapalha em vez de ajudar.
+        kind: z
+          .enum(Object.keys(TIPOS_DE_CASO) as [string, ...string[]])
+          .describe(
+            'do que o caso trata, para a equipe triar: ' +
+              Object.entries(TIPOS_DE_CASO_PARA_A_IA)
+                .map(([k, o]) => `${k} (${o})`)
+                .join('; ') +
+              '. Na dúvida entre dois, escolha o que descreve o PEDIDO, não o obstáculo.',
+          ),
       })
       .passthrough(),
   },
