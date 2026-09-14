@@ -24019,7 +24019,7 @@ create trigger trg_org_voice_calls_set_updated_at
 
 notify pgrst, 'reload schema';
 
--- ---- Registro não nasce `pending` (migration 0244) ----
+-- ---- Registro não nasce `pending` (migration 0239) ----
 --
 -- Racional completo no cabeçalho da migration 0244. Em uma linha: tipo de evento
 -- que ninguém consome não é fila — é registro, e a linha nasce `done`.
@@ -24124,7 +24124,7 @@ update public.event_log
    set status = 'done'
  where status = 'pending'
    and public.fn_event_log_e_registro(event_type);
--- ---- Credencial de enfeite não derruba a leitura (migration 0242) ----
+-- ---- Credencial de enfeite não derruba a leitura (migration 0240) ----
 --
 -- Racional completo no cabeçalho da migration 0242. Em uma linha: não tente
 -- decifrar o que não pode ser cifra — devolva null, que é o contrato que os
@@ -24178,7 +24178,7 @@ revoke all on function public.fn_decrypt_oauth(bytea) from public, anon, authent
 grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 
 notify pgrst, 'reload schema';
--- ---- rascunho de agente sem número de WhatsApp (migration 0244) ----
+-- ---- rascunho de agente sem número de WhatsApp (migration 0241) ----
 --
 -- `channel_session_id` era NOT NULL, e o editor exigia o número para SALVAR.
 -- Instalação nova não tem nenhuma linha em `channel_sessions` (o aparelho é
