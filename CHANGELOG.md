@@ -8,6 +8,154 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.21.0] — 2026-09-14
+
+### Adicionado
+
+- **Quem publica o CRM atrás de um Nginx Proxy Manager sobrevive a atualizações** Instalações que já tinham um Nginx Proxy Manager nas portas 80/443 (em vez do
+  Caddy do próprio kit, ou de um Traefik) precisavam plugar o contêiner `app` na
+  rede do NPM à mão (`docker network connect`). Isso sumia na primeira
+  atualização: `update.sh` recria o `app`, a conexão manual se perde, e o
+  domínio volta a responder 502 — foi o que aconteceu numa VPS real em
+  2026-09-11.
+
+  Agora `REVERSE_PROXY=npm` no `.env` (junto de `PROXY_NETWORK_NAME` e
+  `PROXY_NETWORK_APP_IP`, se a rede ou o IP do seu Proxy Host não forem os
+  padrões) mantém o `app` sempre na rede certa, entra automaticamente em toda
+  atualização e no cron de auto-update, e nunca sobe o Caddy por engano por
+  cima do NPM. Se a rede do NPM sumir (`docker network prune`, por exemplo), a
+  atualização para com uma mensagem explicando o que fazer, em vez de travar no
+  erro opaco do Docker.
+
+  Configurar pela primeira vez continua sendo manual — o NPM não anuncia sua
+  configuração como o Traefik faz por labels — mas está documentado no
+  cabeçalho de `docker-compose.npm.yml`.
+
+### Corrigido
+
+- **A foto do contato volta a aparecer nos números com nono dígito** A tarefa que busca as fotos de perfil pedia a imagem pelo telefone. Em número
+  de celular brasileiro com nono dígito, o telefone que o CRM guarda e o que o
+  WhatsApp usa internamente podem divergir, e a busca voltava vazia — o contato
+  ficava sem foto sem que nada indicasse erro. Agora a tarefa pede primeiro pela
+  identidade interna do WhatsApp e só recorre ao telefone se ela não existir.
+
+  Achado e corrigido por @HigorLira.
+
+- **A tela de atualização passa a dizer em que pé está, do começo ao fim** Ao clicar em "Atualizar agora", a tela mostrava a lista dos quatro passos com
+  todos eles vazios e o título "Atualizando para a versão X" — e ficava assim,
+  sem mexer nada, por vários minutos. Não era travamento: o clique só registra o
+  pedido, e o servidor confere se há algo a fazer de poucos em poucos minutos. Mas
+  não havia como saber disso olhando, e a tela afirmava um trabalho que ainda nem
+  tinha começado.
+
+  Agora a espera tem nome próprio ("Pedido enviado — esperando o servidor pegar"),
+  diz por que demora, avisa que ficar parada nesse tempo é normal e mostra um
+  relógio contando desde o pedido. A lista de passos só aparece quando existe um
+  passo de verdade. Você pode fechar a página: o pedido não se perde.
+
+  Do outro lado acontecia o inverso, e era pior. Terminada a atualização, o
+  sistema voltava e a tela oferecia de novo o botão "Atualizar agora" para a
+  versão que **acabava de ser instalada** — quem clicava refazia tudo, ou concluía
+  que não tinha funcionado. Isso durava até o servidor reportar a versão nova, o
+  que leva alguns minutos. Agora a tela reconhece o fim na hora e diz "Pronto —
+  você está na versão X", sem oferecer nada.
+
+  Você não precisa fazer nada para adotar.
+
+- **Cada tela passa a dizer o próprio nome na aba do navegador** Dezessete telas do aplicativo caíam no título padrão do produto, então quem
+  trabalha com várias abas abertas via a mesma legenda em todas elas e só
+  descobria qual era qual clicando. Agora cada uma nomeia a si mesma.
+
+  Achado e corrigido por @AnditecDev.
+
+- **O WhatsApp oficial conectado pela tela volta a enviar — sem depender do .env** Uma instalação que conectou o número oficial pela **Central de Conexões** guarda a credencial **cifrada no banco** e não escreve nada no `.env` — e as mensagens ficavam paradas na fila, sem erro, com o canal conectado e funcionando na tela.
+
+  A pergunta "dá para tentar enviar?" era respondida só pelo `.env`, num ponto que não consegue consultar o banco. Agora quem decide é o próprio envio, que resolve a credencial da sessão primeiro — e o `.env` continua valendo como fallback para instalações antigas de número único. Sem credencial nenhuma, a mensagem fica na fila com o motivo nomeado (em vez de nunca ser tentada); falha na consulta da credencial vira erro visível na mensagem, em vez de silêncio.
+
+  Quem já tinha a chave no `.env` não vê diferença nenhuma.
+
+- **A instalação deixa de exigir chave de IA — dá para cadastrar depois pela tela** O instalador exigia uma chave de IA que **passasse numa chamada real** ao
+  provedor: sem ela, a instalação morria na Fase 2/4. Só que a documentação
+  (`docs/deploy-selfhost`) sempre prometeu outra coisa — *"deixe vazio e cadastre
+  a chave depois"* —, e o próprio sistema concorda com a doc: faltar todas as
+  chaves é um aviso, não um erro.
+
+  Agora o campo é opcional de verdade: dá para instalar sem abrir conta em
+  provedor de IA e cadastrar a chave depois pela tela, em **IA › Credenciais**,
+  onde ela fica cifrada no banco. A tela final da instalação lembra quem pulou o
+  passo, com o caminho exato.
+
+  Quem digita uma chave continua com ela validada na hora — o que mudou é que
+  pular deixou de ser erro.
+
+- **As duas verificações opcionais de segurança agora ligam de verdade** Em Agentes › Confere antes de enviar, ligar "Detectar tentativa de manipular o
+  assistente" ou "Conferir promessas em texto livre" não gravava nada: o pedido
+  era recusado e o interruptor voltava sozinho, sem explicação na tela. As duas
+  verificações ficavam no que o servidor definia, e quem quisesse ligá-las por
+  organização não conseguia — em nenhuma instalação.
+
+  Agora o interruptor grava a escolha. Se você tentou ligar alguma das duas e
+  achou que o clique não pegava, era isto; tente de novo. Crédito: @rafaelbatistazz.
+
+- **O botão "Reativar" de tipo de agendamento passa a funcionar** Em Configurações › Agenda, um tipo de agendamento desativado mostra o botão
+  "Reativar" — e ele **nunca funcionou**, desde que a tela existe. Clicar devolvia
+  sempre o mesmo erro: "Nenhum campo para alterar." Quem tinha desativado um tipo
+  por engano ficava sem saída pela tela: só criando outro com nome diferente, já
+  que o nome original continuava ocupado pelo tipo desligado.
+
+  A causa era um campo que o servidor descartava em silêncio. A tela pedia para
+  ligar o tipo de volta usando a mesma porta que altera nome, duração e
+  responsável — e essa porta não conhece o campo "ativo", então recebia um pedido
+  que, do lado dela, não mudava nada.
+
+  Agora reativar tem porta própria no servidor, com a mesma exigência de papel do
+  desativar (gerente ou administrador), e fica registrado na trilha de auditoria
+  como "tipo reativado" — separado de uma alteração comum de campo, para que um
+  tipo religado não se confunda com um tipo que teve a duração mudada.
+
+  Você não precisa fazer nada para adotar. Desativar continua igual, e nenhum
+  compromisso já marcado é afetado.
+
+- **Revogar e devolver acesso aparecem na hora na lista de Equipe** Em Equipe, revogar o acesso de alguém — ou devolvê-lo — deixava a linha da
+  pessoa parada até recarregar a página. Quem clicava não via nada acontecer e
+  clicava de novo, sem saber se o primeiro clique tinha valido.
+
+  O servidor sempre fez a parte dele; era a tela que só se atualizava depois. E o
+  problema só apareceu agora porque antes o membro revogado sumia da lista: some
+  ou não some era resposta suficiente. Desde que ele passa a ficar na lista com o
+  estado mudado, uma linha que não muda é uma tela que mente sobre o que acabou de
+  acontecer.
+
+  Agora a linha muda no clique e, se o servidor recusar, ela volta ao que era e o
+  erro aparece — nunca fica dizendo "ativo" para quem não foi reativado. Devolver
+  acesso também passou a confirmar que deu certo, como revogar já fazia: é
+  justamente a ação que se faz com receio de ter errado.
+
+  Você não precisa fazer nada para adotar.
+
+  Crédito: @paulolimajr77.
+
+- **Sentry para de derrubar um coletor de Web Vitals no console de quem usa o DSN da comunidade** A integração `BrowserTracing` do Sentry instrumenta Web Vitals (CLS/LCP/TTFB) mesmo sem enviar
+  nenhum trace — a amostragem decide se o dado é enviado, não se o coletor roda. Numa instalação
+  real (2026-09-09), uma extensão do navegador mexendo na Performance API da página derrubava
+  esse coletor com um erro no console (`TypeError: Cannot read properties of undefined (reading
+  'startTime')`), sem nenhum trace chegando a existir para explicar o motivo. Quem está no DSN da
+  comunidade não tinha telemetria nenhuma sendo enviada por essa integração — só o risco do
+  crash. Ela deixa de ser carregada para essa população; quem aponta para o próprio Sentry
+  mantém o tracing normalmente.
+
+- **A sugestão de resposta diz por que falhou, e a rejeitada sai da tela** Duas coisas na caixa de entrada, medidas numa instalação real.
+
+  **A sugestão rejeitada não saía da tela.** O painel mostrava a sugestão mais recente sem olhar a situação dela — e uma rejeitada continua sendo a mais recente. O texto ficava ali, numa caixa desabilitada, sem botão de fechar (não havia nenhum). Pior no caso comum: quem rejeita costuma pedir outra em seguida; se essa segunda falha, nada substitui a primeira e a tela **trava** naquele texto.
+
+  Agora a sugestão rejeitada — e também a obsoleta e a já enviada — solta o painel, que volta ao botão **Sugerir resposta**. A sugestão que falhou continua aparecendo de propósito: a frase dela é a única pista que sobra.
+
+  **O erro não dizia nada.** Qualquer falha ao gerar virava a mesma frase — "Confira a publicação e a configuração do agente" —, mesmo quando o problema era outro, e **o motivo real era descartado sem ser registrado**. A tela ainda mostrava o identificador da requisição junto, o que fazia a mensagem parecer rastreável: não era, porque não havia nada gravado para procurar.
+
+  Agora a tela diz qual dos motivos foi — nenhum agente publicado atende o canal, ou a conversa não pode receber sugestão (contato que pediu para não receber mensagens, contato anonimizado, histórico ilegível) — e, quando a causa é outra, admite que é outra e **registra** no servidor, onde o identificador finalmente encontra alguma coisa.
+
+  Nada muda para quem opera: sem passo manual, sem mexer em configuração.
+
 ## [1.20.0] — 2026-09-12
 
 ### Adicionado
@@ -3646,7 +3794,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.20.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.21.0...HEAD
+[1.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.18.1...v1.19.0
 [1.18.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.18.0...v1.18.1
