@@ -29,6 +29,7 @@ const EXPECTED_ENTITY_KIND: Record<string, string> = {
   "lead.stage_changed": "crm_lead",
   "lead.tag_added": "crm_lead",
   "contact.tag_added": "contact",
+  "contact.birthday": "contact",
   "message.received": "message",
 };
 

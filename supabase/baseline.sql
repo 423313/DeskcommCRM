@@ -23990,6 +23990,29 @@ create trigger trg_org_voice_calls_set_updated_at
   before update on public.org_voice_calls
   for each row execute function public.fn_set_updated_at();
 
+-- ---- aniversário do contato (migration 0242) ----
+-- `contacts.birthdate` existia e não acionava nada. `birthday_md` é o mês e o
+-- dia num inteiro (914 = 14 de setembro), gerado e armazenado, para a varredura
+-- diária buscar por igualdade em vez de varrer a tabela.
+--
+-- `extract` sobre `date` é immutable, que é o que a coluna gerada exige;
+-- `to_char` não é (depende de configuração regional) e o Postgres a recusaria.
+alter table public.contacts
+  add column if not exists birthday_md integer
+  generated always as (
+    case
+      when birthdate is null then null
+      else (extract(month from birthdate)::integer * 100 + extract(day from birthdate)::integer)
+    end
+  ) stored;
+
+create index if not exists contacts_org_aniversario_idx
+  on public.contacts (organization_id, birthday_md)
+  where birthday_md is not null;
+
+comment on column public.contacts.birthday_md is
+  'Mês e dia do aniversário num inteiro (914 = 14 de setembro), derivado de birthdate. Existe para a varredura diária do cron contact-birthdays poder buscar por igualdade em vez de varrer a tabela.';
+
 notify pgrst, 'reload schema';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
