@@ -23992,7 +23992,7 @@ create trigger trg_org_voice_calls_set_updated_at
 
 notify pgrst, 'reload schema';
 
--- ---- Índices em FKs de mensagens e runs (migration 0239) ----
+-- ---- Índices em FKs de mensagens e runs (migration 0247) ----
 create index if not exists idx_messages_contact_id
   on public.messages (contact_id)
   where contact_id is not null;
