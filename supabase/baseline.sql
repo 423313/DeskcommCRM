@@ -24633,6 +24633,31 @@ comment on function public.fn_finalizar_comanda(uuid, uuid, uuid, integer) is
   'As seis coisas numa transação: venda, comissão por item, entrada na conta da forma de pagamento, ponto de fidelidade e conclusão do agendamento. Idempotente sob FOR UPDATE.';
 
 
+-- ---- uma comanda por agendamento (migration 0243) ----
+-- A rota consulta antes de abrir, e isso resolve o toque repetido, não a
+-- corrida: duas requisições simultâneas passam pelas duas consultas antes de
+-- qualquer insert. Duas comandas abertas para o mesmo atendimento não dão erro
+-- nenhum — são faturadas separadamente, e o cliente paga duas vezes.
+--
+-- Parcial nas duas pontas: comanda avulsa é a maioria e não se exclui entre si;
+-- comanda cancelada deixa de valer, senão cancelar por engano trancaria o
+-- agendamento para sempre.
+update public.sales s
+   set appointment_id = null
+ where s.appointment_id is not null
+   and s.status <> 'cancelled'
+   and exists (
+     select 1 from public.sales anterior
+      where anterior.appointment_id = s.appointment_id
+        and anterior.organization_id = s.organization_id
+        and anterior.status <> 'cancelled'
+        and (anterior.created_at, anterior.id) < (s.created_at, s.id)
+   );
+
+create unique index if not exists sales_agendamento_unico_idx
+  on public.sales (organization_id, appointment_id)
+  where appointment_id is not null and status <> 'cancelled';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
