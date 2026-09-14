@@ -512,10 +512,30 @@ test("gestão configura prazos e gatilho; falta inicia uma vez e resposta interr
   await page.getByLabel("Proteger de cobranças por silêncio após o fim (minutos)").fill("120");
   await page.getByRole("button", { name: "Salvar prazos" }).click();
   await expect(page.getByText("Prazos salvos.")).toBeVisible();
-  expect(
-    (await db.from("organizations").select("settings").eq("id", f.org).single()).data?.settings
-      .agenda,
-  ).toEqual({ confirmation_delay_minutes: 15, unknown_protection_minutes: 120 });
+  // `toEqual` de propósito, e não `toMatchObject`: o que esta linha vigia é que
+  // a tela de prazos escreve EXATAMENTE as chaves que escreveu, sem carregar
+  // lixo junto. Afrouxar para "contém" deixaria passar um campo escrito por
+  // engano.
+  //
+  // A terceira chave entrou pela migration 0249 (#789) e é **opcional** por
+  // decisão escrita: organização já instalada tem `settings.agenda` com duas
+  // chaves, e exigir três quebraria o PATCH vindo de uma aba aberta antes da
+  // atualização. Ausente significa "use o default" (1440), resolvido no
+  // `agendaSettingsSchema`. Por isso ela entra aqui com o valor que a tela
+  // gravou, não como chave obrigatória do schema.
+  const agenda = (await db.from("organizations").select("settings").eq("id", f.org).single()).data
+    ?.settings.agenda;
+  expect(agenda).toEqual({
+    confirmation_delay_minutes: 15,
+    unknown_protection_minutes: 120,
+    pending_expires_after_minutes: agenda?.pending_expires_after_minutes,
+  });
+  // E o valor do terceiro prazo é o DEFAULT, não um resto de outra escrita: a
+  // tela não tem campo para ele, e quem o grava é o `.default(1440)` do
+  // `agendaSettingsWriteSchema` (`lib/schemas/settings.ts:244`) ao fazer parse do
+  // que a tela enviou. Fixar o número aqui é o que separa "a chave apareceu" de
+  // "a chave apareceu com o valor certo".
+  expect(agenda?.pending_expires_after_minutes).toBe(1440);
   await page.goto(`/app/ai/followups/${pointer}`);
   await page.getByTestId("trigger-config-button").click();
   await page.getByLabel("Tipo de gatilho").click();
