@@ -51,14 +51,10 @@ step "Login no registro de imagens"
 printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_USER" --password-stdin
 
 step "Código deste commit"
-if git remote get-url fork >/dev/null 2>&1; then
-  git remote set-url fork "https://github.com/${DONO}/DeskcommCRM.git"
-else
-  git remote add fork "https://github.com/${DONO}/DeskcommCRM.git"
-fi
-# extraHeader em vez de token na URL: a URL do remote não pode guardar segredo.
-git -c "http.extraHeader=Authorization: Bearer ${GH_TOKEN}" \
-  fetch --depth 1 fork "$SHA"
+# Repo público: fetch pela URL, sem token. Bearer no extraHeader faz o git
+# cair no prompt de usuário na VPS (exit 128, "No such device or address").
+GIT_TERMINAL_PROMPT=0 git fetch --depth 1 \
+  "https://github.com/${DONO}/DeskcommCRM.git" "$SHA"
 git reset --hard FETCH_HEAD
 
 # Relê o kit DEPOIS do reset: o _common.sh deste commit é o que vale.

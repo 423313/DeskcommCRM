@@ -20,4 +20,9 @@ describe("deploy da develop na VPS não puxa o registro do upstream", () => {
     expect(SCRIPT).toContain("ghcr.io/${DONO}/deskcomm-worker:develop");
     expect(SCRIPT).toContain("ghcr.io/${DONO}/deskcomm-scheduler:develop");
   });
+
+  it("puxa o código pela URL pública — Bearer no extraHeader faz o git da VPS pedir usuário", () => {
+    expect(semComentario).toContain("GIT_TERMINAL_PROMPT=0");
+    expect(semComentario).not.toMatch(/http\.extraHeader/);
+  });
 });
