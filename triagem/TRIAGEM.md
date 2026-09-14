@@ -473,6 +473,38 @@ Nada disso é alcançável por teste: o defeito mora no **emit**, não no import
 > classe inteira de "o artefato não se monta" — que é justamente o artefato que o self-hoster
 > instala.
 
+### O teto do CHANGELOG impõe o ritmo do trem: um lote, uma release
+
+`tests/unit/changelog-cabe-na-tela-da-vps.test.ts` reprova quando a seção que os fragmentos de
+`.changes/` produziriam passa de **30.000 bytes** — o corte que o `agent.sh` aplica sobre o arquivo
+tagueado. Além dele, o dono da VPS recebe o texto cortado no meio, ou pior: a tela troca o histórico
+por *"este histórico pode não alcançar a sua versão"*.
+
+Num trem de lotes isso vira uma **regra de ordem**, não um defeito a consertar. Medido em 14/09:
+
+```
+lote 2 sozinho ...... 31 fragmentos → cabe, 1.21.0 + minor = 1.22.0
+lote 3 (herda o 2) .. 42 fragmentos → 40.667 bytes, REPROVA
+lote 4 (herda os 2) . 42+ fragmentos → REPROVA
+```
+
+O vermelho do lote 3 não é do lote 3: é dele **carregando os fragmentos do lote 2**. Quando o lote 2
+entra e a release é cortada, os 31 são consumidos e o seguinte volta a caber.
+
+> **Logo: cada lote corta a sua versão antes de o próximo entrar.** Não é preferência de processo —
+> é o que o teto do changelog permite. Empilhar quatro lotes e cortar uma release só reprova, e a
+> mensagem do teste ("enxugue o corpo dos fragmentos") aponta para o conserto errado nesse caso: o
+> problema não é fragmento gordo, é lote empilhado.
+
+Antes de declarar vermelho num lote, confira se o vermelho some com o corte anterior:
+
+```bash
+ls .changes/*.md | wc -l          # quantos fragmentos este lote carrega
+pnpm release:conferir             # e que versão eles produzem juntos
+```
+
+---
+
 ### A fila de CI é finita, e destravá-la toda de uma vez a entope
 
 Liberar workflow parado (passe 1) é certo. Fazê-lo para 36 branches num minuto criou **144
