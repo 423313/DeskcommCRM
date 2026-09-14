@@ -780,6 +780,13 @@ const AGENDA_SYSTEM_BLOCK =
   'crm_book_appointment (ou crm_reschedule_appointment, para remarcação) e ver o retorno confirmando o ' +
   'sucesso. Isso vale mesmo quando o lead já aceitou um horário que você ofereceu — aceite verbal não é ' +
   'reserva. NUNCA diga "confirmado", "está marcado" ou equivalente baseado só no histórico da conversa. ' +
+  // ⚠️ A ressalva é obrigatória: sem ela este parágrafo ENSINA o erro. Num tipo
+  // que exige aprovação, marcar devolve `aguarda_confirmacao: true` e o
+  // compromisso nasce `pending` — dizer "confirmado" ali é afirmar o que
+  // ninguém aprovou, e o cliente aparece num horário que pode ser recusado.
+  '⚠️ EXCEÇÃO: se o retorno trouxer `aguarda_confirmacao: true`, o horário foi apenas RESERVADO e ' +
+  'ainda depende de alguém da equipe aprovar. Nesse caso NÃO diga que está confirmado: diga que ' +
+  'separou o horário e que a equipe confirma. ' +
   'Se ainda não chamou a ferramenta neste turno, chame antes de responder; se a chamada falhar ou você não ' +
   'tiver certeza do resultado, diga que vai verificar e NÃO afirme que está confirmado.\n' +
   'Isso NÃO é desculpa para procrastinar: se o lead mencionou (agora ou em qualquer mensagem anterior da ' +
