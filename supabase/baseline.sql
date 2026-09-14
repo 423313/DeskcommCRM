@@ -18957,8 +18957,25 @@ begin
     insert into public.user_organizations(organization_id, user_id, role, invited_by, invited_at, accepted_at, interface_settings)
       values (p_org, p_user, p_role, p_invited_by, p_invited_at, now(), p_interface_settings) returning * into m;
   end if;
+
+  -- O DONO ASSUMIU. Só o vínculo MARCADO como provisório sai, e só ele.
+  if p_role = 'admin' then
+    delete from public.attendant_availability av
+      where av.organization_id = p_org
+        and av.user_id <> p_user
+        and exists (select 1 from public.user_organizations uo
+                     where uo.organization_id = p_org and uo.user_id = av.user_id
+                       and uo.provisional_until_handover);
+
+    delete from public.user_organizations uo
+      where uo.organization_id = p_org
+        and uo.provisional_until_handover
+        and uo.user_id <> p_user;
+  end if;
+
   return jsonb_build_object('id', m.id, 'changed', true);
 end $$;
+
 revoke all on function public.fn_accept_team_invite(uuid, uuid, text, uuid, timestamptz, timestamptz, jsonb) from public, anon, authenticated;
 grant execute on function public.fn_accept_team_invite(uuid, uuid, text, uuid, timestamptz, timestamptz, jsonb) to service_role;
 
@@ -18979,6 +18996,7 @@ declare
   prior public.idempotency_keys%rowtype;
   org public.organizations%rowtype;
   result jsonb;
+  dono_e_outra_pessoa boolean;
 begin
   if not exists (select 1 from public.platform_admins where user_id = p_actor
     and revoked_at is null and scope = 'full') then
@@ -18998,15 +19016,22 @@ begin
     end if;
     return prior.response_body || jsonb_build_object('created', false);
   end if;
+
+  -- A MESMA comparação que já decidia `interface_settings`, agora com nome e
+  -- guardada. Era ela que sabia a resposta e não a anotava em lugar nenhum.
+  dono_e_outra_pessoa := lower(p_request->>'owner_email') is distinct from
+    (select lower(email) from auth.users where id = p_actor);
+
   insert into public.organizations(display_name, slug, legal_name, cnpj, status, settings, created_by)
     values (p_request->>'display_name', p_request->>'slug', coalesce(nullif(p_request->>'legal_name', ''), p_request->>'display_name'),
       p_request->>'cnpj', 'active', jsonb_build_object('plan', p_request->>'plan'), p_actor)
     returning * into org;
-  insert into public.user_organizations(organization_id, user_id, role, accepted_at, interface_settings)
-    values (org.id, p_actor, 'admin', now(), case when lower(p_request->>'owner_email') =
-      (select lower(email) from auth.users where id = p_actor)
-      then coalesce(p_request->'owner_interface_settings', '{"preset":"completa"}'::jsonb)
-      else '{"preset":"completa"}'::jsonb end);
+  insert into public.user_organizations(organization_id, user_id, role, accepted_at, interface_settings, provisional_until_handover)
+    values (org.id, p_actor, 'admin', now(),
+      case when dono_e_outra_pessoa
+        then '{"preset":"completa"}'::jsonb
+        else coalesce(p_request->'owner_interface_settings', '{"preset":"completa"}'::jsonb) end,
+      dono_e_outra_pessoa);
   result := jsonb_build_object('id', org.id, 'slug', org.slug, 'display_name', org.display_name,
     'invite_id', gen_random_uuid(), 'issued_at', floor(extract(epoch from now()))::bigint);
   insert into public.idempotency_keys(organization_id, key, endpoint, request_hash, status_code, response_body, tenant_creation_trusted)
@@ -19014,6 +19039,7 @@ begin
       decode(p_hash, 'hex'), 201, result, true);
   return result || jsonb_build_object('created', true);
 end $$;
+
 revoke all on function public.fn_create_tenant_with_owner(uuid, uuid, jsonb, text) from public, anon, authenticated;
 grant execute on function public.fn_create_tenant_with_owner(uuid, uuid, jsonb, text) to service_role;
 
@@ -24172,3 +24198,19 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+
+
+-- ---- Criador provisório sai na entrega (migration 0237) ----
+-- As duas funções acima já saíram com a regra; aqui fica só a COLUNA, que é
+-- o dado que faltava. Idempotente. NÃO há expurgo retroativo, de propósito:
+-- vínculo antigo não tem a marca, e deduzi-la foi o erro que a primeira
+-- versão desta regra cometeu (ver o cabeçalho da migration).
+alter table public.user_organizations
+  add column if not exists provisional_until_handover boolean not null default false;
+
+comment on column public.user_organizations.provisional_until_handover is
+  'Este vínculo existe só para a organização não nascer vazia, e sai quando o '
+  'dono assumir. Gravado APENAS por fn_create_tenant_with_owner, e apenas '
+  'quando o tenant foi criado para OUTRA pessoa (owner_email <> e-mail de quem '
+  'cria). Nunca deduzir este valor depois: a ausência dele foi o que fez a '
+  'primeira versão desta regra expulsar alguém da própria empresa.';
