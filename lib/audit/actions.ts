@@ -498,6 +498,16 @@ export const AUDIT_ACTIONS = [
   // um bloqueio não há como saber nem uma coisa nem outra.
   "voice.opt_in_changed",
   "voice.session_unpaired",
+
+  // A exclusão de contato que NÃO completou (issue #752). A ausência de
+  // `contact.deleted` não distinguia "ninguém excluiu" de "tentei, um vínculo
+  // RESTRICT barrou e o contato ficou de pé" — e as duas coisas contam a mesma
+  // história incompleta quando a única linha que o painel tem para olhar é a do
+  // sucesso. `metadata.motivo` separa `vinculo_restrict` de `falha_ao_apagar` e
+  // `metadata.apagados` diz o que já tinha saído quando parou — que é
+  // exatamente o que faltou no incidente: o histórico foi destruído ANTES do
+  // erro, sem rastro de nada.
+  "contact.delete_blocked",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
