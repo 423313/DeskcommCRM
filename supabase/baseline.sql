@@ -24702,26 +24702,36 @@ grant  execute on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, u
 
 comment on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) is
   'Cria o lead de entrada do ingest serializando por (organização, contato) com advisory lock. Devolve NULL quando já existe um aberto. Existe porque o check-then-act em TypeScript deixava três mensagens seguidas virarem três negócios; um índice único resolveria a corrida e quebraria o caso legítimo de dois negócios abertos criados à mão.';
--- ---- o audit log perde o TRUNCATE (migration 0258) ----
+-- ---- o audit log perde UPDATE, DELETE e TRUNCATE nos papéis do PostgREST (migration 0258) ----
 --
--- `api_audit_log` é a única tabela do dump com lista enumerada de privilégios
--- em vez de `GRANT ALL`: alguém tirou UPDATE e DELETE e deixou TRUNCATE, que
--- estava no meio da lista. O resultado é que o "append-only é do schema" valia
--- para linha e não valia para a tabela inteira.
+-- Todo projeto Supabase nasce com um default ACL de TABELAS em `public`
+-- (`anon=arwdDxt`, `authenticated=arwdDxt`, `service_role=arwdDxt`), gravado
+-- pelo bootstrap do Supabase antes de qualquer SQL nosso. `api_audit_log` nasce
+-- com tudo, e o `GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE` que o dump
+-- emite acima só ACRESCENTA. Resultado no Supabase real: `service_role` — que
+-- ignora RLS — apagava e reescrevia linha escolhida da auditoria pela REST, e os
+-- três papéis podiam esvaziá-la com TRUNCATE. `anon`/`authenticated` só não
+-- apagavam porque a RLS não tem policy de UPDATE/DELETE.
 --
--- Não é buraco de superfície (o PostgREST não emite `TRUNCATE`), mas era o
--- único privilégio concedido capaz de apagar auditoria — e ele não passa por
--- RLS, não passa pelas policies e não deixa rastro, porque não sobra tabela.
--- O expurgo legítimo tem dono: `fn_expurgar_auditoria_vencida` (0167), sem
--- seletor de linha, com piso de 90 dias no corpo.
+-- O prelude do `test:db` reproduz o default ACL do Supabase para funções, não
+-- para tabelas; por isso o gate de grants ficava verde. O invariante
+-- `audit-log-sob-o-default-acl-do-supabase` reproduz o de tabela e reaplica
+-- ESTE bloco, extraído daqui pelo rótulo.
+--
+-- O expurgo legítimo não depende destes grants: `fn_expurgar_auditoria_vencida`
+-- (0167) é `security definer` de dono `postgres`. As FKs `on delete set null`
+-- desta tabela também não: a ação referencial roda como o dono da tabela.
+-- `public` entra por completude — um grant a PUBLIC seria herdado pelos três.
 --
 -- `revoke` do que já não existe não é erro: idempotente por natureza, e o
--- `update.sh` de um clone pode reaplicar à vontade.
+-- `update.sh` de um clone pode reaplicar à vontade — inclusive depois do GRANT
+-- do corpo do dump, que reconcede TRUNCATE a cada passada e é revogado aqui.
 
-revoke truncate on table public.api_audit_log from anon, authenticated, service_role;
+revoke update, delete, truncate on table public.api_audit_log
+  from public, anon, authenticated, service_role;
 
 comment on table public.api_audit_log is
-  'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0258) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
+  'L-10: Append-only para os papéis do PostgREST — anon, authenticated e service_role não têm UPDATE, DELETE nem TRUNCATE (migration 0258; o default ACL do Supabase concedia os três). O único apagamento é fn_expurgar_auditoria_vencida (0167), security definer com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
 
 notify pgrst, 'reload schema';
 -- ---- três índices que não pagam o próprio aluguel (migration 0259) ----

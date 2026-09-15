@@ -189,7 +189,7 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       // handler devolve `error` na tentativa em que `drainEventLog` desiste
       // (`row.attempts + 1 >= 5`, o mesmo limiar de `DRAIN_MAX_ATTEMPTS`), e o
       // dreno abre `event_dead` para o evento morto. Cada um só abre se não
-      // houver outro do MESMO kind aberto na organização — então, numa pane,
+      // houver outro da mesma família aberto na organização — então, numa pane,
       // são no máximo um de cada. O `event_dead` diz que um processamento
       // parou; este diz o que fazer (a orientação da política aponta
       // Provedores de IA).

@@ -6,7 +6,7 @@
  * handler no registry e ficam intocados.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { avisoDeEventoMorto } from "@/lib/event-log/aviso-de-evento-morto";
+import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU } from "@/lib/event-log/aviso-de-evento-morto";
 import { dispatchEvent, getRegisteredHandlers, type EventRow } from "@/lib/event-log/dispatcher";
 import { logger } from "@/lib/logger";
 
@@ -56,10 +56,13 @@ function backoffAt(attempts: number): string {
  * `event_log` para onde mandar quem lê. Preencher `ref_kind` com uma entidade
  * sem destino faria o aviso oferecer um botão que não leva a lugar nenhum.
  *
- * Dedupe por `kind`: um aviso aberto por organização enquanto o problema
- * durar, como `midia_nao_lida` e `budget_exceeded` já fazem. Uma linha por
- * evento inundaria a Central numa pane de handler — e Central inundada é
- * Central que ninguém abre, que é como o alerta morre pela segunda vez.
+ * Dedupe por `kind`, MENOS o aviso da IA que deixou de responder: um aviso
+ * aberto por organização enquanto o problema durar, como `midia_nao_lida` e
+ * `budget_exceeded` já fazem. Uma linha por evento inundaria a Central numa pane
+ * de handler — e Central inundada é Central que ninguém abre, que é como o
+ * alerta morre pela segunda vez. O aviso da IA (dreno do agent-engine) é outra
+ * família e fica fora da consulta: sem isso, ele aberto calaria a mídia, e a
+ * mídia aberta já não o cala (`aviso-de-evento-morto.ts`, "as duas famílias").
  *
  * Fire-and-forget: falhar ao avisar não pode derrubar o dreno.
  */
@@ -75,6 +78,7 @@ async function avisarEventoMorto(
       .eq("organization_id", row.organization_id)
       .eq("kind", "event_dead")
       .eq("status", "open")
+      .neq("title", IA_QUE_NAO_RESPONDEU.titulo)
       .limit(1)
       .maybeSingle();
     if (jaAberto) return;

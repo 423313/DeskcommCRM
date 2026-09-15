@@ -97,26 +97,53 @@ export interface ResultadoDeAcao {
   error?: string;
 }
 
+/**
+ * O que o motor ENCONTROU quando aquela execução rodou. Não vai para o banco: é
+ * a história que justifica a linha, e é contra ela que o teste roda o motor.
+ */
+export interface MundoDaExecucao {
+  /** `lead.created`: as etiquetas do lead quando o motor montou o contexto. */
+  lead?: { tags: string[] };
+  /** `message.received`: o texto da mensagem, que o gatilho grava em `body_preview`. */
+  mensagem?: string;
+  /** O gerente da ação `assign_owner` ainda era membro ativo da organização. */
+  gerenteNaOrganizacao: boolean;
+  /** O que a ESCRITA no banco devolveu, quando não foi aceita. */
+  escritaFalhou?: string;
+}
+
 export interface ExecucaoDeDemonstracao {
   regra: string;
   status: "success" | "partial" | "failed";
   actions_result: ResultadoDeAcao[];
   horasAtras: number;
+  mundo: MundoDaExecucao;
 }
 
 /**
- * Os TRÊS desfechos da aba Atividade, todos na regra VIP — a única que existe
- * sempre e tem duas ações, que é o mínimo para `partial` existir.
+ * Os TRÊS desfechos da aba Atividade, cada um POSSÍVEL: a condição da regra casa
+ * com o mundo daquela execução, e o `actions_result` é o que as ações de verdade
+ * devolvem nesse mundo (`lib/automation/actions/add-tag.ts`, `assign-owner.ts`).
+ * A coluna `error` da execução fica vazia porque o motor nunca a preenche.
  *
- * Cada `actions_result` é o que o motor grava de verdade: um resultado por ação
- * da regra, na ordem da regra, com os `reason`/`error` que as ações devolvem
- * (`lib/automation/actions/add-tag.ts`, `assign-owner.ts`). A coluna `error` da
- * execução fica vazia porque o motor nunca a preenche.
+ *   success — regra VIP: etiqueta entrou, lead foi para o gerente;
+ *   partial — regra VIP: etiqueta entrou, mas o gerente escolhido saiu da
+ *             organização (`user_not_in_org`);
+ *   failed  — regra de orçamento: a mensagem pedia orçamento e o contexto tinha
+ *             o contato, mas a escrita da etiqueta caiu no transporte — a
+ *             mensagem é a que o cliente do Supabase devolve quando o `fetch`
+ *             falha.
  *
- *   success — etiqueta entrou, lead foi para o gerente;
- *   partial — etiqueta entrou, mas o gerente escolhido saiu da organização;
- *   failed  — o lead foi apagado antes de o motor rodar: sem lead no contexto,
- *             as duas ações pulam (e pulo conta como não feito).
+ * ⚠️ O `failed` NÃO pode ser da regra VIP. A versão anterior o punha lá com as
+ * duas ações puladas "porque o lead foi apagado" — mas sem lead a condição
+ * `lead.tags contém vip` é falsa (`lib/automation/conditions.ts`) e o motor
+ * filtra a regra ANTES de executar (`runAutomationForEvent`): essa linha nunca
+ * existiria. Com o lead VIP presente, `add_tag` só deixa de ser feito se a
+ * escrita falhar; aí o `assign_owner`, que consulta e escreve no mesmo banco, ou
+ * dá certo (`partial`) ou cai na mesma queda — e nesse caso relata
+ * `user_not_in_org`, porque trata a consulta de membro que FALHOU como membro
+ * ausente. Uma demonstração não deve ensinar esse motivo errado. Regra de uma
+ * ação só não tem o problema.
  */
 export function historicoDeDemonstracao(managerId: string): ExecucaoDeDemonstracao[] {
   return [
@@ -128,6 +155,7 @@ export function historicoDeDemonstracao(managerId: string): ExecucaoDeDemonstrac
         { type: "assign_owner", status: "success", detail: { user_id: managerId } },
       ],
       horasAtras: 2,
+      mundo: { lead: { tags: ["vip"] }, gerenteNaOrganizacao: true },
     },
     {
       regra: REGRA_VIP,
@@ -137,15 +165,18 @@ export function historicoDeDemonstracao(managerId: string): ExecucaoDeDemonstrac
         { type: "assign_owner", status: "failed", error: "user_not_in_org" },
       ],
       horasAtras: 6,
+      mundo: { lead: { tags: ["vip"] }, gerenteNaOrganizacao: false },
     },
     {
-      regra: REGRA_VIP,
+      regra: REGRA_ORCAMENTO,
       status: "failed",
-      actions_result: [
-        { type: "add_tag", status: "skipped", detail: { reason: "no_target" } },
-        { type: "assign_owner", status: "skipped", detail: { reason: "missing_input" } },
-      ],
+      actions_result: [{ type: "add_tag", status: "failed", error: "TypeError: fetch failed" }],
       horasAtras: 24,
+      mundo: {
+        mensagem: "Boa tarde! Queria um orçamento para um evento de 20 pessoas",
+        gerenteNaOrganizacao: true,
+        escritaFalhou: "TypeError: fetch failed",
+      },
     },
   ];
 }
