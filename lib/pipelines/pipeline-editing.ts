@@ -30,7 +30,7 @@ export interface FunilEditavel {
   position: number;
   is_default: boolean;
   /**
-   * Onde nasce o lead de quem já é cliente (migration 0255). Opcional porque um
+   * Onde nasce o lead de quem já é cliente (migration 0262). Opcional porque um
    * chamador que só troca nome ou posição não precisa carregá-la, e porque a
    * coluna é nova: um objeto montado antes dela continua compilando.
    */

@@ -1,4 +1,4 @@
--- 0255 — o contato vira CLIENTE quando tem hora marcada
+-- 0262 — o contato vira CLIENTE quando tem hora marcada
 --
 -- O PROBLEMA, medido: `lib/leads/nascimento-do-lead.ts` abre um lead no funil
 -- `is_default` para TODO número que escreve. Num estúdio com 630 contatos e a

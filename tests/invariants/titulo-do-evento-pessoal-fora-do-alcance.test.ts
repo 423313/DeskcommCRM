@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { motivoDoErro, sql } from "./psql-transporte";
 
 /**
- * O TÍTULO DO EVENTO PESSOAL DO GOOGLE NÃO ALCANÇA OUTRO MEMBRO — migration 0260.
+ * O TÍTULO DO EVENTO PESSOAL DO GOOGLE NÃO ALCANÇA OUTRO MEMBRO — migration 0261.
  *
  * ─── O defeito ──────────────────────────────────────────────────────────────
  *
@@ -28,7 +28,7 @@ import { motivoDoErro, sql } from "./psql-transporte";
  *    select on table` + a view `select e.*` — e mostra o vazamento acontecendo;
  *    sem ele, um instrumento quebrado deixaria os casos de baixo verdes por
  *    nada, que é o pior desfecho para uma guarda de privacidade;
- * 2. o bloco da 0260, LIDO do `supabase/baseline.sql` pelo rótulo — o texto que
+ * 2. o bloco da 0261, LIDO do `supabase/baseline.sql` pelo rótulo — o texto que
  *    o self-host aplica, não uma cópia;
  * 3. só então a sonda: o colega barrado no `title`, a ocupação de pé para ele, e
  *    o espelho do dono inteiro.
@@ -43,16 +43,16 @@ import { motivoDoErro, sql } from "./psql-transporte";
 
 const BASELINE = readFileSync(join(process.cwd(), "supabase", "baseline.sql"), "utf8");
 
-const ROTULO_0260 =
-  "-- ---- PRIVACIDADE: o título do evento pessoal do Google sai do alcance do membro (migration 0260) ----";
+const ROTULO_0261 =
+  "-- ---- PRIVACIDADE: o título do evento pessoal do Google sai do alcance do membro (migration 0261) ----";
 
-/** O bloco rotulado da 0260, do rótulo até o próximo rótulo de apêndice. */
-function blocoDa0260(): string {
-  const inicio = BASELINE.indexOf(ROTULO_0260);
-  if (inicio === -1) throw new Error("rótulo da 0260 não encontrado no baseline");
-  if (BASELINE.indexOf(ROTULO_0260, inicio + 1) !== -1) throw new Error("rótulo da 0260 repetido no baseline");
-  const fim = BASELINE.indexOf("\n-- ---- ", inicio + ROTULO_0260.length);
-  if (fim === -1) throw new Error("fim do bloco da 0260 não encontrado");
+/** O bloco rotulado da 0261, do rótulo até o próximo rótulo de apêndice. */
+function blocoDa0261(): string {
+  const inicio = BASELINE.indexOf(ROTULO_0261);
+  if (inicio === -1) throw new Error("rótulo da 0261 não encontrado no baseline");
+  if (BASELINE.indexOf(ROTULO_0261, inicio + 1) !== -1) throw new Error("rótulo da 0261 repetido no baseline");
+  const fim = BASELINE.indexOf("\n-- ---- ", inicio + ROTULO_0261.length);
+  if (fim === -1) throw new Error("fim do bloco da 0261 não encontrado");
   return BASELINE.slice(inicio, fim);
 }
 
@@ -134,7 +134,7 @@ function erroDo(script: string): string | null {
   }
 }
 
-describe("migration 0260 — o título do evento pessoal fora do alcance do membro", () => {
+describe("migration 0261 — o título do evento pessoal fora do alcance do membro", () => {
   it("controle: o estado da v1.26.0 deixa o colega ler o título, na tabela e na view", () => {
     // Sem este caso, todo o resto ficaria verde se o instrumento não medisse
     // nada — e ele afirmaria privacidade sem ter olhado.
@@ -159,13 +159,13 @@ describe("migration 0260 — o título do evento pessoal fora do alcance do memb
     );
   });
 
-  it("com o bloco da 0260, o colega recebe permission denied no título — o erro, não zero linhas", () => {
+  it("com o bloco da 0261, o colega recebe permission denied no título — o erro, não zero linhas", () => {
     // "Zero linhas" seria indistinguível de "não há evento", e o alvo aqui é a
     // COLUNA: o Postgres tem de recusar a leitura, não devolver vazio.
     const erro = erroDo(`
       begin;
       ${FIXTURE}
-      ${blocoDa0260()}
+      ${blocoDa0261()}
       ${COMO_COLEGA}
       select title from public.calendar_external_events where id = '${EVENTO}';
       rollback;
@@ -174,9 +174,9 @@ describe("migration 0260 — o título do evento pessoal fora do alcance do memb
     expect(erro).toContain("permission denied for table calendar_external_events");
   });
 
-  it("com o bloco da 0260, o SELECT de tabela sai e a ocupação continua concedida", () => {
+  it("com o bloco da 0261, o SELECT de tabela sai e a ocupação continua concedida", () => {
     const [tabela, titulo, ocupacao] = sondasDesfeitas(`
-      ${blocoDa0260()}
+      ${blocoDa0261()}
       select '${MARCA}' || has_table_privilege(
         'authenticated', 'public.calendar_external_events', 'SELECT')::text;
       select '${MARCA}' || has_column_privilege(
@@ -195,7 +195,7 @@ describe("migration 0260 — o título do evento pessoal fora do alcance do memb
     // consertá-la.
     const [direto, pelaView] = sondasDesfeitas(`
       ${FIXTURE}
-      ${blocoDa0260()}
+      ${blocoDa0261()}
       ${COMO_COLEGA}
       select '${MARCA}' || 'tabela=' || starts_at::text || ',' || ends_at::text || ',' || transparency || ',' || status
         from public.calendar_external_events where id = '${EVENTO}';
@@ -212,7 +212,7 @@ describe("migration 0260 — o título do evento pessoal fora do alcance do memb
     // A view era `select e.*`: era por ali que a próxima coluna nasceria
     // exposta, e o `e.*` já expandido não é conferível pela lista de colunas.
     const [colunas] = sondasDesfeitas(`
-      ${blocoDa0260()}
+      ${blocoDa0261()}
       select '${MARCA}' || coalesce(string_agg(column_name, ',' order by column_name), '(sem colunas)')
         from information_schema.columns
        where table_schema = 'public' and table_name = 'calendar_selected_external_events'
@@ -223,7 +223,7 @@ describe("migration 0260 — o título do evento pessoal fora do alcance do memb
     const erro = erroDo(`
       begin;
       ${FIXTURE}
-      ${blocoDa0260()}
+      ${blocoDa0261()}
       ${COMO_COLEGA}
       select title from public.calendar_selected_external_events where id = '${EVENTO}';
       rollback;
@@ -233,11 +233,11 @@ describe("migration 0260 — o título do evento pessoal fora do alcance do memb
   });
 
   it("o espelho do dono fica inteiro: service_role segue lendo e gravando o título", () => {
-    // O que a 0260 fecha é a LEITURA por outro membro, não o dado do dono.
+    // O que a 0261 fecha é a LEITURA por outro membro, não o dado do dono.
     // Apagar título é decisão do dono, em migration própria.
     const [espelho, gravou] = sondasDesfeitas(`
       ${FIXTURE}
-      ${blocoDa0260()}
+      ${blocoDa0261()}
       select '${MARCA}' || has_column_privilege(
         'service_role', 'public.calendar_external_events', 'title', 'SELECT')::text || ',' ||
         has_column_privilege('service_role', 'public.calendar_external_events', 'title', 'UPDATE')::text;
@@ -257,7 +257,7 @@ describe("migration 0260 — o título do evento pessoal fora do alcance do memb
 
   it("`anon` continua sem SELECT — o bloco não abre porta nova", () => {
     const [tabela, view] = sondasDesfeitas(`
-      ${blocoDa0260()}
+      ${blocoDa0261()}
       select '${MARCA}' || has_table_privilege('anon', 'public.calendar_external_events', 'SELECT')::text;
       select '${MARCA}' || has_table_privilege('anon', 'public.calendar_selected_external_events', 'SELECT')::text;
     `);

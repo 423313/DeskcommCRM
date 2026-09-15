@@ -9,7 +9,7 @@ import { TAG_DE_CLIENTE } from "@/lib/contacts/cliente";
  * A ÚNICA divergência possível entre a etiqueta que o banco escreve e a que a
  * tela oferece no filtro.
  *
- * Quem grava `cliente` é SQL (o trigger e o backfill da migration 0255); quem
+ * Quem grava `cliente` é SQL (o trigger e o backfill da migration 0262); quem
  * filtra por ela é TypeScript. São dois literais em dois idiomas, sem nada que
  * os obrigue a concordar — e o dia em que discordarem, o filtro "Cliente" não
  * acha ninguém, sem erro nenhum para investigar. É o modo de falha mais caro
@@ -21,7 +21,7 @@ import { TAG_DE_CLIENTE } from "@/lib/contacts/cliente";
  */
 const MIGRATION = join(
   process.cwd(),
-  "supabase/migrations/20260915130000_0255_cliente_nasce_do_agendamento.sql",
+  "supabase/migrations/20260915180000_0262_cliente_nasce_do_agendamento.sql",
 );
 
 describe("a etiqueta de cliente", () => {
@@ -34,7 +34,7 @@ describe("a etiqueta de cliente", () => {
     const ocorrencias = sql.match(new RegExp(`'${TAG_DE_CLIENTE}'`, "g")) ?? [];
     expect(
       ocorrencias.length,
-      `a migration 0255 tem de escrever '${TAG_DE_CLIENTE}' no trigger E no backfill`,
+      `a migration 0262 tem de escrever '${TAG_DE_CLIENTE}' no trigger E no backfill`,
     ).toBeGreaterThanOrEqual(4);
   });
 

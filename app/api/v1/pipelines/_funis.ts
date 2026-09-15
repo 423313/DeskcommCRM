@@ -117,7 +117,7 @@ export function corpo(funis: FunilEditavel[]): {
         description: f.description ?? null,
         position: f.position,
         is_default: f.is_default,
-        // `?? false` e não `!` — um clone que ainda não aplicou a 0255 devolve
+        // `?? false` e não `!` — um clone que ainda não aplicou a 0262 devolve
         // `undefined` aqui, e a tela precisa de um booleano para decidir se
         // mostra o badge. Ausente é "não é o funil de clientes", que é a
         // verdade nesse banco.

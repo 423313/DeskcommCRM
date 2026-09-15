@@ -2,7 +2,7 @@
  * A etiqueta de quem já foi atendido.
  *
  * ⚠️ QUEM ESCREVE ESTE VALOR É O BANCO, não este arquivo: o trigger
- * `trg_agendamento_marca_cliente` (migration 0255) acrescenta a tag quando nasce
+ * `trg_agendamento_marca_cliente` (migration 0262) acrescenta a tag quando nasce
  * um agendamento, e o backfill da mesma migration a aplicou ao histórico. Aqui
  * ela existe para que a TELA não repita um literal que mora em SQL — e é por
  * isso que `tests/unit/tag-de-cliente.test.ts` compara esta constante com o que

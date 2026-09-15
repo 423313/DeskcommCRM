@@ -36,7 +36,7 @@
  * é daí que a divergência nasce.
  *
  * ⚠️ ESTE CABEÇALHO DIZIA "nenhum campo novo", E DEIXOU DE SER VERDADE na
- * migration 0255, que criou `crm_pipelines.is_client_pipeline` — o funil de quem
+ * migration 0262, que criou `crm_pipelines.is_client_pipeline` — o funil de quem
  * JÁ é cliente. A regra acima não foi afrouxada, foi aplicada: `is_entry_pipeline`
  * foi recusado porque `is_default` já era a MESMA verdade com outro nome; "onde
  * entra quem já é cliente" não tem verdade equivalente no schema, e a alternativa

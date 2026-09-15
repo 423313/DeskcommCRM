@@ -21155,7 +21155,7 @@ $$;
 revoke all on function public.fn_google_counts_for_conflicts(uuid,uuid,text) from public,anon;
 grant execute on function public.fn_google_counts_for_conflicts(uuid,uuid,text) to authenticated,service_role;
 -- A view é recriada, não substituída no lugar: `create or replace view` não
--- renomeia nem remove coluna (aqui, tirar o `title` é o conserto da 0260 — o
+-- renomeia nem remove coluna (aqui, tirar o `title` é o conserto da 0261 — o
 -- membro lê a ocupação do colega, não o texto do compromisso pessoal dele). E o
 -- corpo deste arquivo é REAPLICADO a cada update (`test:db`, job `invariants`),
 -- então `drop` + `create` é a única forma que sobrevive à segunda passada —
@@ -24660,7 +24660,7 @@ revoke execute on function public.fn_configurar_pre_go_live_canal(uuid, uuid, te
 grant execute on function public.fn_configurar_pre_go_live_canal(uuid, uuid, text, text[])
   to service_role;
 
--- ---- cliente nasce do agendamento (migration 0255) ----
+-- ---- cliente nasce do agendamento (migration 0262) ----
 --
 -- Idempotente e auto-curativo: add column if not exists, create index if not
 -- exists, create or replace function, drop trigger if exists, e um backfill
@@ -25028,7 +25028,7 @@ grant  execute on function public.fn_agenda_conexoes_google_do_dono(uuid, uuid) 
 
 notify pgrst, 'reload schema';
 
--- ---- PRIVACIDADE: o título do evento pessoal do Google sai do alcance do membro (migration 0260) ----
+-- ---- PRIVACIDADE: o título do evento pessoal do Google sai do alcance do membro (migration 0261) ----
 --
 -- ## O que estava aberto, e foi medido
 --
