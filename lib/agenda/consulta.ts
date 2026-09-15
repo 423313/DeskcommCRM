@@ -33,8 +33,38 @@ import { googleRpc } from "./google/sync-store";
  * `motivoParaCliente` vai para o modelo e pode chegar ao cliente final: nada de
  * nome de campo, e ele diz o que fazer em seguida em vez de só negar. É a mesma
  * separação que `lerJornadaDoBanco` já faz, e pela mesma razão (DECISÃO 20).
+ *
+ * ─── ⚠️ O GOOGLE DO DONO DA AGENDA É LIDO COM O ADMIN (issue #879) ───────────
+ *
+ * A junção com `calendar_connections` é o caminho até o Google Agenda, e a RLS
+ * dessa tabela só mostra a conexão ao PRÓPRIO dono e a `manager` para cima:
+ *
+ *     create policy calendar_connections_dono_ou_manager_read ... using (
+ *       ... and (user_id = auth.uid()
+ *                or public.fn_role_at_least(organization_id, 'manager')))
+ *
+ * Consequência medida (Postgres descartável, `baseline.sql`, a MESMA agenda):
+ * dono vê 1 evento do Google, gerente vê 1, **atendente vê 0**. Com o cliente de
+ * sessão, o Atendente que marca na agenda de outra pessoa confere ocupação contra
+ * uma lista sem o Google dela — e aceita marcar por cima de um compromisso
+ * pessoal que existe. (`calendar_selected_external_events` e
+ * `calendar_appointments` são lidas por organização; quem some é a CONEXÃO, e é
+ * ela que leva o evento junto, por `!inner`.)
+ *
+ * Por isso as duas leituras do Google — a conexão e os eventos — saem daqui pelo
+ * cliente ADMIN, e a única coisa que as autoriza é o FILTRO, que continua
+ * explícito: `organization_id` do contexto autenticado (nunca do corpo) e
+ * `user_id` do dono da agenda. As demais leituras (jornada, exceções,
+ * compromissos) continuam no cliente de sessão de propósito: a RLS delas já é por
+ * organização, e trocá-las por admin tiraria uma proteção sem conserto para pagar.
+ *
+ * O que sai daqui continua sendo só ocupação — `Slot[]`. Nenhum título, nenhuma
+ * descrição, nenhum horário de evento: este módulo nunca devolveu conteúdo de
+ * evento e não passa a devolver por causa deste atalho.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { horariosLivres, type ExcecaoDeData, type Slot } from "./horarios-livres";
 import { lerJornadaDoBanco } from "./jornada";
@@ -241,13 +271,22 @@ export async function horariosLivresDaOrg(
   // A situação das conexões do dono, para distinguir "não tem Google" de "tem
   // Google que nunca foi lido". Sem `.select` de erro: conexão ilegível cai no
   // mesmo lado de "não sei", que é o lado seguro.
-  const { data: conexoesRaw } = await supabase
+  // ⚠️ DAQUI PARA BAIXO QUEM LÊ O GOOGLE É O ADMIN, de propósito — e a razão
+  // está no cabeçalho deste arquivo: a RLS de `calendar_connections` mostra a
+  // conexão ao próprio dono e a `manager` para cima, então com o cliente de
+  // sessão a junção `!inner` de um Atendente volta VAZIA e a ocupação do dono
+  // some (medido: dono 1, gerente 1, atendente 0). O que autoriza o atalho é o
+  // filtro explícito que segue: `organization_id` do contexto autenticado e
+  // `user_id` do dono da agenda. `createAdminClient` é memoizado no módulo.
+  const clienteDoGoogle = createAdminClient();
+
+  const { data: conexoesRaw } = await clienteDoGoogle
     .from("calendar_connections")
     .select("status, last_sync_at")
     .eq("organization_id", organizationId)
     .eq("user_id", donoId);
 
-  const { data: externosRaw, error: erroExt } = await supabase
+  const { data: externosRaw, error: erroExt } = await clienteDoGoogle
     .from("calendar_selected_external_events")
     .select("starts_at, ends_at, transparency, status, calendar_connections!inner(user_id, status)")
     .eq("organization_id", organizationId)
