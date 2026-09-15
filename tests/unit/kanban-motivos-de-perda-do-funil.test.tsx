@@ -33,7 +33,9 @@ import { motivosDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
 import type { BoardData } from "@/lib/kanban/types";
 
 const { apiPost } = vi.hoisted(() => ({
-  apiPost: vi.fn(async () => ({ data: {} })),
+  // `unknown[]` nos parâmetros de propósito: o mock é chamado com dois argumentos
+  // (rota e corpo) e um `vi.fn()` sem parâmetro nenhum reprova o typecheck (TS2554).
+  apiPost: vi.fn(async (..._args: unknown[]) => ({ data: {} })),
 }));
 
 vi.mock("@/lib/api/client", () => ({
