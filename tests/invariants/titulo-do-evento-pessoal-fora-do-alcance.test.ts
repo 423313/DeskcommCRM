@@ -37,10 +37,13 @@ import { motivoDoErro, sql } from "./psql-transporte";
  *    POSTERIOR (ou um remendo à mão no Supabase) que devolva o SELECT de tabela
  *    a `authenticated`: os casos do item 2 reaplicam a 0261 e a reaplicação
  *    revoga de novo, então ficariam verdes sobre um banco que vaza.
- * 4. SOB O DEFAULT ACL DO SUPABASE, simulado na transação (`grant all on table
- *    … to anon, authenticated, service_role` antes do bloco): o colega que não é
- *    dono da conexão não lê o título nem pela tabela nem pela view; o DONO lê o
- *    que a tela dele lê (a ocupação) e também não lê o título; e
+ * 4. SOB O DEFAULT ACL DO SUPABASE, simulado na transação (`alter default
+ *    privileges … grant all on tables` para a view que o bloco recria, e `grant
+ *    all on table` para a tabela que já existe — ver `DEFAULT_ACL_DO_SUPABASE`),
+ *    com um controle de que a simulação, e não o dump, é o que chega à view: a
+ *    view recriada não fica legível por `anon`; o colega que não é dono da
+ *    conexão não lê o título nem pela tabela nem pela view; o DONO lê o que a
+ *    tela dele lê (a ocupação) e também não lê o título; e
  *    `fn_agenda_ocupacao_google_do_dono`, da migration 0260, segue devolvendo a
  *    ocupação por cima da view recriada.
  *
@@ -85,16 +88,44 @@ const DEFEITO_DA_V1260 = `
 
 /**
  * O default ACL de TABELAS que todo projeto Supabase grava antes de qualquer SQL
- * nosso, reaplicado à mão dentro da transação. O prelude do `test:db` não o
- * reproduz (issue #887); nesta tabela ele chega mesmo assim, pelo `ALTER DEFAULT
- * PRIVILEGES … ON TABLES` que o próprio baseline emite antes do `create table` —
- * mas depender dessa ordem faria o caso medir o dump, não o Supabase. E um
- * `grant all` posterior é exatamente o que devolve o SELECT de tabela: o bloco
- * tem de fechar o título partindo daqui.
+ * nosso, reconstruído dentro da transação (o `rollback` o desfaz). O prelude do
+ * `test:db` não o reproduz (issue #887); hoje ele chega mesmo assim, pelo `ALTER
+ * DEFAULT PRIVILEGES … ON TABLES` que o próprio dump emite — e depender disso
+ * faria o caso medir o dump, não o Supabase. As duas metades têm alvos diferentes:
+ *
+ * - o `alter default privileges` decide o ACL de relação CRIADA DEPOIS, e o bloco
+ *   da 0261 CRIA a view (`drop` + `create`). É ele que dá tudo a `anon` na view
+ *   recriada, e o bloco tem de tirar;
+ * - o `grant all on table` alcança a TABELA, que já existe e a quem default ACL
+ *   nenhum se aplica mais. É o grant que devolve o SELECT de tabela: o bloco tem
+ *   de fechar o título partindo daqui.
+ *
+ * Um `grant` na VIEW aqui não faria nada: o `drop view` do bloco o descarta antes
+ * de qualquer asserção. A versão anterior desta constante fazia exatamente isso,
+ * e o lado da view media o default ACL do dump (medido no pg15 pelo cético do
+ * lote 11: sem o `revoke … from anon` do bloco, a view recriada saía legível por
+ * `anon` com ou sem aquela linha). O controle deste lado é o primeiro caso do
+ * último `describe`.
  */
 const DEFAULT_ACL_DO_SUPABASE = `
+  alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
   grant all on table public.calendar_external_events to anon, authenticated, service_role;
-  grant all on table public.calendar_selected_external_events to anon, authenticated, service_role;
+`;
+
+/**
+ * Tira de `pg_default_acl` a entrada de TABELAS que o dump gravou — o banco de um
+ * projeto sem o bootstrap do Supabase. Só existe para o controle provar que é a
+ * simulação, e não o dump, que alcança a view.
+ */
+const SEM_DEFAULT_ACL_DE_TABELAS = `
+  alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated, service_role;
+`;
+
+/** Recria a view como o bloco recria (só a forma importa aqui: nasce do default ACL). */
+const RECRIA_A_VIEW = `
+  drop view if exists public.calendar_selected_external_events;
+  create view public.calendar_selected_external_events with (security_invoker = true) as
+    select e.id from public.calendar_external_events e;
 `;
 
 const ORG = "02610000-0000-4000-8000-0000000000a1";
@@ -464,6 +495,42 @@ describe("o banco instalado pelo baseline inteiro — sem reaplicar o bloco da 0
 });
 
 describe("sob o default ACL do Supabase, simulado na transação antes do bloco da 0261", () => {
+  it("controle: é a simulação, e não o dump, que dá à view recriada o grant a `anon` — sem ela a view nasce fechada, com ela nasce aberta", () => {
+    // Sem este caso, os de baixo mediriam o default ACL que o dump deixou em
+    // `pg_default_acl`, e não o do Supabase: o `grant` na view que a versão
+    // anterior fazia sumia no `drop view` do bloco sem ninguém notar.
+    const [semSimulacao, comSimulacao] = sondasDesfeitas(`
+      ${SEM_DEFAULT_ACL_DE_TABELAS}
+      ${RECRIA_A_VIEW}
+      select '${MARCA}' || has_table_privilege('anon', 'public.calendar_selected_external_events', 'SELECT')::text;
+      ${DEFAULT_ACL_DO_SUPABASE}
+      ${RECRIA_A_VIEW}
+      select '${MARCA}' || has_table_privilege('anon', 'public.calendar_selected_external_events', 'SELECT')::text;
+    `);
+    expect(semSimulacao, "sem default ACL de tabelas a view recriada já nasce legível por `anon` — o controle não isola nada").toBe(
+      "false",
+    );
+    expect(
+      comSimulacao,
+      "a simulação não alcança a view que o bloco recria — os casos deste describe mediriam o dump, não o Supabase",
+    ).toBe("true");
+  });
+
+  it("a view recriada pelo bloco não fica legível por `anon`, embora o default ACL do Supabase dê tudo a `anon` em relação nova", () => {
+    // O bloco faz `drop` + `create` da view; o ACL dela nasce do default ACL, e
+    // no Supabase ele concede a `anon`. É o `revoke all … from public, anon` do
+    // bloco que fecha — e este caso mede esse revoke partindo de um banco SEM a
+    // entrada do dump, para não depender dela.
+    const [view] = sondasDesfeitas(`
+      ${DEFEITO_DA_V1260}
+      ${SEM_DEFAULT_ACL_DE_TABELAS}
+      ${DEFAULT_ACL_DO_SUPABASE}
+      ${blocoDa0261()}
+      select '${MARCA}' || has_table_privilege('anon', 'public.calendar_selected_external_events', 'SELECT')::text;
+    `);
+    expect(view, "com o default ACL do Supabase, `anon` lê a view da ocupação recriada pela 0261").toBe("false");
+  });
+
   it("o colega que não é dono da conexão não lê o título, nem pela tabela nem pela view", () => {
     const pelaTabela = erroDo(`
       begin;
