@@ -50,6 +50,8 @@ import { pgComoSupabase } from "../pg-como-supabase";
  *   I36, I37       as três colunas são do SISTEMA — sessão nenhuma as grava; o
  *                  service role e o trigger gravam
  *   I38            o quarto número do corpo: a agenda que só tem cancelamento
+ *   I39            o recálculo recusa contato de outra organização — e é a
+ *                  FUNÇÃO que recusa, não a constraint do agendamento
  *
  * ORGANIZAÇÕES SEPARADAS POR PAPEL NO TESTE, para que um caso não verdeie outro
  * por estado compartilhado: A ligada no beforeAll, B sempre desligada, C é o
@@ -743,6 +745,42 @@ describe("LGPD e tenancy", () => {
     const depois = await lerContato(naOutra);
     expect(depois.first_service_at).toBeNull();
     expect(depois.tags).not.toContain(TAG_DE_CLIENTE);
+  });
+
+  it("I39 · o RECÁLCULO recusa contato de outra organização — e não é a constraint que o faz", async () => {
+    // A SABOTAGEM QUE PASSOU VERDE. Tirar `c.organization_id = p_org` do SELECT
+    // e do UPDATE de `fn_recalcular_cliente_do_contato` deixava os 44 casos
+    // verdes, medido. O I12 acima é verde pela CONSTRAINT
+    // `appointment_contact_scope`, que barra o agendamento cruzado ANTES de o
+    // trigger rodar, e o laço do backfill filtra a organização por conta
+    // própria — então o filtro DA FUNÇÃO, que é a última linha e a que o
+    // próximo chamador herda, não era medido por ninguém. Proteção estrutural
+    // creditada à disciplina: os dois existem, e só um estava sob gate.
+    const daB = await criarContato(ORG_B, "Contato da B, alvo da A");
+    const antes = await lerContato(daB);
+
+    const { rows } = await pool.query<{ r: string }>(
+      "select fn_recalcular_cliente_do_contato($1, $2, true) as r",
+      [ORG_A, daB],
+    );
+
+    expect(rows[0]!.r, "a A pedindo o recálculo de um contato da B").toBe("ignorado");
+    const depois = await lerContato(daB);
+    expect(depois.first_service_at).toBeNull();
+    expect(depois.updated_at.toISOString(), "nem `updated_at` se move").toBe(
+      antes.updated_at.toISOString(),
+    );
+
+    // CONTROLE POSITIVO: com a organização CERTA, a MESMA chamada trabalha. Sem
+    // ele, uma função que devolvesse 'ignorado' sempre passaria aqui.
+    await marcar(ORG_B, daB, "2026-09-01T10:00:00Z");
+    expect((await lerContato(daB)).first_service_at, "a B está desligada: o trigger não faz nada").toBeNull();
+    const certo = await pool.query<{ r: string }>(
+      "select fn_recalcular_cliente_do_contato($1, $2, false) as r",
+      [ORG_B, daB],
+    );
+    expect(certo.rows[0]!.r).toBe("etiquetado");
+    expect((await lerContato(daB)).tags).toContain(TAG_DE_CLIENTE);
   });
 });
 
