@@ -77,6 +77,13 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     if (!flag) return { consumer_key, status: "skipped", detail: "video_frames_disabled" };
   }
 
+  /** O que o operador chama de "isto" — o aviso não pode falar em `msg.type`. */
+  const rotuloDoTipo =
+    ({ image: "imagem", audio: "áudio", document: "documento", video: "vídeo" } as Record<
+      string,
+      string
+    >)[msg.type] ?? "mídia";
+
   const markFailed = async () => {
     await admin.from("messages").update({ media_derived_status: "failed" })
       .eq("id", msg.id).eq("organization_id", msg.organization_id);
@@ -164,6 +171,31 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     if (row.attempts >= DRAIN_MAX_ATTEMPTS - 1) {
       logger.error("[media-derive] failed permanently", { message_id: msg.id, detail });
       await markFailed();
+      // ─── E AVISA. Desistir calado era o desfecho mais comum dos três ───────
+      //
+      // As duas recusas que este worker já sabia explicar — modelo sem visão e
+      // provedor indisponível — abrem `midia_nao_lida` lá embaixo, e por isso
+      // pareciam cobrir o assunto. Não cobriam: a falha que vem de DENTRO da
+      // chamada ao modelo (credencial recusada, modelo que a conta não pode
+      // usar, tempo esgotado) estoura como exceção, cai aqui, marcava
+      // `failed` e não dizia nada a ninguém.
+      //
+      // Medido numa VPS em produção (org real, 14/09): quatro imagens JPEG com
+      // `media_derived_status='failed'`, os quatro eventos mortos em
+      // `event_log` com "The model `claude-sonnet-5` does not exist or you do
+      // not have access to it" — e a Central com ZERO avisos de mídia. O
+      // cliente mandou a foto, o agente respondeu sem vê-la, e do lado de cá
+      // não havia o que olhar.
+      //
+      // `midia_nao_lida` e não só o `event_dead` do dreno: os dois vão abrir,
+      // e é este que tem a orientação certa ("ajuste o modelo desse ponto em
+      // Agente de IA → Provedores, ou cadastre a chave necessária"). O outro
+      // diz que um processamento parou; este diz o que fazer.
+      //
+      // O `detail` entra porque é a frase do PROVEDOR, e é ela que distingue
+      // "chave errada" de "modelo que sua conta não assina" — duas ações
+      // diferentes para quem opera.
+      await avisarMidiaNaoLida(msg.organization_id, rotuloDoTipo, detail.slice(0, 200));
     }
     return { consumer_key, status: "error", detail };
   }
