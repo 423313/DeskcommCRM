@@ -116,9 +116,16 @@ function clienteFalso(tabelas: Record<string, Linha[]>): SupabaseClient {
 
   return {
     from: (tabela: string) => daTabela(tabela),
-    // `fn_google_coverage` existe no caminho de leitura; aqui não há Google, e a
-    // coleta trata leitura incerta como "não afirma cobertura".
-    rpc: async () => ({ data: false, error: null }),
+    // Aqui não há Google. `fn_google_coverage` responde "não afirma cobertura";
+    // as duas leituras do Google do dono (migration 0260) respondem lista vazia —
+    // devolver `false` a elas faria a coleta quebrar pelo dublê, não pela regra.
+    rpc: async (fn: string) => {
+      if (fn === "fn_google_coverage") return { data: false, error: null };
+      if (fn === "fn_agenda_ocupacao_google_do_dono" || fn === "fn_agenda_conexoes_google_do_dono") {
+        return { data: [], error: null };
+      }
+      throw new Error(`[duble] rpc não prevista: ${fn}`);
+    },
   } as unknown as SupabaseClient;
 }
 

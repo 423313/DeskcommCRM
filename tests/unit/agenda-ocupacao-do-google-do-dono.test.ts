@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -18,26 +18,33 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  *
  * ─── O que este arquivo prende ──────────────────────────────────────────────
  *
- * Que as duas leituras do Google saem pelo cliente ADMIN (`createAdminClient`),
- * com o filtro explícito de `organization_id` + dono, e que o resultado é o
- * MESMO para quem pergunta: um Atendente (que a RLS deixaria sem o evento) e um
- * dono (que o veria). A ocupação é uma propriedade da AGENDA, não da visibilidade
- * de quem consulta.
+ * Que as duas leituras do Google saem pelas RPCs `fn_agenda_ocupacao_google_do_dono`
+ * e `fn_agenda_conexoes_google_do_dono` (migration 0260) — `security definer`
+ * que conferem pertencimento e filtram o dono — e que o resultado é o MESMO
+ * para quem pergunta: um Atendente (cuja sessão não enxerga a conexão) e um
+ * dono (que a enxerga). A ocupação é uma propriedade da AGENDA, não da
+ * visibilidade de quem consulta.
+ *
+ * ⚠️ A primeira versão deste arquivo (PR #883) dublava `createAdminClient`: o
+ * conserto lia as duas tabelas com service role dentro da coleta. Na
+ * reconciliação do lote 10 a leitura virou RPC (ver o cabeçalho de
+ * `lib/agenda/consulta.ts` e o da migration 0260), e o dublê passou a ter o
+ * olhar da SESSÃO nas tabelas e a resposta da FUNÇÃO nas RPCs. O que o arquivo
+ * prova não mudou.
  *
  * ─── O que este arquivo NÃO mede (declarado, não estimado) ──────────────────
  *
- * 1. **A RLS de verdade.** Nenhum Postgres aqui: dois dublês simulam os dois
- *    olhares (um "vê", outro "não vê"), e a medição da RLS é a do issue
- *    (`pnpm test:db` é quem mede banco e isolamento).
+ * 1. **A RLS e a função de verdade.** Aqui dois olhares são simulados (um vê a
+ *    conexão, outro não). Quem mede o banco — dono, gerente e atendente recebem
+ *    o mesmo pela função; atendente 0 pela junção direta; outra organização 0;
+ *    `anon` recusado; nenhum título na resposta — é
+ *    `tests/invariants/agenda-ocupacao-google-do-dono.test.ts`, via `pnpm test:db`.
  * 2. **Conteúdo de evento.** O que a coleta devolve é `Slot[]` — nenhum título,
- *    nenhuma descrição. O dublê carrega as colunas que a query PEDE
- *    (`starts_at, ends_at, transparency, status`), e nada além.
- * 3. **`fn_google_coverage`.** A RPC de cobertura continua saindo pelo cliente
- *    que veio de fora, de propósito: ela só decide o aviso de defasagem.
+ *    nenhuma descrição. A RPC dublada devolve as cinco colunas que a função
+ *    declara, e nada além.
+ * 3. **O encaixe da pessoa.** A mesma coleta serve o encaixe fora da grade; o
+ *    caso do Atendente pelo handler mora em `tests/unit/pessoa-marca-fora-da-grade.test.ts`.
  */
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
-
-const { createAdminClient } = await import("@/lib/supabase/admin");
 const { horariosLivresDaOrg } = await import("@/lib/agenda/consulta");
 
 const TZ = "America/Sao_Paulo";
@@ -73,14 +80,19 @@ type Filtro = (linha: Linha) => boolean;
 /**
  * Um `SupabaseClient` de mentira que FILTRA de verdade (mesmo dublê do teste da
  * exceção de data): aplica `eq/gte/lte/lt/gt` sobre linhas em memória. Um dublê
- * que ignorasse o filtro deixaria o teste passar pelo motivo errado — e aqui o
- * `organization_id` explícito é justamente a única proteção que existe no
- * caminho do admin.
+ * que ignorasse o filtro deixaria o teste passar pelo motivo errado.
+ *
+ * `veConexao` é o olhar da SESSÃO: `false` esconde `calendar_connections` e o
+ * evento que chega pelo embed `!inner`, como a RLS faz com um Atendente. As
+ * RPCs da migration 0260 NÃO dependem dele — são a resposta da função
+ * `security definer`, lida da tabela inteira com os filtros do corpo SQL.
  */
-function clienteFalso(tabelas: Record<string, Linha[]>): SupabaseClient {
+function clienteFalso(tabelas: Record<string, Linha[]>, veConexao: boolean): SupabaseClient {
+  const escondidas = new Set(veConexao ? [] : ["calendar_connections", "calendar_selected_external_events"]);
   function daTabela(tabela: string) {
     const filtros: Filtro[] = [];
-    const linhas = () => (tabelas[tabela] ?? []).filter((l) => filtros.every((f) => f(l)));
+    const linhas = () =>
+      (escondidas.has(tabela) ? [] : (tabelas[tabela] ?? [])).filter((l) => filtros.every((f) => f(l)));
     const compara = (coluna: string, valor: unknown, ok: (a: string, b: string) => boolean) => {
       filtros.push((l) => ok(String(valorDaColuna(l, coluna)), String(valor)));
       return api;
@@ -102,14 +114,41 @@ function clienteFalso(tabelas: Record<string, Linha[]>): SupabaseClient {
     return api;
   }
 
-  return {
-    from: (tabela: string) => daTabela(tabela),
-    rpc: async () => ({ data: false, error: null }),
-  } as unknown as SupabaseClient;
+  async function rpc(fn: string, args: Record<string, string>) {
+    if (fn === "fn_agenda_ocupacao_google_do_dono") {
+      const ocupam = (tabelas.calendar_selected_external_events ?? []).filter(
+        (l) =>
+          l.organization_id === args.p_org &&
+          valorDaColuna(l, "calendar_connections.user_id") === args.p_owner &&
+          String(l.starts_at) < args.p_ate &&
+          String(l.ends_at) > args.p_de,
+      );
+      return {
+        data: ocupam.map((l) => ({
+          starts_at: l.starts_at,
+          ends_at: l.ends_at,
+          transparency: l.transparency,
+          status: l.status,
+          connection_status: valorDaColuna(l, "calendar_connections.status"),
+        })),
+        error: null,
+      };
+    }
+    if (fn === "fn_agenda_conexoes_google_do_dono") {
+      const doDono = (tabelas.calendar_connections ?? []).filter(
+        (l) => l.organization_id === args.p_org && l.user_id === args.p_owner,
+      );
+      return { data: doDono.map((l) => ({ status: l.status, last_sync_at: l.last_sync_at })), error: null };
+    }
+    if (fn === "fn_google_coverage") return { data: false, error: null };
+    throw new Error(`[dublê] rpc não prevista: ${fn}`);
+  }
+
+  return { from: (tabela: string) => daTabela(tabela), rpc } as unknown as SupabaseClient;
 }
 
-/** As tabelas que a coleta lê; `googleVisivel` é o olhar de quem consulta. */
-function tabelas(googleVisivel: boolean): Record<string, Linha[]> {
+/** As tabelas que a coleta lê; `comGoogle` diz se o dono tem compromisso no Google. */
+function tabelas(comGoogle: boolean): Record<string, Linha[]> {
   const conexao = {
     organization_id: ORG,
     user_id: DONO,
@@ -123,7 +162,7 @@ function tabelas(googleVisivel: boolean): Record<string, Linha[]> {
     transparency: "opaque",
     status: "confirmed",
     // O embed `calendar_connections!inner(user_id, status)`, como o PostgREST
-    // entrega. A RLS decide se esta linha existe; o dublê não faz junção.
+    // entrega. Quem decide se a SESSÃO vê esta linha é `veConexao`.
     calendar_connections: { user_id: DONO, status: "connected" },
   };
 
@@ -156,21 +195,15 @@ function tabelas(googleVisivel: boolean): Record<string, Linha[]> {
     ],
     calendar_availability_exceptions: [],
     calendar_appointments: [],
-    calendar_connections: googleVisivel ? [conexao] : [],
-    calendar_selected_external_events: googleVisivel ? [evento] : [],
+    calendar_connections: [conexao],
+    calendar_selected_external_events: comGoogle ? [evento] : [],
   };
 }
 
-beforeEach(() => {
-  vi.mocked(createAdminClient).mockReset();
-});
-
 describe("a ocupação do Google do dono barra a marcação de quem não enxerga a conexão", () => {
   it("Atendente (RLS esconde a conexão): o compromisso do Google do dono recusa o horário", async () => {
-    // O admin é o único que vê; o cliente de sessão do Atendente não veria nada.
-    vi.mocked(createAdminClient).mockReturnValue(clienteFalso(tabelas(true)));
-
-    const resultado = await horariosLivresDaOrg(clienteFalso(tabelas(false)), ORG, {
+    // A sessão do Atendente não enxerga a conexão; a função responde pela agenda.
+    const resultado = await horariosLivresDaOrg(clienteFalso(tabelas(true), false), ORG, {
       eventTypeId: TIPO_ID,
       ownerUserId: DONO,
       de: DE,
@@ -189,9 +222,7 @@ describe("a ocupação do Google do dono barra a marcação de quem não enxerga
   });
 
   it("o dono consultando recebe a MESMA resposta — a ocupação não depende de quem pergunta", async () => {
-    vi.mocked(createAdminClient).mockReturnValue(clienteFalso(tabelas(true)));
-
-    const resultado = await horariosLivresDaOrg(clienteFalso(tabelas(true)), ORG, {
+    const resultado = await horariosLivresDaOrg(clienteFalso(tabelas(true), true), ORG, {
       eventTypeId: TIPO_ID,
       ownerUserId: DONO,
       de: DE,
@@ -209,9 +240,7 @@ describe("a ocupação do Google do dono barra a marcação de quem não enxerga
   });
 
   it("controle: sem compromisso no Google o horário das 21:00 é oferecido", async () => {
-    vi.mocked(createAdminClient).mockReturnValue(clienteFalso(tabelas(false)));
-
-    const resultado = await horariosLivresDaOrg(clienteFalso(tabelas(false)), ORG, {
+    const resultado = await horariosLivresDaOrg(clienteFalso(tabelas(false), false), ORG, {
       eventTypeId: TIPO_ID,
       ownerUserId: DONO,
       de: DE,
