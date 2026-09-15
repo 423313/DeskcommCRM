@@ -34,6 +34,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      channel_integrations: {
+        Row: { organization_id: string; profile_id: string; credential_encrypted: string; created_at: string; updated_at: string }
+        Insert: { organization_id: string; profile_id: string; credential_encrypted: string; created_at?: string; updated_at?: string }
+        Update: { organization_id?: string; profile_id?: string; credential_encrypted?: string; created_at?: string; updated_at?: string }
+        Relationships: [{ foreignKeyName: "channel_integrations_organization_id_fkey"; columns: ["organization_id"]; isOneToOne: true; referencedRelation: "organizations"; referencedColumns: ["id"] }]
+      }
       ai_reply_drafts: {
         Row: {
           id: string;
@@ -3202,6 +3208,7 @@ export type Database = {
           organization_id: string
           phone_lookup_at: string | null
           phone_number: string | null
+          social_identity: string | null
           source: string
           source_metadata: Json
           tags: string[]
@@ -3239,6 +3246,7 @@ export type Database = {
           organization_id: string
           phone_lookup_at?: string | null
           phone_number?: string | null
+          social_identity?: string | null
           source?: string
           source_metadata?: Json
           tags?: string[]
@@ -3276,6 +3284,7 @@ export type Database = {
           organization_id?: string
           phone_lookup_at?: string | null
           phone_number?: string | null
+          social_identity?: string | null
           source?: string
           source_metadata?: Json
           tags?: string[]

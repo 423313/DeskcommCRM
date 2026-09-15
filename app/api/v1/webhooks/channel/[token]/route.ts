@@ -36,7 +36,7 @@ import {
   abrirArquivoDoWebhook,
   fecharArquivoDoWebhook,
 } from "@/lib/channels/arquivo-de-webhook";
-import { acceptsInboundWebhook, handleInboundWebhook } from "@/lib/channels/inbound";
+import { acceptsInboundWebhook, handleInboundWebhook, verifyInboundWebhookSignature, inboundPayloadBelongsToSession } from "@/lib/channels/inbound";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
@@ -98,6 +98,14 @@ export async function POST(
 
   const cifrado = sessao.webhook_secret_encrypted;
   const secret = cifrado ? await decryptWebhookSecret(admin, cifrado as string) : null;
+
+  if (!verifyInboundWebhookSignature(sessao.provider, rawBody, req.headers, secret)) {
+    return fail("unauthorized", "bad_signature", 401, { requestId });
+  }
+
+  if (!await inboundPayloadBelongsToSession(admin, { session: sessao, rawBody, headers: req.headers, secret })) {
+    return ok({ status: "ignored", reason: "evento_de_outra_conta" }, { requestId });
+  }
 
   // ─── O corpo cru vai para o arquivo ANTES de qualquer processamento ────────
   //

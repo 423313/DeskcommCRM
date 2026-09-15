@@ -196,6 +196,7 @@ export const AUDIT_ACTIONS = [
   "ai_agent.run_failed",
   "channel.connected",
   "channel.pairing_code_requested",
+  "channel.social_configured",
   "channel.ai_access_updated",
   "channel.reconnected",
   // Duas ações distintas de propósito: `deleted` apagou a linha (canal virgem),

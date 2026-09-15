@@ -4638,6 +4638,9 @@ export const DICIONARIO: Traducoes = {
   "Remover tag": { es: "Quitar etiqueta" },
   "Tags da conversa": { es: "Etiquetas de la conversación" },
 
+  "Aguarde uma nova mensagem do cliente para reabrir o atendimento nesta rede.": { es: "Espera un nuevo mensaje del cliente para reabrir la atención en esta red." },
+  "aguardando o cliente": { es: "esperando al cliente" },
+  "Tempo restante para responder. Uma nova mensagem do cliente reabre a janela.": { es: "Tiempo restante para responder. Un nuevo mensaje del cliente reabre la ventana." },
   // ─── Inbox: janela de 24h fechada / seletor de modelo aprovado ───
   "Modelo enviado — a janela reabre quando o cliente responder.": {
     es: "Modelo enviado — la ventana se reabre cuando el cliente responda.",
@@ -8583,6 +8586,38 @@ export const DICIONARIO: Traducoes = {
   "Erro ao reativar tenant": { es: "Error al reactivar el tenant" },
   "Incidente resolvido com sucesso": { es: "Incidente resuelto con éxito" },
   "Erro ao resolver incidente": { es: "Error al resolver el incidente" },
+  "Configuração salva.": { es: "Configuración guardada." },
+  "Redes sociais": { es: "Redes sociales" },
+  "Conecte suas contas e receba mensagens no atendimento.": { es: "Conecta tus cuentas y recibe mensajes en atención." },
+  "A autorização não foi concluída. Tente conectar novamente e aceite as permissões necessárias.": { es: "La autorización no se completó. Intenta conectar de nuevo y acepta los permisos necesarios." },
+  "Autorização concluída. Confira a conta na lista e ative o atendimento, quando disponível.": { es: "Autorización completada. Comprueba la cuenta en la lista y activa la atención cuando esté disponible." },
+  "Vincular o provedor": { es: "Vincular el proveedor" },
+  "A chave fica cifrada no servidor e não é exibida novamente.": { es: "La clave se guarda cifrada en el servidor y no se vuelve a mostrar." },
+  "Buscar perfis": { es: "Buscar perfiles" },
+  "Perfil da empresa": { es: "Perfil de la empresa" },
+  "Conectar uma rede": { es: "Conectar una red" },
+  "Abrindo…": { es: "Abriendo…" },
+  "Autorizar conta": { es: "Autorizar cuenta" },
+  "Você autoriza na própria rede e retorna ao CRM. Cada perfil comporta uma conta por rede; use a mesma conta ao reconectar.": { es: "Autorizas en la propia red y vuelves al CRM. Cada perfil admite una cuenta por red; usa la misma cuenta al reconectar." },
+  "Vinculada": { es: "Vinculada" },
+  "Verificar conexão": { es: "Verificar conexión" },
+  "Receber no atendimento": { es: "Recibir en atención" },
+  "Recebimento configurado. Novas mensagens entram na caixa de entrada.": { es: "Recepción configurada. Los nuevos mensajes llegan a la bandeja de entrada." },
+  "O recebimento precisa de atenção. Confira a conexão antes de atender.": { es: "La recepción requiere atención. Comprueba la conexión antes de atender." },
+  "Ative para receber novas conversas. A IA começa pausada para evitar respostas duplicadas com outras automações.": { es: "Activa para recibir nuevas conversaciones. La IA empieza pausada para evitar respuestas duplicadas con otras automatizaciones." },
+  "Conta disponível no provedor. O atendimento por mensagens desta rede ainda não está integrado ao CRM.": { es: "Cuenta disponible en el proveedor. La atención por mensajes de esta red todavía no está integrada en el CRM." },
+  "Nenhuma conta conectada neste perfil. Autorize uma rede para começar.": { es: "No hay cuentas conectadas en este perfil. Autoriza una red para empezar." },
+  "Alterar credencial": { es: "Cambiar credencial" },
+  "IA pausada": { es: "IA pausada" },
+  "As mensagens chegam para atendimento humano. A IA está pausada neste canal.": { es: "Los mensajes llegan para atención humana. La IA está pausada en este canal." },
+  "Acesso da IA nesta rede": { es: "Acceso de la IA en esta red" },
+  "Pause a IA para manter o atendimento humano ou libere as respostas automáticas neste canal.": { es: "Pausa la IA para mantener la atención humana o habilita las respuestas automáticas en este canal." },
+  "As mensagens continuam chegando à caixa de entrada para sua equipe responder. Confira outras automações da conta antes de liberar a IA aqui.": { es: "Los mensajes siguen llegando a la bandeja de entrada para que tu equipo responda. Revisa otras automatizaciones de la cuenta antes de habilitar la IA aquí." },
+  "Pausar respostas da IA": { es: "Pausar respuestas de la IA" },
+  "Manter IA pausada": { es: "Mantener IA pausada" },
+  "Não foi possível carregar as redes sociais.": { es: "No se pudieron cargar las redes sociales." },
+  "Reconfigurar integração": { es: "Reconfigurar integración" },
+
 };
 
 /**

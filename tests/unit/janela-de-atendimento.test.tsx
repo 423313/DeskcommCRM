@@ -210,3 +210,9 @@ describe("os elos que somem sem barulho", () => {
     expect(fonte).toMatch(/windowRemainingMs\(/);
   });
 });
+
+it("rede social com janela fechada orienta aguardar o cliente sem oferecer modelo", () => {
+  render(<JanelaSelo provider="zernio_social" lastInboundAt={null} />);
+  expect(screen.getByText(/aguardando o cliente/)).toBeInTheDocument();
+  expect(screen.queryByText(/só modelo/)).not.toBeInTheDocument();
+});

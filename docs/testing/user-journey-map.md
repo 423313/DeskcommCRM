@@ -2014,3 +2014,14 @@ ausente, 409 para sessão já conectada e 429 para repetição. Sessão vazia de
 removida pelo fluxo de exclusão, após conferir zero histórico/vínculos; canal
 original permaneceu WORKING. Código gerado pelo transporte é coberto por teste
 de contrato; pareamento real por código ainda requer confirmação no celular.
+
+## Redes sociais nativas — 2026-09-15
+
+- [P0] Conexões → Redes sociais: credencial/perfil, contas e conexão sem expor chave.
+- [P0] Instagram/Facebook: habilitar recebimento, IA pausada, abrir Inbox existente.
+- [P0] Webhook de outra conta/rede, assinatura inválida e evento repetido não produzem resposta.
+- [P1] Conta sem DMs implementados informa a limitação; não oferece ativação fictícia.
+- [P1] Falha na assinatura do webhook fica visível e retenta com reconciliação por URL.
+- Evidência automatizada: `social/parser.test.ts`, `social/client.test.ts`, rota social,
+  `RedesSociaisClient.test.tsx`, invariante de banco `social-native.test.ts`.
+- QA visual e publicação: pendentes até registro da verificação final.
