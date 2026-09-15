@@ -212,7 +212,7 @@ atualizar a LP" — regra que não protege quem a escreve —, e sim:
    seção que chegou à `main` de outro jeito também aparece: a LP lê o arquivo, não as Releases
    do GitHub. Foi o que salvou a v1.20.0, cuja tag foi criada à mão e nunca ganhou Release.
 2. **O cabeçalho da seção é contrato.** `## [X.Y.Z] — AAAA-MM-DD`, subseções em `###`. O leitor
-   da LP (`lib/changelog.ts` em `deskcomm-site`) usa a mesma expressão que
+   da LP (`deskcomm-site/lib/changelog.ts`, outro repositório) usa a mesma expressão que
    `tests/unit/release-chega-na-lp.test.ts` cobra aqui. Mudar o formato é mudar os dois
    repositórios no mesmo movimento.
 3. **O corte confere a consequência.** O último passo do job `cortar-tag` —
