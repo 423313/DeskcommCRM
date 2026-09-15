@@ -1990,3 +1990,16 @@ Produto `7f1d0f3e`, integrado à main `ca895850`: as dez specs de organizações
 Evidência local preservada em `.superpowers/evidence/comunidade-360/final-qa-targeted-r4/` e log `.superpowers/sdd/comunidade-360/final-qa-targeted-r4.log`. A rodada inclui atualização concorrente da interface sem perder formulário, sugestão obsoleta sem confirmação antiga de sucesso e encerramento de suporte com retorno ao contexto original.
 
 Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos aprovados + 1 falha esperada; 184 arquivos de banco / 1.466 casos aprovados + 1 falha esperada e 1 ignorado, com INSTALL e UPDATE; tipos, lint (0 erros, 344 avisos) e build aprovados. `lint:channels`, validadores shell e conferência de release também passaram. Os checks remotos continuam sendo condição do merge pelo revisor da PR #613.
+
+### Conexão por código de pareamento — 2026-09-15
+
+[P0] Conexões → Conectar novo WhatsApp → Conectar por código → telefone com país
+e DDD → Gerar código → confirmação no celular → polling WORKING. Mesmo
+componente no onboarding. QR permanece disponível para retorno.
+
+Cobertura automatizada: `lib/channels/pairing-code.test.ts`,
+`app/api/v1/channel-sessions/[id]/pairing-code/route.test.ts`,
+`components/connections/PairingOptions.test.tsx`: contrato de transporte,
+isolamento da consulta, RBAC/MFA, arquivado, estados não pareáveis, rate limit,
+timeout, sanitização, formulário, geração explícita e retorno ao QR.
+Teste de componente/contrato não prova pareamento real no celular.
