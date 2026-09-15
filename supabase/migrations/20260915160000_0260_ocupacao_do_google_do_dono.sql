@@ -34,11 +34,15 @@
 --     do evento e a situação da conexão. Nenhum título, descrição, participante,
 --     id externo ou token. Quem decide o que ocupa continua sendo o TypeScript
 --     (`ocupadosDoDono`), por isso `transparency`/`status` vêm crus;
---   · `auth.uid() is null` é o `service_role` (ferramenta MCP, worker), o mesmo
---     desenho de `fn_google_coverage`, que já responde sobre o Google do dono a
---     qualquer membro. `anon` não chega: EXECUTE revogado das duas origens.
---   · `fn_is_platform_admin()` preserva o que a policy da conexão já dava ao
---     suporte da plataforma — sem ele, a troca tiraria acesso de alguém.
+--   · `auth.uid() is null` é chamada SEM `sub` no JWT — na prática o
+--     `service_role` (ferramenta MCP, worker): um JWT `authenticated` sem `sub`
+--     só se forja com o segredo, e quem o tem já tem o `service_role`. É o mesmo
+--     desenho de `fn_google_coverage`. `anon` não chega: EXECUTE revogado das
+--     duas origens.
+--   · `fn_is_platform_admin()` preserva, na função de CONEXÕES, o que a policy
+--     da conexão já dava ao suporte da plataforma. Na de OCUPAÇÃO o ramo não
+--     muda nada hoje (a view já filtra por pertencimento; medido pelo cético do
+--     lote 10: platform admin sem suporte lê 0 antes e depois).
 --
 -- A segunda função é a mesma pergunta sobre a CONEXÃO (`status`,
 -- `last_sync_at`), que decide `agendaExternaNuncaLida`: "não tem Google" e "tem

@@ -254,9 +254,11 @@ export async function horariosLivresDaOrg(
   //
   // A margem de ±1 dia é a mesma com que `horariosLivres` visita os dias
   // (`diaLocalISO(naoAntesDe - DIA)` … `diaLocalISO(naoDepoisDe + DIA)`): a
-  // borda de um dia local pode cair no dia UTC vizinho, e a coleta tem que
-  // trazer TODO dia que a grade vai perguntar — dia perguntado e ausente do mapa
-  // vira "sem exceção" e o bloqueio some em silêncio.
+  // borda de um dia local pode cair no dia UTC vizinho, e a coleta não fica
+  // mais estreita que a visita da grade. Hoje a margem é defesa, não conserto:
+  // os horários dos dias da margem já caem fora de `[naoAntesDe, naoDepoisDe]`
+  // (sem ela, a suíte fica verde — medido na revisão do lote 10). O que fecha
+  // o #878 é buscar pelo dia LOCAL, não a margem.
   const fusoDaRegra = leitura.jornada.timezone;
   const primeiroDiaDaRegra = diaLocalISO(new Date(params.de.getTime() - DIA), fusoDaRegra);
   const ultimoDiaDaRegra = diaLocalISO(new Date(params.ate.getTime() + DIA), fusoDaRegra);
