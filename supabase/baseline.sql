@@ -25050,8 +25050,9 @@ notify pgrst, 'reload schema';
 -- ocupação do colega. Restringir a policy ao dono da conexão apagaria a ocupação
 -- de todo mundo — consertaria a privacidade quebrando a agenda. O que o CRM usa de
 -- um evento de colega é ocupado/livre (`starts_at`, `ends_at`, `transparency`,
--- `status`); o título não tem consumidor nenhum, e há gate disso em
--- `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts`.
+-- `status`); o título não tem consumidor nenhum na tela, vigiado por
+-- `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (leituras pela tabela
+-- ou pela view) e por `tests/e2e/agenda-ocupacao-do-google-na-grade.spec.ts`.
 --
 -- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem
 -- `title`. Revogar coluna sem revogar a tabela não faz nada: privilégio de tabela
@@ -25070,13 +25071,25 @@ notify pgrst, 'reload schema';
 --
 -- ## O que este bloco NÃO faz, de propósito
 --
--- * Não apaga os títulos já gravados. O título continua sendo gravado pelo espelho
---   e existe para o dono da agenda (export de LGPD, relatório do titular); o que se
---   fecha é a LEITURA por outro membro. Apagar dado histórico é decisão do dono, e
+-- * Não apaga os títulos já gravados. O título continua sendo gravado pelo espelho;
+--   o que se fecha é a LEITURA por login de usuário — do colega e também do próprio
+--   dono, já que nenhuma tela o mostra. Apagar dado histórico é decisão do dono, e
 --   sai em migration própria — não de carona num conserto de permissão.
 -- * Não toca em `service_role` nem no dono do banco: o espelho (`fn_google_*`) e o
 --   worker seguem lendo e escrevendo o título como antes.
--- * Não concede nada a `anon`, que continua sem SELECT desde a 0108.
+-- * Não concede nada a `anon`, que continua sem privilégio nesta tabela desde a
+--   0177 (`revoke all … from anon`).
+--
+-- ## Para quem mexer depois
+--
+-- * O grant é por LISTA de colunas: coluna nova no espelho nasce SEM SELECT para
+--   `authenticated`. É o lado seguro, e é uma decisão — o invariante reprova até
+--   alguém escrever se ela é ocupação (entra no grant e na lista da view, que
+--   andam juntos, senão `select *` na view vira 42501) ou conteúdo pessoal.
+-- * Quem ler esta view de dentro de função não pode usar `begin atomic`: a
+--   dependência registrada no catálogo impede o `drop view` + `create view` deste
+--   bloco a cada update. `fn_agenda_ocupacao_google_do_dono` (0260) e
+--   `fn_google_counts_for_conflicts` são `language sql` sem `begin atomic`.
 
 revoke select on public.calendar_external_events from authenticated;
 

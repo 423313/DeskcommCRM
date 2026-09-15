@@ -26,9 +26,12 @@
 -- policy ao dono da conexão apagaria a ocupação de todo mundo — consertaria a
 -- privacidade quebrando a agenda. O que o CRM usa de um evento de colega é
 -- ocupado/livre (`starts_at`, `ends_at`, `transparency`, `status`); o `title`
--- não tem consumidor nenhum, e há gate disso em
--- `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (a tela da Agenda e a
--- rota de agendamentos não pedem a coluna).
+-- não tem consumidor nenhum na tela. Isso é vigiado do lado da tela por
+-- `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (as leituras da tela
+-- da Agenda e da rota de agendamentos, pela tabela ou pela view, não pedem a
+-- coluna) e por `tests/e2e/agenda-ocupacao-do-google-na-grade.spec.ts` (o título
+-- não aparece no texto nem no HTML da grade); do lado do banco, pela própria view
+-- sem `title`.
 --
 -- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem o
 -- `title`. Revogar a coluna sem revogar a tabela não faria nada: privilégio de
@@ -45,21 +48,23 @@
 -- daí o `drop` + `create` com lista explícita. A lista explícita é o conserto de
 -- fundo — `e.*` era a forma de a próxima coluna nascer exposta.
 --
--- ─── Onde o dono continua lendo o próprio título ────────────────────────────
+-- ─── Onde o título continua sendo lido ──────────────────────────────────────
 --
 -- No espelho: `service_role`, que esta migration não toca, segue gravando e
--- lendo o `title` (é o worker e são as `fn_google_*`). Nenhuma tela mostra o
--- título de um evento externo — o gate de tela citado acima é quem garante
--- isso —, então não há leitura de titular a preservar nos papéis do PostgREST;
--- se um dia houver uma tela do titular, ela nasce com função `security definer`
--- própria e o invariante muda junto, de propósito.
+-- lendo o `title` (é o worker e são as `fn_google_*`). Nenhum login de usuário
+-- lê o título depois dela — nem o colega, nem o próprio dono da conexão. Nenhuma
+-- tela mostra o título de um evento externo — os guardas de tela citados acima
+-- vigiam isso —, então não há leitura de titular a preservar nos papéis do
+-- PostgREST; se um dia houver uma tela do titular, ela nasce com função
+-- `security definer` própria e o invariante muda junto, de propósito.
 --
 -- ─── O que esta migration NÃO faz, de propósito ─────────────────────────────
 --
 -- * Não apaga os títulos já gravados. O dado do dono continua no espelho; o que
 --   se fecha é a LEITURA por outro membro. Apagar histórico é decisão do dono e
 --   sai em migration própria, não de carona num conserto de permissão.
--- * Não concede nada a `anon`, que segue sem SELECT desde a 0108.
+-- * Não concede nada a `anon`, que segue sem privilégio nesta tabela desde a
+--   0177 (`revoke all … from anon`).
 --
 -- ─── Forma ──────────────────────────────────────────────────────────────────
 --
@@ -67,6 +72,16 @@
 -- clone reaplica à vontade. O apêndice rotulado do `baseline.sql` traz o mesmo
 -- bloco para quem instala do zero. Vigiado por
 -- `tests/invariants/titulo-do-evento-pessoal-fora-do-alcance.test.ts`.
+--
+-- Duas consequências da forma, para quem mexer depois:
+-- * O grant é por LISTA de colunas: coluna nova no espelho nasce SEM SELECT para
+--   `authenticated`. É o lado seguro, e é uma decisão — o invariante reprova até
+--   alguém escrever se ela é ocupação (entra no grant e na lista da view, que
+--   andam juntos, senão `select *` na view vira 42501) ou conteúdo pessoal.
+-- * Quem ler esta view de dentro de função não pode usar `begin atomic`: a
+--   dependência registrada no catálogo impede o `drop view` + `create view` que
+--   o `update.sh` reaplica. `fn_agenda_ocupacao_google_do_dono` (0260) e
+--   `fn_google_counts_for_conflicts` são `language sql` sem `begin atomic`.
 
 revoke select on public.calendar_external_events from authenticated;
 
