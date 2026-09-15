@@ -23,7 +23,8 @@
  * na organização do `.e2e-creds.json`:
  *   • lead criado com a etiqueta `vip` ganha `prioridade` e vai para o gerente;
  *   • mensagem com "orçamento" etiqueta o contato;
- *   • a inscrição `active` chega ao nó de mensagem em 6 h. O contato de
+ *   • a inscrição `active` chega ao nó de mensagem em ~6 h, e a
+ *     `waiting_reply` segue por "sem resposta" em ~1 dia e meio. O contato de
  *     demonstração não tem conversa, e o que o motor faz com isso não foi medido.
  *
  * ─── Onde grava, e por que recusa destino remoto ────────────────────────────
@@ -53,6 +54,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -62,12 +64,11 @@ import {
 } from "./lib/automacoes-de-demonstracao";
 import { anunciarDestino, credenciaisSupabaseDeTeste, destinoEhLocal } from "./lib/env-de-teste";
 import {
-  GRAFO_DE_DEMONSTRACAO,
-  NO_ESPERA,
-  NO_FIM,
-  NO_INICIO,
-  NO_MENSAGEM,
-} from "./lib/grafo-de-demonstracao";
+  inscricoesDeDemonstracao,
+  PONTEIRO_DE_DEMONSTRACAO,
+  type InscricaoDeDemonstracao,
+} from "./lib/followups-de-demonstracao";
+import { GRAFO_DE_DEMONSTRACAO } from "./lib/grafo-de-demonstracao";
 
 // `process.env` VENCE o `.env.local` (ver scripts/lib/env-de-teste.ts).
 const credenciais = credenciaisSupabaseDeTeste();
@@ -90,7 +91,6 @@ const admin = createClient(credenciais.url, credenciais.serviceRole, {
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const HORA = 3_600_000;
-const DIA = 24 * HORA;
 
 interface Creds {
   org_id: string;
@@ -185,7 +185,7 @@ async function semearHistorico(
 // FOLLOW-UPS
 // ════════════════════════════════════════════════════════════════════════════
 
-const NOME_DO_FLUXO = "Retomada de contato (demonstração)";
+const NOME_DO_FLUXO = PONTEIRO_DE_DEMONSTRACAO.name;
 
 async function semearFluxo(orgId: string): Promise<{ pointerId: string; versionId: string }> {
   const { data: ponteiro } = await admin
@@ -223,11 +223,9 @@ async function semearFluxo(orgId: string): Promise<{ pointerId: string; versionI
     .from("followup_flow_pointers")
     .insert({
       organization_id: orgId,
-      name: NOME_DO_FLUXO,
+      ...PONTEIRO_DE_DEMONSTRACAO,
       status: "active",
       active_version_id: versionId,
-      handoff_policy: "pause",
-      trigger_config: { kind: "manual" },
     })
     .select("id")
     .single();
@@ -235,17 +233,10 @@ async function semearFluxo(orgId: string): Promise<{ pointerId: string; versionI
   return { pointerId: (novo as { id: string }).id, versionId };
 }
 
-/** Contatos próprios da demo — um por inscrição VIVA (ver o aviso abaixo). */
-const CONTATOS = [
-  { nome: "Follow-up · aguardando o relógio", telefone: "+5511970000101" },
-  { nome: "Follow-up · esperando resposta", telefone: "+5511970000102" },
-  { nome: "Follow-up · pausado por atendimento", telefone: "+5511970000103" },
-  { nome: "Follow-up · concluído", telefone: "+5511970000104" },
-];
-
-async function garantirContatos(orgId: string): Promise<string[]> {
+/** Um contato próprio por inscrição (ver o aviso abaixo). */
+async function garantirContatos(orgId: string, inscricoes: InscricaoDeDemonstracao[]): Promise<string[]> {
   const ids: string[] = [];
-  for (const c of CONTATOS) {
+  for (const { contato: c } of inscricoes) {
     const { data: existente } = await admin
       .from("contacts")
       .select("id")
@@ -293,6 +284,7 @@ async function semearInscricoes(
   orgId: string,
   pointerId: string,
   versionId: string,
+  inscricoes: InscricaoDeDemonstracao[],
   contatos: string[],
 ): Promise<number> {
   const { count } = await admin
@@ -302,69 +294,32 @@ async function semearInscricoes(
     .eq("pointer_id", pointerId);
   if ((count ?? 0) > 0) return 0; // já semeado
 
-  const comum = { organization_id: orgId, pointer_id: pointerId, version_id: versionId };
-  const linhas = [
-    {
-      ...comum,
-      contact_id: contatos[0]!,
-      current_node_id: NO_ESPERA,
-      status: "active",
-      next_eval_at: daqui(6 * HORA),
-      steps_taken: 1,
-    },
-    {
-      ...comum,
-      contact_id: contatos[1]!,
-      current_node_id: NO_MENSAGEM,
-      status: "waiting_reply",
-      next_eval_at: daqui(2 * DIA),
-      steps_taken: 2,
-    },
-    {
-      ...comum,
-      contact_id: contatos[2]!,
-      current_node_id: NO_MENSAGEM,
-      status: "paused_handoff",
-      next_eval_at: null,
-      steps_taken: 2,
-    },
-    {
-      ...comum,
-      contact_id: contatos[3]!,
-      current_node_id: NO_FIM,
-      status: "completed",
-      next_eval_at: null,
-      steps_taken: 3,
-      outcome: "exhausted",
-      completed_at: daqui(-3 * HORA),
-    },
-  ];
+  // Estado e trilha vêm de `scripts/lib/followups-de-demonstracao.ts`, onde o
+  // teste os reencena com o motor de verdade: sem trilha a tela de uma inscrição
+  // mostra estado sem história, e com trilha inventada mostra uma história que
+  // não aconteceu.
+  const linhas = inscricoes.map((inscricao, i) => ({
+    organization_id: orgId,
+    pointer_id: pointerId,
+    version_id: versionId,
+    contact_id: contatos[i]!,
+    ...inscricao.estado,
+  }));
 
-  const { data, error } = await admin.from("followup_enrollments").insert(linhas).select("id");
+  const { data, error } = await admin.from("followup_enrollments").insert(linhas).select("id, contact_id");
   if (error) throw new Error(`inscrições: ${error.message}`);
 
-  const criadas = (data ?? []) as { id: string }[];
-
-  // A trilha: sem ela a tela de uma inscrição mostra estado sem história, e
-  // "por que esta pessoa parou aqui?" fica sem resposta.
-  const eventos = criadas.flatMap((e, i) => [
-    {
+  const idPorContato = new Map(((data ?? []) as { id: string; contact_id: string }[]).map((e) => [e.contact_id, e.id]));
+  const eventos = inscricoes.flatMap((inscricao, i) => {
+    const enrollmentId = idPorContato.get(contatos[i]!);
+    if (!enrollmentId) throw new Error(`a inscrição de "${inscricao.contato.nome}" não voltou do insert`);
+    // `origem` documenta quem gravou o passo; a tabela não tem essa coluna.
+    return inscricao.passos(enrollmentId).map(({ origem: _origem, ...passo }) => ({
       organization_id: orgId,
-      enrollment_id: e.id,
-      node_id: NO_INICIO,
-      event_type: "enrolled",
-      payload: { origem: "seed" },
-      created_at: daqui(-(i + 2) * DIA),
-    },
-    {
-      organization_id: orgId,
-      enrollment_id: e.id,
-      node_id: NO_ESPERA,
-      event_type: "node_entered",
-      payload: { node_type: "wait" },
-      created_at: daqui(-(i + 1) * DIA),
-    },
-  ]);
+      enrollment_id: enrollmentId,
+      ...passo,
+    }));
+  });
   const { error: erroEventos } = await admin
     .from("followup_enrollment_events")
     .insert(eventos);
@@ -398,8 +353,9 @@ async function main(): Promise<void> {
   const runs = await semearHistorico(orgId, ruleIds, managerId);
 
   const { pointerId, versionId } = await semearFluxo(orgId);
-  const contatos = await garantirContatos(orgId);
-  const inscricoes = await semearInscricoes(orgId, pointerId, versionId, contatos);
+  const demonstracao = inscricoesDeDemonstracao(Date.now(), randomUUID());
+  const contatos = await garantirContatos(orgId, demonstracao);
+  const inscricoes = await semearInscricoes(orgId, pointerId, versionId, demonstracao, contatos);
 
   console.info(
     `\n✅ Seed de automações e follow-ups completo.` +

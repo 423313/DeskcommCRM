@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { flowGraphSchema } from "@/lib/followup/graph-schema";
-import {
-  GRAFO_DE_DEMONSTRACAO,
-  NO_ESPERA,
-  NO_FIM,
-  NO_INICIO,
-  NO_MENSAGEM,
-} from "../../scripts/lib/grafo-de-demonstracao";
+import { validateFlowForPublish } from "@/lib/followup/validate-publish";
+import { inscricoesDeDemonstracao } from "../../scripts/lib/followups-de-demonstracao";
+import { GRAFO_DE_DEMONSTRACAO, NO_ESPERA } from "../../scripts/lib/grafo-de-demonstracao";
 
 /**
  * O GRAFO DA DEMONSTRAÇÃO TEM QUE ABRIR.
@@ -53,13 +49,24 @@ describe("grafo de demonstração do follow-up", () => {
     expect(esperaCurta.success, "30s está abaixo do piso de 300.000 ms").toBe(false);
   });
 
-  it("os ids que as inscrições apontam existem no grafo", () => {
-    // O seed grava `current_node_id` com estes ids. Um id renomeado no grafo e
-    // não no seed produz inscrição apontando para um nó que não existe — e o
-    // motor não tem para onde avançar.
+  it("o construtor PUBLICARIA este grafo", () => {
+    // O seed grava a versão direto, sem passar pelo publish. Um grafo que o
+    // publish recusa (saída de um nó sem aresta, espera curta demais) abriria no
+    // construtor com erro e não poderia ser republicado depois de uma edição.
+    const r = validateFlowForPublish(flowGraphSchema.parse(GRAFO_DE_DEMONSTRACAO));
+    expect(r.ok ? null : JSON.stringify(r.errors, null, 2)).toBeNull();
+  });
+
+  it("os ids que as inscrições e a trilha delas apontam existem no grafo", () => {
+    // O seed grava `current_node_id` e o `node_id` de cada passo com estes ids.
+    // Um id renomeado no grafo e não no seed produz inscrição apontando para um
+    // nó que não existe — e o motor não tem para onde avançar.
     const ids = new Set(GRAFO_DE_DEMONSTRACAO.nodes.map((n) => n.id));
-    for (const id of [NO_INICIO, NO_ESPERA, NO_MENSAGEM, NO_FIM]) {
-      expect(ids.has(id), `o nó "${id}" saiu do grafo e o seed ainda o usa`).toBe(true);
+    for (const inscricao of inscricoesDeDemonstracao(Date.now(), "evento")) {
+      const usados = [inscricao.estado.current_node_id, ...inscricao.passos("inscricao").map((p) => p.node_id)];
+      for (const id of usados) {
+        expect(ids.has(id), `"${inscricao.contato.nome}" usa o nó "${id}", que não está no grafo`).toBe(true);
+      }
     }
   });
 
