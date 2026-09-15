@@ -24811,3 +24811,48 @@ create trigger trg_platform_settings_touch
   for each row execute function public.fn_touch_updated_at();
 
 notify pgrst, 'reload schema';
+
+-- ---- O App da Meta sai do `.env` e vira linha da INSTALAÇÃO (migration 0255) ----
+--
+-- O App Secret e o verify token do webhook são do APP, e um App da Meta atende N
+-- WABAs de N organizações: não há o que separar por tenant. Antes disto os dois
+-- viviam no `.env` (SSH em quem instalou), e a partir do 2º número não havia como
+-- configurar o app sem mexer no que já funcionava (issue #850, fatia F3).
+--
+-- Mesmo desenho de `platform_google_oauth` (0201): uma linha só, RLS ligada SEM
+-- policies, `anon`/`authenticated` revogados e leitura/escrita pelo `service_role`
+-- atrás do gate administrativo. O `revoke` é obrigatório porque o
+-- `alter default privileges` do topo deste arquivo concede tabela nova a `anon` e
+-- `authenticated`.
+--
+-- O `.env` NÃO é apagado: ele é o piso de rollback (código novo sobre banco que
+-- ainda não aplicou esta migration) e a rota de verificação do webhook lê o banco
+-- primeiro. As duas fontes não se misturam.
+create table if not exists public.platform_meta_app (
+  id smallint primary key default 1,
+  app_secret_encrypted bytea,
+  verify_token_encrypted bytea,
+  verify_token_created_at timestamptz,
+  updated_at timestamptz not null default now(),
+  updated_by uuid,
+  constraint platform_meta_app_singleton check (id = 1)
+);
+
+comment on table public.platform_meta_app is
+  'O App da Meta DESTA INSTALAÇÃO (singleton): App Secret que assina a entrega do webhook e verify token que responde ao handshake. Server-side only: RLS ligada sem policies e grants revogados de anon/authenticated — o PostgREST não a serve. Nenhum dos dois segredos volta ao browser; a tela devolve apenas se existem.';
+comment on column public.platform_meta_app.app_secret_encrypted is
+  'Cifrado por fn_encrypt_oauth (pgp_sym_encrypt/aes256). Nunca gravar em claro: sem a chave mestra o save recusa. Quem tem este valor assina uma entrega de webhook válida com dados inventados.';
+comment on column public.platform_meta_app.verify_token_encrypted is
+  'Cifrado por fn_encrypt_oauth. Gerado pelo SERVIDOR (32 bytes de CSPRNG) e exibido UMA vez: não há leitura que o devolva em claro — quem perde o valor usa a rotação da tela. Um token escolhido à mão ("deskcomm", o nome da empresa) é adivinhável, e quem o acerta passa a receber o tráfego do webhook.';
+comment on column public.platform_meta_app.verify_token_created_at is
+  'Quando o verify token em vigor nasceu. A tela mostra a data para quem acabou de rotacionar saber se o valor colado no painel da Meta é o novo.';
+
+alter table public.platform_meta_app enable row level security;
+
+revoke all on public.platform_meta_app from anon, authenticated;
+grant select, insert, update on public.platform_meta_app to service_role;
+
+drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_app;
+create trigger trg_platform_meta_app_updated_at
+  before update on public.platform_meta_app
+  for each row execute function public.fn_set_updated_at();
