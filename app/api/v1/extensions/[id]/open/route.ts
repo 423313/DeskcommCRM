@@ -8,6 +8,7 @@ import {
 } from "@/lib/extensions/http";
 import { extensionRequestJson, openRequestSchema } from "@/lib/extensions/requests";
 import { loadExtensionGuide } from "@/lib/extensions/service";
+import { requireSupportWrite } from "@/lib/impersonate/support";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ export async function POST(
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   try {
+    const denied = await requireSupportWrite();
+    if (denied) return denied;
     const authz = await requireRole("viewer", { resource: "organization_extensions" });
     if (!authz.ok) return authz.response;
     requireExtensionOrganization(request, authz.org.orgId);
