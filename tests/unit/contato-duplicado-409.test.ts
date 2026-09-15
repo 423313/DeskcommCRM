@@ -13,8 +13,11 @@
  * organização estoura; em outra organização, passa.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
+import { requireRole } from "@/lib/auth/require-role";
 import { canonicalPhoneBR, phoneLookupVariants } from "@/lib/channels/phone-variants";
+import { createClient } from "@/lib/supabase/server";
 
 const auditSpy = vi.fn(async () => undefined);
 
@@ -23,6 +26,12 @@ vi.mock("@/lib/audit", () => ({
   isServiceRoleConfigured: () => false,
   hashEmail: (e: string) => e,
 }));
+
+// Só as fronteiras da rota são dubladas — sessão, cookie e o guarda de
+// acompanhamento. O handler e o `fail()` que monta o corpo são os de verdade.
+vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 
 const ORG = "c05e7a00-0000-4000-8000-000000000001";
 const OUTRA_ORG = "c05e7a00-0000-4000-8000-000000000002";
@@ -285,5 +294,62 @@ describe("createContactHandler — telefone repetido (fatia S1 da #852)", () => 
     expect(erro).toMatchObject({ status: 500, code: "internal_error" });
     // Não é 23505: nem chega a procurar contato pelo telefone.
     expect(buscas).toEqual([]);
+  });
+});
+
+/**
+ * Os casos acima chamam `createContactHandler` direto, e por isso não enxergam
+ * a metade do conserto que mora na rota: o `catch` de `POST` precisa repassar
+ * `err.details` ao `fail()`. Sem esse repasse, o handler lança o 409 com o
+ * `contact_id` e o cliente recebe `{ error: { code, message } }` — o id some
+ * no caminho. Medido na revisão do PR: devolver a rota à versão da base deixava
+ * verdes os 7 arquivos / 38 casos rodados. Este caso atravessa `POST` de
+ * verdade e lê o corpo que a tela lê.
+ */
+describe("POST /api/v1/contacts — o 409 chega inteiro ao corpo da resposta", () => {
+  // A rota valida E.164; a forma canônica dele é a que o índice guarda.
+  const TELEFONE_E164 = "+5532984793302";
+
+  beforeEach(() => {
+    vi.mocked(requireRole).mockResolvedValue({
+      ok: true,
+      user: {
+        id: USUARIO,
+        email: "agente@example.com",
+        full_name: null,
+        avatar_url: null,
+        is_platform_admin: false,
+        idioma: "pt-BR" as const,
+        organizations: [{ organization_id: ORG, organization_name: "Org", role: "agent" }],
+      },
+      org: { orgId: ORG, name: "Org", role: "agent" },
+    });
+  });
+
+  it("telefone repetido: status 409, error.code contact_exists e error.details.contact_id do contato existente", async () => {
+    vi.mocked(createClient).mockResolvedValue(
+      clienteFalso({
+        contatos: [{ id: EXISTENTE, organization_id: ORG, phone_number: canonicalPhoneBR(TELEFONE_E164) }],
+      }) as never,
+    );
+    const { POST } = await import("@/app/api/v1/contacts/route");
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/v1/contacts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Ana", phone_number: TELEFONE_E164 }),
+      }),
+    );
+
+    expect(res.status).toBe(409);
+    const corpo = (await res.json()) as {
+      error: { code: string; message: string; details?: Record<string, unknown> };
+    };
+    expect(corpo.error.code).toBe("contact_exists");
+    expect(corpo.error.details).toEqual({ contact_id: EXISTENTE });
+    // É esta frase que o toast mostra: `contact_exists` não tem entrada própria
+    // em `components/feedback/ApiErrorToast.tsx`, então passa o texto da rota.
+    expect(corpo.error.message).toBe("Já existe um contato com este telefone.");
   });
 });
