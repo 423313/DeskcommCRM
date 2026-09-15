@@ -66,16 +66,18 @@ function operation({
   id = RECEIPT.id,
   organizationId = ORG_A,
   kind = "install",
+  status = "completed",
 }: {
   id?: string;
   organizationId?: string | null;
   kind?: ExtensionOperationView["kind"];
+  status?: ExtensionOperationView["status"];
 } = {}): ExtensionOperationView {
   return {
     id,
     organization_id: organizationId,
     kind,
-    status: "completed",
+    status,
     catalog_id: null,
     installation_id: INSTALLATION,
     publisher: "equipe-exemplo",
@@ -442,6 +444,39 @@ describe("ExtensionsManager", () => {
         configuration: { density: "compact", show_description: false },
       }),
     );
+  });
+
+  it("Verificar instalação retoma o MESMO recibo: nada de segundo pedido com chave nova", async () => {
+    const preparando = {
+      ...operation({ kind: "install", status: "preparing" }),
+      // A retomada só reenvia com a identidade completa do pedido preparado.
+      catalog_id: "00000000-0000-4000-8000-000000000009",
+      installation_id: null,
+    };
+    const emPreparo = list(ORG_A, { operations: [preparando] });
+    const chaves: string[] = [];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: emPreparo }))
+      .mockResolvedValueOnce(json({ data: preparando }))
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+        chaves.push(new Headers(init?.headers).get("Idempotency-Key") ?? "");
+        return Promise.resolve(json({ data: operation({ kind: "install", status: "completed" }) }));
+      })
+      .mockResolvedValue(json({ data: list() }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByTestId(`extension-operation-verify-${preparando.id}`));
+
+    await waitFor(() => expect(chaves).toHaveLength(1));
+    // A retomada usa a identidade do recibo, e não uma chave nova — é o que impede a
+    // preparação interrompida de virar uma segunda instalação.
+    expect(chaves[0]).toBe(preparando.id);
+    const [url, init] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect(String(url)).toContain("/api/v1/extensions/install");
+    expect((init.method ?? "GET").toUpperCase()).toBe("POST");
   });
 
   it("sincroniza recibo criado por outra aba", async () => {

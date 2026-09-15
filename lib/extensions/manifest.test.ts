@@ -188,6 +188,39 @@ describe("manifesto declarativo", () => {
     ).toThrow(ExtensionError);
   });
 
+  it.each([
+    ["maiúscula e espaço", "Primeiro Passo"],
+    ["barra, que muda o caminho da URL", "passo/../outro"],
+    ["vazio", ""],
+    ["gigante", "a".repeat(20_000)],
+  ])("recusa id de card com %s", async (_caso, id) => {
+    // O id vai para a URL do guia (`?card=`) e para o data-testid. Texto livre aqui
+    // rendia link de 20 kB (431 no servidor) e id que não identifica nada.
+    await expectCode(
+      () =>
+        parseManifest(
+          manifestBytes({
+            ...manifest,
+            contributions: {
+              crm_cards: [{ ...manifest.contributions.crm_cards[0]!, id }],
+            },
+          }),
+        ),
+      "extension_invalid_package",
+    );
+  });
+
+  it("recusa dois cards com o mesmo id", async () => {
+    const card = manifest.contributions.crm_cards[0]!;
+    await expectCode(
+      () =>
+        parseManifest(
+          manifestBytes({ ...manifest, contributions: { crm_cards: [card, { ...card }] } }),
+        ),
+      "extension_invalid_package",
+    );
+  });
+
   it.each(["", "   ", "\n\t"])("recusa texto localizado vazio %j sem normalizar bytes", (title) => {
     expect(() =>
       parseManifest(

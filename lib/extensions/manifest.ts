@@ -153,7 +153,9 @@ const manifestSchema: z.ZodType<ExtensionManifest> = z
           .array(
             z
               .object({
-                id: z.string(),
+                // O id vai para a URL do guia (`?card=`) e para o data-testid: mesma forma de
+                // slug do publicador e do nome, e não texto livre.
+                id: slugSchema,
                 title: localizedTextSchema(EXTENSION_LIMITS.titleCharacters),
                 description: localizedTextSchema(EXTENSION_LIMITS.descriptionCharacters),
                 icon: iconSchema,
@@ -176,7 +178,13 @@ const manifestSchema: z.ZodType<ExtensionManifest> = z
               })
               .strict(),
           )
-          .max(EXTENSION_LIMITS.cards),
+          .max(EXTENSION_LIMITS.cards)
+          // Dois cards com o mesmo id dariam dois links idênticos e um destino ambíguo.
+          .superRefine((cards, ctx) => {
+            if (new Set(cards.map((card) => card.id)).size !== cards.length) {
+              ctx.addIssue({ code: "custom", message: "id de card repetido" });
+            }
+          }),
       })
       .strict(),
   })
