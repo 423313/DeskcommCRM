@@ -25085,12 +25085,16 @@ notify pgrst, 'reload schema';
 --
 -- ## O que este bloco NÃO faz, de propósito
 --
--- * Não apaga os títulos já gravados. O título continua sendo gravado pelo espelho;
---   o que se fecha é a LEITURA por login de usuário — do colega e também do próprio
---   dono, já que nenhuma tela o mostra. Apagar dado histórico é decisão do dono, e
---   sai em migration própria — não de carona num conserto de permissão.
--- * Não toca em `service_role` nem no dono do banco: o espelho (`fn_google_*`) e o
---   worker seguem lendo e escrevendo o título como antes.
+-- * Não apaga os títulos que sobraram de sincronizações anteriores à v1.17.0. Desde
+--   a 0225 o sincronizador grava `title` nulo (`fn_google_calendar`, ação `item`:
+--   `null` no insert e `set title=null` no `on conflict`, que zera o que encontra),
+--   mas a 0225 não anulou as linhas antigas. O que se fecha é a LEITURA por login de
+--   usuário — do colega e também do próprio dono, já que nenhuma tela o mostra.
+--   Anular o resíduo é decisão do dono, e sai em migration própria — não de carona
+--   num conserto de permissão.
+-- * Não toca em `service_role` nem no dono do banco: `service_role` mantém
+--   SELECT/UPDATE na coluna, e nenhuma função lê o título (a única que o menciona é
+--   `fn_google_calendar`, para gravá-lo nulo).
 -- * Não concede nada a `anon`, que continua sem privilégio nesta tabela desde a
 --   0177 (`revoke all … from anon`).
 --

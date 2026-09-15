@@ -36,7 +36,7 @@ describe("o tipo da view de ocupação do Google", () => {
     expectTypeOf<LinhaDaView>().toHaveProperty("connection_id");
   });
 
-  it("a tabela do espelho continua com `title` — o service_role grava e lê", () => {
+  it("a tabela do espelho continua com a coluna `title` — service_role mantém SELECT/UPDATE nela, e o sincronizador a grava nula", () => {
     expectTypeOf<LinhaDaTabela>().toHaveProperty("title");
   });
 });

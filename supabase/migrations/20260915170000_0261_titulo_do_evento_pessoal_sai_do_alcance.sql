@@ -69,11 +69,20 @@
 -- daí o `drop` + `create` com lista explícita. A lista explícita é o conserto de
 -- fundo — `e.*` era a forma de a próxima coluna nascer exposta.
 --
--- ─── Onde o título continua sendo lido ──────────────────────────────────────
+-- ─── Quem ainda alcança o título ────────────────────────────────────────────
 --
--- No espelho: `service_role`, que esta migration não toca, segue gravando e
--- lendo o `title` (é o worker e são as `fn_google_*`). Nenhum login de usuário
--- lê o título depois dela — nem o colega, nem o próprio dono da conexão. Nenhuma
+-- `service_role`, que esta migration não toca, mantém SELECT/UPDATE na coluna.
+-- Mas o produto não grava nem lê nome nenhum nessa coluna: desde a 0225 (v1.17.0,
+-- PR #613) o sincronizador grava `title` NULO — `fn_google_calendar`, ação
+-- `item`, insere `null` e, no `on conflict`, faz `set title=null`, zerando o que
+-- encontra; o executor (`lib/agenda/google/calendar-executor.ts`) já manda
+-- `title: null` — e nenhuma função do banco lê a coluna (a única que a menciona é
+-- essa, para gravá-la nula). O invariante prende isso: como `service_role`, o
+-- sincronizador grava dois eventos com `title` no payload e o espelho fica com
+-- os dois títulos nulos.
+--
+-- Nenhum login de usuário lê o título depois desta migration — nem o colega, nem
+-- o próprio dono da conexão. Nenhuma
 -- tela mostra o título de um evento externo — os guardas de tela citados acima
 -- vigiam isso —, então não há leitura de titular a preservar nos papéis do
 -- PostgREST; se um dia houver uma tela do titular, ela nasce com função
@@ -81,8 +90,9 @@
 --
 -- ─── O que esta migration NÃO faz, de propósito ─────────────────────────────
 --
--- * Não apaga os títulos já gravados. O dado do dono continua no espelho; o que
---   se fecha é a LEITURA por outro membro. Apagar histórico é decisão do dono e
+-- * Não apaga os títulos que sobraram de sincronizações anteriores à v1.17.0 (a
+--   0225 deixou de gravá-los, mas não anulou os que já estavam lá). O que se
+--   fecha é a LEITURA por login de usuário. Anular o resíduo é decisão do dono e
 --   sai em migration própria, não de carona num conserto de permissão.
 -- * Não concede nada a `anon`, que segue sem privilégio nesta tabela desde a
 --   0177 (`revoke all … from anon`).

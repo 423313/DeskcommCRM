@@ -12,8 +12,9 @@ import { describe, expect, it } from "vitest";
  * base a regra é conhecida — mecanismo protege, prosa é intenção.
  *
  * ─── A decisão, e ela é medida ───────────────────────────────────────────────
- * `calendar_external_events.title` EXISTE e nós o gravamos. O que não pode é
- * chegar à tela: a agenda conectada é PESSOAL de quem atende e a tela da Agenda
+ * `calendar_external_events.title` EXISTE, e guarda nome em linhas gravadas antes
+ * da v1.17.0 (desde a migration 0225 o sincronizador grava o título nulo e zera
+ * o que encontra). O que não pode é chegar à tela: a agenda conectada é PESSOAL de quem atende e a tela da Agenda
  * é multi-tenant, vista por gestor. "Consulta médica", "terapia", "entrevista de
  * emprego" apareceriam para o chefe.
  *
@@ -155,7 +156,7 @@ describe("a ocupação do Google não leva o nome do evento para a tela", () => 
       "A tela da Agenda passou a pedir o `title` do evento externo. A agenda conectada é " +
         "PESSOAL de quem atende e esta tela é multi-tenant, vista por gestor: o nome de um " +
         "compromisso particular — 'consulta médica', 'terapia', 'entrevista' — apareceria " +
-        "para o chefe. A coluna existe e nós a gravamos; o que não pode é ela atravessar " +
+        "para o chefe. A coluna existe e guarda nome de sincronizações antigas; o que não pode é ela atravessar " +
         "para cá. Se a decisão mudou, ela é POR ORGANIZAÇÃO e com aviso de quem vê, e este " +
         "teste muda junto — de propósito, para a decisão ser tomada por gente.",
     ).toEqual([]);
