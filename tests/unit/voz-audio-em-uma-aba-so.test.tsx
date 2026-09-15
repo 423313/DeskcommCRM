@@ -345,6 +345,9 @@ describe("o painel percebe o fim mesmo sem o aviso do tempo real", () => {
     await entregar(conectada());
     expect(result.current.call?.status).toBe("connected");
 
+    // Só as consultas DA CONFERÊNCIA contam: a carga da página, com a marca da
+    // aba, já busca pelo id — medir "alguma consulta com id" acertava por sorte.
+    espiao.get.mockClear();
     espiao.get.mockResolvedValue({ data: [linha({ status: "ended" })] });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(RECONCILIAR_CHAMADA_MS);
@@ -352,7 +355,9 @@ describe("o painel percebe o fim mesmo sem o aviso do tempo real", () => {
     await assentar();
     expect(result.current.call, "painel fantasma: o banco disse ended e a tela não soube").toBeNull();
     // Pelo id: entre "as 5 mais recentes" a ligação sai da janela num escritório movimentado.
-    expect(espiao.get.mock.calls.some((c) => String(c[0]).includes(`id=${CHAMADA}`))).toBe(true);
+    const daConferencia = espiao.get.mock.calls.map((c) => String(c[0]));
+    expect(daConferencia.length).toBeGreaterThan(0);
+    expect(daConferencia.every((u) => u.includes(`id=${CHAMADA}`)), daConferencia.join(" | ")).toBe(true);
     expect(trilhas.every((t) => t.stop.mock.calls.length > 0)).toBe(true);
   });
 
