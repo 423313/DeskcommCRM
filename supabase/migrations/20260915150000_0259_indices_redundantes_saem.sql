@@ -6,10 +6,17 @@
 -- cliente. A varredura do baseline confirmou o caso e achou mais dois do mesmo
 -- feitio — índice cujo trabalho JÁ é feito por outro, integralmente.
 --
--- Índice redundante não é neutro: ele custa em TODO insert e update da tabela,
--- ocupa disco, e entra no cálculo do planner sem nunca ser a melhor escolha.
--- Numa VPS de 1 vCPU e disco pequeno — que é o alvo do kit self-host — isso é
--- pago todo dia por ninguém.
+-- Índice redundante não é neutro: ele custa em TODO insert e update da tabela e
+-- ocupa disco. Numa VPS de 1 vCPU e disco pequeno — que é o alvo do kit
+-- self-host — isso é pago todo dia.
+--
+-- Não é verdade que o planner os ignorava. Os dois de prefixo (casos 2 e 3)
+-- são menores, e quando existem ele os PREFERE. Medido em pg17, 20 000 vínculos
+-- em 2 000 leads, busca por `lead_id`: com os dois índices, `Bitmap Index Scan`
+-- no de uma coluna (216 kB, custo 4,36); só com o largo, o mesmo plano no de
+-- quatro (1464 kB, custo 4,49; total 39,00 → 39,13). A busca segue servida por
+-- índice; troca-se um índice menor na leitura por um índice a menos em toda
+-- escrita.
 --
 -- ─── Os três, e por que cada um é redundante ────────────────────────────────
 --
@@ -32,16 +39,18 @@
 --    `calendar_connections_conta_key (organization_id, user_id, provider,
 --    account_email)`. Mesmo argumento de prefixo.
 --
--- ─── Por que o caso 1 vai dentro de um guard ────────────────────────────────
+-- ─── Por que cada drop vai dentro de um guard ───────────────────────────────
 --
--- Só é seguro derrubar o índice se a constraint estiver LÁ. Num clone onde a
+-- Só é seguro derrubar o índice se o substituto estiver LÁ. Num clone onde a
 -- `ai_models_unique` tenha sido removida à mão, o índice da 0127 é a única coisa
 -- impedindo dois cadastros do mesmo modelo — derrubá-lo abriria a porta para a
--- duplicata que a 0127 foi criada para fechar. O `DO` confere antes de agir.
+-- duplicata que a 0127 foi criada para fechar.
 --
--- Os casos 2 e 3 não precisam de guard: `drop index if exists` sobre um índice
--- que já não existe é silencioso, e o índice que os cobre é declarado no mesmo
--- baseline, alguns blocos acima.
+-- Os casos 2 e 3 pedem o mesmo cuidado, e o argumento "o índice largo é
+-- declarado no mesmo baseline" não bastava: DECLARADO não é EXISTE. O
+-- `update.sh` roda sem `ON_ERROR_STOP`, então uma criação que falhou em silêncio
+-- num clone deixaria a tabela sem índice nenhum para a busca. O `DO` confere o
+-- substituto antes de cada drop.
 
 do $$
 begin
@@ -52,7 +61,20 @@ begin
   ) then
     drop index if exists public.ai_models_provider_model_unique;
   end if;
-end $$;
 
-drop index if exists public.idx_crm_lead_links_lead;
-drop index if exists public.calendar_connections_org_pessoa_idx;
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'crm_lead_links'
+       and indexname = 'uniq_crm_lead_links_lead_target_link'
+  ) then
+    drop index if exists public.idx_crm_lead_links_lead;
+  end if;
+
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'calendar_connections'
+       and indexname = 'calendar_connections_conta_key'
+  ) then
+    drop index if exists public.calendar_connections_org_pessoa_idx;
+  end if;
+end $$;
