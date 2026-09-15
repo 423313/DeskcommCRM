@@ -25116,10 +25116,11 @@ notify pgrst, 'reload schema';
 --   alguém escrever se ela vai ao alcance do membro (entra no grant e na lista da
 --   view, que andam juntos, senão `select *` na view vira 42501) ou não. Estar no
 --   grant não quer dizer "não é pessoal": ver `external_calendar_id`, acima.
--- * Quem ler esta view de dentro de função não pode usar `begin atomic`: a
+-- * Quem LER esta view de dentro de função não pode usar `begin atomic`: a
 --   dependência registrada no catálogo impede o `drop view` + `create view` deste
---   bloco a cada update. `fn_agenda_ocupacao_google_do_dono` (0260) e
---   `fn_google_counts_for_conflicts` são `language sql` sem `begin atomic`.
+--   bloco a cada update. Hoje o único leitor é `fn_agenda_ocupacao_google_do_dono`
+--   (0260), `language sql` sem `begin atomic`. `fn_google_counts_for_conflicts`
+--   não é leitora — é a view que a chama, e essa direção não trava o `drop`.
 
 revoke select on public.calendar_external_events from authenticated;
 
