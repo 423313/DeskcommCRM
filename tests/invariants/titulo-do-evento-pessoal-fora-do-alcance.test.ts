@@ -159,6 +159,48 @@ const LEITURA_DA_TELA = `
 /** Marcador das linhas de resultado: a saída do psql traz também BEGIN, SET, GRANT… */
 const MARCA = "SONDA|";
 
+/** A agenda `pessoal` do `DONO` no catálogo — o que o sincronizador reserva para ler. */
+const CALENDARIO = "02610000-0000-4000-8000-0000000000d1";
+const CATALOGO_DO_DONO = `
+  insert into public.calendar_connection_calendars
+    (id, organization_id, connection_id, external_calendar_id, name, counts_for_conflicts, access_role)
+    values ('${CALENDARIO}', '${ORG}', '${CONEXAO}', 'pessoal', 'Pessoal', true, 'owner');
+`;
+
+/**
+ * O caminho de produção que escreve e apaga no espelho, como `service_role`:
+ * reservar a agenda (`claim`), gravar dois eventos lidos do Google — um que já
+ * existe com título residual, um novo — cada um COM `title` no payload (o
+ * `summary` que o Google manda), e depois o `delete` da desconexão.
+ *
+ * O `\gset` guarda a reserva numa variável do psql, como o executor guarda o
+ * `claim` entre as chamadas.
+ */
+const SINCRONIZA_E_DESCONECTA_COMO_SERVICE_ROLE = `
+  reset role;
+  set local role service_role;
+  select '${MARCA}' || 'papel=' || current_user;
+  select '${MARCA}' || 'coluna=' ||
+    has_column_privilege('service_role', 'public.calendar_external_events', 'title', 'SELECT')::text || ',' ||
+    has_column_privilege('service_role', 'public.calendar_external_events', 'title', 'UPDATE')::text;
+  select public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'claim') -> 'claim' as reserva \\gset
+  select public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'item', jsonb_build_object(
+    'claim', :'reserva'::jsonb,
+    'item', jsonb_build_object('external_event_id', 'ev-0261', 'title', '${TITULO} (do Google)',
+      'starts_at', now() + interval '1 day', 'ends_at', now() + interval '1 day 1 hour', 'status', 'confirmed')));
+  select public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'item', jsonb_build_object(
+    'claim', :'reserva'::jsonb,
+    'item', jsonb_build_object('external_event_id', 'ev-0261-novo', 'title', 'Entrevista de emprego',
+      'starts_at', now() + interval '2 days', 'ends_at', now() + interval '2 days 1 hour', 'status', 'confirmed')));
+  select '${MARCA}' || 'espelho=' ||
+    string_agg(external_event_id || ':' || coalesce(title, '(nulo)'), ',' order by external_event_id)
+    from public.calendar_external_events where connection_id = '${CONEXAO}';
+  delete from public.calendar_external_events
+   where organization_id = '${ORG}' and connection_id in ('${CONEXAO}');
+  select '${MARCA}' || 'depois_de_desconectar=' || count(*)::text
+    from public.calendar_external_events where connection_id = '${CONEXAO}';
+`;
+
 /**
  * Roda `corpo` numa transação desfeita e devolve as linhas marcadas com `MARCA`,
  * sem a marca, na ordem em que saíram.
@@ -283,27 +325,60 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     expect(erro).toContain('column "title" does not exist');
   });
 
-  it("o espelho do dono fica inteiro: service_role segue lendo e gravando o título", () => {
-    // O que a 0261 fecha é a LEITURA por outro membro, não o dado do dono.
-    // Apagar título é decisão do dono, em migration própria.
-    const [espelho, gravou] = sondasDesfeitas(`
+  it("o bloco não fecha o espelho para quem o mantém: como service_role, o sincronizador grava a ocupação — com o título NULO, zerando o que encontra — e a desconexão apaga", () => {
+    // O que a 0261 fecha é a LEITURA por login de usuário. Quem ESCREVE no
+    // espelho é o sincronizador, pela `fn_google_calendar` chamada como
+    // `service_role` (`lib/agenda/google/calendar-executor.ts`); quem APAGA é a
+    // desconexão, pelo admin client (`app/api/v1/agenda/google/desconectar`).
+    // As duas coisas rodam aqui SOB `set local role service_role` — e não como o
+    // superusuário do harness, que é quem `sql()` usa. O caso de baixo é o
+    // controle de que é o papel que está sendo medido.
+    //
+    // E o caso prende a premissa que a prosa da 0261 usa para dizer o alcance: o
+    // sincronizador NÃO grava o nome desde a 0225 (v1.17.0), e o `on conflict`
+    // ZERA o título que encontra. A fixture traz o título à mão, como uma linha
+    // gravada pelo cron anterior à v1.17.0 — que é o único lugar onde ele existe.
+    const linhas = sondasDesfeitas(`
       ${FIXTURE}
+      ${CATALOGO_DO_DONO}
       ${blocoDa0261()}
-      select '${MARCA}' || has_column_privilege(
-        'service_role', 'public.calendar_external_events', 'title', 'SELECT')::text || ',' ||
-        has_column_privilege('service_role', 'public.calendar_external_events', 'title', 'UPDATE')::text;
-      insert into public.calendar_external_events
-        (id, organization_id, connection_id, external_calendar_id, external_event_id,
-         title, starts_at, ends_at)
-        values ('02610000-0000-4000-8000-0000000000e2', '${ORG}', '${CONEXAO}', 'pessoal', 'ev-0261-2',
-                '${TITULO} (espelho)', now() + interval '2 days', now() + interval '2 days 1 hour')
-        on conflict (id) do update set title = excluded.title;
-      select '${MARCA}' || 'gravadas=' || count(*)::text
-        from public.calendar_external_events
-       where connection_id = '${CONEXAO}' and title like '${TITULO}%';
+      ${SINCRONIZA_E_DESCONECTA_COMO_SERVICE_ROLE}
     `);
-    expect(espelho, "o espelho perdeu o título para o service_role").toBe("true,true");
-    expect(gravou, "o espelho deixou de gravar o título").toBe("gravadas=2");
+    expect(linhas, "o espelho deixou de ser mantido pelo service_role, ou o sincronizador voltou a gravar o nome").toEqual([
+      "papel=service_role",
+      "coluna=true,true",
+      "espelho=ev-0261:(nulo),ev-0261-novo:(nulo)",
+      "depois_de_desconectar=0",
+    ]);
+  });
+
+  it("controle do caso acima: sem o privilégio do service_role, a mesma sequência é recusada — o papel medido é o real", () => {
+    // Sem este caso, o de cima ficaria verde rodando como superusuário, que
+    // passa por cima de qualquer `revoke` — foi assim que a versão anterior dele
+    // afirmava "o service_role grava" com um INSERT feito pelo `postgres`.
+    const semChamada = erroDo(`
+      begin;
+      ${FIXTURE}
+      ${CATALOGO_DO_DONO}
+      ${blocoDa0261()}
+      revoke execute on function public.fn_google_calendar(uuid, uuid, text, jsonb) from service_role;
+      ${SINCRONIZA_E_DESCONECTA_COMO_SERVICE_ROLE}
+      rollback;
+    `);
+    expect(semChamada, "sem EXECUTE o sincronizador rodou mesmo assim — a sessão não é do service_role").not.toBeNull();
+    expect(semChamada).toContain("permission denied for function fn_google_calendar");
+
+    const semApagar = erroDo(`
+      begin;
+      ${FIXTURE}
+      ${CATALOGO_DO_DONO}
+      ${blocoDa0261()}
+      revoke delete on public.calendar_external_events from service_role;
+      ${SINCRONIZA_E_DESCONECTA_COMO_SERVICE_ROLE}
+      rollback;
+    `);
+    expect(semApagar, "sem DELETE a desconexão apagou mesmo assim — a sessão não é do service_role").not.toBeNull();
+    expect(semApagar).toContain("permission denied for table calendar_external_events");
   });
 
   it("`anon` continua sem SELECT — o bloco não abre porta nova", () => {
