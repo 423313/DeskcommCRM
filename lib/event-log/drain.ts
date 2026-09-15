@@ -35,6 +35,79 @@ function backoffAt(attempts: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
+/**
+ * O EVENTO QUE MORREU PRECISA DIZER A ALGUÉM QUE MORREU.
+ *
+ * O kind `event_dead` existia na constraint de `agent_inbox_items` desde a
+ * migration 0050, na cópia (`lib/ai/agent-inbox-copy.ts`) e na política de
+ * destino (`lib/ai/inbox-destino.ts`) — e **não tinha um único produtor no
+ * repositório**. Um evento que esgotava as 5 tentativas virava `status='dead'`
+ * e sumia: nenhum aviso, nenhuma tela, nenhum Sentry.
+ *
+ * Medido numa VPS em produção: quatro `media.derive_requested` mortos, com o
+ * cliente ouvindo "não consigo ouvir áudio" e ninguém do lado de cá sabendo.
+ * O evento morto é o fim da linha de um efeito colateral que o produto
+ * prometeu — mídia que nunca foi derivada, mensagem que nunca saiu. Silêncio
+ * aqui é a promessa quebrada sem recibo.
+ *
+ * ⚠️ NASCE SEM REFERÊNCIA, e isso é a política, não esquecimento:
+ * `POLITICAS_DE_AVISO.event_dead` declara `refs: []` porque não existe tela de
+ * `event_log` para onde mandar quem lê. Preencher `ref_kind` com uma entidade
+ * sem destino faria o aviso oferecer um botão que não leva a lugar nenhum.
+ *
+ * Dedupe por `kind`: um aviso aberto por organização enquanto o problema
+ * durar, como `midia_nao_lida` e `budget_exceeded` já fazem. Uma linha por
+ * evento inundaria a Central numa pane de handler — e Central inundada é
+ * Central que ninguém abre, que é como o alerta morre pela segunda vez.
+ *
+ * Fire-and-forget: falhar ao avisar não pode derrubar o dreno.
+ */
+async function avisarEventoMorto(
+  admin: SupabaseClient,
+  row: EventRow,
+  motivo: string,
+): Promise<void> {
+  try {
+    const { data: jaAberto } = await admin
+      .from("agent_inbox_items")
+      .select("id")
+      .eq("organization_id", row.organization_id)
+      .eq("kind", "event_dead")
+      .eq("status", "open")
+      .limit(1)
+      .maybeSingle();
+    if (jaAberto) return;
+
+    // `critical` e não `warn`: é a mesma classe de `job_dead` — algo que o
+    // produto prometeu fazer parou de tentar. O CHECK de
+    // `agent_inbox_items.severity` aceita info|warn|critical, e valor fora
+    // disso é recusado com 23514: o aviso nunca abriria, exatamente no caso
+    // que esta função existe para tornar visível.
+    const { error } = await admin.from("agent_inbox_items").insert({
+      organization_id: row.organization_id,
+      kind: "event_dead",
+      severity: "critical",
+      title: `Um processamento parou de tentar (${row.event_type})`,
+      body:
+        `O evento "${row.event_type}" falhou ${row.attempts + 1} vezes e parou de tentar. ` +
+        `Motivo: ${motivo.slice(0, 400)}. ` +
+        `O efeito que esse evento ia causar não aconteceu. ` +
+        `Peça a quem administra para conferir o registro de eventos e, resolvida a causa, reprocessar.`,
+    });
+    if (error) {
+      logger.error("[event-log.drain] aviso de evento morto recusado", {
+        event_id: row.id,
+        error: error.message,
+      });
+    }
+  } catch (err) {
+    logger.error("[event-log.drain] aviso de evento morto falhou", {
+      event_id: row.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export async function drainEventLog(
   admin: SupabaseClient,
   opts: { limit?: number } = {},
@@ -159,17 +232,19 @@ export async function drainEventLog(
     } else if (errors.length) {
       const attempts = row.attempts + 1;
       const dead = attempts >= MAX_ATTEMPTS;
+      const motivo = errors.map((e) => `${e.consumer_key}: ${e.detail ?? "error"}`).join("; ");
       await admin
         .from("event_log")
         .update({
           status: dead ? "dead" : "pending",
           attempts,
           consumed_by: consumedBy,
-          last_error: errors.map((e) => `${e.consumer_key}: ${e.detail ?? "error"}`).join("; "),
+          last_error: motivo,
           next_attempt_at: dead ? null : backoffAt(attempts),
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id);
+      if (dead) await avisarEventoMorto(admin, row, motivo);
       summary[dead ? "dead" : "failed"] += 1;
     } else {
       // O MOTIVO DE UM `skipped` SOBREVIVE À LINHA.
