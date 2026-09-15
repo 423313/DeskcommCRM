@@ -15,8 +15,10 @@
 import { z } from 'zod';
 import type pg from 'pg';
 
+import { insertInboxItem } from '../../db/repository';
 import type { Logger } from '../../obs/logger';
 import { enqueueJob } from '../../queue/queue';
+import { avisoDeEventoMorto } from '@/lib/event-log/aviso-de-evento-morto';
 import { TIPOS_DERIVAVEIS, DERIVACAO_TERMINADA } from '@/lib/messaging/media/derivable';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 
@@ -117,9 +119,60 @@ export async function drainTick(pool: pg.Pool, knobs: DrainKnobs, log: Logger): 
         [event.id, terminal ? 'dead' : 'pending', message],
       );
       log.error('drain: evento falhou', { event_id: event.id, terminal, error: message });
+      if (terminal) await avisarDespachoMorto(pool, event, message, log);
     }
   }
   return events.length;
+}
+
+/**
+ * O DESPACHO DA IA QUE MORRE AVISA A CENTRAL — como o dreno de handlers já avisa.
+ *
+ * `lib/event-log/drain.ts` passou a abrir `event_dead` quando desiste de um
+ * evento; este dreno marca `dead` o `ai_agent.dispatch_requested` pelo mesmo
+ * critério (5 tentativas) e seguia sem avisar ninguém. É o pior dos dois
+ * silêncios: o efeito que não aconteceu é a resposta ao cliente.
+ *
+ * Mesmo aviso e MESMO dedupe do outro dreno — `kind` por organização, só
+ * enquanto houver um aberto —, só que em SQL de uma instrução
+ * (`insertInboxItem`, `insert … where not exists`) em vez de consulta seguida
+ * de insert. Mil despachos mortos numa pane abrem um aviso, não mil: medido em
+ * `tests/invariants/evento-morto-nao-inunda-a-central.test.ts`.
+ *
+ * Fire-and-forget: falhar ao avisar não pode derrubar o tick, que ainda tem o
+ * resto do lote para drenar.
+ */
+async function avisarDespachoMorto(
+  pool: pg.Pool,
+  event: EventRow,
+  motivo: string,
+  log: Logger,
+): Promise<void> {
+  const { title, body } = avisoDeEventoMorto({
+    eventType: 'ai_agent.dispatch_requested',
+    // `attempts` já foi incrementado no claim: é a contagem com esta tentativa.
+    tentativas: event.attempts,
+    motivo,
+    efeito: {
+      titulo: 'A IA deixou de responder uma mensagem de cliente',
+      consequencia:
+        'Um cliente escreveu e a IA não respondeu; se ele não escrever de novo, a conversa fica sem resposta. ' +
+        'Abra o Inbox e responda as conversas que estão esperando.',
+    },
+  });
+  try {
+    await insertInboxItem(
+      pool,
+      event.organization_id,
+      { kind: 'event_dead', severity: 'critical', title, body },
+      'kind',
+    );
+  } catch (err) {
+    log.error('drain: aviso de despacho morto falhou', {
+      event_id: event.id,
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
+    });
+  }
 }
 
 /** Quanto esperar entre uma checagem e outra da derivação de mídia. */

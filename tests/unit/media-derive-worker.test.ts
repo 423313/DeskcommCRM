@@ -150,8 +150,9 @@ describe("deriveMessageMedia", () => {
   /**
    * DESISTIR CALADO ERA O DESFECHO MAIS COMUM DOS TRÊS.
    *
-   * As duas recusas que o worker sabia explicar — modelo sem visão, provedor
-   * indisponível — já abriam `midia_nao_lida`, e por isso pareciam cobrir o
+   * As recusas que o worker sabia explicar — modelo sem visão, provedor
+   * indisponível, falta de chave para transcrever — já abriam
+   * `midia_nao_lida`, e por isso pareciam cobrir o
    * assunto. A falha que vem de DENTRO da chamada ao modelo estoura como
    * exceção, cai no catch, marcava `failed` e não dizia nada.
    *
@@ -183,6 +184,11 @@ describe("deriveMessageMedia", () => {
       expect(String(aviso.body)).toContain("claude-sonnet-5");
       // E o tipo tem que ser o que o operador chama de "isto", não `msg.type`.
       expect(String(aviso.title)).toContain("imagem");
+      // Nesta falha o agente NÃO recebeu o marcador de "não consegui
+      // interpretar" — a frase das recusas ("responde avisando que não conseguiu
+      // abrir o arquivo") seria mentira aqui.
+      expect(String(aviso.body)).toContain("O conteúdo do arquivo não chegou ao agente.");
+      expect(String(aviso.body)).not.toContain("responde avisando");
     });
 
     it("tentativa que ainda VAI tentar de novo não avisa (controle)", async () => {
