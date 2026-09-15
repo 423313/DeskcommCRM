@@ -263,7 +263,9 @@ describe("a ocupação do Google do dono barra a marcação de quem não enxerga
     // a leitura para `from("calendar_connections")` deixava a suíte verde
     // (medido pelo cético do lote 10: 21 arquivos, 198 casos).
     const t = tabelas(false);
-    t.calendar_connections = [{ ...t.calendar_connections[0], last_sync_at: null }];
+    const [conexao] = t.calendar_connections ?? [];
+    expect(conexao, "o cenário precisa de uma conexão do dono").toBeDefined();
+    t.calendar_connections = [{ ...conexao, last_sync_at: null }];
     const resultado = await horariosLivresDaOrg(clienteFalso(t, false), ORG, {
       eventTypeId: TIPO_ID,
       ownerUserId: DONO,
