@@ -280,7 +280,9 @@ describe("POST /api/v1/leads/[id]/clone", () => {
 
   it("recusa negócio já encerrado", async () => {
     const { POST } = await import("./route");
-    (db.tables.crm_leads ?? [])[0].status = "won";
+    const negocio = (db.tables.crm_leads ?? [])[0];
+    if (!negocio) throw new Error("o teste espera um crm_leads semeado neste ponto");
+    negocio.status = "won";
 
     const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
     const body = await response.json();
