@@ -716,7 +716,34 @@ de `lg`; medido depois em seis larguras em
 automação da Agenda — o INSERT em `event_log` sai com o cliente da sessão e bate
 na RLS (`new row violates row-level security policy`). Toda automação por
 `appointment.created`/`appointment.confirmed` fica muda para o que a equipe faz
-pela tela. O trecho é igual na `main`.
+pela tela. O trecho é igual na `main`. → Consertado no lote 9 (#877), provado abaixo.
+
+---
+
+## Lote 9 da triagem — automações da Agenda, avisos na Central e o seed de demonstração (2026-09-15)
+
+Integração `integracao/triagem-15set-l9` no SHA `cfdb43575`, banco do
+`baseline.sql` em pg17, dona do `bootstrap-owner.ts`, chave de cifra semeada como o
+`install.sh`, `next build` (exit 0) + `next start`, cron imitado chamando
+`/api/v1/cron/event-log-drain` com o `INTERNAL_SECRET` 1×/min. Sem IA, sem Resend,
+sem Google, sem Meta. Evidência, régua e o que foi SQL em
+`evidence/triagem-15set-l9/README.md`.
+
+| # | Caso | Resultado |
+|---|---|---|
+| L9.1 | #877 — Regra "Quando um horário for marcado" → "Adicionar tag" dispara quando a dona marca pela Agenda | **PROVADO EM TELA** — `201`, o cron drena no tick seguinte, Atividade "Sucesso · Adicionar tag" e a etiqueta no contato; zero "gatilho de automação não foi emitido" no log do servidor. `evidence/triagem-15set-l9/877-05-atividade-regra-executou-sucesso.png`, `evidence/triagem-15set-l9/877-06-contato-com-a-tag-da-regra.png` |
+| L9.1a | #877 — Controle positivo na `main` (`b9bc24cf4`), mesmo banco e mesma regra | **NÃO EXECUTAVA** — `201` e "Marcado.", mas o servidor registra `new row violates row-level security policy for table "event_log"`, nenhum evento nasce, a Atividade fica com a execução anterior e o contato sem etiqueta. `evidence/triagem-15set-l9/877-controle-main-03-atividade-so-a-execucao-da-marina.png`, `evidence/triagem-15set-l9/877-controle-main-04-rui-sem-tag.png` |
+| L9.2 | #871 — Evento com handler que esgota as 5 tentativas no dreno do cron abre aviso | **PROVADO EM TELA** — mídia recebida por webhook WAHA assinado, download para um WAHA fora do ar, backoff real (≈30 min): "Um processamento parou de tentar (media.persist_requested)", só "Marcar resolvido", sem "reprocessar". Canal WAHA inserido por SQL. `evidence/triagem-15set-l9/871-01-central-aviso-generico-evento-morto.png` |
+| L9.3 | #871/#872 — Com o genérico aberto, o despacho da IA que morre também avisa | **PROVADO EM TELA** — "A IA deixou de responder uma mensagem de cliente" ao lado do genérico ("Abertos (2)"); mais três mortes não abrem outro; resolvido, a próxima morte reabre. Despachos com contato inexistente preparados por SQL; a morte é do worker real. `evidence/triagem-15set-l9/871-02-central-aviso-da-ia-e-generico-coexistem.png`, `evidence/triagem-15set-l9/871-04-depois-de-resolvido-a-proxima-morte-reabre-o-aviso-da-ia.png` |
+| L9.3a | #872 — `midia_nao_lida` quando a derivação estoura por exceção | **NÃO MEDIDO** — exige mídia persistida e chamada ao provedor de IA falhando; sem WAHA servindo arquivo e sem IA, sem caminho |
+| L9.4 | #875 — Seed contra URL não-local | **PROVADO POR SONDA** — exit 2 e nenhuma requisição (sonda de `fetch`/`http`/`net`/`dns` no processo); com `--permitir-remoto` a mesma sonda registra `GET` e `POST` para o host `.invalid` |
+| L9.5 | #875 — Regras e histórico de demonstração na tela | **PROVADO EM TELA** — três regras ativas; Sucesso, Parcial (`user_not_in_org`) e Falhou (`TypeError: fetch failed`), cada execução com as ações da própria regra; a regra VIP abre no editor com a condição no seletor. `evidence/triagem-15set-l9/875-02-seed-historico-sucesso-parcial-falha.png`, `evidence/triagem-15set-l9/875-03-seed-regra-vip-no-editor.png` |
+| L9.6 | #875 — Follow-ups de demonstração | **VISÍVEIS, TRILHA INCOERENTE** — fluxo ativo e as quatro inscrições na Fila; o dossiê diz "Começou 15/09" com passos de 12/09 e 13/09, os passos saem como "código: enrolled"/"código: node_entered" (este último nenhum código emite) e "Aguardando resposta" sem passo de envio. Reportado, não consertado. `evidence/triagem-15set-l9/875-05-seed-followups-fila-com-as-inscricoes.png`, `evidence/triagem-15set-l9/875-06-seed-followup-dossie-com-trilha.png` |
+| L9.7 | Regressão do lote 8 na árvore combinada | **PROVADO EM TELA** — Agenda abre; "Outro horário" 10:45 chega à confirmação com o Confirmar dentro do painel (843–875 em 0–900); `/admin/meta` `200`. `evidence/triagem-15set-l9/l8-regressao-02-outro-horario-1045-confirmando.png`, `evidence/triagem-15set-l9/l8-regressao-03-admin-meta-carrega.png` |
+
+**Ressalva de leitura:** os dois avisos da Central levam no corpo o nome técnico do
+evento e o motivo cru (`media_persist_v1: fetch failed`; a frase inglesa da FK do
+Postgres no da IA).
 
 ---
 
