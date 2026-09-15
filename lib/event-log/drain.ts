@@ -6,6 +6,7 @@
  * handler no registry e ficam intocados.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { avisoDeEventoMorto } from "@/lib/event-log/aviso-de-evento-morto";
 import { dispatchEvent, getRegisteredHandlers, type EventRow } from "@/lib/event-log/dispatcher";
 import { logger } from "@/lib/logger";
 
@@ -83,16 +84,19 @@ async function avisarEventoMorto(
     // `agent_inbox_items.severity` aceita info|warn|critical, e valor fora
     // disso é recusado com 23514: o aviso nunca abriria, exatamente no caso
     // que esta função existe para tornar visível.
+    // O texto é o MESMO do dreno do agent-engine (`edge/crm/drain.ts`), que
+    // desiste do `ai_agent.dispatch_requested` — ver `aviso-de-evento-morto.ts`.
+    const { title, body } = avisoDeEventoMorto({
+      eventType: row.event_type,
+      tentativas: row.attempts + 1,
+      motivo,
+    });
     const { error } = await admin.from("agent_inbox_items").insert({
       organization_id: row.organization_id,
       kind: "event_dead",
       severity: "critical",
-      title: `Um processamento parou de tentar (${row.event_type})`,
-      body:
-        `O evento "${row.event_type}" falhou ${row.attempts + 1} vezes e parou de tentar. ` +
-        `Motivo: ${motivo.slice(0, 400)}. ` +
-        `O efeito que esse evento ia causar não aconteceu. ` +
-        `Peça a quem administra para conferir o registro de eventos e, resolvida a causa, reprocessar.`,
+      title,
+      body,
     });
     if (error) {
       logger.error("[event-log.drain] aviso de evento morto recusado", {

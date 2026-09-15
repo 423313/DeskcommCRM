@@ -46,8 +46,14 @@ interface Chamada {
  */
 function dublarAdmin(
   linhas: Array<Record<string, unknown>>,
-  /** O que a Central já tem aberto do mesmo kind. `null` = nada aberto. */
-  avisoAberto: Record<string, unknown> | null = null,
+  /**
+   * O que a Central já tem aberto do mesmo kind. `null` = nada aberto. Uma
+   * função responde pelo que o próprio dreno já inseriu nesta rodada.
+   */
+  avisoAberto:
+    | Record<string, unknown>
+    | null
+    | ((chamadas: Chamada[]) => Record<string, unknown> | null) = null,
 ) {
   const chamadas: Chamada[] = [];
 
@@ -110,7 +116,10 @@ function dublarAdmin(
         // dedupe enxergar um evento como se fosse aviso aberto, e o teste do
         // aviso passaria por engano.
         if (tabela === "agent_inbox_items") {
-          resolve({ data: avisoAberto, error: null });
+          resolve({
+            data: typeof avisoAberto === "function" ? avisoAberto(chamadas) : avisoAberto,
+            error: null,
+          });
           return;
         }
         resolve({ data: linhas, error: null });
@@ -238,6 +247,11 @@ describe("drainEventLog — evento morto abre aviso na Central", () => {
     });
     expect(String(aviso!.payload?.body)).toContain("transcription_401");
     expect(String(aviso!.payload?.title)).toContain(MORIBUNDO.event_type);
+    // O corpo só pede o que a tela oferece: não existe tela de `event_log` nem
+    // botão de reprocessar. O que existe é "Marcar resolvido" — e é ele que
+    // rearma o aviso, porque o dedupe é por kind.
+    expect(String(aviso!.payload?.body)).not.toMatch(/reprocess/i);
+    expect(String(aviso!.payload?.body)).toContain("marque-o como resolvido");
     // `refs: []` é a política de `event_dead` (lib/ai/inbox-destino.ts): não há
     // tela de `event_log`, e um ref sem destino viraria botão que não leva a
     // lugar nenhum.
@@ -264,6 +278,23 @@ describe("drainEventLog — evento morto abre aviso na Central", () => {
     await drainEventLog(admin as never);
 
     expect(avisos(chamadas), "Central inundada é Central que ninguém abre").toHaveLength(0);
+  });
+
+  it("mil eventos mortos na mesma rodada abrem UM aviso, não mil", async () => {
+    // O dublê responde "já há aviso aberto?" pelo que o PRÓPRIO dreno inseriu
+    // até ali — é o que mede a sequência de verdade (cada morte consulta depois
+    // de a anterior ter inserido), em vez de afirmar o dedupe com um aviso
+    // aberto de antemão, que é o caso de cima.
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "error", detail: "boom" }]);
+    const mil = Array.from({ length: 1000 }, (_, i) => ({ ...MORIBUNDO, id: `e${i}` }));
+    const { admin, chamadas } = dublarAdmin(mil, (feitas) =>
+      feitas.some((c) => c.op === "insert" && c.tabela === "agent_inbox_items") ? { id: "aviso-1" } : null,
+    );
+
+    const resumo = await drainEventLog(admin as never, { limit: 1000 });
+
+    expect(resumo.dead, "o dublê não matou os mil").toBe(1000);
+    expect(avisos(chamadas), "Central inundada é Central que ninguém abre").toHaveLength(1);
   });
 
   it("recusa do INSERT não derruba o dreno", async () => {
