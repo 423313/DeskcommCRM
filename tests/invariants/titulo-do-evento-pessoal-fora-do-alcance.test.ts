@@ -13,9 +13,17 @@ import { motivoDoErro, sql } from "./psql-transporte";
  * `public.calendar_external_events` é o espelho da agenda PESSOAL de quem
  * atende. O papel `authenticated` tinha SELECT de TABELA nela e a view
  * `calendar_selected_external_events` era `select e.*` — com o `title` dentro.
- * Qualquer membro da organização, inclusive Somente leitura, lia o compromisso
- * particular do colega: "Consulta médica", "Terapia", "entrevista de emprego".
- * O CRM só precisava daquele evento como ocupado ou livre.
+ * Qualquer membro da organização, inclusive Somente leitura, tinha privilégio
+ * para ler o compromisso particular do colega: "Consulta médica", "Terapia",
+ * "entrevista de emprego". O CRM só precisava daquele evento como ocupado ou
+ * livre.
+ *
+ * O ALCANCE REAL é menor que o privilégio: desde a migration 0225 (v1.17.0) o
+ * sincronizador grava o título NULO e zera o que encontra — o caso do
+ * `service_role` abaixo prende isso —, então o nome só existe em linhas gravadas
+ * antes da v1.17.0 e ainda não regravadas. A `FIXTURE` insere o título À MÃO,
+ * como uma dessas linhas. E o `title` não é o único dado pessoal: o id do
+ * calendário segue ao alcance, declarado e medido no último caso da migration.
  *
  * A tela nunca mostrou o título. Quem guarda isso do lado da tela é
  * `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (as consultas da
@@ -142,7 +150,9 @@ const TITULO = "Terapia sigilosa";
 /**
  * A agenda pessoal do `DONO`, com o evento e com o `COLEGA` na mesma
  * organização em papel `viewer` — o caso mais generoso para quem espia, e por
- * isso o caso do defeito.
+ * isso o caso do defeito. O título do evento é inserido À MÃO: é o resíduo de
+ * uma sincronização anterior à v1.17.0, porque o sincronizador de hoje o grava
+ * nulo.
  */
 const FIXTURE = `
   insert into auth.users (id, email) values

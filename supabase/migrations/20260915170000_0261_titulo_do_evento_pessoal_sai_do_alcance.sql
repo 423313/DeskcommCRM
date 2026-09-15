@@ -4,20 +4,33 @@
 --
 -- `public.calendar_external_events` é o espelho da agenda PESSOAL de quem
 -- atende: o compromisso que a pessoa sincronizou só para bloquear o próprio
--- horário — "Consulta médica", "Terapia", "entrevista de emprego". Numa clínica,
--- é o terapeuta que sincroniza a agenda pessoal e tem o texto legível pela
--- recepção inteira.
+-- horário — "Consulta médica", "Terapia", "entrevista de emprego".
 --
 -- O papel `authenticated` tinha SELECT de TABELA nesta tabela, e a view
 -- `calendar_selected_external_events` era `select e.*` — com o `title` dentro.
 -- Num banco instalado do zero (`baseline.sql` da v1.26.0), um membro de OUTRO
--- papel, inclusive Somente leitura, lia o compromisso particular do colega:
+-- papel, inclusive Somente leitura, lia o `title` de uma linha do colega — com o
+-- título INSERIDO À MÃO, ver o alcance logo abaixo:
 --
 --     select title from public.calendar_external_events …   → "Terapia sigilosa"
 --
 -- tanto direto na tabela quanto pela view; e
 -- `has_column_privilege('authenticated','calendar_external_events','title','SELECT')`
 -- respondia `true`.
+--
+-- ─── O alcance real: o privilégio estava aberto; o nome, quase nunca ────────
+--
+-- O título daquela medição foi inserido à mão (a fixture do invariante roda como
+-- superusuário). Numa instalação v1.17.0 ou mais nova o único escritor do
+-- produto grava o título nulo (ver "Quem ainda alcança o título", abaixo), então
+-- não há nome para ler. O nome só existe em linhas gravadas pelo cron anterior à
+-- v1.17.0 (`app/api/v1/cron/agenda-google-sync`, que fazia
+-- `title: lido.evento.title`) e que a ressincronização ainda não regravou: o
+-- rebuild completo, a cada 24h, regrava de 1 dia atrás a 90 dias à frente; o
+-- passado espera o expurgo do espelho (`fn_expurgar_espelho_da_agenda`, por
+-- padrão 90 dias depois de `ends_at`); e uma conexão que não está saudável não
+-- sincroniza. É esse resíduo que o conserto fecha — e ele vale também como defesa
+-- em profundidade contra um escritor futuro que volte a gravar o nome.
 --
 -- ─── Por que o conserto é no PRIVILÉGIO, e não na policy ────────────────────
 --
@@ -82,11 +95,11 @@
 -- os dois títulos nulos.
 --
 -- Nenhum login de usuário lê o título depois desta migration — nem o colega, nem
--- o próprio dono da conexão. Nenhuma
--- tela mostra o título de um evento externo — os guardas de tela citados acima
--- vigiam isso —, então não há leitura de titular a preservar nos papéis do
--- PostgREST; se um dia houver uma tela do titular, ela nasce com função
--- `security definer` própria e o invariante muda junto, de propósito.
+-- o próprio dono da conexão. Nenhuma tela mostra o título de um evento externo —
+-- os guardas de tela citados acima vigiam isso —, então não há leitura de
+-- titular a preservar nos papéis do PostgREST; se um dia houver uma tela do
+-- titular, ela nasce com função `security definer` própria e o invariante muda
+-- junto, de propósito.
 --
 -- ─── O que esta migration NÃO faz, de propósito ─────────────────────────────
 --

@@ -25036,13 +25036,24 @@ notify pgrst, 'reload schema';
 -- O papel `authenticated` tinha SELECT de TABELA nesta tabela e a view
 -- `calendar_selected_external_events` era `select e.*` — com `title` dentro. Num
 -- banco instalado do zero (`baseline.sql` da v1.26.0), qualquer membro da
--- organização, inclusive Somente leitura, lia o compromisso particular do colega:
+-- organização, inclusive Somente leitura, lia o `title` de uma linha do colega
+-- (com o título inserido à mão — ver o alcance logo abaixo):
 --
 --   select title from calendar_external_events …   → "Terapia sigilosa"
 --
 -- tanto direto na tabela quanto pela view, e
 -- `has_column_privilege('authenticated','calendar_external_events','title','SELECT')`
 -- respondia `true`.
+--
+-- ## O alcance real: o privilégio estava aberto; o nome, quase nunca
+--
+-- Numa instalação v1.17.0 ou mais nova o sincronizador grava o título nulo (ver
+-- "O que este bloco NÃO faz"). O nome só existe em linhas gravadas pelo cron
+-- anterior à v1.17.0 e ainda não regravadas: o rebuild completo, a cada 24h,
+-- regrava de 1 dia atrás a 90 dias à frente; o passado espera
+-- `fn_expurgar_espelho_da_agenda` (por padrão 90 dias depois de `ends_at`); e
+-- conexão que não está saudável não sincroniza. O conserto fecha esse resíduo e
+-- vale como defesa em profundidade contra um escritor futuro.
 --
 -- ## Por que o conserto é no PRIVILÉGIO, e não na policy
 --
