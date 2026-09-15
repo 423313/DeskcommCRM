@@ -44,6 +44,7 @@ export function InstalledExtensionCard({
   manageBlockedReason,
   supportMode,
   busy,
+  feedback,
   onConfigure,
 }: {
   extension: InstalledExtensionView;
@@ -52,11 +53,17 @@ export function InstalledExtensionCard({
   manageBlockedReason?: string;
   supportMode: boolean;
   busy: boolean;
+  /**
+   * A resposta do último salvamento. Mora no gestor, e não aqui: salvar sobe a
+   * revisão, a chave do card muda e ele remonta com os valores do servidor — o que
+   * é certo para o formulário e apagava a mensagem antes de ela aparecer.
+   */
+  feedback: string | null;
   onConfigure: (
     extension: InstalledExtensionView,
     enabled: boolean,
     configuration: ExtensionConfiguration,
-  ) => Promise<{ ok: boolean; message: string }>;
+  ) => Promise<void>;
 }) {
   const t = useT();
   const locale = useIdioma();
@@ -66,19 +73,16 @@ export function InstalledExtensionCard({
     extension.configuration.density,
   );
   const [showDescription, setShowDescription] = useState(extension.configuration.show_description);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const changed =
     enabled !== extension.enabled ||
     density !== extension.configuration.density ||
     showDescription !== extension.configuration.show_description;
 
   async function save() {
-    setFeedback(null);
-    const result = await onConfigure(extension, enabled, {
+    await onConfigure(extension, enabled, {
       density,
       show_description: showDescription,
     });
-    setFeedback(result.message);
   }
 
   const status = !extension.compatible

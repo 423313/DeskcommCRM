@@ -8725,6 +8725,7 @@ export const DICIONARIO: Traducoes = {
   "Somente o responsável pela instalação pode instalar este pacote.": { es: "Solo el responsable de la instalación puede instalar este paquete." },
   "Extensão instalada. Agora um administrador da organização pode ativá-la.": { es: "Extensión instalada. Ahora un administrador de la organización puede activarla." },
   "Preparação iniciada. O recibo continuará visível até a conclusão.": { es: "Preparación iniciada. El recibo seguirá visible hasta que termine." },
+  "A instalação falhou. Veja o motivo no recibo e tente de novo.": { es: "La instalación falló. Vea el motivo en el recibo e inténtelo de nuevo." },
   "Atividade recente": { es: "Actividad reciente" },
   "Recibos lidos do servidor; outra aba verá os mesmos estados.": { es: "Recibos leídos del servidor; otra pestaña verá los mismos estados." },
   "Admissão de catálogo": { es: "Admisión de catálogo" },

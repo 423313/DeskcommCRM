@@ -714,7 +714,7 @@ test("pacote pós-build atravessa catálogo, tenants, guia e Tarefas com recuper
       headers: { [EXPECTED_ORGANIZATION_HEADER]: atores!.organizacaoB },
     });
     expect(resposta.status()).toBe(404);
-    expect((await resposta.json()) as unknown).toMatchObject({ error: { code: "not_found" } });
+    expect((await resposta.json()) as unknown).toMatchObject({ error: { code: "extension_inactive" } });
     const recusaDoGuiaB = adminB.waitForResponse(
       (response) =>
         response.request().method() === "GET" &&
@@ -728,7 +728,7 @@ test("pacote pós-build atravessa catálogo, tenants, guia e Tarefas com recuper
       "guia direto sem vínculo em B",
       await recusaDoGuiaB,
       404,
-      "not_found",
+      "extension_inactive",
     );
     await expect(adminB.getByTestId("extension-guide-unavailable")).toBeVisible({
       timeout: 30_000,
@@ -831,7 +831,7 @@ test("pacote pós-build atravessa catálogo, tenants, guia e Tarefas com recuper
       headers: { [EXPECTED_ORGANIZATION_HEADER]: atores!.organizacaoA },
     });
     expect(direta.status()).toBe(404);
-    expect((await direta.json()) as unknown).toMatchObject({ error: { code: "not_found" } });
+    expect((await direta.json()) as unknown).toMatchObject({ error: { code: "extension_inactive" } });
     const recusaDaAcaoAntiga = staleGuide!.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
@@ -848,14 +848,14 @@ test("pacote pós-build atravessa catálogo, tenants, guia e Tarefas com recuper
       "ação da aba antiga depois da desativação",
       await recusaDaAcaoAntiga,
       404,
-      "not_found",
+      "extension_inactive",
     );
     await registrarRecusaHttp(
       observacoes,
       "revalidação da aba antiga depois da desativação",
       await recusaDaRevalidacaoAntiga,
       404,
-      "not_found",
+      "extension_inactive",
     );
     await expect(staleGuide!.getByTestId("extension-guide-unavailable")).toBeVisible({
       timeout: 30_000,

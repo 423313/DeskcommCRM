@@ -134,7 +134,8 @@ test("recupera preparação em HTTP real e mantém tema, idioma e fallback legí
       await theme.click();
     }
     await expect(theme).toHaveAttribute("aria-label", /Tema: dark/);
-    await expect(page.locator("html")).toHaveClass(/dark/);
+    // O produto marca o tema no atributo (lib/theme.tsx: setAttribute("data-theme")), não em classe.
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await capturar(page, testInfo, "recuperacao-dark.png");
 
     await page.getByTestId("seletor-de-idioma").click();

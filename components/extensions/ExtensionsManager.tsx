@@ -65,6 +65,12 @@ export function ExtensionsManager({
   const [storageStatus, setStorageStatus] = useState<"checking" | "ready" | "failed">("checking");
   const [busyTarget, setBusyTarget] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingReceipt[]>([]);
+  // O aviso de "conexão caiu" é sobre UM recibo, não sobre o carregamento da tela.
+  // Guardado junto do erro de carregamento, ele só sumia com uma recarga bem-sucedida
+  // e continuava afirmando um pedido pendente depois que outra aba já o tinha
+  // reconciliado. Aqui ele é derivado: aparece enquanto o recibo existe e some junto.
+  const [uncertainReceiptId, setUncertainReceiptId] = useState<string | null>(null);
+  const [configFeedback, setConfigFeedback] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [catalogFile, setCatalogFile] = useState<File | null>(null);
@@ -285,11 +291,7 @@ export function ExtensionsManager({
       const result = await request(receipt.id);
       setBusyTarget(null);
       if (!result.ok && result.uncertain) {
-        setLoadError(
-          t(
-            "A conexão caiu sem confirmação. O pedido foi preservado pelo recibo; verifique o estado antes de tentar outra vez.",
-          ),
-        );
+        setUncertainReceiptId(receipt.id);
         return result;
       }
 
@@ -333,7 +335,6 @@ export function ExtensionsManager({
       snapshotFresh,
       storageStatus,
       syncPendingFromStorage,
-      t,
     ],
   );
 
@@ -417,6 +418,17 @@ export function ExtensionsManager({
       });
       if (!result.ok) {
         if (!result.uncertain) toast.error(t(result.error.message));
+        return;
+      }
+      // A rota responde 200 com o recibo em QUALQUER desfecho; o status é que diz o
+      // que aconteceu. Um download que falhou (catálogo fora do ar é o caso comum)
+      // chegava aqui como "Preparação iniciada" em verde.
+      if (result.data.status === "failed") {
+        toast.error(
+          result.data.error_message
+            ? t(result.data.error_message)
+            : t("A instalação falhou. Veja o motivo no recibo e tente de novo."),
+        );
         return;
       }
       toast.success(
@@ -764,6 +776,13 @@ export function ExtensionsManager({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{receipt.label}</p>
                       <p className="font-mono text-[11px] text-muted-foreground">{receipt.id}</p>
+                      {receipt.id === uncertainReceiptId ? (
+                        <p role="status" className="mt-1 text-xs text-warning-fg">
+                          {t(
+                            "A conexão caiu sem confirmação. O pedido foi preservado pelo recibo; verifique o estado antes de tentar outra vez.",
+                          )}
+                        </p>
+                      ) : null}
                     </div>
                     <Button
                       variant="outline"
@@ -828,7 +847,12 @@ export function ExtensionsManager({
                       manageBlockedReason={data.can_manage ? mutationBlockedReason : undefined}
                       supportMode={supportMode}
                       busy={busyTarget?.startsWith(`configure:${extension.id}:`) ?? false}
-                      onConfigure={configure}
+                      feedback={configFeedback[extension.id] ?? null}
+                      onConfigure={async (alvo, enabled, configuration) => {
+                        setConfigFeedback(({ [alvo.id]: _, ...resto }) => resto);
+                        const { message } = await configure(alvo, enabled, configuration);
+                        setConfigFeedback((atual) => ({ ...atual, [alvo.id]: message }));
+                      }}
                     />
                   ))}
                 </div>

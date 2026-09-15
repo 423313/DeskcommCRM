@@ -128,9 +128,15 @@ describe("ExtensionsManager", () => {
         configurationReceipt = operation({ id, kind: "configure" });
         return Promise.resolve(json({ data: configurationReceipt }));
       })
-      .mockImplementationOnce(() =>
-        Promise.resolve(json({ data: list(ORG_A, { operations: [configurationReceipt!] }) })),
-      );
+      .mockImplementationOnce(() => {
+        // O que o servidor devolve DEPOIS de gravar: revisão nova e o valor salvo.
+        // Com a revisão parada em 1 o card nunca remontava e o gate ficava cego
+        // para a mensagem que sumia na remontagem.
+        const salva = list(ORG_A, { operations: [configurationReceipt!] });
+        salva.installations[0]!.enabled = true;
+        salva.installations[0]!.revision = 2;
+        return Promise.resolve(json({ data: salva }));
+      });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     renderManager();
@@ -327,6 +333,40 @@ describe("ExtensionsManager", () => {
 
     await waitFor(() => expect(router.refresh).toHaveBeenCalled());
     expect(readPendingReceipts(window.localStorage, ACTOR, ORG_A)).toEqual([RECEIPT]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("o aviso de conexão caída acompanha o recibo e some quando outra aba o resolve", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: list() }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByRole("switch", { name: "Ativa no CRM" }));
+    await user.click(screen.getByTestId(`extension-save-${INSTALLATION}`));
+
+    const [pendente] = await waitFor(() => {
+      const recibos = readPendingReceipts(window.localStorage, ACTOR, ORG_A);
+      expect(recibos).toHaveLength(1);
+      return recibos;
+    });
+    const linha = await screen.findByTestId(`extension-local-receipt-${pendente!.id}`);
+    expect(linha).toHaveTextContent(/A conexão caiu sem confirmação/);
+
+    // Outra aba reconciliou o pedido e apagou o recibo deste navegador.
+    let chave = "";
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const k = window.localStorage.key(i);
+      if (k?.endsWith(pendente!.id)) chave = k;
+    }
+    window.localStorage.removeItem(chave);
+    fireEvent(window, new StorageEvent("storage", { key: chave }));
+
+    await waitFor(() => expect(screen.queryByText(/A conexão caiu sem confirmação/)).toBeNull());
+    // Nada foi reenviado: o aviso some porque o recibo saiu, não por uma nova tentativa.
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
