@@ -654,6 +654,72 @@ as duas.
 
 ---
 
+## J22 — Cadastrar o App da Meta pela tela, e colar na Meta o token que vale `[P0]`
+
+**Por que P0:** é a primeira coisa que o dono faz para receber pelo número
+oficial. Até a tela `/admin/meta` existir, isso exigia editar o `.env` na VPS
+(issue #850); a migration 0257 (PR #861) guardou a credencial no banco, mas
+nenhuma tela a gravava.
+
+| # | Caso | Resultado |
+|---|---|---|
+| J22.1 | Admin Plataforma › API Oficial (Meta) aparece no menu e abre a tela | **PROVADO EM TELA** (2026-09-15, `33ece762a`) — pelo seletor de organização › Gerenciar organizações › menu, sem digitar URL. Evidência: `evidence/triagem-15set-l8/861-02-menu-admin-api-oficial.png` |
+| J22.2 | Primeiro save com a chave secreta mostra o token gerado, com Copiar | **PROVADO EM TELA** — campo esvazia, placeholder "(já cadastrada)", Copiar põe o token na área de transferência (lido de volta). `evidence/triagem-15set-l8/861-04-token-gerado-copie-agora.png` |
+| J22.3 | Recarregar a página: o token some, a tela diz "Gerado em …" | **PROVADO EM TELA** — o token não está nem no HTML servido. `evidence/triagem-15set-l8/861-07-recarregado-token-some.png` |
+| J22.4 | Gerar novo token pede confirmação com o efeito, e mostra o novo | **PROVADO EM TELA** — cancelar não muda `verify_token_created_at`; confirmar mostra token diferente. `evidence/triagem-15set-l8/861-08-confirmacao-novo-token.png`, `evidence/triagem-15set-l8/861-09-novo-token-diferente.png` |
+| J22.5 | Handshake da Meta (`GET …/webhooks/meta/<token>?hub.verify_token=`) passa com o token da tela e recusa o antigo | **PROVADO POR CURL** (diagnóstico) — sessão `meta_cloud` inserida por SQL (conectar exige Graph real): token da tela `200 x`, anterior `403`, inclusive 99 ms após a rotação |
+| J22.6 | Conexões › API Oficial (Meta) não mostra token do `.env` quando vale o da instalação, e oferece o link da tela ao platform admin | **PROVADO EM TELA** — dono vê "Já cadastrado…" e o link (leva a `/admin/meta`); admin de tenant vê o aviso sem o link. `evidence/triagem-15set-l8/861-13-400px-escuro-conexoes-token-na-instalacao.png`, `evidence/triagem-15set-l8/861-15-admin-de-tenant-conexoes-sem-link.png` |
+| J22.7 | Instalação sem `.env` de Meta (estado real de VPS nova): nenhuma tela manda "configurar no servidor" | **PROVADO EM TELA** — `/admin/meta` abre "Nunca configurado por aqui." sem aviso de `.env`; Conexões com canal não tem "defina no servidor" (contagem 0). `evidence/triagem-15set-l8/861-03-tela-nunca-configurada.png` |
+| J22.8 | Admin de organização que não é platform admin não abre `/admin/meta` | **PROVADO EM TELA** — termina em `/admin/forbidden`, formulário não renderiza, o seletor não oferece "Gerenciar organizações". `evidence/triagem-15set-l8/861-14-admin-de-tenant-nao-abre-admin-meta.png` |
+| J22.9 | 400px e tema escuro | **PROVADO POR MEDIDA** — `scrollWidth` 400 = `clientWidth` 400 em repouso, na confirmação e com o token; o token de 43 caracteres rola dentro do campo (342px em 201px). `evidence/triagem-15set-l8/861-10-400px-escuro-repouso.png`, `evidence/triagem-15set-l8/861-11-400px-escuro-confirmacao.png`, `evidence/triagem-15set-l8/861-12-400px-escuro-token-gerado.png` |
+| J22.10 | Instalação sem a chave de cifra no banco | **Recusa com motivo, nada gravado** — o texto é técnico ("GUC app.nuvemshop_oauth_key ausente"). O `install.sh` sempre semeia a chave; o prelúdio do e2e não. `evidence/triagem-15set-l8/861-extra-sem-chave-de-cifra-recusa-com-motivo.png` |
+
+**Dois defeitos achados ao ligar a tela, corrigidos antes dela:**
+1. O primeiro save sem chave secreta gravava um token SOZINHO e o devolvia para
+   copiar. O resolvedor serve o par inteiro ou cai para o `.env`, então o token
+   nunca valia e a Meta receberia 403. A action recusa com
+   `app_secret_obrigatorio` (a rotação também).
+2. `GET /api/v1/channels/official` lia o token do `.env` direto: com o App
+   cadastrado pela tela, Conexões mostrava o token errado (ou "defina no
+   servidor"). Passou a perguntar ao resolvedor.
+
+---
+
+## Lote 8 da triagem — Agenda e Contatos provados em tela (2026-09-15)
+
+Integração `integracao/triagem-15set-l8` no SHA `33ece762a`, banco do
+`baseline.sql` em pg17, dono do `bootstrap-owner.ts`, `next build` + `next start`,
+sem Google, sem IA, sem Resend. Evidência e régua de cada caso em
+`evidence/triagem-15set-l8/README.md`.
+
+| # | Caso | Resultado |
+|---|---|---|
+| L8.1 | #860 — Confirmar na aba "Aguardando confirmação" | **PROVADO EM TELA** — a linha sai da aba (2→1), aparece em Próximos, banco `confirmed`. "Exige aprovação" não tem tela: ligado por `PATCH /api/v1/agenda/tipos` com a sessão do dono. `evidence/triagem-15set-l8/860-03-linha-saiu-da-aba-aguardando.png` |
+| L8.2 | #860 — Confirmar horário no painel do compromisso | **PROVADO EM TELA** — o pendente vira "Agendado" e o botão some. `evidence/triagem-15set-l8/860-07-painel-confirmou-vira-agendado.png` |
+| L8.3 | #858 — Pessoa marca 10:30 numa grade de hora cheia | **PROVADO EM TELA** na porta entregue depois da QA (`triagem/lote-8-encaixe-na-tela`, SHA `0c71973d4`, ambiente fresco próprio): Novo agendamento › segunda › "Outro horário" › 10:30 › Confirmar → `201`, banco `10:30-11:30` `user/ui`, e o card na grade na altura do bloco das 10:30. A grade e o arrastar seguem só com horário publicado, de propósito. **Antes:** FALHOU EM TELA — o painel só listava horas cheias e a rota só era alcançável chamando a API com a sessão (`evidence/triagem-15set-l8/858-02-painel-oferece-so-hora-cheia.png`). `evidence/triagem-15set-l8-encaixe/03-outro-horario-1030-confirmando.png`, `evidence/triagem-15set-l8-encaixe/05-grade-mostra-o-encaixe-1030.png` |
+| L8.3a | #858 — Encaixe por cima de outro encaixe | **PROVADO EM TELA** — 10:45 sobre o das 10:30: `422`, a frase da rota acima do Confirmar, painel aberto, campo com 10:45, um compromisso só no banco. `evidence/triagem-15set-l8-encaixe/06-recusa-por-cima-do-encaixe.png` |
+| L8.3b | #858 — Encaixe num dia sem horário publicado, e remarcar para fora da grade | **PROVADO EM TELA** — domingo abre direto no campo (`201`, `09:15`); Remarcar abre o mesmo painel (`PATCH` `200`, `11:15`). `evidence/triagem-15set-l8-encaixe/07-domingo-sem-grade-encaixe-0915.png`, `evidence/triagem-15set-l8-encaixe/09-grade-mostra-remarcado-1115.png` |
+| L8.3c | #858 — "Outro horário" a 400px no escuro, e escondido de quem só lê | **PROVADO EM TELA** — 400/400 sem elemento fora da tela; papel `viewer` não vê a opção (contagem 0). `evidence/triagem-15set-l8-encaixe/10-400px-escuro-outro-horario.png`, `evidence/triagem-15set-l8-encaixe/12-somente-leitura-sem-outro-horario.png` |
+| L8.4 | #858 — Marcar por cima de compromisso existente | **PROVADO EM TELA** — duas abas disputam 17:00; a segunda recebe `422` e o aviso "Este horário já está ocupado na agenda de quem atende — por outro compromisso ou pelo Google Agenda." `evidence/triagem-15set-l8/858-04-recusa-por-cima-de-compromisso-mensagem.png` |
+| L8.5 | #858 — Evento do Google Agenda ocupando o encaixe | **NÃO MEDIDO** — sem Google real |
+| L8.6 | #859 — Contato com telefone já usado | **PROVADO EM TELA** — `409 contact_exists`, aviso "Já existe um contato com este telefone.", diálogo aberto. `evidence/triagem-15set-l8/859-02-telefone-repetido-diz-o-motivo.png` |
+| L8.7 | #859 — O mesmo número sem o nono dígito | **PROVADO EM TELA** — mesmo `409` e mesma frase; uma linha no banco. `evidence/triagem-15set-l8/859-03-mesmo-numero-sem-nono-digito.png` |
+
+**Achado na prova do encaixe, consertado:** o botão Confirmar do painel de marcar
+ficava inteiro fora da caixa em 1280×800 e 1366×768, e cortado em 1440×900 — o
+painel tem a altura do Sheet, que não rola, e o `overflow-hidden` cortava sem barra.
+Valia para toda marcação, não só o encaixe. O corpo do painel passou a rolar a partir
+de `lg`; medido depois em seis larguras em
+`evidence/triagem-15set-l8-encaixe/README.md`.
+
+**Achado fora do lote:** marcar ou confirmar pela tela não emite o gatilho de
+automação da Agenda — o INSERT em `event_log` sai com o cliente da sessão e bate
+na RLS (`new row violates row-level security policy`). Toda automação por
+`appointment.created`/`appointment.confirmed` fica muda para o que a equipe faz
+pela tela. O trecho é igual na `main`.
+
+---
+
 ## J17 — Trocar de organização, incluindo a que não foi configurada `[P0]`
 
 **Por que P0:** o seletor de organização fica no topo de toda tela do produto e
