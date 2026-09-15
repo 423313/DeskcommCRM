@@ -6517,6 +6517,7 @@ export const DICIONARIO: Traducoes = {
   "A chave parece incompleta. Copie de novo do painel da Meta — ela tem 32 caracteres.": { es: "La clave parece incompleta. Cópiala de nuevo del panel de Meta — tiene 32 caracteres." },
   "Cadastre a chave secreta do aplicativo primeiro. Sem ela o token não vale.": { es: "Registra primero la clave secreta de la aplicación. Sin ella el token no vale." },
   "Nada mudou. Digite uma chave nova para substituir a atual.": { es: "Nada cambió. Escribe una clave nueva para reemplazar la actual." },
+  "Não consegui conferir o que já está gravado, então nada foi alterado. Tente de novo em instantes.": { es: "No pude comprobar lo que ya está guardado, así que no se cambió nada. Inténtalo de nuevo en unos instantes." },
   "Não deu para salvar, e nada foi gravado.": { es: "No se pudo guardar, y no se grabó nada." },
   "Chave secreta salva.": { es: "Clave secreta guardada." },
   "Token de verificação gerado.": { es: "Token de verificación generado." },

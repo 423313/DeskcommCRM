@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { invalidarAppDaMeta } from "@/lib/channels/meta/app";
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
@@ -139,15 +140,36 @@ async function gravar(
   return { ok: true };
 }
 
-/** O que já está gravado — SE existe, nunca QUAL. (A leitura é das colunas cifradas.) */
-async function oQueEstaGravado(): Promise<{ temSegredo: boolean; temToken: boolean }> {
-  const { data } = await createAdminClient()
+/**
+ * O que já está gravado — SE existe, nunca QUAL. (A leitura é das colunas cifradas.)
+ *
+ * ⚠️ LEITURA QUE FALHOU NÃO É "NADA GRAVADO". Esta função ignorava o `error`, e
+ * as duas respostas chegavam iguais a quem decide: sem linha. Com a leitura
+ * falhando numa instalação já configurada, salvar uma chave nova caía no ramo do
+ * primeiro save, gerava um verify token NOVO e o gravava por cima do que o dono
+ * já tinha colado no painel da Meta. A tela mostrava o token novo como se fosse
+ * o primeiro, sem dizer que o antigo deixou de valer — e a próxima verificação do
+ * webhook no painel da Meta falharia. Por isso o erro vira recusa
+ * (`leitura_do_app_falhou`), e nada é gravado.
+ *
+ * Na rotação o desfecho era outro e também errado: nada gravado, mas a recusa
+ * dizia `app_secret_obrigatorio` — "cadastre a chave" para quem já cadastrou.
+ */
+async function oQueEstaGravado(): Promise<
+  { ok: true; temSegredo: boolean; temToken: boolean } | { ok: false; recusa: UpdateMetaAppResult }
+> {
+  const { data, error } = await createAdminClient()
     .from("platform_meta_app")
     .select("app_secret_encrypted, verify_token_encrypted")
     .eq("id", 1)
     .maybeSingle();
+  if (error) {
+    logger.warn("[meta.app] não deu para ler o que está gravado; nada foi alterado", { codigo: error.code });
+    return { ok: false, recusa: { ok: false, error: "leitura_do_app_falhou", details: { codigo: error.code } } };
+  }
   const linha = data as { app_secret_encrypted?: string | null; verify_token_encrypted?: string | null } | null;
   return {
+    ok: true,
     temSegredo: texto(linha?.app_secret_encrypted) !== "",
     temToken: texto(linha?.verify_token_encrypted) !== "",
   };
@@ -177,7 +199,9 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
     return { ok: false, error: "invalid_input", details: parsed.error.flatten() };
   }
 
-  const { temSegredo, temToken: jaTemToken } = await oQueEstaGravado();
+  const gravado = await oQueEstaGravado();
+  if (!gravado.ok) return gravado.recusa;
+  const { temSegredo, temToken: jaTemToken } = gravado;
   const segredoNovo = parsed.data.app_secret;
 
   if (!segredoNovo && !temSegredo) return SEM_SEGREDO;
@@ -242,7 +266,9 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
 export async function rotacionarVerifyTokenDaMeta(): Promise<UpdateMetaAppResult> {
   const { user: authUser } = await requirePlatformAdmin();
 
-  if (!(await oQueEstaGravado()).temSegredo) return SEM_SEGREDO;
+  const gravado = await oQueEstaGravado();
+  if (!gravado.ok) return gravado.recusa;
+  if (!gravado.temSegredo) return SEM_SEGREDO;
 
   const verifyToken = gerarVerifyToken();
   const cifrado = await encryptWebhookSecret(createAdminClient(), verifyToken);
