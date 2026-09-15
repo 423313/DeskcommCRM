@@ -2667,10 +2667,6 @@ CREATE INDEX IF NOT EXISTS "idx_conversations_org_last_msg" ON "public"."convers
 
 
 
-CREATE INDEX IF NOT EXISTS "idx_crm_lead_links_lead" ON "public"."crm_lead_links" USING "btree" ("lead_id");
-
-
-
 CREATE INDEX IF NOT EXISTS "idx_crm_lead_links_org_target" ON "public"."crm_lead_links" USING "btree" ("organization_id", "target_kind", "target_id");
 
 
@@ -11138,7 +11134,23 @@ delete from public.ai_models a
      )
    );
 
-create unique index if not exists ai_models_provider_model_unique on public.ai_models (provider, model_id);
+-- O índice da 0127 só nasce onde a unicidade FALTA. A constraint
+-- `ai_models_unique (provider, model_id)` vem do schema original (0023) e já
+-- garante o upsert do sincronizador; criar o índice ao lado dela era construir
+-- à toa uma cópia que o bloco da 0259 derruba no fim deste arquivo. Onde a
+-- constraint não existe (removida à mão, ou recusada acima pelo dump porque
+-- havia duplicata — o delete logo acima acabou de limpá-la), o índice é a única
+-- garantia, e continua sendo criado.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'ai_models_unique'
+       and conrelid = 'public.ai_models'::regclass
+  ) then
+    create unique index if not exists ai_models_provider_model_unique on public.ai_models (provider, model_id);
+  end if;
+end $$;
 create index if not exists ai_models_source_idx on public.ai_models (source) where deprecated_at is null;
 
 comment on column public.ai_models.source is
@@ -15438,8 +15450,9 @@ create unique index if not exists calendar_connections_conta_key
 create index if not exists calendar_connections_renovacao_idx
   on public.calendar_connections (token_expires_at)
   where status in ('healthy','rate_limited') and token_expires_at is not null;
-create index if not exists calendar_connections_org_pessoa_idx
-  on public.calendar_connections (organization_id, user_id);
+-- `calendar_connections_org_pessoa_idx (organization_id, user_id)` nascia aqui e
+-- saiu na migration 0259: é prefixo de `calendar_connections_conta_key`, logo
+-- acima. Não se cria para derrubar no fim do arquivo (ver o bloco da 0259).
 
 comment on table public.calendar_connections is
   'A conta de agenda externa que UMA PESSOA conectou. Uma por atendente, e por isso não cabe em tenant_integrations, que é uma por organização e por provedor.';
@@ -24713,9 +24726,8 @@ comment on table public.api_audit_log is
 notify pgrst, 'reload schema';
 -- ---- três índices que não pagam o próprio aluguel (migration 0259) ----
 --
--- Índice redundante custa em TODO insert/update, ocupa disco e entra no cálculo
--- do planner sem nunca ser a melhor escolha. Numa VPS de 1 vCPU isso é pago
--- todo dia por ninguém. Os três abaixo têm o trabalho JÁ feito por outro:
+-- Índice redundante custa em TODO insert/update e ocupa disco. Os três abaixo
+-- têm o trabalho JÁ feito por outro índice da mesma tabela:
 --
 -- 1. `ai_models_provider_model_unique (provider, model_id)`, da migration 0127,
 --    contra a constraint `ai_models_unique (provider, model_id)` do schema
@@ -24729,14 +24741,25 @@ notify pgrst, 'reload schema';
 --    `calendar_connections_conta_key (organization_id, user_id, provider,
 --    account_email)` — mesmo argumento de prefixo.
 --
--- ⚠️ O guard do caso 1 não é cerimônia: num clone onde alguém tenha removido a
--- `ai_models_unique` à mão, o índice da 0127 é a ÚNICA coisa impedindo dois
--- cadastros do mesmo modelo. Derrubá-lo abriria a duplicata que a 0127 fechou.
+-- O planner NÃO ignorava os dois de prefixo: quando existiam, ele os preferia,
+-- porque são menores. Medido em pg17, 20 000 vínculos em 2 000 leads, busca por
+-- `lead_id`: com os dois índices, `Bitmap Index Scan on` o de uma coluna
+-- (216 kB, custo 4,36); só com o largo, o mesmo plano no de quatro (1464 kB,
+-- custo 4,49; total 39,00 → 39,13). A busca segue servida por índice; o que se
+-- troca é um índice menor na leitura por um índice a menos em toda escrita.
 --
--- Os índices ainda são criados acima neste mesmo arquivo (o corpo do dump e o
--- bloco da 0127). Derrubá-los aqui, no fim, é o que mantém o arquivo aplicável
--- tanto em banco novo quanto em clone que atualiza — apagar as linhas de
--- criação deixaria o baseline divergente da cadeia de migrations.
+-- ⚠️ CADA DROP CONFERE QUE O SUBSTITUTO ESTÁ DE PÉ. O `update.sh` roda sem
+-- `ON_ERROR_STOP`: uma criação que falhou acima (duplicata num clone, por
+-- exemplo) segue em silêncio, e derrubar o índice menor sem o maior deixaria
+-- a tabela sem índice nenhum para a busca — ou, no caso 1, sem a ÚNICA coisa
+-- impedindo dois cadastros do mesmo modelo.
+--
+-- E este arquivo não os cria mais para derrubar aqui: a linha do dump saiu, o
+-- bloco da 0127 só cria o índice onde a constraint falta, e o do calendário não
+-- o declara. Antes, toda instalação e todo `update.sh` construía os três e os
+-- jogava fora neste bloco — `CREATE INDEX` não concorrente, que trava escrita
+-- na tabela enquanto constrói. Quem já os tem (instalou antes da 0259) os perde
+-- aqui, uma vez.
 
 do $$
 begin
@@ -24747,10 +24770,23 @@ begin
   ) then
     drop index if exists public.ai_models_provider_model_unique;
   end if;
-end $$;
 
-drop index if exists public.idx_crm_lead_links_lead;
-drop index if exists public.calendar_connections_org_pessoa_idx;
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'crm_lead_links'
+       and indexname = 'uniq_crm_lead_links_lead_target_link'
+  ) then
+    drop index if exists public.idx_crm_lead_links_lead;
+  end if;
+
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'calendar_connections'
+       and indexname = 'calendar_connections_conta_key'
+  ) then
+    drop index if exists public.calendar_connections_org_pessoa_idx;
+  end if;
+end $$;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
