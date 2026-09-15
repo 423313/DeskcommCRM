@@ -32,7 +32,7 @@ import { motivoDoErro, sql } from "./psql-transporte";
  * protege o BANCO: quem tem a chave da organização e fala direto com a REST não
  * passa por lá. É essa a camada que este arquivo vigia.
  *
- * ─── O que ele mede, e por que em três estados diferentes ───────────────────
+ * ─── O que ele mede, e por que em quatro situações diferentes ───────────────
  *
  * 1. CONTROLE: o estado da v1.26.0 reconstruído na transação — `grant select on
  *    table` + a view `select e.*` — com o vazamento acontecendo. Sem ele, um

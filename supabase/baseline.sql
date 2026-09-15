@@ -25067,6 +25067,10 @@ notify pgrst, 'reload schema';
 -- `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (leituras pela tabela
 -- ou pela view) e por `tests/e2e/agenda-ocupacao-do-google-na-grade.spec.ts`.
 --
+-- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem
+-- `title`. Revogar coluna sem revogar a tabela não faz nada: o privilégio de TABELA
+-- cobre todas as colunas, e é ele que o default ACL de tabelas concede.
+--
 -- ## O que continua ao alcance do membro, e por quê
 --
 -- O título NÃO é o único dado pessoal do espelho. `external_calendar_id` é o `id`
@@ -25080,10 +25084,6 @@ notify pgrst, 'reload schema';
 -- servir a ocupação por função `security definer` (o padrão da 0260) e mudar as
 -- leituras de `app/app/agenda/page.tsx` e `app/api/v1/agenda/agendamentos` —
 -- decisão do dono. O invariante mede que o colega segue lendo o id.
---
--- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem
--- `title`. Revogar coluna sem revogar a tabela não faz nada: o privilégio de TABELA
--- cobre todas as colunas, e é ele que o default ACL de tabelas concede.
 --
 -- ## A view precisa ser recriada, não substituída no lugar
 --
