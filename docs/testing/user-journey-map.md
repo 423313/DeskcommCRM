@@ -654,6 +654,34 @@ as duas.
 
 ---
 
+## J22 — Cadastrar o App da Meta pela tela, e colar na Meta o token que vale `[P0]`
+
+**Por que P0:** é a primeira coisa que o dono faz para receber pelo número
+oficial. Até a tela `/admin/meta` existir, isso exigia editar o `.env` na VPS
+(issue #850); a migration 0257 (PR #861) guardou a credencial no banco, mas
+nenhuma tela a gravava.
+
+| # | Caso | Resultado |
+|---|---|---|
+| J22.1 | Admin Plataforma › API Oficial (Meta) aparece no menu e abre a tela | **NÃO PROVADO EM TELA** — porta declarada em `components/admin/AdminSidebar.tsx` |
+| J22.2 | Primeiro save com a chave secreta mostra o token gerado, com Copiar | **NÃO PROVADO EM TELA** — unitário `app-da-meta-tela-nao-devolve-segredo.test.tsx` |
+| J22.3 | Recarregar a página: o token some, a tela diz "Gerado em …" | **NÃO PROVADO EM TELA** |
+| J22.4 | Gerar novo token pede confirmação com o efeito, e mostra o novo | **NÃO PROVADO EM TELA** — unitário idem |
+| J22.5 | Handshake da Meta (`GET …/webhooks/meta/<token>?hub.verify_token=`) passa com o token da tela e recusa o antigo | **NÃO PROVADO** — precisa de receiver/curl contra a instalação fresca |
+| J22.6 | Conexões › API Oficial (Meta) não mostra token do `.env` quando vale o da instalação, e oferece o link da tela ao platform admin | **NÃO PROVADO EM TELA** — unitário `canal-oficial-token-de-verificacao-vem-da-instalacao.test.ts` |
+| J22.7 | Instalação sem `.env` de Meta (estado real de VPS nova): nenhuma tela manda "configurar no servidor" | **NÃO PROVADO EM TELA** |
+
+**Dois defeitos achados ao ligar a tela, corrigidos antes dela:**
+1. O primeiro save sem chave secreta gravava um token SOZINHO e o devolvia para
+   copiar. O resolvedor serve o par inteiro ou cai para o `.env`, então o token
+   nunca valia e a Meta receberia 403. A action recusa com
+   `app_secret_obrigatorio` (a rotação também).
+2. `GET /api/v1/channels/official` lia o token do `.env` direto: com o App
+   cadastrado pela tela, Conexões mostrava o token errado (ou "defina no
+   servidor"). Passou a perguntar ao resolvedor.
+
+---
+
 ## J17 — Trocar de organização, incluindo a que não foi configurada `[P0]`
 
 **Por que P0:** o seletor de organização fica no topo de toda tela do produto e

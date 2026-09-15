@@ -139,15 +139,29 @@ async function gravar(
   return { ok: true };
 }
 
-/** Já existe verify token gravado? (A leitura é da coluna cifrada, nunca do valor.) */
-async function temVerifyTokenGravado(): Promise<boolean> {
+/** O que já está gravado — SE existe, nunca QUAL. (A leitura é das colunas cifradas.) */
+async function oQueEstaGravado(): Promise<{ temSegredo: boolean; temToken: boolean }> {
   const { data } = await createAdminClient()
     .from("platform_meta_app")
-    .select("verify_token_encrypted")
+    .select("app_secret_encrypted, verify_token_encrypted")
     .eq("id", 1)
     .maybeSingle();
-  return texto((data as { verify_token_encrypted?: string | null } | null)?.verify_token_encrypted) !== "";
+  const linha = data as { app_secret_encrypted?: string | null; verify_token_encrypted?: string | null } | null;
+  return {
+    temSegredo: texto(linha?.app_secret_encrypted) !== "",
+    temToken: texto(linha?.verify_token_encrypted) !== "",
+  };
 }
+
+/**
+ * Sem chave secreta — nem gravada, nem chegando agora — não se gera token.
+ *
+ * O resolvedor (`lib/channels/meta/app.ts`) serve o par INTEIRO ou cai para o
+ * `.env`. Um token gravado sozinho seria exibido para copiar sem nunca valer: o
+ * dono o colaria no painel da Meta e o "Verificar e salvar" de lá receberia 403,
+ * sem nada nesta tela que explicasse. Vale para o primeiro save e para a rotação.
+ */
+const SEM_SEGREDO: UpdateMetaAppResult = { ok: false, error: "app_secret_obrigatorio" };
 
 /**
  * Salva o App Secret e, na PRIMEIRA vez, gera o verify token.
@@ -163,8 +177,10 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
     return { ok: false, error: "invalid_input", details: parsed.error.flatten() };
   }
 
-  const jaTemToken = await temVerifyTokenGravado();
+  const { temSegredo, temToken: jaTemToken } = await oQueEstaGravado();
   const segredoNovo = parsed.data.app_secret;
+
+  if (!segredoNovo && !temSegredo) return SEM_SEGREDO;
 
   if (!segredoNovo && jaTemToken) {
     // Nada a fazer, e dizer isso é melhor que gravar uma trilha de "atualizou"
@@ -225,6 +241,8 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
  */
 export async function rotacionarVerifyTokenDaMeta(): Promise<UpdateMetaAppResult> {
   const { user: authUser } = await requirePlatformAdmin();
+
+  if (!(await oQueEstaGravado()).temSegredo) return SEM_SEGREDO;
 
   const verifyToken = gerarVerifyToken();
   const cifrado = await encryptWebhookSecret(createAdminClient(), verifyToken);

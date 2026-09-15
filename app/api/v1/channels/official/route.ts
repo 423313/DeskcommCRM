@@ -29,6 +29,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
+import { appDaMeta, appDaMetaDoAmbiente } from "@/lib/channels/meta/app";
 import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
 import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { env } from "@/lib/env";
@@ -61,6 +62,35 @@ function publicBase(req: NextRequest): string {
   return (
     usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`
   );
+}
+
+/**
+ * O token de verificação que esta tela pode MOSTRAR — e de onde vem o que vale.
+ *
+ * Isto lia `process.env.META_WEBHOOK_VERIFY_TOKEN` direto, e a migration 0257
+ * tornou a leitura errada nos dois sentidos: com o App da Meta cadastrado pela
+ * tela de administração, o handshake passa a conferir o token do BANCO, e esta
+ * rota seguia mostrando o do `.env` (que a Meta recusaria) ou, sem `.env`,
+ * "defina no servidor" para quem já tinha configurado tudo.
+ *
+ * O valor do banco NÃO é devolvido: ele é mostrado uma vez, na resposta da
+ * action que o gera (`app/actions/settings/updateMetaApp.ts`), e aqui quem
+ * responde é o admin de UM tenant, não quem administra a instalação. O do `.env`
+ * continua sendo mostrado, como sempre foi — é o mesmo valor, na mesma rota.
+ *
+ * "O que vale é igual ao do `.env`" é exatamente "o que vale veio do `.env`",
+ * porque o resolvedor serve o par inteiro de UMA fonte só (`lib/channels/meta/app.ts`).
+ */
+async function tokenDeVerificacaoParaATela(): Promise<{
+  verifyToken: string | null;
+  verifyTokenOrigem: "ambiente" | "instalacao" | null;
+}> {
+  const { verifyToken: emVigor } = await appDaMeta();
+  if (!emVigor) return { verifyToken: null, verifyTokenOrigem: null };
+  if (emVigor === appDaMetaDoAmbiente().verifyToken) {
+    return { verifyToken: emVigor, verifyTokenOrigem: "ambiente" };
+  }
+  return { verifyToken: null, verifyTokenOrigem: "instalacao" };
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -103,7 +133,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     webhook: data
       ? {
           callbackUrl: `${base}/api/v1/webhooks/meta/${data.webhook_path_token}`,
-          verifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN ?? null,
+          ...(await tokenDeVerificacaoParaATela()),
+          // A porta para quem PODE abrir a tela da instalação — mesma regra do
+          // link de `/admin/google` na Agenda. Para o admin de um tenant qualquer
+          // o link seria um 404; a tela diz a ele quem procurar.
+          configurarEm: authz.user.is_platform_admin && !authz.user.support ? "/admin/meta" : null,
           fields: ["messages", "message_template_status_update"],
         }
       : null,
