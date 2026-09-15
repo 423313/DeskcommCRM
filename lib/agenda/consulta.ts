@@ -33,8 +33,38 @@ import { googleRpc } from "./google/sync-store";
  * `motivoParaCliente` vai para o modelo e pode chegar ao cliente final: nada de
  * nome de campo, e ele diz o que fazer em seguida em vez de só negar. É a mesma
  * separação que `lerJornadaDoBanco` já faz, e pela mesma razão (DECISÃO 20).
+ *
+ * ─── ⚠️ O GOOGLE DO DONO DA AGENDA É LIDO COM O ADMIN (issue #879) ───────────
+ *
+ * A junção com `calendar_connections` é o caminho até o Google Agenda, e a RLS
+ * dessa tabela só mostra a conexão ao PRÓPRIO dono e a `manager` para cima:
+ *
+ *     create policy calendar_connections_dono_ou_manager_read ... using (
+ *       ... and (user_id = auth.uid()
+ *                or public.fn_role_at_least(organization_id, 'manager')))
+ *
+ * Consequência medida (Postgres descartável, `baseline.sql`, a MESMA agenda):
+ * dono vê 1 evento do Google, gerente vê 1, **atendente vê 0**. Com o cliente de
+ * sessão, o Atendente que marca na agenda de outra pessoa confere ocupação contra
+ * uma lista sem o Google dela — e aceita marcar por cima de um compromisso
+ * pessoal que existe. (`calendar_selected_external_events` e
+ * `calendar_appointments` são lidas por organização; quem some é a CONEXÃO, e é
+ * ela que leva o evento junto, por `!inner`.)
+ *
+ * Por isso as duas leituras do Google — a conexão e os eventos — saem daqui pelo
+ * cliente ADMIN, e a única coisa que as autoriza é o FILTRO, que continua
+ * explícito: `organization_id` do contexto autenticado (nunca do corpo) e
+ * `user_id` do dono da agenda. As demais leituras (jornada, exceções,
+ * compromissos) continuam no cliente de sessão de propósito: a RLS delas já é por
+ * organização, e trocá-las por admin tiraria uma proteção sem conserto para pagar.
+ *
+ * O que sai daqui continua sendo só ocupação — `Slot[]`. Nenhum título, nenhuma
+ * descrição, nenhum horário de evento: este módulo nunca devolveu conteúdo de
+ * evento e não passa a devolver por causa deste atalho.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { diaLocalISO } from "./fuso";
 import { horariosLivres, type ExcecaoDeData, type Slot } from "./horarios-livres";
@@ -261,7 +291,17 @@ export async function horariosLivresDaOrg(
   // A situação das conexões do dono, para distinguir "não tem Google" de "tem
   // Google que nunca foi lido". Sem `.select` de erro: conexão ilegível cai no
   // mesmo lado de "não sei", que é o lado seguro.
-  const { data: conexoesRaw } = await supabase
+  // ⚠️ A CONEXÃO DO DONO É LIDA PELO ADMIN, de propósito — e a razão está no
+  // cabeçalho deste arquivo: a RLS de `calendar_connections` mostra a conexão
+  // ao próprio dono e a `manager` para cima, então com o cliente de sessão um
+  // Atendente não a veria. Os EVENTOS do Google saem pelo mesmo cliente, em
+  // `coletaOQueOcupa` (a coleta que a grade e o encaixe compartilham). O que
+  // autoriza o atalho é o filtro explícito que segue: `organization_id` do
+  // contexto autenticado e `user_id` do dono da agenda. `createAdminClient` é
+  // memoizado no módulo.
+  const clienteDoGoogle = createAdminClient();
+
+  const { data: conexoesRaw } = await clienteDoGoogle
     .from("calendar_connections")
     .select("status, last_sync_at")
     .eq("organization_id", organizationId)
@@ -358,7 +398,12 @@ export async function coletaOQueOcupa(
     // `calendar_external_events` NÃO tem `user_id`: o dono vem por
     // `connection_id → calendar_connections.user_id`. O join traz de carona a
     // situação da conexão, que decide se o horário sai com aviso de defasagem.
-    supabase
+    //
+    // ⚠️ PELO ADMIN, e não pelo cliente que veio de fora (issue #879, ver o
+    // cabeçalho): com a sessão de um Atendente a junção `!inner` volta vazia e o
+    // Google do dono some — da grade E do encaixe, que é por isso que a troca
+    // mora aqui. O filtro de `organization_id` e de dono é o que autoriza.
+    createAdminClient()
       .from("calendar_selected_external_events")
       .select("starts_at, ends_at, transparency, status, calendar_connections!inner(user_id, status)")
       .eq("organization_id", organizationId)
