@@ -8,6 +8,54 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.25.0] — 2026-09-15
+
+### Adicionado
+
+- **O aniversário do contato pode disparar uma automação** A data de nascimento já aparecia na ficha do contato e não acionava nada: para
+  parabenizar alguém era preciso descobrir sozinho quem fazia aniversário.
+
+  Em Automações, o gatilho "No aniversário de um contato" já pode ser escolhido, e
+  a ação de mandar WhatsApp é a mesma das outras regras. A mensagem sai às 9h no
+  fuso da organização, uma vez por pessoa, e só para quem configurou a regra.
+
+- **A instalação pode aceitar só quem foi convidado** Em **Admin › Cadastro** há um interruptor novo: **cadastro apenas por convite**. Ligado, `/signup` deixa de aceitar quem chega sem convite — e quem chega com um convite válido entra igual.
+
+  **Nada muda para quem não ligar.** O padrão é o comportamento de sempre: qualquer pessoa cria conta e abre a própria empresa. Instalações que já existem não precisam fazer nada.
+
+  **Por que isto é do produto, e não do proxy.** Fechar `/signup` no nginx era a única saída até aqui, e ela erra por construção: proxy não sabe o que é um convite. Medido numa instalação real em 2026-09-10 — a regra que bloqueava `/signup` bloqueou junto o `/signup?invite=…`, ou seja, exatamente quem deveria passar, e o convidado ficou sem conseguir entrar.
+
+  **A recusa tem tela.** Quem abre o cadastro sem convite numa instalação fechada vê uma página com a marca e o idioma da instalação, explicando que o acesso é por convite e oferecendo o login — não um `403 Forbidden` cru do servidor.
+
+  **Fecha nas quatro portas, não só na tela.** A tela é adulterável e a server action é chamável direto, então a recusa acontece também em `signUp()`, em `/auth/confirm` (que é quem provisiona a organização, e pega inclusive conta nascida fora da tela) e na recuperação de organização. Uma porta só seria outro capacho.
+
+  **Se o banco parar de responder, a instalação fechada continua fechada.** A leitura guarda o último valor conhecido em vez de cair no padrão — senão um soluço do banco reabriria o cadastro sem ninguém ver. E instalação que ainda não aplicou esta versão do schema continua aberta, como sempre esteve.
+
+- **Automação externa agora consegue abrir a primeira conversa com um cliente novo** Até aqui, uma automação de prospecção (por exemplo, um fluxo que acabou de captar um lead) não
+  tinha como abrir a primeira conversa com esse cliente pela chave de integração: só dava para
+  mandar mensagem numa conversa que já existia. Agora existe uma nova capacidade de integração
+  ("Iniciar conversa com cliente novo e enviar mensagem") que cadastra o cliente se precisar, abre
+  a conversa no número de WhatsApp escolhido — o próprio fluxo decide qual, em vez de o sistema
+  escolher sozinho — e manda a primeira mensagem. Crédito: @hamiltonviana.
+
+- **O lembrete de compromisso pode avisar mais de uma vez** Um tipo de agendamento tinha um lembrete só. Quem queria avisar o cliente com um
+  dia de antecedência **e de novo poucas horas antes** não tinha como: ligar o
+  segundo aviso exigiria apagar o primeiro.
+
+  Em Configurações › Agenda, cada tipo ganhou o campo "E de novo, quantos minutos
+  antes", que aceita até três avisos adicionais. Vazio é o comportamento de
+  sempre, um lembrete só — nada muda para quem não mexer no campo.
+
+### Corrigido
+
+- **O acompanhamento que já encerrou deixa de derrubar o banco** O banco da instalação podia ir a 100% de processador sem ninguém usando o produto. A causa era um acompanhamento (follow-up) que já tinha acabado: o sistema tentava atualizá-lo, o banco recusava, e o recuso era do tipo que o próprio banco pede "tente de novo". Ele tentava de novo — milhares de vezes por minuto — e o processador não saía do teto.
+
+  Isso não muda tela, fluxo nem configuração. Na próxima atualização o recuso deixa de pedir retry, e o banco volta a respirar.
+
+  Nada para fazer na VPS além de atualizar quando o aviso aparecer.
+
+- **O primeiro pareamento de chamada de voz recebe o código QR** Com o serviço de voz configurado, a tela prepara a sessão antes de abrir a conexão de eventos e pedir o QR. A conexão do pareamento e a ponte que acompanha as chamadas passam a enviar a credencial já usada nas demais operações. Falhas ao receber o código aparecem na tela e permitem tentar novamente.
+
 ## [1.24.0] — 2026-09-14
 
 ### Adicionado
@@ -4433,7 +4481,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.24.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.0...HEAD
+[1.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.21.0...v1.22.0

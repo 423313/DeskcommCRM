@@ -1,4 +1,4 @@
--- 0255 — o audit log perde o TRUNCATE, e o append-only vira verdade inteira
+-- 0257 — o audit log perde o TRUNCATE, e o append-only vira verdade inteira
 --
 -- ─── O problema ─────────────────────────────────────────────────────────────
 --
@@ -51,6 +51,6 @@
 revoke truncate on table public.api_audit_log from anon, authenticated, service_role;
 
 comment on table public.api_audit_log is
-  'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0255) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
+  'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0257) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
 
 notify pgrst, 'reload schema';

@@ -80,7 +80,7 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
     where table_name='api_audit_log' and privilege_type in ('DELETE','UPDATE','TRUNCATE');"
   ```
 
-  **`TRUNCATE` entra na consulta de propósito, e desde a migration 0255 o
+  **`TRUNCATE` entra na consulta de propósito, e desde a migration 0257 o
   resultado é vazio.** Até ela, estava concedido a `anon`, `authenticated` e
   `service_role` — resíduo de o dump enumerar os privilégios desta tabela (as
   demais recebem `GRANT ALL`, e quem as protege é a RLS). Nunca foi alcançável
@@ -332,7 +332,28 @@ Duas armadilhas irmãs, as duas pagas no mesmo dia:
   ```
 
   Se não baterem, a sonda está cega — troque por `--reporter=verbose` e rode de
-  novo, em vez de acreditar no silêncio. (Comparar contra `Test Files` dá
+  novo, em vez de acreditar no silêncio.
+
+  **E as duas podem bater em zero com a suíte reprovada.** O Vitest sai com
+  `exit=1` quando há **erro não tratado** durante a execução, mesmo com todos os
+  testes passando — e esse erro aparece numa TERCEIRA linha do rodapé, que
+  nenhuma das duas sondas acima lê:
+
+  ```
+   Test Files  866 passed (866)
+        Tests  8904 passed | 1 expected fail (8905)
+       Errors  1 error          ← só o exit code viu isto
+  ```
+
+  Medido em 2026-09-15: `EnvironmentTeardownError: [vitest-worker]: Closing rpc
+  while "onUserConsoleLog" was pending`, sob carga. Rodapé `0 failed`, `grep FAIL`
+  vazio, exit 1. **O exit code é a autoridade; o rodapé e o grep são explicação
+  dele.** Quando o exit diverge dos dois, leia a linha `Errors` antes de concluir
+  qualquer coisa:
+
+  ```bash
+  grep -aE "^ *Errors " /tmp/vt.log      # vazio é o esperado
+  ``` (Comparar contra `Test Files` dá
   divergência falsa: `2 failed` de arquivos contra `7` de casos parece defeito
   da sonda e é só régua trocada.)
 

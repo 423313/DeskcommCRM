@@ -16273,20 +16273,51 @@ alter table public.calendar_connection_calendars
 comment on column public.calendar_connection_calendars.time_zone is
   'Fuso IANA do calendário, como o Google devolve (`timeZone`). NULL = ainda não sincronizado; quem lê deve tratar NULL como "não sei", nunca como UTC — foi o `?? UTC` que fez evento de dia inteiro vazar a noite anterior.';
 
--- ---- lembrete nasce desligado (migration 0194) ----
+-- ---- lembrete nasce desligado (migrations 0194 + 0255) ----
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, pelo mesmo motivo da 0193.
+--
+-- A 0194 corrigiu o histórico junto com o default, e o raciocínio dela valia
+-- naquele dia: "com zero leitores e zero disparador, nada depende do valor
+-- atual". Ela própria avisou o que viria depois — *"Depois do disparador, isto
+-- seria apagar a escolha de um operador"*.
+--
+-- O disparador nasceu (`agenda-reminder`), e o `update.sh` re-aplica este
+-- arquivo INTEIRO a cada atualização. Sem guarda, toda atualização desligava o
+-- lembrete de todo tipo em que alguém o tinha ligado — sem erro, sem log, com a
+-- tela mostrando o controle desmarcado como se ninguém o tivesse marcado.
+--
+-- A guarda é o `column_default`, porque pelo VALOR da coluna é impossível
+-- distinguir "linha antiga que ninguém escolheu" de "linha que o operador
+-- acabou de ligar": as duas são `true`. O default só é diferente de `false`
+-- ANTES da primeira aplicação da 0194 neste banco, que é o único momento em que
+-- corrigir o histórico é certo.
+--
+-- ⚠️ LER O DEFAULT ANTES DE GRAVÁ-LO. Invertido, a condição seria sempre falsa e
+-- um clone pré-0194 nunca receberia a correção que a 0194 existe para fazer.
+do $$
+declare
+  v_default text;
+begin
+  select column_default into v_default
+    from information_schema.columns
+   where table_schema = 'public'
+     and table_name = 'calendar_event_types'
+     and column_name = 'reminder_enabled';
+
+  -- `is distinct from`: num banco sem a coluna a consulta devolve NULL, e
+  -- `NULL <> 'false'` seria NULL — pulando a correção em silêncio.
+  if v_default is distinct from 'false' then
+    update public.calendar_event_types
+       set reminder_enabled = false
+     where reminder_enabled is true;
+  end if;
+end $$;
+
 alter table public.calendar_event_types
   alter column reminder_enabled set default false;
 
--- As linhas JÁ criadas também voltam: com zero leitores e zero disparador, nada depende do
--- valor atual, então este é o único momento em que corrigir o histórico não regride
--- comportamento de ninguém. Depois do disparador, isto seria apagar a escolha de um operador.
-update public.calendar_event_types
-   set reminder_enabled = false
- where reminder_enabled is true;
-
 comment on column public.calendar_event_types.reminder_enabled is
-  'Lembrete automático deste tipo. Nasce DESLIGADO de propósito: enviar mensagem é irreversível, e um default ligado inscreveria o histórico inteiro sem ninguém ter escolhido. Ligar por padrão é decisão do dono do produto, a ser tomada quando o disparador existir.';
+  'Lembrete automático deste tipo. Nasce DESLIGADO: enviar mensagem é irreversível. O histórico foi corrigido UMA vez, na primeira aplicação da 0194 em cada banco (a 0255 guarda isso pelo column_default) — depois disso, true significa que alguém ligou, e atualizar o CRM não desliga mais.';
 
 -- ---- tipo semeado adota dono no primeiro membro (migration 0195) ----
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon: aqui é OBRIGATÓRIO, não preferência —
@@ -24603,7 +24634,62 @@ grant execute on function public.fn_configurar_pre_go_live_canal(uuid, uuid, tex
   to service_role;
 
 notify pgrst, 'reload schema';
--- ---- o audit log perde o TRUNCATE (migration 0255) ----
+-- ---- lead do ingest nao duplica (migration 0256) ----
+-- Check-then-act em TypeScript deixava três mensagens seguidas virarem três
+-- negócios (medido: mesmo contato, três cards às 17:07). O advisory lock
+-- serializa só o MESMO contato; um índice único resolveria a corrida e
+-- quebraria o caso legítimo de dois negócios abertos criados à mão.
+create or replace function public.fn_nascer_lead_da_conversa(
+  p_org uuid,
+  p_contact uuid,
+  p_pipeline uuid,
+  p_stage uuid,
+  p_title text,
+  p_source text,
+  p_source_metadata jsonb default '{}'::jsonb,
+  p_tags text[] default '{}'::text[]
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  -- Serializa por (organização, contato). Transaction-scoped: liberado no
+  -- commit, sem risco de lock vazado.
+  perform pg_advisory_xact_lock(hashtextextended(p_org::text || ':' || p_contact::text, 0));
+
+  select id into v_id
+    from public.crm_leads
+   where organization_id = p_org
+     and contact_id = p_contact
+     and status = 'open'
+   limit 1;
+
+  -- NULL significa "já existe", e quem chama traduz isso para `ja_existe`. Não é
+  -- erro: é o desfecho correto da segunda mensagem.
+  if v_id is not null then
+    return null;
+  end if;
+
+  insert into public.crm_leads
+    (organization_id, pipeline_id, stage_id, contact_id, title, source, source_metadata, tags)
+  values
+    (p_org, p_pipeline, p_stage, p_contact, p_title, p_source, coalesce(p_source_metadata, '{}'::jsonb), coalesce(p_tags, '{}'::text[]))
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke execute on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) from public, anon;
+grant  execute on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) to authenticated, service_role;
+
+comment on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) is
+  'Cria o lead de entrada do ingest serializando por (organização, contato) com advisory lock. Devolve NULL quando já existe um aberto. Existe porque o check-then-act em TypeScript deixava três mensagens seguidas virarem três negócios; um índice único resolveria a corrida e quebraria o caso legítimo de dois negócios abertos criados à mão.';
+-- ---- o audit log perde o TRUNCATE (migration 0257) ----
 --
 -- `api_audit_log` é a única tabela do dump com lista enumerada de privilégios
 -- em vez de `GRANT ALL`: alguém tirou UPDATE e DELETE e deixou TRUNCATE, que
@@ -24622,7 +24708,7 @@ notify pgrst, 'reload schema';
 revoke truncate on table public.api_audit_log from anon, authenticated, service_role;
 
 comment on table public.api_audit_log is
-  'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0255) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
+  'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0257) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
 
 notify pgrst, 'reload schema';
 
