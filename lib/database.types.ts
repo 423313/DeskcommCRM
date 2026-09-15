@@ -2222,6 +2222,7 @@ export type Database = {
           outcome_user_id: string | null
           owner_user_id: string | null
           reminder_sent_at: string | null
+          reminder_sent_offsets_minutes: number[]
           rescheduled_from_id: string | null
           revision: number
           revision_started_at: string
@@ -2286,6 +2287,7 @@ export type Database = {
           outcome_user_id?: string | null
           owner_user_id?: string | null
           reminder_sent_at?: string | null
+          reminder_sent_offsets_minutes?: number[]
           rescheduled_from_id?: string | null
           revision?: number
           revision_started_at?: string
@@ -2350,6 +2352,7 @@ export type Database = {
           outcome_user_id?: string | null
           owner_user_id?: string | null
           reminder_sent_at?: string | null
+          reminder_sent_offsets_minutes?: number[]
           rescheduled_from_id?: string | null
           revision?: number
           revision_started_at?: string
@@ -2661,6 +2664,7 @@ export type Database = {
           position: number
           reminder_enabled: boolean
           reminder_minutes_before: number
+          reminder_extra_offsets_minutes: number[]
           reminder_template_name: string | null
           requires_confirmation: boolean
           slot_interval_minutes: number | null
@@ -2686,6 +2690,7 @@ export type Database = {
           position?: number
           reminder_enabled?: boolean
           reminder_minutes_before?: number
+          reminder_extra_offsets_minutes?: number[]
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
@@ -2711,6 +2716,7 @@ export type Database = {
           position?: number
           reminder_enabled?: boolean
           reminder_minutes_before?: number
+          reminder_extra_offsets_minutes?: number[]
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
@@ -3426,6 +3432,7 @@ export type Database = {
           avatar_storage_path: string | null
           avatar_updated_at: string | null
           birthdate: string | null
+          birthday_md: number | null
           blocked_at: string | null
           blocked_reason: string | null
           consent: Json

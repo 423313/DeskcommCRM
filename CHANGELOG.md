@@ -8,6 +8,58 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.24.0] — 2026-09-14
+
+### Adicionado
+
+- **Você passa a ver, por cliente, qual agente está publicado** Se você administra a instalação, agora dá para saber se cada cliente está sendo atendido sem abrir cliente por cliente: a tela de Uso ganhou a coluna com o agente publicado (e o mesmo campo no CSV), e cada cliente ganhou a aba **Agente**, com a versão que o motor executa, o provedor e o modelo. A leitura fica registrada na auditoria com o seu usuário e a organização visitada. Nada precisa ser feito na VPS. Crédito: @jostoz.
+
+### Corrigido
+
+- **O agente para de dizer que a mensagem veio vazia quando ela tem texto** Quando chegava um áudio ou uma foto sem legenda, o agente lia a coluna crua da
+  mensagem e recebia o corpo vazio — mesmo com a transcrição já gravada e o texto
+  à vista na tela da conversa. Com isso ele respondia ao cliente dizendo que a
+  mensagem tinha vindo em branco, e a trava que impede exatamente essa frase
+  ficava desarmada, porque aos olhos dele não havia texto nenhum. Agora a
+  mensagem que acorda o agente é lida pela mesma função que monta o histórico da
+  conversa: com texto, com transcrição ou com o marcador da mídia, ele nunca mais
+  anuncia vazio.
+
+  Achado e corrigido por @webtecnica.
+
+- **O hub de IA respeita o idioma escolhido** Ao abrir a área de IA em espanhol, títulos, seções e descrições agora acompanham o idioma escolhido em vez de aparecerem em português. Crédito: @alexneverland.
+
+- **Grafo corrompido deixa de passar no schema** O schema do fluxo validava cada nó e cada aresta isoladamente, então um grafo corrompido passava no salvamento: aresta apontando para nó que não existe mais (o estrago que o editor produz ao excluir um nó), dois nós com o mesmo id e duas arestas com o mesmo id. O `flowGraphSchema` agora tem uma catraca de integridade que rejeita os três casos com mensagem explícita dizendo o id a corrigir — `aresta "e-3" aponta para nó inexistente: "no-9"`, `id de nó repetido: "no-1"`, `id de aresta repetido: "e-2"`.
+
+  Esses grafos só quebravam longe do defeito: no meio de um disparo, quando uma aresta não resolvia para nó nenhum. Como salvar o rascunho e carregar a versão usam a mesma porta, o erro passa a aparecer na hora de salvar, com o id na mensagem, em vez de virar um caso de suporte.
+
+  Quem já tem rascunho corrompido passa a ver o erro ao abrir e salvar o fluxo e precisa corrigir a aresta — não há migração automática, decisão registrada na issue #699. Grafo íntegro e campo desconhecido seguem como antes, com controle nos testes.
+
+- **Material .txt e .md salvo no Windows entra na base de conhecimento sem mojibake** Arquivo de texto salvo no Bloco de Notas — que grava em cp1252 (ANSI) por padrão, e é assim que quem monta a base de conhecimento no Windows escreve os `.txt` e `.md` — entrava no conhecimento do agente com cada acento virando U+FFFD — "Ação" entrava como "A��o". Não dava erro, não dava aviso: o material aparecia como pronto na tela, o índice era construído, e o agente passava a citar o texto corrompido para o cliente.
+
+  Agora a leitura dos bytes usa a mesma decisão de codificação que a importação de planilhas já usava (lê como UTF-8 e só troca para windows-1252 quando o arquivo prova não ser UTF-8), e material que não é texto — um `.xlsx` renomeado para `.md`, ou um `.txt` salvo como "Unicode" (UTF-16) — é recusado no envio com uma frase dizendo o que fazer, em vez de entrar como lixo. Material que já era UTF-8 entra exatamente como antes.
+
+- **O canal não volta sozinho para o modo de teste depois de aberto ao público** O modo de acesso da IA de um canal mora em três chaves de metadata: uma diz se o
+  canal está aberto, em allowlist por origem ou em lista de testadores; outra diz
+  se ele está em pré-go-live. Ao abrir o canal ao público, a segunda chave era
+  gravada sempre com o mesmo valor — "em teste" — mesmo quando o canal já não
+  estava em teste. Sozinha, a chave errada não mudava nada. Na volta, sim: o script
+  que liga o allowlist POR ORIGEM gravava só a primeira chave, então o canal
+  reaparecia em modo de teste com a lista de testadores antiga, em vez de atender
+  quem tem autorização por origem. A IA parava de responder a quem deveria atender
+  sem erro nenhum na tela, e o próprio simulador do script prometia que o contato
+  seria atendido.
+
+  Agora as duas chaves andam juntas nas duas pontas: abrir ao público tira o canal
+  do teste, e o script escreve o alvo nos dois campos — recusando a gravação se o
+  motor continuaria lendo modo de teste. O simulador do script passou a prometer o
+  mesmo veredito que o motor executa.
+
+  Canais que hoje estão abertos com a chave velha continuam abertos: ela sai na
+  próxima gravação da tela ou do script. Você não precisa fazer nada para adotar.
+
+  Achado e corrigido por @webtecnica.
+
 ## [1.23.0] — 2026-09-14
 
 ### Adicionado
@@ -4381,7 +4433,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.23.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.24.0...HEAD
+[1.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.20.0...v1.21.0

@@ -602,6 +602,7 @@ jobs:
         zona-de-perigo-apaga-dados-de-teste.spec.ts
         central-avisos-resolver-em-lote.spec.ts
         voz-desligada-por-padrao.spec.ts
+        voz-primeiro-pareamento.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         qa-titulos-das-telas.spec.ts
         qa-equipe-pinta-na-hora.spec.ts
