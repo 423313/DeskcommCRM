@@ -187,6 +187,29 @@ describe("apiClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("t11b: 503 com Retry-After num POST também repete — é o contrato do discador com o socket caído", async () => {
+    // `POST /api/v1/voice/calls` responde 503 `wacalls_not_connected` +
+    // `Retry-After` quando o WaCalls diz "websocket not connected" (o erro nasce
+    // ANTES de qualquer <call> sair, então repetir é seguro). Este caso prende a
+    // outra metade do contrato: o cliente de fato repete um POST em 503.
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          503,
+          { error: { code: "wacalls_not_connected", message: "sem conexão" } },
+          { "Retry-After": "0" },
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse(201, { data: { id: "c1" } }));
+
+    const result = await apiClient.post<{ data: { id: string } }>("/api/v1/voice/calls", {
+      contactId: "x",
+    });
+
+    expect(result).toEqual({ data: { id: "c1" } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   /**
    * O ORÇAMENTO DE ESPERA DA ESCRITA (o vermelho de `followup-dossie:190`).
    *

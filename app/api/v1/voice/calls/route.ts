@@ -15,7 +15,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { exigirVozLigada } from "@/lib/voice/guarda";
-import { getWacallsClient, wacallsFriendlyError } from "@/lib/wacalls/client";
+import { getWacallsClient, wacallsFriendlyError, wacallsSemConexao } from "@/lib/wacalls/client";
 import { resolveWacallsSession } from "@/lib/wacalls/session";
 
 export const dynamic = "force-dynamic";
@@ -150,6 +150,19 @@ export async function POST(req: Request): Promise<Response> {
       contact_id: contact.id,
       error: err instanceof Error ? err.message : String(err),
     });
+    // Socket do WhatsApp caído por baixo de uma sessão pareada — ver o cabeçalho
+    // de `wacallsSemConexao`. 503 e não 502, porque a distinção não é cosmética:
+    // `lib/api/client.ts` repete 503 (até 3 tentativas, espaçadas pelo
+    // `Retry-After`), e repetir AQUI é seguro — o erro nasce ANTES de qualquer
+    // `<call>` sair para o telefone, então nada foi discado duas vezes. Um 502
+    // vira toast na hora, e era isso que a pessoa via: dois cliques, dois
+    // erros genéricos, e o número voltando sozinho minutos depois.
+    if (wacallsSemConexao(err)) {
+      return fail("wacalls_not_connected", wacallsFriendlyError(err), 503, {
+        requestId,
+        headers: { "Retry-After": "3" },
+      });
+    }
     return fail("wacalls_error", wacallsFriendlyError(err), 502, { requestId });
   }
 }

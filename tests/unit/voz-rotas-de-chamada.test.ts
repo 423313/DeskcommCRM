@@ -29,9 +29,12 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/logger", () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
-vi.mock("@/lib/wacalls/client", () => ({
+// Só o CLIENTE é dublê. `wacallsFriendlyError`/`wacallsSemConexao` são puras e
+// entram de verdade: o caso do socket caído mede a rota escolhendo 503 a partir
+// do texto real do upstream, e um dublê aqui mediria o dublê.
+vi.mock("@/lib/wacalls/client", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   getWacallsClient: vi.fn(),
-  wacallsFriendlyError: (e: unknown) => String(e),
 }));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -196,6 +199,66 @@ describe("o discador respeita quem pediu para não ser incomodado", () => {
     expect(res.status).toBe(422);
     expect((await corpo(res)).error).toMatchObject({ code: "contact_anonymized" });
     expect(wacalls.startCall).not.toHaveBeenCalled();
+  });
+});
+
+describe("o número pareado cujo socket com o WhatsApp caiu", () => {
+  /**
+   * O corpo EXATO do log da VPS em 2026-09-15 11:10:20 UTC — 60 s depois de o
+   * worker registrar "sessão pareada". O WaCalls segue dizendo `state: open`
+   * (não tem caso para `Disconnected`), então este texto é a única fonte do
+   * fato; ver o cabeçalho de `wacallsSemConexao` em `lib/wacalls/client.ts`.
+   */
+  const SOCKET_CAIDO = new Error(
+    'wacalls_500: {"error":"usync devices: failed to send usync query: websocket not connected"}\n',
+  );
+  const SESSAO_PAREADA = {
+    data: { id: "canal-de-voz", wacalls_session_id: "sessao-up" },
+    error: null,
+  };
+
+  async function discar() {
+    const { POST } = await import("@/app/api/v1/voice/calls/route");
+    return POST(
+      new Request("http://x/api/v1/voice/calls", {
+        method: "POST",
+        body: JSON.stringify({ contactId: CONTATO }),
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    respostas["channel_sessions"] = SESSAO_PAREADA;
+    respostas["contacts"] = {
+      data: { id: CONTATO, phone_number: "5511900000000", name: "Fulano", is_blocked: false, is_anonymized: false },
+      error: null,
+    };
+  });
+
+  it("responde 503 com Retry-After, o código próprio e a orientação — não o 502 genérico", async () => {
+    wacalls.startCall.mockRejectedValueOnce(SOCKET_CAIDO);
+
+    const res = await discar();
+    expect(res.status).toBe(503);
+    // `Retry-After` é o que faz `lib/api/client.ts` repetir o POST sozinho: a
+    // pessoa clica uma vez, e a janela de reconexão do whatsmeow é absorvida.
+    expect(res.headers.get("Retry-After")).toBe("3");
+    const erro = (await corpo(res)).error as { code: string; message: string };
+    expect(erro.code).toBe("wacalls_not_connected");
+    expect(erro.message).toContain("sem conexão com o WhatsApp");
+    expect(erro.message).not.toBe("Não foi possível completar a chamada. Tente novamente em instantes.");
+    // Nada foi discado, então repetir é seguro — é o que torna o 503 honesto.
+    expect(inseridas.filter((i) => i.tabela === "voice_calls")).toEqual([]);
+  });
+
+  it("controle: outra recusa do upstream continua 502 sem Retry-After", async () => {
+    wacalls.startCall.mockRejectedValueOnce(new Error("wacalls_429: max concurrent calls"));
+
+    const res = await discar();
+    expect(res.status).toBe(502);
+    expect(res.headers.get("Retry-After")).toBeNull();
+    expect((await corpo(res)).error).toMatchObject({ code: "wacalls_error" });
   });
 });
 

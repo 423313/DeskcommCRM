@@ -134,6 +134,7 @@ export const ApiErrorCodes = {
   unavailable: "unavailable", // 503: dependência de config ausente (ex.: pool do engine sem SUPABASE_DB_URL)
   waha_error: "waha_error",
   wacalls_error: "wacalls_error", // 502: o serviço de chamada de voz recusou ou não respondeu
+  wacalls_not_connected: "wacalls_not_connected", // 503 + Retry-After: sessão pareada cujo socket com o WhatsApp caiu por um instante (ver `wacallsSemConexao`)
   ai_provider_error: "ai_provider_error",
   nuvemshop_error: "nuvemshop_error",
 } as const;

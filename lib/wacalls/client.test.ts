@@ -1,8 +1,36 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { WacallsClient, wacallsFriendlyError } from "./client";
+import { WacallsClient, wacallsFriendlyError, wacallsSemConexao } from "./client";
+
+/**
+ * O corpo EXATO que o WaCalls devolveu na VPS em 2026-09-15 11:10 UTC, 60 s
+ * depois de "sessão pareada" — copiado do log do app, não reconstruído.
+ */
+const SOCKET_CAIDO = new Error(
+  'wacalls_500: {"error":"usync devices: failed to send usync query: websocket not connected"}\n',
+);
+
+describe("wacallsSemConexao", () => {
+  it("reconhece o socket caído pelo texto que vem de dentro do whatsmeow", () => {
+    expect(wacallsSemConexao(SOCKET_CAIDO)).toBe(true);
+  });
+
+  it("não confunde com as outras recusas do upstream", () => {
+    expect(wacallsSemConexao(new Error("wacalls_503: not paired"))).toBe(false);
+    expect(wacallsSemConexao(new Error("wacalls_409: operator already on a call"))).toBe(false);
+    expect(wacallsSemConexao(new Error("network timeout"))).toBe(false);
+  });
+});
 
 describe("wacallsFriendlyError", () => {
+  it("socket caído diz que é passageiro e o que fazer, em vez do genérico", () => {
+    const texto = wacallsFriendlyError(SOCKET_CAIDO);
+    expect(texto).not.toBe("Não foi possível completar a chamada. Tente novamente em instantes.");
+    expect(texto).toContain("sem conexão com o WhatsApp");
+    expect(texto).toContain("Aguarde alguns segundos");
+    expect(texto).toContain("Configurações › Canais");
+  });
+
   it("traduz operator already on a call para mensagem amigável", () => {
     expect(wacallsFriendlyError(new Error("operator already on a call"))).toBe(
       "Você já está em outra chamada. Encerre-a antes de iniciar uma nova.",

@@ -163,6 +163,8 @@ Todas exigem `getUser()` + verificação de organização (nunca confiar em `org
 | `DELETE /api/v1/voice/calls/:id` | `DELETE .../calls/{id}` | → 204 |
 | `GET /api/v1/voice/calls/history` | `GET .../history` | → `{rows: CallRecord[]}` |
 
+**Erro do upstream em `POST /api/v1/voice/calls`:** o texto passa por `wacallsFriendlyError` e a rota responde `502 wacalls_error` — com UMA exceção. `500 {"error":"usync devices: ... websocket not connected"}` é o socket do WhatsApp caído por baixo de uma sessão que o WaCalls ainda declara `state: open` (o `handleEvent` de `internal/app/session/session.go` não tem caso para `Disconnected`, então o estado nunca desce; `handleStartCall` só confere `IsPaired()`). Medido na VPS em 2026-09-15: 60 s depois de "sessão pareada", duas recusas com esse corpo, e a conexão de pé outra vez minutos depois sem restart. Para esse caso a rota responde **`503 wacalls_not_connected` + `Retry-After: 3`** — `lib/api/client.ts` repete 503 (até 3 tentativas), e repetir é seguro porque o erro nasce antes de qualquer `<call>` sair. Regra em `wacallsSemConexao` (`lib/wacalls/client.ts`); medido em `tests/unit/voz-rotas-de-chamada.test.ts`.
+
 **`X-Client-Id`** (header ou `?clientId=`) é como o WaCalls identifica o OPERADOR dono de uma chamada (exclusividade — um atendente só segura uma chamada ativa por vez, `409 operator already on a call` senão). A rota DeskcommCRM injeta o `user.id` da sessão autenticada aqui — nunca deixa o frontend escolher esse valor.
 
 `sessionId` do WaCalls nunca vaza pro frontend sem passar pela verificação de org — igual o `webhook_path_token` do WAHA não expõe `session_name` direto.

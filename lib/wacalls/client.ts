@@ -216,8 +216,36 @@ export function getWacallsClient(): WacallsClient | null {
   return new WacallsClient(url, token);
 }
 
+/**
+ * O socket do WhatsApp caiu por baixo de uma sessão que o WaCalls ainda
+ * declara `open`.
+ *
+ * Medido em produção (2026-09-15, VPS hg): 60 s depois de o worker registrar
+ * "sessão pareada", `POST /sessions/{sid}/calls` respondeu
+ * `500 {"error":"usync devices: failed to send usync query: websocket not
+ * connected"}` — duas vezes, cinco segundos entre uma e outra — e vinte minutos
+ * depois o mesmo contêiner tinha a conexão com os servidores da Meta de pé
+ * outra vez, sem restart e sem novo pareamento. O upstream marca a sessão como
+ * `open` no instante do QR "success" e NÃO tem caso para `Disconnected` no
+ * `handleEvent` (`internal/app/session/session.go`): o estado não desce quando
+ * o socket cai, e `handleStartCall` só confere `IsPaired()`. A única fonte do
+ * fato "está sem socket agora" é este texto, vindo de dentro do whatsmeow.
+ *
+ * É condição PASSAGEIRA (o whatsmeow reconecta sozinho) e o número foi
+ * PRESERVADO (o pareamento não se perdeu) — por isso a rota devolve 503 com
+ * `Retry-After`, que é o que `lib/api/client.ts` já sabe repetir, e não o 502
+ * de "o serviço recusou".
+ */
+export function wacallsSemConexao(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes("websocket not connected");
+}
+
 export function wacallsFriendlyError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
+  if (wacallsSemConexao(err)) {
+    return "O número de voz está sem conexão com o WhatsApp neste momento — acontece logo depois de parear ou quando a rede oscila. Aguarde alguns segundos e tente de novo; se continuar, refaça o pareamento em Configurações › Canais.";
+  }
   if (msg.includes("wacalls_401") || msg.includes("wacalls_403")) {
     return "O serviço de chamada de voz recusou a credencial deste servidor. Confira WACALLS_API_TOKEN.";
   }

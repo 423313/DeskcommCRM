@@ -4264,6 +4264,10 @@ export const DICIONARIO: Traducoes = {
   // Mensagens que as rotas de voz devolvem traduzidas (`traduzir(..., idioma)`).
   "Chamada de voz ligada.": { es: "Llamadas de voz activadas." },
   "Chamada de voz desligada.": { es: "Llamadas de voz desactivadas." },
+  "O número de voz está sem conexão com o WhatsApp neste momento — acontece logo depois de parear ou quando a rede oscila. Aguarde alguns segundos e tente de novo; se continuar, refaça o pareamento em Configurações › Canais.":
+    {
+      es: "El número de voz está sin conexión con WhatsApp en este momento: ocurre justo después de vincular o cuando la red oscila. Espera unos segundos y vuelve a intentarlo; si continúa, vuelve a vincular en Configuración › Canales.",
+    },
   "Chamada de voz desligada e aparelho desconectado.": {
     es: "Llamadas de voz desactivadas y dispositivo desconectado.",
   },
