@@ -2663,8 +2663,8 @@ export type Database = {
           organization_id: string
           position: number
           reminder_enabled: boolean
-          reminder_minutes_before: number
           reminder_extra_offsets_minutes: number[]
+          reminder_minutes_before: number
           reminder_template_name: string | null
           requires_confirmation: boolean
           slot_interval_minutes: number | null
@@ -2689,8 +2689,8 @@ export type Database = {
           organization_id: string
           position?: number
           reminder_enabled?: boolean
-          reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
+          reminder_minutes_before?: number
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
@@ -2715,8 +2715,8 @@ export type Database = {
           organization_id?: string
           position?: number
           reminder_enabled?: boolean
-          reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
+          reminder_minutes_before?: number
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
@@ -3470,6 +3470,7 @@ export type Database = {
           avatar_storage_path?: string | null
           avatar_updated_at?: string | null
           birthdate?: string | null
+          birthday_md?: number | null
           blocked_at?: string | null
           blocked_reason?: string | null
           consent?: Json
@@ -3507,6 +3508,7 @@ export type Database = {
           avatar_storage_path?: string | null
           avatar_updated_at?: string | null
           birthdate?: string | null
+          birthday_md?: number | null
           blocked_at?: string | null
           blocked_reason?: string | null
           consent?: Json
@@ -7096,6 +7098,27 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_settings: {
+        Row: {
+          id: number
+          signup_mode: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: number
+          signup_mode?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: number
+          signup_mode?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       platform_support_sessions: {
         Row: {
           access_mode: string
@@ -8429,9 +8452,20 @@ export type Database = {
           google_sync_error: string | null
           google_synced_at: string | null
           google_synced_local_revision: number | null
+          guest_email: string | null
           id: string | null
           location_details: string | null
           location_kind: string | null
+          meeting_attempts: number | null
+          meeting_delivery: Json | null
+          meeting_delivery_job_id: string | null
+          meeting_last_error: string | null
+          meeting_next_attempt_at: string | null
+          meeting_ready_at: string | null
+          meeting_received_at: string | null
+          meeting_request_id: string | null
+          meeting_requested_at: string | null
+          meeting_state: string | null
           meeting_url: string | null
           needs_google_push: boolean | null
           notes: string | null
@@ -8482,9 +8516,20 @@ export type Database = {
           google_sync_error?: string | null
           google_synced_at?: string | null
           google_synced_local_revision?: number | null
+          guest_email?: string | null
           id?: string | null
           location_details?: string | null
           location_kind?: string | null
+          meeting_attempts?: number | null
+          meeting_delivery?: Json | null
+          meeting_delivery_job_id?: string | null
+          meeting_last_error?: string | null
+          meeting_next_attempt_at?: string | null
+          meeting_ready_at?: string | null
+          meeting_received_at?: string | null
+          meeting_request_id?: string | null
+          meeting_requested_at?: string | null
+          meeting_state?: string | null
           meeting_url?: string | null
           needs_google_push?: boolean | null
           notes?: string | null
@@ -8535,9 +8580,20 @@ export type Database = {
           google_sync_error?: string | null
           google_synced_at?: string | null
           google_synced_local_revision?: number | null
+          guest_email?: string | null
           id?: string | null
           location_details?: string | null
           location_kind?: string | null
+          meeting_attempts?: number | null
+          meeting_delivery?: Json | null
+          meeting_delivery_job_id?: string | null
+          meeting_last_error?: string | null
+          meeting_next_attempt_at?: string | null
+          meeting_ready_at?: string | null
+          meeting_received_at?: string | null
+          meeting_request_id?: string | null
+          meeting_requested_at?: string | null
+          meeting_state?: string | null
           meeting_url?: string | null
           needs_google_push?: boolean | null
           notes?: string | null
@@ -8592,6 +8648,13 @@ export type Database = {
             columns: ["google_connection_id"]
             isOneToOne: false
             referencedRelation: "calendar_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_appointments_meeting_delivery_job_id_fkey"
+            columns: ["meeting_delivery_job_id"]
+            isOneToOne: false
+            referencedRelation: "job_queue"
             referencedColumns: ["id"]
           },
           {
@@ -9008,6 +9071,10 @@ export type Database = {
       fn_definir_marca_da_organizacao: {
         Args: { p_actor: string; p_marca: Json; p_org: string }
         Returns: number
+      }
+      fn_degraus_de_lembrete_validos: {
+        Args: { p_degraus: number[] }
+        Returns: boolean
       }
       fn_demanda_encerrar: {
         Args: {
