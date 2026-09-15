@@ -24606,7 +24606,7 @@ comment on column public.user_organizations.provisional_until_handover is
   'cria). Nunca deduzir este valor depois: a ausência dele foi o que fez a '
   'primeira versão desta regra expulsar alguém da própria empresa.';
 
--- ---- O App da Meta sai do `.env` e vira linha da INSTALAÇÃO (migration 0252) ----
+-- ---- O App da Meta sai do `.env` e vira linha da INSTALAÇÃO (migration 0255) ----
 --
 -- O App Secret e o verify token do webhook são do APP, e um App da Meta atende N
 -- WABAs de N organizações: não há o que separar por tenant. Antes disto os dois

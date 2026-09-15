@@ -325,7 +325,7 @@ export const AUDIT_ACTIONS = [
   // event_log (nenhum handler consumiria o tipo — ver register-handlers.ts).
   "platform_branding.updated",
   "platform_google_oauth.updated",
-  // A credencial do APP da Meta da INSTALAÇÃO (migration 0252): o App Secret que
+  // A credencial do APP da Meta da INSTALAÇÃO (migration 0255): o App Secret que
   // assina a entrega do webhook e o verify token que responde ao handshake.
   // Auditável pelo mesmo motivo da linha acima, e com alcance maior — quem tem o
   // App Secret assina uma entrega de webhook VÁLIDA com dados que ele inventar,

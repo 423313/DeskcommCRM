@@ -182,7 +182,7 @@ describe("a entrega (POST) confere o HMAC com o App Secret do BANCO", () => {
 
 describe("o caminho ANTIGO fica intacto — instalação que só tem .env", () => {
   it("handshake com o token do .env: 200, mesmo sem a tabela existir", async () => {
-    // É o piso de rollback: código novo sobre banco que ainda não tem a 0252
+    // É o piso de rollback: código novo sobre banco que ainda não tem a 0255
     // (o `agent.sh` reverte a imagem, não o schema). Nada muda de resposta.
     erroDaLeitura = { code: "42P01", message: 'relation "platform_meta_app" does not exist' };
     vi.stubEnv("META_WEBHOOK_VERIFY_TOKEN", TOKEN_DO_ENV);

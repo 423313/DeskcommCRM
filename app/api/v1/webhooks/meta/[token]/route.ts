@@ -16,7 +16,7 @@
  * antes de qualquer escrita — sem ele, quem conhecesse o App Secret escreveria em
  * qualquer tenant.
  *
- * ─── De onde vêm as duas credenciais (issue #850, migration 0252) ─────────────
+ * ─── De onde vêm as duas credenciais (issue #850, migration 0255) ─────────────
  *
  * Do BANCO (`platform_meta_app`), não do ambiente: as duas são da INSTALAÇÃO
  * inteira, não da organização — é isto que faz o 2º número conectar sem ninguém
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse
   const session = await metaSessionByWebhookToken(token);
   if (!session) return new NextResponse("not found", { status: 404 });
 
-  // Do BANCO (platform_meta_app, migration 0252), com o `.env` como piso: é a
+  // Do BANCO (platform_meta_app, migration 0255), com o `.env` como piso: é a
   // credencial da INSTALAÇÃO inteira, não da organização — e um clone que ainda
   // não aplicou a migration continua verificado pelo ambiente. Não lança nunca;
   // a precedência e o porquê estão em `lib/channels/meta/app.ts`.
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   if (!session) return fail("not_found", "unknown webhook token", 404, { requestId });
 
   const rawBody = await req.text();
-  // Do mesmo lugar que o handshake: BANCO primeiro, `.env` como piso (0252). Sem
+  // Do mesmo lugar que o handshake: BANCO primeiro, `.env` como piso (0255). Sem
   // segredo nenhum configurado a verificação devolve `false` e a entrega morre em
   // 401 — que é o desfecho de hoje, e não um 500.
   const { appSecret } = await appDaMeta();

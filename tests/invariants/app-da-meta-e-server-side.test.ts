@@ -90,7 +90,7 @@ beforeAll(() => {
   // >= 32.
   sql(`
     insert into private.app_secrets (name, value)
-    values ('nuvemshop_oauth_key', 'chave-de-teste-do-harness-0252-nao-e-segredo')
+    values ('nuvemshop_oauth_key', 'chave-de-teste-do-harness-0255-nao-e-segredo')
     on conflict (name) do nothing;
   `);
 });
@@ -162,8 +162,8 @@ describe("os dois segredos são gravados cifrados, e voltam pela decifra", () =>
     // A propriedade que a tela promete quando diz que o verify token aparece
     // UMA vez. Sem este caso, gravar em texto puro passaria por todos os outros
     // — eles medem QUEM alcança a tabela, não O QUE está lá dentro.
-    const segredo = "segredo-de-app-de-teste-0252";
-    const token = "token-de-verificacao-de-teste-0252";
+    const segredo = "segredo-de-app-de-teste-0255";
+    const token = "token-de-verificacao-de-teste-0255";
     sql(`
       insert into public.${TABELA} (id, app_secret_encrypted, verify_token_encrypted)
       values (
