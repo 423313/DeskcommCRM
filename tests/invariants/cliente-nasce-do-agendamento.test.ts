@@ -812,30 +812,41 @@ describe("as corridas", () => {
     }
   }
 
-  it("I27 · duas marcações simultâneas do mesmo contato: fica a data MAIS CEDO, não a do último a gravar", async () => {
+  it("I27 · dois horários do mesmo contato mudando ao mesmo tempo: fica a data MAIS CEDO, não a do último a gravar", async () => {
     // Por que o recálculo trava o contato ANTES de ler a agenda: a segunda
-    // transação, se lesse o min() antes da trava, não enxergaria o horário mais
-    // cedo que a primeira ainda não commitou — e gravaria o dela por cima.
-    const contato = await criarContato(ORG_A, "Corrida de marcação");
+    // transação, se lesse o min() antes da trava, não enxergaria o horário que a
+    // primeira adiantou e ainda não commitou — e gravaria o dela por cima.
+    //
+    // ⚠️ UPDATE, E NÃO DOIS INSERTS. Medido: com dois INSERTs a segunda
+    // transação já espera a primeira ANTES de chegar ao trigger (espera o
+    // `transactionid` da primeira no próprio INSERT), então quando o recálculo
+    // roda a primeira já commitou e a ordem das leituras não importa — a
+    // sabotagem "lê o min() antes da trava" passou verde nessa versão. Mover o
+    // horário por UPDATE não passa por aquela espera, e a ordem volta a decidir.
+    const contato = await criarContato(ORG_A, "Corrida de remarcação");
+    const cedo = await marcar(ORG_A, contato, "2027-01-01T15:00:00Z");
+    const tarde = await marcar(ORG_A, contato, "2027-01-01T16:00:00Z");
+    expect((await lerContato(contato)).first_service_at?.toISOString()).toBe("2027-01-01T15:00:00.000Z");
+
     const a = await pool.connect();
     const b = await pool.connect();
     try {
       await a.query("begin");
+      // A primeira ADIANTA o horário das 16h para as 9h (e passa a travar o contato).
       await a.query(
-        `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id)
-         values ($1, 'Cedo', '2026-10-01T09:00:00Z', '2026-10-01T10:00:00Z', $2)`,
-        [ORG_A, contato],
+        "update calendar_appointments set starts_at = '2027-01-01T09:00:00Z', ends_at = '2027-01-01T10:00:00Z' where id = $1",
+        [tarde],
       );
       const pidA = (await a.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
       const pidB = (await b.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
 
       await b.query("begin");
       let terminou = false;
+      // A segunda ATRASA o das 15h para as 17h.
       const segunda = b
         .query(
-          `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id)
-           values ($1, 'Tarde', '2026-10-01T15:00:00Z', '2026-10-01T16:00:00Z', $2)`,
-          [ORG_A, contato],
+          "update calendar_appointments set starts_at = '2027-01-01T17:00:00Z', ends_at = '2027-01-01T18:00:00Z' where id = $1",
+          [cedo],
         )
         .finally(() => {
           terminou = true;
@@ -853,9 +864,8 @@ describe("as corridas", () => {
     }
 
     const depois = await lerContato(contato);
-    expect(depois.first_service_at?.toISOString()).toBe("2026-10-01T09:00:00.000Z");
+    expect(depois.first_service_at?.toISOString()).toBe("2027-01-01T09:00:00.000Z");
     expect(depois.tags.filter((t) => t === TAG_DE_CLIENTE)).toHaveLength(1);
-    expect(await eventosDeEtiqueta({ contato })).toBe(1);
   });
 
   it("I28 · ligar a regra enquanto um horário está sendo marcado: o contato não fica de fora", async () => {
