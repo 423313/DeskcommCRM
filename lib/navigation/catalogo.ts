@@ -689,6 +689,15 @@ export const NAV_CATALOG = [
     section: "Dados e acesso",
     minRole: "admin",
   },
+  {
+    href: "/app/settings/voip-trunk",
+    label: "Trunk SIP",
+    description: "Credenciais do provedor SIP para chamadas de voz por IA.",
+    icon: "Phone",
+    group: "organizacao",
+    section: "Dados e acesso",
+    minRole: "admin",
+  },
 ] as const satisfies readonly NavMetadata[];
 
 export type NavDestinationId = (typeof NAV_CATALOG)[number]["href"];

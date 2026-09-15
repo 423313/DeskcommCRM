@@ -11,6 +11,11 @@
  * WaCalls upstream, reaproveitado aqui em vez de estender o CHECK. A rota GET
  * traduz isso pra um `status` mais rico na resposta (ver mapStatusParaApi).
  *
+ * O endpoint do trunk vem de `voip_trunk_settings` (Configurações > Trunk
+ * SIP, migration 0257) — um trunk por organização, cadastrado numa tela em
+ * vez de fixo em env. `VOIP_TRUNK_ENDPOINT` continua como fallback pra quem
+ * ainda não migrou pra tela (compatibilidade, não fica pra sempre).
+ *
  * "mode: human" fica pra quando o atendente quer discar direto (a IA não
  * entra na ponte de áudio) — mesmo endpoint, o worker decide com base nesse
  * campo. A ponte WebRTC pro navegador do atendente não está implementada
@@ -137,6 +142,24 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const supabase = await createClient();
 
+  // Trunk da organização (Configurações > Trunk SIP) — fallback pro env pra
+  // quem ainda não cadastrou nada na tela.
+  const { data: trunkConfig } = await supabase
+    .from("voip_trunk_settings")
+    .select("endpoint_name, is_active")
+    .eq("organization_id", activeOrg.orgId)
+    .maybeSingle();
+  const trunkEndpoint =
+    trunkConfig && trunkConfig.is_active ? trunkConfig.endpoint_name : process.env.VOIP_TRUNK_ENDPOINT;
+  if (!trunkEndpoint) {
+    return fail(
+      "trunk_not_configured",
+      "Nenhum trunk SIP configurado para esta organização (Configurações > Trunk SIP).",
+      422,
+      { requestId },
+    );
+  }
+
   // Gerado ANTES do insert e passado como `channelId` pro ARI (originateCall):
   // fecha a race entre o worker recebendo StasisStart (via WebSocket, processo
   // separado) e este handler gravando asterisk_channel_id DEPOIS que o ARI
@@ -170,7 +193,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const channel = await originateCall({
       toNumber: input.toNumber,
       fromNumber: process.env.VOIP_DEFAULT_CALLER_ID,
-      trunkEndpoint: process.env.VOIP_TRUNK_ENDPOINT!,
+      trunkEndpoint,
       callerLabel: input.mode,
       channelId,
     });

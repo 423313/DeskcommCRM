@@ -23754,6 +23754,67 @@ grant execute on function public.fn_attendant_metrics(uuid,timestamptz,timestamp
 
 notify pgrst, 'reload schema';
 
+-- ---- voip_trunk_settings (migration 0257) ----
+--
+-- Tela de configuração de trunk SIP por organização — ver docstring completa
+-- na migration 0257 e em lib/voip/guardar-trunk.ts. Um trunk por org (chave
+-- primária = organization_id), senha cifrada AES-256-GCM (mesmo esquema de
+-- ai_provider_credentials), aplicação no Asterisk ainda MANUAL nesta fase.
+
+create table if not exists public.voip_trunk_settings (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  host text not null,
+  port integer not null default 5060,
+  username text not null,
+  password_encrypted bytea not null,
+  password_iv bytea not null,
+  password_tag bytea not null,
+  password_last4 text not null,
+  from_domain text,
+  endpoint_name text not null,
+  is_active boolean not null default true,
+  updated_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.voip_trunk_settings enable row level security;
+
+drop policy if exists voip_trunk_settings_select on public.voip_trunk_settings;
+create policy voip_trunk_settings_select on public.voip_trunk_settings
+  for select using (organization_id in (select public.fn_user_org_ids()));
+
+drop policy if exists voip_trunk_settings_admin_write on public.voip_trunk_settings;
+create policy voip_trunk_settings_admin_write on public.voip_trunk_settings
+  for all
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'admin')
+  )
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'admin')
+  );
+
+revoke all on public.voip_trunk_settings from anon;
+
+drop trigger if exists trg_voip_trunk_settings_set_updated_at on public.voip_trunk_settings;
+create trigger trg_voip_trunk_settings_set_updated_at
+  before update on public.voip_trunk_settings
+  for each row execute function public.fn_set_updated_at();
+
+create or replace view public.voip_trunk_settings_safe
+  with (security_invoker = true) as
+select
+  organization_id, host, port, username, password_last4, from_domain,
+  endpoint_name, is_active, updated_by, created_at, updated_at
+from public.voip_trunk_settings;
+
+revoke all on public.voip_trunk_settings_safe from anon;
+grant select on public.voip_trunk_settings_safe to authenticated;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
