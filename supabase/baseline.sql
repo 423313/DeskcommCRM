@@ -16273,20 +16273,51 @@ alter table public.calendar_connection_calendars
 comment on column public.calendar_connection_calendars.time_zone is
   'Fuso IANA do calendário, como o Google devolve (`timeZone`). NULL = ainda não sincronizado; quem lê deve tratar NULL como "não sei", nunca como UTC — foi o `?? UTC` que fez evento de dia inteiro vazar a noite anterior.';
 
--- ---- lembrete nasce desligado (migration 0194) ----
+-- ---- lembrete nasce desligado (migrations 0194 + 0252) ----
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, pelo mesmo motivo da 0193.
+--
+-- A 0194 corrigiu o histórico junto com o default, e o raciocínio dela valia
+-- naquele dia: "com zero leitores e zero disparador, nada depende do valor
+-- atual". Ela própria avisou o que viria depois — *"Depois do disparador, isto
+-- seria apagar a escolha de um operador"*.
+--
+-- O disparador nasceu (`agenda-reminder`), e o `update.sh` re-aplica este
+-- arquivo INTEIRO a cada atualização. Sem guarda, toda atualização desligava o
+-- lembrete de todo tipo em que alguém o tinha ligado — sem erro, sem log, com a
+-- tela mostrando o controle desmarcado como se ninguém o tivesse marcado.
+--
+-- A guarda é o `column_default`, porque pelo VALOR da coluna é impossível
+-- distinguir "linha antiga que ninguém escolheu" de "linha que o operador
+-- acabou de ligar": as duas são `true`. O default só é diferente de `false`
+-- ANTES da primeira aplicação da 0194 neste banco, que é o único momento em que
+-- corrigir o histórico é certo.
+--
+-- ⚠️ LER O DEFAULT ANTES DE GRAVÁ-LO. Invertido, a condição seria sempre falsa e
+-- um clone pré-0194 nunca receberia a correção que a 0194 existe para fazer.
+do $$
+declare
+  v_default text;
+begin
+  select column_default into v_default
+    from information_schema.columns
+   where table_schema = 'public'
+     and table_name = 'calendar_event_types'
+     and column_name = 'reminder_enabled';
+
+  -- `is distinct from`: num banco sem a coluna a consulta devolve NULL, e
+  -- `NULL <> 'false'` seria NULL — pulando a correção em silêncio.
+  if v_default is distinct from 'false' then
+    update public.calendar_event_types
+       set reminder_enabled = false
+     where reminder_enabled is true;
+  end if;
+end $$;
+
 alter table public.calendar_event_types
   alter column reminder_enabled set default false;
 
--- As linhas JÁ criadas também voltam: com zero leitores e zero disparador, nada depende do
--- valor atual, então este é o único momento em que corrigir o histórico não regride
--- comportamento de ninguém. Depois do disparador, isto seria apagar a escolha de um operador.
-update public.calendar_event_types
-   set reminder_enabled = false
- where reminder_enabled is true;
-
 comment on column public.calendar_event_types.reminder_enabled is
-  'Lembrete automático deste tipo. Nasce DESLIGADO de propósito: enviar mensagem é irreversível, e um default ligado inscreveria o histórico inteiro sem ninguém ter escolhido. Ligar por padrão é decisão do dono do produto, a ser tomada quando o disparador existir.';
+  'Lembrete automático deste tipo. Nasce DESLIGADO: enviar mensagem é irreversível. O histórico foi corrigido UMA vez, na primeira aplicação da 0194 em cada banco (a 0252 guarda isso pelo column_default) — depois disso, true significa que alguém ligou, e atualizar o CRM não desliga mais.';
 
 -- ---- tipo semeado adota dono no primeiro membro (migration 0195) ----
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon: aqui é OBRIGATÓRIO, não preferência —
