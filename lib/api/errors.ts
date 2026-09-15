@@ -44,6 +44,11 @@ export const ApiErrorCodes = {
   agenda_disponibilidade_invalida: "agenda_disponibilidade_invalida",
   agenda_ja_cancelado: "agenda_ja_cancelado",
   agenda_listagem_sem_recorte: "agenda_listagem_sem_recorte",
+  // Código PRÓPRIO, e não o `unprocessable_entity` genérico: quem recebe isto
+  // server-to-server precisa saber que o `lead_id` mandado não é um negócio do
+  // funil (é quase sempre um id de CONTATO — ver #509/#540) e que a correção é
+  // trocar o parâmetro, não abrir chamado de indisponibilidade.
+  agenda_listagem_alvo_nao_e_lead: "agenda_listagem_alvo_nao_e_lead",
 
   // 409 — conflito
   idempotency_conflict: "idempotency_conflict",
