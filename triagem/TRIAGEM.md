@@ -893,6 +893,30 @@ nesses dois casos — mas **a razão vai escrita no corpo do commit, com a medi�
 no uso da variável. A linha do segundo caso é a mais importante: o hook da migration **não é rede
 para renumeração**, e quem lê a mensagem dele achando que é vai renumerar contra uma régua cega.
 
+### E há o caso oposto, que é pior: o merge LIMPO não chama hook nenhum
+
+A tabela acima trata do hook que dispara quando não devia. O furo mais caro é o hook que **não
+dispara quando devia** — e num trem de lotes ele é a regra, não a exceção.
+
+`git merge` que termina **sem conflito** cria o commit sozinho e **não roda o `pre-commit`**. Dois
+PRs que trazem migrations de nomes diferentes (`…_0241_lembrete_em_degraus.sql` e
+`…_0241_rascunho_de_agente_sem_numero.sql`) não conflitam textualmente — então o merge sai limpo, o
+commit nasce sem o hook, e o `0241` duplicado entra calado.
+
+Medido em 14/09: o #804 entrou assim no lote 6, com o `0241` que o #770 já ocupava na `main` desde
+o lote 2. Nenhuma guarda viu. Quem viu foi a sonda abaixo, rodada depois de montar o lote.
+
+**Num trem, a colisão de migration se mede na ÁRVORE montada, nunca se confia no hook:**
+
+```bash
+ls supabase/migrations/*.sql | sed -E 's/.*_([0-9]{4})_.*/\1/'   | sort | uniq -d   # NNNN
+ls supabase/migrations/*.sql | sed -E 's#.*/([0-9]+)_.*#\1#'     | sort | uniq -d   # timestamp
+```
+
+Vazio nas duas é o esperado. Rode depois de **cada** merge que traga migration, e **sempre** antes
+de abrir o PR do lote — com controle positivo: rodada contra a `origin/main`, ela também tem de
+devolver vazio, senão a duplicata é antiga e não do lote.
+
 ---
 
 ## 8-quinquies. O PR cujo conteúdo foi REESCRITO — o merge de história
