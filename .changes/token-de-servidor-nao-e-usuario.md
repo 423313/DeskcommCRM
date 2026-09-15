@@ -6,9 +6,8 @@ titulo: Integração com token de servidor volta a conseguir escrever
 
 Um token de servidor sem escopo de agente era tratado como se fosse uma pessoa
 logada, e o sistema tentava anotar o token como "quem fez". O banco recusava,
-porque token não é gente — então mandar mensagem, criar contato, marcar
-compromisso ou criar negócio por token respondia **erro interno**, sem pista do
-motivo.
+porque token não é gente — então mandar mensagem ou marcar compromisso por
+token respondia **erro interno**, sem pista do motivo.
 
 Agora o token é reconhecido como integração, e essas escritas voltam a
 funcionar. Se você tem um sistema ligado por token, três coisas passam a valer
