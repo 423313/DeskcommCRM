@@ -2667,10 +2667,6 @@ CREATE INDEX IF NOT EXISTS "idx_conversations_org_last_msg" ON "public"."convers
 
 
 
-CREATE INDEX IF NOT EXISTS "idx_crm_lead_links_lead" ON "public"."crm_lead_links" USING "btree" ("lead_id");
-
-
-
 CREATE INDEX IF NOT EXISTS "idx_crm_lead_links_org_target" ON "public"."crm_lead_links" USING "btree" ("organization_id", "target_kind", "target_id");
 
 
@@ -11138,7 +11134,23 @@ delete from public.ai_models a
      )
    );
 
-create unique index if not exists ai_models_provider_model_unique on public.ai_models (provider, model_id);
+-- O índice da 0127 só nasce onde a unicidade FALTA. A constraint
+-- `ai_models_unique (provider, model_id)` vem do schema original (0023) e já
+-- garante o upsert do sincronizador; criar o índice ao lado dela era construir
+-- à toa uma cópia que o bloco da 0259 derruba no fim deste arquivo. Onde a
+-- constraint não existe (removida à mão, ou recusada acima pelo dump porque
+-- havia duplicata — o delete logo acima acabou de limpá-la), o índice é a única
+-- garantia, e continua sendo criado.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'ai_models_unique'
+       and conrelid = 'public.ai_models'::regclass
+  ) then
+    create unique index if not exists ai_models_provider_model_unique on public.ai_models (provider, model_id);
+  end if;
+end $$;
 create index if not exists ai_models_source_idx on public.ai_models (source) where deprecated_at is null;
 
 comment on column public.ai_models.source is
@@ -15438,8 +15450,9 @@ create unique index if not exists calendar_connections_conta_key
 create index if not exists calendar_connections_renovacao_idx
   on public.calendar_connections (token_expires_at)
   where status in ('healthy','rate_limited') and token_expires_at is not null;
-create index if not exists calendar_connections_org_pessoa_idx
-  on public.calendar_connections (organization_id, user_id);
+-- `calendar_connections_org_pessoa_idx (organization_id, user_id)` nascia aqui e
+-- saiu na migration 0259: é prefixo de `calendar_connections_conta_key`, logo
+-- acima. Não se cria para derrubar no fim do arquivo (ver o bloco da 0259).
 
 comment on table public.calendar_connections is
   'A conta de agenda externa que UMA PESSOA conectou. Uma por atendente, e por isso não cabe em tenant_integrations, que é uma por organização e por provedor.';
@@ -24689,6 +24702,102 @@ grant  execute on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, u
 
 comment on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) is
   'Cria o lead de entrada do ingest serializando por (organização, contato) com advisory lock. Devolve NULL quando já existe um aberto. Existe porque o check-then-act em TypeScript deixava três mensagens seguidas virarem três negócios; um índice único resolveria a corrida e quebraria o caso legítimo de dois negócios abertos criados à mão.';
+-- ---- o audit log perde UPDATE, DELETE e TRUNCATE nos papéis do PostgREST (migration 0258) ----
+--
+-- Todo projeto Supabase nasce com um default ACL de TABELAS em `public`
+-- (`anon=arwdDxt`, `authenticated=arwdDxt`, `service_role=arwdDxt`), gravado
+-- pelo bootstrap do Supabase antes de qualquer SQL nosso. `api_audit_log` nasce
+-- com tudo, e o `GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE` que o dump
+-- emite acima só ACRESCENTA. Resultado no Supabase real: `service_role` — que
+-- ignora RLS — apagava e reescrevia linha escolhida da auditoria pela REST, e os
+-- três papéis podiam esvaziá-la com TRUNCATE. `anon`/`authenticated` só não
+-- apagavam porque a RLS não tem policy de UPDATE/DELETE.
+--
+-- O prelude do `test:db` reproduz o default ACL do Supabase para funções, não
+-- para tabelas; por isso o gate de grants ficava verde. O invariante
+-- `audit-log-sob-o-default-acl-do-supabase` reproduz o de tabela e reaplica
+-- ESTE bloco, extraído daqui pelo rótulo.
+--
+-- O expurgo legítimo não depende destes grants: `fn_expurgar_auditoria_vencida`
+-- (0167) é `security definer` de dono `postgres`. As FKs `on delete set null`
+-- desta tabela também não: a ação referencial roda como o dono da tabela.
+-- `public` entra por completude — um grant a PUBLIC seria herdado pelos três.
+--
+-- `revoke` do que já não existe não é erro: idempotente por natureza, e o
+-- `update.sh` de um clone pode reaplicar à vontade — inclusive depois do GRANT
+-- do corpo do dump, que reconcede TRUNCATE a cada passada e é revogado aqui.
+
+revoke update, delete, truncate on table public.api_audit_log
+  from public, anon, authenticated, service_role;
+
+comment on table public.api_audit_log is
+  'L-10: Append-only para os papéis do PostgREST — anon, authenticated e service_role não têm UPDATE, DELETE nem TRUNCATE (migration 0258; o default ACL do Supabase concedia os três). O único apagamento é fn_expurgar_auditoria_vencida (0167), security definer com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
+
+notify pgrst, 'reload schema';
+-- ---- três índices que não pagam o próprio aluguel (migration 0259) ----
+--
+-- Índice redundante custa em TODO insert/update e ocupa disco. Os três abaixo
+-- têm o trabalho JÁ feito por outro índice da mesma tabela:
+--
+-- 1. `ai_models_provider_model_unique (provider, model_id)`, da migration 0127,
+--    contra a constraint `ai_models_unique (provider, model_id)` do schema
+--    original — mesmas colunas, mesma ordem, os dois UNIQUE. É o "índice
+--    duplicado em ai_models" que o advisor apontou numa VPS de cliente. Fica a
+--    constraint, que é a forma mais forte.
+-- 2. `idx_crm_lead_links_lead (lead_id)` contra
+--    `uniq_crm_lead_links_lead_target_link (lead_id, target_kind, target_id,
+--    link_kind)` — um btree responde por qualquer PREFIXO das suas colunas.
+-- 3. `calendar_connections_org_pessoa_idx (organization_id, user_id)` contra
+--    `calendar_connections_conta_key (organization_id, user_id, provider,
+--    account_email)` — mesmo argumento de prefixo.
+--
+-- O planner NÃO ignorava os dois de prefixo: quando existiam, ele os preferia,
+-- porque são menores. Medido em pg17, 20 000 vínculos em 2 000 leads, busca por
+-- `lead_id`: com os dois índices, `Bitmap Index Scan on` o de uma coluna
+-- (216 kB, custo 4,36); só com o largo, o mesmo plano no de quatro (1464 kB,
+-- custo 4,49; total 39,00 → 39,13). A busca segue servida por índice; o que se
+-- troca é um índice menor na leitura por um índice a menos em toda escrita.
+--
+-- ⚠️ CADA DROP CONFERE QUE O SUBSTITUTO ESTÁ DE PÉ. O `update.sh` roda sem
+-- `ON_ERROR_STOP`: uma criação que falhou acima (duplicata num clone, por
+-- exemplo) segue em silêncio, e derrubar o índice menor sem o maior deixaria
+-- a tabela sem índice nenhum para a busca — ou, no caso 1, sem a ÚNICA coisa
+-- impedindo dois cadastros do mesmo modelo.
+--
+-- E este arquivo não os cria mais para derrubar aqui: a linha do dump saiu, o
+-- bloco da 0127 só cria o índice onde a constraint falta, e o do calendário não
+-- o declara. Antes, toda instalação e todo `update.sh` construía os três e os
+-- jogava fora neste bloco — `CREATE INDEX` não concorrente, que trava escrita
+-- na tabela enquanto constrói. Quem já os tem (instalou antes da 0259) os perde
+-- aqui, uma vez.
+
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'ai_models_unique'
+       and conrelid = 'public.ai_models'::regclass
+  ) then
+    drop index if exists public.ai_models_provider_model_unique;
+  end if;
+
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'crm_lead_links'
+       and indexname = 'uniq_crm_lead_links_lead_target_link'
+  ) then
+    drop index if exists public.idx_crm_lead_links_lead;
+  end if;
+
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'calendar_connections'
+       and indexname = 'calendar_connections_conta_key'
+  ) then
+    drop index if exists public.calendar_connections_org_pessoa_idx;
+  end if;
+end $$;
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

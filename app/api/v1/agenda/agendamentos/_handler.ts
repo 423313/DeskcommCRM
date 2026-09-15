@@ -718,13 +718,27 @@ async function fecharOLaco(
   // Fire-and-forget, como a atividade: falhar em emitir NÃO pode desfazer um
   // compromisso que já está gravado. O consumidor é o motor de regras
   // (`lib/automation/engine.ts`), que casa por `trigger_event`.
+  //
+  // POR `emit_event`, E NUNCA POR INSERT EM `event_log` (issue #877). O
+  // `event_log` não tem policy PERMISSIVA de INSERT para `authenticated` — a
+  // `support_write_insert` é RESTRITIVA, só estreita. Pela tela o `supabase`
+  // daqui é o cliente da SESSÃO, então o INSERT direto voltava `new row
+  // violates row-level security policy` em TODA marcação e confirmação, o
+  // compromisso era gravado e nenhuma automação da Agenda rodava. A tool MCP
+  // não via o defeito porque chega com service role.
+  //
+  // `emit_event` é o caminho de evento de domínio do produto: security definer,
+  // executável por `authenticated`, e confere que quem chama é membro da
+  // organização (`fn_role_at_least`, que também cobre a sessão de suporte).
+  // Serve igual aos dois chamadores — o mesmo `registraFalhaDeAtividade` logo
+  // abaixo já emite assim. A organização vem do contexto autenticado.
   if (args.gatilho) {
-    const { error } = await supabase.from("event_log").insert({
-      organization_id: ctx.organization_id,
-      event_type: args.gatilho,
-      entity_kind: ENTIDADE_DO_AGENDAMENTO,
-      entity_id: args.appointmentId,
-      payload: {
+    const { error } = await supabase.rpc("emit_event", {
+      p_organization_id: ctx.organization_id,
+      p_event_type: args.gatilho,
+      p_entity_kind: ENTIDADE_DO_AGENDAMENTO,
+      p_entity_id: args.appointmentId,
+      p_payload: {
         appointment_id: args.appointmentId,
         contact_id: args.contactId,
         event_type_name: args.nomeDoTipo,
@@ -734,7 +748,7 @@ async function fecharOLaco(
       // `request_id` sem o prefixo `rule:` de propósito: ele correlaciona com o
       // audit log e NÃO aciona o anti-loop do motor, que só barra o que uma
       // regra causou.
-      metadata: { request_id: ctx.requestId },
+      p_metadata: { request_id: ctx.requestId },
     });
     if (error) {
       logger.error("[agenda] gatilho de automação não foi emitido", {

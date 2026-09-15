@@ -135,6 +135,9 @@ function bancoEmMemoria(tabelas: Record<string, Linha[]>): Banco {
         Object.assign(linha, args.p_patch as Linha, { revision: Number(linha.revision) + 1 });
         return { data: { ...linha }, error: null };
       }
+      // O gatilho de automação da Agenda sai por aqui (issue #877). Este arquivo
+      // não é sobre ele — quem o vigia é `agenda-gatilho-leva-o-tipo-real`.
+      if (fn === "emit_event") return { data: null, error: null };
       throw new Error(`[dublê] rpc não prevista: ${fn}`);
     },
   } as unknown as SupabaseClient;
