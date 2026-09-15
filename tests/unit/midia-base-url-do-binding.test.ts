@@ -22,9 +22,26 @@ const updateEqMock = vi.fn();
 const inboxInsertMock = vi.fn();
 /** O factory do provedor — é o que a issue diz estar sem o endereço do binding. */
 const factoryMock = vi.fn(() => "modelo-de-mentira");
+const transcribeDoSvcMock = vi.fn(async () => "transcrição de mentira");
 const provedorDeTranscricaoMock = vi.fn((_cfg: unknown) => ({
-  transcribe: async () => "transcrição de mentira",
+  transcribe: transcribeDoSvcMock,
 }));
+
+// O guarda de destino resolve o nome antes de julgar (é o "inclusive depois da
+// resolução de DNS" do requisito). Aqui a resolução é controlada por variável:
+// por padrão um IP público, e cada teste escolhe a resposta que quiser.
+const dns = vi.hoisted(() => ({
+  resposta: [] as Array<{ address: string; family: number }>,
+  erro: null as Error | null,
+}));
+vi.mock("node:dns/promises", () => {
+  const lookup = vi.fn(async () => {
+    if (dns.erro) throw dns.erro;
+    return dns.resposta;
+  });
+  // O default é obrigatório: sem ele o vitest recusa o mock na coleta.
+  return { lookup, default: { lookup } };
+});
 
 /**
  * Duas formas de binding: com o endereço que o operador configurou, e sem ele
@@ -162,6 +179,9 @@ function depsDaChamada(): DeriveDeps {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  dns.erro = null;
+  dns.resposta = [{ address: "93.184.216.34", family: 4 }];
   bindingDaVez = BINDING_COM_ENDPOINT;
   linhaDaMensagem = {
     id: "msg1",
@@ -225,5 +245,60 @@ describe("worker de mídia: base_url do binding de visão (#855)", () => {
       baseUrl: "https://api.groq.com/openai/v1",
       model: "whisper-large-v3",
     });
+  });
+
+  it("recusa endereço de metadados no binding da visão e não manda a chave", async () => {
+    bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "http://169.254.169.254/v1" };
+
+    await deriveMessageMedia(eventRow());
+    const texto = await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+    expect(factoryMock).not.toHaveBeenCalled();
+    expect(texto).toBeTruthy();
+    const corpos = inboxInsertMock.mock.calls.map((c) =>
+      String((c[0] as { body?: string } | undefined)?.body ?? ""),
+    );
+    expect(corpos.some((b) => b.includes("unsafe_url:private_host"))).toBe(true);
+  });
+
+  it("recusa nome de aparência pública que resolve para IP interno", async () => {
+    bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://coletor.exemplo/v1" };
+    dns.resposta = [{ address: "10.1.2.3", family: 4 }];
+
+    await deriveMessageMedia(eventRow());
+    const texto = await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+    expect(factoryMock).not.toHaveBeenCalled();
+    expect(texto).toBeTruthy();
+    const corpos = inboxInsertMock.mock.calls.map((c) =>
+      String((c[0] as { body?: string } | undefined)?.body ?? ""),
+    );
+    expect(corpos.some((b) => b.includes("unsafe_url:private_ip"))).toBe(true);
+  });
+
+  it("não manda a chave do serviço de transcrição para endereço interno", async () => {
+    vi.stubEnv("TRANSCRIPTION_API_KEY", "chave-do-servico");
+    vi.stubEnv("TRANSCRIPTION_BASE_URL", "http://169.254.169.254/v1");
+
+    await deriveMessageMedia(eventRow());
+    const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+    expect(transcribeDoSvcMock).not.toHaveBeenCalled();
+    expect(texto).not.toContain("transcrição de mentira");
+    const corpos = inboxInsertMock.mock.calls.map((c) =>
+      String((c[0] as { body?: string } | undefined)?.body ?? ""),
+    );
+    expect(corpos.some((b) => b.includes("unsafe_url:private_host"))).toBe(true);
+  });
+
+  it("segue transcrevendo no serviço quando o endereço é aceito", async () => {
+    vi.stubEnv("TRANSCRIPTION_API_KEY", "chave-do-servico");
+    vi.stubEnv("TRANSCRIPTION_BASE_URL", "https://api.groq.com/openai/v1");
+
+    await deriveMessageMedia(eventRow());
+    const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+    expect(transcribeDoSvcMock).toHaveBeenCalledTimes(1);
+    expect(texto).toBe("transcrição de mentira");
   });
 });

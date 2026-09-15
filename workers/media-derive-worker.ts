@@ -19,6 +19,8 @@ import { deriveVideoText } from "@/lib/messaging/media/video-derive";
 import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
+import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
 import { DETALHE_TECNICO } from "@/lib/event-log/aviso-de-evento-morto";
 
 export const MEDIA_DERIVE_CONSUMER_KEY = "media_derive_v1";
@@ -341,6 +343,25 @@ function buildDeriveDeps(
       await avisarMidiaNaoLida(orgId, "imagem", motivo);
       return MARCADOR_NAO_LIDA;
     }
+    // O endereço é escolhido por quem administra a instalação (o campo de
+    // endereço do binding) e a chamada leva a chave do provedor no cabeçalho:
+    // sem esta recusa, um destino interno — o metadata da nuvem, o Postgres do
+    // compose — recebe credencial da instalação e ainda pode devolver resposta
+    // forjada ao agente. Mesma recusa das saídas de webhook, e antes de a
+    // chave sair daqui.
+    if (baseUrlDaVisao) {
+      const recusa = await motivoDaRecusaDeDestino(baseUrlDaVisao);
+      if (recusa) {
+        await avisarMidiaNaoLida(
+          orgId,
+          "imagem",
+          "o endereço configurado para a visão não foi aceito como destino, então não enviei a imagem nem a chave para lá — confira o endereço do provedor em Agente de IA e Provedores",
+          undefined,
+          recusa,
+        );
+        return MARCADOR_NAO_LIDA;
+      }
+    }
     const factory = registry[llm.provider];
     if (!factory) {
       await avisarMidiaNaoLida(orgId, "imagem", `o provedor ${llm.provider} não está disponível nesta instalação`);
@@ -380,16 +401,43 @@ function buildDeriveDeps(
   // `model`, e o worker nunca os passava: quem tinha Groq/Whisper próprio
   // continuava batendo em api.openai.com com `whisper-1`. Sem
   // `TRANSCRIPTION_API_KEY` o comportamento é exatamente o de antes.
+  const transcricaoPadrao: DeriveDeps["transcriber"] = openaiKey
+    ? apiTranscriptionProvider({ apiKey: openaiKey })
+    : semTranscricao;
+  // O endereço do serviço de transcrição vem do .env da instalação e a chamada
+  // leva a chave no cabeçalho: mesma recusa do endereço da visão, e antes de a
+  // chave sair daqui.
+  const transcriberDeServico = (
+    servico: NonNullable<DeriveDeps["transcriber"]>,
+  ): DeriveDeps["transcriber"] => ({
+    transcribe: async (audio, mime) => {
+      const enderecoDoServico = process.env.TRANSCRIPTION_BASE_URL;
+      const recusa = enderecoDoServico
+        ? await motivoDaRecusaDeDestino(enderecoDoServico)
+        : null;
+      if (recusa) {
+        await avisarMidiaNaoLida(
+          orgId,
+          "áudio",
+          "o endereço configurado para a transcrição não foi aceito como destino, então não enviei o áudio nem a chave para lá — confira TRANSCRIPTION_BASE_URL",
+          undefined,
+          recusa,
+        );
+        return MARCADOR_NAO_LIDA;
+      }
+      return servico.transcribe(audio, mime);
+    },
+  });
   const chaveDeTranscricao = process.env.TRANSCRIPTION_API_KEY;
   const transcriber: DeriveDeps["transcriber"] = chaveDeTranscricao
-    ? apiTranscriptionProvider({
-        apiKey: chaveDeTranscricao,
-        baseUrl: process.env.TRANSCRIPTION_BASE_URL || undefined,
-        model: process.env.TRANSCRIPTION_MODEL || undefined,
-      })
-    : openaiKey
-      ? apiTranscriptionProvider({ apiKey: openaiKey })
-      : semTranscricao;
+    ? transcriberDeServico(
+        apiTranscriptionProvider({
+          apiKey: chaveDeTranscricao,
+          baseUrl: process.env.TRANSCRIPTION_BASE_URL || undefined,
+          model: process.env.TRANSCRIPTION_MODEL || undefined,
+        }),
+      )
+    : transcricaoPadrao;
   return {
     transcriber,
     describeImage,
@@ -438,6 +486,25 @@ export function textoDoAvisoDeMidiaNaoLida(aviso: {
       `Para resolver, ajuste o modelo desse ponto em Agente de IA → Provedores, ou cadastre a chave necessária em Credenciais.` +
       (aviso.detalheTecnico ? ` ${DETALHE_TECNICO} ${aviso.detalheTecnico}` : ""),
   };
+}
+
+/**
+ * O motivo pelo qual um endereço configurado pela instalação não pode receber
+ * a mídia — e a credencial da instalação que a acompanha —, ou null quando
+ * pode.
+ *
+ * São os MESMOS dois guardas que as saídas de webhook já aplicam, na mesma
+ * ordem: o textual julga de graça o que dá para julgar sem rede, e o de DNS
+ * paga a resolução para julgar o IP por trás do nome.
+ */
+async function motivoDaRecusaDeDestino(endereco: string): Promise<string | null> {
+  try {
+    assertSafeOutboundUrl(endereco);
+    await assertDestinoResolvidoSeguro(new URL(endereco).hostname);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
 }
 
 async function avisarMidiaNaoLida(
