@@ -127,7 +127,7 @@ export function PainelDeTags({ tags, idioma }: { tags: LinhaDeVocabulario[]; idi
                   {!linha.no_vocabulario && (
                     // Em uso e fora do vocabulário curado: existe em algum
                     // registro sem passar por nenhuma tela de cadastro.
-                    <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                    <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                       {t("em uso, fora do vocabulário")}
                     </span>
                   )}
