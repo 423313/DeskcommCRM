@@ -213,13 +213,16 @@ describe("append-only: por onde o expurgo pode passar, e por onde não pode", ()
     // do caso perguntava só por DELETE/UPDATE, devolvia vazio, e deixava quem
     // leu concluindo que a tabela não podia ser esvaziada — enquanto o
     // privilégio que a esvazia INTEIRA estava concedido a anon, authenticated e
-    // service_role, resíduo do `pg_dump` (`api_audit_log` é a única tabela do
-    // dump com lista enumerada de privilégios em vez de `GRANT ALL`).
+    // service_role pelo `GRANT` enumerado do `pg_dump` (o dump também enumera
+    // outras tabelas: `grep -nE '^GRANT [A-Z,]+ ON TABLE' supabase/baseline.sql
+    // | grep -v 'GRANT ALL'`).
     //
-    // TRUNCATE é a pior das três para a auditoria: não passa por RLS (RLS filtra
-    // linha, e ele não olha linha), não passa pelas policies (que só existem
-    // para INSERT e SELECT) e não deixa rastro, porque não sobra tabela. A
-    // migration 0258 o revogou; este caso é o que impede o retorno.
+    // ⚠️ E ESTE CASO NÃO MEDE O SUPABASE REAL. O prelude do `test-db.sh`
+    // reproduz o default ACL do Supabase para funções, não para tabelas: aqui
+    // `api_audit_log` nasce só com o que o dump concede, e o caso fica verde
+    // com ou sem o revoke de UPDATE/DELETE da migration 0258. No Supabase o
+    // default ACL de tabelas dá UPDATE e DELETE aos três papéis; quem mede esse
+    // mundo é `audit-log-sob-o-default-acl-do-supabase.test.ts`.
     const linhas = sql(`
       select coalesce(string_agg(grantee || ':' || privilege_type, ',' order by grantee), '')
         from information_schema.role_table_grants
