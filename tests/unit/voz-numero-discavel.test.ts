@@ -128,4 +128,17 @@ describe("resolverNumeroDiscavel", () => {
       fonte: "cadastro",
     });
   });
+
+  it("WAHA que aceita e não responde não segura a ligação além do prazo", async () => {
+    // Sem prazo: duas grafias × 15 s de teto passavam dos 30 s do navegador, a
+    // tela mostrava erro e a ligação saía mesmo assim, uma por clique.
+    const { db } = supabaseCom("sessao");
+    const pendurado = {
+      checkContactExists: vi.fn(() => new Promise(() => undefined)),
+    } as unknown as WahaClient;
+    const inicio = Date.now();
+    const r = await resolverNumeroDiscavel(db, ORG, "+5531998966398", { waha: () => pendurado, prazoMs: 50 });
+    expect(r).toEqual({ digitos: "5531998966398", fonte: "cadastro" });
+    expect(Date.now() - inicio).toBeLessThan(2_000);
+  });
 });

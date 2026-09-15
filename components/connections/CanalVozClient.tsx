@@ -94,7 +94,13 @@ export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boole
           es.close();
           esRef.current = null;
           setPareando(false);
+          // O QR que talvez já tenha chegado é de uma sessão que a rota desfez.
+          setQrDataUrl(null);
           toast.error(errMsg(err, "Não foi possível iniciar o pareamento.", t));
+          // Recarrega SEMPRE: o 409 `voice_already_paired` é justamente o caso
+          // em que a rota acabou de corrigir o banco (o WaCalls já estava
+          // pareado), e sem reler a tela seguia "Não pareado" com o botão.
+          void carregar();
         });
       };
       es.onmessage = (ev) => {
@@ -120,7 +126,12 @@ export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boole
         es.close();
         esRef.current = null;
         setPareando(false);
+        // Sem a stream não chega "venceu" nem "pareado": um QR que ficasse na
+        // tela seria um código morto, e o botão de tentar de novo não voltaria.
+        setQrDataUrl(null);
         toast.error(t("Não foi possível receber o código de pareamento. Tente novamente."));
+        // A pessoa pode ter escaneado antes de a conexão cair.
+        void carregar();
       };
     } catch (err) {
       toast.error(errMsg(err, "Não foi possível iniciar o pareamento.", t));

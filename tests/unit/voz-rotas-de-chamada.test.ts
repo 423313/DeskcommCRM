@@ -58,6 +58,8 @@ type Resposta = { data: unknown; error: { message: string; code?: string } | nul
 let respostas: Record<string, Resposta | (() => Resposta)>;
 let escritas: Array<{ tabela: string; patch: unknown; filtros: Array<[string, unknown]> }>;
 let inseridas: Array<{ tabela: string; linha: Record<string, unknown> }>;
+/** O que cada tabela pediu em `.select(...)` — a resposta da rota é o que ela seleciona. */
+let selecionadas: Array<{ tabela: string; colunas: string }>;
 
 function dubleSupabase() {
   return {
@@ -67,9 +69,13 @@ function dubleSupabase() {
       // `wacalls_call_id` reescreveria toda ligação da organização, e um dublê
       // que ignora `.eq()` deixaria isso verde.
       let filtrosDaEscrita: Array<[string, unknown]> | null = null;
-      for (const m of ["select", "is", "order", "limit"]) {
+      for (const m of ["is", "order", "limit"]) {
         cadeia[m] = () => cadeia;
       }
+      cadeia.select = (colunas?: string) => {
+        selecionadas.push({ tabela, colunas: colunas ?? "*" });
+        return cadeia;
+      };
       cadeia.eq = (coluna: string, valor: unknown) => {
         filtrosDaEscrita?.push([coluna, valor]);
         return cadeia;
@@ -139,6 +145,7 @@ beforeEach(() => {
   respostas = {};
   escritas = [];
   inseridas = [];
+  selecionadas = [];
   autorizadoComo(EU);
   // ⚠️ CONSENTIMENTO DA ORGANIZAÇÃO, e ele é PRÉ-CONDIÇÃO desde que
   // `exigirVozLigada` ganhou chamadores. Sem esta linha, `POST /voice/calls`
@@ -304,6 +311,16 @@ describe("a ponte de eventos grava a ligação antes da rota — e a rota comple
     });
     // O status da ponte é mais novo que o "starting" daqui: não se regride.
     expect(patch).not.toHaveProperty("status");
+    // A resposta é o que a rota SELECIONA, e o dublê devolve a fixture seja qual
+    // for a lista: sem medir a lista, trocá-la por "id, status" ficava verde e o
+    // painel de quem discou voltava a sumir.
+    const doPainel = selecionadas.filter((x) => x.tabela === "voice_calls").map((x) => x.colunas);
+    expect(doPainel.length).toBeGreaterThan(0);
+    for (const colunas of doPainel) {
+      for (const c of ["id", "status", "direction", "owner_user_id", "created_by", "contact_id"]) {
+        expect(colunas.split(",").map((x) => x.trim()), `faltou ${c} em "${colunas}"`).toContain(c);
+      }
+    }
   });
 
   it("o número discado é o que o WhatsApp registrou, não o do cadastro", async () => {

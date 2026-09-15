@@ -25,6 +25,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getWahaClient, type WahaClient } from "@/lib/waha/client";
 import { resolvePhoneJidDigitsForCall } from "@/lib/waha/resolve-contact-whatsapp-id";
 
+/**
+ * Quanto a ligação espera o WAHA responder antes de discar o cadastro.
+ *
+ * Cada `check-exists` tem teto de 15 s (`TETO_PADRAO_MS`) e são até duas grafias
+ * em série: com o WAHA aceitando conexão e sem responder, a rota passava dos
+ * 30 s em que o navegador desiste de uma escrita (`MUTATION_TIMEOUT_MS`). A tela
+ * mostrava erro, o botão seguia livre para outro clique, e a ligação saía mesmo
+ * assim ~31 s depois — uma por clique. Numa resposta normal o WAHA devolve em
+ * dezenas de milissegundos; 4 s é folga, não estimativa.
+ */
+export const PRAZO_DA_CONSULTA_MS = 4_000;
+
 export interface NumeroDiscavel {
   /** Só dígitos, sem `+` — a forma que `POST /api/sessions/{sid}/calls` recebe. */
   digitos: string;
@@ -37,7 +49,7 @@ export async function resolverNumeroDiscavel(
   supabase: SupabaseClient<any>,
   organizationId: string,
   telefone: string,
-  deps: { waha: () => WahaClient | null } = { waha: getWahaClient },
+  deps: { waha: () => WahaClient | null; prazoMs?: number } = { waha: getWahaClient },
 ): Promise<NumeroDiscavel> {
   const doCadastro: NumeroDiscavel = { digitos: telefone.replace(/\D/g, ""), fonte: "cadastro" };
 
@@ -59,6 +71,16 @@ export async function resolverNumeroDiscavel(
   const sessao = (data as { waha_session_name: string | null } | null)?.waha_session_name;
   if (!sessao) return doCadastro;
 
-  const digitos = await resolvePhoneJidDigitsForCall(waha, sessao, telefone);
-  return digitos ? { digitos, fonte: "whatsapp" } : doCadastro;
+  // A consulta que estoura o prazo segue em segundo plano e é descartada: é
+  // leitura, não tem efeito a desfazer.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const prazo = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), deps.prazoMs ?? PRAZO_DA_CONSULTA_MS);
+  });
+  try {
+    const digitos = await Promise.race([resolvePhoneJidDigitsForCall(waha, sessao, telefone), prazo]);
+    return digitos ? { digitos, fonte: "whatsapp" } : doCadastro;
+  } finally {
+    clearTimeout(timer);
+  }
 }

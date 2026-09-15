@@ -70,6 +70,33 @@ describe("primeiro pareamento da voz", () => {
     expect(screen.getByRole("button", { name: "Parear chamada de voz" })).toBeEnabled();
   });
 
+  it("409 'já pareada' relê o estado da tela — a rota acabou de corrigir o banco", async () => {
+    api.post.mockRejectedValueOnce(new Error("voice_already_paired"));
+    render(<CanalVozClient wacallsConfigured />);
+    fireEvent.click(await screen.findByRole("button", { name: "Parear chamada de voz" }));
+    await waitFor(() => expect(Eventos.abertos).toHaveLength(1));
+    const leiturasAntes = api.get.mock.calls.filter((c) => String(c[0]).endsWith("/status")).length;
+    await act(async () => Eventos.abertos[0]!.onopen?.());
+    await waitFor(() =>
+      expect(api.get.mock.calls.filter((c) => String(c[0]).endsWith("/status")).length).toBe(leiturasAntes + 1),
+    );
+  });
+
+  it("queda da conexão com o QR na tela tira o código morto e devolve o botão", async () => {
+    render(<CanalVozClient wacallsConfigured />);
+    fireEvent.click(await screen.findByRole("button", { name: "Parear chamada de voz" }));
+    await waitFor(() => expect(Eventos.abertos).toHaveLength(1));
+    await act(async () => Eventos.abertos[0]!.onopen?.());
+    await act(async () =>
+      Eventos.abertos[0]!.onmessage?.({
+        data: JSON.stringify({ type: "qr", dataUrl: "data:image/png;base64,cXI=" }),
+      }),
+    );
+    act(() => Eventos.abertos[0]!.onerror?.());
+    expect(screen.queryByAltText("QR Code para parear chamada de voz")).toBeNull();
+    expect(screen.getByRole("button", { name: "Parear chamada de voz" })).toBeEnabled();
+  });
+
   it("falha da conexão avisa a pessoa e permite tentar de novo", async () => {
     render(<CanalVozClient wacallsConfigured />);
     fireEvent.click(await screen.findByRole("button", { name: "Parear chamada de voz" }));
