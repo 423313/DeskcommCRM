@@ -18,7 +18,7 @@ import type pg from 'pg';
 import { insertInboxItem } from '../../db/repository';
 import type { Logger } from '../../obs/logger';
 import { enqueueJob } from '../../queue/queue';
-import { avisoDeEventoMorto } from '@/lib/event-log/aviso-de-evento-morto';
+import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU } from '@/lib/event-log/aviso-de-evento-morto';
 import { TIPOS_DERIVAVEIS, DERIVACAO_TERMINADA } from '@/lib/messaging/media/derivable';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 
@@ -133,11 +133,15 @@ export async function drainTick(pool: pg.Pool, knobs: DrainKnobs, log: Logger): 
  * critério (5 tentativas) e seguia sem avisar ninguém. É o pior dos dois
  * silêncios: o efeito que não aconteceu é a resposta ao cliente.
  *
- * Mesmo aviso e MESMO dedupe do outro dreno — `kind` por organização, só
- * enquanto houver um aberto —, só que em SQL de uma instrução
+ * Mesmo texto do outro dreno, mas dedupe POR TÍTULO (`kind_e_titulo`), só
+ * enquanto houver um aberto: um `event_dead` de mídia ou de automação aberto não
+ * engole este, que é o único que diz que um cliente ficou sem resposta (ver
+ * `aviso-de-evento-morto.ts`, "as duas famílias"). SQL de uma instrução
  * (`insertInboxItem`, `insert … where not exists`) em vez de consulta seguida
  * de insert. Mil despachos mortos numa pane abrem um aviso, não mil: medido em
- * `tests/invariants/evento-morto-nao-inunda-a-central.test.ts`.
+ * `tests/invariants/evento-morto-nao-inunda-a-central.test.ts`; o aviso de
+ * outra família aberto não cala este: medido em
+ * `tests/invariants/aviso-da-ia-nao-some-atras-de-outro-evento-morto.test.ts`.
  *
  * Fire-and-forget: falhar ao avisar não pode derrubar o tick, que ainda tem o
  * resto do lote para drenar.
@@ -153,19 +157,14 @@ async function avisarDespachoMorto(
     // `attempts` já foi incrementado no claim: é a contagem com esta tentativa.
     tentativas: event.attempts,
     motivo,
-    efeito: {
-      titulo: 'A IA deixou de responder uma mensagem de cliente',
-      consequencia:
-        'Um cliente escreveu e a IA não respondeu; se ele não escrever de novo, a conversa fica sem resposta. ' +
-        'Abra o Inbox e responda as conversas que estão esperando.',
-    },
+    efeito: IA_QUE_NAO_RESPONDEU,
   });
   try {
     await insertInboxItem(
       pool,
       event.organization_id,
       { kind: 'event_dead', severity: 'critical', title, body },
-      'kind',
+      'kind_e_titulo',
     );
   } catch (err) {
     log.error('drain: aviso de despacho morto falhou', {

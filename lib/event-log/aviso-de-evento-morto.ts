@@ -18,12 +18,30 @@
  * O que a tela DE FATO oferece, e por isso o que o corpo diz:
  *  - a orientação da política (`POLITICAS_DE_AVISO.event_dead`), renderizada
  *    pela Central logo abaixo — não se repete aqui;
- *  - o botão "Marcar resolvido", que é o que REARMA o aviso: o dedupe é por
- *    `kind`, então enquanto este estiver aberto, as mortes seguintes da mesma
- *    organização não abrem outro. Quem não souber disso resolve o primeiro
- *    problema e fica cego para o segundo;
+ *  - o botão "Marcar resolvido", que é o que REARMA o aviso: enquanto este
+ *    estiver aberto, as mortes seguintes DA MESMA FAMÍLIA na organização não
+ *    abrem outro. Quem não souber disso resolve o primeiro problema e fica
+ *    cego para o segundo;
  *  - quando o dreno sabe o que o evento ia fazer, o lugar onde a pessoa
  *    consegue fazer à mão o que o sistema não fez.
+ *
+ * ═══ AS DUAS FAMÍLIAS, E POR QUE A CHAVE É O TÍTULO ═══
+ *
+ * Os dois drenos abrem o mesmo `kind` (`event_dead`). Com o dedupe só por
+ * `kind`, um aviso de mídia aberto engolia a morte do despacho da IA — medido:
+ * com um `event_dead` de mídia aberto, três despachos mortos não abriam nada, e
+ * o aviso que dizia "a IA deixou de responder" nunca chegava à Central. É o
+ * pior dos silêncios, porque o efeito perdido é a resposta ao cliente.
+ *
+ * Então há duas famílias, cada uma com no máximo um aviso aberto por
+ * organização: a IA que deixou de responder (título fixo,
+ * `IA_QUE_NAO_RESPONDEU.titulo`) e todos os outros processamentos. Um `kind`
+ * próprio seria a chave mais limpa, mas `agent_inbox_items.kind` tem CHECK — o
+ * kind novo pediria migration, apêndice, rótulo pt/es e política de destino
+ * para separar dois textos do mesmo aviso. O título fixo já é o que a Central
+ * mostra e o que distingue as famílias; se ele mudar de redação, o aviso aberto
+ * com o texto antigo deixa de deduplicar UMA vez, e o efeito é um aviso a mais,
+ * nunca um a menos.
  */
 
 export interface EventoMorto {
@@ -35,11 +53,31 @@ export interface EventoMorto {
    * O que deixou de acontecer, dito por quem opera. Sem isto o título cai no
    * genérico — o dreno de handlers não sabe traduzir cada tipo que carrega.
    */
-  efeito?: { titulo: string; consequencia: string };
+  efeito?: { titulo: string; consequencia: string; rearme: string };
 }
+
+/**
+ * O despacho da IA que morreu — a família que nenhum outro aviso pode esconder.
+ * O `titulo` é a chave do dedupe dos DOIS drenos: o do agent-engine deduplica
+ * por ele, e o de handlers o exclui do seu.
+ */
+export const IA_QUE_NAO_RESPONDEU = {
+  titulo: "A IA deixou de responder uma mensagem de cliente",
+  consequencia:
+    "Um cliente escreveu e a IA não respondeu; se ele não escrever de novo, a conversa fica sem resposta. " +
+    "Abra o Inbox e responda as conversas que estão esperando.",
+  rearme:
+    "Enquanto este aviso estiver aberto, outras respostas da IA que pararem de tentar não abrem aviso novo: " +
+    "depois de corrigida a causa, marque-o como resolvido para voltar a ser avisado.",
+} as const;
 
 const CONSEQUENCIA_GENERICA =
   "O efeito que esse evento ia causar não aconteceu, e ele não será tentado de novo.";
+
+const REARME_GENERICO =
+  "Enquanto este aviso estiver aberto, outros processamentos que pararem de tentar não abrem aviso novo " +
+  "(a IA que deixa de responder um cliente abre o seu próprio): " +
+  "depois de corrigida a causa, marque-o como resolvido para voltar a ser avisado.";
 
 export function avisoDeEventoMorto(evento: EventoMorto): { title: string; body: string } {
   return {
@@ -48,7 +86,6 @@ export function avisoDeEventoMorto(evento: EventoMorto): { title: string; body: 
       `O evento "${evento.eventType}" falhou ${evento.tentativas} vezes e parou de tentar. ` +
       `Motivo: ${evento.motivo.slice(0, 400)}. ` +
       `${evento.efeito?.consequencia ?? CONSEQUENCIA_GENERICA} ` +
-      `Enquanto este aviso estiver aberto, outros processamentos que pararem de tentar não abrem aviso novo: ` +
-      `depois de corrigida a causa, marque-o como resolvido para voltar a ser avisado.`,
+      (evento.efeito?.rearme ?? REARME_GENERICO),
   };
 }

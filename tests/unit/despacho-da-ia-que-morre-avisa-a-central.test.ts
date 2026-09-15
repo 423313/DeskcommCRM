@@ -95,17 +95,21 @@ describe("drainTick — o despacho que morre abre `event_dead` na Central", () =
     expect(corpo).not.toMatch(/reprocess/i);
   });
 
-  it("o aviso usa o dedupe por KIND — um aberto por organização, não um por evento", async () => {
+  it("o aviso usa o dedupe por KIND E TÍTULO — um aberto por organização, que outro event_dead não cala", async () => {
     const { pool, chamadas } = poolQueFalha(5);
 
     await drainTick(pool, KNOBS, log() as never);
 
     const [aviso] = avisos(chamadas);
-    // `insertInboxItem(..., 'kind')`: o `where not exists` casa organização +
-    // kind + aberto, e o 8º parâmetro (`kind_e_ref`) é falso. Com `kind_e_ref`,
-    // ou sem dedupe nenhum, cada despacho morto abriria um aviso próprio.
+    // `insertInboxItem(..., 'kind_e_titulo')`: o `where not exists` casa
+    // organização + kind + título + aberto. Com `kind` sozinho, um `event_dead`
+    // de mídia aberto engolia este; com `kind_e_ref`, ou sem dedupe nenhum, cada
+    // despacho morto abriria um aviso próprio. O que isso faz contra a tabela
+    // real é medido em
+    // tests/invariants/aviso-da-ia-nao-some-atras-de-outro-evento-morto.test.ts.
     expect(aviso!.sql).toMatch(/where not exists/);
     expect(aviso!.params[7], "dedupe por kind+ref: cada morte abriria um aviso").toBe(false);
+    expect(aviso!.params[8], "dedupe só por kind: o aviso de mídia aberto cala este").toBe(true);
   });
 
   it("falha que ainda VAI tentar de novo não avisa (controle)", async () => {

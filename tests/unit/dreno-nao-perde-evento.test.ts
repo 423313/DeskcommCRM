@@ -31,6 +31,7 @@ vi.mock("@/lib/event-log/dispatcher", () => ({
   dispatchEvent: (row: unknown) => dispatch(row),
 }));
 
+import { IA_QUE_NAO_RESPONDEU } from "@/lib/event-log/aviso-de-evento-morto";
 import { drainEventLog } from "@/lib/event-log/drain";
 
 interface Chamada {
@@ -79,6 +80,10 @@ function dublarAdmin(
       },
       eq: (c: string, v: unknown) => {
         registro.filtros.push(["eq", c, v]);
+        return self;
+      },
+      neq: (c: string, v: unknown) => {
+        registro.filtros.push(["neq", c, v]);
         return self;
       },
       lt: (c: string, v: unknown) => {
@@ -278,6 +283,31 @@ describe("drainEventLog — evento morto abre aviso na Central", () => {
     await drainEventLog(admin as never);
 
     expect(avisos(chamadas), "Central inundada é Central que ninguém abre").toHaveLength(0);
+  });
+
+  it("o aviso aberto da IA que deixou de responder NÃO cala o de outro processamento", async () => {
+    // A Central deste dublê tem aberto só o `event_dead` da IA, e responde à
+    // consulta do dreno pelos FILTROS que ela trouxe: se a consulta não excluir
+    // o título da IA, ela o enxerga como "já há aviso aberto" e o de mídia some
+    // — o mesmo engolimento que calava a IA, na direção oposta.
+    dispatch.mockResolvedValue([{ consumer_key: "media-derive.v1", status: "error", detail: "timeout" }]);
+    const soOAvisoDaIaAberto = (feitas: Chamada[]) => {
+      const consulta = [...feitas]
+        .reverse()
+        .find((c) => c.tabela === "agent_inbox_items" && c.op === "select");
+      const excluiAIa = consulta?.filtros.some(
+        ([op, coluna, valor]) => op === "neq" && coluna === "title" && valor === IA_QUE_NAO_RESPONDEU.titulo,
+      );
+      return excluiAIa ? null : { id: "aviso-da-ia" };
+    };
+    const { admin, chamadas } = dublarAdmin([MORIBUNDO], soOAvisoDaIaAberto);
+
+    await drainEventLog(admin as never);
+
+    const [aviso] = avisos(chamadas);
+    expect(aviso, "o aviso aberto da IA engoliu a morte de outro processamento").toBeDefined();
+    expect(String(aviso!.payload?.title)).toContain(MORIBUNDO.event_type);
+    expect(String(aviso!.payload?.body)).toContain("abre o seu próprio");
   });
 
   it("mil eventos mortos na mesma rodada abrem UM aviso, não mil", async () => {
