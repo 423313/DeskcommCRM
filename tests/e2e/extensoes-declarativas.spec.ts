@@ -753,6 +753,34 @@ test("pacote pós-build atravessa catálogo, tenants, guia e Tarefas com recuper
       .eq("installation_id", installationId);
     if (error) throw new Error(error.message);
     expect(data).toEqual([]);
+
+    // O recibo de configuração de A é lido com service role e filtro MANUAL de organização
+    // (readExtensionOperation). Nenhum outro teste mede esse filtro: B, com o UUID em mãos,
+    // não lê o recibo nem o vê no histórico da própria gestão.
+    const { data: reciboDeA, error: erroRecibo } = await atores!.db
+      .from("extension_operations")
+      .select("id")
+      .eq("organization_id", atores!.organizacaoA)
+      .eq("kind", "configure")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+    if (erroRecibo) throw new Error(erroRecibo.message);
+    const leituraCruzada = await adminB.request.get(
+      `/api/v1/extensions/operations/${reciboDeA.id}`,
+      { headers: { [EXPECTED_ORGANIZATION_HEADER]: atores!.organizacaoB } },
+    );
+    expect(leituraCruzada.status()).toBe(404);
+    expect((await leituraCruzada.json()) as unknown).toMatchObject({
+      error: { code: "extension_operation_not_found" },
+    });
+    await adminB.goto("/app/extensions");
+    // Espera a lista carregada (a instalação é da instância e aparece para B desativada)
+    // antes de afirmar ausência — senão a ausência seria só a tela ainda vazia.
+    await expect(adminB.getByTestId(`extension-installed-${installationId}`)).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(adminB.getByTestId(`extension-operation-${reciboDeA.id}`)).toHaveCount(0);
   });
 
   await test.step("catálogo fora do ar não impede guia local e tarefa em A", async () => {
