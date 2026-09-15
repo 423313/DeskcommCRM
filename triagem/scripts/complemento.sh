@@ -115,6 +115,20 @@ if [ "$NOVAPAG" -gt 0 ]; then
   f -q 'lib/navigation/registry.ts' && p porta_navegacao "registry.ts tocado" || p porta_navegacao "$NOVAPAG page.tsx SEM tocar lib/navigation/registry.ts"
 fi
 
+# --- server action nova sem chamador (TRIAGEM, modo de falha 65) ---
+# O #861 cumpria a fatia "pela tela" com a action e nenhuma tela a chamava. Uma
+# action exportada que só é citada no próprio arquivo e em testes não existe para
+# quem opera, e o fragmento que a anuncia é falso.
+# `BASE` (padrão origin/main) existe para medir PR já mergeado contra a base dele.
+if git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
+  for a in $(git diff --name-only --diff-filter=A "${BASE:-origin/main}...$SHA" -- 'app/actions/' 2>/dev/null | grep -E '\.ts$'); do
+    for fn in $(git show "$SHA:$a" | grep -oE 'export (async )?function [A-Za-z0-9_]+' | awk '{print $NF}'); do
+      n=$(git grep -l -w "$fn" "$SHA" -- app components hooks lib 2>/dev/null | sed "s#^$SHA:##" | grep -vxF "$a" | grep -vcE '\.test\.|(^|/)tests?/')
+      [ "$n" -eq 0 ] && p acao_sem_chamador "$a:$fn — nenhum chamador fora do próprio arquivo e dos testes"
+    done
+  done
+fi
+
 # --- teste acompanha comportamento ---
 # `.tsx` entra: a main tem >100 `.test.tsx` e o vitest os coleta. Medido no #860: "SEM teste"
 # com `tests/unit/agenda-confirmar-pela-tela.test.tsx` no PR.
