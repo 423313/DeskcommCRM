@@ -750,6 +750,37 @@ Postgres no da IA).
 
 ---
 
+## Lote 10 da triagem — folga à noite e o Google da dona visto pela Atendente (2026-09-15)
+
+Integração `integracao/triagem-15set-l10` no SHA `ca13073ea`, controle na `main`
+`a0c88136a`; banco do `baseline.sql` em pg17, dona do `bootstrap-owner.ts`,
+Atendente criada pela tela (convite › criar conta › confirmação por e-mail),
+`next build` (exit 0 nas duas árvores) + `next start`, sem Google real, sem IA,
+sem Resend. O Google da dona foi semeado por SQL, versionado ao lado das imagens.
+Régua e medida de cada caso em `evidence/triagem-15set-l10/README.md`.
+
+| # | Caso | Resultado |
+|---|---|---|
+| L10.1 | #882 — dia de folga (jornada até 23:00, São Paulo) não oferece horário no painel; o dia seguinte oferece 21:00 | **PROVADO EM TELA** — quinta 17: 0 horários, "Outro horário" aberto (encaixe por desenho); sexta 18: 30 horários com 21:00. **Não discrimina:** a `main` mostra o mesmo, porque o painel pede o mês a partir de agora e a data UTC de `de` já alcança a exceção. `evidence/triagem-15set-l10/882-02-quinta-17-folga-sem-horario.png`, `evidence/triagem-15set-l10/882-03-sexta-18-controle-oferece-21h.png` |
+| L10.1a | #882 — a dona abre o painel às 21:05 do próprio dia de folga (o caso que discrimina) | **PROVADO EM TELA** — `main`: 21:30, 22:00 e 22:30 oferecidos na quinta fechada; lote: 0. Relógio do navegador em 17/09 21:05 −03:00, GET com `de=2026-09-18T00:05Z`. `evidence/triagem-15set-l10/main-882-04-quinta-17-folga-aberto-as-2105.png`, `evidence/triagem-15set-l10/882-04-lote-quinta-17-folga-aberto-as-2105.png` |
+| L10.2 | #883 — Atendente, na agenda da dona com evento do Google 10:00–11:00: 10:00 não é oferecido | **PROVADO EM TELA** — 10:00 e 10:30 fora da lista (contagem 0). Na `main`, a Atendente via os dois. `evidence/triagem-15set-l10/883-02-atendente-segunda-21-sem-10h.png`, `evidence/triagem-15set-l10/main-883-atendente-segunda-21-oferece-10h.png` |
+| L10.2a | #883 — Atendente tenta "Outro horário" às 10:15 | **PROVADO EM TELA** — `422 agenda_horario_indisponivel`, frase legível acima do Confirmar, sem o título do evento. Na `main`: `201` e um compromisso nasce por cima do Google da dona. `evidence/triagem-15set-l10/883-02-atendente-encaixe-1015-recusado.png`, `evidence/triagem-15set-l10/main-883-atendente-encaixe-1015-marcado.png` |
+| L10.2b | #883 — a dona recebe a mesma resposta | **PROVADO EM TELA** — 10:00 fora, encaixe 10:15 com o mesmo `422`. `evidence/triagem-15set-l10/883-03-dona-encaixe-1015-recusado.png` |
+| L10.3 | #892 — nenhum título do Google da dona aparece nas telas de agenda da Atendente | **PROVADO EM TELA** (texto e HTML, visões Semana, Dia e Mês). Mas a grade dela também não desenha "Ocupado" e explica o bloco travado com "fora dos horários que você publicou". **Diagnóstico por API:** a REST entrega o título a qualquer membro da organização. `evidence/triagem-15set-l10/892-01-atendente-semana-20-26.png`, `evidence/triagem-15set-l10/892-03-atendente-grade-segunda-21-10h.png` |
+| L10.4 | Regressão — encaixe livre como dona, e `/admin/meta` | **PROVADO EM TELA** — 11:15 → `201`, `user/ui`; `/admin/meta` `200` sem 5xx (aberta pela URL). `evidence/triagem-15set-l10/regr-01-dona-encaixe-1115-marcado.png`, `evidence/triagem-15set-l10/regr-02-admin-meta-carrega.png` |
+| L10.5 | #883 — Google real (OAuth e sincronização), gerente, agente de IA | **NÃO MEDIDO** |
+
+**Achados fora do lote, reportados e não consertados:** (1) para o papel `agent`,
+`GET /api/v1/team` responde `403`: ao abrir a Agenda aparece "Você não tem
+permissão para esta ação." e o painel diz que o compromisso é com "Você" enquanto
+marca na agenda da dona — igual na `main`; (2) a semente da Agenda e `GET
+/api/v1/agenda/agendamentos` ainda leem o Google pelo embed
+`calendar_connections!inner`, que a RLS esconde da Atendente — a mesma causa do
+#879 em leitores que o lote não tocou, e consertar é decidir o que ela pode ver
+(#892).
+
+---
+
 ## J17 — Trocar de organização, incluindo a que não foi configurada `[P0]`
 
 **Por que P0:** o seletor de organização fica no topo de toda tela do produto e

@@ -24799,6 +24799,82 @@ begin
 end $$;
 
 
+-- ---- a ocupação do Google do dono não depende de quem consulta (migration 0260) ----
+-- Racional completo no cabeçalho da migration 0260 (issue #879, PR #883). Em uma
+-- linha: a RLS de `calendar_connections` esconde a conexão de um `agent`, e a
+-- junção que levava ao Google do dono voltava vazia — a grade e o encaixe
+-- ofereciam horário em cima de compromisso que existe. As duas funções
+-- atravessam SÓ essa RLS, conferem o pertencimento no corpo (`fn_user_org_ids`),
+-- filtram o dono e devolvem ocupação (início/fim/transparência/situação), nunca
+-- conteúdo do evento. Idempotente: `create or replace` + revoke/grant.
+
+create or replace function public.fn_agenda_ocupacao_google_do_dono(
+  p_org uuid,
+  p_owner uuid,
+  p_de timestamptz,
+  p_ate timestamptz
+)
+returns table (
+  starts_at timestamptz,
+  ends_at timestamptz,
+  transparency text,
+  status text,
+  connection_status text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select e.starts_at, e.ends_at, e.transparency, e.status, c.status
+    from public.calendar_selected_external_events e
+    join public.calendar_connections c
+      on c.organization_id = e.organization_id
+     and c.id = e.connection_id
+   where (auth.uid() is null
+          or p_org in (select public.fn_user_org_ids())
+          or public.fn_is_platform_admin())
+     and e.organization_id = p_org
+     and c.user_id = p_owner
+     -- Cruzamento ESTRITO, a régua de `colide`: encostar não é ocupar.
+     and e.starts_at < p_ate
+     and e.ends_at > p_de;
+$$;
+
+create or replace function public.fn_agenda_conexoes_google_do_dono(
+  p_org uuid,
+  p_owner uuid
+)
+returns table (
+  status text,
+  last_sync_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select c.status, c.last_sync_at
+    from public.calendar_connections c
+   where (auth.uid() is null
+          or p_org in (select public.fn_user_org_ids())
+          or public.fn_is_platform_admin())
+     and c.organization_id = p_org
+     and c.user_id = p_owner;
+$$;
+
+-- Função nova em `public` nasce EXPOSTA — as DUAS origens de EXECUTE (CLAUDE.md):
+-- (A) o `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON FUNCTIONS TO anon` do
+--     baseline, que `revoke from public` NÃO remove;
+-- (B) o grant a PUBLIC que o Postgres dá a toda função criada, que
+--     `revoke from anon` NÃO remove.
+revoke execute on function public.fn_agenda_ocupacao_google_do_dono(uuid, uuid, timestamptz, timestamptz) from public, anon;
+grant  execute on function public.fn_agenda_ocupacao_google_do_dono(uuid, uuid, timestamptz, timestamptz) to authenticated, service_role;
+revoke execute on function public.fn_agenda_conexoes_google_do_dono(uuid, uuid) from public, anon;
+grant  execute on function public.fn_agenda_conexoes_google_do_dono(uuid, uuid) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
