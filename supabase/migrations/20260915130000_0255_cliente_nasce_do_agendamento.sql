@@ -99,7 +99,11 @@ begin
   -- exatamente o modo de falha que a cascata de LGPD existe para impedir.
   update public.contacts c
      set first_service_at = least(coalesce(c.first_service_at, 'infinity'::timestamptz), new.starts_at),
-         tags = case when 'cliente' = any(c.tags) then c.tags else c.tags || 'cliente' end,
+         -- `array_append` e NÃO `c.tags || ...`: sem cast, o `||` lê o literal
+         -- como ARRAY e o baseline morre em `malformed array literal: "cliente"`.
+         -- Medido no CI, no modo INSTALL — é o tipo de erro que só um Postgres
+         -- real acusa, e por isso o `test:db` não é opcional em mudança de schema.
+         tags = case when 'cliente' = any(c.tags) then c.tags else array_append(c.tags, 'cliente') end,
          updated_at = now()
    where c.id = new.contact_id
      -- Tenancy explícita mesmo com a FK: é a convenção do repo, e é a rede que
@@ -145,7 +149,7 @@ with primeiro as (
 )
 update public.contacts c
    set first_service_at = p.em,
-       tags = case when 'cliente' = any(c.tags) then c.tags else c.tags || 'cliente' end
+       tags = case when 'cliente' = any(c.tags) then c.tags else array_append(c.tags, 'cliente') end
   from primeiro p
  where p.organization_id = c.organization_id
    and p.contact_id = c.id
