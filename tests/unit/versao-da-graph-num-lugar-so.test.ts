@@ -48,8 +48,46 @@ const PASTAS_IGNORADAS = new Set([
 
 const CODIGO = /\.(ts|tsx|mjs|js)$/;
 
-/** Literal de versão da Graph: `"v22.0"`, `'v26.0'`, `` `v23.0` ``. */
-const LITERAL_DE_VERSAO = /["'`]v\d+\.\d+["'`]/;
+/**
+ * Literal de versão da Graph, nas duas formas em que ela chega à chamada:
+ *
+ * - string inteira: `"v22.0"`, `'v26.0'`, `` `v23.0` ``;
+ * - segmento de endereço: `/v22.0/`, `/v22.0?fields=…`, `/v22.0` no fim da
+ *   string ou do template, `/v22.0${caminho}`, `"v22.0/"`.
+ *
+ * A primeira versão desta catraca só conhecia a string inteira — aspas dos dois
+ * lados. A forma que o código de canal realmente escreve é a segunda: o número
+ * no meio do endereço (`` `https://graph.facebook.com/v22.0/${id}` ``). Medido:
+ * pôr esse endereço em `lib/channels/meta/validate-credentials.ts` deixava os
+ * quatro casos verdes.
+ *
+ * A borda é o que separa a versão de texto qualquer: à esquerda aspas ou `/`, à
+ * direita aspas, `/`, `?`, `#` ou o começo de uma interpolação. Por isso
+ * `design system · v0.1` (sem borda), `"v1.25.0"` (versão de release, com um
+ * terceiro número) e `/api/v1/` (sem ponto) não reprovam — os três estão em
+ * `NAO_E_VERSAO_DA_GRAPH`, abaixo.
+ */
+const LITERAL_DE_VERSAO = /(?<=["'`/])v\d+\.\d+(?=["'`/?#]|\$\{)/;
+
+/** Linhas que TÊM de reprovar. A primeira é a sabotagem que a versão anterior deixava passar. */
+const E_VERSAO_DA_GRAPH = [
+  "      `https://graph.facebook.com/v22.0/${input.phoneNumberId}` +",
+  "const BASE = `https://graph.facebook.com/v22.0`;",
+  'const url = "https://graph.facebook.com/v22.0?fields=id";',
+  "const url = `/v22.0${caminho}`;",
+  'const url = "v22.0/" + id;',
+  'const version = input.graphVersion ?? "v22.0";',
+  "const v = 'v26.0';",
+];
+
+/** Linhas que NÃO podem reprovar — senão a catraca vira ruído e alguém a desliga. */
+const NAO_E_VERSAO_DA_GRAPH = [
+  '<div className="ds-sub">design system · v0.1</div>',
+  'const release = "v1.25.0";',
+  "const rota = `/api/v1/contacts`;",
+  "      `https://graph.facebook.com/${version}/${input.phoneNumberId}` +",
+  "const url = `https://graph.facebook.com/${VERSAO_DA_API}/${caminho}`;",
+];
 
 /**
  * Tira comentário antes de varrer. Sem isto, a catraca reprovaria o próprio
@@ -108,9 +146,23 @@ describe("a versão da Graph tem um lugar só", () => {
     const literais = fonte
       .split("\n")
       .filter((linha) => LITERAL_DE_VERSAO.test(linha))
-      .map((linha) => linha.trim().match(LITERAL_DE_VERSAO)![0].slice(1, -1));
+      .map((linha) => linha.match(LITERAL_DE_VERSAO)![0]);
 
     expect(literais).toEqual([VERSAO_PADRAO_DA_GRAPH]);
+  });
+
+  it("a catraca reconhece a versão no meio do endereço, e não confunde versão de outra coisa", () => {
+    // Fixa a forma do padrão independente da árvore: a varredura acima só prova
+    // que HOJE não há culpado, e ficaria verde com um padrão que não pega nada.
+    const pegas = (linhas: string[]) =>
+      linhas.filter((linha) => semComentarios(linha).split("\n").some((l) => LITERAL_DE_VERSAO.test(l)));
+
+    expect(pegas(E_VERSAO_DA_GRAPH)).toEqual(E_VERSAO_DA_GRAPH);
+    expect(pegas(NAO_E_VERSAO_DA_GRAPH)).toEqual([]);
+
+    // Comentário continua fora: citar a versão medida não é escrevê-la à mão.
+    expect(pegas(["// a Meta reescreveu o next para https://graph.facebook.com/v25.0/abc"])).toEqual([]);
+    expect(pegas(["const x = 1; // chamado em https://graph.facebook.com/v22.0/abc"])).toEqual([]);
   });
 
   it("o .env.example não anuncia versão diferente da que o código usa", () => {
