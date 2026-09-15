@@ -28,9 +28,11 @@ import { useT } from "@/hooks/i18n/useT";
  * organização, e a regra nasce de `calendar_appointments`.
  *
  * ⚠️ LIGAR PEDE CONFIRMAÇÃO, DESLIGAR NÃO. Ligar etiqueta de uma vez todo
- * contato que já teve horário, e desligar depois não tira a etiqueta de
- * ninguém — o diálogo diz isso ANTES, que é o único momento em que a frase
- * serve. Desligar não mexe em contato nenhum, então não há o que confirmar.
+ * contato que já teve horário; RELIGAR também tira a etiqueta que o sistema
+ * tinha posto em quem ficou sem horário que conte; e desligar depois não tira a
+ * etiqueta de ninguém. O diálogo diz as três coisas ANTES, que é o único
+ * momento em que a frase serve. Desligar não mexe em contato nenhum, então não
+ * há o que confirmar.
  *
  * ⚠️ O ESTADO E O RESULTADO VÊM DO CORPO DA ACTION, nunca de um
  * `router.refresh` que perca a corrida para os prefetches da barra lateral. O
@@ -47,6 +49,48 @@ const TEXTO_DO_ERRO: Record<ErroClientePelaAgenda, string> = {
   tente_de_novo: "Outra mudança estava em andamento. Tente de novo.",
   falha: "Não consegui salvar essa mudança agora.",
 };
+
+/**
+ * A frase do resultado, escolhida pelos TRÊS números que o banco devolve.
+ *
+ * A versão anterior escolhia só por `ganharam_etiqueta`, e medido num banco
+ * real: religar sem nada novo devolve `{ganharam: 0, clientes: 2}`, e a tela
+ * afirmava "Nenhum contato tinha horário marcado ainda" sobre dois clientes.
+ * Zero etiquetas novas tem três causas diferentes, e cada uma tem sua frase.
+ */
+function frasesDoResultado(
+  r: ResultadoClientePelaAgenda,
+  t: (texto: string) => string,
+): { ganho: string; perda: string | null } {
+  const ganho =
+    r.ganharam_etiqueta > 1
+      ? t("{n} contatos ganharam a etiqueta “cliente”.").replace("{n}", String(r.ganharam_etiqueta))
+      : r.ganharam_etiqueta === 1
+        ? t("1 contato ganhou a etiqueta “cliente”.")
+        : r.clientes > 1
+          ? t("Nenhum contato novo ganhou a etiqueta: {c} contatos já eram clientes.").replace(
+              "{c}",
+              String(r.clientes),
+            )
+          : r.clientes === 1
+            ? t("Nenhum contato novo ganhou a etiqueta: 1 contato já era cliente.")
+            : r.perderam_etiqueta > 0
+              ? t("Nenhum contato ganhou a etiqueta.")
+              : t("Nenhum contato tinha horário marcado ainda. Quem marcar daqui em diante ganha a etiqueta.");
+
+  const perda =
+    r.perderam_etiqueta > 1
+      ? t(
+          "{m} contatos perderam a etiqueta “cliente”: enquanto a regra estava desligada, os horários deles foram cancelados, marcados como falta ou apagados.",
+        ).replace("{m}", String(r.perderam_etiqueta))
+      : r.perderam_etiqueta === 1
+        ? t(
+            "1 contato perdeu a etiqueta “cliente”: enquanto a regra estava desligada, os horários dele foram cancelados, marcados como falta ou apagados.",
+          )
+        : null;
+
+  return { ganho, perda };
+}
 
 export function ClientePelaAgenda({
   ligadoInicial,
@@ -87,6 +131,8 @@ export function ClientePelaAgenda({
     });
   }
 
+  const frases = resultado ? frasesDoResultado(resultado, t) : null;
+
   function aoMudar(novo: boolean) {
     if (novo) {
       setConfirmando(true);
@@ -114,7 +160,7 @@ export function ClientePelaAgenda({
 
       <p className="text-sm text-text-muted">
         {t(
-          "Com isto ligado, todo contato com horário marcado ganha a etiqueta “cliente” e a ficha passa a mostrar “Cliente desde”. Ao ligar, quem já teve horário marcado também ganha. Horário cancelado e falta não contam: se não sobrar nenhum horário que conte, a etiqueta sai. Se alguém da equipe tirar a etiqueta à mão, ela não volta enquanto a pessoa continuar cliente.",
+          "Com isto ligado, todo contato com horário marcado ganha a etiqueta “cliente” e a ficha passa a mostrar “Cliente desde”. Ao ligar, quem já teve horário marcado também ganha. Horário cancelado e falta não contam: se não sobrar nenhum horário que conte, sai a etiqueta que o sistema pôs — a que a equipe pôs à mão fica. Se alguém da equipe tirar a etiqueta, ela não volta.",
         )}
       </p>
 
@@ -128,7 +174,7 @@ export function ClientePelaAgenda({
 
       <p className="text-sm text-text-muted">
         {t(
-          "As automações “Quando um contato ganhar uma tag” disparam para quem virar cliente depois de ligar — não para quem já era cliente antes.",
+          "As automações “Quando um contato ganhar uma tag” disparam uma vez por contato: na primeira vez que ele vira cliente com a regra ligada. Não disparam para quem já era cliente ao ligar, nem de novo para quem cancela e marca outra vez.",
         )}
       </p>
 
@@ -136,27 +182,10 @@ export function ClientePelaAgenda({
         <p className="text-sm text-text-muted">{t("Só um administrador pode mudar essa regra.")}</p>
       )}
 
-      {resultado && (
+      {frases && (
         <div role="status" className="space-y-1 text-sm" data-testid="cliente-pela-agenda-resultado">
-          <p>
-            {resultado.ganharam_etiqueta === 0
-              ? t(
-                  "Nenhum contato tinha horário marcado ainda. Quem marcar daqui em diante ganha a etiqueta.",
-                )
-              : resultado.ganharam_etiqueta === 1
-                ? t("1 contato ganhou a etiqueta “cliente”.")
-                : t("{n} contatos ganharam a etiqueta “cliente”.").replace(
-                    "{n}",
-                    String(resultado.ganharam_etiqueta),
-                  )}
-          </p>
-          {resultado.perderam_etiqueta > 0 && (
-            <p>
-              {t(
-                "{m} deixaram de ser clientes: os horários deles foram cancelados ou tiveram falta enquanto a regra estava desligada.",
-              ).replace("{m}", String(resultado.perderam_etiqueta))}
-            </p>
-          )}
+          <p>{frases.ganho}</p>
+          {frases.perda && <p>{frases.perda}</p>}
         </div>
       )}
 
@@ -172,7 +201,7 @@ export function ClientePelaAgenda({
             <AlertDialogTitle>{t("Ligar clientes pela agenda?")}</AlertDialogTitle>
             <AlertDialogDescription>
               {t(
-                "Todos os contatos que já tiveram horário marcado (sem contar cancelados e faltas) ganham a etiqueta “cliente” agora. Desligar depois não tira a etiqueta de ninguém.",
+                "Todos os contatos que já tiveram horário marcado (sem contar cancelados e faltas) ganham a etiqueta “cliente” agora. Se a regra já esteve ligada, quem ficou sem horário que conte perde a etiqueta que o sistema tinha posto. Desligar depois não tira a etiqueta de ninguém.",
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

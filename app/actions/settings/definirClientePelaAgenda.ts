@@ -83,9 +83,19 @@ export async function definirClientePelaAgenda(
     if (error.code === "42501") {
       return { ok: false, erro: error.message.includes("mfa_required") ? "mfa" : "sem_permissao" };
     }
-    // Deadlock ou conflito de serialização com um agendamento em voo: nada foi
-    // gravado (a transação inteira voltou), e tentar de novo resolve.
-    if (error.code === "40P01" || error.code === "40001") return { ok: false, erro: "tente_de_novo" };
+    // A ligação espera, na trava da organização, todo agendamento e toda junção
+    // de contatos em voo naquela organização (migration 0262). Três desfechos
+    // dessa espera voltam a transação inteira — nada foi gravado — e tentar de
+    // novo resolve:
+    //   55P03  o prazo de 4s do papel `authenticated` (migration 0243) venceu;
+    //   40P01  o Postgres escolheu esta transação para desfazer um ciclo;
+    //   40001  conflito de serialização.
+    // O 40P01 não é o caminho esperado: a ordem das travas (organização antes do
+    // contato, na fusão e no recálculo) existe para que ele não aconteça, e as
+    // corridas I32/I33 do invariante medem as duas que aconteciam.
+    if (error.code === "55P03" || error.code === "40P01" || error.code === "40001") {
+      return { ok: false, erro: "tente_de_novo" };
+    }
     logger.error("[cliente-pela-agenda] a RPC falhou", {
       organization_id: org.orgId,
       code: error.code,

@@ -90,11 +90,15 @@ describe("definirClientePelaAgenda", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("42501 com mfa_required → mfa; 42501 sem → sem_permissao; 40P01 → tente_de_novo", async () => {
+  it("42501 com mfa_required → mfa; 42501 sem → sem_permissao; 55P03/40P01 → tente_de_novo", async () => {
     respostaDaRpc = { data: null, error: { code: "42501", message: "cliente_pela_agenda_mfa_required" } };
     expect(await definirClientePelaAgenda(true)).toEqual({ ok: false, erro: "mfa" });
     respostaDaRpc = { data: null, error: { code: "42501", message: "cliente_pela_agenda_forbidden" } };
     expect(await definirClientePelaAgenda(true)).toEqual({ ok: false, erro: "sem_permissao" });
+    // O prazo de trava do papel `authenticated` (4s, migration 0243) vencido
+    // esperando uma junção ou um agendamento em voo.
+    respostaDaRpc = { data: null, error: { code: "55P03", message: "canceling statement due to lock timeout" } };
+    expect(await definirClientePelaAgenda(true)).toEqual({ ok: false, erro: "tente_de_novo" });
     respostaDaRpc = { data: null, error: { code: "40P01", message: "deadlock detected" } };
     expect(await definirClientePelaAgenda(true)).toEqual({ ok: false, erro: "tente_de_novo" });
     expect(auditadas).toEqual([]);
