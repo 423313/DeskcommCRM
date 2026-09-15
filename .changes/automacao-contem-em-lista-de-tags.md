@@ -1,5 +1,5 @@
 ---
-impacto: atencao
+impacto: exige_acao
 secao: corrigido
 titulo: Automação com condição "contém" passa a funcionar nas tags
 ---
