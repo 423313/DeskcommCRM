@@ -25002,7 +25002,9 @@ comment on column public.contacts.first_service_at is
   'CONTAM (fn_situacao_conta_como_atendimento) — min(least(created_at, starts_at)). Histórico importado '
   'fica com a data passada; um horário marcado hoje para o mês que vem fica com hoje, nunca com data futura. '
   'Mantida pelos triggers de calendar_appointments (inserir, alterar, apagar) só enquanto '
-  'organizations.settings.crm.cliente_pela_agenda = true; desligada, fica congelada e nenhuma tela a lê. '
+  'organizations.settings.crm.cliente_pela_agenda = true; desligada, fica congelada e nenhuma TELA a '
+  'mostra — o export de LGPD (lib/lgpd/export-collector.ts) e a API de contatos continuam levando o valor '
+  'congelado, porque é dado guardado. Só o SISTEMA a grava: um BEFORE UPDATE recusa a escrita de sessão. '
   'Cancelar, marcar falta ou apagar o único horário que conta a devolve a null. Preservada na anonimização.';
 
 alter table public.contacts
@@ -25021,8 +25023,9 @@ alter table public.contacts
 comment on column public.contacts.client_tag_by_system is
   'De quem é a etiqueta cliente. added = o sistema pôs; removed = o sistema tirou a que ele mesmo pôs; '
   'null = o sistema nunca mexeu, ou a equipe assumiu (tirou a do sistema, ou pôs uma à mão). O sistema só '
-  'tira a etiqueta que é dele e só repõe a que ele mesmo tirou. O que a equipe fez é lido na próxima '
-  'escrita de fn_recalcular_cliente_do_contato. Vocabulário só do banco: nenhum TypeScript lê ou grava.';
+  'tira a etiqueta que é dele e só repõe a que ele mesmo tirou. O que a equipe fez é lido NA HORA, pelo '
+  'BEFORE UPDATE fn_colunas_de_cliente_sao_do_sistema — quem mexe na etiqueta sem gravar o dono na mesma '
+  'escrita passa a ser o dono dela. Vocabulário só do banco: nenhum TypeScript lê ou grava.';
 
 -- Auto-cura de banco que aplicou uma versão anterior desta migration: contato
 -- com data e sem carimbo seria tratado como "nunca reconhecido" e dispararia a
@@ -25141,9 +25144,11 @@ begin
 
   v_tem := c_etiqueta = any(v_tags);
 
-  -- O QUE A EQUIPE FEZ desde a última escrita do sistema: a etiqueta que ele
-  -- pôs sumiu, ou a que ele tirou reapareceu. Nos dois casos a etiqueta passa a
-  -- ser da equipe, e o sistema não a toca mais.
+  -- REDE, e não mais a regra: quem lê o que a equipe fez é a guarda da seção
+  -- 4b, na hora da escrita. Isto aqui alcança os dois casos que ela não vê —
+  -- um banco que aplicou uma versão anterior desta migration (a etiqueta mudou
+  -- de mão antes de a guarda existir) e uma restauração com
+  -- `session_replication_role = replica`, que desliga trigger.
   if (v_dono = 'added' and not v_tem) or (v_dono = 'removed' and v_tem) then
     v_dono := null;
   end if;
@@ -25174,6 +25179,13 @@ begin
     v_resultado := 'mudou_a_data';
   end if;
 
+  -- A ESCRITA SE ANUNCIA. `auth.uid()` continua preenchido aqui dentro — uma
+  -- `security definer` troca o dono da função, nunca o JWT da sessão —, então
+  -- sem um sinal explícito a guarda da seção 4b barraria o próprio sistema. A
+  -- chave é de TRANSAÇÃO (`set_config(..., true)`) e volta a 'off' na linha
+  -- seguinte: a janela é o UPDATE, não o resto da transação.
+  perform set_config('deskcomm.cliente_pela_agenda', 'on', true);
+
   update public.contacts
      set first_service_at = v_depois,
          client_recognized_at = coalesce(v_reconhecido, case when v_depois is not null then now() end),
@@ -25182,6 +25194,8 @@ begin
          updated_at = now()
    where organization_id = p_org
      and id = p_contact;
+
+  perform set_config('deskcomm.cliente_pela_agenda', 'off', true);
 
   -- UMA VEZ POR CONTATO: só quando a etiqueta entra na primeira vez que a regra
   -- o reconhece.
@@ -25207,6 +25221,107 @@ begin
 end $$;
 
 revoke execute on function public.fn_recalcular_cliente_do_contato(uuid, uuid, boolean) from public, anon, authenticated;
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 4b · as três colunas são do SISTEMA — e o dono da etiqueta é lido na escrita
+-- ────────────────────────────────────────────────────────────────────────────
+-- DUAS COISAS NUMA FUNÇÃO SÓ, e a ordem entre elas é a razão de não serem dois
+-- triggers: BEFORE dispara por ordem ALFABÉTICA do nome, e a reconciliação
+-- GRAVA `client_tag_by_system` — vindo depois da guarda, ela mesma seria
+-- recusada. Aqui a guarda julga o que a ESCRITA trouxe, e só então o dono é
+-- reconciliado.
+--
+-- (1) A GUARDA. As três colunas nascem com UPDATE para `authenticated` (o
+--     `ALTER DEFAULT PRIVILEGES … GRANT ALL ON TABLES` que todo projeto
+--     Supabase traz), e a única policy de escrita de `contacts` é cega a papel:
+--     `tenant_isolation_contacts_all` é `organization_id in fn_user_org_ids()`,
+--     sem `fn_role_at_least`. Medido num Postgres descartável, antes desta
+--     seção: `set local role authenticated` com o JWT de um `viewer` — o papel
+--     que a tela chama de "Somente leitura" — da PRÓPRIA organização gravava
+--     `first_service_at = '2019-01-01'` e devolvia `UPDATE 1`. Isso é "Cliente
+--     desde 2019" forjado; é o lead daquele contato passando a nascer no funil
+--     de clientes (`lib/leads/nascimento-do-lead.ts` lê exatamente essa
+--     coluna); e é `contact.tag_added` silenciado para sempre naquele contato,
+--     porque `client_recognized_at` nunca volta a null. O limite multi-tenant
+--     não caía — nada disso alcança outra organização —, mas dentro do tenant o
+--     papel mais fraco decidia roteamento.
+--
+--     POR QUE TRIGGER E NÃO GRANT DE COLUNA, que é a forma da migration irmã
+--     (0261 faz `revoke select on table` + `grant select (<lista>)`): lá a
+--     tabela tem lista de colunas estável e o alvo é o SELECT. Aqui seria
+--     `revoke update on table contacts` + `grant update (<todas as outras>)`, e
+--     toda coluna acrescentada a `contacts` depois disto nasceria NÃO-gravável
+--     por sessão nenhuma, em silêncio, até alguém lembrar de estender a lista.
+--     A recusa nomeada custa um trigger e não deixa esse rastro.
+--
+--     `auth.uid() is null` PASSA de propósito: é o admin client (service role),
+--     que resolve a organização de fonte confiável, e é o caminho da
+--     anonimização de LGPD, dos importadores e das migrations. Quem é barrado é
+--     a SESSÃO — inclusive a de um admin, porque a coluna não é campo de ficha.
+--
+-- (2) O DONO DA ETIQUETA. O sinal de "foi o sistema" é o próprio
+--     `client_tag_by_system` mudar na MESMA escrita, e é o que
+--     `fn_recalcular_cliente_do_contato` faz sempre: toda vez que ele mexe na
+--     etiqueta, grava o dono junto. Mudou a presença sem o dono mudar → foi a
+--     equipe (pela tela de Contatos, pela automação "adicionar tag", pela API),
+--     e a etiqueta passa a ser dela. Com o dono já nulo não há o que
+--     reconciliar, que é o caso da esmagadora maioria das edições de tag.
+--
+-- A CHAVE `deskcomm.cliente_pela_agenda` é de transação e não é alcançável de
+-- fora: o PostgREST não envia SQL solto, e `set_config` mora em `pg_catalog`,
+-- fora do schema exposto. Ela existe porque `auth.uid()` continua preenchido
+-- dentro da `security definer` chamada pela sessão.
+create or replace function public.fn_colunas_de_cliente_sao_do_sistema()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  c_etiqueta constant text := 'cliente';
+begin
+  if auth.uid() is not null
+     and coalesce(current_setting('deskcomm.cliente_pela_agenda', true), '') <> 'on'
+     and (old.first_service_at is distinct from new.first_service_at
+       or old.client_recognized_at is distinct from new.client_recognized_at
+       or old.client_tag_by_system is distinct from new.client_tag_by_system) then
+    raise exception 'colunas_de_cliente_sao_do_sistema' using errcode = '42501';
+  end if;
+
+  if new.client_tag_by_system is not null
+     and old.client_tag_by_system is not distinct from new.client_tag_by_system
+     and (c_etiqueta = any(coalesce(old.tags, '{}'::text[])))
+         is distinct from (c_etiqueta = any(coalesce(new.tags, '{}'::text[]))) then
+    new.client_tag_by_system := null;
+  end if;
+
+  return new;
+end $$;
+
+comment on function public.fn_colunas_de_cliente_sao_do_sistema() is
+  'Guarda de contacts (migration 0262): sessão nenhuma grava first_service_at, client_recognized_at ou '
+  'client_tag_by_system (42501 colunas_de_cliente_sao_do_sistema); o service role e as migrations passam. '
+  'E quem mexe na etiqueta cliente sem gravar o dono na mesma escrita vira o dono dela, o que é como a '
+  'remoção à mão passa a ser respeitada NA HORA. Provado em tests/invariants/cliente-nasce-do-agendamento.test.ts.';
+
+-- Função de trigger não exige EXECUTE de quem dispara o UPDATE; revogar das
+-- duas origens (o grant a PUBLIC e o grant direto a `anon` do baseline) não
+-- quebra nada.
+revoke execute on function public.fn_colunas_de_cliente_sao_do_sistema() from public, anon, authenticated;
+
+-- `before update` sem lista de colunas, com a WHEN filtrando: a lista do
+-- `update of` dispara quando a coluna é MENCIONADA na escrita, mesmo sem mudar
+-- de valor — um `select *` que volta inteiro no UPDATE acordaria a guarda à toa.
+-- A WHEN compara VALORES, e o caso comum (nenhuma das quatro mudou) nem chama a
+-- função.
+drop trigger if exists trg_contato_colunas_de_cliente on public.contacts;
+create trigger trg_contato_colunas_de_cliente
+  before update on public.contacts
+  for each row
+  when (old.first_service_at is distinct from new.first_service_at
+     or old.client_recognized_at is distinct from new.client_recognized_at
+     or old.client_tag_by_system is distinct from new.client_tag_by_system
+     or old.tags is distinct from new.tags)
+  execute function public.fn_colunas_de_cliente_sao_do_sistema();
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 5 · os triggers — condicionais ao interruptor, em INSERT, UPDATE e DELETE
@@ -25258,11 +25373,19 @@ begin
     perform public.fn_recalcular_cliente_do_contato(v_org, new.contact_id, true);
   elsif tg_op = 'UPDATE' then
     if new.contact_id is not null then
-      -- O horário TROCOU DE CONTATO: é o repontamento de `fn_mesclar_contatos`,
-      -- e a pessoa que ganhou o horário já era cliente no cadastro antigo. Não
-      -- é virada que as automações devam ver.
+      -- O CONTATO DO HORÁRIO MUDOU — e a condição `is distinct from` tem DUAS
+      -- causas, não uma. A primeira é o repontamento de `fn_mesclar_contatos`
+      -- (X → Y): o horário só trocou de cadastro, e a escrita no vencedor não é
+      -- a virada que as automações devem ver. A segunda é o PRIMEIRO vínculo de
+      -- um horário que nasceu sem contato (null → Y), e esse é reconhecimento
+      -- de verdade: é a primeira vez que este contato tem horário, e emite como
+      -- um INSERT emitiria. Medido antes desta linha: no caminho null → Y o
+      -- contato virava cliente, ganhava a etiqueta, ficava com
+      -- `client_recognized_at` carimbado — e NENHUM `contact.tag_added` saía,
+      -- nem ali nem nunca mais, porque o carimbo não volta a null.
       perform public.fn_recalcular_cliente_do_contato(
-        v_org, new.contact_id, old.contact_id is not distinct from new.contact_id);
+        v_org, new.contact_id,
+        old.contact_id is not distinct from new.contact_id or old.contact_id is null);
     end if;
     if old.contact_id is not null and old.contact_id is distinct from new.contact_id then
       perform public.fn_recalcular_cliente_do_contato(v_org, old.contact_id, false);
@@ -25326,7 +25449,8 @@ create trigger trg_agendamento_apagado_recalcula_cliente
 -- action) com as contagens que esta função devolve.
 --
 -- DESLIGAR só grava `false`: nenhum contato muda, `first_service_at` fica
--- congelada e nenhuma tela a lê. RELIGAR recalcula todos — quem virou cliente
+-- congelada e nenhuma TELA a mostra (o export de LGPD e a API de contatos
+-- continuam levando o valor congelado, porque é dado guardado). RELIGAR recalcula todos — quem virou cliente
 -- enquanto estava desligada ganha a etiqueta (sem evento: ao religar ele já era
 -- cliente), quem ficou sem horário que conte perde a etiqueta que o sistema
 -- tinha posto, e quem já tinha data não passa por virada. A etiqueta da equipe,
@@ -25410,6 +25534,14 @@ begin
     end loop;
   end if;
 
+  -- O QUARTO NÚMERO EXISTE PARA A TELA NÃO MENTIR. Medido: numa organização
+  -- cujo único contato TEM horário marcado, todos cancelados, o corpo era
+  -- `{ganharam: 0, perderam: 0, clientes: 0}` — e a última frase de
+  -- `components/agenda/ClientePelaAgenda.tsx` dizia "Nenhum contato tinha
+  -- horário marcado ainda". Numa clínica com cancelamentos, que é o nicho que
+  -- esta migration cita, essa é a primeira frase depois de ligar. Zero
+  -- etiquetas novas tem QUATRO causas, e esta é a única que os outros três
+  -- números não distinguem.
   return jsonb_build_object(
     'ligado', p_ligado,
     'mudou', coalesce(v_antes, false) <> p_ligado,
@@ -25417,7 +25549,14 @@ begin
     'perderam_etiqueta', v_perderam,
     'clientes', (select count(*) from public.contacts
                   where organization_id = p_org and first_service_at is not null
-                    and is_anonymized = false and is_merged_into is null)
+                    and is_anonymized = false and is_merged_into is null),
+    'com_agendamento_que_nao_conta', (
+      select count(*) from public.contacts c
+       where c.organization_id = p_org
+         and c.first_service_at is null
+         and c.is_anonymized = false and c.is_merged_into is null
+         and exists (select 1 from public.calendar_appointments a
+                      where a.organization_id = p_org and a.contact_id = c.id))
   );
 end $$;
 

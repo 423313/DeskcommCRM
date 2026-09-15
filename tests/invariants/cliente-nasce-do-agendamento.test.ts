@@ -44,6 +44,12 @@ import { pgComoSupabase } from "../pg-como-supabase";
  *                  não reemite, e a junção de contatos nunca emite
  *   I27, I28,      as corridas que a ordem das travas existe para impedir —
  *   I32, I33       marcação × marcação, ligação × marcação, ligação × junção
+ *   I34            a etiqueta que a equipe REPÔS à mão o sistema não tira
+ *   I35            horário que nasce sem contato e é vinculado depois: o
+ *                  primeiro vínculo é reconhecimento, e emite
+ *   I36, I37       as três colunas são do SISTEMA — sessão nenhuma as grava; o
+ *                  service role e o trigger gravam
+ *   I38            o quarto número do corpo: a agenda que só tem cancelamento
  *
  * ORGANIZAÇÕES SEPARADAS POR PAPEL NO TESTE, para que um caso não verdeie outro
  * por estado compartilhado: A ligada no beforeAll, B sempre desligada, C é o
@@ -73,6 +79,8 @@ const ORG_F = "c11e0000-0000-4000-8000-000000000006";
 const ORG_G = "c11e0000-0000-4000-8000-000000000007";
 /** Só para a corrida entre ligar a regra e um INSERT que já travou o contato pela FK (I33). */
 const ORG_H = "c11e0000-0000-4000-8000-000000000008";
+/** Só para a agenda em que NADA conta — o quarto número do corpo (I38). */
+const ORG_I = "c11e0000-0000-4000-8000-000000000009";
 
 const ADMIN_A = "c11e1111-0000-4000-8000-000000000001";
 const AGENT_A = "c11e1111-0000-4000-8000-000000000002";
@@ -90,6 +98,9 @@ const MANAGER_A = "c11e1111-0000-4000-8000-00000000000c";
 const ADMIN_G = "c11e1111-0000-4000-8000-00000000000d";
 const MANAGER_G = "c11e1111-0000-4000-8000-00000000000e";
 const ADMIN_H = "c11e1111-0000-4000-8000-00000000000f";
+/** O papel mais fraco DENTRO da A, para a guarda das três colunas (I36). */
+const VIEWER_A = "c11e1111-0000-4000-8000-000000000010";
+const ADMIN_I = "c11e1111-0000-4000-8000-000000000011";
 
 const CONVERSA = "c11e0000-0000-4000-8000-00000000c001";
 
@@ -101,6 +112,8 @@ interface Resultado {
   ganharam_etiqueta: number;
   perderam_etiqueta: number;
   clientes: number;
+  /** Contatos que TÊM horário e nenhum que conte. Ver I38. */
+  com_agendamento_que_nao_conta: number;
 }
 
 interface Opcoes {
@@ -194,6 +207,35 @@ async function tirarEtiquetaAMao(contato: string): Promise<void> {
   await pool.query("update contacts set tags = array_remove(tags, $2) where id = $1", [contato, TAG_DE_CLIENTE]);
 }
 
+async function porEtiquetaAMao(contato: string): Promise<void> {
+  await pool.query("update contacts set tags = array_append(tags, $2) where id = $1", [contato, TAG_DE_CLIENTE]);
+}
+
+/** De quem é a etiqueta agora: 'added', 'removed' ou null (a equipe). */
+async function donoDaEtiqueta(contato: string): Promise<string | null> {
+  const { rows } = await pool.query<{ d: string | null }>(
+    "select client_tag_by_system as d from contacts where id = $1",
+    [contato],
+  );
+  return rows[0]!.d;
+}
+
+/** Liga um horário que nasceu SEM contato a um contato (I35). */
+async function vincular(agendamento: string, contato: string): Promise<void> {
+  await pool.query("update calendar_appointments set contact_id = $2 where id = $1", [agendamento, contato]);
+}
+
+/** O que a sessão recebeu: `<código>:<mensagem>`, ou 'passou' se o banco deixou. */
+async function tentarComoUsuario(uid: string, sql: string, params: unknown[]): Promise<string> {
+  try {
+    await comoUsuario(uid, sql, params);
+    return "passou";
+  } catch (e) {
+    const erro = e as { code?: string; message?: string };
+    return `${erro.code}:${erro.message}`;
+  }
+}
+
 const JUNTAR = "select fn_mesclar_contatos($1, $2, $3::uuid[]) as r";
 
 interface Juncao {
@@ -246,7 +288,7 @@ async function crmDe(org: string): Promise<unknown> {
 beforeAll(async () => {
   const usuarios = [
     ADMIN_A, AGENT_A, ADMIN_B, ADMIN_C, ADMIN_D, MANAGER_D, AGENT_D, VIEWER_D, ADMIN_E, SUPORTE_D, ADMIN_F,
-    MANAGER_A, ADMIN_G, MANAGER_G, ADMIN_H,
+    MANAGER_A, ADMIN_G, MANAGER_G, ADMIN_H, VIEWER_A, ADMIN_I,
   ];
   for (const u of usuarios) {
     await pool.query("insert into auth.users (id, email) values ($1, $2) on conflict (id) do nothing", [
@@ -263,6 +305,7 @@ beforeAll(async () => {
     [ORG_F, "cliente-agenda-f"],
     [ORG_G, "cliente-agenda-g"],
     [ORG_H, "cliente-agenda-h"],
+    [ORG_I, "cliente-agenda-i"],
   ] as const) {
     await pool.query(
       `insert into organizations (id, slug, legal_name, display_name)
@@ -286,6 +329,8 @@ beforeAll(async () => {
     [ADMIN_G, ORG_G, "admin"],
     [MANAGER_G, ORG_G, "manager"],
     [ADMIN_H, ORG_H, "admin"],
+    [VIEWER_A, ORG_A, "viewer"],
+    [ADMIN_I, ORG_I, "admin"],
   ] as const) {
     await pool.query(
       `insert into user_organizations (user_id, organization_id, role, accepted_at)
@@ -546,6 +591,41 @@ describe("a etiqueta tirada à mão é respeitada", () => {
     expect(depois.tags).toEqual(["cliente", "vip"]);
     expect(await eventosDeEtiqueta({ contato })).toBe(0);
   });
+  it("I34 · a etiqueta que a equipe REPÔS à mão: o sistema não a tira no cancelamento seguinte", async () => {
+    // A JANELA QUE A LEITURA PREGUIÇOSA DO DONO DEIXAVA ABERTA. Medido, antes da
+    // guarda: o sistema põe (`added`), a equipe tira, a equipe REPÕE — e como
+    // nenhuma data mudou, `fn_recalcular_cliente_do_contato` não rodava e o dono
+    // continuava `added`. O cancelamento seguinte então tirava a etiqueta da
+    // EQUIPE, sem evento e sem auditoria — exatamente o que o cabeçalho da
+    // migration diz que não acontece, sem nenhuma condição.
+    const contato = await criarContato(ORG_A, "Repôs à mão");
+    const horario = await marcar(ORG_A, contato, "2026-06-01T10:00:00Z");
+    expect((await lerContato(contato)).tags).toContain(TAG_DE_CLIENTE);
+    expect(await donoDaEtiqueta(contato)).toBe("added");
+
+    await tirarEtiquetaAMao(contato);
+    expect(await donoDaEtiqueta(contato), "tirar à mão passa a etiqueta para a equipe NA HORA").toBeNull();
+    await porEtiquetaAMao(contato);
+    expect(await donoDaEtiqueta(contato), "repor à mão também é da equipe").toBeNull();
+
+    await cancelar(horario);
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at, "a data é do sistema, e ela volta a null").toBeNull();
+    expect(depois.tags, "a etiqueta é da equipe: o sistema não a tira").toContain(TAG_DE_CLIENTE);
+  });
+
+  it("I34b · controle: sem a equipe no meio, o sistema TIRA a etiqueta que é dele", async () => {
+    // O par do I34. Sem ele, um dono que virasse null em toda escrita deixaria
+    // o I34 verde e quebraria a feature: ninguém perderia a etiqueta nunca.
+    const contato = await criarContato(ORG_A, "Só o sistema");
+    const horario = await marcar(ORG_A, contato, "2026-06-02T10:00:00Z");
+    expect(await donoDaEtiqueta(contato)).toBe("added");
+    await cancelar(horario);
+    const depois = await lerContato(contato);
+    expect(depois.tags).not.toContain(TAG_DE_CLIENTE);
+    expect(await donoDaEtiqueta(contato)).toBe("removed");
+  });
 });
 
 describe("o evento sai UMA vez por contato", () => {
@@ -610,6 +690,31 @@ describe("o evento sai UMA vez por contato", () => {
     expect(await eventosDeEtiqueta({ contato: nova })).toBe(0);
     expect(await eventosDeEtiqueta({ org: ORG_A })).toBe(eventosDaOrg);
   });
+  it("I35 · horário que nasce SEM contato e é vinculado depois: o primeiro vínculo emite", async () => {
+    // O PRIMEIRO VÍNCULO NÃO É REPONTAMENTO. A condição do ramo de UPDATE é
+    // `old.contact_id is distinct from new.contact_id`, e ela tem dois membros:
+    // X → Y (a junção do I31, que não deve emitir) e null → Y, que é a primeira
+    // vez que este contato tem horário. Medido antes: o contato virava cliente,
+    // ganhava a etiqueta, ficava com `client_recognized_at` carimbado — e
+    // NENHUM `contact.tag_added` saía, nem ali nem nunca mais, porque o carimbo
+    // não volta a null. A automação de boas-vindas nunca veria essa pessoa.
+    const contato = await criarContato(ORG_A, "Vinculado depois");
+    const horario = await marcar(ORG_A, null, "2026-06-05T10:00:00Z");
+    expect(await eventosDeEtiqueta({ contato })).toBe(0);
+    expect((await lerContato(contato)).first_service_at, "sem contato, nada acontece").toBeNull();
+
+    await vincular(horario, contato);
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at).not.toBeNull();
+    expect(depois.tags).toContain(TAG_DE_CLIENTE);
+    expect(await eventosDeEtiqueta({ contato }), "o primeiro vínculo emite").toBe(1);
+
+    // E continua sendo UM: o carimbo já está lá.
+    await cancelar(horario);
+    await marcar(ORG_A, contato, "2026-06-06T10:00:00Z");
+    expect(await eventosDeEtiqueta({ contato })).toBe(1);
+  });
 });
 
 describe("LGPD e tenancy", () => {
@@ -669,6 +774,11 @@ describe("ligar classifica o histórico SÓ da organização que liga", () => {
       ganharam_etiqueta: 3,
       perderam_etiqueta: 0,
       clientes: 3,
+      // `c.soCancelado` tem horário e nenhum que conte; `c.semHorario` não tem
+      // horário nenhum. Os dois ficam sem etiqueta, e só o primeiro entra aqui —
+      // é essa diferença que a tela precisa para não dizer "ninguém tinha
+      // horário marcado" a quem só teve cancelamento.
+      com_agendamento_que_nao_conta: 1,
     });
     expect(await crmDe(ORG_C)).toEqual({ cliente_pela_agenda: true });
     for (const [id, data] of [
@@ -731,6 +841,38 @@ describe("ligar classifica o histórico SÓ da organização que liga", () => {
     const ganhou = await lerContato(novo);
     expect(ganhou.first_service_at?.toISOString()).toBe("2026-01-15T10:00:00.000Z");
     expect(ganhou.tags).toContain(TAG_DE_CLIENTE);
+  });
+
+  it("I38 · agenda que só tem cancelamento: os três números zerados, e o QUARTO em 1", async () => {
+    // O CORPO QUE A TELA PRECISA DISTINGUIR. Medido antes deste número: uma
+    // organização cujo único contato TEM horário marcado, todos cancelados,
+    // devolvia `{ganharam: 0, perderam: 0, clientes: 0}` — três números
+    // idênticos aos de uma agenda VAZIA — e a tela dizia "Nenhum contato tinha
+    // horário marcado ainda" sobre uma organização que tem horário marcado.
+    // Numa clínica com cancelamentos é a primeira frase depois de ligar.
+    const contato = await criarContato(ORG_I, "Só cancelou");
+    await marcar(ORG_I, contato, "2026-08-01T10:00:00Z", "cancelled");
+
+    const r = await ligar(ADMIN_I, ORG_I, true);
+
+    expect(r).toEqual({
+      ligado: true,
+      mudou: true,
+      ganharam_etiqueta: 0,
+      perderam_etiqueta: 0,
+      clientes: 0,
+      com_agendamento_que_nao_conta: 1,
+    });
+    // E o contato continua intocado: o quarto número CONTA, não classifica.
+    const linha = await lerContato(contato);
+    expect(linha.first_service_at).toBeNull();
+    expect(linha.tags).not.toContain(TAG_DE_CLIENTE);
+
+    // CONTROLE: marcar um horário que CONTA tira este contato da conta e o põe
+    // na de clientes. Sem o par, um número fixo em 1 passaria.
+    await marcar(ORG_I, contato, "2026-08-02T10:00:00Z");
+    const religou = await ligar(ADMIN_I, ORG_I, false);
+    expect(religou.com_agendamento_que_nao_conta, "desligar não recalcula, mas conta o AGORA").toBe(0);
   });
 
   it("I10b · na C: etiquetada, tirada à mão, desligada e religada — a etiqueta não volta", async () => {
@@ -842,6 +984,87 @@ describe("quem pode ligar", () => {
   it("I21b · controle do par: o admin da D, sem suporte, liga", async () => {
     const r = await ligar(ADMIN_D, ORG_D, true);
     expect(r).toMatchObject({ ligado: true, mudou: true, ganharam_etiqueta: 2 });
+  });
+});
+
+describe("as três colunas são do sistema", () => {
+  // O valor forjado é DIFERENTE do que está lá em todas as três: a guarda só
+  // dispara quando a coluna MUDA, e reescrever o mesmo valor deixaria o caso
+  // verde sem medir nada. O contato deste caso tem a etiqueta do sistema
+  // (`added`), então o forjado é `removed` — é a escrita que faria o sistema
+  // devolver a etiqueta na próxima marcação.
+  const TRES = [
+    ["first_service_at", "update contacts set first_service_at = $2::timestamptz where id = $1", "2019-01-01T00:00:00Z"],
+    ["client_recognized_at", "update contacts set client_recognized_at = $2::timestamptz where id = $1", "2019-01-01T00:00:00Z"],
+    ["client_tag_by_system", "update contacts set client_tag_by_system = $2 where id = $1", "removed"],
+  ] as const;
+
+  it("I36 · viewer, agent e admin da PRÓPRIA organização: 42501 nas três, e o valor não muda", async () => {
+    // A CLASSE É PRÉ-EXISTENTE (um viewer já reescreve `tags` e `name`), e esta
+    // entrega ACRESCENTA a ela a coluna que decide roteamento e o carimbo de
+    // uma-vez-só. Medido antes da guarda, no mesmo banco: `set local role
+    // authenticated` com o JWT de um viewer da PRÓPRIA organização gravava
+    // `first_service_at = '2019-01-01'` e devolvia `UPDATE 1` — "Cliente desde
+    // 2019" forjado, o lead nascendo no funil de clientes e `contact.tag_added`
+    // silenciado para sempre naquele contato.
+    //
+    // `authenticated` tem UPDATE nestas colunas (default ACL de tabela do
+    // Supabase, reproduzido no prelude) e a policy de `contacts` é cega a papel:
+    // quem recusa é o BEFORE UPDATE, e é por isso que o admin também é recusado.
+    const contato = await criarContato(ORG_A, "Não me forje a data");
+    await marcar(ORG_A, contato, "2026-07-01T10:00:00Z");
+    const antes = await lerContato(contato);
+    const dono = await donoDaEtiqueta(contato);
+    expect(dono, "a fixture precisa ter a etiqueta do SISTEMA").toBe("added");
+
+    for (const [coluna, sql, forjado] of TRES) {
+      for (const [quem, uid] of [
+        ["viewer", VIEWER_A],
+        ["agent", AGENT_A],
+        ["admin", ADMIN_A],
+      ] as const) {
+        const r = await tentarComoUsuario(uid, sql, [contato, forjado]);
+        expect(r, `${quem} gravou ${coluna}`).toBe("42501:colunas_de_cliente_sao_do_sistema");
+      }
+    }
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at?.toISOString()).toBe(antes.first_service_at?.toISOString());
+    expect(await donoDaEtiqueta(contato)).toBe(dono);
+
+    // CONTROLE POSITIVO, na mesma sessão e na mesma linha: o que é da equipe
+    // continua da equipe. Sem ele, um `revoke` largo demais em `contacts`
+    // deixaria este caso verde quebrando a tela de Contatos inteira.
+    expect(
+      await tentarComoUsuario(VIEWER_A, "update contacts set display_name = $2 where id = $1", [
+        contato,
+        "renomeado pelo viewer",
+      ]),
+    ).toBe("passou");
+    expect((await lerContato(contato)).tags, "e a etiqueta segue lá").toContain(TAG_DE_CLIENTE);
+  });
+
+  it("I37 · o trigger e o service role continuam gravando as três", async () => {
+    // O par do I36, e a sabotagem que ele existe para pegar: uma guarda que
+    // recusasse TODA escrita (sem o anúncio `deskcomm.cliente_pela_agenda`)
+    // deixaria o I36 verde e impediria qualquer um de marcar horário — porque a
+    // escrita do sistema também passa pelo trigger, com o `auth.uid()` da
+    // sessão que marcou.
+    const contato = await criarContato(ORG_A, "O sistema grava");
+    const r = await tentarComoUsuario(
+      AGENT_A,
+      `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id, status)
+       values ($1, 'Pela sessão', $2::timestamptz, $2::timestamptz + interval '1 hour', $3, 'confirmed')`,
+      [ORG_A, "2026-07-05T10:00:00Z", contato],
+    );
+    expect(r, "marcar horário pela SESSÃO não pode esbarrar na guarda").toBe("passou");
+    const linha = await lerContato(contato);
+    expect(linha.first_service_at, "e o trigger gravou a coluna").not.toBeNull();
+    expect(await donoDaEtiqueta(contato)).toBe("added");
+
+    // E o admin client (service role, auth.uid() nulo) — o caminho da
+    // anonimização de LGPD e dos importadores — passa.
+    await pool.query("update contacts set client_recognized_at = now() where id = $1", [contato]);
   });
 });
 
