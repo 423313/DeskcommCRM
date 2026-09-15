@@ -7615,7 +7615,7 @@ export type Database = {
         Relationships: Database["public"]["Tables"]["calendar_appointments"]["Relationships"]
       }
       calendar_selected_external_events: {
-        Row: Omit<Database["public"]["Tables"]["calendar_external_events"]["Row"], "starts_at" | "ends_at"> & { starts_at: string; ends_at: string }
+        Row: Omit<Database["public"]["Tables"]["calendar_external_events"]["Row"], "starts_at" | "ends_at" | "title"> & { starts_at: string; ends_at: string }
         Relationships: Database["public"]["Tables"]["calendar_external_events"]["Relationships"]
       }
 
