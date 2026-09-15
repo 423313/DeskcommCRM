@@ -7387,6 +7387,15 @@ export const DICIONARIO: Traducoes = {
   "você ainda não publicou seus horários": { es: "todavía no publicaste tus horarios" },
   "não consegui carregar os horários": { es: "no pude cargar los horarios" },
   "nenhum horário livre neste dia": { es: "ningún horario libre en este día" },
+  // O encaixe no painel de marcação (#858): a pessoa digita um horário fora da grade.
+  "Outro horário": { es: "Otro horario" },
+  "Usar": { es: "Usar" },
+  "nenhum horário publicado neste dia": { es: "ningún horario publicado en este día" },
+  "Nenhum horário publicado neste dia.": { es: "Ningún horario publicado en este día." },
+  "Vale fora dos horários publicados. A agenda só recusa se o horário já estiver ocupado.": {
+    es: "Vale fuera de los horarios publicados. La agenda solo lo rechaza si el horario ya está ocupado.",
+  },
+  "Não foi marcado. Tente de novo.": { es: "No se agendó. Inténtalo de nuevo." },
   "Marcar outro": { es: "Agendar otro" },
   "Ver na agenda": { es: "Ver en la agenda" },
   "horários": { es: "horarios" },
