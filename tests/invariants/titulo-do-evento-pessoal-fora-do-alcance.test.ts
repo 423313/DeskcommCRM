@@ -133,6 +133,8 @@ const DONO = "02610000-0000-4000-8000-000000000001";
 const COLEGA = "02610000-0000-4000-8000-000000000002";
 const CONEXAO = "02610000-0000-4000-8000-0000000000c1";
 const EVENTO = "02610000-0000-4000-8000-0000000000e1";
+/** A conta Google do `DONO` — e o id da agenda principal dele no Google. */
+const EMAIL_DO_DONO = "dono-0261@invariant.test";
 
 /** O compromisso pessoal que ninguém na recepção deveria ler. */
 const TITULO = "Terapia sigilosa";
@@ -144,7 +146,7 @@ const TITULO = "Terapia sigilosa";
  */
 const FIXTURE = `
   insert into auth.users (id, email) values
-    ('${DONO}', 'dono-0261@invariant.test'),
+    ('${DONO}', '${EMAIL_DO_DONO}'),
     ('${COLEGA}', 'colega-0261@invariant.test');
   insert into public.organizations (id, slug, legal_name, display_name)
     values ('${ORG}', 'inv-0261', 'Inv 0261', 'Inv 0261');
@@ -152,7 +154,7 @@ const FIXTURE = `
     ('${ORG}', '${DONO}', 'agent', now()),
     ('${ORG}', '${COLEGA}', 'viewer', now());
   insert into public.calendar_connections (id, organization_id, user_id, provider, account_email, status)
-    values ('${CONEXAO}', '${ORG}', '${DONO}', 'google_calendar', 'dono-0261@invariant.test', 'healthy');
+    values ('${CONEXAO}', '${ORG}', '${DONO}', 'google_calendar', '${EMAIL_DO_DONO}', 'healthy');
   insert into public.calendar_external_events
     (id, organization_id, connection_id, external_calendar_id, external_event_id,
      title, starts_at, ends_at, transparency)
@@ -421,6 +423,49 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     expect(tabela, "`anon` ganhou leitura da tabela do espelho").toBe("false");
     expect(view, "`anon` ganhou leitura da view da ocupação").toBe("false");
   });
+
+  it("o que a 0261 NÃO fecha, e declara: o colega segue lendo o id do calendário — na agenda principal, o e-mail da conta que a RLS da conexão esconde dele", () => {
+    // O `title` não é o único dado pessoal do espelho. `external_calendar_id` é o
+    // `id` do CalendarList do Google (`fn_google_catalog` grava `it->>'id'`), e na
+    // agenda PRINCIPAL — a que conta por padrão — esse id é o e-mail da conta.
+    // A RLS de `calendar_connections` esconde a conta de um colega que não é
+    // gestor; esta tabela e a view a entregam a todo membro.
+    //
+    // A 0261 deixa isso aberto por decisão escrita no cabeçalho dela: a view é
+    // `security_invoker` e passa a coluna a `fn_google_counts_for_conflicts`,
+    // então revogá-la derruba TODA leitura da view por membro. Fechar pede servir
+    // a ocupação por função `security definer` (o padrão da 0260), e isso é do
+    // dono. Este caso existe para a prosa não mentir em nenhum dos dois sentidos:
+    // no dia em que alguém fechar, ele fica vermelho — e a 0261, o fragmento e o
+    // MANIFEST mudam junto.
+    const [conexao, tabela, view] = sondasDesfeitas(`
+      ${FIXTURE}
+      insert into public.calendar_external_events
+        (organization_id, connection_id, external_calendar_id, external_event_id, starts_at, ends_at)
+        values ('${ORG}', '${CONEXAO}', '${EMAIL_DO_DONO}', 'ev-0261-principal',
+                now() + interval '3 days', now() + interval '3 days 1 hour');
+      ${DEFEITO_DA_V1260}
+      ${blocoDa0261()}
+      ${COMO_COLEGA}
+      select '${MARCA}' || 'conexao=' || count(*)::text
+        from public.calendar_connections where id = '${CONEXAO}';
+      select '${MARCA}' || 'tabela=' || external_calendar_id
+        from public.calendar_external_events where external_event_id = 'ev-0261-principal';
+      select '${MARCA}' || 'view=' || external_calendar_id
+        from public.calendar_selected_external_events where external_event_id = 'ev-0261-principal';
+    `);
+    expect(conexao, "a RLS da conexão passou a mostrar a conta ao colega — a premissa da declaração mudou").toBe(
+      "conexao=0",
+    );
+    expect(
+      tabela,
+      "o colega deixou de ler o id do calendário na tabela — a exposição declarada na 0261 foi fechada: atualize a prosa",
+    ).toBe(`tabela=${EMAIL_DO_DONO}`);
+    expect(
+      view,
+      "o colega deixou de ler o id do calendário pela view — a exposição declarada na 0261 foi fechada: atualize a prosa",
+    ).toBe(`view=${EMAIL_DO_DONO}`);
+  });
 });
 
 describe("o banco instalado pelo baseline inteiro — sem reaplicar o bloco da 0261", () => {
@@ -461,8 +506,16 @@ describe("o banco instalado pelo baseline inteiro — sem reaplicar o bloco da 0
   it("coluna do espelho legível por membro é decisão explícita: só o `title` fica de fora, e a view cabe no que foi concedido", () => {
     // O grant é por LISTA de colunas: coluna nova no espelho nasce ilegível para
     // `authenticated`. É o lado seguro, mas é uma decisão — este caso fica
-    // vermelho até alguém escrever se a coluna nova é ocupação (entra no grant e
-    // na view, que andam juntos) ou conteúdo pessoal (entra em NAO_CONCEDIDAS).
+    // vermelho até alguém escrever se a coluna nova vai ao alcance do membro
+    // (entra no grant e na view, que andam juntos) ou não (entra em
+    // NAO_CONCEDIDAS).
+    //
+    // ⚠️ "Concedida" NÃO quer dizer "não pessoal". O `title` é a única coluna
+    // FORA do grant, mas não é o único dado pessoal: `external_calendar_id` está
+    // DENTRO, e na agenda principal do Google ele é o e-mail da conta conectada.
+    // Isso está declarado na 0261 e medido pelo último caso do describe da
+    // migration; `external_event_id` e `ical_uid` (identificadores do Google)
+    // também seguem concedidos.
     const NAO_CONCEDIDAS = "title";
     const [foraDoGrant, viewForaDoGrant, ocupacaoNaView] = sondasDesfeitas(`
       select '${MARCA}' || coalesce(string_agg(a.attname, ',' order by a.attname), '(nenhuma)')

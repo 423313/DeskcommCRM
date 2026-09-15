@@ -25054,6 +25054,20 @@ notify pgrst, 'reload schema';
 -- `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (leituras pela tabela
 -- ou pela view) e por `tests/e2e/agenda-ocupacao-do-google-na-grade.spec.ts`.
 --
+-- ## O que continua ao alcance do membro, e por quê
+--
+-- O título NÃO é o único dado pessoal do espelho. `external_calendar_id` é o `id`
+-- do CalendarList do Google (`fn_google_catalog` grava `it->>'id'`), e na agenda
+-- PRINCIPAL — a que conta por padrão — esse id é o e-mail da conta conectada. A
+-- RLS de `calendar_connections` esconde essa conta de um colega que não é gestor;
+-- esta tabela e a view a entregam a todo membro. `external_event_id` e `ical_uid`
+-- também seguem concedidos. Fica aberto, por escrito: a view é `security_invoker`
+-- e passa a coluna a `fn_google_counts_for_conflicts`, então revogá-la derruba
+-- TODA leitura da view por membro, a do dono inclusive (medido). Fechar pede
+-- servir a ocupação por função `security definer` (o padrão da 0260) e mudar as
+-- leituras de `app/app/agenda/page.tsx` e `app/api/v1/agenda/agendamentos` —
+-- decisão do dono. O invariante mede que o colega segue lendo o id.
+--
 -- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem
 -- `title`. Revogar coluna sem revogar a tabela não faz nada: privilégio de tabela
 -- cobre todas as colunas.
@@ -25084,8 +25098,9 @@ notify pgrst, 'reload schema';
 --
 -- * O grant é por LISTA de colunas: coluna nova no espelho nasce SEM SELECT para
 --   `authenticated`. É o lado seguro, e é uma decisão — o invariante reprova até
---   alguém escrever se ela é ocupação (entra no grant e na lista da view, que
---   andam juntos, senão `select *` na view vira 42501) ou conteúdo pessoal.
+--   alguém escrever se ela vai ao alcance do membro (entra no grant e na lista da
+--   view, que andam juntos, senão `select *` na view vira 42501) ou não. Estar no
+--   grant não quer dizer "não é pessoal": ver `external_calendar_id`, acima.
 -- * Quem ler esta view de dentro de função não pode usar `begin atomic`: a
 --   dependência registrada no catálogo impede o `drop view` + `create view` deste
 --   bloco a cada update. `fn_agenda_ocupacao_google_do_dono` (0260) e

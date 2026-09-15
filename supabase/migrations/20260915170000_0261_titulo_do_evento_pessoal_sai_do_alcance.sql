@@ -37,6 +37,27 @@
 -- `title`. Revogar a coluna sem revogar a tabela não faria nada: privilégio de
 -- tabela cobre todas as colunas, e o `GRANT` enumerado do dump só ACRESCENTA.
 --
+-- ─── O que continua ao alcance do membro, e por quê ─────────────────────────
+--
+-- O `title` NÃO é o único dado pessoal do espelho. `external_calendar_id` é o
+-- `id` do CalendarList do Google (`fn_google_catalog` grava `it->>'id'`), e na
+-- agenda PRINCIPAL — a que conta por padrão — esse id é o e-mail da conta
+-- conectada. A RLS de `calendar_connections` esconde essa conta de um colega que
+-- não é gestor; esta tabela e a view a entregam a todo membro da organização.
+-- `external_event_id` e `ical_uid`, identificadores do Google, também seguem
+-- concedidos.
+--
+-- Esta migration deixa isso aberto, e por escrito. A view é `security_invoker` e
+-- passa `e.external_calendar_id` a `fn_google_counts_for_conflicts`: revogar a
+-- coluna faz TODA leitura da view por membro falhar com `permission denied for
+-- table calendar_external_events` — a do próprio dono inclusive (medido). Fechar
+-- pede servir a ocupação por função `security definer` que devolva só intervalo e
+-- situação (o padrão da 0260) e mudar as duas leituras que usam a view
+-- (`app/app/agenda/page.tsx` e `app/api/v1/agenda/agendamentos/route.ts`): é
+-- decisão do dono, fora deste conserto. Um caso do invariante mede que o colega
+-- segue lendo o id — no dia em que alguém fechar, ele fica vermelho e esta seção
+-- muda junto.
+--
 -- ─── A view precisa ser recriada, não substituída no lugar ──────────────────
 --
 -- `calendar_selected_external_events` era `select e.*`. Com `security_invoker`,
@@ -76,8 +97,9 @@
 -- Duas consequências da forma, para quem mexer depois:
 -- * O grant é por LISTA de colunas: coluna nova no espelho nasce SEM SELECT para
 --   `authenticated`. É o lado seguro, e é uma decisão — o invariante reprova até
---   alguém escrever se ela é ocupação (entra no grant e na lista da view, que
---   andam juntos, senão `select *` na view vira 42501) ou conteúdo pessoal.
+--   alguém escrever se ela vai ao alcance do membro (entra no grant e na lista da
+--   view, que andam juntos, senão `select *` na view vira 42501) ou não. Estar no
+--   grant não quer dizer "não é pessoal": ver `external_calendar_id`, acima.
 -- * Quem ler esta view de dentro de função não pode usar `begin atomic`: a
 --   dependência registrada no catálogo impede o `drop view` + `create view` que
 --   o `update.sh` reaplica. `fn_agenda_ocupacao_google_do_dono` (0260) e
