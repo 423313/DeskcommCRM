@@ -19,7 +19,7 @@ export default async function ConnectWhatsappPage() {
 
   // Receber pelo canal oficial exige DOIS segredos, não um — a regra e o porquê
   // moram em `lib/channels/meta/webhook.ts`, ao lado de quem os consome. Agora os
-  // dois podem vir do BANCO (`platform_meta_app`, migration 0252) e não só do
+  // dois podem vir do BANCO (`platform_meta_app`, migration 0257) e não só do
   // `.env`: `fontesDoAppDaMeta()` devolve a fonte VENCEDORA, sem misturar as duas
   // — App Secret de um lado com verify token do outro é um app que não existe, e
   // esta tela diria que está tudo pronto.

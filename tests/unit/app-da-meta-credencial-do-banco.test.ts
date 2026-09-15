@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * A CREDENCIAL DO APP DA META VEM DO BANCO, E O `.env` É O PISO.
  *
- * ─── O defeito que a migration 0255 fecha ────────────────────────────────────
+ * ─── O defeito que a migration 0257 fecha ────────────────────────────────────
  *
  * Conectar a API oficial exigia SSH na VPS, editar o `.env` e recriar
  * `app`/`worker` — e só funcionava para UM número por instalação. Quem opera
@@ -139,7 +139,7 @@ describe("appDaMeta: banco primeiro, .env como piso", () => {
     expect(app.verifyToken).toBe("token-do-env");
   });
 
-  it("tabela inexistente (clone sem a 0255) NÃO derruba o webhook", async () => {
+  it("tabela inexistente (clone sem a 0257) NÃO derruba o webhook", async () => {
     // Esta função é chamada a cada entrega da Meta: um throw aqui é 500 no
     // webhook, e a Meta reentrega em backoff um evento que nunca vai melhorar.
     // O clone que ainda não aplicou a migration devolve 42P01, e isso não é erro
@@ -233,7 +233,7 @@ describe("o memo do processo", () => {
 
 describe("fontesDoAppDaMeta: as mesmas chaves do .env, para quem lê por nome de variável", () => {
   it("com o par no BANCO, a instalação PODE receber sem tocar no .env", async () => {
-    // O aviso do primeiro acesso perguntava só ao ambiente, e depois da 0255
+    // O aviso do primeiro acesso perguntava só ao ambiente, e depois da 0257
     // isso diria "não dá para receber" a quem acabou de configurar pela tela —
     // mandando o dono editar um arquivo que ele não precisa abrir.
     linhaDoBanco = LINHA_CHEIA;

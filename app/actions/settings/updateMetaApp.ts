@@ -37,7 +37,7 @@ export type UpdateMetaAppResult =
  * ── Por que a escrita vai pelo admin client ──────────────────────────────────
  *
  * `platform_meta_app` tem RLS LIGADA e ZERO POLICIES, com os privilégios de
- * `anon` e `authenticated` revogados (migration 0255). Pelo client de sessão
+ * `anon` e `authenticated` revogados (migration 0257). Pelo client de sessão
  * nada acontece — nem leitura. É deliberado: a anon key vai para o browser, e
  * quem tem o App Secret assina uma entrega de webhook VÁLIDA com dados que ele
  * inventar.

@@ -24812,7 +24812,7 @@ create trigger trg_platform_settings_touch
 
 notify pgrst, 'reload schema';
 
--- ---- O App da Meta sai do `.env` e vira linha da INSTALAÇÃO (migration 0255) ----
+-- ---- O App da Meta sai do `.env` e vira linha da INSTALAÇÃO (migration 0257) ----
 --
 -- O App Secret e o verify token do webhook são do APP, e um App da Meta atende N
 -- WABAs de N organizações: não há o que separar por tenant. Antes disto os dois

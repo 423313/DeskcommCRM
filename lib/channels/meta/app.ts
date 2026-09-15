@@ -18,7 +18,7 @@
  * O `.env` é o PISO DE ROLLBACK: o `agent.sh` do kit, em falha de update,
  * reverte só a IMAGEM — não o schema. Ou seja, o rollback põe código antigo
  * sobre banco novo por construção, e é o caminho inverso que dói aqui: código
- * NOVO sobre banco que ainda não tem a 0255 (clone que não atualizou, `db push`
+ * NOVO sobre banco que ainda não tem a 0257 (clone que não atualizou, `db push`
  * que falhou). Com o `.env` intacto, a entrega continua sendo aceita em vez de
  * parar de existir no pior momento possível.
  *
@@ -115,7 +115,7 @@ async function linhaDoBanco(): Promise<LinhaDoApp | null> {
       .select("app_secret_encrypted, verify_token_encrypted")
       .eq("id", 1)
       .maybeSingle();
-    // Clone que ainda não aplicou a 0255 devolve 42P01 aqui. Isso NÃO é erro
+    // Clone que ainda não aplicou a 0257 devolve 42P01 aqui. Isso NÃO é erro
     // desta instalação — é o piso de rollback funcionando, e o `.env` assume.
     if (error) {
       logger.info("[meta.app] sem credencial no banco; vale o .env", { codigo: error.code });
@@ -176,7 +176,7 @@ export async function appDaMeta(): Promise<AppDaMetaEmVigor> {
  * variável, como `metaPodeReceber`.
  *
  * ⚠️ Existe para o aviso do primeiro acesso parar de mentir: ele perguntava só
- * ao ambiente, e depois da 0255 isso diria "não dá para receber pelo canal
+ * ao ambiente, e depois da 0257 isso diria "não dá para receber pelo canal
  * oficial" a quem acabou de configurar pela tela — mandando o dono editar um
  * arquivo que ele não precisa abrir.
  *

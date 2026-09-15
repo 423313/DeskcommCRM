@@ -1,4 +1,4 @@
--- 0255 · Conectar a API oficial exigia SSH na VPS, quatro variáveis no `.env` e
+-- 0257 · Conectar a API oficial exigia SSH na VPS, quatro variáveis no `.env` e
 -- um número por instalação (issue #850, fatia F3).
 --
 -- ─── O que o usuário via ────────────────────────────────────────────────────

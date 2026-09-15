@@ -333,7 +333,7 @@ export const AUDIT_ACTIONS = [
   // deixa rastro em nenhuma outra tabela.
   "platform.signup_mode_updated",
   "platform_google_oauth.updated",
-  // A credencial do APP da Meta da INSTALAÇÃO (migration 0255): o App Secret que
+  // A credencial do APP da Meta da INSTALAÇÃO (migration 0257): o App Secret que
   // assina a entrega do webhook e o verify token que responde ao handshake.
   // Auditável pelo mesmo motivo da linha acima, e com alcance maior — quem tem o
   // App Secret assina uma entrega de webhook VÁLIDA com dados que ele inventar,
