@@ -266,6 +266,16 @@ describe("marcar — a regra no ponto de uso", () => {
     expect(criados(banco)[0]).toMatchObject({ starts_at: FORA_DA_GRADE, ends_at: FIM_DO_ENCAIXE });
   });
 
+  it("a pessoa marca até FORA DO EXPEDIENTE — o encaixe dispensa as regras da grade", async () => {
+    // Quarta 20:00 em São Paulo; a jornada termina às 18:00.
+    const banco = agenda();
+    await marcarAgendamentoHandler(banco.client, ctx(PESSOA), {
+      event_type_id: TIPO,
+      starts_at: "2026-10-07T23:00:00.000Z",
+    });
+    expect(criados(banco), "o encaixe ainda respeita o expediente — a pessoa não consegue marcar depois do horário").toHaveLength(1);
+  });
+
   it("o que NÃO ocupa não barra o encaixe: encostado, cancelado, falta, outro responsável", async () => {
     const banco = agenda({
       agendamentos: [
