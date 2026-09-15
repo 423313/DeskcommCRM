@@ -86,6 +86,32 @@ it('derivação travada além do teto: segue SEM o texto em vez de deixar o clie
   expect(calls.some((s) => s.includes('job_queue'))).toBe(true);
 });
 
+/**
+ * Catraca do teto (issue #543): 90s é o valor que o #530 teve de abandonar.
+ *
+ * O PR #530 subiu o teto de 45s para 120s, mas os dois casos que exercitam o
+ * teto usavam 1s (adia) e 150s (segue) — NENHUM caía entre 45s e 120s, a única
+ * janela onde o comportamento mudou. Medido na triagem do #530: reverter o teto
+ * para 45_000 mantendo todo o resto dava 0 vermelhos, a suíte inteira verde.
+ *
+ * 90s cai dentro da janela: com o teto em 120s o turno é adiado; revertido para
+ * 45s, ele segue — e este caso fica vermelho. Junto com o caso de 150s, o teto
+ * fica preso em (90s, 150s]: abaixo dele o cliente volta a receber "não consegui
+ * ouvir seu áudio" com a transcrição chegando segundos depois (o defeito do
+ * Alfran), acima dele o cliente espera minutos.
+ */
+it('áudio esperando 90s (janela 45s–120s do #530): turno segue ADIADO, não despachado sem o texto', async () => {
+  const calls: string[] = [];
+  process.env.__ESPERA__ = '90000'; // 90s — dentro do teto de 120s e fora do antigo de 45s
+  await drainTick(poolFalso({ type: 'audio', media_derived_status: null }, calls), knobs, log);
+  expect(calls.some((s) => s.includes('media_derived_status'))).toBe(true);
+  // Nada de job: a resposta não sai antes de o texto derivado existir.
+  expect(calls.some((s) => s.includes('job_queue'))).toBe(false);
+  // Adiar não é falha: volta a 'pending' com espera curta, sem gastar tentativa.
+  expect(calls.some((s) => s.includes("status = 'pending'") && s.includes('next_attempt_at'))).toBe(true);
+  expect(calls.some((s) => s.includes("status = 'done'"))).toBe(false);
+});
+
 it('mensagem de texto não espera nada', async () => {
   const calls: string[] = [];
   process.env.__ESPERA__ = '0';
