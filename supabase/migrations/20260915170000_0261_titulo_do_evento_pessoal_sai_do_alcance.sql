@@ -32,8 +32,17 @@
 -- rebuild completo, a cada 24h, regrava de 1 dia atrás a 90 dias à frente; o
 -- passado espera o expurgo do espelho (`fn_expurgar_espelho_da_agenda`, por
 -- padrão 90 dias depois de `ends_at`); e uma conexão que não está saudável não
--- sincroniza. É esse resíduo que o conserto fecha — e ele vale também como defesa
--- em profundidade contra um escritor futuro que volte a gravar o nome.
+-- sincroniza.
+--
+-- E nem tudo o que está DENTRO da janela é regravado. O evento CANCELADO escapa
+-- do rebuild: o `page` que o fecha apaga o que a leitura não viu com `and
+-- status<>'cancelled'`, e a leitura completa do Google não devolve cancelados,
+-- então nenhum `item` o zera. Um cancelado FUTURO guarda o nome até o expurgo, 90
+-- dias depois de terminar — o invariante mede, com o controle de que o confirmado
+-- que sumiu do Google, no mesmo rebuild, é apagado. Não é só "o que já passou".
+--
+-- É esse resíduo que o conserto fecha — e ele vale também como defesa em
+-- profundidade contra um escritor futuro que volte a gravar o nome.
 --
 -- ─── Por que o conserto é no PRIVILÉGIO — e o que a policy fecharia ────────
 --

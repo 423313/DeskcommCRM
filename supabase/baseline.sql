@@ -25054,8 +25054,12 @@ notify pgrst, 'reload schema';
 -- anterior à v1.17.0 e ainda não regravadas: o rebuild completo, a cada 24h,
 -- regrava de 1 dia atrás a 90 dias à frente; o passado espera
 -- `fn_expurgar_espelho_da_agenda` (por padrão 90 dias depois de `ends_at`); e
--- conexão que não está saudável não sincroniza. O conserto fecha esse resíduo e
--- vale como defesa em profundidade contra um escritor futuro.
+-- conexão que não está saudável não sincroniza. Dentro da janela, o evento
+-- CANCELADO escapa do rebuild: o `page` final apaga o não visto com `and
+-- status<>'cancelled'`, e a leitura completa do Google não devolve cancelados —
+-- um cancelado FUTURO guarda o nome até o expurgo (medido no invariante). O
+-- conserto fecha esse resíduo e vale como defesa em profundidade contra um
+-- escritor futuro.
 --
 -- ## Por que o conserto é no PRIVILÉGIO — e o que a policy fecharia
 --

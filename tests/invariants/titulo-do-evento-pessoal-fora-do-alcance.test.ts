@@ -669,6 +669,54 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
   });
 });
 
+/**
+ * O RESÍDUO que a ressincronização deixa — o que a 0261 escreve sobre "o alcance
+ * real", preso aqui para a prosa não encolher de novo. Estes casos não aplicam
+ * o bloco: eles medem o sincronizador (`fn_google_calendar`, chamado como
+ * `service_role`) e dimensionam a decisão de anular o resíduo, que é do dono.
+ */
+describe("o alcance do resíduo que a 0261 descreve — o que a ressincronização não regrava", () => {
+  it("o rebuild completo de 24h não regrava nem apaga o evento CANCELADO: futuro e dentro da janela, ele mantém o nome — e o evento confirmado que sumiu do Google é apagado", () => {
+    // O `page` final do rebuild (`mode=full`) apaga o que a leitura não viu,
+    // mas com `and status<>'cancelled'`; e a leitura completa do Google não
+    // devolve cancelados, então nenhum `item` o zera. O controle do mesmo
+    // rebuild é o evento CONFIRMADO que não veio: esse é apagado — prova de que o
+    // rebuild rodou inteiro, e que o cancelado sobrou por ser cancelado.
+    const [modo, espelho] = sondasDesfeitas(`
+      ${FIXTURE}
+      ${CATALOGO_DO_DONO}
+      insert into public.calendar_external_events
+        (organization_id, connection_id, external_calendar_id, external_event_id, title, status, starts_at, ends_at)
+        values
+        ('${ORG}', '${CONEXAO}', 'pessoal', 'ev-0261-cancelado', 'Consulta cancelada', 'cancelled',
+         now() + interval '3 days', now() + interval '3 days 1 hour'),
+        ('${ORG}', '${CONEXAO}', 'pessoal', 'ev-0261-sumiu', 'Entrevista que sumiu', 'confirmed',
+         now() + interval '4 days', now() + interval '4 days 1 hour');
+      set local role service_role;
+      select public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'claim') -> 'claim' as reserva \\gset
+      reset role;
+      select '${MARCA}' || 'modo=' || (sync_cursor ->> 'mode')
+        from public.calendar_connection_calendars where id = '${CALENDARIO}';
+      set local role service_role;
+      select public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'item', jsonb_build_object(
+        'claim', :'reserva'::jsonb,
+        'item', jsonb_build_object('external_event_id', 'ev-0261', 'title', '${TITULO} (do Google)',
+          'starts_at', now() + interval '1 day', 'ends_at', now() + interval '1 day 1 hour', 'status', 'confirmed')));
+      select public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'page', jsonb_build_object(
+        'claim', :'reserva'::jsonb, 'next_page_token', null, 'next_sync_token', 'sync-0261'));
+      reset role;
+      select '${MARCA}' || 'espelho=' ||
+        string_agg(external_event_id || ':' || status || ':' || coalesce(title, '(nulo)'), ',' order by external_event_id)
+        from public.calendar_external_events where connection_id = '${CONEXAO}';
+    `);
+    expect(modo, "a primeira reserva da agenda não foi um rebuild completo — o caso não mede o rebuild").toBe("modo=full");
+    expect(
+      espelho,
+      "o rebuild passou a regravar/apagar o evento cancelado, ou deixou de apagar o confirmado que sumiu — a prosa do resíduo na 0261 muda junto",
+    ).toBe("espelho=ev-0261:confirmed:(nulo),ev-0261-cancelado:cancelled:Consulta cancelada");
+  });
+});
+
 describe("o banco instalado pelo baseline inteiro — sem reaplicar o bloco da 0261", () => {
   it("não entrega o título ao colega: sem SELECT de tabela, sem SELECT no `title`, e a view sem a coluna", () => {
     // Todo caso acima reaplica a 0261, e a reaplicação revoga de novo. Um bloco
