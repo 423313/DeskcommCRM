@@ -168,7 +168,7 @@ function dadoDaTabela(tabela: string): unknown {
 function cliente(): SupabaseClient {
   const leitura = (tabela: string) => {
     const cadeia: Record<string, unknown> = {};
-    for (const m of ["eq", "neq", "in", "is", "not", "or", "gte", "lte", "order", "limit"]) {
+    for (const m of ["eq", "neq", "in", "is", "not", "or", "gte", "lte", "lt", "gt", "order", "limit"]) {
       cadeia[m] = () => cadeia;
     }
     const resposta = () => ({ data: dadoDaTabela(tabela), error: null });
