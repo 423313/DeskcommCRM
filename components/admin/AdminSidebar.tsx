@@ -14,6 +14,7 @@ import {
   CalendarBlank,
   Palette,
   Key,
+  WebhooksLogo,
   ArrowRight,
 } from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
@@ -47,6 +48,10 @@ const NAV_ITEMS: NavItem[] = [
   // A porta da tela do app OAuth do Google — mesma razão da de cima: é
   // configuração da INSTALAÇÃO, e /admin tem navegação própria.
   { href: "/admin/google", label: "Google Agenda", icon: CalendarBlank },
+  // A porta da tela do App da Meta (chave secreta e token de verificação do
+  // webhook) — mesma razão da de cima: é da INSTALAÇÃO. O rótulo é o da aba de
+  // Conexões, para quem vem de lá reconhecer o mesmo nome.
+  { href: "/admin/meta", label: "API Oficial (Meta)", icon: WebhooksLogo },
   // A porta da tela que decide quem pode criar conta nesta instalação — mesma
   // razão das duas de cima: é configuração da INSTALAÇÃO, e /admin tem
   // navegação própria (o registro de `lib/navigation/` cobre só `app/app/**`).

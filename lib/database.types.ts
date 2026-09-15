@@ -7098,6 +7098,33 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_meta_app: {
+        Row: {
+          app_secret_encrypted: string | null
+          id: number
+          updated_at: string
+          updated_by: string | null
+          verify_token_created_at: string | null
+          verify_token_encrypted: string | null
+        }
+        Insert: {
+          app_secret_encrypted?: string | null
+          id?: number
+          updated_at?: string
+          updated_by?: string | null
+          verify_token_created_at?: string | null
+          verify_token_encrypted?: string | null
+        }
+        Update: {
+          app_secret_encrypted?: string | null
+          id?: number
+          updated_at?: string
+          updated_by?: string | null
+          verify_token_created_at?: string | null
+          verify_token_encrypted?: string | null
+        }
+        Relationships: []
+      }
       platform_settings: {
         Row: {
           id: number
@@ -8476,6 +8503,7 @@ export type Database = {
           outcome_user_id: string | null
           owner_user_id: string | null
           reminder_sent_at: string | null
+          reminder_sent_offsets_minutes: number[] | null
           rescheduled_from_id: string | null
           revision: number | null
           revision_started_at: string | null
@@ -8540,6 +8568,7 @@ export type Database = {
           outcome_user_id?: string | null
           owner_user_id?: string | null
           reminder_sent_at?: string | null
+          reminder_sent_offsets_minutes?: number[] | null
           rescheduled_from_id?: string | null
           revision?: number | null
           revision_started_at?: string | null
@@ -8604,6 +8633,7 @@ export type Database = {
           outcome_user_id?: string | null
           owner_user_id?: string | null
           reminder_sent_at?: string | null
+          reminder_sent_offsets_minutes?: number[] | null
           rescheduled_from_id?: string | null
           revision?: number | null
           revision_started_at?: string | null
@@ -8820,9 +8850,26 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_agenda_conexoes_google_do_dono: {
+        Args: { p_org: string; p_owner: string }
+        Returns: {
+          last_sync_at: string
+          status: string
+        }[]
+      }
       fn_agenda_minutes: {
         Args: { p_default: number; p_key: string; p_settings: Json }
         Returns: number
+      }
+      fn_agenda_ocupacao_google_do_dono: {
+        Args: { p_ate: string; p_de: string; p_org: string; p_owner: string }
+        Returns: {
+          connection_status: string
+          ends_at: string
+          starts_at: string
+          status: string
+          transparency: string
+        }[]
       }
       fn_agenda_settings: {
         Args: { p_config: Json; p_org: string }
@@ -9402,6 +9449,19 @@ export type Database = {
           lead_id: string
           pipeline_id: string
         }[]
+      }
+      fn_nascer_lead_da_conversa: {
+        Args: {
+          p_contact: string
+          p_org: string
+          p_pipeline: string
+          p_source: string
+          p_source_metadata?: Json
+          p_stage: string
+          p_tags?: string[]
+          p_title: string
+        }
+        Returns: string
       }
       fn_pgrst_recusar_replay_do_gateway: { Args: never; Returns: undefined }
       fn_podar_fila_de_jobs: {
