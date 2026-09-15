@@ -2112,8 +2112,14 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 ## J24 — Instalar e usar uma extensão declarativa publicada após o build `[P0]`
 
 Specs: `tests/e2e/extensoes-declarativas.spec.ts` e `tests/e2e/extensoes-recuperacao.spec.ts`.
-Estado: **implementadas, sem PASS integral ainda**; quatro rodadas diagnósticas corrigiram
-esperas/seletores da própria spec principal e a próxima aguarda o build integrado estável. A fixture
+Estado: **as duas passaram inteiras em 15/09/2026**, sobre o build `ALAqeLI0VQJi4bpWWFbUL` gerado do
+commit `b4b186219` (a principal em 1,4 min; a de recuperação em 24 s, na mesma árvore). Foram sete
+rodadas até lá: quatro defeitos da própria prova (espera por URL que a aba já tinha, seletor
+`data-slot` que o Card do repositório não tem, clique no cabeçalho rolado para fora da vista, prazo
+de 5 s em asserções que dependem de duas idas ao servidor) e um defeito de produto que só ela achou
+(a aba original não recarregava depois que outra aba reconciliava o recibo). Entre `b4b186219` e o
+HEAD, `git diff --stat b4b186219..HEAD -- app lib components` só mostra arquivos de voz vindos da
+`main`, um comentário e as frases de voz no dicionário — nada do caminho das extensões. A fixture
 recusa credenciais fora das portas locais dedicadas, cria usuários e organizações exclusivos,
 publica dois pacotes pelo CLI depois de encontrar `.next/BUILD_ID` e inicia o catálogo HTTP real em
 `127.0.0.1:56331`, com SQLite e PID próprios.

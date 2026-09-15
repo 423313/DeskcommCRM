@@ -263,7 +263,7 @@
     }
   ],
   "contracts": {
-    "status": "implementado nesta branch; revisão do banco aprovada; E2E ainda pendente",
+    "status": "implementado nesta branch; suíte de banco e revisão aprovadas; as duas jornadas em tela passaram em 15/09/2026 (build ALAqeLI0VQJi4bpWWFbUL); nada publicado",
     "spec": "docs/specs/extensoes-declarativas-v1.md",
     "no_links": [
       "Catálogo não recebe contatos, conversas, tarefas ou identidade persistente da VPS.",

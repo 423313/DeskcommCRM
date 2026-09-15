@@ -1,6 +1,6 @@
 # Extensões declarativas v1 — primeira integração
 
-Estado em 14/set/2026: **contrato de implementação, ainda sem prova integrada**. Complementa o PROG-017 e o marco 2 do PROG-018. A autorização de arquitetura e as respostas A/A/A do DEC-004 continuam vigentes. Os relatórios [08](../research/extensoes/08-integracao-bases.md), [09](../research/extensoes/09-integracao-impactos.md) e [10](../research/extensoes/10-integracao-riscos.md) são as três investigações deste recorte.
+Estado em 15/set/2026: **implementado e provado em tela** (as duas jornadas do J24 passaram; ver o fim do PROG-021 para o que ficou em aberto). Complementa o PROG-017 e o marco 2 do PROG-018. A autorização de arquitetura e as respostas A/A/A do DEC-004 continuam vigentes. Os relatórios [08](../research/extensoes/08-integracao-bases.md), [09](../research/extensoes/09-integracao-impactos.md) e [10](../research/extensoes/10-integracao-riscos.md) são as três investigações deste recorte.
 
 ## Jornada e limites
 
