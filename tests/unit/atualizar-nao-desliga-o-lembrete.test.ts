@@ -14,6 +14,15 @@
  * O comentário que descreve uma guarda é, por construção, o texto mais parecido
  * com ela. Sem tirar os comentários, esta suíte passaria com a guarda removida —
  * casando com a prosa que a explica. Já custou caro neste repo.
+ *
+ * ═══ ⚠️ O QUE ESTE ARQUIVO NÃO PROVA ═══
+ *
+ * Ele lê TEXTO, e a ordem "lê o default → grava o default" só é conferida
+ * dentro do bloco. Um `set default false` num bloco ANTERIOR do baseline deixa
+ * os cinco casos verdes com a correção do histórico morta (medido: 5 passed).
+ * A prova do comportamento — re-aplicar o baseline inteiro e ler o banco, nos
+ * dois sentidos — é `tests/invariants/atualizar-nao-desliga-o-lembrete.test.ts`,
+ * no `pnpm test:db`. Este arquivo fica como sinal rápido do `verify`.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
