@@ -2182,3 +2182,31 @@ sessões): um 502 do Kong em `fn_support_context` (`recv() failed (104:
 Connection reset by peer)` do PostgREST), que a rota do funil devolve como 503
 `upstream_unavailable`, e 504 do GoTrue em `/auth/v1/user`. Nenhuma das duas
 falhas tocou código desta feature; a terceira rodada, com a carga em 12, passou.
+
+**Rodada 3 (2026-09-15), sobre os achados da segunda revisão.** Três defeitos
+achados executando, nenhum deles alcançável pela spec atual — e é isso que os
+torna interessantes de registrar aqui:
+
+- **A frase da tela sobre a agenda que só tem cancelamento.** Organização cujo
+  único contato TEM horário marcado, todos cancelados: o corpo da RPC era
+  `{ganharam: 0, perderam: 0, clientes: 0}` — três números idênticos aos de uma
+  agenda vazia — e a tela dizia "Nenhum contato tinha horário marcado ainda".
+  Numa clínica com cancelamentos é a primeira frase depois de ligar. Provado e
+  guardado em `components/agenda/ClientePelaAgenda.test.tsx` (o corpo agora tem
+  um quarto número) e no invariante I38. **A spec não alcança**: ela monta uma
+  organização com um horário que CONTA, e montar a agenda só de cancelamento
+  seria uma segunda organização inteira pela tela.
+- **A etiqueta que a equipe repõe à mão.** O sistema a tirava no cancelamento
+  seguinte, porque o dono só era reconciliado quando a data mudava. Invariante
+  I34 (e I34b, o par). **A spec não alcança**: são quatro edições de etiqueta
+  pela tela de Contatos, com um cancelamento no meio.
+- **As três colunas gravadas por sessão.** Um `viewer` da própria organização
+  gravava `first_service_at = '2019-01-01'` com `UPDATE 1`. Invariante I36 (e
+  I37, o par). **A spec não alcança**: nenhuma tela oferece essa escrita — o
+  caminho é a API/PostgREST, e o que a fecha é um trigger.
+
+Não houve rodada nova de Playwright nesta rodada 3: nenhuma das três mudanças de
+comportamento é alcançável pela jornada da spec, e a única mudança de TEXTO na
+tela (a frase nova e a das automações) é medida pelo teste de componente. O que
+a rodada 2 provou pela tela continua valendo — a árvore mudou o corpo da RPC,
+não o caminho que a spec percorre.
