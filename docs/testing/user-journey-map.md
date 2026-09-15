@@ -2131,10 +2131,28 @@ etiquetaria os contatos das outras specs). Banco: `tests/invariants/cliente-nasc
 
 | Caso | Prioridade | Resultado |
 |---|---|---|
-| Marcar horário para um contato PELA AGENDA com a regra desligada: a lista de Contatos não mostra selo "Cliente" | `[P1]` | ver a seção de execução abaixo |
-| Configurações › Tipos de agendamento mostra "Desligado: …"; ligar abre a confirmação que diz que desligar não tira a etiqueta | `[P1]` | ver a seção de execução abaixo |
-| Confirmar: "1 contato ganhou a etiqueta “cliente”." | `[P1]` | ver a seção de execução abaixo |
-| Ligada: selo "Cliente" na lista, filtro "cliente" acha o contato, ficha mostra "Cliente desde", Funis oferece "Funil de clientes" | `[P1]` | ver a seção de execução abaixo |
+| J23.1 Marcar horário para um contato PELA AGENDA com a regra desligada: a lista de Contatos não mostra selo "Cliente" | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/1-contatos-regra-desligada.png` |
+| J23.2 Configurações › Tipos de agendamento (pelo hub) mostra "Desligado: …"; ligar abre a confirmação que diz que desligar não tira a etiqueta | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/2-regra-desligada.png`, `evidence/cliente-pela-agenda/3-confirmacao.png` |
+| J23.3 Confirmar: "1 contato ganhou a etiqueta “cliente”."; o interruptor fica `aria-checked=true`, habilitado e com opacidade 1 (medido por `getComputedStyle`) | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/4-regra-ligada.png` |
+| J23.4 Ligada: selo "Cliente" na lista, filtro "cliente" acha o contato, ficha mostra "Cliente desde", Funis oferece "Funil de clientes" | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/5-contatos-filtro-cliente.png`, `evidence/cliente-pela-agenda/6-ficha-cliente-desde.png`, `evidence/cliente-pela-agenda/7-funis-com-funil-de-clientes.png` |
+
+Execução (2026-09-15): build de produção (`pnpm e2e:build`) da árvore
+`f1fa08a19` + a spec, Supabase local próprio com o `baseline.sql` aplicado
+(`ON_ERROR_STOP=1`, 0 erros), Chromium real, `next start`. 1 passed.
+
+**Controle da spec:** com o trigger sabotado para ignorar o interruptor (no
+banco do teste, restaurado depois), a spec reprova — em J23.3, e não em J23.1
+como eu previra: o selo da lista é escondido pela própria regra desligada
+(`ActiveOrg.cliente_pela_agenda`), então o contato etiquetado indevidamente só
+aparece quando ligar diz "Nenhum contato tinha horário marcado ainda".
+
+**Achado da própria spec, não do produto:** a primeira versão conferia o botão
+de Funis com `toContainText`, que não exige visibilidade — passou com a tela
+ainda no esqueleto do `loading.tsx` (o conteúdo chega num `<div hidden>` do
+streaming), e a evidência capturada era o esqueleto. Agora a spec espera
+`toBeVisible` antes do texto. Uma rodada caiu por 504 do GoTrue local sob carga
+da máquina (`AuthRetryableFetchError`, média de carga 24); a seguinte passou sem
+nenhum 504.
 
 O que a tela NÃO prova, e onde está provado: cancelado e falta não contam, a
 etiqueta tirada à mão não volta, o `contact.tag_added` no formato do app, a

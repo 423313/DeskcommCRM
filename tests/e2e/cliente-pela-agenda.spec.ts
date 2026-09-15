@@ -113,6 +113,9 @@ function linhaDoContato(page: Page) {
 }
 
 test.afterAll(async () => {
+  // Apagar a organização atravessa a cascata de todas as tabelas dela; sob carga
+  // passou dos 30 s padrão do hook (medido numa rodada local).
+  test.setTimeout(120_000);
   for (const org of orgs) {
     const r = await db.from("organizations").delete().eq("id", org);
     if (r.error) throw r.error;
@@ -181,6 +184,16 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
     { timeout: 30_000 },
   );
   await expect(page.getByTestId("cliente-pela-agenda-estado")).toContainText("Ligado:");
+  const interruptor = page.getByTestId("cliente-pela-agenda-interruptor");
+  await expect(interruptor).toHaveAttribute("aria-checked", "true");
+  // Medido, não olhado: o interruptor volta a responder depois de salvar (um
+  // `disabled` preso pela transição deixaria a regra impossível de desligar).
+  await expect(interruptor).toBeEnabled();
+  const medida = await interruptor.evaluate((el) => ({
+    opacidade: getComputedStyle(el).opacity,
+    estado: el.getAttribute("data-state"),
+  }));
+  expect(medida).toEqual({ opacidade: "1", estado: "checked" });
   await evidencia(page, info, "4-regra-ligada");
 
   // ── 4 · ligada: selo, filtro, ficha e funil ─────────────────────────────
@@ -197,9 +210,15 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   await evidencia(page, info, "6-ficha-cliente-desde");
 
   await page.goto("/app/kanban");
-  await expect(page.locator('[data-testid^="clientes-"]').first()).toContainText("Funil de clientes", {
-    timeout: 30_000,
-  });
+  // ⚠️ `toBeVisible` ANTES do texto, e não é redundância — medido nesta spec. A
+  // página de Funis tem `loading.tsx`: o conteúdo chega por streaming dentro de
+  // um `<div hidden>` e só depois substitui o esqueleto. `toContainText` não
+  // exige visibilidade, e passou com a tela ainda mostrando o esqueleto (a
+  // evidência capturada era o esqueleto, com o botão já no DOM).
+  const botaoDeClientes = page.locator('[data-testid^="clientes-"]').first();
+  await expect(botaoDeClientes).toBeVisible({ timeout: 60_000 });
+  await expect(botaoDeClientes).toContainText("Funil de clientes");
+  await expect(page.getByTestId("funis-rodape-clientes")).toBeVisible();
   await expect(page.getByTestId("funis-rodape-clientes")).toContainText(
     "Quem já tem atendimento marcado entra pelo funil de clientes.",
   );
