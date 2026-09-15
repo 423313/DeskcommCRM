@@ -78,14 +78,12 @@ export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boole
     setPareando(true);
     setQrDataUrl(null);
     try {
-      // O relay só abre quando há sessão da organização. Criá-la aqui sem
-      // emitir QR evita o 404 do primeiro uso e preserva a ordem SSE → pair.
-      await apiClient.post("/api/v1/voice/sessions/pair", { prepare_only: true });
       // A stream tem que estar ABERTA antes de disparar o pareamento: o
-      // WaCalls emite o QR no INSTANTE do `pair` (whatsmeow gera na hora),
-      // não em resposta a quem está ouvindo. Chamar o POST primeiro e só
-      // depois abrir o `EventSource` (ordem anterior) perdia esse primeiro
-      // QR — a tela ficava presa em "Preparando o código…" pra sempre.
+      // WaCalls emite o QR no INSTANTE em que a sessão é criada (whatsmeow
+      // gera na hora), não em resposta a quem está ouvindo. O relay não exige
+      // sessão para abrir — ele reconhece a nossa pelo nome quando ela nasce
+      // (`lib/wacalls/nome-da-sessao.ts`), então não há mais passo de
+      // "preparar" antes: o POST único cria a sessão e o QR chega por aqui.
       let pareamentoDisparado = false;
       const es = new EventSource("/api/v1/voice/events");
       esRef.current = es;
@@ -103,6 +101,12 @@ export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boole
         const payload = JSON.parse(ev.data) as { type: string; dataUrl?: string };
         if (payload.type === "qr" && payload.dataUrl) {
           setQrDataUrl(payload.dataUrl);
+        } else if (payload.type === "expired") {
+          es.close();
+          esRef.current = null;
+          setPareando(false);
+          setQrDataUrl(null);
+          toast.error(t("O código de pareamento venceu. Clique em parear para gerar outro."));
         } else if (payload.type === "paired") {
           es.close();
           esRef.current = null;

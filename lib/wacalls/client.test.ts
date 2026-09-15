@@ -43,6 +43,12 @@ describe("wacallsFriendlyError", () => {
     );
   });
 
+  it("traduz o texto que o upstream escreve de fato — `no session <id>`", () => {
+    expect(wacallsFriendlyError(new Error('wacalls_404: {"error":"no session 2f27b0e0"}'))).toBe(
+      "Sessão de chamada de voz não encontrada.",
+    );
+  });
+
   it("traduz no such session para sessão não encontrada", () => {
     expect(wacallsFriendlyError(new Error("no such session found"))).toBe(
       "Sessão de chamada de voz não encontrada.",

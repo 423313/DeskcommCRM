@@ -32,6 +32,16 @@ vi.mock("@/lib/logger", () => ({
 // Só o CLIENTE é dublê. `wacallsFriendlyError`/`wacallsSemConexao` são puras e
 // entram de verdade: o caso do socket caído mede a rota escolhendo 503 a partir
 // do texto real do upstream, e um dublê aqui mediria o dublê.
+// O número discável é perguntado ao WAHA; aqui ele é o do cadastro por padrão,
+// e o caso do nono dígito troca a resposta. O resolvedor em si tem arquivo
+// próprio (`tests/unit/voz-numero-discavel.test.ts`).
+const numeroDiscavel = vi.hoisted(() => ({
+  resolver: vi.fn(async (_db: unknown, _org: string, telefone: string) => ({
+    digitos: telefone.replace(/\D/g, ""),
+    fonte: "cadastro" as "cadastro" | "whatsapp",
+  })),
+}));
+vi.mock("@/lib/voice/numero-discavel", () => ({ resolverNumeroDiscavel: numeroDiscavel.resolver }));
 vi.mock("@/lib/wacalls/client", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getWacallsClient: vi.fn(),
@@ -44,29 +54,44 @@ const CONTATO = "44444444-4444-4444-8444-444444444444";
 const CHAMADA = "55555555-5555-4555-8555-555555555555";
 
 /** O que cada `from(<tabela>)` devolve nesta rodada, e o que foi escrito nela. */
-let respostas: Record<string, { data: unknown; error: { message: string } | null }>;
-let escritas: Array<{ tabela: string; patch: unknown }>;
+type Resposta = { data: unknown; error: { message: string; code?: string } | null };
+let respostas: Record<string, Resposta | (() => Resposta)>;
+let escritas: Array<{ tabela: string; patch: unknown; filtros: Array<[string, unknown]> }>;
 let inseridas: Array<{ tabela: string; linha: Record<string, unknown> }>;
 
 function dubleSupabase() {
   return {
     from(tabela: string) {
       const cadeia: Record<string, unknown> = {};
-      for (const m of ["select", "eq", "is", "order", "limit"]) {
+      // Os filtros de um UPDATE são registrados: um UPDATE sem o
+      // `wacalls_call_id` reescreveria toda ligação da organização, e um dublê
+      // que ignora `.eq()` deixaria isso verde.
+      let filtrosDaEscrita: Array<[string, unknown]> | null = null;
+      for (const m of ["select", "is", "order", "limit"]) {
         cadeia[m] = () => cadeia;
       }
+      cadeia.eq = (coluna: string, valor: unknown) => {
+        filtrosDaEscrita?.push([coluna, valor]);
+        return cadeia;
+      };
       cadeia.update = (patch: unknown) => {
-        escritas.push({ tabela, patch });
+        filtrosDaEscrita = [];
+        escritas.push({ tabela, patch, filtros: filtrosDaEscrita });
         return cadeia;
       };
       cadeia.insert = (linha: Record<string, unknown>) => {
         inseridas.push({ tabela, linha });
         return cadeia;
       };
-      cadeia.single = async () => respostas[tabela] ?? { data: null, error: null };
-      cadeia.maybeSingle = async () => respostas[tabela] ?? { data: null, error: null };
-      cadeia.then = (ok: (r: unknown) => unknown) =>
-        ok(respostas[tabela] ?? { data: [], error: null });
+      // Função = resposta que muda a cada chamada (a corrida com a ponte
+      // precisa de duas respostas diferentes para a mesma tabela).
+      const resposta = (): Resposta | undefined => {
+        const r = respostas[tabela];
+        return typeof r === "function" ? r() : r;
+      };
+      cadeia.single = async () => resposta() ?? { data: null, error: null };
+      cadeia.maybeSingle = async () => resposta() ?? { data: null, error: null };
+      cadeia.then = (ok: (r: unknown) => unknown) => ok(resposta() ?? { data: [], error: null });
       return cadeia;
     },
   };
@@ -202,12 +227,118 @@ describe("o discador respeita quem pediu para não ser incomodado", () => {
   });
 });
 
+describe("a ponte de eventos grava a ligação antes da rota — e a rota completa em vez de recusar", () => {
+  const SESSAO_PAREADA = {
+    data: { id: "canal-de-voz", wacalls_session_id: "sessao-up" },
+    error: null,
+  };
+
+  async function discar() {
+    const { POST } = await import("@/app/api/v1/voice/calls/route");
+    return POST(
+      new Request("http://x/api/v1/voice/calls", {
+        method: "POST",
+        body: JSON.stringify({ contactId: CONTATO }),
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    respostas["channel_sessions"] = SESSAO_PAREADA;
+    respostas["contacts"] = {
+      data: { id: CONTATO, phone_number: "5511900000000", name: "Fulano", is_blocked: false, is_anonymized: false },
+      error: null,
+    };
+  });
+
+  it("chave duplicada vira reconciliação: 201 com a linha da ponte, sentido e dono corrigidos, status intacto", async () => {
+    // Medido na VPS em 2026-09-15: o `call-status` chega ao worker e vira linha
+    // ~200 ms antes deste INSERT, e a rota devolvia 502 com o telefone do outro
+    // lado tocando. A linha da ponte é a mesma ligação — escrita por quem não
+    // sabe que foi alguém daqui que discou, para este contato.
+    let vez = 0;
+    respostas["voice_calls"] = () =>
+      vez++ === 0
+        ? {
+            data: null,
+            error: {
+              code: "23505",
+              message:
+                'duplicate key value violates unique constraint "voice_calls_organization_id_wacalls_call_id_key"',
+            },
+          }
+        : {
+            data: {
+              id: CHAMADA,
+              status: "ringing",
+              owner_user_id: EU,
+              created_by: EU,
+              direction: "outbound",
+              contact_id: CONTATO,
+            },
+            error: null,
+          };
+
+    const res = await discar();
+    expect(res.status).toBe(201);
+    expect((await corpo(res)).data).toMatchObject({
+      id: CHAMADA,
+      callId: "up-1",
+      status: "ringing",
+      owner_user_id: EU,
+      direction: "outbound",
+    });
+    const escrita = escritas.find((e) => e.tabela === "voice_calls");
+    // A reconciliação toca UMA linha: a desta ligação, desta organização.
+    expect(escrita?.filtros).toEqual([
+      ["organization_id", ORG],
+      ["wacalls_call_id", "up-1"],
+    ]);
+    const patch = escrita?.patch as Record<string, unknown>;
+    expect(patch).toMatchObject({
+      direction: "outbound",
+      created_by: EU,
+      owner_user_id: EU,
+      contact_id: CONTATO,
+    });
+    // O status da ponte é mais novo que o "starting" daqui: não se regride.
+    expect(patch).not.toHaveProperty("status");
+  });
+
+  it("o número discado é o que o WhatsApp registrou, não o do cadastro", async () => {
+    // Medido na VPS em 2026-09-15: cadastro +5531998966398, WhatsApp
+    // 553198966398. Discar o do cadastro mandava a oferta para lugar nenhum.
+    numeroDiscavel.resolver.mockResolvedValueOnce({ digitos: "553198966398", fonte: "whatsapp" });
+    respostas["contacts"] = {
+      data: { id: CONTATO, phone_number: "+5531998966398", name: "Fulano", is_blocked: false, is_anonymized: false },
+      error: null,
+    };
+    respostas["voice_calls"] = { data: { id: CHAMADA, status: "starting" }, error: null };
+
+    const res = await discar();
+    expect(res.status).toBe(201);
+    expect(numeroDiscavel.resolver).toHaveBeenCalledWith(expect.anything(), ORG, "+5531998966398");
+    expect(wacalls.startCall).toHaveBeenCalledWith("sessao-up", EU, "553198966398");
+    // O registro guarda o telefone do cadastro, com o nono — é como o CRM lê.
+    expect(inseridas.find((i) => i.tabela === "voice_calls")?.linha.peer_phone).toBe("+5531998966398");
+  });
+
+  it("controle: outro erro de escrita continua sendo erro", async () => {
+    respostas["voice_calls"] = { data: null, error: { message: "conexão caiu" } };
+    const res = await discar();
+    expect(res.status).toBe(502);
+    expect(escritas.filter((e) => e.tabela === "voice_calls")).toEqual([]);
+  });
+});
+
 describe("o número pareado cujo socket com o WhatsApp caiu", () => {
   /**
-   * O corpo EXATO do log da VPS em 2026-09-15 11:10:20 UTC — 60 s depois de o
-   * worker registrar "sessão pareada". O WaCalls segue dizendo `state: open`
-   * (não tem caso para `Disconnected`), então este texto é a única fonte do
-   * fato; ver o cabeçalho de `wacallsSemConexao` em `lib/wacalls/client.ts`.
+   * O corpo EXATO do log da VPS em 2026-09-15 11:10:20 UTC. Naquele dia a
+   * causa era o cliente morto deixado pelo `/pair` (consertado na rota de
+   * pareamento); o texto é o mesmo que o whatsmeow devolve para qualquer
+   * cliente sem socket, e é essa classe que a rota trata como passageira. Ver
+   * o cabeçalho de `wacallsSemConexao` em `lib/wacalls/client.ts`.
    */
   const SOCKET_CAIDO = new Error(
     'wacalls_500: {"error":"usync devices: failed to send usync query: websocket not connected"}\n',

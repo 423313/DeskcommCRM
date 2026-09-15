@@ -4264,9 +4264,9 @@ export const DICIONARIO: Traducoes = {
   // Mensagens que as rotas de voz devolvem traduzidas (`traduzir(..., idioma)`).
   "Chamada de voz ligada.": { es: "Llamadas de voz activadas." },
   "Chamada de voz desligada.": { es: "Llamadas de voz desactivadas." },
-  "O número de voz está sem conexão com o WhatsApp neste momento — acontece logo depois de parear ou quando a rede oscila. Aguarde alguns segundos e tente de novo; se continuar, refaça o pareamento em Configurações › Canais.":
+  "O número de voz está sem conexão com o WhatsApp neste momento. Aguarde alguns segundos e tente de novo; se continuar, desconecte o número e pareie de novo em Configurações › Canais.":
     {
-      es: "El número de voz está sin conexión con WhatsApp en este momento: ocurre justo después de vincular o cuando la red oscila. Espera unos segundos y vuelve a intentarlo; si continúa, vuelve a vincular en Configuración › Canales.",
+      es: "El número de voz está sin conexión con WhatsApp en este momento. Espera unos segundos y vuelve a intentarlo; si continúa, desconecta el número y vuelve a vincularlo en Configuración › Canales.",
     },
   "Chamada de voz desligada e aparelho desconectado.": {
     es: "Llamadas de voz desactivadas y dispositivo desconectado.",
@@ -7486,6 +7486,7 @@ export const DICIONARIO: Traducoes = {
   "Abrindo o áudio…": { es: "Abriendo el audio…" },
   "Sem áudio: o canal de voz não abriu": { es: "Sin audio: el canal de voz no se abrió" },
   "Chamada de voz": { es: "Llamada de voz" },
+  "Chamada de voz sem resposta": { es: "Llamada de voz sin respuesta" },
   "A chamada de voz não está configurada.": { es: "La llamada de voz no está configurada." },
   "Falta o endereço do serviço (": { es: "Falta la dirección del servicio (" },
   ") nas variáveis de ambiente desta instalação.": {
@@ -7522,6 +7523,9 @@ export const DICIONARIO: Traducoes = {
   "chamada de voz": { es: "llamada de voz" },
   "chamadas de voz": { es: "llamadas de voz" },
   "Não foi possível iniciar o pareamento.": { es: "No fue posible iniciar el emparejamiento." },
+  "O código de pareamento venceu. Clique em parear para gerar outro.": {
+    es: "El código de vinculación venció. Haz clic en vincular para generar otro.",
+  },
   "Não foi possível receber o código de pareamento. Tente novamente.": {
     es: "No fue posible recibir el código de emparejamiento. Inténtalo de nuevo.",
   },

@@ -187,26 +187,35 @@ describe("apiClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("t11b: 503 com Retry-After num POST também repete — é o contrato do discador com o socket caído", async () => {
-    // `POST /api/v1/voice/calls` responde 503 `wacalls_not_connected` +
-    // `Retry-After` quando o WaCalls diz "websocket not connected" (o erro nasce
-    // ANTES de qualquer <call> sair, então repetir é seguro). Este caso prende a
-    // outra metade do contrato: o cliente de fato repete um POST em 503.
+  it("t11b: 503 com Retry-After num POST também repete, esperando o que o servidor pediu", async () => {
+    // Contrato do discador: `POST /api/v1/voice/calls` responde 503
+    // `wacalls_not_connected` + `Retry-After` quando o WaCalls diz "websocket
+    // not connected" (o erro nasce ANTES de qualquer <call> sair, então repetir
+    // é seguro). O comportamento do cliente já existia; este caso o PRENDE,
+    // para a rota não depender de um retry que alguém poderia tirar.
+    //
+    // `Retry-After: "1"`, e não "0": `parseRetryAfterSeconds` descarta zero e
+    // cai no backoff, e o caminho que honra o valor do servidor ficaria sem
+    // medida.
+    vi.useFakeTimers();
     fetchMock
       .mockResolvedValueOnce(
         jsonResponse(
           503,
           { error: { code: "wacalls_not_connected", message: "sem conexão" } },
-          { "Retry-After": "0" },
+          { "Retry-After": "1" },
         ),
       )
       .mockResolvedValueOnce(jsonResponse(201, { data: { id: "c1" } }));
 
-    const result = await apiClient.post<{ data: { id: string } }>("/api/v1/voice/calls", {
+    const pendente = apiClient.post<{ data: { id: string } }>("/api/v1/voice/calls", {
       contactId: "x",
     });
 
-    expect(result).toEqual({ data: { id: "c1" } });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(fetchMock, "repetiu antes do Retry-After").toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await pendente).toEqual({ data: { id: "c1" } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
