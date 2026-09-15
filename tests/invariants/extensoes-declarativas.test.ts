@@ -104,6 +104,40 @@ describe("extensões: autoridade e isolamento reais", () => {
     expect((await withRole("authenticated", "select * from organization_extensions", [], viewer)).rowCount).toBe(0);
   });
 
+  it("suporte ativo lê o vínculo só da organização atendida; convite não aceito segue sem ler", async () => {
+    const id = await install();
+    await configure(id);
+    await configure(id, 0, true, null, randomUUID(), orgB, adminB);
+    const sessao = randomUUID();
+    await query("insert into auth.sessions(id,user_id,aal) values($1,$2,'aal1')", [sessao, actor]);
+    const ler = async (org: string, sessionId: string) => {
+      const c = await pool.connect();
+      try {
+        await c.query("begin");
+        await c.query("set local role authenticated");
+        await c.query("select set_config('request.jwt.claims',$1,true)", [
+          JSON.stringify({ sub: actor, role: "authenticated", session_id: sessionId }),
+        ]);
+        return (await c.query("select 1 from organization_extensions where organization_id=$1", [org])).rowCount;
+      } finally {
+        await c.query("rollback");
+        c.release();
+      }
+    };
+    try {
+      // O ator é platform admin sem membership em A nem em B: o caso normal de suporte.
+      await query("select public.fn_start_support($1,$2,$3,null,'support_readonly',600)", [actor, sessao, orgB]);
+      expect(await ler(orgB, sessao)).toBe(1);
+      expect(await ler(orgA, sessao)).toBe(0);
+      expect(await ler(orgB, randomUUID())).toBe(0);
+      await query("update user_organizations set accepted_at=null where user_id=$1", [viewer]);
+      expect((await withRole("authenticated", "select * from organization_extensions where organization_id=$1", [orgA], viewer)).rowCount).toBe(0);
+    } finally {
+      await query("delete from platform_support_sessions where auth_session_id=$1", [sessao]);
+      await query("delete from auth.sessions where id=$1", [sessao]);
+    }
+  });
+
   it("tabelas de instância fechadas e seis RPCs não são alcançáveis por anon/authenticated", async () => {
     const id = await install();
     await configure(id);

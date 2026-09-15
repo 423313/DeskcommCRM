@@ -84,11 +84,19 @@ grant select on public.extension_catalogs, public.extension_artifacts, public.ex
   public.organization_extensions, public.extension_operations to service_role;
 grant select on public.organization_extensions to authenticated;
 drop policy if exists tenant_isolation_organization_extensions_select on public.organization_extensions;
+-- fn_user_org_ids() inclui convite ainda não aceito e sessão de suporte ativa. O
+-- vínculo exige convite aceito de quem é membro e, sem exigir linha de membership,
+-- aceita a sessão de suporte ativa na organização atendida: sem isso, quem dá suporte
+-- via todas as extensões como "desativadas" enquanto o cliente as via ativas.
 create policy tenant_isolation_organization_extensions_select on public.organization_extensions
   for select to authenticated using (
     organization_id in (select public.fn_user_org_ids())
-    and exists (select 1 from public.user_organizations u where u.organization_id = organization_extensions.organization_id
-      and u.user_id = auth.uid() and u.accepted_at is not null and u.revoked_at is null)
+    and (
+      exists (select 1 from public.user_organizations u where u.organization_id = organization_extensions.organization_id
+        and u.user_id = auth.uid() and u.accepted_at is not null and u.revoked_at is null)
+      or exists (select 1 from (select public.fn_support_context() s) c
+        where c.s->>'status' = 'active' and (c.s->>'organization_id')::uuid = organization_extensions.organization_id)
+    )
   );
 
 -- Helpers privados: EXECUTE fechado também porque o baseline concede defaults a anon.
