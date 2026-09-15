@@ -109,15 +109,22 @@
 --
 -- ─── Quem ainda alcança o título ────────────────────────────────────────────
 --
--- `service_role`, que esta migration não toca, mantém SELECT/UPDATE na coluna.
--- Mas o produto não grava nem lê nome nenhum nessa coluna: desde a 0225 (v1.17.0,
--- PR #613) o sincronizador grava `title` NULO — `fn_google_calendar`, ação
--- `item`, insere `null` e, no `on conflict`, faz `set title=null`, zerando o que
--- encontra; o executor (`lib/agenda/google/calendar-executor.ts`) já manda
--- `title: null` — e nenhuma função do banco lê a coluna (a única que a menciona é
--- essa, para gravá-la nula). O invariante prende isso: como `service_role`, o
--- sincronizador grava dois eventos com `title` no payload e o espelho fica com
--- os dois títulos nulos.
+-- `service_role`, que esta migration não toca, mantém SELECT/UPDATE na coluna —
+-- mas nenhum caminho do produto usa esse privilégio. O sincronizador não grava
+-- com ele: `fn_google_calendar` é `security definer`, só `service_role` a
+-- executa, e o `insert … on conflict` roda com o privilégio do DONO da função.
+-- Desde a 0225 (v1.17.0, PR #613) ela grava `title` NULO — ação `item`, `null`
+-- no insert e `set title=null` no `on conflict`, zerando o que encontra; o
+-- executor (`lib/agenda/google/calendar-executor.ts`) já manda `title: null`. O
+-- único privilégio de TABELA do `service_role` que o produto usa é o da
+-- desconexão (`app/api/v1/agenda/google/desconectar/route.ts`): DELETE, e SELECT
+-- nas colunas do filtro. O invariante mede cada caminho pelo que ele usa: o
+-- `service_role` chama o sincronizador com dois eventos com `title` no payload e
+-- o espelho fica com os dois títulos nulos — igual com todo privilégio de tabela
+-- do papel revogado —, e a desconexão apaga com o DELETE do papel.
+--
+-- E nenhuma função do banco lê a coluna (a única que a menciona é
+-- `fn_google_calendar`, para gravá-la nula).
 --
 -- Nenhum login de usuário lê o título depois desta migration — nem o colega, nem
 -- o próprio dono da conexão. Nenhuma tela mostra o título de um evento externo —

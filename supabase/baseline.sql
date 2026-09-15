@@ -25117,8 +25117,11 @@ notify pgrst, 'reload schema';
 --   usuário — do colega e também do próprio dono, já que nenhuma tela o mostra.
 --   Anular o resíduo é decisão do dono, e sai em migration própria — não de carona
 --   num conserto de permissão.
--- * Não toca em `service_role` nem no dono do banco: `service_role` mantém
---   SELECT/UPDATE na coluna, e nenhuma função lê o título (a única que o menciona é
+-- * Não toca em `service_role` nem no dono do banco. `service_role` mantém
+--   SELECT/UPDATE na coluna, mas nenhum caminho do produto os usa: o sincronizador
+--   grava pela `fn_google_calendar`, `security definer`, com o privilégio do dono
+--   dela (do `service_role` só usa o EXECUTE), e a desconexão usa DELETE e SELECT
+--   nas colunas do filtro. Nenhuma função lê o título (a única que o menciona é
 --   `fn_google_calendar`, para gravá-lo nulo).
 -- * Não concede nada a `anon`, que continua sem privilégio nesta tabela desde a
 --   0177 (`revoke all … from anon`).
