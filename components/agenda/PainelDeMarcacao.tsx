@@ -699,10 +699,15 @@ export function PainelDeMarcacao({
               // `showApiError` também a diz, mas some em segundos e mora no canto
               // da tela — e quem marcou por cima de um compromisso precisa ler o
               // motivo enquanto corrige a hora.
+              //
+              // `lg:w-0 lg:min-w-full`: a frase ocupa a largura do corpo SEM
+              // entrar na conta da largura dele. O painel é `lg:w-fit`, e a
+              // frase numa linha só pedia mais espaço — medido: ao aparecer a
+              // recusa, a coluna de horários pulava 9px para a direita.
               <div
                 data-testid="recusa-da-marcacao"
                 role="alert"
-                className="mt-3 flex gap-2 rounded-sm border border-warning/40 bg-warning-bg p-2.5"
+                className="mt-3 flex gap-2 rounded-sm border border-warning/40 bg-warning-bg p-2.5 lg:w-0 lg:min-w-full"
               >
                 <Warning size={16} weight="fill" className="mt-0.5 shrink-0 text-warning" aria-hidden />
                 <p className="text-xs leading-4 text-text">{recusa.mensagem}</p>
