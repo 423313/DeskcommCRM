@@ -2131,10 +2131,11 @@ etiquetaria os contatos das outras specs). Banco: `tests/invariants/cliente-nasc
 
 | Caso | Prioridade | Resultado |
 |---|---|---|
-| J23.1 Marcar horário para um contato PELA AGENDA com a regra desligada: a lista de Contatos não mostra selo "Cliente" | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/1-contatos-regra-desligada.png` |
-| J23.2 Configurações › Tipos de agendamento (pelo hub) mostra "Desligado: …"; ligar abre a confirmação que diz que desligar não tira a etiqueta | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/2-regra-desligada.png`, `evidence/cliente-pela-agenda/3-confirmacao.png` |
+| J23.1 Marcar horário para um contato PELA AGENDA com a regra desligada: a lista de Contatos não mostra selo "Cliente", a célula Tags da linha não tem "cliente" e a ficha não tem o chip nem "Cliente desde" | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/1-contatos-regra-desligada.png` |
+| J23.2 Configurações › Tipos de agendamento (pelo hub) mostra "Desligado: …"; ligar abre a confirmação que diz que religar tira a etiqueta de quem ficou sem horário e que desligar não tira a etiqueta | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/2-regra-desligada.png`, `evidence/cliente-pela-agenda/3-confirmacao.png` |
 | J23.3 Confirmar: "1 contato ganhou a etiqueta “cliente”."; o interruptor fica `aria-checked=true`, habilitado e com opacidade 1 (medido por `getComputedStyle`) | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/4-regra-ligada.png` |
-| J23.4 Ligada: selo "Cliente" na lista, filtro "cliente" acha o contato, ficha mostra "Cliente desde", Funis oferece "Funil de clientes" | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/5-contatos-filtro-cliente.png`, `evidence/cliente-pela-agenda/6-ficha-cliente-desde.png`, `evidence/cliente-pela-agenda/7-funis-com-funil-de-clientes.png` |
+| J23.4 Ligada: selo "Cliente" na lista, filtro "cliente" acha o contato, ficha mostra "Cliente desde" com o dia em que o horário foi combinado (nunca o dia futuro do horário), Funis oferece "Funil de clientes" | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/5-contatos-filtro-cliente.png`, `evidence/cliente-pela-agenda/6-ficha-cliente-desde.png` |
+| J23.5 Marcar o funil de clientes, RECARREGAR: o selo "Clientes" e o botão "Deixar de ser funil de clientes" continuam | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/7-funis-com-funil-de-clientes.png` |
 
 Execução (2026-09-15): build de produção (`pnpm e2e:build`) da árvore
 `f1fa08a19` + a spec, Supabase local próprio com o `baseline.sql` aplicado
@@ -2158,3 +2159,26 @@ O que a tela NÃO prova, e onde está provado: cancelado e falta não contam, a
 etiqueta tirada à mão não volta, o `contact.tag_added` no formato do app, a
 classificação do histórico só da organização que liga e sem evento, e quem pode
 ligar (admin, MFA, suporte) — todos no invariante acima, contra Postgres real.
+
+**Rodada 2 (2026-09-15), sobre os achados da revisão.** Execução: build de
+produção da árvore `88461bda5`, Supabase local próprio (project `fx867-e2e`,
+portas 556xx) com o `baseline.sql` aplicado (`ON_ERROR_STOP=1`, 0 erros),
+Chromium real, `next start` na 3867. 1 passed (23s). A evidência 6 agora mostra
+"Criado em 15/09/2026 · Cliente desde 15/09/2026" — a da rodada 1 mostrava
+"Cliente desde 21/09/2026", o dia do horário, que ainda não tinha chegado.
+
+Controles, cada um com a previsão escrita antes:
+
+- **E2E-S1** (o trigger ignora o interruptor, no banco do teste, restaurado
+  depois): reprova no **J23.1**, na célula Tags (`toHaveCount(0)`, recebido 1).
+  Na rodada 1 esse passo não reprovava, porque só olhava o selo que a tela
+  esconde por `ActiveOrg`.
+- **E2E-S2** (`/app/kanban` sem `is_client_pipeline` no select, build
+  refeito): reprova no **J23.5**, depois do reload ("Funil de clientes" onde
+  devia estar "Deixar de ser funil de clientes"). Sem o reload, passava.
+
+Duas rodadas caíram antes da verde por carga da máquina (média 25–42, de outras
+sessões): um 502 do Kong em `fn_support_context` (`recv() failed (104:
+Connection reset by peer)` do PostgREST), que a rota do funil devolve como 503
+`upstream_unavailable`, e 504 do GoTrue em `/auth/v1/user`. Nenhuma das duas
+falhas tocou código desta feature; a terceira rodada, com a carga em 12, passou.
