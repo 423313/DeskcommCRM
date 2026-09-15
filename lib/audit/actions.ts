@@ -528,6 +528,11 @@ export const AUDIT_ACTIONS = [
   // porque toda leitura de `admin/` é auditada neste repo — e porque aqui o
   // operador enxerga o agente publicado na organização de outra pessoa.
   "platform_admin.tenant_agents_viewed",
+  "extension.catalog_admitted",
+  "extension.installed",
+  "extension.configured",
+  "extension.deactivated",
+  "extension.preparation_cancelled",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

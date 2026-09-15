@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { NavHub } from "@/components/shell/NavHub";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { loadCrmExtensions } from "@/lib/extensions/service";
+import type { ExtensionGuideView } from "@/lib/extensions/view";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,18 @@ export default async function CrmHubPage() {
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
   const idioma = user.idioma;
+  let extensionGuides: ExtensionGuideView[] = [];
+  let extensionsUnavailable = false;
+
+  if (activeOrg) {
+    try {
+      extensionGuides = await loadCrmExtensions(activeOrg.orgId);
+    } catch {
+      // O hub continua útil sem extensões, mas a falha precisa ser distinguível
+      // de uma lista legitimamente vazia. A gestão oferece a reconciliação.
+      extensionsUnavailable = true;
+    }
+  }
 
   return (
     <NavHub
@@ -39,6 +53,8 @@ export default async function CrmHubPage() {
         idioma,
       )}
       locale={idioma}
+      extensionGuides={extensionGuides}
+      extensionsUnavailable={extensionsUnavailable}
     />
   );
 }

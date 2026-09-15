@@ -1982,6 +1982,38 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 - [P1] Pausar e retomar: ponteiro publicado permanece; assistência manual continua. Troca de modo em voo impede efeitos automáticos obsoletos.
 - Provas Task9 em preparação: `tests/invariants/autonomia-replies.test.ts`, `lib/agent-engine/agent/preview.test.ts`. Evidência browser será registrada após revisão e aplicação da migration0227 no QA.
 
+## J22 — Instalar e usar uma extensão declarativa publicada após o build `[P0]`
+
+Specs: `tests/e2e/extensoes-declarativas.spec.ts` e `tests/e2e/extensoes-recuperacao.spec.ts`.
+Estado: **implementadas, sem PASS integral ainda**; quatro rodadas diagnósticas corrigiram
+esperas/seletores da própria spec principal e a próxima aguarda o build integrado estável. A fixture
+recusa credenciais fora das portas locais dedicadas, cria usuários e organizações exclusivos,
+publica dois pacotes pelo CLI depois de encontrar `.next/BUILD_ID` e inicia o catálogo HTTP real em
+`127.0.0.1:56331`, com SQLite e PID próprios.
+
+| Caso | Prioridade | Prova prevista |
+|---|---|---|
+| Admitir arquivo revisado e instalar pela UI | P0 | Catálogo exportado pelo CLI; origem, revisão, SHA-256, instante e bytes conferidos no SQLite, no HTTP e no banco do CRM |
+| Resposta da instalação perdida depois do commit | P0 | `route.fetch()` completa a rota real e só a resposta ao navegador é abortada; o recibo local reconcilia uma única instalação persistida |
+| Pacote alterado após exportar o catálogo | P0 | O SQLite troca um byte depois da exportação e antes da admissão pela UI, preservando o tamanho; o HTTP entrega SHA divergente do arquivo admitido, o recibo guarda `extension_digest_mismatch` e nenhuma instalação nasce |
+| Storage indisponível antes do pedido | P0 | Falha restrita ao namespace dos recibos bloqueia a UI antes de qualquer POST ou nova operação; após restaurar o Storage e recarregar, a instalação volta a estar disponível |
+| Resposta perdida reconciliada em outra aba | P0 | O UUID aparece no namespace ator+organização antes do fetch; outra aba lê a conclusão e remove o mesmo recibo, com um único POST e uma instalação |
+| Cancelar durante download real | P0 | A segunda aba vê o recibo `preparing` e cancela enquanto metade do corpo continua aberta; a entrega tardia termina como `cancelled` e não publica instalação |
+| Socket interrompido | P0 | O receiver entrega parte dos bytes publicados e encerra o socket; a UI mostra falha e próxima tentativa, o recibo guarda `extension_download_failed` e nenhuma instalação nasce |
+| Configurar e ativar somente na organização A | P0 | Densidade compacta e descrição oculta persistem; B não recebe vínculo, card ou acesso direto ao guia |
+| Troca concorrente entre abas | P0 | Uma aba carregada em A envia a organização esperada; após outra aba trocar a sessão para B, o salvamento recebe 409, recarrega o contexto e não cria vínculo em B nem altera A |
+| Usar o guia até o núcleo | P0 | Card do hub CRM abre o guia; Enter no botão revalidado abre Tarefas; tarefa criada e concluída pela UI pertence somente a A |
+| Desativar, revalidar aba antiga e reativar | P0 | URL e ação já abertas passam a recusar; reativação preserva a configuração anterior |
+| Trocar A/B pelo seletor e desligar o catálogo | P0 | `tenant-switcher-item-<id>` muda o contexto; conteúdo instalado continua vindo do banco local com o catálogo indisponível |
+| Papéis sem gestão | P0 | `agent` e `viewer` veem a tela sem controles de mutação; POST/PUT diretos respondem 403 sem criar operação |
+| Desktop, móvel e teclado | P1 | Capturas em `.superpowers/evidence/extensoes-integracao/e2e/`, viewport móvel de 390 px, sem overflow horizontal nem erro de console; trace ligado |
+| Tema escuro e espanhol | P1 | Controles reais mudam tema e idioma; tela em espanhol mantém o aviso explícito quando um texto do pacote usa fallback português, sem overflow; capturas complementares ficam em `e2e/recuperacao/` |
+| Auditoria visível | P0 | Banco identifica ator e organização nas ações `extension.*`; `/admin/audit` filtra pelos controles canônicos e mostra `extension.configured` |
+
+Limite declarado: esta jornada prova o perfil declarativo e o catálogo local de ensaio. Não prova
+marketplace público, autoria criptográfica, atualização/remoção de versão nem execução de código de
+pacote. A escrita SQL direta sob RLS pertence à suíte de invariantes de banco desta integração.
+
 
 ## Comunidade 360 — aceite integrado de 2026-09-06
 

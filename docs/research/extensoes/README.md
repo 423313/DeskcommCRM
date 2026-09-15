@@ -39,3 +39,15 @@ O diagrama da proposta descreve responsabilidades futuras. Ele não foi publicad
 | [07 — Perfil de contêiner](07-perfil-comparacao-executor.md) | Imagem fixa, rodada Docker real, limites exercitados e comparação delimitada |
 
 O [runbook da bancada](../../../experiments/extensoes/README.md) permite repetir os experimentos em ambiente próprio. O [PROG-020](../../../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-020%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20resultados%20da%20bancada.md) é a síntese para acompanhar a execução sem ler o código.
+
+## Primeira integração ao CRM
+
+A branch `feat/extensoes-declarativas-20260914` preserva a bancada e incorpora `origin/main` em `60079eb5`. O [PROG-021](<../../../Decisão Implementações/PROG-021 — Extensões — primeira integração.md>) acompanha implementação e provas do marco 2. O [contrato v1](../../specs/extensoes-declarativas-v1.md) define o pacote declarativo, admissão e jornada.
+
+| Investigação | Foco desta integração |
+|---|---|
+| [08 — Bases](08-integracao-bases.md) | Skills, download, confiança e operações existentes |
+| [09 — Impactos](09-integracao-impactos.md) | RLS, navegação, auditoria e consumidor em Tarefas |
+| [10 — Riscos](10-integracao-riscos.md) | Parser, compatibilidade, rede e recuperação |
+
+A persistência foi implementada e revisada; a jornada integrada em tela continua pendente de execução. O catálogo público e o perfil de código externo continuam fora desta entrega.
