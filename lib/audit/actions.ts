@@ -547,6 +547,9 @@ export const AUDIT_ACTIONS = [
   // porque toda leitura de `admin/` é auditada neste repo — e porque aqui o
   // operador enxerga o agente publicado na organização de outra pessoa.
   "platform_admin.tenant_agents_viewed",
+  // "Cliente pela agenda" ligada ou desligada (migration 0262). Ligar reescreve
+  // etiquetas de toda a organização; metadata leva as contagens.
+  "crm.cliente_pela_agenda_alterado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

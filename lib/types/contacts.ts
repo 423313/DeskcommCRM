@@ -27,9 +27,11 @@ export interface Contact {
   updated_at: string;
   last_activity_at: string | null;
   /**
-   * Primeiro atendimento marcado. Não nulo = é cliente, e é ESTE campo que a
-   * tela e o roteamento de funil consultam — a tag `cliente` é etiqueta de
-   * trabalho, removível à mão. Derivado por trigger; não entra no PATCH.
+   * Início do primeiro agendamento que conta, mantido só com
+   * `settings.crm.cliente_pela_agenda` ligado; desligado fica congelado. A tela
+   * só o mostra com a regra ligada (`ActiveOrg.cliente_pela_agenda`). A tag
+   * `cliente` é etiqueta de trabalho, removível à mão. Derivado por trigger;
+   * não entra no PATCH.
    */
   first_service_at: string | null;
   /**

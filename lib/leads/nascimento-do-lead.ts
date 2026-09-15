@@ -52,6 +52,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
 
+import { lerClientePelaAgenda } from "@/lib/contacts/cliente-pela-agenda";
 import { ehIdentificadorTecnico, rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 
 import { emitLeadActivity } from "./activity-emitter";
@@ -139,7 +140,9 @@ export async function funilDeEntrada(
    *
    * O destino é declarado por `crm_pipelines.is_client_pipeline`, irmão
    * exclusivo de `is_default` — nenhum NOME de funil aparece aqui, que é a
-   * mesma regra do cabeçalho deste arquivo.
+   * mesma regra do cabeçalho deste arquivo. E só vale com
+   * `settings.crm.cliente_pela_agenda` ligado: quem decide isso é o chamador,
+   * que só passa `true` com a regra ligada.
    *
    * ⚠️ TODA FALHA CAI NO FUNIL DE ENTRADA, e isso é o desenho, não descuido.
    * Sem funil de clientes marcado (o estado de toda instalação nova), ou com um
@@ -229,7 +232,15 @@ export async function garantirLeadDaConversa(
   // COLUNA, carimbada pelo agendamento), nunca a tag `cliente` — a tag é
   // removível à mão e pelo PATCH de contatos, e âncora removível faria alguém
   // voltar a ser lead por descuido de quem editou etiquetas.
-  const ehCliente = contato?.first_service_at != null;
+  //
+  // ⚠️ E SÓ COM A REGRA LIGADA NA ORGANIZAÇÃO (migration 0262). Desligada, a
+  // coluna fica congelada no que era quando a regra estava ligada, e rotear por
+  // ela seria decidir o funil com um fato vencido. A leitura do interruptor só
+  // acontece quando o contato TEM a data — o caso comum (contato sem data) não
+  // paga consulta a mais — e falha de leitura cai no funil de entrada, que é a
+  // regra que o cabeçalho deste arquivo já declara.
+  const ehCliente =
+    contato?.first_service_at != null && (await lerClientePelaAgenda(db, organizationId));
   const destino = await funilDeEntrada(db, organizationId, ehCliente);
   if ("erro" in destino) return { criado: false, motivo: destino.erro };
 

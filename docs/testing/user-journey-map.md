@@ -2117,3 +2117,26 @@ Produto `7f1d0f3e`, integrado à main `ca895850`: as dez specs de organizações
 Evidência local preservada em `.superpowers/evidence/comunidade-360/final-qa-targeted-r4/` e log `.superpowers/sdd/comunidade-360/final-qa-targeted-r4.log`. A rodada inclui atualização concorrente da interface sem perder formulário, sugestão obsoleta sem confirmação antiga de sucesso e encerramento de suporte com retorno ao contexto original.
 
 Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos aprovados + 1 falha esperada; 184 arquivos de banco / 1.466 casos aprovados + 1 falha esperada e 1 ignorado, com INSTALL e UPDATE; tipos, lint (0 erros, 344 avisos) e build aprovados. `lint:channels`, validadores shell e conferência de release também passaram. Os checks remotos continuam sendo condição do merge pelo revisor da PR #613.
+
+## J22 — Clientes pela agenda: o administrador liga, e quem tem horário vira cliente `[P1]` (2026-09-15)
+
+Contribuição de @423313 (PR #867), com a decisão do dono: a regra nasce
+**desligada** em toda organização, e só um administrador a liga, em
+Configurações › Tipos de agendamento (migration 0262). A porta secundária é o
+rodapé da tela de Funis, que diz onde ligar enquanto estiver desligada.
+
+Spec: `tests/e2e/cliente-pela-agenda.spec.ts` (organização e admin próprios,
+criados e apagados pela spec — ligar a regra na organização compartilhada do CI
+etiquetaria os contatos das outras specs). Banco: `tests/invariants/cliente-nasce-do-agendamento.test.ts`.
+
+| Caso | Prioridade | Resultado |
+|---|---|---|
+| Marcar horário para um contato PELA AGENDA com a regra desligada: a lista de Contatos não mostra selo "Cliente" | `[P1]` | ver a seção de execução abaixo |
+| Configurações › Tipos de agendamento mostra "Desligado: …"; ligar abre a confirmação que diz que desligar não tira a etiqueta | `[P1]` | ver a seção de execução abaixo |
+| Confirmar: "1 contato ganhou a etiqueta “cliente”." | `[P1]` | ver a seção de execução abaixo |
+| Ligada: selo "Cliente" na lista, filtro "cliente" acha o contato, ficha mostra "Cliente desde", Funis oferece "Funil de clientes" | `[P1]` | ver a seção de execução abaixo |
+
+O que a tela NÃO prova, e onde está provado: cancelado e falta não contam, a
+etiqueta tirada à mão não volta, o `contact.tag_added` no formato do app, a
+classificação do histórico só da organização que liga e sem evento, e quem pode
+ligar (admin, MFA, suporte) — todos no invariante acima, contra Postgres real.
