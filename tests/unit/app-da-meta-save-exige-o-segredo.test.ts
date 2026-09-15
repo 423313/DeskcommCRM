@@ -23,14 +23,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *   só troca a chave, não o devolve.
  * - A trilha de auditoria registra O QUE mudou, jamais o valor.
  *
+ * - Leitura que FALHOU não é "nada gravado": sem saber se já existe token, a
+ *   action recusa com `leitura_do_app_falhou` e não grava. Antes, a falha lia
+ *   como instalação vazia, e salvar uma chave nova regravava um token por cima do
+ *   que já estava colado no painel da Meta.
+ *
  * Sabotagem que confirma que a guarda vigia: remover a checagem de
- * `app_secret_obrigatorio` em `updateMetaApp` deixa o caso ⭐ vermelho.
+ * `app_secret_obrigatorio` em `updateMetaApp` deixa o caso ⭐ vermelho; ignorar o
+ * `error` em `oQueEstaGravado` deixa vermelhos os dois casos 🔒.
  */
 
 const USUARIO = "11111111-1111-4111-8111-111111111111";
 const SEGREDO = "0123456789abcdef0123456789abcdef";
 
 let linha: { app_secret_encrypted: string | null; verify_token_encrypted: string | null } | null = null;
+/** Quando preenchido, a leitura de `platform_meta_app` falha como o PostgREST falha: `data` nulo e `error`. */
+let erroDeLeitura: { code: string; message: string } | null = null;
 const gravacoes: Record<string, unknown>[] = [];
 
 vi.mock("@/lib/auth/requirePlatformAdmin", () => ({
@@ -44,7 +52,11 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: (tabela: string) => {
       if (tabela !== "platform_meta_app") throw new Error(`tabela inesperada: ${tabela}`);
       return {
-        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: linha, error: null }) }) }),
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => (erroDeLeitura ? { data: null, error: erroDeLeitura } : { data: linha, error: null }),
+          }),
+        }),
         upsert: async (valores: Record<string, unknown>) => {
           gravacoes.push(valores);
           return { error: null };
@@ -63,6 +75,7 @@ vi.mock("@/lib/audit", () => ({ audit: (evento: { metadata?: Record<string, unkn
 
 beforeEach(() => {
   linha = null;
+  erroDeLeitura = null;
   gravacoes.length = 0;
   audit.mockClear();
 });
@@ -158,5 +171,28 @@ describe("rotacionarVerifyTokenDaMeta", () => {
     expect(gravacoes[0]).toMatchObject({ verify_token_encrypted: `cifra(${token})` });
     expect(gravacoes[0]).not.toHaveProperty("app_secret_encrypted");
     expect(JSON.stringify(audit.mock.calls)).not.toContain(token);
+  });
+});
+
+describe("a leitura do que está gravado falhou", () => {
+  const FALHA = { code: "57014", message: "canceling statement due to statement timeout" };
+
+  it("🔒 salvar uma chave nova é RECUSADO — não gera token por cima do que já está no painel da Meta", async () => {
+    erroDeLeitura = FALHA;
+    const { updateMetaApp } = await acoes();
+
+    const r = await updateMetaApp({ app_secret: SEGREDO });
+
+    expect(r).toMatchObject({ ok: false, error: "leitura_do_app_falhou" });
+    expect(gravacoes, "a falha de leitura virou 'nunca configurado' e a action gravou mesmo assim").toEqual([]);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("🔒 a rotação é RECUSADA com o motivo certo — não manda cadastrar a chave a quem já cadastrou", async () => {
+    erroDeLeitura = FALHA;
+    const { rotacionarVerifyTokenDaMeta } = await acoes();
+
+    expect(await rotacionarVerifyTokenDaMeta()).toMatchObject({ ok: false, error: "leitura_do_app_falhou" });
+    expect(gravacoes).toEqual([]);
   });
 });
