@@ -225,6 +225,14 @@ execuções no histórico" e "0 inscrições" com 3 e 4 no banco — conta o que
 gravou e diz que é o estado. E ele manda olhar "abas Regras e Atividade"; a aba se
 chama "Automações".
 
+**Consertado** (branch `triagem/lote-9-qa-consertos`, commit do item 2): o resumo relê do
+banco o que existe depois da rodada e diz, ao lado, quantas a rodada criou; e manda olhar
+"Webhooks › abas Automações e Atividade" e "Follow-ups › abas Fluxos e Fila" —
+`tests/unit/resumo-do-seed-diz-o-que-existe.test.ts` lê esses nomes do menu
+(`lib/navigation/catalogo.ts`) e dos `TabsTrigger` das telas. Saída real de duas rodadas
+no Supabase local descartável, com 3 regras, 3 execuções e 4 inscrições no banco:
+`875-09-seed-resumo-duas-rodadas.txt`.
+
 ## Regressão do lote 8 na árvore combinada
 
 - `l8-regressao-01-agenda-abre.png` — a Agenda abre, com os dois compromissos em

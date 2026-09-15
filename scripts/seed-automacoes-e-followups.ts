@@ -69,6 +69,7 @@ import {
   type InscricaoDeDemonstracao,
 } from "./lib/followups-de-demonstracao";
 import { GRAFO_DE_DEMONSTRACAO } from "./lib/grafo-de-demonstracao";
+import { textoDoResumo, type EstadoDaDemonstracao } from "./lib/resumo-do-seed-de-demonstracao";
 
 // `process.env` VENCE o `.env.local` (ver scripts/lib/env-de-teste.ts).
 const credenciais = credenciaisSupabaseDeTeste();
@@ -109,15 +110,16 @@ function daqui(ms: number): string {
 /**
  * As regras vêm de `scripts/lib/automacoes-de-demonstracao.ts`, onde um teste as
  * passa pelo schema da API e pelo avaliador de condições do motor. Devolve o id
- * de cada regra pelo NOME, que é a chave natural do seed.
+ * de cada regra pelo NOME, que é a chave natural do seed, e quantas esta rodada criou.
  */
 async function semearAutomacoes(
   orgId: string,
   pipelineId: string | null,
   stageId: string | null,
   managerId: string,
-): Promise<Map<string, string>> {
+): Promise<{ ids: Map<string, string>; criadas: number }> {
   const ids = new Map<string, string>();
+  let criadas = 0;
 
   for (const regra of regrasDeDemonstracao({ pipelineId, stageId, managerId })) {
     const { data: existente } = await admin
@@ -139,9 +141,10 @@ async function semearAutomacoes(
       .single();
     if (error) throw new Error(`regra "${regra.name}": ${error.message}`);
     ids.set(regra.name, (data as { id: string }).id);
+    criadas += 1;
   }
 
-  return ids;
+  return { ids, criadas };
 }
 
 /**
@@ -330,6 +333,58 @@ async function semearInscricoes(
 
 // ════════════════════════════════════════════════════════════════════════════
 
+async function contar(consulta: PromiseLike<{ count: number | null; error: { message: string } | null }>, oQue: string) {
+  const { count, error } = await consulta;
+  if (error) throw new Error(`contar ${oQue}: ${error.message}`);
+  return count ?? 0;
+}
+
+/**
+ * O que EXISTE depois da rodada — relido do banco, não somado do que ela gravou.
+ * Numa rodada repetida nada é criado e tudo continua lá; o resumo tem de dizer
+ * as duas coisas.
+ */
+async function lerEstado(
+  orgId: string,
+  ruleIds: string[],
+  pointerId: string,
+  criadasAgora: { regras: number; execucoes: number; inscricoes: number },
+): Promise<EstadoDaDemonstracao> {
+  const [regras, ligadas, execucoes, inscricoes, ponteiro] = await Promise.all([
+    contar(
+      admin.from("automation_rules").select("id", { count: "exact", head: true }).eq("organization_id", orgId).in("id", ruleIds),
+      "regras",
+    ),
+    contar(
+      admin
+        .from("automation_rules")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .in("id", ruleIds)
+        .eq("is_active", true),
+      "regras ligadas",
+    ),
+    contar(
+      admin.from("automation_rule_runs").select("id", { count: "exact", head: true }).eq("organization_id", orgId).in("rule_id", ruleIds),
+      "execuções",
+    ),
+    contar(
+      admin.from("followup_enrollments").select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("pointer_id", pointerId),
+      "inscrições",
+    ),
+    admin.from("followup_flow_pointers").select("name, status").eq("organization_id", orgId).eq("id", pointerId).single(),
+  ]);
+  if (ponteiro.error) throw new Error(`ler o fluxo: ${ponteiro.error.message}`);
+  const fluxo = ponteiro.data as { name: string; status: string };
+
+  return {
+    regras: { existem: regras, ligadas, criadasAgora: criadasAgora.regras },
+    execucoes: { existem: execucoes, criadasAgora: criadasAgora.execucoes },
+    fluxo: { nome: fluxo.name, ativo: fluxo.status === "active" },
+    inscricoes: { existem: inscricoes, criadasAgora: criadasAgora.inscricoes },
+  };
+}
+
 async function main(): Promise<void> {
   if (!fs.existsSync(CREDS_PATH)) {
     throw new Error(
@@ -349,7 +404,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const ruleIds = await semearAutomacoes(orgId, pipelineId, stageId, managerId);
+  const { ids: ruleIds, criadas: regrasCriadas } = await semearAutomacoes(orgId, pipelineId, stageId, managerId);
   const runs = await semearHistorico(orgId, ruleIds, managerId);
 
   const { pointerId, versionId } = await semearFluxo(orgId);
@@ -357,12 +412,12 @@ async function main(): Promise<void> {
   const contatos = await garantirContatos(orgId, demonstracao);
   const inscricoes = await semearInscricoes(orgId, pointerId, versionId, demonstracao, contatos);
 
-  console.info(
-    `\n✅ Seed de automações e follow-ups completo.` +
-      `\n   Automações: ${ruleIds.size} regras ativas, ${runs} execuções no histórico` +
-      `\n   Follow-up:  fluxo "${NOME_DO_FLUXO}" ativo, ${inscricoes} inscrições` +
-      `\n   Telas: /app/webhooks (abas Regras e Atividade) e /app/ai/followups`,
-  );
+  const estado = await lerEstado(orgId, [...ruleIds.values()], pointerId, {
+    regras: regrasCriadas,
+    execucoes: runs,
+    inscricoes,
+  });
+  console.info(textoDoResumo(estado));
 }
 
 main().catch((err) => {
