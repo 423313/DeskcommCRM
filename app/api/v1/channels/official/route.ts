@@ -78,8 +78,15 @@ function publicBase(req: NextRequest): string {
  * responde é o admin de UM tenant, não quem administra a instalação. O do `.env`
  * continua sendo mostrado, como sempre foi — é o mesmo valor, na mesma rota.
  *
- * "O que vale é igual ao do `.env`" é exatamente "o que vale veio do `.env`",
- * porque o resolvedor serve o par inteiro de UMA fonte só (`lib/channels/meta/app.ts`).
+ * Por que "o que vale é igual ao do `.env`" basta para rotular a origem como
+ * `ambiente`: o token em vigor (`lib/channels/meta/app.ts`) é OU o do banco OU o
+ * do `.env` — o do banco só vale com o par inteiro decifrado; fora disso vale o
+ * que o `.env` tiver, até pela metade. Então a igualdade só engana num caso: o
+ * token do banco coincidir com o do `.env`. E o do banco ninguém escolhe — é
+ * gerado pelo servidor com 32 bytes aleatórios —, então coincidir exige alguém
+ * ter COPIADO o token gerado para o `.env`. Nesse caso o rótulo erra a origem,
+ * mas o valor exibido é o mesmo que já está no `.env`, que esta rota sempre
+ * mostrou: não sai nada que antes não saía.
  */
 async function tokenDeVerificacaoParaATela(): Promise<{
   verifyToken: string | null;
