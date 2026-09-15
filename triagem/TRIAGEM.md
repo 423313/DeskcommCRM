@@ -914,8 +914,13 @@ ls supabase/migrations/*.sql | sed -E 's#.*/([0-9]+)_.*#\1#'     | sort | uniq -
 ```
 
 Vazio nas duas é o esperado. Rode depois de **cada** merge que traga migration, e **sempre** antes
-de abrir o PR do lote — com controle positivo: rodada contra a `origin/main`, ela também tem de
-devolver vazio, senão a duplicata é antiga e não do lote.
+de abrir o PR do lote — com **linha de base** contra a `origin/main`: se ela também devolver a
+duplicata, o número é antigo e não do lote.
+
+Linha de base não é controle positivo, e a diferença importa: a `main` limpa devolvendo vazio não
+prova que a sonda enxerga — prova só que não há dívida herdada. O controle positivo é a sonda **ter
+achado** uma duplicata real alguma vez; em 14/09 foi o `0241` do #804. Sem esse registro, vazio nas
+duas é indistinguível de instrumento morto.
 
 ---
 
