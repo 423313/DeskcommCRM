@@ -245,7 +245,10 @@ describe("a confirmação é levada até a vista", () => {
     const antes = rolou.mock.calls.length;
     fireEvent.click(screen.getByTestId("confirmar-marcacao"));
     await screen.findByTestId("recusa-da-marcacao");
-    expect(rolou.mock.calls.length).toBeGreaterThan(antes);
+    // `waitFor`, e não asserção direta: a rolagem mora num efeito, que roda DEPOIS
+    // de a recusa estar no DOM. Medido: na suíte de agenda inteira (58 arquivos
+    // em paralelo) o `findBy` resolvia antes do efeito e o caso reprovava.
+    await waitFor(() => expect(rolou.mock.calls.length).toBeGreaterThan(antes));
     expect(rolou.mock.contexts.at(-1)).toBe(screen.getByTestId("confirmacao"));
   });
 });
