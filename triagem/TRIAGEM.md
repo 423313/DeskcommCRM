@@ -2386,3 +2386,18 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
     pattern`, e dentro de um laço isso falha **no meio** enquanto o resto segue: em 14/09, 11 de 29
     vereditos não foram postados e o laço imprimiu "vereditos postados" no fim. Texto com mais de
     uma linha vai por Python, e o laço confere o `returncode` de cada envio.
+
+
+57. **Reconciliação que REMOVE um artefato e deixa o inventário que o declarava.** Tirar um
+    workflow, uma rota ou uma tela é metade do conserto: a outra metade é o mapa que a enumera
+    (`GATILHO_ESPERADO`, `vercel.ts`, `registry.ts`, `SPECS_PARTE_*`). Em 14/09 removi o workflow
+    de deploy de um fork e deixei as três entradas dele no `GATILHO_ESPERADO` — e não vi porque, no
+    worktree da reconciliação, rodei só o teste que eu sabia afetado. **Depois de reconciliar, rode
+    a suíte, não o arquivo.** O arquivo que você lembra é o que você já sabe; o que quebra é o que
+    você não pensou.
+
+58. **Duas reconciliações feitas em ordem diferente da ordem de merge.** Reconciliei o `vercel.ts`
+    do #767 antes de o #805 entrar no lote; o #805 criou um cron que aquele `vercel.ts` não
+    conhecia. Cada reconciliação estava certa contra a árvore em que foi feita. **Inventário se
+    confere na árvore do LOTE montado, depois do último merge** — nunca na branch de reconciliação
+    isolada.
