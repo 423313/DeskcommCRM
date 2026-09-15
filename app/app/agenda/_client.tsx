@@ -77,6 +77,7 @@ export function AgendaClient({
   linkDeConfiguracaoDoGoogle,
   tiposIniciais,
   agendamentosIniciais,
+  podeMarcarEncaixe,
 }: {
   fusoDeApresentacao: string | null;
   googleConfigurado: boolean;
@@ -96,6 +97,12 @@ export function AgendaClient({
   }>;
   /** A semana corrente, resolvida no servidor: `GET /agendamentos` não existe. */
   agendamentosIniciais: Agendamento[];
+  /**
+   * Quem está logado pode MARCAR — o mesmo piso da rota (`requireRole("agent")`
+   * em `app/api/v1/agenda/agendamentos/route.ts`). É ele que liga o encaixe no
+   * painel: oferecer "Outro horário" a quem só lê seria oferecer um 403.
+   */
+  podeMarcarEncaixe: boolean;
 }) {
   const localeDaData = useLocaleDeData();
   const t = useT();
@@ -686,6 +693,11 @@ export function AgendaClient({
                 fontesDefasadas={horarios?.fontes_defasadas}
                 googleCoberturaParcial={horarios?.google_cobertura_parcial}
                 horarioInicial={horarioEscolhido ?? undefined}
+                // O ENCAIXE é desta tela, e só dela: aqui quem marca é uma
+                // pessoa da equipe com sessão, que é exatamente o ator a quem a
+                // rota permite sair da grade. Vale também para REMARCAR, que é
+                // este mesmo painel com PATCH — e a rota aplica a mesma regra lá.
+                permiteEncaixe={podeMarcarEncaixe}
                 // ESTE é o fio que faltava. Sem ele o "Marcado ✓" era estado
                 // local do React e nenhuma linha nascia no banco.
                 onConfirmar={(instante) => {

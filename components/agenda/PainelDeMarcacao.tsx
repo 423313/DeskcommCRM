@@ -4,11 +4,14 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { addDays, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { instanteDe } from "@/lib/agenda/fuso";
+import { ApiError } from "@/lib/api/types";
 import { CaretLeft, CaretRight, CheckCircle, Clock, MapPin, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +49,7 @@ export function PainelDeMarcacao({
   googleCoberturaParcial,
   quemSeraAtendido,
   horarioInicial,
+  permiteEncaixe = false,
   onConfirmar,
   onVerNaAgenda,
   className,
@@ -139,6 +143,24 @@ export function PainelDeMarcacao({
    * ofereceria.
    */
   horarioInicial?: HorarioLivre;
+  /**
+   * O ENCAIXE — "Outro horário", digitado, fora da grade publicada.
+   *
+   * O servidor aceita horário fora da grade quando quem marca é uma PESSOA da
+   * equipe (`podeMarcarForaDaGrade`, `app/api/v1/agenda/agendamentos/_handler.ts`)
+   * e recusa só a ocupação real. Sem esta porta a regra existia e ninguém a
+   * alcançava pela tela: a QA do lote 8 só conseguiu marcar 10:30 chamando a API.
+   *
+   * Prop EXPLÍCITA e desligada por padrão, porque quem sabe se o encaixe cabe é
+   * quem monta o painel: a vitrine desenha este componente com dado de mentira,
+   * e quem não pode marcar (`viewer`) levaria 403 da rota. A tela esconder não é
+   * autorização — a rota cobra de novo —, é não oferecer um caminho que não existe.
+   *
+   * Mesmo ligada, ela só aparece quando o servidor aceitaria e a tela sabe o que
+   * "10:30" significa: com jornada publicada (sem ela a rota devolve
+   * `agenda_fora_da_jornada`), sem erro na consulta e com `fuso` conhecido.
+   */
+  permiteEncaixe?: boolean;
   onConfirmar?: (instante: string) => void | Promise<unknown>;
   className?: string;
 }) {
@@ -155,6 +177,16 @@ export function PainelDeMarcacao({
   const [mes, setMes] = React.useState(() =>
     startOfMonth(horarioInicial ? new Date(horarioInicial.instante) : ancora),
   );
+  const [encaixeAberto, setEncaixeAberto] = React.useState(false);
+  // O que a pessoa DIGITOU sobrevive a "Voltar", à troca de dia e à recusa do
+  // servidor: quem ouviu "ocupado" quer corrigir dez minutos, não redigitar.
+  const [horaDoEncaixe, setHoraDoEncaixe] = React.useState("");
+  /**
+   * A recusa do servidor PRESA ao horário recusado. Escolher outro horário a tira
+   * da tela sem ninguém lembrar de limpar — e voltar ao recusado a traz de volta,
+   * que é verdade: nada mudou nele.
+   */
+  const [recusa, setRecusa] = React.useState<{ instante: string; mensagem: string } | null>(null);
 
   /**
    * O painel pode continuar montado entre duas aberturas (o `Sheet` decide
@@ -222,16 +254,22 @@ export function PainelDeMarcacao({
     return Object.keys(horariosPorDia).some((chave) => new Date(`${chave}T12:00:00`) >= fimDoMes);
   }, [horariosPorDia, mes]);
 
-  const nenhumDiaClicavel = React.useMemo(
-    () =>
-      semanas
-        .flat()
-        .every(
-          (d) =>
-            !((horariosPorDia[format(d, "yyyy-MM-dd")]?.length ?? 0) > 0 && isSameMonth(d, mes)),
-        ),
-    [semanas, horariosPorDia, mes],
-  );
+  const encaixeLigado = permiteEncaixe && Boolean(fuso) && publicouHorarios && !erroAoCarregar;
+  const inicioDeHoje = startOfDay(agora).getTime();
+
+  /**
+   * O dia aceita clique? Com horário publicado, sempre; sem, só pelo encaixe — e
+   * só de hoje em diante, que é o que o calendário já oferecia.
+   *
+   * É a ÚNICA expressão de clicável: o botão do dia e `nenhumDiaClicavel` leem
+   * esta função, para os dois não voltarem a divergir (ver o bloco acima).
+   */
+  const diaClicavel = (d: Date): boolean =>
+    isSameMonth(d, mes) &&
+    ((horariosPorDia[format(d, "yyyy-MM-dd")]?.length ?? 0) > 0 ||
+      (encaixeLigado && d.getTime() >= inicioDeHoje));
+
+  const nenhumDiaClicavel = semanas.flat().every((d) => !diaClicavel(d));
 
   const motivoDoBloqueio: "sem-jornada" | "erro" | "sem-vaga" | null = !publicouHorarios
     ? "sem-jornada"
@@ -252,6 +290,31 @@ export function PainelDeMarcacao({
           : t("nenhum horário livre neste dia");
 
   const doDia = dia ? (horariosPorDia[format(dia, "yyyy-MM-dd")] ?? []) : [];
+
+  const partesDaHora = /^([01]\d|2[0-3]):([0-5]\d)(?::\d{2})?$/.exec(horaDoEncaixe);
+
+  /**
+   * "10:30" do dia escolhido, no fuso que o painel EXIBE ("Horários no fuso …"),
+   * vira instante pela mesma conversão do motor (`lib/agenda/fuso.ts`).
+   *
+   * ⚠️ NUNCA `new Date(ano, mes, dia, hora)`: isso é o fuso do NAVEGADOR. Para
+   * quem atende em São Paulo e abre a agenda com o computador em outro fuso, o
+   * compromisso nasceria horas fora do que a pessoa combinou com o cliente.
+   */
+  const usarHoraDoEncaixe = () => {
+    if (!dia || !fuso || !partesDaHora) return;
+    const instante = instanteDe(
+      {
+        ano: dia.getFullYear(),
+        mes: dia.getMonth() + 1,
+        dia: dia.getDate(),
+        hora: Number(partesDaHora[1]),
+        minuto: Number(partesDaHora[2]),
+      },
+      fuso,
+    ).toISOString();
+    setHorario({ instante, rotulo: `${partesDaHora[1]}:${partesDaHora[2]}` });
+  };
 
   if (tempo === "marcado" && marcado) {
     return (
@@ -281,7 +344,17 @@ export function PainelDeMarcacao({
             </p>
           )}
           <div className="mt-5 flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setMarcado(null); setHorario(null); setDia(null); }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setMarcado(null);
+                setHorario(null);
+                setDia(null);
+                setEncaixeAberto(false);
+                setHoraDoEncaixe("");
+              }}
+            >
               {t("Marcar outro")}
             </Button>
             {/*
@@ -530,7 +603,13 @@ export function PainelDeMarcacao({
             // Dia sem horário nasce apagado E não clicável. Oferecer o clique e
             // depois dizer "não tem nada" gasta uma interação para entregar a
             // mesma informação que a cor já dava.
+            //
+            // A exceção é o ENCAIXE: ali o clique entrega outra coisa — o campo
+            // de hora —, e o dia sem grade fica clicável mas SEM a cor de vaga.
+            // `data-disponivel` segue dizendo "tem horário publicado".
             const disponivel = livres.length > 0 && isSameMonth(d, mes);
+            const clicavel = diaClicavel(d);
+            const soEncaixe = clicavel && !disponivel;
             const escolhido = dia !== null && isSameDay(d, dia);
             return (
               <button
@@ -538,7 +617,8 @@ export function PainelDeMarcacao({
                 type="button"
                 data-testid={`dia-${chave}`}
                 data-disponivel={disponivel}
-                disabled={!disponivel}
+                data-encaixe={soEncaixe || undefined}
+                disabled={!clicavel}
                 // O DIA DIZ POR QUÊ. O rótulo era `— sem horário` para tudo:
                 // dia de outro mês, dia sem vaga e dia com a consulta quebrada
                 // liam igual, e quem usa leitor de tela recebia a constatação da
@@ -548,17 +628,20 @@ export function PainelDeMarcacao({
                 aria-label={
                   disponivel
                     ? `${format(d, t("d 'de' MMMM"), { locale: localeDaData })} — ${livres.length} ${t("horários")}`
-                    : `${format(d, t("d 'de' MMMM"), { locale: localeDaData })} — ${razaoDoDia(isSameMonth(d, mes))}`
+                    : soEncaixe
+                      ? `${format(d, t("d 'de' MMMM"), { locale: localeDaData })} — ${t("nenhum horário publicado neste dia")}`
+                      : `${format(d, t("d 'de' MMMM"), { locale: localeDaData })} — ${razaoDoDia(isSameMonth(d, mes))}`
                 }
-                title={disponivel ? undefined : razaoDoDia(isSameMonth(d, mes))}
+                title={clicavel ? undefined : razaoDoDia(isSameMonth(d, mes))}
                 onClick={() => { setDia(d); setHorario(null); }}
                 className={cn(
                   "flex h-9 items-center justify-center rounded-sm text-sm tabular-nums transition-colors duration-fast ease-out",
                   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
                   !isSameMonth(d, mes) && "text-text-subtle",
                   disponivel && !escolhido && "bg-accent-soft text-text hover:bg-accent hover:text-accent-foreground",
+                  soEncaixe && !escolhido && "text-text hover:bg-accent-soft",
                   escolhido && "bg-accent font-semibold text-accent-foreground",
-                  !disponivel && "cursor-default text-text-subtle",
+                  !clicavel && "cursor-default text-text-subtle",
                   isSameDay(d, agora) && !escolhido && "ring-1 ring-inset ring-border-strong",
                 )}
               >
@@ -576,6 +659,21 @@ export function PainelDeMarcacao({
                 {format(new Date(horario.instante), t("EEEE, d 'de' MMMM 'às' HH:mm"), { locale: localeDaData })}
               </span>
             </p>
+
+            {recusa?.instante === horario.instante && (
+              // A RECUSA FICA AQUI, ao lado do botão que a produziu. O toast do
+              // `showApiError` também a diz, mas some em segundos e mora no canto
+              // da tela — e quem marcou por cima de um compromisso precisa ler o
+              // motivo enquanto corrige a hora.
+              <div
+                data-testid="recusa-da-marcacao"
+                role="alert"
+                className="mt-3 flex gap-2 rounded-sm border border-warning/40 bg-warning-bg p-2.5"
+              >
+                <Warning size={16} weight="fill" className="mt-0.5 shrink-0 text-warning" aria-hidden />
+                <p className="text-xs leading-4 text-text">{recusa.mensagem}</p>
+              </div>
+            )}
 
             {quemSeraAtendido && !quemSeraAtendido.aceitaMensagem && (
               // Aviso, não bloqueio: o botão de confirmar continua ativo logo
@@ -614,10 +712,20 @@ export function PainelDeMarcacao({
                   // horário ainda escolhido para tentar de novo.
                   try {
                     await onConfirmar?.(horario.instante);
+                    setRecusa(null);
                     setMarcado(horario);
-                  } catch {
-                    // silêncio proposital: quem reporta é o `showApiError` da
-                    // mutação, e engolir aqui não esconde nada que não seja dito.
+                  } catch (err) {
+                    // A mensagem da ROTA só quando ela é uma recusa com motivo
+                    // (4xx). Rede e 5xx chegam como "HTTP 500", que não é frase
+                    // para a tela — e inventar um motivo seria pior que admitir
+                    // que não marcou.
+                    setRecusa({
+                      instante: horario.instante,
+                      mensagem:
+                        err instanceof ApiError && err.status >= 400 && err.status < 500
+                          ? err.message
+                          : t("Não foi marcado. Tente de novo."),
+                    });
                   }
                 }}
               >
@@ -711,6 +819,67 @@ export function PainelDeMarcacao({
               </button>
             ))}
           </div>
+
+          {encaixeLigado && dia && (
+            <div data-testid="encaixe" className="mt-2 shrink-0">
+              {doDia.length === 0 && (
+                <p className="mb-2 text-xs text-text-muted">{t("Nenhum horário publicado neste dia.")}</p>
+              )}
+              {/*
+                Recolhido quando o dia TEM horários — a grade continua sendo o
+                caminho de todo dia, e o encaixe, a exceção. Aberto direto quando
+                não tem: ali ele é a única coisa que o clique no dia podia querer.
+              */}
+              {!encaixeAberto && doDia.length > 0 ? (
+                <button
+                  type="button"
+                  data-testid="abrir-encaixe"
+                  onClick={() => setEncaixeAberto(true)}
+                  className={cn(
+                    "h-11 w-full rounded-sm border border-dashed border-border text-sm text-text-muted transition-colors duration-fast ease-out lg:h-9",
+                    "hover:border-accent hover:text-text",
+                    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
+                  )}
+                >
+                  {t("Outro horário")}
+                </button>
+              ) : (
+                <div className="space-y-1.5">
+                  <label htmlFor="hora-do-encaixe" className="block text-xs font-medium text-text-muted">
+                    {t("Outro horário")}
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="hora-do-encaixe"
+                      data-testid="hora-do-encaixe"
+                      type="time"
+                      step={60}
+                      value={horaDoEncaixe}
+                      onChange={(e) => setHoraDoEncaixe(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") usarHoraDoEncaixe();
+                      }}
+                      aria-describedby="ajuda-do-encaixe"
+                      className="h-11 min-w-0 flex-1 px-2 tabular-nums lg:h-9"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      data-testid="usar-hora-do-encaixe"
+                      disabled={!partesDaHora}
+                      onClick={usarHoraDoEncaixe}
+                      className="lg:h-9"
+                    >
+                      {t("Usar")}
+                    </Button>
+                  </div>
+                  <p id="ajuda-do-encaixe" className="text-[11px] leading-4 text-text-subtle">
+                    {t("Vale fora dos horários publicados. A agenda só recusa se o horário já estiver ocupado.")}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
