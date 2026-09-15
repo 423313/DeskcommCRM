@@ -24972,16 +24972,22 @@ notify pgrst, 'reload schema';
 -- Derivado de supabase/migrations/20260915180000_0262_cliente_pela_agenda.sql (a
 -- partir da seção 1; o porquê inteiro está no cabeçalho de lá). Contribuição de
 -- @423313 (PR #867), com os ajustes da decisão do dono: regra desligada por
--- organização, cancelado/falta não contam, remoção manual respeitada, automação
--- vê a etiqueta.
+-- organização, cancelado/falta não contam, a etiqueta tem dono (o sistema só
+-- tira a que pôs e só repõe a que tirou), e contact.tag_added sai uma vez por
+-- contato. A seção 7 redefine `fn_mesclar_contatos` para pegar a trava da
+-- organização antes dos contatos.
 --
 -- Idempotente e auto-curativo: add column/create index if not exists, create or
--- replace function, drop trigger if exists. NENHUM backfill: o update.sh de quem
--- já roda não muda nenhum contato — o histórico só é classificado quando um
--- administrador liga a regra (fn_definir_cliente_pela_agenda).
+-- replace function, drop trigger if exists. NENHUM backfill de classificação: o
+-- update.sh de quem já roda não etiqueta nenhum contato — o histórico só é
+-- classificado quando um administrador liga a regra
+-- (fn_definir_cliente_pela_agenda). O único UPDATE de dados (seção 1) carimba
+-- `client_recognized_at` em quem tem `first_service_at` sem carimbo; numa
+-- instalação que nunca teve a coluna, casa zero linhas.
 --
 -- Nenhum dado a deduplicar antes do índice único novo: nenhuma linha nasce com
--- is_client_pipeline = true.
+-- is_client_pipeline = true. Nem antes do CHECK de client_tag_by_system: a
+-- coluna nasce junto com ele, toda null.
 --
 -- ⚠️ ANTES do bloco da VARREDURA anon, que é de propósito o último do arquivo.
 --
@@ -24992,11 +24998,40 @@ alter table public.contacts
   add column if not exists first_service_at timestamptz;
 
 comment on column public.contacts.first_service_at is
-  'Início do primeiro agendamento que CONTA (fn_situacao_conta_como_atendimento). '
-  'Mantida por trg_agendamento_marca_cliente/trg_agendamento_recalcula_cliente só '
-  'enquanto organizations.settings.crm.cliente_pela_agenda = true; desligada, fica '
-  'congelada e nenhuma tela a lê. Recalculada: cancelar ou marcar falta no único '
-  'horário que conta a devolve a null. Preservada na anonimização.';
+  'Quando a relação começou: o mais cedo entre marcar e o início do horário, entre os agendamentos que '
+  'CONTAM (fn_situacao_conta_como_atendimento) — min(least(created_at, starts_at)). Histórico importado '
+  'fica com a data passada; um horário marcado hoje para o mês que vem fica com hoje, nunca com data futura. '
+  'Mantida pelos triggers de calendar_appointments (inserir, alterar, apagar) só enquanto '
+  'organizations.settings.crm.cliente_pela_agenda = true; desligada, fica congelada e nenhuma tela a lê. '
+  'Cancelar, marcar falta ou apagar o único horário que conta a devolve a null. Preservada na anonimização.';
+
+alter table public.contacts
+  add column if not exists client_recognized_at timestamptz;
+
+comment on column public.contacts.client_recognized_at is
+  'A PRIMEIRA vez que a regra cliente pela agenda reconheceu o contato como cliente: marcando, ao ligar a '
+  'regra ou por junção de contatos. Nunca volta a null. É o que faz contact.tag_added sair uma vez por '
+  'contato: quem já foi reconhecido não dispara as automações de novo ao voltar a marcar.';
+
+alter table public.contacts
+  add column if not exists client_tag_by_system text
+    constraint contacts_client_tag_by_system_check
+    check (client_tag_by_system in ('added', 'removed'));
+
+comment on column public.contacts.client_tag_by_system is
+  'De quem é a etiqueta cliente. added = o sistema pôs; removed = o sistema tirou a que ele mesmo pôs; '
+  'null = o sistema nunca mexeu, ou a equipe assumiu (tirou a do sistema, ou pôs uma à mão). O sistema só '
+  'tira a etiqueta que é dele e só repõe a que ele mesmo tirou. O que a equipe fez é lido na próxima '
+  'escrita de fn_recalcular_cliente_do_contato. Vocabulário só do banco: nenhum TypeScript lê ou grava.';
+
+-- Auto-cura de banco que aplicou uma versão anterior desta migration: contato
+-- com data e sem carimbo seria tratado como "nunca reconhecido" e dispararia a
+-- automação ao voltar a marcar. Em instalação que nunca teve a coluna, zero
+-- linhas — `first_service_at` nasce null em todo contato.
+update public.contacts
+   set client_recognized_at = now()
+ where first_service_at is not null
+   and client_recognized_at is null;
 
 create index if not exists contacts_clientes_idx
   on public.contacts (organization_id, first_service_at desc)
@@ -25044,8 +25079,10 @@ revoke execute on function public.fn_situacao_conta_como_atendimento(text) from 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 4 · o recálculo de UM contato — a única régua de transição
 -- ────────────────────────────────────────────────────────────────────────────
--- Usado pelo trigger (com evento) e pela ligação da regra (sem evento). Devolve
--- o que aconteceu, para quem liga poder contar.
+-- Usado pelos triggers e pela ligação da regra. Devolve o que aconteceu, para
+-- quem liga poder contar. `p_emitir` diz se ESTA escrita pode ser a virada que
+-- as automações veem: o INSERT e a alteração de um horário podem; a ligação da
+-- regra, o repontamento de uma junção e o horário apagado não.
 create or replace function public.fn_recalcular_cliente_do_contato(p_org uuid, p_contact uuid, p_emitir boolean)
 returns text
 language plpgsql
@@ -25056,31 +25093,41 @@ declare
   c_etiqueta constant text := 'cliente';
   v_antes timestamptz;
   v_tags text[];
+  v_reconhecido timestamptz;
+  v_dono text;
   v_depois timestamptz;
+  v_tem boolean;
   v_novas text[];
-  v_tinha boolean;
+  v_resultado text;
 begin
   -- TRAVA O CONTATO ANTES DE LER A AGENDA. Na ordem inversa, duas marcações
   -- simultâneas do mesmo contato gravam um min() velho por cima do certo: em
   -- READ COMMITTED o min() lido DEPOIS da trava enxerga a marcação concorrente
   -- que já commitou.
   --
+  -- `for no key update`, e não `for update`: é a trava que o UPDATE abaixo toma
+  -- de qualquer jeito, e ela não conflita com o `for key share` que a FK de toda
+  -- tabela que aponta para `contacts` toma num INSERT. Medido com `for update`:
+  -- a ligação da regra (trava da organização, depois o contato) e um INSERT de
+  -- agendamento (a FK trava o contato, depois o trigger espera a trava da
+  -- organização) fechavam `deadlock detected`.
+  --
   -- Anonimizado e mesclado não recebem escrita derivada nova: sem esta guarda
   -- um agendamento posterior faria "Cliente Anonimizado #N" reaparecer
   -- etiquetado.
-  select c.first_service_at, coalesce(c.tags, '{}'::text[])
-    into v_antes, v_tags
+  select c.first_service_at, coalesce(c.tags, '{}'::text[]), c.client_recognized_at, c.client_tag_by_system
+    into v_antes, v_tags, v_reconhecido, v_dono
     from public.contacts c
    where c.organization_id = p_org
      and c.id = p_contact
      and c.is_anonymized = false
      and c.is_merged_into is null
-   for update;
+   for no key update;
   if not found then
     return 'ignorado';
   end if;
 
-  select min(a.starts_at) into v_depois
+  select min(least(a.created_at, a.starts_at)) into v_depois
     from public.calendar_appointments a
    where a.organization_id = p_org
      and a.contact_id = p_contact
@@ -25092,60 +25139,77 @@ begin
     return 'igual';
   end if;
 
-  v_tinha := c_etiqueta = any(v_tags);
-  -- A etiqueta só se mexe NA VIRADA. Entre as viradas o sistema não a toca, e
-  -- é isso que respeita quem a tirou à mão: quem já é cliente e perdeu a
-  -- etiqueta não passa por virada nenhuma ao marcar outra hora.
-  --
+  v_tem := c_etiqueta = any(v_tags);
+
+  -- O QUE A EQUIPE FEZ desde a última escrita do sistema: a etiqueta que ele
+  -- pôs sumiu, ou a que ele tirou reapareceu. Nos dois casos a etiqueta passa a
+  -- ser da equipe, e o sistema não a toca mais.
+  if (v_dono = 'added' and not v_tem) or (v_dono = 'removed' and v_tem) then
+    v_dono := null;
+  end if;
+
   -- `array_append`/`array_remove` e não `||`: sem cast, o `||` lê o literal
   -- como ARRAY e morre em `malformed array literal` (medido pelo autor no CI).
-  v_novas := case
-    when v_antes is null and not v_tinha then array_append(v_tags, c_etiqueta)
-    when v_depois is null then array_remove(v_tags, c_etiqueta)
-    else v_tags
-  end;
+  v_novas := v_tags;
+  if v_antes is null then
+    -- Virou cliente. A etiqueta entra se nunca foi reconhecido (a primeira vez)
+    -- ou se foi o sistema que a tirou. Se a equipe a tirou, fica fora.
+    if not v_tem and (v_reconhecido is null or v_dono = 'removed') then
+      v_novas := array_append(v_tags, c_etiqueta);
+      v_dono := 'added';
+      v_resultado := 'etiquetado';
+    else
+      v_resultado := 'virou_cliente';
+    end if;
+  elsif v_depois is null then
+    -- Deixou de ser cliente. Só sai a etiqueta que é do sistema.
+    if v_tem and v_dono = 'added' then
+      v_novas := array_remove(v_tags, c_etiqueta);
+      v_dono := 'removed';
+      v_resultado := 'desetiquetado';
+    else
+      v_resultado := 'deixou_de_ser_cliente';
+    end if;
+  else
+    v_resultado := 'mudou_a_data';
+  end if;
 
   update public.contacts
      set first_service_at = v_depois,
+         client_recognized_at = coalesce(v_reconhecido, case when v_depois is not null then now() end),
+         client_tag_by_system = v_dono,
          tags = v_novas,
          updated_at = now()
    where organization_id = p_org
      and id = p_contact;
 
-  if v_antes is null then
-    if v_tinha then
-      return 'virou_cliente';
-    end if;
-    if p_emitir then
-      -- O MESMO formato que o app emite (app/api/v1/contacts/_handler.ts e
-      -- lib/automation/actions/add-tag.ts): `added_tags` + `tags`.
-      --
-      -- SEM `service_origin`: `emit_event` o carimba sozinho para
-      -- contact.tag_added, e o recusaria (42501) vindo de sessão autenticada.
-      -- SEM `caused_by_rule`: a automação TEM de ver este evento.
-      -- Trigger nunca faz HTTP: a linha vai para event_log e o worker consome.
-      perform public.emit_event(
-        'contact.tag_added',
-        'contact',
-        p_contact,
-        jsonb_build_object('added_tags', jsonb_build_array(c_etiqueta), 'tags', to_jsonb(v_novas)),
-        jsonb_build_object('actor_type', 'system', 'actor_id', 'trg_agendamento_marca_cliente'),
-        p_org
-      );
-    end if;
-    return 'etiquetado';
+  -- UMA VEZ POR CONTATO: só quando a etiqueta entra na primeira vez que a regra
+  -- o reconhece.
+  if v_resultado = 'etiquetado' and v_reconhecido is null and p_emitir then
+    -- O MESMO formato que o app emite (app/api/v1/contacts/_handler.ts e
+    -- lib/automation/actions/add-tag.ts): `added_tags` + `tags`.
+    --
+    -- SEM `service_origin`: `emit_event` o carimba sozinho para
+    -- contact.tag_added, e o recusaria (42501) vindo de sessão autenticada.
+    -- SEM `caused_by_rule`: a automação TEM de ver este evento.
+    -- Trigger nunca faz HTTP: a linha vai para event_log e o worker consome.
+    perform public.emit_event(
+      'contact.tag_added',
+      'contact',
+      p_contact,
+      jsonb_build_object('added_tags', jsonb_build_array(c_etiqueta), 'tags', to_jsonb(v_novas)),
+      jsonb_build_object('actor_type', 'system', 'actor_id', 'trg_agendamento_marca_cliente'),
+      p_org
+    );
   end if;
 
-  if v_depois is null then
-    return case when v_tinha then 'desetiquetado' else 'deixou_de_ser_cliente' end;
-  end if;
-  return 'mudou_a_data';
+  return v_resultado;
 end $$;
 
 revoke execute on function public.fn_recalcular_cliente_do_contato(uuid, uuid, boolean) from public, anon, authenticated;
 
 -- ────────────────────────────────────────────────────────────────────────────
--- 5 · o trigger — condicional ao interruptor, em INSERT e UPDATE
+-- 5 · os triggers — condicionais ao interruptor, em INSERT, UPDATE e DELETE
 -- ────────────────────────────────────────────────────────────────────────────
 -- Os nomes são os do PR (`fn_marcar_contato_como_cliente`,
 -- `trg_agendamento_marca_cliente`); o corpo é outro.
@@ -25166,33 +25230,45 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
+  v_org uuid;
   v_ligado boolean;
 begin
+  if tg_op = 'DELETE' then
+    v_org := old.organization_id;
+  else
+    v_org := new.organization_id;
+  end if;
+
   -- Espera a ligação em voo commitar. O SELECT abaixo é outro comando, então
   -- em READ COMMITTED tira snapshot novo e enxerga a chave já gravada.
-  perform pg_advisory_xact_lock_shared(hashtextextended(new.organization_id::text, 262));
+  perform pg_advisory_xact_lock_shared(hashtextextended(v_org::text, 262));
 
   -- Comparar com 'true'::jsonb nunca lança erro. Um `::boolean` abortaria a
   -- marcação do horário se alguém gravasse lixo na chave.
   select (o.settings -> 'crm' -> 'cliente_pela_agenda') = 'true'::jsonb
     into v_ligado
     from public.organizations o
-   where o.id = new.organization_id;
+   where o.id = v_org;
 
   if v_ligado is not true then
     return null;
   end if;
 
-  if new.contact_id is not null then
-    perform public.fn_recalcular_cliente_do_contato(new.organization_id, new.contact_id, true);
-  end if;
-
-  -- O horário trocou de contato (mesclagem de contatos repõe `contact_id` por
-  -- UPDATE): quem perdeu o horário também é recalculado.
-  if tg_op = 'UPDATE'
-     and old.contact_id is not null
-     and old.contact_id is distinct from new.contact_id then
-    perform public.fn_recalcular_cliente_do_contato(old.organization_id, old.contact_id, true);
+  if tg_op = 'INSERT' then
+    perform public.fn_recalcular_cliente_do_contato(v_org, new.contact_id, true);
+  elsif tg_op = 'UPDATE' then
+    if new.contact_id is not null then
+      -- O horário TROCOU DE CONTATO: é o repontamento de `fn_mesclar_contatos`,
+      -- e a pessoa que ganhou o horário já era cliente no cadastro antigo. Não
+      -- é virada que as automações devam ver.
+      perform public.fn_recalcular_cliente_do_contato(
+        v_org, new.contact_id, old.contact_id is not distinct from new.contact_id);
+    end if;
+    if old.contact_id is not null and old.contact_id is distinct from new.contact_id then
+      perform public.fn_recalcular_cliente_do_contato(v_org, old.contact_id, false);
+    end if;
+  else
+    perform public.fn_recalcular_cliente_do_contato(v_org, old.contact_id, false);
   end if;
 
   return null;
@@ -25219,6 +25295,17 @@ create trigger trg_agendamento_recalcula_cliente
         or old.contact_id is distinct from new.contact_id)
   execute function public.fn_marcar_contato_como_cliente();
 
+-- Apagar o único horário que conta é o mesmo que cancelá-lo, para o contato.
+-- `contact_id` é `on delete restrict`, então este trigger nunca vê a cascata de
+-- um contato apagado; a de uma organização apagada chega aqui com a linha da
+-- organização já invisível, e o interruptor lê desligado.
+drop trigger if exists trg_agendamento_apagado_recalcula_cliente on public.calendar_appointments;
+create trigger trg_agendamento_apagado_recalcula_cliente
+  after delete on public.calendar_appointments
+  for each row
+  when (old.contact_id is not null)
+  execute function public.fn_marcar_contato_como_cliente();
+
 -- ────────────────────────────────────────────────────────────────────────────
 -- 6 · ligar e desligar — e classificar o histórico ao ligar
 -- ────────────────────────────────────────────────────────────────────────────
@@ -25240,9 +25327,13 @@ create trigger trg_agendamento_recalcula_cliente
 --
 -- DESLIGAR só grava `false`: nenhum contato muda, `first_service_at` fica
 -- congelada e nenhuma tela a lê. RELIGAR recalcula todos — quem virou cliente
--- enquanto estava desligada ganha a etiqueta, quem teve todos os horários
--- cancelados perde, e quem já tinha data não passa por virada (então a
--- etiqueta tirada à mão continua fora).
+-- enquanto estava desligada ganha a etiqueta (sem evento: ao religar ele já era
+-- cliente), quem ficou sem horário que conte perde a etiqueta que o sistema
+-- tinha posto, e quem já tinha data não passa por virada. A etiqueta da equipe,
+-- posta ou tirada à mão, não se mexe em nenhum dos três casos.
+--
+-- ⚠️ RELIGAR TIRA ETIQUETA, e a tela diz isso ANTES de confirmar
+-- (components/agenda/ClientePelaAgenda.tsx) — `perderam_etiqueta` existe por isso.
 create or replace function public.fn_definir_cliente_pela_agenda(p_org uuid, p_ligado boolean)
 returns jsonb
 language plpgsql
@@ -25332,6 +25423,316 @@ end $$;
 
 revoke execute on function public.fn_definir_cliente_pela_agenda(uuid, boolean) from public, anon;
 grant  execute on function public.fn_definir_cliente_pela_agenda(uuid, boolean) to authenticated;
+
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 7 · a junção de contatos pega a trava da organização primeiro
+-- ────────────────────────────────────────────────────────────────────────────
+-- Cópia de `fn_mesclar_contatos` como está em vigor (migration 0222, a última a
+-- redefini-la), com UMA mudança: a linha do `pg_advisory_xact_lock_shared` antes
+-- do mutex dos atendimentos. O porquê está no comentário ao lado dela.
+CREATE OR REPLACE FUNCTION public.fn_mesclar_contatos(p_organization_id uuid, p_contato_principal uuid, p_contatos_secundarios uuid[])
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_principal public.contacts%rowtype;
+  v_esperado integer;
+  v_achado integer;
+  v_alvo record;
+  v_linha record;
+  v_movidas integer;
+  v_pulados integer;
+  v_repontado jsonb := '{}'::jsonb;
+  v_nao_repontado jsonb := '{}'::jsonb;
+  v_nome text;
+  v_apelido text;
+  v_nascimento date;
+  v_email text;
+  v_telefone text;
+  v_lid text;
+  v_tags text[];
+  v_leads integer := 0;
+  v_service_contact uuid;
+begin
+  if not public.fn_support_write_allowed(p_organization_id) then raise exception 'support_readonly' using errcode='42501'; end if;
+  -- 1 · Autorização. Fundir é destrutivo na prática: `manager`, o mesmo piso das
+  --     policies de `merge_queue`. Sessão de service role (auth.uid() nulo) não
+  --     passa por aqui — quem resolve a org nesse caminho é a rota, de fonte
+  --     confiável, nunca do body.
+  if auth.uid() is not null
+     and not public.fn_role_at_least(p_organization_id, 'manager') then
+    raise exception using errcode = '42501', message = 'insufficient_role';
+  end if;
+
+  if p_contato_principal is null
+     or p_contatos_secundarios is null
+     or cardinality(p_contatos_secundarios) = 0
+     or p_contato_principal = any(p_contatos_secundarios) then
+    raise exception using errcode = '22023', message = 'selecao_de_mesclagem_invalida';
+  end if;
+
+  select count(distinct id)::integer into v_esperado
+    from unnest(p_contatos_secundarios) as ids(id);
+  if v_esperado <> cardinality(p_contatos_secundarios) then
+    raise exception using errcode = '22023', message = 'secundario_repetido';
+  end if;
+
+  -- A TRAVA DA REGRA "CLIENTES PELA AGENDA" (migration 0262), ANTES DE TODA
+  -- OUTRA. O passo 5 reponta `calendar_appointments.contact_id`, e o trigger
+  -- desse repontamento pede `pg_advisory_xact_lock_shared(org, 262)` — só que
+  -- a esta altura a fusão já segura os contatos (passos 2 e 3).
+  -- `fn_definir_cliente_pela_agenda` pega a mesma trava EXCLUSIVA e depois
+  -- trava contato por contato. Medido com duas sessões, sem esta linha: a fusão
+  -- morria em `deadlock detected` e a rota devolvia 500. Aqui a ordem fica a
+  -- mesma das duas funções — a organização primeiro, os contatos depois. Duas
+  -- fusões, ou uma fusão e uma marcação, pegam a versão compartilhada e não se
+  -- esperam.
+  perform pg_catalog.pg_advisory_xact_lock_shared(pg_catalog.hashtextextended(p_organization_id::text, 262));
+
+  -- Mesmo mutex dos atendimentos, ANTES de qualquer row lock.
+  for v_service_contact in select distinct id from unnest(array[p_contato_principal]||p_contatos_secundarios) ids(id) order by id loop
+    perform public.fn_service_lock(p_organization_id,v_service_contact);
+  end loop;
+  perform 1 from public.conversations where organization_id=p_organization_id
+    and contact_id=any(array[p_contato_principal]||p_contatos_secundarios) order by id for no key update;
+
+  -- Conversa colidente NÃO aborta a fusão. Duas conversas no mesmo
+  -- `channel_session_id` é exatamente COMO a duplicata de WhatsApp nasce (dois
+  -- cadastros, dois números, o mesmo número de atendimento), então recusar aqui
+  -- fecharia o caminho dominante do recurso — medido: o caso ordinário do
+  -- `tests/e2e/juntar-contatos-duplicados.spec.ts` virava 409.
+  -- Quem trata a colisão é o passo 5: `uniq_conversations_1to1_per_contact_session`
+  -- levanta unique_violation, o repontamento cai para linha a linha, a conversa
+  -- que não coube FICA na lápide e sai contada em `nao_repontado` — que a rota
+  -- devolve e a tela anuncia ("N registro(s) continuaram no cadastro antigo").
+  -- Mensagem não se perde: `messages.contact_id` não tem índice único por
+  -- contato e passa inteira para o vencedor.
+
+  -- 2 · O principal existe, é desta org, está vivo — e trava até o fim.
+  select * into v_principal from public.contacts
+   where id = p_contato_principal
+     and organization_id = p_organization_id
+     and is_merged_into is null
+     and is_anonymized = false
+   for update;
+  if not found then
+    raise exception using errcode = 'P0002', message = 'contato_principal_indisponivel';
+  end if;
+
+  -- 3 · Os secundários também. `is_anonymized = false` não é zelo: L-04 é
+  --     irreversível, e reencaixar a linha anonimizada num contato ativo a
+  --     traria de volta ao atendimento pela porta dos fundos.
+  perform 1 from public.contacts
+   where id = any(p_contatos_secundarios)
+     and organization_id = p_organization_id
+     and is_merged_into is null
+     and is_anonymized = false
+   for update;
+  get diagnostics v_achado = row_count;
+  if v_achado <> v_esperado then
+    raise exception using errcode = 'P0002', message = 'contato_secundario_indisponivel';
+  end if;
+
+  -- 4 · A LÁPIDE VEM ANTES de tudo. É ela que solta telefone/e-mail/CPF dos
+  --     índices únicos parciais para o vencedor poder herdá-los no passo 6.
+  update public.contacts
+     set is_merged_into = p_contato_principal,
+         merged_at = now(),
+         updated_at = now()
+   where organization_id = p_organization_id
+     and id = any(p_contatos_secundarios);
+
+  -- Cadeia: quem já tinha sido mesclado NUM dos secundários passa a apontar para
+  -- o vencedor. Sem isto, `is_merged_into` vira uma corrente que a leitura teria
+  -- de percorrer, e ninguém percorre.
+  update public.contacts
+     set is_merged_into = p_contato_principal
+   where organization_id = p_organization_id
+     and is_merged_into = any(p_contatos_secundarios);
+
+  -- 5 · Reponta TODO ponteiro para os perdedores. A lista sai do catálogo; o
+  --     polimórfico entra à mão porque catálogo nenhum o conhece.
+  for v_alvo in
+    select n.nspname as esquema, c.relname as tabela, a.attname as coluna, ''::text as filtro
+      from pg_catalog.pg_constraint co
+      join pg_catalog.pg_class c on c.oid = co.conrelid
+      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+      join pg_catalog.pg_attribute a on a.attrelid = co.conrelid and a.attnum = co.conkey[1]
+     where co.contype = 'f'
+       and co.confrelid = 'public.contacts'::regclass
+       and co.conrelid <> 'public.contacts'::regclass
+       and array_length(co.conkey, 1) = 1
+       and c.relkind = 'r'
+       and n.nspname = 'public'
+    union all
+    select 'public', 'crm_lead_links', 'target_id', ' and target_kind = ''contact'''
+     where to_regclass('public.crm_lead_links') is not null
+    order by 2, 3
+  loop
+    v_pulados := 0;
+    begin
+      execute format(
+        'update %I.%I set %I = $1 where %I = any($2)%s',
+        v_alvo.esquema, v_alvo.tabela, v_alvo.coluna, v_alvo.coluna, v_alvo.filtro
+      ) using p_contato_principal, p_contatos_secundarios;
+      get diagnostics v_movidas = row_count;
+    exception when unique_violation or exclusion_violation then
+      -- Colisão REAL e esperada: `uniq_job_queue_one_running_per_contact` deixa
+      -- um job 'running' por contato, e os dois lados podem ter um. Em vez de
+      -- abortar a fusão inteira por causa de estado efêmero de runtime, reponta
+      -- linha a linha e conta quem ficou. Quem fica NÃO vira FK órfã — continua
+      -- apontando para a lápide, que existe.
+      v_movidas := 0;
+      for v_linha in execute format(
+        'select ctid as tid from %I.%I where %I = any($1)%s',
+        v_alvo.esquema, v_alvo.tabela, v_alvo.coluna, v_alvo.filtro
+      ) using p_contatos_secundarios
+      loop
+        begin
+          execute format(
+            'update %I.%I set %I = $1 where ctid = $2',
+            v_alvo.esquema, v_alvo.tabela, v_alvo.coluna
+          ) using p_contato_principal, v_linha.tid;
+          v_movidas := v_movidas + 1;
+        exception when unique_violation or exclusion_violation then
+          v_pulados := v_pulados + 1;
+        end;
+      end loop;
+    end;
+
+    if v_movidas > 0 then
+      v_repontado := v_repontado
+        || jsonb_build_object(v_alvo.tabela || '.' || v_alvo.coluna, v_movidas);
+    end if;
+    if v_pulados > 0 then
+      v_nao_repontado := v_nao_repontado
+        || jsonb_build_object(v_alvo.tabela || '.' || v_alvo.coluna, v_pulados);
+    end if;
+  end loop;
+
+  -- 6 · O principal MANDA; o que ele não tem, vem dos perdedores. Nunca o
+  --     contrário: sobrescrever o que o atendente digitou seria fusão com
+  --     surpresa, e fusão não tem desfazer.
+  select c.name into v_nome from public.contacts c
+   where c.id = any(p_contatos_secundarios) and c.name is not null
+   order by c.created_at, c.id limit 1;
+  select c.display_name into v_apelido from public.contacts c
+   where c.id = any(p_contatos_secundarios) and c.display_name is not null
+   order by c.created_at, c.id limit 1;
+  select c.birthdate into v_nascimento from public.contacts c
+   where c.id = any(p_contatos_secundarios) and c.birthdate is not null
+   order by c.created_at, c.id limit 1;
+  select c.email into v_email from public.contacts c
+   where c.id = any(p_contatos_secundarios) and c.email is not null
+   order by c.created_at, c.id limit 1;
+  select c.phone_number into v_telefone from public.contacts c
+   where c.id = any(p_contatos_secundarios) and c.phone_number is not null
+   order by c.created_at, c.id limit 1;
+  -- `wa_identity`/`wa_lid` são GERADAS: o que se herda é a origem delas. Sem
+  -- isto o WhatsApp do perdedor fica órfão — `fn_upsert_wa_contact` filtra
+  -- `is_merged_into is null`, não acharia mais ninguém e criaria um contato
+  -- novo na mensagem seguinte, refazendo a duplicata que acabou de ser desfeita.
+  select c.source_metadata->>'waha_lid' into v_lid from public.contacts c
+   where c.id = any(p_contatos_secundarios)
+     and c.source_metadata->>'waha_lid' is not null
+   order by c.created_at, c.id limit 1;
+
+  -- Guardas de unicidade. A lápide já tirou os perdedores dos índices parciais,
+  -- então o que sobrar aqui é conflito com um TERCEIRO contato vivo — e nesse
+  -- caso o vencedor simplesmente não herda o campo. Falhar a fusão inteira por
+  -- causa de um e-mail seria perder o repontamento que já valeu a pena.
+  if v_email is not null and exists (
+    select 1 from public.contacts o
+     where o.organization_id = p_organization_id and o.is_merged_into is null
+       and o.id <> p_contato_principal and o.email_normalized = lower(btrim(v_email))
+  ) then v_email := null; end if;
+  if v_telefone is not null and exists (
+    select 1 from public.contacts o
+     where o.organization_id = p_organization_id and o.is_merged_into is null
+       and o.id <> p_contato_principal and o.phone_number = v_telefone
+  ) then v_telefone := null; end if;
+  if v_lid is not null and exists (
+    select 1 from public.contacts o
+     where o.organization_id = p_organization_id and o.is_merged_into is null
+       and o.id <> p_contato_principal and o.wa_lid = v_lid
+  ) then v_lid := null; end if;
+
+  select coalesce(array_agg(distinct t), '{}'::text[]) into v_tags
+    from (
+      select unnest(c.tags) as t from public.contacts c
+       where c.organization_id = p_organization_id
+         and (c.id = p_contato_principal or c.id = any(p_contatos_secundarios))
+    ) as todas;
+
+  -- CPF e `consent` NÃO são herdados, de propósito. CPF é um PAR
+  -- (`cpf_encrypted` + `cpf_hash`) preso por check constraint e criptografado
+  -- com a chave da instalação — mover metade quebra a linha. `consent` é
+  -- registro legal do que AQUELA pessoa autorizou; herdar um "granted_at" de
+  -- outro cadastro fabricaria consentimento. Falha fechada nos dois.
+  update public.contacts set
+    name = coalesce(name, v_nome),
+    display_name = coalesce(display_name, v_apelido),
+    birthdate = coalesce(birthdate, v_nascimento),
+    email = coalesce(email, v_email),
+    phone_number = coalesce(phone_number, v_telefone),
+    tags = v_tags,
+    last_activity_at = greatest(
+      last_activity_at,
+      (select max(c.last_activity_at) from public.contacts c
+        where c.id = any(p_contatos_secundarios))
+    ),
+    source_metadata = (
+      case when source_metadata->>'waha_lid' is null and v_lid is not null
+        then source_metadata || jsonb_build_object('waha_lid', v_lid)
+        else source_metadata end
+    )
+      - case when coalesce(phone_number, v_telefone) is not null
+             then 'telefone_em_conflito' else '' end
+      || jsonb_build_object(
+           'mesclado_de',
+           coalesce(source_metadata->'mesclado_de', '[]'::jsonb)
+             || to_jsonb(p_contatos_secundarios),
+           'mesclado_em', to_jsonb(now())
+         ),
+    updated_at = now()
+  where id = p_contato_principal and organization_id = p_organization_id;
+
+  -- 7 · A fusão aparece na timeline de cada negócio que o vencedor passou a ter.
+  --     `crm_lead_activities.lead_id` é NOT NULL — contato sem negócio nenhum
+  --     não tem onde escrever, e para esse caso quem guarda o rastro é o
+  --     `api_audit_log` que a rota emite, sempre.
+  insert into public.crm_lead_activities
+    (organization_id, lead_id, contact_id, source_module, source_id, type,
+     payload, metadata, performed_at, performed_by_user_id)
+  select p_organization_id, l.id, p_contato_principal, 'crm', p_contato_principal,
+         'contacts_merged',
+         jsonb_build_object(
+           'contatos_mesclados', to_jsonb(p_contatos_secundarios),
+           'repontado', v_repontado,
+           'nao_repontado', v_nao_repontado
+         ),
+         '{}'::jsonb, now(), auth.uid()
+    from public.crm_leads l
+   where l.organization_id = p_organization_id
+     and l.contact_id = p_contato_principal;
+  get diagnostics v_leads = row_count;
+
+  return jsonb_build_object(
+    'contato_id', p_contato_principal,
+    'contatos_mesclados', to_jsonb(p_contatos_secundarios),
+    'repontado', v_repontado,
+    'nao_repontado', v_nao_repontado,
+    'atividades_emitidas', v_leads
+  );
+end;
+$function$;
+
+
+revoke execute on function public.fn_mesclar_contatos(uuid, uuid, uuid[]) from public, anon;
+grant execute on function public.fn_mesclar_contatos(uuid, uuid, uuid[]) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
 

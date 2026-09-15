@@ -28,19 +28,27 @@ import { pgComoSupabase } from "../pg-como-supabase";
  *   I2             ligada: data + etiqueta + contact.tag_added no formato do app,
  *                  que uma condição de automação reconhece
  *   I3, I4         data só se move quando o mínimo muda; sem contato, nada
+ *   I3b            horário futuro: "Cliente desde" é o dia em que se combinou,
+ *                  nunca uma data que ainda não chegou
  *   I5–I9          cancelado e falta não contam — nem na inserção, nem depois
- *   I10            a etiqueta tirada à mão não volta (marcando ou religando)
+ *   I7b            apagar o horário é o mesmo que cancelá-lo
+ *   I10, I10b      a etiqueta tirada à mão não volta (marcando ou religando)
+ *   I10c           a etiqueta posta à mão ANTES sobrevive ao cancelamento
  *   I11, I12       LGPD e tenancy
  *   I14–I16        ligar classifica SÓ a organização que liga, sem evento;
  *                  religar recalcula; desligar não mexe em ninguém
  *   I17–I21        quem pode ligar: admin da própria organização, com MFA
  *                  comprovado e fora de suporte somente leitura
  *   I22–I26        o funil de clientes (do PR) só vale com a regra ligada
- *   I27, I28       as duas corridas que as travas existem para impedir
+ *   I29–I31        o evento sai UMA vez por contato: cancelar e marcar de novo
+ *                  não reemite, e a junção de contatos nunca emite
+ *   I27, I28,      as corridas que a ordem das travas existe para impedir —
+ *   I32, I33       marcação × marcação, ligação × marcação, ligação × junção
  *
  * ORGANIZAÇÕES SEPARADAS POR PAPEL NO TESTE, para que um caso não verdeie outro
  * por estado compartilhado: A ligada no beforeAll, B sempre desligada, C é o
- * ciclo liga/desliga/religa, D é o alvo das negações, E é a de MFA.
+ * ciclo liga/desliga/religa, D é o alvo das negações, E é a de MFA; F, G e H
+ * são uma por corrida com a ligação.
  */
 const container = process.env.TEST_DB_CONTAINER;
 if (!container) {
@@ -61,6 +69,10 @@ const ORG_D = "c11e0000-0000-4000-8000-000000000004";
 const ORG_E = "c11e0000-0000-4000-8000-000000000005";
 /** Só para a corrida entre ligar a regra e marcar um horário (I28). */
 const ORG_F = "c11e0000-0000-4000-8000-000000000006";
+/** Só para a corrida entre ligar a regra e juntar contatos (I32). */
+const ORG_G = "c11e0000-0000-4000-8000-000000000007";
+/** Só para a corrida entre ligar a regra e um INSERT que já travou o contato pela FK (I33). */
+const ORG_H = "c11e0000-0000-4000-8000-000000000008";
 
 const ADMIN_A = "c11e1111-0000-4000-8000-000000000001";
 const AGENT_A = "c11e1111-0000-4000-8000-000000000002";
@@ -74,6 +86,10 @@ const ADMIN_E = "c11e1111-0000-4000-8000-000000000009";
 /** Operador de plataforma que é TAMBÉM admin da D: isola a guarda de suporte da de papel. */
 const SUPORTE_D = "c11e1111-0000-4000-8000-00000000000a";
 const ADMIN_F = "c11e1111-0000-4000-8000-00000000000b";
+const MANAGER_A = "c11e1111-0000-4000-8000-00000000000c";
+const ADMIN_G = "c11e1111-0000-4000-8000-00000000000d";
+const MANAGER_G = "c11e1111-0000-4000-8000-00000000000e";
+const ADMIN_H = "c11e1111-0000-4000-8000-00000000000f";
 
 const CONVERSA = "c11e0000-0000-4000-8000-00000000c001";
 
@@ -174,6 +190,16 @@ async function cancelar(agendamento: string): Promise<void> {
   );
 }
 
+async function tirarEtiquetaAMao(contato: string): Promise<void> {
+  await pool.query("update contacts set tags = array_remove(tags, $2) where id = $1", [contato, TAG_DE_CLIENTE]);
+}
+
+const JUNTAR = "select fn_mesclar_contatos($1, $2, $3::uuid[]) as r";
+
+interface Juncao {
+  repontado: Record<string, number>;
+}
+
 interface Linha {
   first_service_at: Date | null;
   tags: string[];
@@ -220,6 +246,7 @@ async function crmDe(org: string): Promise<unknown> {
 beforeAll(async () => {
   const usuarios = [
     ADMIN_A, AGENT_A, ADMIN_B, ADMIN_C, ADMIN_D, MANAGER_D, AGENT_D, VIEWER_D, ADMIN_E, SUPORTE_D, ADMIN_F,
+    MANAGER_A, ADMIN_G, MANAGER_G, ADMIN_H,
   ];
   for (const u of usuarios) {
     await pool.query("insert into auth.users (id, email) values ($1, $2) on conflict (id) do nothing", [
@@ -234,6 +261,8 @@ beforeAll(async () => {
     [ORG_D, "cliente-agenda-d"],
     [ORG_E, "cliente-agenda-e"],
     [ORG_F, "cliente-agenda-f"],
+    [ORG_G, "cliente-agenda-g"],
+    [ORG_H, "cliente-agenda-h"],
   ] as const) {
     await pool.query(
       `insert into organizations (id, slug, legal_name, display_name)
@@ -253,6 +282,10 @@ beforeAll(async () => {
     [ADMIN_E, ORG_E, "admin"],
     [SUPORTE_D, ORG_D, "admin"],
     [ADMIN_F, ORG_F, "admin"],
+    [MANAGER_A, ORG_A, "manager"],
+    [ADMIN_G, ORG_G, "admin"],
+    [MANAGER_G, ORG_G, "manager"],
+    [ADMIN_H, ORG_H, "admin"],
   ] as const) {
     await pool.query(
       `insert into user_organizations (user_id, organization_id, role, accepted_at)
@@ -344,14 +377,16 @@ describe("ligada — a transição", () => {
   });
 
   it("I3 · marcação posterior não move nada nem emite; anterior move a data para trás sem emitir", async () => {
+    // Datas PASSADAS de propósito: com horário passado, `least(created_at,
+    // starts_at)` é o início do horário, e é ele que este caso mede.
     const contato = await criarContato(ORG_A, "Marta");
-    await marcar(ORG_A, contato, "2026-03-12T14:00:00Z");
+    await marcar(ORG_A, contato, "2025-03-12T14:00:00Z");
     const primeiro = await lerContato(contato);
     const eventos = await eventosDeEtiqueta({ contato });
 
-    await marcar(ORG_A, contato, "2026-09-01T10:00:00Z");
+    await marcar(ORG_A, contato, "2025-09-01T10:00:00Z");
     const segundo = await lerContato(contato);
-    expect(segundo.first_service_at?.toISOString()).toBe("2026-03-12T14:00:00.000Z");
+    expect(segundo.first_service_at?.toISOString()).toBe("2025-03-12T14:00:00.000Z");
     expect(segundo.updated_at.toISOString()).toBe(primeiro.updated_at.toISOString());
     expect(segundo.tags.filter((t) => t === TAG_DE_CLIENTE)).toHaveLength(1);
 
@@ -360,6 +395,26 @@ describe("ligada — a transição", () => {
     expect(terceiro.first_service_at?.toISOString()).toBe("2021-01-05T09:00:00.000Z");
     expect(terceiro.tags.filter((t) => t === TAG_DE_CLIENTE)).toHaveLength(1);
     expect(await eventosDeEtiqueta({ contato })).toBe(eventos);
+  });
+
+  it("I3b · horário marcado para o mês que vem: 'Cliente desde' é o dia em que se combinou, não o do horário", async () => {
+    // A evidência da rodada anterior mostrava "Cliente desde 21/09/2026" numa
+    // ficha capturada em 15/09: `min(starts_at)` punha na ficha uma data que
+    // ainda não tinha chegado. A relação começa quando se combina a hora.
+    const contato = await criarContato(ORG_A, "Marcou para o futuro");
+    const { rows } = await pool.query<{ criado: Date; inicio: Date }>(
+      `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id)
+       values ($1, 'Futuro', now() + interval '30 days', now() + interval '30 days 1 hour', $2)
+       returning created_at as criado, starts_at as inicio`,
+      [ORG_A, contato],
+    );
+    const { criado, inicio } = rows[0]!;
+    expect(inicio.getTime(), "controle: o horário é mesmo futuro").toBeGreaterThan(Date.now());
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at?.toISOString()).toBe(criado.toISOString());
+    expect(depois.first_service_at!.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(depois.tags).toContain(TAG_DE_CLIENTE);
   });
 
   it("I4 · agendamento sem contato não toca contato nenhum", async () => {
@@ -426,6 +481,30 @@ describe("cancelado e falta não contam", () => {
     expect(depois.first_service_at?.toISOString()).toBe("2026-08-01T10:00:00.000Z");
     expect(depois.tags.filter((t) => t === TAG_DE_CLIENTE)).toHaveLength(1);
   });
+
+  it("I7b · apagar horário pela sessão de um agent: o anterior move a data, o último tira a etiqueta, sem evento", async () => {
+    // A policy `calendar_appointments_write` deixa um agent apagar. Sem o
+    // trigger de DELETE o contato ficava cliente de um horário que não existe.
+    const contato = await criarContato(ORG_A, "Apagaram os horários");
+    const primeiro = await marcar(ORG_A, contato, "2025-04-01T10:00:00Z");
+    const segundo = await marcar(ORG_A, contato, "2025-05-01T10:00:00Z");
+    const eventos = await eventosDeEtiqueta({ contato });
+    expect(eventos, "controle: a primeira marcação emitiu").toBe(1);
+
+    const apagar = (id: string) =>
+      comoUsuario(AGENT_A, "delete from calendar_appointments where id = $1 and organization_id = $2", [id, ORG_A]);
+
+    expect((await apagar(primeiro)).rowCount, "a policy deixa o agent apagar").toBe(1);
+    const meio = await lerContato(contato);
+    expect(meio.first_service_at?.toISOString()).toBe("2025-05-01T10:00:00.000Z");
+    expect(meio.tags).toContain(TAG_DE_CLIENTE);
+
+    expect((await apagar(segundo)).rowCount).toBe(1);
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at).toBeNull();
+    expect(depois.tags).not.toContain(TAG_DE_CLIENTE);
+    expect(await eventosDeEtiqueta({ contato })).toBe(eventos);
+  });
 });
 
 describe("a etiqueta tirada à mão é respeitada", () => {
@@ -447,6 +526,89 @@ describe("a etiqueta tirada à mão é respeitada", () => {
     expect(depois.first_service_at?.toISOString()).toBe("2025-12-01T14:00:00.000Z");
     expect(depois.tags).not.toContain(TAG_DE_CLIENTE);
     expect(await eventosDeEtiqueta({ contato })).toBe(eventos);
+  });
+
+  it("I10c · etiqueta posta à mão ANTES de marcar: sobrevive ao cancelamento, e não emite", async () => {
+    // Medido na versão anterior: {cliente,vip} postos pela equipe viravam {vip}
+    // quando o único horário era cancelado. O sistema apagava o que nunca pôs.
+    const contato = await criarContato(ORG_A, "Cliente de antes da regra");
+    await pool.query("update contacts set tags = array['cliente','vip'] where id = $1", [contato]);
+
+    const ag = await marcar(ORG_A, contato, "2025-10-01T10:00:00Z");
+    const marcado = await lerContato(contato);
+    expect(marcado.first_service_at?.toISOString()).toBe("2025-10-01T10:00:00.000Z");
+    expect(marcado.tags).toEqual(["cliente", "vip"]);
+
+    await cancelar(ag);
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at).toBeNull();
+    expect(depois.tags).toEqual(["cliente", "vip"]);
+    expect(await eventosDeEtiqueta({ contato })).toBe(0);
+  });
+});
+
+describe("o evento sai UMA vez por contato", () => {
+  it("I29 · pedido pendente que expira e é refeito: a etiqueta volta, e o evento continua sendo um", async () => {
+    // O ciclo do pedido que ninguém confirma: vence, vira `cancelled`, e a
+    // pessoa pede de novo. A versão anterior emitia duas vezes — duas
+    // boas-vindas para a mesma pessoa.
+    const contato = await criarContato(ORG_A, "Pediu duas vezes");
+    const pedido = await marcar(ORG_A, contato, "2025-06-10T10:00:00Z", "pending");
+    expect((await lerContato(contato)).tags).toContain(TAG_DE_CLIENTE);
+    expect(await eventosDeEtiqueta({ contato }), "controle: a primeira virada emite").toBe(1);
+
+    await pool.query(
+      `update calendar_appointments
+          set status = 'cancelled', cancelled_at = now(), cancellation_reason = 'Pedido expirado'
+        where id = $1`,
+      [pedido],
+    );
+    const expirado = await lerContato(contato);
+    expect(expirado.first_service_at).toBeNull();
+    expect(expirado.tags, "a etiqueta que o sistema pôs sai").not.toContain(TAG_DE_CLIENTE);
+
+    await marcar(ORG_A, contato, "2025-06-20T10:00:00Z", "pending");
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at?.toISOString()).toBe("2025-06-20T10:00:00.000Z");
+    expect(depois.tags, "voltou a ser cliente: a etiqueta volta").toContain(TAG_DE_CLIENTE);
+    expect(await eventosDeEtiqueta({ contato }), "cancelar e marcar de novo = 1 evento no total").toBe(1);
+  });
+
+  it("I30 · a equipe tirou a etiqueta; o horário foi cancelado e refeito: a etiqueta não volta, e nada emite", async () => {
+    const contato = await criarContato(ORG_A, "Não quer etiqueta nunca");
+    const pedido = await marcar(ORG_A, contato, "2025-07-10T10:00:00Z", "pending");
+    expect(await eventosDeEtiqueta({ contato })).toBe(1);
+    await tirarEtiquetaAMao(contato);
+
+    await cancelar(pedido);
+    await marcar(ORG_A, contato, "2025-07-20T10:00:00Z");
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at?.toISOString()).toBe("2025-07-20T10:00:00.000Z");
+    expect(depois.tags).not.toContain(TAG_DE_CLIENTE);
+    expect(await eventosDeEtiqueta({ contato })).toBe(1);
+  });
+
+  it("I31 · juntar a duplicata nova com a cliente de 2023: a vencedora vira cliente, e ninguém ganha evento", async () => {
+    // Medido na versão anterior: `fn_mesclar_contatos` reponta o horário por
+    // UPDATE de contact_id, o trigger via a vencedora "virar cliente" e emitia —
+    // uma cliente de 2023 recebia a automação de boas-vindas.
+    const antiga = await criarContato(ORG_A, "Lúcia de 2023");
+    await marcar(ORG_A, antiga, "2023-05-01T10:00:00Z");
+    expect((await lerContato(antiga)).tags).toContain(TAG_DE_CLIENTE);
+    const nova = await criarContato(ORG_A, "Lúcia duplicada");
+    const eventosDaOrg = await eventosDeEtiqueta({ org: ORG_A });
+
+    const { rows } = await comoUsuario<{ r: Juncao }>(MANAGER_A, JUNTAR, [ORG_A, nova, [antiga]]);
+
+    expect(rows[0]!.r.repontado["calendar_appointments.contact_id"], "controle: o horário foi repontado").toBe(1);
+    const vencedora = await lerContato(nova);
+    expect(vencedora.first_service_at?.toISOString()).toBe("2023-05-01T10:00:00.000Z");
+    expect(vencedora.tags.filter((t) => t === TAG_DE_CLIENTE)).toHaveLength(1);
+    expect(await eventosDeEtiqueta({ contato: nova })).toBe(0);
+    expect(await eventosDeEtiqueta({ org: ORG_A })).toBe(eventosDaOrg);
   });
 });
 
@@ -823,10 +985,13 @@ describe("as corridas", () => {
     // roda a primeira já commitou e a ordem das leituras não importa — a
     // sabotagem "lê o min() antes da trava" passou verde nessa versão. Mover o
     // horário por UPDATE não passa por aquela espera, e a ordem volta a decidir.
+    //
+    // Datas PASSADAS: com horário futuro a data do contato é o `created_at` dos
+    // dois, e mover `starts_at` não mudaria nada — a corrida sumiria do desfecho.
     const contato = await criarContato(ORG_A, "Corrida de remarcação");
-    const cedo = await marcar(ORG_A, contato, "2027-01-01T15:00:00Z");
-    const tarde = await marcar(ORG_A, contato, "2027-01-01T16:00:00Z");
-    expect((await lerContato(contato)).first_service_at?.toISOString()).toBe("2027-01-01T15:00:00.000Z");
+    const cedo = await marcar(ORG_A, contato, "2025-01-01T15:00:00Z");
+    const tarde = await marcar(ORG_A, contato, "2025-01-01T16:00:00Z");
+    expect((await lerContato(contato)).first_service_at?.toISOString()).toBe("2025-01-01T15:00:00.000Z");
 
     const a = await pool.connect();
     const b = await pool.connect();
@@ -834,7 +999,7 @@ describe("as corridas", () => {
       await a.query("begin");
       // A primeira ADIANTA o horário das 16h para as 9h (e passa a travar o contato).
       await a.query(
-        "update calendar_appointments set starts_at = '2027-01-01T09:00:00Z', ends_at = '2027-01-01T10:00:00Z' where id = $1",
+        "update calendar_appointments set starts_at = '2025-01-01T09:00:00Z', ends_at = '2025-01-01T10:00:00Z' where id = $1",
         [tarde],
       );
       const pidA = (await a.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
@@ -845,7 +1010,7 @@ describe("as corridas", () => {
       // A segunda ATRASA o das 15h para as 17h.
       const segunda = b
         .query(
-          "update calendar_appointments set starts_at = '2027-01-01T17:00:00Z', ends_at = '2027-01-01T18:00:00Z' where id = $1",
+          "update calendar_appointments set starts_at = '2025-01-01T17:00:00Z', ends_at = '2025-01-01T18:00:00Z' where id = $1",
           [cedo],
         )
         .finally(() => {
@@ -864,7 +1029,7 @@ describe("as corridas", () => {
     }
 
     const depois = await lerContato(contato);
-    expect(depois.first_service_at?.toISOString()).toBe("2027-01-01T09:00:00.000Z");
+    expect(depois.first_service_at?.toISOString()).toBe("2025-01-01T09:00:00.000Z");
     expect(depois.tags.filter((t) => t === TAG_DE_CLIENTE)).toHaveLength(1);
   });
 
@@ -881,7 +1046,7 @@ describe("as corridas", () => {
       await a.query("begin");
       await a.query(
         `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id)
-         values ($1, 'Em voo', '2026-11-01T09:00:00Z', '2026-11-01T10:00:00Z', $2)`,
+         values ($1, 'Em voo', '2025-11-01T09:00:00Z', '2025-11-01T10:00:00Z', $2)`,
         [ORG_F, contato],
       );
       const pidA = (await a.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
@@ -909,8 +1074,131 @@ describe("as corridas", () => {
     }
 
     const depois = await lerContato(contato);
-    expect(depois.first_service_at?.toISOString()).toBe("2026-11-01T09:00:00.000Z");
+    expect(depois.first_service_at?.toISOString()).toBe("2025-11-01T09:00:00.000Z");
     expect(depois.tags).toContain(TAG_DE_CLIENTE);
     expect(resultado).toMatchObject({ ligado: true, mudou: true, ganharam_etiqueta: 1 });
+  });
+
+  /** Uma conexão como o usuário, com a transação ABERTA — quem chama commita. */
+  async function sessaoAberta(uid: string): Promise<{ conexao: pg.PoolClient; pid: number }> {
+    const conexao = await pool.connect();
+    await conexao.query("begin");
+    await conexao.query("set local role authenticated");
+    await conexao.query("select set_config('request.jwt.claims', $1, true)", [
+      JSON.stringify({ sub: uid, role: "authenticated", aal: "aal1" }),
+    ]);
+    const pid = (await conexao.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+    return { conexao, pid };
+  }
+
+  const TRAVA_DA_ORGANIZACAO = "select pg_advisory_xact_lock(hashtextextended($1::text, 262))";
+
+  /**
+   * A consulta que fica esperando, com o desfecho CAPTURADO na hora. Sem isto um
+   * `deadlock detected` na conexão que espera vira "unhandled rejection" do
+   * arquivo, e o vermelho não aparece no caso que o causou.
+   */
+  function emVoo<T>(consulta: Promise<T>): { desfecho: () => Promise<T>; terminou: () => boolean } {
+    let fim = false;
+    const capturado = consulta.then(
+      (valor) => ({ ok: true as const, valor }),
+      (erro: unknown) => ({ ok: false as const, erro }),
+    );
+    capturado.finally(() => {
+      fim = true;
+    });
+    return {
+      // Função, e não promessa pronta: o erro só é relançado quando o caso o
+      // aguarda — uma promessa rejeitada à espera também seria "unhandled".
+      desfecho: async () => {
+        const d = await capturado;
+        if (!d.ok) throw d.erro;
+        return d.valor;
+      },
+      terminou: () => fim,
+    };
+  }
+
+  it("I32 · ligar a regra enquanto uma junção de contatos está em voo: as duas terminam, e a vencedora vira cliente", async () => {
+    // Medido na versão anterior, com duas sessões: a junção travava os contatos
+    // e só então o trigger do repontamento pedia a trava da organização; a
+    // ligação, com a trava da organização, pedia o contato. `deadlock detected`,
+    // e a rota de junção devolvia 500. A ligação pega a trava da organização
+    // ANTES (como a própria RPC faz na 1ª instrução) para a junção chegar com
+    // ela tomada.
+    const antiga = await criarContato(ORG_G, "G antiga");
+    await marcar(ORG_G, antiga, "2023-03-01T10:00:00Z");
+    const nova = await criarContato(ORG_G, "G duplicada");
+
+    const r = await sessaoAberta(ADMIN_G);
+    const m = await sessaoAberta(MANAGER_G);
+    let resultado: Resultado | null = null;
+    let juncao: Juncao | null = null;
+    try {
+      await r.conexao.query(TRAVA_DA_ORGANIZACAO, [ORG_G]);
+      const juntando = emVoo(m.conexao.query<{ r: Juncao }>(JUNTAR, [ORG_G, nova, [antiga]]));
+      await esperarBloqueio(m.pid, r.pid, juntando.terminou);
+
+      resultado = (await r.conexao.query<{ r: Resultado }>(RPC, [ORG_G, true])).rows[0]!.r;
+      await r.conexao.query("commit");
+      juncao = (await juntando.desfecho()).rows[0]!.r;
+      await m.conexao.query("commit");
+    } finally {
+      for (const s of [r, m]) {
+        await s.conexao.query("rollback").catch(() => undefined);
+        s.conexao.release();
+      }
+    }
+
+    expect(resultado).toMatchObject({ ligado: true, mudou: true, ganharam_etiqueta: 1 });
+    expect(juncao?.repontado["calendar_appointments.contact_id"]).toBe(1);
+    const vencedora = await lerContato(nova);
+    expect(vencedora.first_service_at?.toISOString()).toBe("2023-03-01T10:00:00.000Z");
+    expect(vencedora.tags).toContain(TAG_DE_CLIENTE);
+    expect(await eventosDeEtiqueta({ org: ORG_G })).toBe(0);
+  });
+
+  it("I33 · ligar a regra enquanto um horário novo espera por ela: a ligação alcança o contato que a FK já travou", async () => {
+    // Medido com `for update` no recálculo: o INSERT do horário trava o contato
+    // em `key share` (a FK) ANTES do trigger, e o trigger espera a trava da
+    // organização; a ligação, com ela tomada, pedia o contato em `for update` —
+    // que conflita com `key share`. `deadlock detected` num horário comum. Com
+    // `for no key update`, as duas travas de linha convivem.
+    const contato = await criarContato(ORG_H, "H já tinha horário");
+    await marcar(ORG_H, contato, "2024-01-10T10:00:00Z");
+
+    const r = await sessaoAberta(ADMIN_H);
+    const i = await pool.connect();
+    let resultado: Resultado | null = null;
+    try {
+      await r.conexao.query(TRAVA_DA_ORGANIZACAO, [ORG_H]);
+      await i.query("begin");
+      const pidI = (await i.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+      const inserindo = emVoo(
+        i.query(
+          `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id)
+           values ($1, 'Segundo horário', '2024-06-10T10:00:00Z', '2024-06-10T11:00:00Z', $2)`,
+          [ORG_H, contato],
+        ),
+      );
+      await esperarBloqueio(pidI, r.pid, inserindo.terminou);
+
+      resultado = (await r.conexao.query<{ r: Resultado }>(RPC, [ORG_H, true])).rows[0]!.r;
+      await r.conexao.query("commit");
+      await inserindo.desfecho();
+      await i.query("commit");
+    } finally {
+      await r.conexao.query("rollback").catch(() => undefined);
+      r.conexao.release();
+      await i.query("rollback").catch(() => undefined);
+      i.release();
+    }
+
+    expect(resultado).toMatchObject({ ligado: true, mudou: true, ganharam_etiqueta: 1 });
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at?.toISOString()).toBe("2024-01-10T10:00:00.000Z");
+    expect(depois.tags).toContain(TAG_DE_CLIENTE);
+    // Já era cliente quando a regra ligou: o horário em voo não é virada.
+    expect(await eventosDeEtiqueta({ contato })).toBe(0);
   });
 });

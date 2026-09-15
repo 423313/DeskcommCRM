@@ -3188,6 +3188,8 @@ export type Database = {
           birthday_md: number | null
           blocked_at: string | null
           blocked_reason: string | null
+          client_recognized_at: string | null
+          client_tag_by_system: string | null
           consent: Json
           cpf_encrypted: string | null
           custom_fields: Json
@@ -3226,6 +3228,8 @@ export type Database = {
           birthdate?: string | null
           blocked_at?: string | null
           blocked_reason?: string | null
+          client_recognized_at?: string | null
+          client_tag_by_system?: string | null
           consent?: Json
           cpf_encrypted?: string | null
           custom_fields?: Json
@@ -3264,6 +3268,8 @@ export type Database = {
           birthdate?: string | null
           blocked_at?: string | null
           blocked_reason?: string | null
+          client_recognized_at?: string | null
+          client_tag_by_system?: string | null
           consent?: Json
           cpf_encrypted?: string | null
           custom_fields?: Json
