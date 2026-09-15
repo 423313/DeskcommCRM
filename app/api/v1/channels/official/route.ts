@@ -134,6 +134,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       ? {
           callbackUrl: `${base}/api/v1/webhooks/meta/${data.webhook_path_token}`,
           ...(await tokenDeVerificacaoParaATela()),
+          // A porta para quem PODE abrir a tela da instalação — mesma regra do
+          // link de `/admin/google` na Agenda. Para o admin de um tenant qualquer
+          // o link seria um 404; a tela diz a ele quem procurar.
+          configurarEm: authz.user.is_platform_admin && !authz.user.support ? "/admin/meta" : null,
           fields: ["messages", "message_template_status_update"],
         }
       : null,

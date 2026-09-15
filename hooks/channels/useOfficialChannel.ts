@@ -23,6 +23,8 @@ export interface OfficialChannelState {
      * Opcional: ausente é lido como desconhecido, e a tela cai no aviso genérico.
      */
     verifyTokenOrigem?: "ambiente" | "instalacao" | null;
+    /** Onde se cadastra o App da Meta — só para quem pode abrir a tela da instalação. */
+    configurarEm?: string | null;
     fields: string[];
   } | null;
 }

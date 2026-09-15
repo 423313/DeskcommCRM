@@ -6509,6 +6509,7 @@ export const DICIONARIO: Traducoes = {
   "Por segurança, ele não aparece de novo depois que você sair desta página. Se perder, é só gerar outro aqui.": { es: "Por seguridad, no vuelve a aparecer después de que salgas de esta página. Si lo pierdes, basta con generar otro aquí." },
   "No painel da Meta, em WhatsApp › Configuração › Webhook, este token vai no campo “Verificar token”. O outro campo, “URL de callback”, é de cada número: ele aparece em Conexões › API Oficial (Meta), depois que o número é conectado.": { es: "En el panel de Meta, en WhatsApp › Configuración › Webhook, este token va en el campo “Verificar token”. El otro campo, “URL de devolución de llamada”, es de cada número: aparece en Conexiones › API Oficial (Meta), después de conectar el número." },
   "Abrir Conexões": { es: "Abrir Conexiones" },
+  "Abrir API Oficial (Meta) na administração": { es: "Abrir API Oficial (Meta) en la administración" },
   "Gerar token": { es: "Generar token" },
   "Gerar novo token": { es: "Generar nuevo token" },
   "Gerar um novo token de verificação?": { es: "¿Generar un nuevo token de verificación?" },

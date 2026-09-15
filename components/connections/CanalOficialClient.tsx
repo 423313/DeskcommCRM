@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -124,15 +125,26 @@ export function CanalOficialClient() {
               // servidor" quem já cadastrou tudo por lá seria mandá-lo editar um
               // arquivo que ele não precisa abrir — e o valor do arquivo nem é
               // mais o que a Meta precisa receber.
-              estado.webhook.verifyTokenOrigem === "instalacao" ? (
-                <span className="text-sm text-muted-foreground" data-testid="token-na-instalacao">
-                  {t("Já cadastrado na administração da instalação. Ele aparece uma vez só, quando é gerado — se não foi guardado, quem administra a instalação gera outro em Admin › API Oficial (Meta).")}
-                </span>
-              ) : (
-                <span className="text-sm text-destructive" data-testid="token-nao-configurado">
-                  {t("Ainda não configurado. Quem administra a instalação cadastra em Admin › API Oficial (Meta), e o token aparece lá pronto para copiar.")}
-                </span>
-              )
+              <span className="flex flex-col items-start gap-1">
+                {estado.webhook.verifyTokenOrigem === "instalacao" ? (
+                  <span className="text-sm text-muted-foreground" data-testid="token-na-instalacao">
+                    {t("Já cadastrado na administração da instalação. Ele aparece uma vez só, quando é gerado — se não foi guardado, quem administra a instalação gera outro em Admin › API Oficial (Meta).")}
+                  </span>
+                ) : (
+                  <span className="text-sm text-destructive" data-testid="token-nao-configurado">
+                    {t("Ainda não configurado. Quem administra a instalação cadastra em Admin › API Oficial (Meta), e o token aparece lá pronto para copiar.")}
+                  </span>
+                )}
+                {estado.webhook.configurarEm ? (
+                  <Link
+                    href={estado.webhook.configurarEm}
+                    data-testid="abrir-app-da-meta"
+                    className="text-sm font-medium underline underline-offset-2"
+                  >
+                    {t("Abrir API Oficial (Meta) na administração")}
+                  </Link>
+                ) : null}
+              </span>
             }
           />
           <div className="flex flex-col gap-1">

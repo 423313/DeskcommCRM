@@ -33,13 +33,14 @@ const SEGREDO_DO_ENV = "segredo-do-env-de-teste";
 const TOKEN_DO_ENV = "token-do-env-de-teste";
 
 let linhaDaMeta: { app_secret_encrypted: string | null; verify_token_encrypted: string | null } | null = null;
+let usuario: { id: string; idioma: "pt-BR"; is_platform_admin: boolean; support?: boolean } = {
+  id: "u1",
+  idioma: "pt-BR",
+  is_platform_admin: false,
+};
 
 vi.mock("@/lib/auth/require-role", () => ({
-  requireRole: async () => ({
-    ok: true,
-    user: { id: "u1", idioma: "pt-BR" },
-    org: { orgId: ORG, role: "admin" },
-  }),
+  requireRole: async () => ({ ok: true, user: usuario, org: { orgId: ORG, role: "admin" } }),
 }));
 
 vi.mock("@/lib/supabase/admin", () => {
@@ -79,6 +80,7 @@ const ORIGINAL = { ...process.env };
 
 beforeEach(async () => {
   linhaDaMeta = null;
+  usuario = { id: "u1", idioma: "pt-BR", is_platform_admin: false };
   delete process.env.META_APP_SECRET;
   delete process.env.META_WEBHOOK_VERIFY_TOKEN;
   // O resolvedor memoriza o par por 30s no `globalThis`; cada caso é uma instalação.
@@ -137,5 +139,20 @@ describe("GET /api/v1/channels/official — o token de verificação", () => {
 
     expect(webhook.verifyToken).toBeNull();
     expect(webhook.verifyTokenOrigem).toBeNull();
+  });
+});
+
+describe("GET /api/v1/channels/official — a porta para a tela da instalação", () => {
+  it("quem administra a instalação recebe o endereço da tela", async () => {
+    usuario = { ...usuario, is_platform_admin: true };
+
+    expect((await webhookDaTela()).configurarEm).toBe("/admin/meta");
+  });
+
+  it("o admin de um tenant não recebe um link que daria 404 — nem em modo suporte", async () => {
+    expect((await webhookDaTela()).configurarEm).toBeNull();
+
+    usuario = { ...usuario, is_platform_admin: true, support: true };
+    expect((await webhookDaTela()).configurarEm).toBeNull();
   });
 });
