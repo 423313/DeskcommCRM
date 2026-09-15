@@ -171,31 +171,43 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     if (row.attempts >= DRAIN_MAX_ATTEMPTS - 1) {
       logger.error("[media-derive] failed permanently", { message_id: msg.id, detail });
       await markFailed();
-      // ─── E AVISA. Desistir calado era o desfecho mais comum dos três ───────
+      // ─── E AVISA. Desistir calado era o desfecho mais comum ────────────────
       //
-      // As duas recusas que este worker já sabia explicar — modelo sem visão e
-      // provedor indisponível — abrem `midia_nao_lida` lá embaixo, e por isso
-      // pareciam cobrir o assunto. Não cobriam: a falha que vem de DENTRO da
-      // chamada ao modelo (credencial recusada, modelo que a conta não pode
-      // usar, tempo esgotado) estoura como exceção, cai aqui, marcava
-      // `failed` e não dizia nada a ninguém.
+      // As recusas que este worker já sabia explicar — modelo sem visão,
+      // provedor indisponível, falta de chave da OpenAI para transcrever —
+      // abrem `midia_nao_lida` lá embaixo, e por isso pareciam cobrir o
+      // assunto. Não cobriam: o que estoura como EXCEÇÃO (credencial recusada,
+      // modelo que a conta não pode usar, tempo esgotado, e também o download
+      // do Storage que falhou) cai aqui, marcava `failed` e não dizia nada.
       //
       // Medido numa VPS em produção (org real, 14/09): quatro imagens JPEG com
       // `media_derived_status='failed'`, os quatro eventos mortos em
       // `event_log` com "The model `claude-sonnet-5` does not exist or you do
-      // not have access to it" — e a Central com ZERO avisos de mídia. O
-      // cliente mandou a foto, o agente respondeu sem vê-la, e do lado de cá
-      // não havia o que olhar.
+      // not have access to it" — e a Central com ZERO avisos de mídia.
       //
-      // `midia_nao_lida` e não só o `event_dead` do dreno: os dois vão abrir,
-      // e é este que tem a orientação certa ("ajuste o modelo desse ponto em
-      // Agente de IA → Provedores, ou cadastre a chave necessária"). O outro
-      // diz que um processamento parou; este diz o que fazer.
+      // O QUE A CENTRAL MOSTRA NESTA TENTATIVA: dois avisos, não um. Este
+      // handler devolve `error` na tentativa em que `drainEventLog` desiste
+      // (`row.attempts + 1 >= 5`, o mesmo limiar de `DRAIN_MAX_ATTEMPTS`), e o
+      // dreno abre `event_dead` para o evento morto. Cada um só abre se não
+      // houver outro do MESMO kind aberto na organização — então, numa pane,
+      // são no máximo um de cada. O `event_dead` diz que um processamento
+      // parou; este diz o que fazer (a orientação da política aponta
+      // Provedores de IA).
+      //
+      // ⚠️ Aqui o agente NÃO recebeu o marcador de "não consegui interpretar":
+      // a exceção não grava `media_derived_text`, e o turno já seguiu sem o
+      // texto no teto de espera do dreno do agent-engine. Por isso a
+      // consequência é outra que a das recusas, e vai explícita.
       //
       // O `detail` entra porque é a frase do PROVEDOR, e é ela que distingue
       // "chave errada" de "modelo que sua conta não assina" — duas ações
       // diferentes para quem opera.
-      await avisarMidiaNaoLida(msg.organization_id, rotuloDoTipo, detail.slice(0, 200));
+      await avisarMidiaNaoLida(
+        msg.organization_id,
+        rotuloDoTipo,
+        detail.slice(0, 200),
+        "O conteúdo do arquivo não chegou ao agente.",
+      );
     }
     return { consumer_key, status: "error", detail };
   }
@@ -363,6 +375,11 @@ async function avisarMidiaNaoLida(
   organizationId: string,
   tipo: string,
   motivo: string,
+  /**
+   * O que aconteceu com o atendimento. O padrão vale para as recusas, que
+   * entregam o marcador ao agente; a falha permanente não entrega nada.
+   */
+  consequencia = "Enquanto isso, o agente responde avisando que não conseguiu abrir o arquivo.",
 ): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -386,7 +403,7 @@ async function avisarMidiaNaoLida(
       severity: "warn",
       title: `O agente não conseguiu ler ${tipo} que o cliente enviou`,
       body:
-        `Motivo: ${motivo}. Enquanto isso, o agente responde avisando que não conseguiu abrir o arquivo. ` +
+        `Motivo: ${motivo}. ${consequencia} ` +
         `Para resolver, ajuste o modelo desse ponto em Agente de IA → Provedores, ou cadastre a chave necessária em Credenciais.`,
     });
     // E o retorno é CONFERIDO. O supabase-js devolve `{ error }` em vez de
