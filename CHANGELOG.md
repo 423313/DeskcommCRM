@@ -8,6 +8,26 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.27.0] — 2026-09-15
+
+### Adicionado
+
+- **Processamento que para de tentar agora aparece na Central de avisos** Quando um processamento em segundo plano falha cinco vezes e o sistema desiste dele — ler uma foto ou um áudio que o cliente mandou, rodar uma automação, preparar um material da base de conhecimento, ou fazer a IA responder uma mensagem de cliente —, a Central de avisos passa a receber um alerta crítico com o tipo do processamento e o motivo da falha. Antes isso acontecia em silêncio: o efeito não ocorria e nada indicava o problema em nenhuma tela. Quando o que não aconteceu foi a resposta da IA, o aviso tem título próprio ("A IA deixou de responder uma mensagem de cliente") e orienta a responder pelo Inbox. Para uma pane não inundar a Central, cada organização tem no máximo dois desses avisos abertos por vez — um para a IA que deixou de responder e um para os demais processamentos —, e um não esconde o outro: o aviso aberto de uma foto que não pôde ser lida não impede o da IA de aparecer. Depois de corrigir a causa, marque o aviso como resolvido para voltar a ser avisado.
+
+### Alterado
+
+- **Três índices redundantes saem do banco** O banco mantinha três índices cujo trabalho já era feito por outro índice da mesma tabela. Eles cobravam o preço em toda gravação e ocupavam espaço em disco. Foram removidos na atualização. As buscas que os usavam continuam atendidas por índice — o maior, da mesma tabela — e nenhuma proteção contra duplicidade foi perdida.
+
+### Corrigido
+
+- **Automações da Agenda voltam a disparar quando alguém marca ou confirma pela tela** Quando uma pessoa da equipe marcava, confirmava, remarcava ou cancelava um compromisso pela tela da Agenda, o compromisso era gravado normalmente, mas as automações ligadas a esses momentos — por exemplo "quando um agendamento for confirmado, avise o cliente" — não rodavam. O aviso para as regras era recusado pelo banco sem nada aparecer na tela. Agora ele é registrado pelo mesmo caminho que o resto do sistema usa, e as regras da Agenda disparam também para o que é feito pela equipe. Os compromissos marcados pelo assistente de IA não eram afetados.
+
+- **O registro de auditoria não pode mais ser alterado nem apagado pela chave de serviço** Num projeto Supabase, a tabela de auditoria herdava do próprio Supabase a permissão de alterar, apagar e esvaziar registros — inclusive pela chave de serviço, que ignora as regras de acesso por organização. Na prática, quem tivesse essa chave conseguia apagar ou reescrever um registro escolhido da auditoria. Essas permissões foram removidas: a auditoria agora só recebe registros novos e é lida. A limpeza legítima, que apaga apenas registros mais antigos que o prazo de retenção configurado, continua funcionando como antes.
+
+- **A falha ao atualizar a conversa depois de uma mensagem passa a ficar registrada nos três canais** Quando uma mensagem é gravada e a atualização da conversa falha logo em seguida, a mensagem existe, mas a conversa não sobe na lista do Inbox e, no canal oficial, a janela de resposta de 24 horas não abre. No canal oficial essa falha não era registrada em lugar nenhum; no canal intermediado ficava só no log do servidor, que se perde quando ele reinicia. Agora os três canais gravam a ocorrência no registro de eventos do banco, com a conversa, o sentido da mensagem e o motivo. Nenhuma tela mostra esse registro ainda: ele serve para quem investiga uma conversa que ficou para trás. O texto da mensagem do cliente não é copiado para ele.
+
+- **Foto ou áudio que o provedor de IA recusou passa a abrir aviso na Central** O aviso "O agente não conseguiu ler uma foto ou áudio que o cliente enviou" já aparecia na Central quando o modelo escolhido não enxerga imagens, quando o provedor não está disponível nesta instalação ou quando falta a chave para transcrever áudio. Quando a falha vinha da própria chamada ao provedor — chave recusada, modelo que a conta não pode usar, tempo esgotado — ou do download do arquivo, o sistema tentava cinco vezes e desistia sem avisar ninguém. Agora essa desistência abre o mesmo aviso, com a frase de erro do provedor, que diferencia chave errada de modelo não liberado. No mesmo momento a Central recebe também o aviso de processamento que parou de tentar, se não houver um desses já aberto; numa pane, fica no máximo um de cada aberto por organização. Esses avisos não escondem o de que a IA deixou de responder um cliente, que abre por conta própria.
+
 ## [1.26.0] — 2026-09-15
 
 ### Adicionado
@@ -4670,7 +4690,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.26.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.0...HEAD
+[1.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.1...v1.26.0
 [1.25.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.24.0...v1.25.0
