@@ -255,4 +255,25 @@ describe("a ocupação do Google do dono barra a marcação de quem não enxerga
       "2026-09-17T00:00:00.000Z",
     );
   });
+  it("a leitura das CONEXÕES também sai pela função: o Atendente vê a agenda do dono que nunca foi lida", async () => {
+    // A segunda RPC (`fn_agenda_conexoes_google_do_dono`) alimenta o sinal
+    // `agendaExternaNuncaLida`. Pela SESSÃO, o Atendente não enxerga a conexão:
+    // a lista viria vazia e o sinal diria "não há agenda externa" — a mesma
+    // cegueira do #879, só que no aviso em vez da ocupação. Sem este caso, voltar
+    // a leitura para `from("calendar_connections")` deixava a suíte verde
+    // (medido pelo cético do lote 10: 21 arquivos, 198 casos).
+    const t = tabelas(false);
+    t.calendar_connections = [{ ...t.calendar_connections[0], last_sync_at: null }];
+    const resultado = await horariosLivresDaOrg(clienteFalso(t, false), ORG, {
+      eventTypeId: TIPO_ID,
+      ownerUserId: DONO,
+      de: DE,
+      ate: ATE,
+      agora: AGORA,
+    });
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.agendaExternaNuncaLida).toBe(true);
+  });
 });
