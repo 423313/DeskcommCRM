@@ -77,14 +77,18 @@
 -- `first_service_at = '2019-01-01'` com `UPDATE 1`. A mesma seção 4b recusa
 -- isso; o admin client (service role, `auth.uid()` nulo) continua passando.
 --
--- O EVENTO SAI UMA VEZ POR CONTATO. `contact.tag_added` só na PRIMEIRA vez que
--- a regra reconhece o contato (`client_recognized_at`, que nunca volta a null).
+-- O EVENTO SAI UMA VEZ POR CONTATO — e é na primeira vez que o sistema
+-- ACRESCENTA A ETIQUETA, que não é a mesma coisa que "a primeira vez que ele
+-- vira cliente". Quem já tinha a etiqueta posta à mão vira cliente sem que
+-- etiqueta nenhuma entre, e ali `contact.tag_added` seria mentira: nada foi
+-- acrescentado. O carimbo é `client_recognized_at`, que nunca volta a null.
 -- Medido na versão anterior: um pedido `pending` que o cron
 -- `agenda-expira-pendentes` cancela e que a pessoa refaz emitia DUAS vezes para
 -- a mesma pessoa, e uma junção de contatos fazia a duplicata nova de uma
 -- cliente de 2023 "ganhar a etiqueta" e disparar a automação de boas-vindas.
 -- Quem volta a ser cliente ganha a etiqueta de volta, sem disparar de novo; o
--- repontamento de uma junção nunca emite.
+-- repontamento de uma junção nunca emite. O PRIMEIRO VÍNCULO DE UM HORÁRIO QUE
+-- NASCEU SEM CONTATO emite, e a razão está na seção 5: ele não é repontamento.
 --
 -- A ORDEM DAS TRAVAS É UMA SÓ: primeiro a da organização (advisory 262), depois
 -- a do contato. Duas medições, as duas com `deadlock detected`, fizeram esta
