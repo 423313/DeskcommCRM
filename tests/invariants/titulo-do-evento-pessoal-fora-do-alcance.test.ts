@@ -23,7 +23,8 @@ import { motivoDoErro, sql } from "./psql-transporte";
  * `service_role` abaixo prende isso —, então o nome só existe em linhas gravadas
  * antes da v1.17.0 e ainda não regravadas. A `FIXTURE` insere o título À MÃO,
  * como uma dessas linhas. E o `title` não é o único dado pessoal: o id do
- * calendário segue ao alcance, declarado e medido no último caso da migration.
+ * calendário segue ao alcance, declarado e medido no último caso da migration, e
+ * o `ical_uid` do mesmo período também — e esse nem a ressincronização limpa.
  *
  * A tela nunca mostrou o título. Quem guarda isso do lado da tela é
  * `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (as consultas da
@@ -151,11 +152,19 @@ const EMAIL_DO_DONO = "dono-0261@invariant.test";
 const TITULO = "Terapia sigilosa";
 
 /**
+ * O `ical_uid` gravado junto com o título pelo cron anterior à v1.17.0. Não é um
+ * id do Google: é o UID RFC 5545 que o sistema de QUEM CRIOU o evento gerou
+ * (`evento.iCalUID`, `lib/agenda/google/evento.ts`) — num convite externo, o
+ * formato e o domínio de quem convidou.
+ */
+const ICAL_UID_RESIDUAL = "convite-0261@sistema-de-quem-convidou.test";
+
+/**
  * A agenda pessoal do `DONO`, com o evento e com o `COLEGA` na mesma
  * organização em papel `viewer` — o caso mais generoso para quem espia, e por
  * isso o caso do defeito. O título do evento é inserido À MÃO: é o resíduo de
  * uma sincronização anterior à v1.17.0, porque o sincronizador de hoje o grava
- * nulo.
+ * nulo — e o `ical_uid` vem junto, do mesmo período.
  */
 const FIXTURE = `
   insert into auth.users (id, email) values
@@ -170,8 +179,8 @@ const FIXTURE = `
     values ('${CONEXAO}', '${ORG}', '${DONO}', 'google_calendar', '${EMAIL_DO_DONO}', 'healthy');
   insert into public.calendar_external_events
     (id, organization_id, connection_id, external_calendar_id, external_event_id,
-     title, starts_at, ends_at, transparency)
-    values ('${EVENTO}', '${ORG}', '${CONEXAO}', 'pessoal', 'ev-0261', '${TITULO}',
+     title, ical_uid, starts_at, ends_at, transparency)
+    values ('${EVENTO}', '${ORG}', '${CONEXAO}', 'pessoal', 'ev-0261', '${TITULO}', '${ICAL_UID_RESIDUAL}',
             now() + interval '1 day', now() + interval '1 day 1 hour', 'opaque');
 `;
 
@@ -227,8 +236,9 @@ const CATALOGO_DO_DONO = `
  * O caminho de produção que escreve no espelho: o sincronizador, que o executor
  * (`lib/agenda/google/calendar-executor.ts`) chama com o admin client — reservar
  * a agenda (`claim`) e gravar dois eventos lidos do Google, um que já existe com
- * título residual e um novo, cada um COM `title` no payload (o `summary` que o
- * Google manda).
+ * título e `ical_uid` residuais e um novo, cada um COM `title` e `ical_uid` no
+ * payload — como o executor manda: ele espalha `read.evento`, que traz o
+ * `ical_uid`, e só sobrescreve o `title` com nulo.
  *
  * ⚠️ Quem GRAVA não é o `service_role`. `fn_google_calendar` é `security
  * definer`: o `insert … on conflict` roda com o privilégio do DONO da função. Do
@@ -250,14 +260,17 @@ const SINCRONIZA_COMO_SERVICE_ROLE = `
   select public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'item', jsonb_build_object(
     'claim', :'reserva'::jsonb,
     'item', jsonb_build_object('external_event_id', 'ev-0261', 'title', '${TITULO} (do Google)',
+      'ical_uid', 'uid-que-o-google-manda-hoje@google.com',
       'starts_at', now() + interval '1 day', 'ends_at', now() + interval '1 day 1 hour', 'status', 'confirmed')));
   select public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'item', jsonb_build_object(
     'claim', :'reserva'::jsonb,
     'item', jsonb_build_object('external_event_id', 'ev-0261-novo', 'title', 'Entrevista de emprego',
+      'ical_uid', 'uid-do-evento-novo@google.com',
       'starts_at', now() + interval '2 days', 'ends_at', now() + interval '2 days 1 hour', 'status', 'confirmed')));
   reset role;
   select '${MARCA}' || 'espelho=' ||
-    string_agg(external_event_id || ':' || coalesce(title, '(nulo)'), ',' order by external_event_id)
+    string_agg(external_event_id || ':' || coalesce(title, '(nulo)') || ':' || coalesce(ical_uid, '(nulo)'),
+               ',' order by external_event_id)
     from public.calendar_external_events where connection_id = '${CONEXAO}';
 `;
 
@@ -465,6 +478,12 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     // sincronizador NÃO grava o nome desde a 0225 (v1.17.0), e o `on conflict`
     // ZERA o título que encontra. A fixture traz o título à mão, como uma linha
     // gravada pelo cron anterior à v1.17.0 — que é o único lugar onde ele existe.
+    //
+    // Prende também o que a 0261 diz do `ical_uid`, do mesmo período: o
+    // sincronizador não o grava (o evento novo fica nulo, embora o payload o
+    // traga) e o `on conflict` NÃO o põe no `set` — o residual sobrevive ao
+    // reprocessamento que zera o título. No dia em que a ressincronização passar
+    // a limpá-lo, este caso fica vermelho e a prosa muda junto.
     const linhas = sondasDesfeitas(`
       ${FIXTURE}
       ${CATALOGO_DO_DONO}
@@ -478,7 +497,7 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     ).toEqual([
       "papel=service_role",
       "executa=true",
-      "espelho=ev-0261:(nulo),ev-0261-novo:(nulo)",
+      `espelho=ev-0261:(nulo):${ICAL_UID_RESIDUAL},ev-0261-novo:(nulo):(nulo)`,
       "desconexao=true,true,true",
       "depois_de_desconectar=0",
     ]);
@@ -499,7 +518,7 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     expect(papel).toBe("papel=service_role");
     expect(executa).toBe("executa=true");
     expect(espelho, "sem privilégio de tabela o sincronizador deixou de gravar — ele não grava pela definer").toBe(
-      "espelho=ev-0261:(nulo),ev-0261-novo:(nulo)",
+      `espelho=ev-0261:(nulo):${ICAL_UID_RESIDUAL},ev-0261-novo:(nulo):(nulo)`,
     );
 
     const desconexao = erroDo(`
@@ -650,8 +669,9 @@ describe("o banco instalado pelo baseline inteiro — sem reaplicar o bloco da 0
     // FORA do grant, mas não é o único dado pessoal: `external_calendar_id` está
     // DENTRO, e na agenda principal do Google ele é o e-mail da conta conectada.
     // Isso está declarado na 0261 e medido pelo último caso do describe da
-    // migration; `external_event_id` e `ical_uid` (identificadores do Google)
-    // também seguem concedidos.
+    // migration. `external_event_id` também segue concedido, e `ical_uid` — o UID
+    // RFC 5545 de quem criou o evento, não um id do Google — é resíduo do mesmo
+    // período do `title` que a ressincronização não limpa (caso do service_role).
     const NAO_CONCEDIDAS = "title";
     const [foraDoGrant, viewForaDoGrant, ocupacaoNaView] = sondasDesfeitas(`
       select '${MARCA}' || coalesce(string_agg(a.attname, ',' order by a.attname), '(nenhuma)')

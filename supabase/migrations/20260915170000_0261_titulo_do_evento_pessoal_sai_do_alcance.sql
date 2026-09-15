@@ -82,8 +82,20 @@
 -- agenda PRINCIPAL — a que conta por padrão — esse id é o e-mail da conta
 -- conectada. A RLS de `calendar_connections` esconde essa conta de um colega que
 -- não é gestor; esta tabela e a view a entregam a todo membro da organização.
--- `external_event_id` e `ical_uid`, identificadores do Google, também seguem
--- concedidos.
+-- `external_event_id` (o id do evento na agenda do Google) também segue concedido.
+--
+-- E `ical_uid` também — mas ele não é um identificador do Google. É o UID do RFC
+-- 5545 que o sistema de QUEM CRIOU o evento gerou (`evento.iCalUID`,
+-- `lib/agenda/google/evento.ts`): num convite de fora, o formato e o domínio de
+-- quem convidou. E é resíduo do MESMO período do `title`: só o cron anterior à
+-- v1.17.0 o gravava (v1.16.1, `app/api/v1/cron/agenda-google-sync/route.ts`,
+-- `ical_uid: lido.evento.ical_uid`). Desde a 0225 nenhuma função o grava — o
+-- executor ainda o manda no payload, e `fn_google_calendar` o ignora —, e o `on
+-- conflict` dela não o põe no `set`. Então, ao contrário do `title`, a
+-- ressincronização NÃO o limpa: o valor antigo sobrevive ao reprocessamento que
+-- anula o título (o invariante mede). O conteúdo real desses UIDs em convites de
+-- fora não foi medido. Fechá-lo cabe na policy da seção anterior ou na migration
+-- que anular o resíduo — as duas, decisão do dono.
 --
 -- Esta migration deixa isso aberto, e por escrito. Revogar a COLUNA não serve: a
 -- view é `security_invoker` e passa `e.external_calendar_id` a
@@ -136,7 +148,8 @@
 -- ─── O que esta migration NÃO faz, de propósito ─────────────────────────────
 --
 -- * Não apaga os títulos que sobraram de sincronizações anteriores à v1.17.0 (a
---   0225 deixou de gravá-los, mas não anulou os que já estavam lá). O que se
+--   0225 deixou de gravá-los, mas não anulou os que já estavam lá), nem os
+--   `ical_uid` do mesmo período, que nem a ressincronização limpa. O que se
 --   fecha é a LEITURA por login de usuário. Anular o resíduo é decisão do dono e
 --   sai em migration própria, não de carona num conserto de permissão.
 -- * Não concede nada a `anon`, que segue sem privilégio nesta tabela desde a

@@ -25088,8 +25088,13 @@ notify pgrst, 'reload schema';
 -- do CalendarList do Google (`fn_google_catalog` grava `it->>'id'`), e na agenda
 -- PRINCIPAL — a que conta por padrão — esse id é o e-mail da conta conectada. A
 -- RLS de `calendar_connections` esconde essa conta de um colega que não é gestor;
--- esta tabela e a view a entregam a todo membro. `external_event_id` e `ical_uid`
--- também seguem concedidos. Fica aberto, por escrito. Revogar a COLUNA não serve:
+-- esta tabela e a view a entregam a todo membro. `external_event_id` também segue
+-- concedido, e `ical_uid` — que não é id do Google: é o UID RFC 5545 gerado pelo
+-- sistema de quem criou o evento (`lib/agenda/google/evento.ts`) — é resíduo do
+-- mesmo período do `title` (só o cron anterior à v1.17.0 o gravava) e, ao
+-- contrário dele, a ressincronização NÃO o limpa: o `on conflict` de
+-- `fn_google_calendar` não o põe no `set` (medido no invariante). Fica aberto, por
+-- escrito. Revogar a COLUNA não serve:
 -- a view é `security_invoker` e passa a coluna a `fn_google_counts_for_conflicts`,
 -- então revogá-la derruba TODA leitura da view por membro, a do dono inclusive
 -- (medido). O que fecha é a policy "dono da conexão OU manager ou acima" da seção
@@ -25110,7 +25115,8 @@ notify pgrst, 'reload schema';
 --
 -- ## O que este bloco NÃO faz, de propósito
 --
--- * Não apaga os títulos que sobraram de sincronizações anteriores à v1.17.0. Desde
+-- * Não apaga os títulos que sobraram de sincronizações anteriores à v1.17.0, nem os
+--   `ical_uid` do mesmo período. Desde
 --   a 0225 o sincronizador grava `title` nulo (`fn_google_calendar`, ação `item`:
 --   `null` no insert e `set title=null` no `on conflict`, que zera o que encontra),
 --   mas a 0225 não anulou as linhas antigas. O que se fecha é a LEITURA por login de
