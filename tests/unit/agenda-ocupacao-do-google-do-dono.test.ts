@@ -114,7 +114,7 @@ function clienteFalso(tabelas: Record<string, Linha[]>, veConexao: boolean): Sup
     return api;
   }
 
-  async function rpc(fn: string, args: Record<string, string>) {
+  async function rpc(fn: string, args: { p_org: string; p_owner: string; p_de: string; p_ate: string }) {
     if (fn === "fn_agenda_ocupacao_google_do_dono") {
       const ocupam = (tabelas.calendar_selected_external_events ?? []).filter(
         (l) =>
