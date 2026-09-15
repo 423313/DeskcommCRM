@@ -60,7 +60,7 @@ function ag(id: string, situacao: SituacaoDoAgendamento, comecaEmMinutos = 120):
     comeca: instante(comecaEmMinutos),
     termina: instante(comecaEmMinutos + 30),
     tipo: "Consulta",
-    origem: "ai_agent",
+    origem: "mcp",
     situacao,
   };
 }
