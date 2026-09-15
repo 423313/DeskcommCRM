@@ -2463,3 +2463,49 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
     ancestralidade antes de agir** (`git merge-base --is-ancestor <head> origin/main`); se for
     ancestral, espere e releia — reabrir, comentar ou mergear de novo nesse intervalo produz ruído
     no PR de quem contribuiu.
+
+64. **Prove a JORNADA DO MOTIVO, não a função que o PR mudou.** O #858 dizia no corpo "hoje isso é
+    impossível **até pela tela**: o `PainelDeMarcacao` monta as opções da lista de slots" — e mudou
+    só o servidor. Dossiê, três consertadores e o cético mediram o servidor (sabotagens, 620 casos)
+    e ficaram verdes; só a QA em tela viu que a dona do negócio continuava sem conseguir o encaixe.
+    **Antes de medir, copie a frase "Como apareceu"/"O que muda" do PR para o briefing do dossiê e
+    escreva a jornada que ela descreve.** É essa que precisa ficar verde — e, se a tela não a
+    oferece, a triagem constrói a porta (foi o que entrou no lote 8) ou declara no fragmento.
+
+65. **Fatia que promete "pela tela" e entrega a action sem chamador.** O #861 cumpria a fatia F3 da
+    issue #850 ("App Secret e verify token **pela tela**") com tabela, action e leitura na rota — e
+    `git grep updateMetaApp -- app components hooks lib` só achava a própria action. A sonda é
+    barata e vai no passe 4: **toda server action ou rota nova tem ao menos um chamador fora do
+    próprio arquivo e dos testes?** Sem chamador, a capacidade não existe para quem opera, e o
+    fragmento que a anuncia é falso.
+
+66. **Invariante de GRANT de tabela no `test:db` é verde por construção.** O prelude de
+    `scripts/test-db.sh` simula o default ACL do Supabase para FUNÇÕES e não para TABELAS; num
+    Supabase real toda tabela nova de `public` nasce com `arwdDxt` para `anon`, `authenticated` e
+    `service_role`, e o dump só ACRESCENTA grants. O #873 revogou TRUNCATE de `api_audit_log`, o
+    invariante saiu verde, e o cético mostrou `service_role: DELETE 1` com o default ACL reproduzido
+    — a frase "append-only, nem `service_role`" do `CLAUDE.md` já era falsa na `main`. **Todo PR que
+    afirme "papel X não pode Y na tabela Z" é medido com `grant all on table … to anon,
+    authenticated, service_role` na transação ANTES do bloco do PR** (issue #887 pede o prelude).
+
+67. **Dedupe por `kind` faz o aviso menos grave tampar o mais grave.** O #871 estendeu `event_dead` à
+    morte do despacho da IA; com um `event_dead` de mídia aberto, "a IA deixou de responder" não
+    abria. Ao estender um aviso deduplicado a um caso novo, **meça com outro aviso do mesmo kind já
+    aberto** — a contagem "1000 mortes → 1 aviso" sozinha aprova o defeito.
+
+68. **Número de migration prometido a PR que não entrou é dívida com o contribuidor.** Escrevi no
+    #867 "fica com `0258`" e no #865 "`0259`"; vinte minutos depois chegaram #873 e #874 com
+    migration, gates verdes e sem decisão pendente — e entraram antes. Tive de editar os dois
+    comentários. **O número é de quem ENTRA primeiro**; ao contribuidor diga "o próximo livre na hora
+    da integração".
+
+69. **`bash scripts/test-db.sh` sem o `pnpm` é gate que não rodou.** O prelúdio imprime `✓ install ok`
+    e `✓ update ok`, e depois `vitest: comando não encontrado`, exit 127 — as linhas verdes estão no
+    log, os invariantes não. O caminho é `pnpm test:db`. E `pnpm test:db -- <arquivo>` **não
+    filtra**: roda os 200 (três agentes pagaram 10 minutos por isso no mesmo dia).
+
+70. **Não mova o HEAD de um worktree com gates rodando.** Um merge de proveniência (#860, árvore
+    idêntica) entrou no worktree do lote enquanto o `test:unit` corria. Inofensivo desta vez, mas o
+    log dos gates passou a declarar um SHA que já não era o HEAD. Proveniência entra **depois** dos
+    gates, ou o resumo dos gates declara o **tree** (`git rev-parse HEAD^{tree}`), que é o que o
+    teste mediu.
