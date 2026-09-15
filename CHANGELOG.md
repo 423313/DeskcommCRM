@@ -8,6 +8,90 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.25.1] — 2026-09-15
+
+### Corrigido
+
+- **A agenda para de chamar de falha do servidor o erro de quem chamou errado** A listagem da agenda respondia "erro do servidor" para toda recusa que não fosse
+  "falta um recorte". O caso que apareceu na prática é o id de um CONTATO enviado
+  no lugar do id de um negócio — a mesma troca que a #509 mediu. A consulta era
+  recusada corretamente, mas a resposta dizia que o problema era do servidor: a
+  tela tratava como falha nossa, e o monitoramento de erros contava como incidente
+  uma requisição que só estava com o parâmetro trocado.
+
+  Agora essa recusa sai como erro de quem chamou, com um código próprio que diz que
+  o id mandado não é um negócio do funil e que a correção é usar o do contato. O
+  "erro do servidor" fica reservado para o que é falha de verdade, com teste que
+  atravessa a rota para separar os dois.
+
+  Você não precisa fazer nada.
+
+  Achado e corrigido por @webtecnica.
+
+- **Atualizar o CRM deixa de desligar os lembretes** Toda atualização desligava o lembrete de todos os tipos de agendamento em que
+  alguém o tinha ligado. Sem erro e sem aviso: a tela mostrava o controle
+  desmarcado como se ninguém o tivesse marcado, e o cliente deixava de receber o
+  aviso do compromisso.
+
+  A correção de histórico que fazia isso era certa quando foi escrita, numa época
+  em que nada lia esse campo — só que ela voltava a ser aplicada a cada
+  atualização, e o disparador nasceu no meio do caminho. Agora ela roda uma vez
+  por banco e para de reescrever a sua escolha.
+
+  **Se você já usou lembretes, confira se continuam ligados** em Configurações ›
+  Agenda, no campo "Avisar o cliente antes do compromisso". Uma atualização
+  anterior pode tê-los desligado, e esta versão não religa sozinha: religar por
+  conta própria mandaria mensagem para clientes de quem desligou de propósito.
+
+- **A IA deixa de afirmar o tamanho de um catálogo que não mediu** Quando a varredura do catálogo era cortada e a loja não informava o total, a resposta ao
+  cliente saía com o número `null` no meio da frase — o agente dizia "o catálogo desta loja
+  tem null". Era uma afirmação sobre um tamanho que ninguém mediu, justamente no lugar onde a
+  regra é declarar a dúvida.
+
+  O mesmo valia para a lista vazia: "não encontrei" podia ser ouvido como "a loja não tem",
+  quando o que houve foi uma varredura que não chegou ao fim. Lista vazia só é ausência quando
+  a varredura terminou.
+
+  Agora o tamanho medido continua sendo dito — é ele que explica o corte a quem opera — e o que
+  não foi medido é dito como desconhecido. Nada muda no que o operador precisa fazer: as mesmas
+  ferramentas respondem, e a regra de não afirmar ausência sem varredura completa já valia.
+
+- **Três mensagens seguidas deixam de virar três negócios** Quando alguém escrevia várias mensagens em sequência — "oi", "tudo bem?",
+  "queria marcar" —, cada uma podia abrir um negócio novo no funil. O mesmo
+  cliente aparecia duas ou três vezes, tudo no mesmo minuto, e quem organiza a
+  fila tinha que limpar à mão.
+
+  Agora a entrada é serializada por cliente: a segunda mensagem encontra o card
+  que a primeira criou, em vez de criar outro.
+
+  Continua possível ter mais de um negócio aberto para o mesmo cliente quando é
+  você quem cria — o que mudou vale só para o card que o sistema abre sozinho.
+
+- **Integração com token de servidor volta a conseguir escrever** Um token de servidor sem escopo de agente era tratado como se fosse uma pessoa
+  logada, e o sistema tentava anotar o token como "quem fez". O banco recusava,
+  porque token não é gente — então mandar mensagem ou marcar compromisso por
+  token respondia **erro interno**, sem pista do motivo.
+
+  Agora o token é reconhecido como integração, e essas escritas voltam a
+  funcionar. Se você tem um sistema ligado por token, três coisas passam a valer
+  para ele junto com isso:
+
+  **O envio por token respeita o modo de teste do canal.** Enquanto o número
+  estiver em teste, só os números da lista de teste recebem; para os outros a
+  mensagem fica como falha, com o motivo "modo de teste do canal". É a mesma
+  regra que já valia para a IA e para as automações. Para liberar, abra
+  "Configurar acesso da IA" no número, em Conexões, e deixe-o como "IA aberta ao
+  público".
+
+  **Comparecimento e falta continuam sendo registrados pela equipe.** Por token, a
+  API recusa com o pedido de confirmação humana na Agenda, em vez de devolver um
+  erro genérico.
+
+  **Mensagem enviada por token não pausa a IA** na conversa, ao contrário da
+  resposta de um atendente pela tela.
+
+  Token de agente de IA nunca foi afetado, e continua igual.
+
 ## [1.25.0] — 2026-09-15
 
 ### Adicionado
@@ -4481,7 +4565,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.1...HEAD
+[1.25.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.22.0...v1.23.0
