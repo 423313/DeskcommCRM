@@ -24634,7 +24634,7 @@ grant execute on function public.fn_configurar_pre_go_live_canal(uuid, uuid, tex
   to service_role;
 
 notify pgrst, 'reload schema';
--- ---- lead do ingest nao duplica (migration 0253) ----
+-- ---- lead do ingest nao duplica (migration 0256) ----
 -- Check-then-act em TypeScript deixava três mensagens seguidas virarem três
 -- negócios (medido: mesmo contato, três cards às 17:07). O advisory lock
 -- serializa só o MESMO contato; um índice único resolveria a corrida e
