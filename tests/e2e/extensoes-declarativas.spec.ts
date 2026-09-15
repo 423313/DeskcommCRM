@@ -70,15 +70,26 @@ async function login(page: Page, email: string, senha: string): Promise<void> {
 }
 
 async function trocarOrganizacao(page: Page, organizationId: string): Promise<void> {
+  // O cabeçalho rola com a página. Com a gestão rolada até um card, o clique no avatar
+  // exigia que o Playwright rolasse até ele, e a janela voltava à posição anterior com o
+  // menu aberto: medido, item do seletor em y=-1410 com scrollY=1463. Quem usa sobe a
+  // página antes de trocar de organização; a prova faz o mesmo.
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.getByTestId("tenant-switcher").click();
   const item = page.getByTestId(`tenant-switcher-item-${organizationId}`);
   if ((await item.getByText("✓", { exact: true }).count()) > 0) {
     await page.keyboard.press("Escape");
     return;
   }
-  const navegacao = page.waitForURL("**/app/inbox", { waitUntil: "load" });
+  // A troca é uma Server Action seguida de window.location.assign("/app/inbox"), um
+  // documento NOVO. Esperar a URL não distingue o documento velho do novo: com a aba já
+  // em /app/inbox a espera casava antes de a troca acontecer, e fechar a aba nessa hora
+  // abortava a Server Action (medido no trace da rodada 4: POST /app/inbox cancelado e a
+  // sessão presa na outra organização). O evento `load` só dispara no documento novo.
+  const novoDocumento = page.waitForEvent("load", { timeout: 60_000 });
   await item.click({ noWaitAfter: true });
-  await navegacao;
+  await novoDocumento;
+  await expect(page).toHaveURL(/\/app\/inbox(?:[?#]|$)/);
 }
 
 function observarErros(page: Page, rotulo: string, observacoes: ObservacoesBrowser): void {
@@ -801,9 +812,15 @@ test("pacote pós-build atravessa catálogo, tenants, guia e Tarefas com recuper
     await expect(
       contribution.getByText(catalogo!.pacote.cardDescription, { exact: true }),
     ).toHaveCount(0);
+    // O Card deste repositório não carrega `data-slot` (components/ui/card.tsx): o card é o
+    // filho direto do link da contribuição (components/shell/NavHub.tsx). O seletor antigo
+    // nunca casava e a medição esperava até estourar o prazo do teste inteiro.
     const padding = await contribution
-      .locator('[data-slot="card"]')
-      .evaluate((element) => getComputedStyle(element).paddingTop);
+      .locator(":scope > div")
+      .first()
+      .evaluate((element) => getComputedStyle(element).paddingTop, undefined, {
+        timeout: 20_000,
+      });
     expect(padding).toBe("12px");
     await contribution.click();
     await expect(page.getByTestId("extension-guide")).toBeVisible();
