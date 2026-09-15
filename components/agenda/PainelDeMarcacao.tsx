@@ -334,6 +334,74 @@ export function PainelDeMarcacao({
     setHorario({ instante, rotulo: `${partesDaHora[1]}:${partesDaHora[2]}` });
   };
 
+  /**
+   * O encaixe mora na coluna de horários. Com horários no dia ele vem DEPOIS da
+   * lista, recolhido; sem nenhum, vem ANTES dela — senão a lista vazia, que
+   * estica para ocupar a coluna, empurrava o campo para o pé da coluna, embaixo
+   * de um vão em branco (medido na tela, 1440×900).
+   */
+  const blocoDoEncaixe =
+    encaixeLigado && dia ? (
+      <div data-testid="encaixe" className={cn("shrink-0", doDia.length > 0 && "mt-2")}>
+        {doDia.length === 0 && (
+          <p className="mb-2 text-xs text-text-muted">{t("Nenhum horário publicado neste dia.")}</p>
+        )}
+        {/*
+          Recolhido quando o dia TEM horários — a grade continua sendo o
+          caminho de todo dia, e o encaixe, a exceção. Aberto direto quando
+          não tem: ali ele é a única coisa que o clique no dia podia querer.
+        */}
+        {!encaixeAberto && doDia.length > 0 ? (
+          <button
+            type="button"
+            data-testid="abrir-encaixe"
+            onClick={() => setEncaixeAberto(true)}
+            className={cn(
+              "h-11 w-full rounded-sm border border-dashed border-border text-sm text-text-muted transition-colors duration-fast ease-out lg:h-9",
+              "hover:border-accent hover:text-text",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
+            )}
+          >
+            {t("Outro horário")}
+          </button>
+        ) : (
+          <div className="space-y-1.5">
+            <label htmlFor="hora-do-encaixe" className="block text-xs font-medium text-text-muted">
+              {t("Outro horário")}
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id="hora-do-encaixe"
+                data-testid="hora-do-encaixe"
+                type="time"
+                step={60}
+                value={horaDoEncaixe}
+                onChange={(e) => setHoraDoEncaixe(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") usarHoraDoEncaixe();
+                }}
+                aria-describedby="ajuda-do-encaixe"
+                className="h-11 min-w-0 flex-1 px-2 tabular-nums lg:h-9"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="usar-hora-do-encaixe"
+                disabled={!partesDaHora}
+                onClick={usarHoraDoEncaixe}
+                className="lg:h-9"
+              >
+                {t("Usar")}
+              </Button>
+            </div>
+            <p id="ajuda-do-encaixe" className="text-[11px] leading-4 text-text-subtle">
+              {t("Vale fora dos horários publicados. A agenda só recusa se o horário já estiver ocupado.")}
+            </p>
+          </div>
+        )}
+      </div>
+    ) : null;
+
   if (tempo === "marcado" && marcado) {
     return (
       <div
@@ -795,6 +863,7 @@ export function PainelDeMarcacao({
           <p className="mb-2 shrink-0 text-xs font-semibold text-text-muted first-letter:uppercase">
             {dia ? format(dia, t("EEEE, d 'de' MMM"), { locale: localeDaData }) : ""}
           </p>
+          {doDia.length === 0 && blocoDoEncaixe}
           {/*
             `data-testid` para a lista poder ser MEDIDA, e não só vista. O
             `overflow-y-auto` aqui sempre esteve certo e era INERTE: um
@@ -859,66 +928,7 @@ export function PainelDeMarcacao({
             ))}
           </div>
 
-          {encaixeLigado && dia && (
-            <div data-testid="encaixe" className="mt-2 shrink-0">
-              {doDia.length === 0 && (
-                <p className="mb-2 text-xs text-text-muted">{t("Nenhum horário publicado neste dia.")}</p>
-              )}
-              {/*
-                Recolhido quando o dia TEM horários — a grade continua sendo o
-                caminho de todo dia, e o encaixe, a exceção. Aberto direto quando
-                não tem: ali ele é a única coisa que o clique no dia podia querer.
-              */}
-              {!encaixeAberto && doDia.length > 0 ? (
-                <button
-                  type="button"
-                  data-testid="abrir-encaixe"
-                  onClick={() => setEncaixeAberto(true)}
-                  className={cn(
-                    "h-11 w-full rounded-sm border border-dashed border-border text-sm text-text-muted transition-colors duration-fast ease-out lg:h-9",
-                    "hover:border-accent hover:text-text",
-                    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
-                  )}
-                >
-                  {t("Outro horário")}
-                </button>
-              ) : (
-                <div className="space-y-1.5">
-                  <label htmlFor="hora-do-encaixe" className="block text-xs font-medium text-text-muted">
-                    {t("Outro horário")}
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="hora-do-encaixe"
-                      data-testid="hora-do-encaixe"
-                      type="time"
-                      step={60}
-                      value={horaDoEncaixe}
-                      onChange={(e) => setHoraDoEncaixe(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") usarHoraDoEncaixe();
-                      }}
-                      aria-describedby="ajuda-do-encaixe"
-                      className="h-11 min-w-0 flex-1 px-2 tabular-nums lg:h-9"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      data-testid="usar-hora-do-encaixe"
-                      disabled={!partesDaHora}
-                      onClick={usarHoraDoEncaixe}
-                      className="lg:h-9"
-                    >
-                      {t("Usar")}
-                    </Button>
-                  </div>
-                  <p id="ajuda-do-encaixe" className="text-[11px] leading-4 text-text-subtle">
-                    {t("Vale fora dos horários publicados. A agenda só recusa se o horário já estiver ocupado.")}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+          {doDia.length > 0 && blocoDoEncaixe}
         </div>
       </div>
     </div>

@@ -99,6 +99,8 @@ describe("a opção existe só onde a prop a liga", () => {
     expect(screen.getByTestId("horario-10:00")).toBeInTheDocument();
     expect(screen.getByTestId("abrir-encaixe")).toHaveTextContent("Outro horário");
     expect(screen.queryByTestId("hora-do-encaixe")).toBeNull();
+    const antes = screen.getByTestId("encaixe").compareDocumentPosition(screen.getByTestId("lista-de-horarios"));
+    expect(antes & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("com a prop, o dia SEM horário publicado fica clicável e abre direto no campo de hora", () => {
@@ -111,6 +113,11 @@ describe("a opção existe só onde a prop a liga", () => {
     expect(domingo).toHaveAttribute("data-disponivel", "false");
     fireEvent.click(domingo);
     expect(screen.getByTestId("hora-do-encaixe")).toBeInTheDocument();
+    expect(screen.getByTestId("encaixe")).toHaveTextContent("Nenhum horário publicado neste dia.");
+    // Sem horários, o campo vem ANTES da lista vazia — que estica e o jogaria
+    // para o pé da coluna, embaixo de um vão em branco.
+    const depois = screen.getByTestId("encaixe").compareDocumentPosition(screen.getByTestId("lista-de-horarios"));
+    expect(depois & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("dia que já passou continua apagado, com a prop ou sem ela", () => {
