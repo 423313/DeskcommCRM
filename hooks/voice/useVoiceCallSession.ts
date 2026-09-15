@@ -6,6 +6,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
+import { randomId } from "@/lib/random-id";
 import { float32ToInt16LE, int16LEToFloat32 } from "@/lib/wacalls/pcm";
 
 export type VoiceCallStatus = "starting" | "ringing" | "connected" | "ended";
@@ -176,7 +177,9 @@ function idDaAba(): string | undefined {
   try {
     let id = window.sessionStorage.getItem(ID_DA_ABA);
     if (!id) {
-      id = crypto.randomUUID();
+      // `randomId`, nunca `crypto.randomUUID` cru: em self-host servido por
+      // http://IP ele não existe (contexto não seguro) — ver lib/random-id.ts.
+      id = randomId();
       window.sessionStorage.setItem(ID_DA_ABA, id);
     }
     return id;
