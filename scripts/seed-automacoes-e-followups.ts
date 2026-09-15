@@ -423,7 +423,7 @@ async function main(): Promise<void> {
   const contatos = await garantirContatos(orgId);
   const inscricoes = await semearInscricoes(orgId, pointerId, versionId, contatos);
 
-  console.log(
+  console.info(
     `\n✅ Seed de automações e follow-ups completo.` +
       `\n   Automações: ${ruleIds.length} regras ativas, ${runs} execuções no histórico` +
       `\n   Follow-up:  fluxo "${NOME_DO_FLUXO}" ativo, ${inscricoes} inscrições` +
