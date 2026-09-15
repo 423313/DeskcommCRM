@@ -893,6 +893,35 @@ nesses dois casos — mas **a razão vai escrita no corpo do commit, com a medi�
 no uso da variável. A linha do segundo caso é a mais importante: o hook da migration **não é rede
 para renumeração**, e quem lê a mensagem dele achando que é vai renumerar contra uma régua cega.
 
+### E há o caso oposto, que é pior: o merge LIMPO não chama hook nenhum
+
+A tabela acima trata do hook que dispara quando não devia. O furo mais caro é o hook que **não
+dispara quando devia** — e num trem de lotes ele é a regra, não a exceção.
+
+`git merge` que termina **sem conflito** cria o commit sozinho e **não roda o `pre-commit`**. Dois
+PRs que trazem migrations de nomes diferentes (`…_0241_lembrete_em_degraus.sql` e
+`…_0241_rascunho_de_agente_sem_numero.sql`) não conflitam textualmente — então o merge sai limpo, o
+commit nasce sem o hook, e o `0241` duplicado entra calado.
+
+Medido em 14/09: o #804 entrou assim no lote 6, com o `0241` que o #770 já ocupava na `main` desde
+o lote 2. Nenhuma guarda viu. Quem viu foi a sonda abaixo, rodada depois de montar o lote.
+
+**Num trem, a colisão de migration se mede na ÁRVORE montada, nunca se confia no hook:**
+
+```bash
+ls supabase/migrations/*.sql | sed -E 's/.*_([0-9]{4})_.*/\1/'   | sort | uniq -d   # NNNN
+ls supabase/migrations/*.sql | sed -E 's#.*/([0-9]+)_.*#\1#'     | sort | uniq -d   # timestamp
+```
+
+Vazio nas duas é o esperado. Rode depois de **cada** merge que traga migration, e **sempre** antes
+de abrir o PR do lote — com **linha de base** contra a `origin/main`: se ela também devolver a
+duplicata, o número é antigo e não do lote.
+
+Linha de base não é controle positivo, e a diferença importa: a `main` limpa devolvendo vazio não
+prova que a sonda enxerga — prova só que não há dívida herdada. O controle positivo é a sonda **ter
+achado** uma duplicata real alguma vez; em 14/09 foi o `0241` do #804. Sem esse registro, vazio nas
+duas é indistinguível de instrumento morto.
+
 ---
 
 ## 8-quinquies. O PR cujo conteúdo foi REESCRITO — o merge de história
@@ -2357,3 +2386,30 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
     pattern`, e dentro de um laço isso falha **no meio** enquanto o resto segue: em 14/09, 11 de 29
     vereditos não foram postados e o laço imprimiu "vereditos postados" no fim. Texto com mais de
     uma linha vai por Python, e o laço confere o `returncode` de cada envio.
+
+
+57. **Reconciliação que REMOVE um artefato e deixa o inventário que o declarava.** Tirar um
+    workflow, uma rota ou uma tela é metade do conserto: a outra metade é o mapa que a enumera
+    (`GATILHO_ESPERADO`, `vercel.ts`, `registry.ts`, `SPECS_PARTE_*`). Em 14/09 removi o workflow
+    de deploy de um fork e deixei as três entradas dele no `GATILHO_ESPERADO` — e não vi porque, no
+    worktree da reconciliação, rodei só o teste que eu sabia afetado. **Depois de reconciliar, rode
+    a suíte, não o arquivo.** O arquivo que você lembra é o que você já sabe; o que quebra é o que
+    você não pensou.
+
+58. **Duas reconciliações feitas em ordem diferente da ordem de merge.** Reconciliei o `vercel.ts`
+    do #767 antes de o #805 entrar no lote; o #805 criou um cron que aquele `vercel.ts` não
+    conhecia. Cada reconciliação estava certa contra a árvore em que foi feita. **Inventário se
+    confere na árvore do LOTE montado, depois do último merge** — nunca na branch de reconciliação
+    isolada.
+
+59. **Exit 1 com zero falhas, e as duas sondas concordando em zero.** O rodapé `Tests … 0 failed` e
+    o `grep FAIL` vazio não esgotam o que reprova uma suíte: erro não tratado sai numa terceira
+    linha, `Errors N error`. Em 15/09 a suíte de um lote saiu `exit=1` com 866 arquivos passados.
+    O exit code é a autoridade; quando ele diverge, leia `Errors` — e prove que é carga rodando o
+    arquivo apontado **isolado, mais de uma vez**, e depois a suíte de novo na árvore final.
+
+60. **Gate de merge que já estava vermelho, consertado pela metade.** Um PR chegou com `verify`
+    E `invariants` vermelhos. Consertei o `verify` e assumi que o `invariants` era a mesma causa,
+    sem abrir o log. Não era — era um invariante que o PR tinha atualizado em uma de duas linhas
+    irmãs. **Cada job vermelho tem o seu log.** Dois vermelhos não são um defeito até o segundo
+    log dizer que são.

@@ -16273,20 +16273,51 @@ alter table public.calendar_connection_calendars
 comment on column public.calendar_connection_calendars.time_zone is
   'Fuso IANA do calendário, como o Google devolve (`timeZone`). NULL = ainda não sincronizado; quem lê deve tratar NULL como "não sei", nunca como UTC — foi o `?? UTC` que fez evento de dia inteiro vazar a noite anterior.';
 
--- ---- lembrete nasce desligado (migration 0194) ----
+-- ---- lembrete nasce desligado (migrations 0194 + 0255) ----
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, pelo mesmo motivo da 0193.
+--
+-- A 0194 corrigiu o histórico junto com o default, e o raciocínio dela valia
+-- naquele dia: "com zero leitores e zero disparador, nada depende do valor
+-- atual". Ela própria avisou o que viria depois — *"Depois do disparador, isto
+-- seria apagar a escolha de um operador"*.
+--
+-- O disparador nasceu (`agenda-reminder`), e o `update.sh` re-aplica este
+-- arquivo INTEIRO a cada atualização. Sem guarda, toda atualização desligava o
+-- lembrete de todo tipo em que alguém o tinha ligado — sem erro, sem log, com a
+-- tela mostrando o controle desmarcado como se ninguém o tivesse marcado.
+--
+-- A guarda é o `column_default`, porque pelo VALOR da coluna é impossível
+-- distinguir "linha antiga que ninguém escolheu" de "linha que o operador
+-- acabou de ligar": as duas são `true`. O default só é diferente de `false`
+-- ANTES da primeira aplicação da 0194 neste banco, que é o único momento em que
+-- corrigir o histórico é certo.
+--
+-- ⚠️ LER O DEFAULT ANTES DE GRAVÁ-LO. Invertido, a condição seria sempre falsa e
+-- um clone pré-0194 nunca receberia a correção que a 0194 existe para fazer.
+do $$
+declare
+  v_default text;
+begin
+  select column_default into v_default
+    from information_schema.columns
+   where table_schema = 'public'
+     and table_name = 'calendar_event_types'
+     and column_name = 'reminder_enabled';
+
+  -- `is distinct from`: num banco sem a coluna a consulta devolve NULL, e
+  -- `NULL <> 'false'` seria NULL — pulando a correção em silêncio.
+  if v_default is distinct from 'false' then
+    update public.calendar_event_types
+       set reminder_enabled = false
+     where reminder_enabled is true;
+  end if;
+end $$;
+
 alter table public.calendar_event_types
   alter column reminder_enabled set default false;
 
--- As linhas JÁ criadas também voltam: com zero leitores e zero disparador, nada depende do
--- valor atual, então este é o único momento em que corrigir o histórico não regride
--- comportamento de ninguém. Depois do disparador, isto seria apagar a escolha de um operador.
-update public.calendar_event_types
-   set reminder_enabled = false
- where reminder_enabled is true;
-
 comment on column public.calendar_event_types.reminder_enabled is
-  'Lembrete automático deste tipo. Nasce DESLIGADO de propósito: enviar mensagem é irreversível, e um default ligado inscreveria o histórico inteiro sem ninguém ter escolhido. Ligar por padrão é decisão do dono do produto, a ser tomada quando o disparador existir.';
+  'Lembrete automático deste tipo. Nasce DESLIGADO: enviar mensagem é irreversível. O histórico foi corrigido UMA vez, na primeira aplicação da 0194 em cada banco (a 0255 guarda isso pelo column_default) — depois disso, true significa que alguém ligou, e atualizar o CRM não desliga mais.';
 
 -- ---- tipo semeado adota dono no primeiro membro (migration 0195) ----
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon: aqui é OBRIGATÓRIO, não preferência —
@@ -20227,12 +20258,14 @@ begin
   end if;
  end if;
  if new.appointment_revision is not null and new.status in ('active','waiting_reply','paused_handoff','paused_manual') then
+  -- P0001, não 40001: 40001 é serialization_failure e o cliente retenta para
+  -- sempre. followup_stale é permanente. Medido: 6000 erros/min, CPU 100%, 24h.
   if old.status not in ('active','waiting_reply','paused_handoff','paused_manual') or not exists(
    select 1 from public.calendar_appointments a join public.appointment_recovery_receipts r
     on r.organization_id=a.organization_id and r.appointment_id=a.id and r.appointment_revision=a.revision
    where a.organization_id=new.organization_id and a.id=new.appointment_id and a.revision=new.appointment_revision
     and a.status='no_show' and a.contact_id=new.contact_id and r.result='started' and r.invalidated_at is null
-  ) then raise exception 'followup_stale' using errcode='40001'; end if;
+  ) then raise exception 'followup_stale' using errcode='P0001'; end if;
  end if;
  new.revision:=old.revision+1; return new;
 end; $$;
@@ -20451,11 +20484,11 @@ returns bigint language plpgsql security definer set search_path=public as $$
 declare current public.followup_enrollments; patched public.followup_enrollments; contact uuid;
 begin
  select contact_id into contact from public.followup_enrollments where id=p_id and organization_id=p_org;
- if not found then raise exception 'followup_stale' using errcode='40001'; end if;
+ if not found then raise exception 'followup_stale' using errcode='P0001'; end if;
  perform public.fn_service_lock(p_org,contact);
  select * into current from public.followup_enrollments where id=p_id and organization_id=p_org for update;
- if current.contact_id is distinct from contact or current.revision is distinct from p_revision then raise exception 'followup_stale' using errcode='40001'; end if;
- if p_patch->>'status' in ('active','waiting_reply') and current.appointment_revision is not null and not public.fn_appointment_enrollment_current(p_org,p_id,current.current_node_id) then raise exception 'followup_stale' using errcode='40001'; end if;
+ if current.contact_id is distinct from contact or current.revision is distinct from p_revision then raise exception 'followup_stale' using errcode='P0001'; end if;
+ if p_patch->>'status' in ('active','waiting_reply') and current.appointment_revision is not null and not public.fn_appointment_enrollment_current(p_org,p_id,current.current_node_id) then raise exception 'followup_stale' using errcode='P0001'; end if;
  select * into patched from jsonb_populate_record(current,p_patch);
  update public.followup_enrollments set status=patched.status,current_node_id=patched.current_node_id,next_eval_at=patched.next_eval_at,
   claimed_until=patched.claimed_until,attempts=patched.attempts,last_error=patched.last_error,steps_taken=patched.steps_taken,
@@ -23247,7 +23280,7 @@ grant execute on function public.fn_reserve_channel_connection(uuid,uuid,text,te
 
 notify pgrst,'reload schema';
 
--- ---- nome de sessão WAHA cabe no teto do WAHA (migration 0232) ----
+-- ---- nome de sessão WAHA cabe no teto do WAHA (migration 0233) ----
 -- O `devlikeapro/waha:latest-2026.7.2` valida `name` de sessão com @MaxLength(54);
 -- `org_<32>_<32>` = 69 e todo `POST /api/sessions` de canal novo tomava 400. O
 -- prefixo da org encurta para 8 (`org_<8>_<32>` = 45), alinhado com a busca de
@@ -24017,6 +24050,92 @@ create trigger trg_org_voice_calls_set_updated_at
   before update on public.org_voice_calls
   for each row execute function public.fn_set_updated_at();
 
+
+-- ---- lembrete em degraus (migration 0254) ----
+-- Um tipo de evento passa a ter mais de um lembrete: `reminder_minutes_before`
+-- segue sendo o degrau principal e `reminder_extra_offsets_minutes` guarda os
+-- ADICIONAIS. Vazio = um lembrete só, que é o comportamento anterior — por isso
+-- o update de um clone não precisa decidir nada.
+--
+-- O carimbo por degrau é o que torna o segundo aviso possível: com
+-- `reminder_sent_at` como filtro, quem recebeu o de um dia nunca voltaria para
+-- receber o de três horas. O backfill abaixo marca o degrau principal onde já
+-- havia carimbo, senão a primeira varredura depois da atualização reenviaria
+-- lembrete para todo compromisso já avisado.
+alter table public.calendar_event_types
+  add column if not exists reminder_extra_offsets_minutes integer[] not null default '{}';
+
+alter table public.calendar_appointments
+  add column if not exists reminder_sent_offsets_minutes integer[] not null default '{}';
+
+create or replace function public.fn_degraus_de_lembrete_validos(p_degraus integer[])
+returns boolean
+language sql
+immutable
+as $$
+  select coalesce(array_length(p_degraus, 1), 0) <= 3
+     and coalesce(bool_and(x between 15 and 10080), true)
+    from unnest(coalesce(p_degraus, '{}'::integer[])) as x;
+$$;
+
+revoke execute on function public.fn_degraus_de_lembrete_validos(integer[]) from public, anon;
+grant execute on function public.fn_degraus_de_lembrete_validos(integer[]) to authenticated, service_role;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'calendar_event_types_extras_na_faixa'
+       and conrelid = 'public.calendar_event_types'::regclass
+  ) then
+    update public.calendar_event_types
+       set reminder_extra_offsets_minutes = '{}'
+     where not public.fn_degraus_de_lembrete_validos(reminder_extra_offsets_minutes);
+
+    alter table public.calendar_event_types
+      add constraint calendar_event_types_extras_na_faixa
+      check (public.fn_degraus_de_lembrete_validos(reminder_extra_offsets_minutes));
+  end if;
+end $$;
+
+update public.calendar_appointments a
+   set reminder_sent_offsets_minutes = array[t.reminder_minutes_before]
+  from public.calendar_event_types t
+ where a.event_type_id = t.id
+   and a.reminder_sent_at is not null
+   and coalesce(array_length(a.reminder_sent_offsets_minutes, 1), 0) = 0;
+
+comment on column public.calendar_event_types.reminder_extra_offsets_minutes is
+  'Degraus ADICIONAIS de lembrete, em minutos antes do compromisso. Os degraus efetivos são reminder_minutes_before mais estes. Vazio = um lembrete só, o comportamento anterior.';
+
+comment on column public.calendar_appointments.reminder_sent_offsets_minutes is
+  'Quais degraus de lembrete já saíram para este compromisso. É a autoridade sobre o que falta enviar — reminder_sent_at guarda apenas o instante do último envio e NÃO deve ser usado como filtro.';
+
+comment on column public.calendar_appointments.reminder_sent_at is
+  'Instante do último lembrete enviado. Informativo: quem decide o que ainda falta enviar é reminder_sent_offsets_minutes.';
+-- ---- aniversário do contato (migration 0252) ----
+-- `contacts.birthdate` existia e não acionava nada. `birthday_md` é o mês e o
+-- dia num inteiro (914 = 14 de setembro), gerado e armazenado, para a varredura
+-- diária buscar por igualdade em vez de varrer a tabela.
+--
+-- `extract` sobre `date` é immutable, que é o que a coluna gerada exige;
+-- `to_char` não é (depende de configuração regional) e o Postgres a recusaria.
+alter table public.contacts
+  add column if not exists birthday_md integer
+  generated always as (
+    case
+      when birthdate is null then null
+      else (extract(month from birthdate)::integer * 100 + extract(day from birthdate)::integer)
+    end
+  ) stored;
+
+create index if not exists contacts_org_aniversario_idx
+  on public.contacts (organization_id, birthday_md)
+  where birthday_md is not null;
+
+comment on column public.contacts.birthday_md is
+  'Mês e dia do aniversário num inteiro (914 = 14 de setembro), derivado de birthdate. Existe para a varredura diária do cron contact-birthdays poder buscar por igualdade em vez de varrer a tabela.';
+
 notify pgrst, 'reload schema';
 
 -- ---- Registro não nasce `pending` (migration 0239) ----
@@ -24126,7 +24245,7 @@ update public.event_log
    and public.fn_event_log_e_registro(event_type);
 -- ---- Credencial de enfeite não derruba a leitura (migration 0240) ----
 --
--- Racional completo no cabeçalho da migration 0242. Em uma linha: não tente
+-- Racional completo no cabeçalho da migration 0252. Em uma linha: não tente
 -- decifrar o que não pode ser cifra — devolva null, que é o contrato que os
 -- leitores já tratam (`lib/webhooks/secrets.ts`).
 --
@@ -24515,6 +24634,62 @@ grant execute on function public.fn_configurar_pre_go_live_canal(uuid, uuid, tex
   to service_role;
 
 notify pgrst, 'reload schema';
+-- ---- lead do ingest nao duplica (migration 0256) ----
+-- Check-then-act em TypeScript deixava três mensagens seguidas virarem três
+-- negócios (medido: mesmo contato, três cards às 17:07). O advisory lock
+-- serializa só o MESMO contato; um índice único resolveria a corrida e
+-- quebraria o caso legítimo de dois negócios abertos criados à mão.
+create or replace function public.fn_nascer_lead_da_conversa(
+  p_org uuid,
+  p_contact uuid,
+  p_pipeline uuid,
+  p_stage uuid,
+  p_title text,
+  p_source text,
+  p_source_metadata jsonb default '{}'::jsonb,
+  p_tags text[] default '{}'::text[]
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  -- Serializa por (organização, contato). Transaction-scoped: liberado no
+  -- commit, sem risco de lock vazado.
+  perform pg_advisory_xact_lock(hashtextextended(p_org::text || ':' || p_contact::text, 0));
+
+  select id into v_id
+    from public.crm_leads
+   where organization_id = p_org
+     and contact_id = p_contact
+     and status = 'open'
+   limit 1;
+
+  -- NULL significa "já existe", e quem chama traduz isso para `ja_existe`. Não é
+  -- erro: é o desfecho correto da segunda mensagem.
+  if v_id is not null then
+    return null;
+  end if;
+
+  insert into public.crm_leads
+    (organization_id, pipeline_id, stage_id, contact_id, title, source, source_metadata, tags)
+  values
+    (p_org, p_pipeline, p_stage, p_contact, p_title, p_source, coalesce(p_source_metadata, '{}'::jsonb), coalesce(p_tags, '{}'::text[]))
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke execute on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) from public, anon;
+grant  execute on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) to authenticated, service_role;
+
+comment on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) is
+  'Cria o lead de entrada do ingest serializando por (organização, contato) com advisory lock. Devolve NULL quando já existe um aberto. Existe porque o check-then-act em TypeScript deixava três mensagens seguidas virarem três negócios; um índice único resolveria a corrida e quebraria o caso legítimo de dois negócios abertos criados à mão.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -24605,3 +24780,34 @@ comment on column public.user_organizations.provisional_until_handover is
   'quando o tenant foi criado para OUTRA pessoa (owner_email <> e-mail de quem '
   'cria). Nunca deduzir este valor depois: a ausência dele foi o que fez a '
   'primeira versão desta regra expulsar alguém da própria empresa.';
+-- ---- política de cadastro da instalação (migration 0253) ----
+create table if not exists public.platform_settings (
+  id           smallint    primary key default 1,
+  signup_mode  text        not null default 'aberto',
+  updated_at   timestamptz not null default now(),
+  updated_by   uuid,
+  constraint platform_settings_singleton check (id = 1),
+  constraint platform_settings_signup_mode check (signup_mode in ('aberto', 'so_convite'))
+);
+
+comment on table public.platform_settings is
+  'Configuração da INSTALAÇÃO (não do tenant) — linha única id=1. Hoje só a política de cadastro. Lida/escrita apenas server-side (service_role); a ausência da linha significa o default, que é o comportamento anterior à 0253. Ver lib/auth/politica-de-cadastro.ts.';
+
+comment on column public.platform_settings.signup_mode is
+  'aberto = qualquer pessoa cria conta em /signup (comportamento histórico). so_convite = só quem chega com convite válido; sem convite, /signup recusa com tela e /auth/confirm NÃO provisiona organização.';
+
+alter table public.platform_settings enable row level security;
+
+-- ZERO POLICIES, DE PROPÓSITO. Mesma decisão de `platform_branding`: esta linha
+-- não pertence a organização nenhuma, então não há predicado de tenant que a
+-- isole. RLS ligada sem policy = ninguém alcança pela REST; quem lê é o
+-- service_role, que a bypassa, e só a partir do servidor.
+revoke all on public.platform_settings from anon, authenticated;
+grant select, insert, update on public.platform_settings to service_role;
+
+drop trigger if exists trg_platform_settings_touch on public.platform_settings;
+create trigger trg_platform_settings_touch
+  before update on public.platform_settings
+  for each row execute function public.fn_touch_updated_at();
+
+notify pgrst, 'reload schema';
