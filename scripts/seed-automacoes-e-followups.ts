@@ -14,12 +14,30 @@
  *
  * Tela vazia passa em qualquer teste. É o falso verde mais barato que existe.
  *
- * ─── O que ele NÃO faz ──────────────────────────────────────────────────────
+ * ─── O que ele NÃO faz, e o que o estado dele FAZ ───────────────────────────
  *
- * Não dispara nada. As regras nascem `is_active = true` e as inscrições têm
- * relógio, mas quem as executa é o motor — este script só põe o estado de pé
- * para que a execução possa ser observada e para que as telas tenham conteúdo.
- * Nenhuma mensagem sai daqui.
+ * O script não dispara nada nem envia mensagem. Mas o estado que ele deixa é
+ * ATIVO — é o padrão dos seeds irmãos (`seed-e2e-acervo`, `seed-e2e-agenda`,
+ * `seed-e2e-credentials`, `seed-e2e-followup-agent` gravam `is_active: true`), e
+ * uma demonstração desligada não demonstra execução. Então, quando o motor rodar
+ * na organização do `.e2e-creds.json`:
+ *   • lead criado com a etiqueta `vip` ganha `prioridade` e vai para o gerente;
+ *   • mensagem com "orçamento" etiqueta o contato;
+ *   • a inscrição `active` chega ao nó de mensagem em 6 h. O contato de
+ *     demonstração não tem conversa, e o que o motor faz com isso não foi medido.
+ *
+ * ─── Onde grava, e por que recusa destino remoto ────────────────────────────
+ *
+ * Grava onde `credenciaisSupabaseDeTeste()` apontar: o ambiente, ou o
+ * `.env.local` — que num checkout de trabalho aponta para PRODUÇÃO. Os seeds
+ * irmãos só ANUNCIAM o destino (`anunciarDestino`); este também recusa um
+ * destino que não seja local, porque o que ele cria age sozinho (regras e
+ * follow-up ativos) e nenhum fluxo automatizado precisa dele fora da máquina.
+ * Quem quer mesmo semear um Supabase remoto (a auditoria de uma VPS, por
+ * exemplo) passa `--permitir-remoto` e lê o aviso impresso antes.
+ *
+ * Roda SÓ por comando manual: nenhum `install.sh`, `update.sh`,
+ * `bootstrap-owner.ts`, script do `package.json` ou workflow o chama.
  *
  * ─── Idempotente ────────────────────────────────────────────────────────────
  *
@@ -31,14 +49,18 @@
  * Roda depois de `scripts/seed-crm-vivo.ts` (precisa do `.e2e-creds.json` e do
  * pipeline dele para a ação `create_or_move_lead` apontar para algo real).
  *
- * Run: npx tsx scripts/seed-automacoes-e-followups.ts
+ * Run: npx tsx scripts/seed-automacoes-e-followups.ts [--permitir-remoto]
  */
 
 import { createClient } from "@supabase/supabase-js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { carregarEnvLocal } from "./lib/env-de-teste";
+import {
+  historicoDeDemonstracao,
+  regrasDeDemonstracao,
+} from "./lib/automacoes-de-demonstracao";
+import { anunciarDestino, credenciaisSupabaseDeTeste, destinoEhLocal } from "./lib/env-de-teste";
 import {
   GRAFO_DE_DEMONSTRACAO,
   NO_ESPERA,
@@ -47,15 +69,22 @@ import {
   NO_MENSAGEM,
 } from "./lib/grafo-de-demonstracao";
 
-const env = carregarEnvLocal();
+// `process.env` VENCE o `.env.local` (ver scripts/lib/env-de-teste.ts).
+const credenciais = credenciaisSupabaseDeTeste();
+anunciarDestino("seed-automacoes-e-followups", credenciais);
 
-const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE_ROLE = env.SUPABASE_SERVICE_ROLE_KEY!;
-if (!SUPABASE_URL || !SERVICE_ROLE) {
-  throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in .env.local");
+// Só a URL decide: este script fala apenas com a API do Supabase (admin client)
+// e nunca abre `pg.Pool`, então o `dbUrl` não é destino dele.
+if (!destinoEhLocal(credenciais.url) && !process.argv.includes("--permitir-remoto")) {
+  console.error(
+    `[seed-automacoes-e-followups] recusado: ${credenciais.url} não é local, e este seed cria ` +
+      "regras de automação e follow-up ATIVOS. Para gravar mesmo assim, rode de novo com " +
+      "--permitir-remoto.",
+  );
+  process.exit(2);
 }
 
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+const admin = createClient(credenciais.url, credenciais.serviceRole, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
@@ -78,56 +107,19 @@ function daqui(ms: number): string {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * As regras usam o vocabulário REAL, lido de `lib/schemas/webhooks.ts`:
- * `trigger_event` da lista `ENTIDADE_ESPERADA_POR_GATILHO` e `actions` do
- * `actionSchema`. Inventar um gatilho aqui criaria uma regra que a tela mostra
- * e o motor nunca casa — que é exatamente o defeito mudo que
- * `lib/automation/gatilhos-em-uma-fonte.test.ts` existe para impedir.
+ * As regras vêm de `scripts/lib/automacoes-de-demonstracao.ts`, onde um teste as
+ * passa pelo schema da API e pelo avaliador de condições do motor. Devolve o id
+ * de cada regra pelo NOME, que é a chave natural do seed.
  */
-function regras(pipelineId: string | null, stageId: string | null, managerId: string) {
-  const base = [
-    {
-      name: "Lead novo ganha etiqueta de origem",
-      trigger_event: "lead.created",
-      conditions: [],
-      actions: [{ type: "add_tag", config: { tags: ["novo", "automático"] } }],
-    },
-    {
-      name: "Quem manda mensagem cai com o gerente",
-      trigger_event: "message.received",
-      // Condição de verdade, não `[]`: a aba Regras precisa mostrar como um
-      // filtro se parece, e uma regra sem condição nenhuma não ensina nada a
-      // quem abre a tela pela primeira vez.
-      conditions: [{ field: "direction", op: "eq", value: "inbound" }],
-      actions: [{ type: "assign_owner", config: { user_id: managerId } }],
-    },
-  ];
-
-  // Só entra se o pipeline do CRM Vivo existir: uma ação apontando para um
-  // estágio inexistente é uma regra que falha em toda execução, e uma demo que
-  // nasce quebrada é pior que uma demo incompleta.
-  if (pipelineId && stageId) {
-    base.push({
-      name: "Aniversariante volta para o começo do funil",
-      trigger_event: "contact.birthday",
-      conditions: [],
-      actions: [
-        { type: "create_or_move_lead", config: { pipeline_id: pipelineId, stage_id: stageId } },
-      ],
-    });
-  }
-  return base;
-}
-
 async function semearAutomacoes(
   orgId: string,
   pipelineId: string | null,
   stageId: string | null,
   managerId: string,
-): Promise<string[]> {
-  const ids: string[] = [];
+): Promise<Map<string, string>> {
+  const ids = new Map<string, string>();
 
-  for (const regra of regras(pipelineId, stageId, managerId)) {
+  for (const regra of regrasDeDemonstracao({ pipelineId, stageId, managerId })) {
     const { data: existente } = await admin
       .from("automation_rules")
       .select("id")
@@ -136,7 +128,7 @@ async function semearAutomacoes(
       .maybeSingle();
 
     if (existente) {
-      ids.push((existente as { id: string }).id);
+      ids.set(regra.name, (existente as { id: string }).id);
       continue;
     }
 
@@ -146,57 +138,43 @@ async function semearAutomacoes(
       .select("id")
       .single();
     if (error) throw new Error(`regra "${regra.name}": ${error.message}`);
-    ids.push((data as { id: string }).id);
+    ids.set(regra.name, (data as { id: string }).id);
   }
 
   return ids;
 }
 
 /**
- * Histórico com os TRÊS desfechos que a constraint aceita.
+ * Histórico com os TRÊS desfechos que a aba Atividade distingue.
  *
  * A aba Atividade (`app/app/webhooks/_components/ActivityTab.tsx`) lê
  * `automation_rule_runs`, e uma lista só com `success` não prova que a tela sabe
  * mostrar um erro — que é justamente a linha que alguém vai procurar quando
- * disser "a automação não funcionou".
+ * disser "a automação não funcionou". Cada execução descreve as ações da regra
+ * a que pertence (ver `historicoDeDemonstracao`).
  */
-async function semearHistorico(orgId: string, ruleIds: string[]): Promise<number> {
-  if (!ruleIds.length) return 0;
-
+async function semearHistorico(
+  orgId: string,
+  ruleIds: Map<string, string>,
+  managerId: string,
+): Promise<number> {
   const { count } = await admin
     .from("automation_rule_runs")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", orgId);
   if ((count ?? 0) > 0) return 0; // já semeado
 
-  const primeira = ruleIds[0]!;
-  const linhas = [
-    {
+  const linhas = historicoDeDemonstracao(managerId).map((execucao) => {
+    const ruleId = ruleIds.get(execucao.regra);
+    if (!ruleId) throw new Error(`histórico aponta para a regra "${execucao.regra}", que não foi semeada`);
+    return {
       organization_id: orgId,
-      rule_id: primeira,
-      status: "success",
-      actions_result: [{ type: "add_tag", status: "success", detail: { added: ["novo"] } }],
-      created_at: daqui(-2 * HORA),
-    },
-    {
-      organization_id: orgId,
-      rule_id: primeira,
-      status: "partial",
-      actions_result: [
-        { type: "add_tag", status: "success", detail: { added: ["automático"] } },
-        { type: "assign_owner", status: "skipped", detail: { reason: "no_target" } },
-      ],
-      created_at: daqui(-6 * HORA),
-    },
-    {
-      organization_id: orgId,
-      rule_id: ruleIds[ruleIds.length - 1]!,
-      status: "failed",
-      actions_result: [{ type: "assign_owner", status: "failed", error: "owner_not_found" }],
-      error: "owner_not_found",
-      created_at: daqui(-1 * DIA),
-    },
-  ];
+      rule_id: ruleId,
+      status: execucao.status,
+      actions_result: execucao.actions_result,
+      created_at: daqui(-execucao.horasAtras * HORA),
+    };
+  });
 
   const { error } = await admin.from("automation_rule_runs").insert(linhas);
   if (error) throw new Error(`histórico de automação: ${error.message}`);
@@ -417,7 +395,7 @@ async function main(): Promise<void> {
   }
 
   const ruleIds = await semearAutomacoes(orgId, pipelineId, stageId, managerId);
-  const runs = await semearHistorico(orgId, ruleIds);
+  const runs = await semearHistorico(orgId, ruleIds, managerId);
 
   const { pointerId, versionId } = await semearFluxo(orgId);
   const contatos = await garantirContatos(orgId);
@@ -425,7 +403,7 @@ async function main(): Promise<void> {
 
   console.info(
     `\n✅ Seed de automações e follow-ups completo.` +
-      `\n   Automações: ${ruleIds.length} regras ativas, ${runs} execuções no histórico` +
+      `\n   Automações: ${ruleIds.size} regras ativas, ${runs} execuções no histórico` +
       `\n   Follow-up:  fluxo "${NOME_DO_FLUXO}" ativo, ${inscricoes} inscrições` +
       `\n   Telas: /app/webhooks (abas Regras e Atividade) e /app/ai/followups`,
   );
