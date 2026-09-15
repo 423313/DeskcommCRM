@@ -24020,7 +24020,7 @@ create trigger trg_org_voice_calls_set_updated_at
   for each row execute function public.fn_set_updated_at();
 
 
--- ---- lembrete em degraus (migration 0241) ----
+-- ---- lembrete em degraus (migration 0254) ----
 -- Um tipo de evento passa a ter mais de um lembrete: `reminder_minutes_before`
 -- segue sendo o degrau principal e `reminder_extra_offsets_minutes` guarda os
 -- ADICIONAIS. Vazio = um lembrete só, que é o comportamento anterior — por isso
