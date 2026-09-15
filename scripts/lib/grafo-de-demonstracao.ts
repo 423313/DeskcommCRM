@@ -107,7 +107,7 @@ export const GRAFO_DE_DEMONSTRACAO = {
       priority: 0,
       condition: { type: "branch", branch_id: "no_reply" },
     },
-    // Respondeu outra coisa: a saída de escape, que o publish exige, encerra como "sem sim".
+    // Respondeu, mas não "sim": a saída de escape que o publish exige vai para o mesmo fim.
     { id: "e6", source: NO_RESPOSTA, target: NO_FIM, priority: 0, condition: { type: "always" } },
   ],
 };
