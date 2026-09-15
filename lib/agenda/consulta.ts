@@ -36,6 +36,7 @@ import { googleRpc } from "./google/sync-store";
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { diaLocalISO } from "./fuso";
 import { horariosLivres, type ExcecaoDeData, type Slot } from "./horarios-livres";
 import { lerJornadaDoBanco } from "./jornada";
 import {
@@ -109,10 +110,13 @@ export type ResultadoDaConsulta =
       motivoParaCliente: string;
     };
 
-/** `YYYY-MM-DD` de um instante, em UTC — a régua que a coluna `date` usa. */
-function diaISO(instante: Date): string {
-  return instante.toISOString().slice(0, 10);
-}
+/**
+ * Um dia em milissegundos — a margem de cada lado com que os dias locais são
+ * visitados, a MESMA de `horarios-livres.ts` (lá `naoAntesDe - DIA` …
+ * `naoDepoisDe + DIA`). A coleta tem que cobrir a visita inteira; margem menor
+ * de um lado devolve dia que a grade pergunta e o mapa não tem.
+ */
+const DIA = 86_400_000;
 
 const NAO_OFERECA =
   "Não ofereça horários e não diga que está sem vaga — avise que alguém da equipe confirma o horário.";
@@ -207,6 +211,23 @@ export async function horariosLivresDaOrg(
     };
   }
 
+  // ⚠️ As exceções de data são a MESMA régua de `horariosLivres`: coluna `date`
+  // no Postgres, sem fuso — o dia LOCAL DA REGRA (`leitura.jornada.timezone`),
+  // nunca o dia UTC do instante pedido. Com o dia UTC a coleta começava DEPOIS
+  // do dia pedido num fuso negativo: 21:00 de D em America/Sao_Paulo já é
+  // 00:00Z de D+1, então a exceção de D (folga, feriado, dia inteiro bloqueado)
+  // ficava fora do `.gte()` — e a grade oferecia, e a escrita aceitava, horário
+  // de um dia bloqueado (#878).
+  //
+  // A margem de ±1 dia é a mesma com que `horariosLivres` visita os dias
+  // (`diaLocalISO(naoAntesDe - DIA)` … `diaLocalISO(naoDepoisDe + DIA)`): a
+  // borda de um dia local pode cair no dia UTC vizinho, e a coleta tem que
+  // trazer TODO dia que a grade vai perguntar — dia perguntado e ausente do mapa
+  // vira "sem exceção" e o bloqueio some em silêncio.
+  const fusoDaRegra = leitura.jornada.timezone;
+  const primeiroDiaDaRegra = diaLocalISO(new Date(params.de.getTime() - DIA), fusoDaRegra);
+  const ultimoDiaDaRegra = diaLocalISO(new Date(params.ate.getTime() + DIA), fusoDaRegra);
+
   const [{ data: excecoesRaw, error: erroExc }, { data: agendaRaw, error: erroAg }] =
     await Promise.all([
       supabase
@@ -214,8 +235,8 @@ export async function horariosLivresDaOrg(
         .select("exception_date, is_unavailable, start_minute, end_minute")
         .eq("organization_id", organizationId)
         .eq("user_id", donoId)
-        .gte("exception_date", diaISO(params.de))
-        .lte("exception_date", diaISO(params.ate)),
+        .gte("exception_date", primeiroDiaDaRegra)
+        .lte("exception_date", ultimoDiaDaRegra),
       supabase
         .from("calendar_appointments")
         .select("starts_at, ends_at, status")
