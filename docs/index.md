@@ -79,6 +79,7 @@ Detalham schema SQL e payloads exatos. **Consulte antes de modelar qualquer cois
 | [`specs/17`](specs/17-spec-conversa-vira-lead.md) | **A conversa vira lead** — o elo entre atendimento e CRM |
 | [`specs/17`](specs/17-spec-indice-de-atrito.md) | **Índice de Atrito** — medir o propósito (menor atrito p/ os dois lados), não a atividade |
 | [`specs/18`](specs/18-spec-voice-calls-wacalls.md) | Chamada de voz WhatsApp (WaCalls) — rascunho, sem sub-PRD dedicado |
+| [`specs/extensoes-declarativas-v1.md`](specs/extensoes-declarativas-v1.md) | **Extensões declarativas v1** — pacote JSON estrito, catálogo admitido pelo dono da instalação, ativação por organização, guia no hub CRM |
 | [`specs/RECONCILIATION-LOG.md`](specs/RECONCILIATION-LOG.md) | Log de reconciliação entre specs |
 
 ## 4. Doutrina e arquitetura
@@ -97,6 +98,7 @@ Detalham schema SQL e payloads exatos. **Consulte antes de modelar qualquer cois
 | [`specs/pre-go-live-whatsapp.md`](specs/pre-go-live-whatsapp.md) | Modo de teste do WhatsApp por canal: lista de telefones, abertura ao público e compatibilidade com autorização por origem |
 | [`specs/19`](specs/19-spec-console-de-agencia.md) | **Console de Agência** — operar N organizações clientes; unidade de cobrança decidida (retainer por cliente operado). Lei em [`doctrine/operacao-de-agentes.md`](doctrine/operacao-de-agentes.md) |
 | [`architecture/pre-go-live-whatsapp.architecture.json`](architecture/pre-go-live-whatsapp.architecture.json) | Mapa do pré-go-live, configuração administrativa e gate compartilhado |
+| [`architecture/extensoes-declarativas.architecture.json`](architecture/extensoes-declarativas.architecture.json) | Mapa vivo das extensões declarativas — admissão, download, recibos, ativação por organização e guia no CRM |
 | [`architecture/teto-de-orcamento.architecture.json`](architecture/teto-de-orcamento.architecture.json) | **Mapa vivo do teto de gasto com IA** — quem alimenta o gate, o que a parada NÃO desfaz sozinha, e o laço de retorno (invariante 7) |
 | [`release/teto-de-orcamento.md`](release/teto-de-orcamento.md) | **Nota de release para quem opera uma VPS** — o que muda, o que fazer (nada), a troca de rótulo de R$ para US$ e como ligar a proteção |
 | [`research/architecture-diagrams.md`](research/architecture-diagrams.md) | Diagramas de arquitetura |
