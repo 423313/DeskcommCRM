@@ -16,8 +16,9 @@ import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-se
  *   2. a regra se alcança pela porta (Configurações › Tipos de agendamento), e
  *      ligar pede confirmação e diz quantos contatos ganharam a etiqueta;
  *   3. ligada, o mesmo contato tem o selo na lista, é achado pelo filtro
- *      "cliente", mostra "Cliente desde" na ficha, e a tela de Funis oferece o
- *      funil de clientes.
+ *      "cliente", mostra "Cliente desde" na ficha — com a data em que se
+ *      combinou, nunca a do horário futuro —, e a tela de Funis oferece o funil
+ *      de clientes, que continua marcado depois de recarregar.
  *
  * ⚠️ ORGANIZAÇÃO PRÓPRIA, criada aqui e apagada no fim. Ligar a regra na
  * organização compartilhada do CI etiquetaria os contatos que as outras specs
@@ -112,6 +113,18 @@ function linhaDoContato(page: Page) {
   return page.getByRole("row").filter({ hasText: "Bruna Tatuada" });
 }
 
+/**
+ * A célula "Tags" da linha do contato, achada pelo CABEÇALHO e não por posição
+ * fixa: uma coluna nova antes dela não pode fazer a asserção olhar outra célula
+ * e passar vazia.
+ */
+async function celulaDeTags(page: Page) {
+  const cabecalhos = (await page.getByRole("columnheader").allInnerTexts()).map((c) => c.trim());
+  const indice = cabecalhos.indexOf("Tags");
+  expect(indice, `a lista de Contatos perdeu a coluna Tags: ${JSON.stringify(cabecalhos)}`).toBeGreaterThan(-1);
+  return linhaDoContato(page).getByRole("cell").nth(indice);
+}
+
 test.afterAll(async () => {
   // Apagar a organização atravessa a cascata de todas as tabelas dela; sob carga
   // passou dos 30 s padrão do hook (medido numa rodada local).
@@ -158,10 +171,22 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   expect(agendamento?.contact_id, "o horário nasceu sem o contato escolhido").toBe(f.contato);
 
   // ── 2 · desligada: nada de cliente ──────────────────────────────────────
+  // O selo "Cliente" some por `ActiveOrg` seja qual for o banco, então ele
+  // sozinho não prova nada sobre o trigger. A ETIQUETA é o que o trigger
+  // escreveria: a coluna Tags e os chips da ficha são os lugares onde uma regra
+  // desligada que etiquetasse apareceria.
   await page.goto("/app/contacts");
   await expect(linhaDoContato(page)).toBeVisible({ timeout: 30_000 });
   await expect(linhaDoContato(page).getByText("Cliente", { exact: true })).toHaveCount(0);
+  const tagsDesligada = await celulaDeTags(page);
+  await expect(tagsDesligada).toBeVisible();
+  await expect(tagsDesligada.getByText("cliente", { exact: true })).toHaveCount(0);
   await evidencia(page, info, "1-contatos-regra-desligada");
+
+  await page.goto(`/app/contacts/${f.contato}`);
+  await expect(page.getByRole("heading", { name: "Bruna Tatuada" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("cliente", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Cliente desde")).toHaveCount(0);
 
   // ── 3 · a porta: Configurações › Tipos de agendamento ───────────────────
   await page.goto("/app/settings");
@@ -205,8 +230,40 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   await expect(linhaDoContato(page)).toBeVisible({ timeout: 30_000 });
   await evidencia(page, info, "5-contatos-filtro-cliente");
 
+  // "Cliente desde" é o dia em que o horário foi COMBINADO. O horário é da
+  // semana seguinte; a evidência da rodada anterior mostrava essa data futura.
+  const { data: fatos } = await db
+    .from("contacts")
+    .select("first_service_at")
+    .eq("id", f.contato)
+    .single();
+  const { data: horario } = await db
+    .from("calendar_appointments")
+    .select("created_at, starts_at")
+    .eq("organization_id", f.org)
+    .single();
+  const desde = (fatos as { first_service_at: string | null } | null)?.first_service_at;
+  const { created_at: combinado, starts_at: inicio } = horario as { created_at: string; starts_at: string };
+  expect(desde, "ligada, o contato tem data de cliente").not.toBeNull();
+  expect(new Date(desde!).getTime(), "a data é a do combinado").toBe(new Date(combinado).getTime());
+  expect(new Date(desde!).getTime()).toBeLessThanOrEqual(Date.now());
+  expect(new Date(inicio).getTime(), "controle: o horário é mesmo futuro").toBeGreaterThan(Date.now());
+
   await page.goto(`/app/contacts/${f.contato}`);
   await expect(page.getByText("Cliente desde")).toBeVisible({ timeout: 30_000 });
+  // O mesmo `dd/MM/yyyy` no fuso do navegador que a ficha usa.
+  const [diaCombinado, diaDoHorario] = await page.evaluate(
+    ([a, b]) =>
+      [a, b].map((iso) => {
+        const d = new Date(iso);
+        const dois = (n: number) => String(n).padStart(2, "0");
+        return `${dois(d.getDate())}/${dois(d.getMonth() + 1)}/${d.getFullYear()}`;
+      }),
+    [desde!, inicio] as const,
+  );
+  const fichaDeCliente = page.getByText("Cliente desde").locator("xpath=..");
+  await expect(fichaDeCliente).toContainText(diaCombinado!);
+  await expect(fichaDeCliente).not.toContainText(diaDoHorario!);
   await evidencia(page, info, "6-ficha-cliente-desde");
 
   await page.goto("/app/kanban");
@@ -222,5 +279,23 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   await expect(page.getByTestId("funis-rodape-clientes")).toContainText(
     "Quem já tem atendimento marcado entra pelo funil de clientes.",
   );
+
+  // ── 5 · marcar o funil de clientes, e ele continuar marcado ao recarregar ─
+  // O selo "Clientes" sumia ao recarregar porque /app/kanban não selecionava
+  // `is_client_pipeline`: só o corpo do PATCH trazia a coluna. Sem recarregar,
+  // tirar a coluna do select da página continuaria verde.
+  const idDoFunil = (await botaoDeClientes.getAttribute("data-testid"))!.replace(/^clientes-/, "");
+  const marcouOFunil = page.waitForResponse(
+    (r) => r.url().includes(`/api/v1/pipelines/${idDoFunil}`) && r.request().method() === "PATCH",
+  );
+  await botaoDeClientes.click();
+  expect((await marcouOFunil).ok(), "marcar o funil de clientes foi recusado").toBe(true);
+  await expect(page.getByTestId(`clientes-${idDoFunil}`)).toContainText("Deixar de ser funil de clientes");
+
+  await page.reload();
+  const botaoRecarregado = page.getByTestId(`clientes-${idDoFunil}`);
+  await expect(botaoRecarregado).toBeVisible({ timeout: 60_000 });
+  await expect(botaoRecarregado).toContainText("Deixar de ser funil de clientes");
+  await expect(page.getByTestId(`abrir-${idDoFunil}`).getByText("Clientes", { exact: true })).toBeVisible();
   await evidencia(page, info, "7-funis-com-funil-de-clientes");
 });

@@ -17,10 +17,14 @@ import { TAG_DE_CLIENTE } from "@/lib/contacts/cliente";
  * clientes marcados ainda").
  *
  * O literal mora em UM lugar do SQL — a constante `c_etiqueta` — e toda escrita
- * (acrescentar na virada para cliente, remover na virada de volta) usa a
- * constante. Por isso o teste cobra as duas coisas: a constante é igual à do
- * TypeScript, e nenhuma escrita de array usa um literal solto que pudesse
- * divergir dela.
+ * (acrescentar quando o contato vira cliente, remover a etiqueta que o próprio
+ * sistema pôs quando ele deixa de ser) usa a constante. Por isso o teste cobra
+ * as duas coisas: a constante é igual à do TypeScript, e nenhuma escrita de
+ * array usa um literal solto que pudesse divergir dela.
+ *
+ * O COMPORTAMENTO — de quem é a etiqueta, quando ela sai e volta, quantas vezes
+ * o evento sai — não se prova lendo arquivo. Mora em
+ * `tests/invariants/cliente-nasce-do-agendamento.test.ts`, contra Postgres real.
  *
  * O teste lê o ARQUIVO, e não o banco, de propósito: assim ele roda em
  * `test:unit` (sem Postgres) e reprova o PR que muda um lado só.
@@ -48,11 +52,14 @@ describe("a etiqueta de cliente", () => {
     expect(soltos).toEqual([]);
   });
 
-  it("o baseline carrega a mesma constante e o trigger de UPDATE — é ele que o self-hoster aplica", () => {
+  it("o baseline carrega a mesma constante, os triggers de UPDATE e DELETE e o dono da etiqueta — é ele que o self-hoster aplica", () => {
     // Migração que só entra em `migrations/` não chega a quem instalou pelo kit.
     const baseline = readFileSync(BASELINE, "utf8");
     const capturas = [...baseline.matchAll(CONSTANTE)].map((m) => m[1]);
     expect(capturas).toEqual([TAG_DE_CLIENTE]);
     expect(baseline).toContain("trg_agendamento_recalcula_cliente");
+    expect(baseline).toContain("trg_agendamento_apagado_recalcula_cliente");
+    expect(baseline).toContain("add column if not exists client_tag_by_system");
+    expect(baseline).toContain("add column if not exists client_recognized_at");
   });
 });
