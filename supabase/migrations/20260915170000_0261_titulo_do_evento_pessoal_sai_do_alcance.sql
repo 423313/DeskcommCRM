@@ -6,7 +6,10 @@
 -- atende: o compromisso que a pessoa sincronizou só para bloquear o próprio
 -- horário — "Consulta médica", "Terapia", "entrevista de emprego".
 --
--- O papel `authenticated` tinha SELECT de TABELA nesta tabela, e a view
+-- O papel `authenticated` tinha SELECT de TABELA nesta tabela — vindo do default
+-- ACL de TABELAS do Supabase (que o dump também reemite, `ALTER DEFAULT
+-- PRIVILEGES … GRANT ALL ON TABLES`): a tabela nasce no apêndice do baseline, e
+-- não há `GRANT` dela no dump —, e a view
 -- `calendar_selected_external_events` era `select e.*` — com o `title` dentro.
 -- Num banco instalado do zero (`baseline.sql` da v1.26.0), um membro de OUTRO
 -- papel, inclusive Somente leitura, lia o `title` de uma linha do colega — com o
@@ -47,8 +50,8 @@
 -- sem `title`.
 --
 -- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem o
--- `title`. Revogar a coluna sem revogar a tabela não faria nada: privilégio de
--- tabela cobre todas as colunas, e o `GRANT` enumerado do dump só ACRESCENTA.
+-- `title`. Revogar a coluna sem revogar a tabela não faria nada: o privilégio de
+-- TABELA cobre todas as colunas, e é ele que o default ACL de tabelas concede.
 --
 -- ─── O que continua ao alcance do membro, e por quê ─────────────────────────
 --

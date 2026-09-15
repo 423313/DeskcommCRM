@@ -25033,7 +25033,9 @@ notify pgrst, 'reload schema';
 -- ## O que estava aberto, e foi medido
 --
 -- `public.calendar_external_events` é o espelho da agenda PESSOAL de quem atende.
--- O papel `authenticated` tinha SELECT de TABELA nesta tabela e a view
+-- O papel `authenticated` tinha SELECT de TABELA nesta tabela — vindo do default
+-- ACL de TABELAS (`ALTER DEFAULT PRIVILEGES … GRANT ALL ON TABLES`, que o Supabase
+-- grava e este dump reemite; não há `GRANT` desta tabela no dump) — e a view
 -- `calendar_selected_external_events` era `select e.*` — com `title` dentro. Num
 -- banco instalado do zero (`baseline.sql` da v1.26.0), qualquer membro da
 -- organização, inclusive Somente leitura, lia o `title` de uma linha do colega
@@ -25080,8 +25082,8 @@ notify pgrst, 'reload schema';
 -- decisão do dono. O invariante mede que o colega segue lendo o id.
 --
 -- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem
--- `title`. Revogar coluna sem revogar a tabela não faz nada: privilégio de tabela
--- cobre todas as colunas.
+-- `title`. Revogar coluna sem revogar a tabela não faz nada: o privilégio de TABELA
+-- cobre todas as colunas, e é ele que o default ACL de tabelas concede.
 --
 -- ## A view precisa ser recriada, não substituída no lugar
 --
