@@ -3,7 +3,7 @@ import pg from "pg";
 
 import { drainTick } from "@/lib/agent-engine/edge/crm/drain";
 import { createLogger } from "@/lib/agent-engine/obs/logger";
-import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU } from "@/lib/event-log/aviso-de-evento-morto";
+import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU, TITULO_GENERICO } from "@/lib/event-log/aviso-de-evento-morto";
 
 /**
  * O AVISO "A IA DEIXOU DE RESPONDER" NÃO SOME ATRÁS DE OUTRO `event_dead` ABERTO.
@@ -148,7 +148,7 @@ const mortos = () =>
     [ORG],
   );
 
-const TITULO_MIDIA = "Um processamento parou de tentar (media.derive_requested)";
+const TITULO_MIDIA = TITULO_GENERICO;
 const KNOBS = { batchSize: MIL, intervalMs: 0, idleIntervalMs: 0, debounceMs: 0, reapTimeoutMs: 300_000 };
 
 let cenario: Cenario;

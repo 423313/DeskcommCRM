@@ -251,7 +251,9 @@ describe("drainEventLog — evento morto abre aviso na Central", () => {
       severity: "critical",
     });
     expect(String(aviso!.payload?.body)).toContain("transcription_401");
-    expect(String(aviso!.payload?.title)).toContain(MORIBUNDO.event_type);
+    // O nome do evento sai do título (quem lê a Central não programa) e fica no corpo, no detalhe técnico.
+    expect(String(aviso!.payload?.title)).not.toContain(MORIBUNDO.event_type);
+    expect(String(aviso!.payload?.body)).toContain(MORIBUNDO.event_type);
     // No corpo, o nome do evento vai para o detalhe técnico, no fim — o começo é
     // lido por quem não programa (ver `aviso-de-evento-morto.ts`).
     const corpo = String(aviso!.payload?.body);
@@ -311,7 +313,9 @@ describe("drainEventLog — evento morto abre aviso na Central", () => {
 
     const [aviso] = avisos(chamadas);
     expect(aviso, "o aviso aberto da IA engoliu a morte de outro processamento").toBeDefined();
-    expect(String(aviso!.payload?.title)).toContain(MORIBUNDO.event_type);
+    // O nome do evento sai do título (quem lê a Central não programa) e fica no corpo, no detalhe técnico.
+    expect(String(aviso!.payload?.title)).not.toContain(MORIBUNDO.event_type);
+    expect(String(aviso!.payload?.body)).toContain(MORIBUNDO.event_type);
     expect(String(aviso!.payload?.body)).toContain("abre o seu próprio");
   });
 

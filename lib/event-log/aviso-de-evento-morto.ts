@@ -38,11 +38,9 @@
  * quem der suporte. O motivo NÃO é traduzido nem escondido: é a única pista de
  * quem investiga, e uma tradução nossa de mensagem de banco erraria em silêncio.
  *
- * ⚠️ O TÍTULO GENÉRICO AINDA LEVA O NOME DO EVENTO, e não por gosto:
- * `tests/invariants/aviso-da-ia-nao-some-atras-de-outro-evento-morto.test.ts`
- * conta os avisos abertos pelo título literal `Um processamento parou de tentar
- * (media.derive_requested)`, e invariante é congelado. Tirar o nome daqui
- * deixaria aquela contagem medindo zero linhas.
+ * O título também é para quem lê a Central: o nome do evento não entra nele
+ * (ele está no detalhe técnico do corpo). O dedupe do dreno de handlers é por
+ * `kind`, então tirar o nome do título não junta nem separa avisos.
  *
  * ═══ AS DUAS FAMÍLIAS, E POR QUE A CHAVE É O TÍTULO ═══
  *
@@ -96,6 +94,8 @@ export const IA_QUE_NAO_RESPONDEU = {
     "depois de corrigida a causa, marque-o como resolvido para voltar a ser avisado.",
 } as const;
 
+export const TITULO_GENERICO = "Uma tarefa automática parou de tentar";
+
 const CONSEQUENCIA_GENERICA =
   "Uma tarefa automática do sistema falhou e parou de tentar: o que ela ia fazer não aconteceu, " +
   "e não será tentado de novo.";
@@ -107,7 +107,7 @@ const REARME_GENERICO =
 
 export function avisoDeEventoMorto(evento: EventoMorto): { title: string; body: string } {
   return {
-    title: evento.efeito?.titulo ?? `Um processamento parou de tentar (${evento.eventType})`,
+    title: evento.efeito?.titulo ?? TITULO_GENERICO,
     body:
       `${evento.efeito?.consequencia ?? CONSEQUENCIA_GENERICA} ` +
       `${evento.efeito?.rearme ?? REARME_GENERICO} ` +
