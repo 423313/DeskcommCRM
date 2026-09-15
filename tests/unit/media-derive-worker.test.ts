@@ -91,6 +91,7 @@ vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
 
 import { deriveMessageMedia } from "@/workers/media-derive-worker";
 import { deriveMediaText } from "@/lib/messaging/media/derive";
+import { DETALHE_TECNICO } from "@/lib/event-log/aviso-de-evento-morto";
 
 function eventRow(attempts = 0) {
   return {
@@ -189,6 +190,13 @@ describe("deriveMessageMedia", () => {
       // abrir o arquivo") seria mentira aqui.
       expect(String(aviso.body)).toContain("O conteúdo do arquivo não chegou ao agente.");
       expect(String(aviso.body)).not.toContain("responde avisando");
+      // E a frase do provedor vem no FIM, rotulada: é inglês de API, e quem lê
+      // a Central não programa.
+      const corpo = String(aviso.body);
+      const rotulo = corpo.indexOf(DETALHE_TECNICO);
+      expect(rotulo, "a frase do provedor sem o rótulo de detalhe técnico").toBeGreaterThan(0);
+      expect(corpo.slice(0, rotulo)).not.toContain("does not exist");
+      expect(corpo.slice(rotulo)).toContain(RECUSA_DO_PROVEDOR);
     });
 
     it("tentativa que ainda VAI tentar de novo não avisa (controle)", async () => {

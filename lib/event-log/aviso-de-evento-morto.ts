@@ -25,6 +25,23 @@
  *  - quando o dreno sabe o que o evento ia fazer, o lugar onde a pessoa
  *    consegue fazer à mão o que o sistema não fez.
  *
+ * ═══ QUEM LÊ NÃO PROGRAMA — O TÉCNICO VAI NO FIM, ROTULADO ═══
+ *
+ * A Central é lida pelo dono do negócio. A versão anterior abria o corpo com
+ * `O evento "media.persist_requested" falhou 5 vezes… Motivo: <cru>` — e, no
+ * aviso da IA, o motivo cru era uma frase do Postgres em inglês (`insert or
+ * update on table "job_queue" violates foreign key constraint…`). Medido na QA
+ * do lote 9 da triagem, pela tela.
+ *
+ * Então o corpo começa pelo que aconteceu e pelo que a pessoa pode fazer, e o
+ * nome do evento e o motivo ficam no fim, depois de `DETALHE_TECNICO`, para
+ * quem der suporte. O motivo NÃO é traduzido nem escondido: é a única pista de
+ * quem investiga, e uma tradução nossa de mensagem de banco erraria em silêncio.
+ *
+ * O título também é para quem lê a Central: o nome do evento não entra nele
+ * (ele está no detalhe técnico do corpo). O dedupe do dreno de handlers é por
+ * `kind`, então tirar o nome do título não junta nem separa avisos.
+ *
  * ═══ AS DUAS FAMÍLIAS, E POR QUE A CHAVE É O TÍTULO ═══
  *
  * Os dois drenos abrem o mesmo `kind` (`event_dead`). Com o dedupe só por
@@ -43,6 +60,12 @@
  * com o texto antigo deixa de deduplicar UMA vez, e o efeito é um aviso a mais,
  * nunca um a menos.
  */
+
+/**
+ * O rótulo que separa o que a pessoa lê do que o suporte precisa. Um só, para
+ * todo aviso que carrega detalhe técnico dizer isso do mesmo jeito.
+ */
+export const DETALHE_TECNICO = "Detalhe técnico, para quem der suporte:";
 
 export interface EventoMorto {
   eventType: string;
@@ -71,21 +94,24 @@ export const IA_QUE_NAO_RESPONDEU = {
     "depois de corrigida a causa, marque-o como resolvido para voltar a ser avisado.",
 } as const;
 
+export const TITULO_GENERICO = "Uma tarefa automática parou de tentar";
+
 const CONSEQUENCIA_GENERICA =
-  "O efeito que esse evento ia causar não aconteceu, e ele não será tentado de novo.";
+  "Uma tarefa automática do sistema falhou e parou de tentar: o que ela ia fazer não aconteceu, " +
+  "e não será tentado de novo.";
 
 const REARME_GENERICO =
-  "Enquanto este aviso estiver aberto, outros processamentos que pararem de tentar não abrem aviso novo " +
+  "Enquanto este aviso estiver aberto, outras tarefas automáticas que pararem de tentar não abrem aviso novo " +
   "(a IA que deixa de responder um cliente abre o seu próprio): " +
   "depois de corrigida a causa, marque-o como resolvido para voltar a ser avisado.";
 
 export function avisoDeEventoMorto(evento: EventoMorto): { title: string; body: string } {
   return {
-    title: evento.efeito?.titulo ?? `Um processamento parou de tentar (${evento.eventType})`,
+    title: evento.efeito?.titulo ?? TITULO_GENERICO,
     body:
-      `O evento "${evento.eventType}" falhou ${evento.tentativas} vezes e parou de tentar. ` +
-      `Motivo: ${evento.motivo.slice(0, 400)}. ` +
       `${evento.efeito?.consequencia ?? CONSEQUENCIA_GENERICA} ` +
-      (evento.efeito?.rearme ?? REARME_GENERICO),
+      `${evento.efeito?.rearme ?? REARME_GENERICO} ` +
+      `${DETALHE_TECNICO} evento ${evento.eventType}, ${evento.tentativas} tentativas; ` +
+      `motivo: ${evento.motivo.slice(0, 400)}`,
   };
 }

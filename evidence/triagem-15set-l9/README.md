@@ -118,6 +118,16 @@ failed` e, no da IA, a frase inglesa do Postgres `insert or update on table
 "job_queue" violates foreign key constraint …`. O título genérico também leva
 `(media.persist_requested)`.
 
+**Consertado o corpo, não o título** (`d9a81523e`, branch `triagem/lote-9-qa-consertos`): o
+corpo dos dois avisos de evento morto e o do `midia_nao_lida` da falha permanente começam
+pelo que aconteceu e pelo que a pessoa pode fazer; o nome do evento, as tentativas e o
+motivo cru — sem tradução — ficam no fim, depois de "Detalhe técnico, para quem der
+suporte:". Provado por teste (`tests/unit/aviso-de-evento-morto-le-para-leigo.test.ts`,
+e a falha permanente pelo worker real em `tests/unit/media-derive-worker.test.ts`), **não
+em tela**. O título genérico segue com `(media.persist_requested)`: o invariante
+`aviso-da-ia-nao-some-atras-de-outro-evento-morto` conta avisos por esse título literal, e
+o pre-commit recusa editar invariante.
+
 **NÃO MEDIDO:** o aviso `midia_nao_lida` que o #872 passa a abrir quando a
 **derivação** (transcrição/leitura pela IA) estoura por exceção. Chegar lá exige a
 mídia persistida e uma chamada ao provedor de IA que falhe; sem WAHA servindo o
@@ -185,10 +195,53 @@ motor escreve (`node_advanced`, `wait_started`, `action_sent`, `handoff_paused`,
 para o primeiro passo — e levá-la para `scripts/lib/`, onde um teste pode passar cada
 evento por `descreveEvento` e reprovar o que cair no `default`.
 
+**Consertado em `5a83d292a`** (branch `triagem/lote-9-qa-consertos`). O motor grava a
+trilha por três portas — o tick (`engine.ts`), a conclusão do envio (`turn-bridge.ts`) e a
+reatividade a atendimento humano (`reactivity.ts`) —, e a inscrição manual nasce **sem**
+passo nenhum (`enroll.ts`). A demonstração passou a ter só isso:
+
+- estado e trilha em `scripts/lib/followups-de-demonstracao.ts`, com o `event_type`, o
+  payload e a chave de idempotência (`<nó>:<passos>`) que essas portas gravam, e
+  `started_at`/`updated_at`/`completed_at` coerentes com a trilha;
+- o grafo ganhou o nó "Espera a resposta" (`match_reply`): o motor só grava
+  `waiting_reply` num nó que espera o cliente, então num fluxo que termina na mensagem
+  "Aguardando resposta" é um estado inalcançável;
+- `tests/unit/followups-de-demonstracao-sao-possiveis.test.ts` reencena cada trilha com
+  `runFollowupTick`, `completeTurnForEnrollment` e `applyReactivityEvent` sobre um banco
+  em memória e exige os mesmos passos e o mesmo estado final; confere que todo código é
+  literal de um módulo que insere em `followup_enrollment_events` (achados no código) e
+  que a tela o traduz; e que as datas andam a partir do início. Sabotagens (previsão =
+  observado): `node_entered` no lugar de `wait_started` → 6 vermelhos; primeiro passo
+  2 dias antes do início → 5; "esperando resposta" parada no nó da mensagem → 1.
+
+Prova em tela, mesma construção do app (`next build` da árvore de `5a83d292a`, e a tela do dossiê
+não mudou no conserto), Supabase local próprio (`fx-l9-qa`, portas 5972x, Postgres 17.6,
+só o `baseline.sql`), `e2e-manager`, Chromium `pt-BR`/`America/Sao_Paulo`:
+
+- `875-07-dossie-antes-trilha-impossivel.png` — o seed do SHA `e0b68b70f`: "Começou
+  15/09/2026 06:26", trilha "código: enrolled" em 12/09 e "código: node_entered" em 13/09,
+  "Aguardando resposta" em "Retoma o contato", 2 passos.
+- `875-08-dossie-depois-trilha-do-motor.png` — as linhas do fluxo antigo apagadas **do
+  banco descartável**, e o seed do conserto: "Começou 13/09/2026 22:28", seis passos em
+  ordem a partir do início (Seguiu em frente → Começou a esperar → Seguiu em frente →
+  Pediu ao agente para escrever a mensagem → Mensagem enviada → Começou a esperar), a
+  inscrição em "Espera a resposta". Nenhuma linha "código:". Os outros três dossiês
+  abertos pela mesma sonda (texto, sem imagem): relógio com 2 passos, pausado com
+  "Pausado porque uma pessoa assumiu a conversa" depois da espera, concluído com 8
+  passos terminando em "Fluxo concluído · esgotou as tentativas".
+
 **Menores, na mesma saída:** na segunda rodada o seed imprime "3 regras ativas, 0
 execuções no histórico" e "0 inscrições" com 3 e 4 no banco — conta o que a rodada
 gravou e diz que é o estado. E ele manda olhar "abas Regras e Atividade"; a aba se
 chama "Automações".
+
+**Consertado** (branch `triagem/lote-9-qa-consertos`, commit do item 2): o resumo relê do
+banco o que existe depois da rodada e diz, ao lado, quantas a rodada criou; e manda olhar
+"Webhooks › abas Automações e Atividade" e "Follow-ups › abas Fluxos e Fila" —
+`tests/unit/resumo-do-seed-diz-o-que-existe.test.ts` lê esses nomes do menu
+(`lib/navigation/catalogo.ts`) e dos `TabsTrigger` das telas. Saída real de duas rodadas
+no Supabase local descartável, com 3 regras, 3 execuções e 4 inscrições no banco:
+`875-09-seed-resumo-duas-rodadas.txt`.
 
 ## Regressão do lote 8 na árvore combinada
 
