@@ -33,9 +33,15 @@ node experiments/extensoes/console.mjs
 pnpm exec playwright test -c experiments/extensoes/playwright.config.mjs
 ```
 
-A porta é fixa para recusar consoles concorrentes, sem encerrar o processo que já a ocupa. O console aceita somente as três provas enumeradas e as executa uma por vez. Os resultados e traces ficam na área exclusiva da bancada; falha e ambiente incompleto não viram sucesso. Encerre o console com Ctrl+C. Isso não para o PostgreSQL, cujo encerramento é feito pelo comando `stop` acima.
+A porta é fixa para recusar consoles concorrentes, sem encerrar o processo que já a ocupa. O console aceita somente as três provas enumeradas. Um supervisor Python mantém a exclusão entre console e CLI durante a vida real do trabalho, inclusive se o console morrer. Os resultados e traces ficam na área exclusiva da bancada; falha e ambiente incompleto não viram sucesso. Encerre o console com Ctrl+C. Isso não para o PostgreSQL, cujo encerramento é feito pelo comando `stop` acima.
+
+Cada início usa um UUID de solicitação e recibo persistido antes da autorização do trabalho. Se a resposta se perder, a tela informa que a confirmação está pendente e consulta o mesmo recibo; reenviar o mesmo ID não executa novamente. A recarga recupera resultados já gravados. Ela não reconstrói um relatório perdido por interrupção do executor.
+
+O caminho de CLI é `node experiments/extensoes/runner.mjs runtime` (ou `events`/`state`). Ele compartilha a guarda do console. Timeout ou SIGTERM do supervisor encerra o grupo de processos próprio e confirma seu término antes de liberar a reserva. SIGKILL do supervisor ou saída anormal do runner conserva a reserva e recusa nova execução. Nesse caso, inspecione os processos e a reserva da área própria antes de qualquer recuperação manual; não apague o arquivo de lock para forçar uma execução, nem mate PIDs lidos de arquivo sem confirmar sua identidade. A bancada não faz essa recuperação incerta automaticamente.
 
 A prova de navegador valida a identidade da worktree antes de enviar mutações. O cenário de ambiente ausente move temporariamente o venv exclusivo e o restaura em `finally`; não execute outra prova Wasmtime simultaneamente por CLI durante essa jornada. A execução bem-sucedida seguinte verifica a recuperação. A suíte da bancada usa sua configuração própria e fica fora do Vitest do produto.
+
+O perfil Docker usa comandos e journals próprios, descritos no [relatório 07](../../docs/research/extensoes/07-perfil-comparacao-executor.md). Não é acionado pelos três botões nem pela guarda do supervisor acima. Execute-o separadamente, sem concorrência com outras medições. O diagnóstico do ensaio Wasmtime distingue disponibilidade do Docker de execução do perfil: `container_comparison.status=not_run` significa que aquele relatório não executou contêineres, mesmo quando `daemon_status=ready`.
 
 ## Recuperação e propriedade
 

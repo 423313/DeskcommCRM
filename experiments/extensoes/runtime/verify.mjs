@@ -18,5 +18,5 @@ assert.equal(report.measurements.cold_process_ms.n, 5);
 assert.equal(report.measurements.warm_call_ms.n, 50);
 assert.equal(report.measurements.concurrent.tasks, 8);
 assert.equal(report.measurements.concurrent.maximum_active, 2);
-assert.equal(report.measurements.container_comparison.status, 'blocked');
+assert.equal(report.measurements.container_comparison.status, 'not_run');
 process.stdout.write(`${JSON.stringify({ status: report.status, checks: report.checks.length, evidence: join(evidenceDir, 'runtime-report.json') })}\n`);

@@ -9,6 +9,11 @@
 
 <!-- 1-3 frases, do ponto de vista de quem USA o sistema. Se resolve issue: Closes #123 -->
 
+<!-- Destino da mudança (opcional para quem contribui): núcleo, extensão, ambos ou
+     infraestrutura/documentação. Diga por quê, se já souber. A triagem completa essa
+     avaliação com você; não é necessário usar um SDK que ainda não foi entregue.
+     Critério: triagem/TRIAGEM.md, passe 2-bis. -->
+
 ---
 
 ### 📌 Contribuindo de um fork? Você está no lugar certo.

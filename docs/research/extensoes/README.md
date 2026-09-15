@@ -1,6 +1,6 @@
 # Plataforma de extensões — pesquisa de arquitetura
 
-**14/set/2026. Investigação e proposta, ainda sem implementação ou jornada E2E nova executada.**
+**14/set/2026. Arquitetura aprovada; bancada experimental executada, corrigida e revisada. Jornada integrada de extensões no CRM ainda pendente.**
 
 Referência de código: `25edc35b05c8d522e2bfe313863e6003f47b8f56`, obtida de `origin/main` para esta pesquisa. Os caminhos e as linhas dos relatórios descrevem essa fotografia; outras branches ou commits podem ter comportamento diferente.
 
@@ -28,3 +28,14 @@ Os relatórios foram produzidos por agentes distintos e reconciliados na síntes
 A pesquisa usa a branch `docs/plataforma-extensoes-20260914`, numa worktree própria. A pasta principal estava em outra branch, com alterações de outras sessões. Esses arquivos não foram incorporados nem revertidos. Os documentos solicitados ficam em `Decisão Implementações`; a branch da pesquisa preserva uma cópia versionada e as evidências técnicas.
 
 O diagrama da proposta descreve responsabilidades futuras. Ele não foi publicado como mapa de componentes já operacionais, nem autoriza declarar a arquitetura implantada. Escolhas técnicas que dependem de medição permanecem explícitas no plano de provas.
+
+## Experimentos implementados
+
+| Relatório | Alcance |
+|---|---|
+| [04 — Executor](04-bancada-executor.md) | Wasmtime concreto, capacidades sintéticas, limites e caminhos próprios |
+| [05 — Eventos](05-bancada-eventos.md) | Captura/entregas, concorrência, retomada e efeito HTTP incerto |
+| [06 — Estado e dados](06-bancada-estado-e-dados.md) | Compatibilidade real de tarefa antiga, RLS da fixture, desativação e anonimização |
+| [07 — Perfil de contêiner](07-perfil-comparacao-executor.md) | Imagem fixa, rodada Docker real, limites exercitados e comparação delimitada |
+
+O [runbook da bancada](../../../experiments/extensoes/README.md) permite repetir os experimentos em ambiente próprio. O [PROG-020](../../../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-020%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20resultados%20da%20bancada.md) é a síntese para acompanhar a execução sem ler o código.

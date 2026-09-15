@@ -107,10 +107,11 @@ async function dockerAvailability() {
     });
     observations.push(observation);
   }
-  return { status: 'blocked', observations,
-    reason: observations.some((item) => item.result === 'HTTP 200')
-      ? 'Daemon respondeu; comparação ainda exige imagem fixa e perfil equivalente de quotas. Nenhum contêiner foi executado por esta bancada.'
-      : 'Daemon Docker indisponível nos sockets locais testados. Comparação com contêiner não executada.',
+  const available = observations.some((item) => item.result === 'HTTP 200');
+  return { status: 'not_run', daemon_status: available ? 'ready' : 'blocked', observations,
+    reason: available
+      ? 'Docker respondeu. Este ensaio mede Wasmtime; a execução em contêiner e suas evidências pertencem ao perfil separado runtime/container.'
+      : 'Docker não respondeu nos sockets testados. Este ensaio mede Wasmtime; execute o perfil separado runtime/container quando o daemon estiver disponível.',
     profile: null, measurements: null };
 }
 

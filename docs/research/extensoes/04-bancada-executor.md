@@ -2,8 +2,10 @@
 
 Medido em 2026-09-14, sobre a bancada isolada de `experiments/extensoes/runtime/`.
 **CONFIRMADO:** os 14 controles do ensaio passaram em Wasmtime 48.0.0, macOS ARM64,
-Python 3.14.6 e Node 22.22.3. A comparação com contêiner ficou **bloqueada**: o daemon
-não respondeu ao `/_ping` em dois segundos nos dois sockets locais testados.
+Python 3.14.6 e Node 22.22.3. Na primeira rodada, a comparação com contêiner ficou
+**bloqueada**: o daemon não respondeu ao `/_ping` em dois segundos nos dois sockets
+locais testados. Após a recuperação autorizada, o perfil separado foi executado;
+resultados e limites estão no [relatório 07](07-perfil-comparacao-executor.md).
 Isso não prova a integração ao CRM nem conclui a escolha de implantação na VPS.
 
 ## Pergunta e fronteira testada
@@ -44,7 +46,10 @@ contexto externo ou simbólico é recusado antes de executar ou escrever.
 A integração usa `runProbe({ repoRoot, evidenceDir, databaseUrl })` exportado em
 `experiments/extensoes/runtime/probe.mjs`. Erros inesperados produzem `failed`.
 `passed` cobre os controles executados; o objeto separado
-`measurements.container_comparison.status` continua `blocked`.
+`measurements.container_comparison.status` informa `not_run`: este comando não roda
+o perfil Docker. `daemon_status` informa separadamente `ready` ou `blocked`. Os
+relatórios históricos anteriores a essa separação usavam `blocked` nesse campo;
+uma resposta ao ping não comprova execução nem valida os limites do contêiner.
 
 ## Correção da fronteira de evidências — revisão F5
 
@@ -161,15 +166,16 @@ não promessa de precisão do temporizador.
 
 ## Comparação com contêiner
 
-`GET /_ping` em `/var/run/docker.sock` e `~/.docker/run/docker.sock` expirou em
+Na rodada histórica deste relatório, `GET /_ping` em `/var/run/docker.sock` e `~/.docker/run/docker.sock` expirou em
 2.006,889 e 2.003,011 ms, respectivamente. Nenhum contêiner foi criado, nenhum daemon
 reiniciado e nenhum serviço compartilhado alterado. Perfil e medições de contêiner
 ficaram `null` no relatório.
 
-Para concluir a comparação é necessário um daemon funcional e uma imagem imutável,
-com CPU, memória, processos, usuário, filesystem, rede e privilégios declarados.
-O código atual apenas diagnostica disponibilidade: mesmo se o daemon voltar, a
-comparação segue bloqueada até haver perfil e execução equivalentes implementados.
+O daemon foi recuperado depois, por autorização explícita. O perfil separado usa
+imagem imutável e limites inspecionados; sua rodada real e cinco provas de limites
+passaram, conforme o relatório 07. Este comando Wasmtime continua apenas
+diagnosticando disponibilidade do Docker. Comparação de custo em VPS e broker
+equivalente seguem pendentes; os dois percursos locais não medem a mesma fronteira.
 
 ## Consequência para a arquitetura
 
@@ -183,7 +189,7 @@ porque a chamada quente desta fixture é muito menor que o processo novo. A banc
 não mede o custo de um SDK JavaScript, de JSON real, do broker remoto ou de isolamento
 entre sucessivas execuções reais; ainda não justifica escolher um pool de produção.
 
-**PENDENTE:** Linux amd64 com quotas de processo, comparação com contêiner, carga
+**PENDENTE:** Linux amd64 com quotas de processo, comparação equivalente com contêiner, carga
 prolongada e competição entre organizações; limites de compilação de artefatos grandes;
 Component Model/WIT; validação de pacote real; transporte, autenticação e RBAC do
 broker do CRM; persistência transacional e cancelamento/idempotência de efeitos
