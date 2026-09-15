@@ -45,8 +45,14 @@ export type VoiceCallStatus = "starting" | "ringing" | "connected" | "ended";
  *                 diagnosticar: "não abriu" aponta para rede/porta, "caiu"
  *                 aponta para queda no meio — e o fim da ligação, que fecha a
  *                 ponte do lado do WaCalls, também cai aqui.
+ * - `falhou`      a tentativa nem chegou à rede: microfone negado ou fechado no
+ *                 pedido do navegador, worklet que não carregou, troca de SDP
+ *                 recusada. Existe porque a trava contra novas tentativas em
+ *                 laço deixava o painel em "Abrindo o áudio…" para sempre, sem
+ *                 botão — justo na primeira ligação de quem nunca deu permissão
+ *                 ao microfone.
  */
-export type EstadoDaMidia = "ociosa" | "negociando" | "aberta" | "com_audio" | "sem_rota" | "caiu";
+export type EstadoDaMidia = "ociosa" | "negociando" | "aberta" | "com_audio" | "sem_rota" | "caiu" | "falhou";
 
 /**
  * Quanto tempo o caminho de mídia tem para abrir antes de o painel declarar que
@@ -350,11 +356,22 @@ export function useVoiceCallSession(remoteAudioRef: RefObject<HTMLAudioElement |
   useEffect(() => {
     if (!orgId) return;
     let cancelado = false;
+    // Recarregou no meio da ligação: a marca desta aba diz QUAL ligação é a
+    // dela. Sem isso o boot adotava a mais recente da organização — de um
+    // colega, ou uma recebida tocando — e a própria ligação não reabria.
+    const marcada = lerMarcaDaAba();
+    const url = marcada
+      ? `/api/v1/voice/calls/history?id=${encodeURIComponent(marcada)}&limit=1`
+      : "/api/v1/voice/calls/history?limit=5";
     apiClient
-      .get<VoiceCallsListResponse>("/api/v1/voice/calls/history?limit=5")
-      .then((res) => {
+      .get<VoiceCallsListResponse>(url)
+      .then(async (res) => {
+        let linhas = res.data;
+        if (marcada && !linhas.some((r) => r.id === marcada && ehRelevante(r))) {
+          linhas = (await apiClient.get<VoiceCallsListResponse>("/api/v1/voice/calls/history?limit=5")).data;
+        }
         if (cancelado) return;
-        const ativa = res.data.find((r) => ehRelevante(r) && !encerradasRef.current.has(r.id));
+        const ativa = linhas.find((r) => ehRelevante(r) && !encerradasRef.current.has(r.id));
         if (ativa) setCall((atual) => atual ?? ativa);
       })
       .catch(() => {
@@ -379,7 +396,12 @@ export function useVoiceCallSession(remoteAudioRef: RefObject<HTMLAudioElement |
     const atual = callRef.current;
     if (!atual || !ehRelevante(atual)) return;
     try {
-      const res = await apiClient.get<VoiceCallsListResponse>("/api/v1/voice/calls/history?limit=5");
+      // Pelo id, e não "entre as 5 mais recentes": num escritório com várias
+      // ligações a desta tela sai da janela, e a rede de segurança deixaria de
+      // achar justamente a ligação que precisa fechar.
+      const res = await apiClient.get<VoiceCallsListResponse>(
+        `/api/v1/voice/calls/history?id=${encodeURIComponent(atual.id)}&limit=1`,
+      );
       const noServidor = res.data.find((r) => r.id === atual.id);
       if (!noServidor) return;
       if (noServidor.status === "ended") encerradasRef.current.add(noServidor.id);
@@ -599,6 +621,10 @@ export function useVoiceCallSession(remoteAudioRef: RefObject<HTMLAudioElement |
       if (geracaoDaMidiaRef.current !== geracao) return;
       showApiError(err);
       teardownMedia();
+      // Depois do teardown (que devolve `ociosa`): a tentativa NÃO é refeita
+      // sozinha — `midiaTentadaRef` segue marcada, contra o laço —, então o
+      // painel precisa dizer que falhou e oferecer o botão.
+      setEstadoDaMidia("falhou");
     } finally {
       // Só a tentativa vigente fala pelo estado: uma superada que baixasse o
       // "conectando" apagaria o indicador da tentativa que está em curso.

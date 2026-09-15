@@ -60,6 +60,8 @@ let escritas: Array<{ tabela: string; patch: unknown; filtros: Array<[string, un
 let inseridas: Array<{ tabela: string; linha: Record<string, unknown> }>;
 /** O que cada tabela pediu em `.select(...)` — a resposta da rota é o que ela seleciona. */
 let selecionadas: Array<{ tabela: string; colunas: string }>;
+/** Todo `.eq()` de leitura, por tabela — o filtro é o que decide QUAL linha volta. */
+let filtrosLidos: Array<{ tabela: string; coluna: string; valor: unknown }>;
 
 function dubleSupabase() {
   return {
@@ -77,7 +79,8 @@ function dubleSupabase() {
         return cadeia;
       };
       cadeia.eq = (coluna: string, valor: unknown) => {
-        filtrosDaEscrita?.push([coluna, valor]);
+        if (filtrosDaEscrita) filtrosDaEscrita.push([coluna, valor]);
+        else filtrosLidos.push({ tabela, coluna, valor });
         return cadeia;
       };
       cadeia.update = (patch: unknown) => {
@@ -146,6 +149,7 @@ beforeEach(() => {
   escritas = [];
   inseridas = [];
   selecionadas = [];
+  filtrosLidos = [];
   autorizadoComo(EU);
   // ⚠️ CONSENTIMENTO DA ORGANIZAÇÃO, e ele é PRÉ-CONDIÇÃO desde que
   // `exigirVozLigada` ganhou chamadores. Sem esta linha, `POST /voice/calls`
@@ -610,6 +614,26 @@ describe("erro de consulta não é 'nunca ligou'", () => {
     const res = await historico();
     expect(res.status).toBe(200);
     expect((await corpo(res)).data).toHaveLength(1);
+  });
+
+  it("com ?id=, filtra pela ligação — é assim que o painel confere UMA ligação", async () => {
+    respostas["voice_calls"] = { data: [{ id: CHAMADA }], error: null };
+    const { GET } = await import("@/app/api/v1/voice/calls/history/route");
+    const res = await GET(new Request(`http://x/api/v1/voice/calls/history?id=${CHAMADA}&limit=1`));
+    expect(res.status).toBe(200);
+    expect(filtrosLidos).toEqual(
+      expect.arrayContaining([
+        { tabela: "voice_calls", coluna: "organization_id", valor: ORG },
+        { tabela: "voice_calls", coluna: "id", valor: CHAMADA },
+      ]),
+    );
+  });
+
+  it("?id= que não é uuid é 400, sem consultar", async () => {
+    const { GET } = await import("@/app/api/v1/voice/calls/history/route");
+    const res = await GET(new Request("http://x/api/v1/voice/calls/history?id=1%20or%201=1"));
+    expect(res.status).toBe(400);
+    expect(filtrosLidos).toEqual([]);
   });
 
   it("falha de consulta responde erro, e não lista vazia", async () => {

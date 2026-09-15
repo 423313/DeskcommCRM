@@ -83,6 +83,10 @@ export function ActiveCallPanel() {
       // Abrir aqui sozinho trocaria a ponte do serviço de voz e emudeceria a aba
       // que ela está usando — então pergunta, com o botão.
       { texto: t("O áudio desta ligação está em outra aba"), grave: false, ouvirAqui: t("Ouvir aqui") }
+    : estadoDaMidia === "falhou"
+      ? // Antes do "connected" também: o microfone é pedido no clique, com o
+        // telefone ainda tocando, e dá tempo de corrigir antes de o cliente atender.
+        { texto: t("Não consegui abrir o áudio. Confira o microfone."), grave: true, ouvirAqui: t("Tentar de novo") }
     : call.status !== "connected" || estadoDaMidia === "com_audio"
       ? null
       : estadoDaMidia === "sem_rota"

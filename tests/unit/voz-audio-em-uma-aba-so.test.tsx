@@ -290,6 +290,42 @@ describe("só a aba do gesto abre o áudio", () => {
     expect(postsDeMidia().map((c) => String(c[0]))).toEqual([`/api/v1/voice/calls/${SEGUNDA}/webrtc`]);
   });
 
+  it("microfone negado no clique: o painel diz que falhou e 'Tentar de novo' abre uma tentativa nova", async () => {
+    // A trava contra laço deixava o estado em `ociosa` e o painel em "Abrindo o
+    // áudio…" para sempre, sem botão — a primeira ligação de quem nunca deu
+    // permissão ao microfone.
+    (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      Object.assign(new Error("Permission denied"), { name: "NotAllowedError" }),
+    );
+    const { result } = await montar();
+    await act(async () => {
+      await result.current.startCall(CONTATO);
+    });
+    await assentar();
+    expect(result.current.estadoDaMidia).toBe("falhou");
+    await entregar(conectada());
+    expect(result.current.estadoDaMidia, "o 'connected' apagou o aviso de falha").toBe("falhou");
+    expect(postsDeMidia()).toHaveLength(0);
+
+    await act(async () => result.current.ouvirAqui());
+    await assentar();
+    expect(postsDeMidia()).toHaveLength(1);
+    expect(result.current.estadoDaMidia).toBe("negociando");
+  });
+
+  it("recarregar prefere a ligação marcada nesta aba, mesmo com outra mais nova na organização", async () => {
+    window.sessionStorage.setItem("voz:midia", CHAMADA);
+    const OUTRA = "88888888-8888-4888-8888-888888888888";
+    espiao.get.mockImplementation(async (url: string) =>
+      String(url).includes(`id=${CHAMADA}`)
+        ? { data: [conectada()] }
+        : { data: [linha({ id: OUTRA, status: "ringing", direction: "inbound", owner_user_id: null, created_by: null })] },
+    );
+    const { result } = await montar();
+    expect(result.current.call?.id, "adotou a ligação mais nova da organização").toBe(CHAMADA);
+    expect(postsDeMidia().map((c) => String(c[0]))).toEqual([`/api/v1/voice/calls/${CHAMADA}/webrtc`]);
+  });
+
   it("a marca da aba é apagada quando a ligação que ela marcou acaba", async () => {
     const { result } = await montar();
     await act(async () => {
@@ -315,6 +351,8 @@ describe("o painel percebe o fim mesmo sem o aviso do tempo real", () => {
     });
     await assentar();
     expect(result.current.call, "painel fantasma: o banco disse ended e a tela não soube").toBeNull();
+    // Pelo id: entre "as 5 mais recentes" a ligação sai da janela num escritório movimentado.
+    expect(espiao.get.mock.calls.some((c) => String(c[0]).includes(`id=${CHAMADA}`))).toBe(true);
     expect(trilhas.every((t) => t.stop.mock.calls.length > 0)).toBe(true);
   });
 

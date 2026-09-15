@@ -7488,6 +7488,7 @@ export const DICIONARIO: Traducoes = {
   "O áudio desta ligação está em outra aba": { es: "El audio de esta llamada está en otra pestaña" },
   "Ouvir aqui": { es: "Escuchar aquí" },
   "O áudio caiu": { es: "El audio se cayó" },
+  "Não consegui abrir o áudio. Confira o microfone.": { es: "No pude abrir el audio. Revisa el micrófono." },
   "Reconectar o áudio": { es: "Reconectar el audio" },
   "Chamada de voz": { es: "Llamada de voz" },
   "Chamada de voz sem resposta": { es: "Llamada de voz sin respuesta" },
