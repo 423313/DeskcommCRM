@@ -150,13 +150,17 @@ function pinnedLookup(expectedHostname: string, addresses: LookupAddress[]): Loo
 async function readResponse(response: http.IncomingMessage, entry: CatalogEntry) {
   if (response.statusCode !== 200) {
     response.destroy();
-    throw new ExtensionError("extension_download_failed");
+    throw new ExtensionError("extension_download_failed", {
+      cause: { code: "http_status", status: response.statusCode },
+    });
   }
 
   const encoding = response.headers["content-encoding"];
   if (encoding !== undefined && encoding.trim().toLowerCase() !== "identity") {
     response.destroy();
-    throw new ExtensionError("extension_download_failed");
+    throw new ExtensionError("extension_download_failed", {
+      cause: { code: "content_encoding" },
+    });
   }
 
   const contentLengthHeader = response.headers["content-length"];
@@ -164,7 +168,9 @@ async function readResponse(response: http.IncomingMessage, entry: CatalogEntry)
     const contentLength = Number(contentLengthHeader);
     if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
       response.destroy();
-      throw new ExtensionError("extension_download_failed");
+      throw new ExtensionError("extension_download_failed", {
+        cause: { code: "content_length" },
+      });
     }
     if (contentLength > EXTENSION_LIMITS.packageBytes) {
       response.destroy();

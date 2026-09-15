@@ -555,6 +555,7 @@ export const AUDIT_ACTIONS = [
   "platform_admin.tenant_agents_viewed",
   "extension.catalog_admitted",
   "extension.installed",
+  "extension.install_failed",
   "extension.configured",
   "extension.deactivated",
   "extension.preparation_cancelled",

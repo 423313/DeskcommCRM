@@ -478,7 +478,9 @@ export function ExtensionsManager({
         if (result.error.code === "extension_context_changed") {
           return { ok: false, message: t(result.error.message) };
         }
-        if (result.status === 409) {
+        // Só a revisão divergente é "outra pessoa alterou". Os outros 409 (o limite de
+        // extensões ativas, por exemplo) têm motivo próprio, e o servidor já o escreve.
+        if (result.status === 409 && result.error.code === "extension_revision_conflict") {
           await carregar(true);
           return {
             ok: false,

@@ -383,6 +383,67 @@ describe("ExtensionsManager", () => {
     expect(escritas).toHaveLength(1);
   });
 
+  it("409 que não é conflito de revisão mostra o motivo do servidor, não 'outra pessoa alterou'", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: list() }))
+      .mockResolvedValueOnce(
+        json(
+          {
+            error: {
+              code: "extension_active_limit",
+              message: "O limite de extensões ativas foi atingido. Desative uma antes de ativar outra.",
+            },
+          },
+          409,
+        ),
+      )
+      .mockResolvedValue(json({ data: list() }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByRole("switch", { name: "Ativa no CRM" }));
+    await user.click(screen.getByTestId(`extension-save-${INSTALLATION}`));
+
+    expect(await screen.findByText(/O limite de extensões ativas foi atingido/)).toBeVisible();
+    expect(screen.queryByText(/Outra pessoa alterou esta extensão/)).toBeNull();
+  });
+
+  it("extensão que ficou incompatível e segue ativa pode ser desativada, com a configuração preservada", async () => {
+    const quebrada = list();
+    Object.assign(quebrada.installations[0]!, {
+      enabled: true,
+      revision: 4,
+      configuration: { density: "compact", show_description: false },
+      compatible: false,
+      compatibility_reason: "O pacote gravado não pôde ser conferido por esta versão do CRM.",
+    });
+    let corpo: unknown = null;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: quebrada }))
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+        corpo = JSON.parse(String(init?.body));
+        const id = new Headers(init?.headers).get("Idempotency-Key")!;
+        return Promise.resolve(json({ data: operation({ id, kind: "configure" }) }));
+      })
+      .mockResolvedValue(json({ data: list() }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByTestId(`extension-disable-incompatible-${INSTALLATION}`));
+
+    await waitFor(() =>
+      expect(corpo).toEqual({
+        expected_revision: 4,
+        enabled: false,
+        configuration: { density: "compact", show_description: false },
+      }),
+    );
+  });
+
   it("sincroniza recibo criado por outra aba", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ data: list() })));
     renderManager();

@@ -6,17 +6,18 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 import { assertCatalogOrigin, downloadArtifact } from "./download";
-import { ExtensionError } from "./errors";
+import { causaSegura, ExtensionError } from "./errors";
+import { lerManifestoAdmitido, montarInstalada, MOTIVO_PACOTE_ILEGIVEL } from "./instalada";
 import { ExtensionServiceError, requireExtensionPlatform } from "./http";
 import {
   checkCompatibility,
   configurationSchema,
   parseCatalog,
-  parseManifest,
   validateCatalogSnapshot,
   validateArtifact,
   type CatalogEntry,
@@ -213,18 +214,30 @@ const ARTIFACT_COLS = "id,sha256,byte_length,manifest,document";
 const BINDING_COLS = "organization_id,installation_id,enabled,configuration,revision";
 
 function admittedManifest(value: z.infer<typeof artifactRowSchema>): ExtensionManifest {
-  const bytes = new TextEncoder().encode(value.document);
-  if (
-    bytes.byteLength !== value.byte_length ||
-    createHash("sha256").update(bytes).digest("hex") !== value.sha256
-  ) {
+  const leitura = lerManifestoAdmitido(value);
+  if (leitura.ok) return leitura.manifest;
+  if (leitura.code === "extension_storage_failed") {
     throw new ExtensionServiceError(
       "extension_storage_failed",
       "O pacote local precisa ser conferido pelo administrador da instalação.",
       503,
     );
   }
-  return parseManifest(bytes);
+  throw new ExtensionError(leitura.code);
+}
+
+/** Snapshot que esta versão já não sabe ler some do catálogo, e não da gestão inteira. */
+function entradasLegiveis(row: z.infer<typeof catalogRowSchema>): CatalogEntry[] {
+  try {
+    return validateCatalogSnapshot(row.snapshot).entries;
+  } catch (error) {
+    if (!(error instanceof ExtensionError)) throw error;
+    logger.warn("[extensions] catálogo admitido ilegível nesta versão", {
+      catalog_id: row.id,
+      error_code: error.code,
+    });
+    return [];
+  }
 }
 
 /** Instância é lida pelo gestor autorizado; vínculos usam RLS e org explícita. */
@@ -278,33 +291,19 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
   );
 
   const views: InstalledExtensionView[] = installations.map((item) => {
-    const artifact = artifacts.get(item.artifact_id);
-    const catalog = catalogs.find((source) => source.id === item.catalog_id);
-    if (!artifact || !catalog)
-      throw new ExtensionServiceError(
-        "extension_storage_failed",
-        "Não foi possível ler o pacote instalado. Consulte o administrador da instalação.",
-        503,
-      );
-    const manifest = admittedManifest(artifact);
-    const compatibility = checkCompatibility(manifest);
-    const binding = bindings.get(item.id);
-    return {
-      id: item.id,
-      origin: catalog.origin,
-      publisher: item.publisher,
-      name: item.name,
-      version: item.version,
-      display: manifest.display,
-      permissions: manifest.permissions,
-      enabled: binding?.enabled ?? false,
-      revision: binding?.revision ?? 0,
-      configuration: binding?.configuration ?? manifest.configuration,
-      compatible: compatibility.compatible,
-      compatibility_reason: compatibility.compatible
-        ? null
-        : "Esta extensão não é compatível com a API disponível nesta instalação.",
-    };
+    const view = montarInstalada({
+      item,
+      artifact: artifacts.get(item.artifact_id),
+      catalog: catalogs.find((source) => source.id === item.catalog_id),
+      binding: bindings.get(item.id),
+    });
+    if (view.compatibility_reason === MOTIVO_PACOTE_ILEGIVEL) {
+      // Registra a identidade, nunca o conteúdo do pacote.
+      logger.warn("[extensions] pacote instalado ilegível nesta versão", {
+        installation_id: item.id,
+      });
+    }
+    return view;
   });
   return {
     organization_id: org.orgId,
@@ -315,7 +314,7 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
       origin: row.origin,
       revision: row.revision,
       admitted_at: row.admitted_at,
-      entries: validateCatalogSnapshot(row.snapshot).entries,
+      entries: entradasLegiveis(row),
     })),
     installations: views,
     operations: [...(results[5]!.data ?? []), ...(results[4]!.data ?? [])].map(operationView),
@@ -385,7 +384,28 @@ export async function loadCrmExtensions(organizationId: string): Promise<Extensi
     .limit(8);
   dbFailure(result.error);
   const ids = z.array(z.object({ installation_id: uuid })).parse(result.data ?? []);
-  return Promise.all(ids.map((item) => loadExtensionGuide(organizationId, item.installation_id)));
+  const guias = await Promise.allSettled(
+    ids.map((item) => loadExtensionGuide(organizationId, item.installation_id)),
+  );
+  // Um guia ativo que esta versão já não lê (ou cujo pacote falhou na conferência) sai
+  // do hub sozinho. Antes, um só derrubava a lista e escondia todos os outros cards.
+  guias.forEach((resultado, indice) => {
+    if (resultado.status === "rejected") {
+      const motivo = resultado.reason as { code?: unknown };
+      logger.warn("[extensions] guia ativo fora do hub", {
+        installation_id: ids[indice]!.installation_id,
+        error_code: typeof motivo?.code === "string" ? motivo.code : null,
+      });
+    }
+  });
+  const lidos = guias.flatMap((resultado) =>
+    resultado.status === "fulfilled" ? [resultado.value] : [],
+  );
+  if (ids.length > 0 && lidos.length === 0) {
+    // Nenhum dos ativos pôde ser lido: é falha, não lista vazia, e o hub precisa distinguir.
+    throw (guias[0] as PromiseRejectedResult).reason;
+  }
+  return lidos;
 }
 
 export async function readExtensionOperation(
@@ -503,13 +523,41 @@ export async function installExtension(
       throw new ExtensionError("extension_incompatible");
   } catch (error) {
     if (!(error instanceof ExtensionError)) throw error;
+    // O recibo guarda só o código estável; o porquê operacional (status HTTP, erro de
+    // rede) ia embora aqui. Vai a log e à auditoria, sem texto remoto nem do pacote.
+    const causa = causaSegura(error);
+    logger.warn("[extensions] instalação falhou", {
+      operation_id: operationId,
+      catalog_id: input.catalog_id,
+      error_code: error.code,
+      ...causa,
+    });
     const failed = await admin.rpc("fn_extensions_fail_install", {
       p_actor: actorId,
       p_operation: operationId,
       p_error_code: error.code,
     });
     dbFailure(failed.error);
-    return operationView(failed.data);
+    const falha = operationView(failed.data);
+    if (falha.status === "failed") {
+      await audit({
+        action: "extension.install_failed",
+        actorUserId: actorId,
+        actingAsPlatformAdmin: true,
+        resourceType: "extension_operation",
+        resourceId: falha.id,
+        metadata: {
+          operation_id: falha.id,
+          error_code: error.code,
+          catalog_id: input.catalog_id,
+          publisher: entry.publisher,
+          name: entry.name,
+          version: entry.version,
+          ...causa,
+        },
+      });
+    }
+    return falha;
   }
   // Só esta transação publica. Falha de conexão daqui em diante deixa resultado
   // a reconciliar; não transforma uma confirmação possivelmente consumada em failed.

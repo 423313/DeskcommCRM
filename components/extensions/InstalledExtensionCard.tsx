@@ -85,11 +85,12 @@ export function InstalledExtensionCard({
     });
   }
 
+  // Rótulos em t() literal: passados por variável, escapavam do gate de espanhol.
   const status = !extension.compatible
-    ? { label: "Incompatível", variant: "error" as const }
+    ? { label: t("Incompatível"), variant: "error" as const }
     : extension.enabled
-      ? { label: "Ativa", variant: "success" as const }
-      : { label: "Desativada", variant: "neutral" as const };
+      ? { label: t("Ativa"), variant: "success" as const }
+      : { label: t("Desativada"), variant: "neutral" as const };
 
   return (
     <Card className="flex h-full flex-col p-5" data-testid={`extension-installed-${extension.id}`}>
@@ -102,7 +103,7 @@ export function InstalledExtensionCard({
             <h2 className="text-base font-semibold">
               {localize(extension.display.title, locale).text}
             </h2>
-            <Badge variant={status.variant}>{t(status.label)}</Badge>
+            <Badge variant={status.variant}>{status.label}</Badge>
           </div>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             {localize(extension.display.summary, locale).text}
@@ -133,12 +134,39 @@ export function InstalledExtensionCard({
         <div className="mt-4 rounded-md border border-error/30 bg-error-bg p-3 text-sm">
           <p className="font-medium text-error-fg">{t("Esta versão não pode ser ativada")}</p>
           <p className="mt-1 text-muted-foreground">
-            {extension.compatibility_reason ??
-              t("O servidor recusou a compatibilidade desta versão.")}
+            {extension.compatibility_reason
+              ? t(extension.compatibility_reason)
+              : t("O servidor recusou a compatibilidade desta versão.")}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             {t("Peça ao responsável pela instalação uma versão compatível.")}
           </p>
+          {canManage && extension.enabled ? (
+            // Ficou incompatível depois de ativada (uma atualização do CRM estreitou o
+            // contrato): sai do hub, mas segue ativa e ocupando vaga. Sem este botão não
+            // havia saída pela tela. Desativar preserva a configuração.
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "Ela segue marcada como ativa e ocupa uma das vagas de extensões ativas até ser desativada.",
+                )}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid={`extension-disable-incompatible-${extension.id}`}
+                disabled={busy || actionsDisabled}
+                onClick={() => void onConfigure(extension, false, extension.configuration)}
+              >
+                {t("Desativar nesta organização")}
+              </Button>
+              {feedback ? (
+                <p role="status" className="text-xs text-muted-foreground">
+                  {feedback}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : canManage ? (
         <div className="mt-4 space-y-4 border-t border-border pt-4">
