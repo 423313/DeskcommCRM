@@ -35,14 +35,11 @@
 -- sincroniza. É esse resíduo que o conserto fecha — e ele vale também como defesa
 -- em profundidade contra um escritor futuro que volte a gravar o nome.
 --
--- ─── Por que o conserto é no PRIVILÉGIO, e não na policy ────────────────────
+-- ─── Por que o conserto é no PRIVILÉGIO — e o que a policy fecharia ────────
 --
--- A policy de leitura é da ORGANIZAÇÃO de propósito: a grade da equipe mostra a
--- ocupação do colega, e é isso que a agenda existe para fazer. Restringir a
--- policy ao dono da conexão apagaria a ocupação de todo mundo — consertaria a
--- privacidade quebrando a agenda. O que o CRM usa de um evento de colega é
--- ocupado/livre (`starts_at`, `ends_at`, `transparency`, `status`); o `title`
--- não tem consumidor nenhum na tela. Isso é vigiado do lado da tela por
+-- O que o CRM usa de um evento do Google é ocupado/livre (`starts_at`,
+-- `ends_at`, `transparency`, `status`); o `title` não tem consumidor nenhum na
+-- tela. Isso é vigiado do lado da tela por
 -- `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (as leituras da tela
 -- da Agenda e da rota de agendamentos, pela tabela ou pela view, não pedem a
 -- coluna) e por `tests/e2e/agenda-ocupacao-do-google-na-grade.spec.ts` (o título
@@ -52,6 +49,31 @@
 -- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem o
 -- `title`. Revogar a coluna sem revogar a tabela não faria nada: o privilégio de
 -- TABELA cobre todas as colunas, e é ele que o default ACL de tabelas concede.
+--
+-- A policy de leitura (`calendar_external_events_select`) segue sendo da
+-- ORGANIZAÇÃO, e esta migration não a toca. Uma versão anterior deste cabeçalho
+-- dizia que era assim de propósito, porque "a grade da equipe mostra a ocupação
+-- do colega", e que restringi-la "apagaria a ocupação de todo mundo". Não é o
+-- que o produto faz — medido:
+--
+-- * as duas leituras de tela (`app/app/agenda/page.tsx` e
+--   `app/api/v1/agenda/agendamentos/route.ts`) usam a sessão do usuário e pedem
+--   a view com o embed `calendar_connections!inner(user_id)`. A RLS de
+--   `calendar_connections` mostra a conexão só ao dono e a quem é manager ou
+--   acima, e o `!inner` tira da resposta a linha cuja conexão o leitor não vê.
+--   Para Somente leitura e Atendente, a grade de HOJE já não mostra a ocupação do
+--   Google do colega, antes e depois desta migration (issue #879);
+-- * quem entrega essa ocupação a todo membro é
+--   `fn_agenda_ocupacao_google_do_dono` (0260), `security definer`, que o encaixe
+--   de horários chama (`lib/agenda/consulta.ts`) — e que policy nenhuma alcança.
+--
+-- Numa transação desfeita, com a policy trocada por "dono da conexão OU manager
+-- ou acima" (a régua de `calendar_connection_calendars_select`): Somente leitura
+-- e Atendente passaram a ler 0 linha na tabela e na view, a leitura da tela deles
+-- seguiu com 0, e a função da 0260 seguiu devolvendo a ocupação a eles; dono e
+-- gestor seguiram com a tela inteira. É o fechamento mais barato do que fica
+-- aberto na seção seguinte, e não pede mudar leitura nenhuma. Não entra aqui
+-- porque muda QUEM lê o espelho, e não só que coluna: é decisão do dono.
 --
 -- ─── O que continua ao alcance do membro, e por quê ─────────────────────────
 --
@@ -63,16 +85,16 @@
 -- `external_event_id` e `ical_uid`, identificadores do Google, também seguem
 -- concedidos.
 --
--- Esta migration deixa isso aberto, e por escrito. A view é `security_invoker` e
--- passa `e.external_calendar_id` a `fn_google_counts_for_conflicts`: revogar a
--- coluna faz TODA leitura da view por membro falhar com `permission denied for
--- table calendar_external_events` — a do próprio dono inclusive (medido). Fechar
--- pede servir a ocupação por função `security definer` que devolva só intervalo e
--- situação (o padrão da 0260) e mudar as duas leituras que usam a view
--- (`app/app/agenda/page.tsx` e `app/api/v1/agenda/agendamentos/route.ts`): é
--- decisão do dono, fora deste conserto. Um caso do invariante mede que o colega
--- segue lendo o id — no dia em que alguém fechar, ele fica vermelho e esta seção
--- muda junto.
+-- Esta migration deixa isso aberto, e por escrito. Revogar a COLUNA não serve: a
+-- view é `security_invoker` e passa `e.external_calendar_id` a
+-- `fn_google_counts_for_conflicts`, então revogá-la faz TODA leitura da view por
+-- membro falhar com `permission denied for table calendar_external_events` — a do
+-- próprio dono inclusive (medido). O que fecha é a policy "dono da conexão OU
+-- manager ou acima" da seção anterior: tira o id de Somente leitura e de
+-- Atendente sem tocar em tela nem em rota, e não entrega ao gestor nada que ele
+-- já não leia — ele lê `account_email` em `calendar_connections`. É decisão do
+-- dono, fora deste conserto. Um caso do invariante mede que o colega segue lendo
+-- o id — no dia em que alguém fechar, ele fica vermelho e esta seção muda junto.
 --
 -- ─── A view precisa ser recriada, não substituída no lugar ──────────────────
 --

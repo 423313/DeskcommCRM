@@ -25057,19 +25057,30 @@ notify pgrst, 'reload schema';
 -- conexão que não está saudável não sincroniza. O conserto fecha esse resíduo e
 -- vale como defesa em profundidade contra um escritor futuro.
 --
--- ## Por que o conserto é no PRIVILÉGIO, e não na policy
+-- ## Por que o conserto é no PRIVILÉGIO — e o que a policy fecharia
 --
--- A policy de leitura é da ORGANIZAÇÃO de propósito: a grade da equipe mostra a
--- ocupação do colega. Restringir a policy ao dono da conexão apagaria a ocupação
--- de todo mundo — consertaria a privacidade quebrando a agenda. O que o CRM usa de
--- um evento de colega é ocupado/livre (`starts_at`, `ends_at`, `transparency`,
--- `status`); o título não tem consumidor nenhum na tela, vigiado por
--- `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (leituras pela tabela
--- ou pela view) e por `tests/e2e/agenda-ocupacao-do-google-na-grade.spec.ts`.
+-- O que o CRM usa de um evento do Google é ocupado/livre (`starts_at`, `ends_at`,
+-- `transparency`, `status`); o título não tem consumidor nenhum na tela, vigiado
+-- por `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts` (leituras pela
+-- tabela ou pela view) e por `tests/e2e/agenda-ocupacao-do-google-na-grade.spec.ts`.
 --
 -- Então o SELECT de `authenticated` sai da TABELA e volta COLUNA A COLUNA, sem
 -- `title`. Revogar coluna sem revogar a tabela não faz nada: o privilégio de TABELA
 -- cobre todas as colunas, e é ele que o default ACL de tabelas concede.
+--
+-- A policy de leitura segue sendo da ORGANIZAÇÃO, e este bloco não a toca — mas
+-- não porque "a grade da equipe mostra a ocupação do colega", como uma versão
+-- anterior dizia. As duas leituras de tela (`app/app/agenda/page.tsx` e
+-- `app/api/v1/agenda/agendamentos/route.ts`) pedem a view pela sessão com o embed
+-- `calendar_connections!inner(user_id)`, e a RLS da conexão (dono OU manager ou
+-- acima) tira a linha do colega de quem não é gestor: para Somente leitura e
+-- Atendente a grade de hoje JÁ não mostra essa ocupação (issue #879). Quem a
+-- entrega a todo membro é `fn_agenda_ocupacao_google_do_dono` (0260), `security
+-- definer`, que policy nenhuma alcança. Medido numa transação desfeita com a policy
+-- trocada por "dono da conexão OU manager ou acima": não-gestor com 0 linha na
+-- tabela, na view e na tela, a função da 0260 com a ocupação, dono e gestor com a
+-- tela inteira. É o fechamento mais barato do que fica aberto abaixo, sem mudar
+-- leitura nenhuma; muda QUEM lê o espelho, então é decisão do dono.
 --
 -- ## O que continua ao alcance do membro, e por quê
 --
@@ -25078,12 +25089,13 @@ notify pgrst, 'reload schema';
 -- PRINCIPAL — a que conta por padrão — esse id é o e-mail da conta conectada. A
 -- RLS de `calendar_connections` esconde essa conta de um colega que não é gestor;
 -- esta tabela e a view a entregam a todo membro. `external_event_id` e `ical_uid`
--- também seguem concedidos. Fica aberto, por escrito: a view é `security_invoker`
--- e passa a coluna a `fn_google_counts_for_conflicts`, então revogá-la derruba
--- TODA leitura da view por membro, a do dono inclusive (medido). Fechar pede
--- servir a ocupação por função `security definer` (o padrão da 0260) e mudar as
--- leituras de `app/app/agenda/page.tsx` e `app/api/v1/agenda/agendamentos` —
--- decisão do dono. O invariante mede que o colega segue lendo o id.
+-- também seguem concedidos. Fica aberto, por escrito. Revogar a COLUNA não serve:
+-- a view é `security_invoker` e passa a coluna a `fn_google_counts_for_conflicts`,
+-- então revogá-la derruba TODA leitura da view por membro, a do dono inclusive
+-- (medido). O que fecha é a policy "dono da conexão OU manager ou acima" da seção
+-- anterior, sem tocar em tela nem em rota — e o gestor já lê `account_email` em
+-- `calendar_connections`. Decisão do dono. O invariante mede que o colega segue
+-- lendo o id.
 --
 -- ## A view precisa ser recriada, não substituída no lugar
 --

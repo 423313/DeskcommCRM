@@ -57,10 +57,13 @@ import { motivoDoErro, sql } from "./psql-transporte";
  *
  * ─── O que ele NÃO exige ────────────────────────────────────────────────────
  *
- * Não exige que a policy de leitura deixe de ser da organização: ela É da
- * organização, de propósito, porque a grade da equipe mostra a ocupação do
- * colega. O que se mede é o PRIVILÉGIO DE COLUNA, que é onde o título estava
- * exposto.
+ * Não exige nada da policy de leitura, que segue da organização. O que se mede é
+ * o PRIVILÉGIO DE COLUNA, que é onde o título estava exposto. E não exige que o
+ * colega leia a ocupação do dono direto na tabela ou na view: a grade não lê
+ * assim (a leitura da tela esconde do não-gestor a conexão do colega), e quem
+ * entrega essa ocupação a todo membro é a função da 0260 — é isso que fica de
+ * pé. Trocar a policy por "dono da conexão OU gestor" é decisão do dono (ver a
+ * 0261); se vier, só o caso "o que a 0261 NÃO fecha" fica vermelho, de propósito.
  */
 
 const BASELINE = readFileSync(join(process.cwd(), "supabase", "baseline.sql"), "utf8");
@@ -185,6 +188,16 @@ function como(usuario: string): string {
 const COMO_COLEGA = como(COLEGA);
 /** Fala como o `DONO` da conexão. */
 const COMO_DONO = como(DONO);
+
+/** Um gestor da organização — o papel a quem a RLS de `calendar_connections` mostra a conexão alheia. */
+const GESTOR = "02610000-0000-4000-8000-000000000003";
+const GESTOR_NA_ORG = `
+  insert into auth.users (id, email) values ('${GESTOR}', 'gestor-0261@invariant.test');
+  insert into public.user_organizations (organization_id, user_id, role, accepted_at)
+    values ('${ORG}', '${GESTOR}', 'manager', now());
+`;
+/** Fala como o `GESTOR`. */
+const COMO_GESTOR = como(GESTOR);
 
 /**
  * A leitura que a tela da Agenda do dono faz (`app/app/agenda/page.tsx`), com o
@@ -322,24 +335,58 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     expect(ocupacao, "a ocupação perdeu a leitura — o conserto é largo demais").toBe("true");
   });
 
-  it("sobre a v1.26.0, a ocupação do colega continua visível, pela tabela e pela view — o conserto não quebra a grade", () => {
-    // Este é o caso que impede o conserto fácil: se a privacidade só funcionar
-    // apagando a ocupação de todo mundo, ela quebrou a agenda em vez de
-    // consertá-la.
-    const [direto, pelaView] = sondasDesfeitas(`
+  it("sobre a v1.26.0, o bloco da 0261 deixa de pé quem mostra a ocupação: a leitura da tela para o dono e o gestor, e a função da 0260 para o colega — cuja tela já não trazia a ocupação do dono", () => {
+    // A versão anterior deste caso exigia que o colega Somente leitura seguisse
+    // lendo a ocupação do dono DIRETO na tabela e na view, "senão a grade da
+    // equipe esvaziaria". A grade não lê assim. `app/app/agenda/page.tsx` e
+    // `app/api/v1/agenda/agendamentos/route.ts` pedem a view com a sessão do
+    // usuário e o embed `calendar_connections!inner(user_id)` — a
+    // `LEITURA_DA_TELA` —, e a RLS de `calendar_connections` (dono OU gestor)
+    // tira da resposta a linha cuja conexão o leitor não vê. Para quem não é
+    // gestor, a tela JÁ não mostrava a ocupação do Google do colega antes da 0261
+    // (issue #879). Quem a entrega a todo membro é
+    // `fn_agenda_ocupacao_google_do_dono` (0260), `security definer`, que o
+    // encaixe de horários chama (`lib/agenda/consulta.ts`).
+    //
+    // Prender a leitura direta do colega protegia um uso que o produto não tem, e
+    // ficaria vermelho justamente com o fechamento mais barato do resto do
+    // espelho — trocar a policy de SELECT por "dono da conexão OU gestor", a régua
+    // de `calendar_connection_calendars_select`, que é decisão do dono (ver a
+    // 0261). O que precisa continuar de pé é o que este caso mede.
+    const [colegaAntes, colegaDepois, dono, gestor, funcao] = sondasDesfeitas(`
       ${FIXTURE}
+      ${GESTOR_NA_ORG}
       ${DEFEITO_DA_V1260}
+      ${COMO_COLEGA}
+      select '${MARCA}' || 'tela=' || count(*)::text from (${LEITURA_DA_TELA}) t;
+      reset role;
       ${blocoDa0261()}
       ${COMO_COLEGA}
-      select '${MARCA}' || 'tabela=' || starts_at::text || ',' || ends_at::text || ',' || transparency || ',' || status
-        from public.calendar_external_events where id = '${EVENTO}';
-      select '${MARCA}' || 'view=' || count(*)::text
-        from public.calendar_selected_external_events where id = '${EVENTO}';
+      select '${MARCA}' || 'tela=' || count(*)::text from (${LEITURA_DA_TELA}) t;
+      ${COMO_DONO}
+      select '${MARCA}' || 'tela=' || count(*)::text || ',' || coalesce(min(t.user_id::text), '(ninguém)')
+        from (${LEITURA_DA_TELA}) t;
+      ${COMO_GESTOR}
+      select '${MARCA}' || 'tela=' || count(*)::text || ',' || coalesce(min(t.user_id::text), '(ninguém)')
+        from (${LEITURA_DA_TELA}) t;
+      ${COMO_COLEGA}
+      select '${MARCA}' || 'funcao=' || count(*)::text || ',' || coalesce(min(o.transparency), '(nulo)') || ',' ||
+             coalesce(min(o.status), '(nulo)') || ',' || coalesce(min(o.connection_status), '(nulo)')
+        from public.fn_agenda_ocupacao_google_do_dono('${ORG}', '${DONO}', now(), now() + interval '2 days') o;
     `);
-    expect(direto, "o colega perdeu a ocupação direto na tabela").toMatch(
-      /^tabela=.+,.+,opaque,confirmed$/,
+    expect(
+      colegaAntes,
+      "na v1.26.0 a leitura da tela entregou ao colega que não é gestor a ocupação do dono — a premissa com que a 0261 descreve a grade mudou",
+    ).toBe("tela=0");
+    expect(
+      colegaDepois,
+      "depois do bloco a leitura da tela entregou ao colega que não é gestor a ocupação do dono — a premissa com que a 0261 descreve a grade mudou",
+    ).toBe("tela=0");
+    expect(dono, "o dono perdeu a própria ocupação na leitura da tela da Agenda").toBe(`tela=1,${DONO}`);
+    expect(gestor, "o gestor perdeu a ocupação do dono na leitura da tela da Agenda").toBe(`tela=1,${DONO}`);
+    expect(funcao, "o colega deixou de receber a ocupação do dono pela função da 0260").toBe(
+      "funcao=1,opaque,confirmed,healthy",
     );
-    expect(pelaView, "o colega perdeu a ocupação pela view — a grade da equipe esvaziaria").toBe("view=1");
   });
 
   it("sobre a v1.26.0, a view recriada não tem `title` na definição — e pedi-lo é erro, não silêncio", () => {
@@ -441,12 +488,15 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     // A RLS de `calendar_connections` esconde a conta de um colega que não é
     // gestor; esta tabela e a view a entregam a todo membro.
     //
-    // A 0261 deixa isso aberto por decisão escrita no cabeçalho dela: a view é
-    // `security_invoker` e passa a coluna a `fn_google_counts_for_conflicts`,
-    // então revogá-la derruba TODA leitura da view por membro. Fechar pede servir
-    // a ocupação por função `security definer` (o padrão da 0260), e isso é do
-    // dono. Este caso existe para a prosa não mentir em nenhum dos dois sentidos:
-    // no dia em que alguém fechar, ele fica vermelho — e a 0261, o fragmento e o
+    // A 0261 deixa isso aberto por decisão escrita no cabeçalho dela. Revogar a
+    // COLUNA não serve: a view é `security_invoker` e passa a coluna a
+    // `fn_google_counts_for_conflicts`, então revogá-la derruba TODA leitura da
+    // view por membro. O que fecha sem mudar leitura nenhuma é a policy de SELECT
+    // "dono da conexão OU gestor": as leituras de tela já escondem do não-gestor a
+    // conexão do colega (caso da grade, acima), e a ocupação que todo membro
+    // precisa vem da função da 0260, que a policy não alcança. Isso é do dono.
+    // Este caso existe para a prosa não mentir em nenhum dos dois sentidos: no
+    // dia em que alguém fechar, ele fica vermelho — e a 0261, o fragmento e o
     // MANIFEST mudam junto.
     const [conexao, tabela, view] = sondasDesfeitas(`
       ${FIXTURE}
