@@ -637,6 +637,17 @@ async function exigeHorarioLivre(
  *
  * Existe porque não há nada no schema que impeça a sobreposição: sem `exclude`
  * com `tstzrange` nem índice, a única guarda do produto é esta leitura.
+ *
+ * ⚠️ O GOOGLE QUE ELA VÊ DEPENDE DE QUEM PERGUNTA. A rota passa o client de
+ * SESSÃO, e a coleta chega aos eventos do Google pelo embed
+ * `calendar_connections!inner` — tabela cuja RLS só mostra a conexão ao próprio
+ * dono e a `manager`+. Para um `agent` marcando na agenda de OUTRA pessoa, o
+ * embed volta vazio e o Google dela não entra na conta. Medido em 2026-09-15
+ * num Postgres descartável com o `baseline.sql`, como `authenticated`, por uma
+ * junção equivalente à do embed (`join lateral` em `calendar_connections` com o
+ * filtro de dono — não pelo PostgREST): dono 1 evento, gerente 1, atendente 0; e
+ * o atendente enxerga a linha em `calendar_selected_external_events` quando lida
+ * sem a junção. A ferramenta MCP usa service role, que não passa pela RLS.
  */
 async function exigeSemSobreposicao(
   supabase: SB,
