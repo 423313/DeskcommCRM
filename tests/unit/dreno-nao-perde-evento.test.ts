@@ -55,6 +55,8 @@ function dublarAdmin(
     | Record<string, unknown>
     | null
     | ((chamadas: Chamada[]) => Record<string, unknown> | null) = null,
+  /** O que está preso em `processing` além da janela. Só a consulta que filtra por esse status as vê. */
+  presos: Array<Record<string, unknown>> = [],
 ) {
   const chamadas: Chamada[] = [];
 
@@ -74,7 +76,7 @@ function dublarAdmin(
         registro.op = "update";
         registro.payload = payload;
         chamadas.push(registro);
-        ehUpdateDeReclamacao = payload.status === "pending" && payload.updated_at !== undefined;
+        ehUpdateDeReclamacao = payload.attempts !== undefined && payload.last_error !== undefined;
         ehClaim = payload.status === "processing";
         return self;
       },
@@ -113,8 +115,11 @@ function dublarAdmin(
           return;
         }
         if (registro.op === "update") {
-          // Reclamação de órfão devolve lista vazia; claim devolve a linha.
-          resolve({ data: ehClaim ? [{ id: "e1" }] : ehUpdateDeReclamacao ? [] : [{ id: "e1" }] });
+          // A reclamação de órfão devolve a linha que tocou (o guarda
+          // `status = 'processing'` só falha para quem já foi reclamado por
+          // outra instância); o claim devolve a linha.
+          const id = registro.filtros.find(([tipo, col]) => tipo === "eq" && col === "id")?.[2];
+          resolve({ data: ehClaim || ehUpdateDeReclamacao ? [{ id: id ?? "e1" }] : [{ id: "e1" }] });
           return;
         }
         // A Central responde pelo que ELA tem — devolver `linhas` aqui faria o
@@ -127,7 +132,10 @@ function dublarAdmin(
           });
           return;
         }
-        resolve({ data: linhas, error: null });
+        const pedePresos = registro.filtros.some(
+          ([tipo, col, val]) => tipo === "eq" && col === "status" && val === "processing",
+        );
+        resolve({ data: pedePresos ? presos : linhas, error: null });
       },
     };
     return self;
@@ -155,38 +163,100 @@ beforeEach(() => {
   handlers.mockReturnValue([{ key: "k", events: ["knowledge_source.updated"] }]);
 });
 
-describe("drainEventLog — evento preso volta para a fila", () => {
-  it("devolve `processing` velho para `pending` ANTES de selecionar", async () => {
+describe("drainEventLog — evento preso volta para a fila, e a volta conta", () => {
+  const PRESO = { id: "p1", organization_id: "org-1", event_type: "knowledge_source.updated", attempts: 0 };
+
+  function reclamacoes(chamadas: Chamada[]) {
+    return chamadas.filter(
+      (c) =>
+        c.tabela === "event_log" &&
+        c.op === "update" &&
+        c.payload?.attempts !== undefined &&
+        c.filtros.some(([tipo, col, val]) => tipo === "eq" && col === "status" && val === "processing"),
+    );
+  }
+
+  it("procura `processing` velho com janela de tempo, e devolve para `pending`", async () => {
     dispatch.mockResolvedValue([{ consumer_key: "k", status: "ok" }]);
-    const { admin, chamadas } = dublarAdmin([]);
+    const { admin, chamadas } = dublarAdmin([], null, [PRESO]);
 
     await drainEventLog(admin as never);
 
-    const reclamacao = chamadas.find(
+    const busca = chamadas.find(
       (c) =>
-        c.op === "update" &&
-        c.payload?.status === "pending" &&
+        c.tabela === "event_log" &&
+        c.op === "select" &&
         c.filtros.some(([tipo, col, val]) => tipo === "eq" && col === "status" && val === "processing"),
     );
-    expect(reclamacao, "nada devolve evento preso em processing").toBeDefined();
+    expect(busca, "nada procura evento preso em processing").toBeDefined();
     // A janela existe: sem ela, a reclamação pegaria o evento que ESTÁ sendo
     // processado agora e dois workers agiriam sobre o mesmo evento.
     expect(
-      reclamacao!.filtros.some(([tipo, col]) => tipo === "lt" && col === "updated_at"),
+      busca!.filtros.some(([tipo, col]) => tipo === "lt" && col === "updated_at"),
       "reclamou sem janela de tempo — trocaria evento parado por efeito em dobro",
     ).toBe(true);
+    const [volta] = reclamacoes(chamadas);
+    expect(volta, "nada devolve o evento preso").toBeDefined();
+    expect(volta!.payload?.status).toBe("pending");
+    expect(volta!.filtros).toContainEqual(["eq", "id", "p1"]);
+  });
+
+  it("a volta CONTA como tentativa, com backoff e motivo", async () => {
+    // Era o laço dos 313 reinícios: o processo morria antes de o handler
+    // devolver erro, e só handler que devolve erro incrementava `attempts`. O
+    // evento voltava com `attempts=0`, era reclamado de novo, matava de novo.
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "ok" }]);
+    const { admin, chamadas } = dublarAdmin([], null, [PRESO]);
+
+    await drainEventLog(admin as never);
+
+    const [volta] = reclamacoes(chamadas);
+    expect(volta!.payload?.attempts, "voltou para a fila com as tentativas intactas").toBe(1);
+    expect(String(volta!.payload?.last_error)).toMatch(/não voltou/);
+    // Sem backoff, o evento reclamado é o primeiro da fila do próximo tique e o
+    // worker recém-reiniciado morre no mesmo minuto.
+    expect(volta!.payload?.next_attempt_at, "voltou sem backoff").toBeTruthy();
+    expect(new Date(String(volta!.payload?.next_attempt_at)).getTime()).toBeGreaterThan(Date.now() + 60_000);
+  });
+
+  it("na quinta volta o evento morre e avisa a Central — igual à quinta falha", async () => {
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "ok" }]);
+    const { admin, chamadas } = dublarAdmin([], null, [{ ...PRESO, attempts: 4 }]);
+
+    const resumo = await drainEventLog(admin as never);
+
+    const [volta] = reclamacoes(chamadas);
+    expect(volta!.payload?.status).toBe("dead");
+    expect(volta!.payload?.attempts).toBe(5);
+    expect(volta!.payload?.next_attempt_at).toBeNull();
+    expect(resumo.dead).toBe(1);
+    const aviso = chamadas.find((c) => c.op === "insert" && c.tabela === "agent_inbox_items");
+    expect(aviso, "evento envenenado morreu sem abrir aviso na Central").toBeDefined();
+    expect(aviso!.payload).toMatchObject({ organization_id: "org-1", kind: "event_dead" });
+    expect(String(aviso!.payload?.body)).toContain("não voltou");
   });
 
   it("a reclamação acontece ANTES da seleção, senão o evento devolvido só rodaria no próximo tique", async () => {
     dispatch.mockResolvedValue([{ consumer_key: "k", status: "ok" }]);
-    const { admin, chamadas } = dublarAdmin([]);
+    const { admin, chamadas } = dublarAdmin([], null, [PRESO]);
 
     await drainEventLog(admin as never);
 
     const iReclama = chamadas.findIndex((c) => c.op === "update" && c.payload?.status === "pending");
-    const iSeleciona = chamadas.findIndex((c) => c.op === "select");
+    const iSeleciona = chamadas.findIndex(
+      (c) => c.op === "select" && c.filtros.some(([tipo, col, val]) => tipo === "eq" && col === "status" && val === "pending"),
+    );
     expect(iReclama).toBeGreaterThanOrEqual(0);
     expect(iSeleciona).toBeGreaterThan(iReclama);
+  });
+
+  it("sem evento preso, nada é reclamado (controle)", async () => {
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "ok" }]);
+    const { admin, chamadas } = dublarAdmin([]);
+
+    await drainEventLog(admin as never);
+
+    expect(reclamacoes(chamadas)).toHaveLength(0);
   });
 });
 
