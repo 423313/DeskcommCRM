@@ -125,7 +125,7 @@ Validações de parser/rede hostil; banco real para RLS/RBAC, repetição/revis�
 | Quem recebe a saída? | `NavHub`, `ExtensionGuide` e a capacidade fixa `tasks.open`, que abre as Tarefas existentes. |
 | Que registro emite? | `extension_operations` é o recibo transacional; `audit()` emite ações `extension.*` em `api_audit_log`, como registro complementar. |
 | Onde o registro aparece? | `ExtensionOperations` exibe recibos na gestão; a auditoria complementar tem o visualizador existente `/admin/audit`, por `/api/v1/admin/audit`. |
-| Por qual porta se chega? | Entrada Extensões no `NAV_CATALOG` de `lib/navigation/catalogo.ts`, grupo CRM; cards ativos também abrem os guias pelo hub. |
+| Por qual porta se chega? | Entrada Extensões no `NAV_CATALOG` de `lib/navigation/catalogo.ts`, grupo Organização › "Sua empresa" (visível a todo membro; ações só para admin); cards ativos também abrem os guias pelo hub CRM. |
 | Qual o próximo passo garantido? | Preparação persistida oferece verificar/retomar ou cancelar; falhas explicam o motivo e a nova tentativa. O guia não cria demanda própria: a tarefa continua no domínio e na jornada existentes. |
 | Onde se configura? | `InstalledExtensionCard` permite ativar, desativar, mudar densidade e descrição; `fn_extensions_configure` verifica papel, organização e revisão. |
 | Qual a continuidade IA ↔ humano? | Este perfil só apresenta texto e abre uma tela existente. Não cria ferramentas de IA, handoff, envio ou autoridade nova; essas integrações pertencem aos marcos seguintes. |

@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/hooks/i18n/useT";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
+import { randomId } from "@/lib/random-id";
 import type { CatalogEntry, ExtensionConfiguration } from "@/lib/extensions/manifest";
 import type {
   ExtensionListView,
@@ -256,7 +257,7 @@ export function ExtensionsManager({
       try {
         const current = findPendingReceipt(window.localStorage, actorId, organizationId, targetKey);
         receipt = current ?? {
-          id: crypto.randomUUID(),
+          id: randomId(),
           kind,
           label,
           targetKey,
@@ -603,7 +604,7 @@ export function ExtensionsManager({
         {
           method: "POST",
           headers: {
-            "Idempotency-Key": crypto.randomUUID(),
+            "Idempotency-Key": randomId(),
             [EXPECTED_ORGANIZATION_HEADER]: organizationId,
           },
         },

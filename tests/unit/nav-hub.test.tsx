@@ -78,13 +78,14 @@ describe("NavHub", () => {
     expect(screen.getByRole("link", { name: /Agentes/ })).toBeTruthy();
   });
 
-  it("mantém a seção quando há uma rota de viewer e esconde os destinos administrativos", () => {
+  it("Extensões fica em Sua empresa, visível ao viewer; Dados e acesso continua sumindo sem destino", () => {
     render(
       <NavHub group="organizacao" isPlatformAdmin={false} role="viewer" title="Org" subtitle="" />,
     );
     const secoes = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent?.trim());
     expect(secoes).toContain("Sua conta");
-    expect(secoes).toContain("Dados e acesso");
+    expect(secoes).toContain("Sua empresa");
+    expect(secoes).not.toContain("Dados e acesso");
     expect(screen.getByRole("link", { name: /Extensões/ })).toHaveAttribute(
       "href",
       "/app/extensions",

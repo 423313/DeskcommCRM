@@ -2109,7 +2109,7 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 - [P1] Pausar e retomar: ponteiro publicado permanece; assistência manual continua. Troca de modo em voo impede efeitos automáticos obsoletos.
 - Provas Task9 em preparação: `tests/invariants/autonomia-replies.test.ts`, `lib/agent-engine/agent/preview.test.ts`. Evidência browser será registrada após revisão e aplicação da migration0227 no QA.
 
-## J22 — Instalar e usar uma extensão declarativa publicada após o build `[P0]`
+## J24 — Instalar e usar uma extensão declarativa publicada após o build `[P0]`
 
 Specs: `tests/e2e/extensoes-declarativas.spec.ts` e `tests/e2e/extensoes-recuperacao.spec.ts`.
 Estado: **implementadas, sem PASS integral ainda**; quatro rodadas diagnósticas corrigiram

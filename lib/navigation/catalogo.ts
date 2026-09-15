@@ -679,7 +679,7 @@ export const NAV_CATALOG = [
       "Guias instalados para orientar o trabalho no CRM, com permissões e estado visíveis.",
     icon: "PuzzlePiece",
     group: "organizacao",
-    section: "Dados e acesso",
+    section: "Sua empresa",
   },
 ] as const satisfies readonly NavMetadata[];
 
