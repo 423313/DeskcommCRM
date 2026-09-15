@@ -261,24 +261,17 @@ const PARES: Array<{
     arquivo: "lib/tarefas/tipos.ts",
     simbolo: "SITUACOES_DA_TAREFA",
   },
-  // Módulo VoIP (migration 0232) — 5 pares nascem juntos no mesmo commit,
-  // como manda a nota de "taxa" no topo deste arquivo.
+  // Módulo VoIP (0232/0252) — status fica de fora: é vocabulário de terceiro
+  // (binário WaCalls, compartilhado), mapeado na API — não é 1:1 com TS aqui.
   {
-    tabela: "crm_calls",
+    tabela: "voice_calls",
     coluna: "direction",
     // lib/voip/call-vocabulary.ts -> CallDirection
     arquivo: "lib/voip/call-vocabulary.ts",
     simbolo: "CallDirection",
   },
   {
-    tabela: "crm_calls",
-    coluna: "status",
-    // lib/voip/call-vocabulary.ts -> CallStatus
-    arquivo: "lib/voip/call-vocabulary.ts",
-    simbolo: "CallStatus",
-  },
-  {
-    tabela: "crm_calls",
+    tabela: "voice_calls",
     coluna: "handled_by",
     // lib/voip/call-vocabulary.ts -> CallHandledBy
     arquivo: "lib/voip/call-vocabulary.ts",

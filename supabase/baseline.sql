@@ -23205,7 +23205,7 @@ grant execute on function public.fn_reserve_channel_connection(uuid,uuid,text,te
 
 notify pgrst,'reload schema';
 
--- ---- módulo VoIP — crm_calls, phone_numbers, ai_agents.channel (migration 0232) ----
+-- ---- ai_agents.channel + phone_numbers (migration 0232 — crm_calls foi unificada em voice_calls, ver migration 0252) ----
 --
 -- SIP/Asterisk + IA de voz via OpenAI Realtime. Segue os mesmos padrões de
 -- conversations/messages: RLS por tenant via fn_user_org_ids(), audit
@@ -23225,73 +23225,6 @@ alter table public.ai_agents
 alter table public.ai_agents
   add constraint ai_agents_channel_check
   check (channel = any (array['whatsapp', 'voice']));
-
-create table if not exists public.crm_calls (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references public.organizations(id) on delete cascade,
-
-  lead_id uuid references public.crm_leads(id) on delete set null,
-  contact_id uuid references public.contacts(id) on delete set null,
-
-  direction text not null check (direction = any (array['outbound', 'inbound'])),
-  status text not null default 'ringing'
-    check (status = any (array['ringing', 'in_progress', 'completed', 'no_answer', 'busy', 'failed', 'canceled'])),
-
-  from_number text not null,
-  to_number text not null,
-
-  asterisk_channel_id text unique,
-  ari_bridge_id text,
-
-  assigned_to_user_id uuid references auth.users(id) on delete set null,
-
-  ai_agent_id uuid references public.ai_agents(id) on delete set null,
-  handled_by text not null default 'human'
-    check (handled_by = any (array['human', 'ai', 'ai_then_human'])),
-
-  started_at timestamptz,
-  answered_at timestamptz,
-  ended_at timestamptz,
-  duration_seconds int generated always as (
-    case when answered_at is not null and ended_at is not null
-      then extract(epoch from (ended_at - answered_at))::int
-      else null
-    end
-  ) stored,
-
-  recording_url text,
-  transcript jsonb,
-  sentiment text,
-  ai_summary text,
-
-  metadata jsonb not null default '{}'::jsonb,
-
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists idx_crm_calls_org on public.crm_calls(organization_id);
-create index if not exists idx_crm_calls_lead on public.crm_calls(lead_id) where lead_id is not null;
-create index if not exists idx_crm_calls_contact on public.crm_calls(contact_id) where contact_id is not null;
-create index if not exists idx_crm_calls_status on public.crm_calls(organization_id, status);
-create index if not exists idx_crm_calls_started on public.crm_calls(organization_id, started_at desc);
-
-alter table public.crm_calls enable row level security;
-
-drop policy if exists crm_calls_isolation on public.crm_calls;
-create policy crm_calls_isolation on public.crm_calls
-  using (organization_id in (select fn_user_org_ids()))
-  with check (organization_id in (select fn_user_org_ids()));
-
-drop trigger if exists trg_crm_calls_updated_at on public.crm_calls;
-create trigger trg_crm_calls_updated_at
-  before update on public.crm_calls
-  for each row execute function public.fn_set_updated_at();
-
-drop trigger if exists trg_crm_calls_audit on public.crm_calls;
-create trigger trg_crm_calls_audit
-  after insert or update or delete on public.crm_calls
-  for each row execute function public.fn_audit_log_row();
 
 create table if not exists public.phone_numbers (
   id uuid primary key default gen_random_uuid(),
@@ -23354,6 +23287,472 @@ revoke execute on function public.fn_resolve_inbound_number(text) from public, a
 grant execute on function public.fn_resolve_inbound_number(text) to service_role;
 
 notify pgrst,'reload schema';
+
+-- ---- voice_calls (WaCalls, migrations 0233-0236 da main) + unificação SIP (migration 0252) ----
+--
+-- Este branch nasceu antes da feature de chamada de voz por WhatsApp
+-- (WaCalls, PRs #628/#697) entrar na main. Este apêndice traz o schema dela
+-- pra cá (pra este arquivo continuar instalável do zero, sozinho) e, em
+-- seguida, unifica nosso módulo SIP nele — ver migration 0252 pro raciocínio
+-- completo. Migrations 0233-0236 e 0252 são a fonte de verdade histórica;
+-- isto aqui é só o estado final, idempotente.
+
+create table if not exists public.voice_calls (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  channel_session_id uuid references public.channel_sessions(id) on delete restrict,
+  contact_id uuid references public.contacts(id) on delete set null,
+  wacalls_call_id text,
+  direction text not null check (direction in ('inbound', 'outbound')),
+  peer_phone text not null,
+  status text not null check (status in ('starting', 'ringing', 'connected', 'ended')),
+  end_reason text,
+  started_at timestamptz not null default now(),
+  answered_at timestamptz,
+  ended_at timestamptz,
+  duration_ms integer,
+  created_by uuid references auth.users(id),
+  owner_user_id uuid references auth.users(id) on delete set null,
+  lead_id uuid references public.crm_leads(id) on delete set null,
+  provider text not null default 'wacalls' check (provider = any (array['wacalls', 'sip'])),
+  asterisk_channel_id text,
+  ai_agent_id uuid references public.ai_agents(id) on delete set null,
+  handled_by text check (handled_by is null or handled_by = any (array['human', 'ai', 'ai_then_human'])),
+  transcript jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, wacalls_call_id)
+);
+
+comment on column public.voice_calls.owner_user_id is
+  'Quem esteve NA LINHA. Gravado pela rota de atender/iniciar e confirmado pelo campo `owner` do upstream (que é o X-Client-Id que nós mandamos, ou seja, o auth.users.id). Distinto de created_by, que só existe na chamada iniciada pelo CRM e é nulo em toda ligação recebida.';
+comment on column public.voice_calls.provider is
+  'Discrimina a origem da ligação: ''wacalls'' (WhatsApp, #628/#697) ou ''sip'' (Asterisk/AudioSocket, #677). Todo o resto do schema é compartilhado.';
+comment on column public.voice_calls.status is
+  'Vocabulário do provider ''wacalls'' (binário WaCalls upstream) reaproveitado por ''sip'': ringing=tocando, connected=atendida, ended=terminal (granularidade extra em end_reason). Ver mapeamento no worker (lib/voip).';
+
+create index if not exists idx_voice_calls_org on public.voice_calls(organization_id);
+create index if not exists idx_voice_calls_contact on public.voice_calls(contact_id);
+create index if not exists idx_voice_calls_channel_session on public.voice_calls(channel_session_id);
+create index if not exists idx_voice_calls_owner_answered
+  on public.voice_calls(organization_id, owner_user_id, answered_at)
+  where answered_at is not null;
+create index if not exists idx_voice_calls_asterisk_channel
+  on public.voice_calls(asterisk_channel_id) where asterisk_channel_id is not null;
+create index if not exists idx_voice_calls_lead
+  on public.voice_calls(lead_id) where lead_id is not null;
+
+alter table public.voice_calls enable row level security;
+
+drop policy if exists tenant_isolation_voice_calls_all on public.voice_calls;
+drop policy if exists voice_calls_select on public.voice_calls;
+drop policy if exists voice_calls_write on public.voice_calls;
+
+create policy voice_calls_select on public.voice_calls for select
+  using (organization_id in (select public.fn_user_org_ids()));
+
+create policy voice_calls_write on public.voice_calls for all
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+  )
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+  );
+
+revoke all on public.voice_calls from anon;
+
+drop trigger if exists trg_voice_calls_set_updated_at on public.voice_calls;
+create trigger trg_voice_calls_set_updated_at
+  before update on public.voice_calls
+  for each row execute function public.fn_set_updated_at();
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+     where pubname = 'supabase_realtime'
+       and schemaname = 'public'
+       and tablename = 'voice_calls'
+  ) then
+    execute 'alter publication supabase_realtime add table public.voice_calls';
+  end if;
+end $$;
+
+create table if not exists public.org_voice_calls (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  enabled boolean not null default false,
+  risco_aceito_em timestamptz,
+  risco_aceito_por uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.org_voice_calls enable row level security;
+
+drop policy if exists org_voice_calls_select on public.org_voice_calls;
+drop policy if exists org_voice_calls_admin_write on public.org_voice_calls;
+
+create policy org_voice_calls_select on public.org_voice_calls
+  for select using (
+    (organization_id in (select public.fn_user_org_ids()))
+    or public.fn_is_platform_admin()
+  );
+
+create policy org_voice_calls_admin_write on public.org_voice_calls
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'admin'))
+  )
+  with check (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'admin'))
+  );
+
+revoke all on public.org_voice_calls from anon;
+
+drop trigger if exists trg_org_voice_calls_set_updated_at on public.org_voice_calls;
+create trigger trg_org_voice_calls_set_updated_at
+  before update on public.org_voice_calls
+  for each row execute function public.fn_set_updated_at();
+
+-- fn_lgpd_cascade_redact_contact e fn_attendant_metrics: versão final, já
+-- com o bloco de voice_calls (peer_phone/owner_user_id/created_by/transcript
+-- redigidos) e a contagem de ligação atendida nas métricas de atendente.
+CREATE OR REPLACE FUNCTION "public"."fn_lgpd_cascade_redact_contact"("p_organization_id" "uuid", "p_contact_id" "uuid", "p_request_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_already bool;
+  v_counts jsonb := '{}'::jsonb;
+  v_media_paths text[] := '{}';
+  v_anon_label text;
+  v_count int;
+begin
+  perform public.fn_service_lock(p_organization_id,p_contact_id);
+  select is_anonymized into v_already
+    from contacts
+    where id = p_contact_id and organization_id = p_organization_id;
+
+  if not found then
+    raise exception 'contact not found' using errcode = 'P0002';
+  end if;
+
+  if v_already then
+    return jsonb_build_object('already_anonymized', true, 'counts', v_counts, 'media_paths', v_media_paths);
+  end if;
+
+  v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+
+  select coalesce(array_agg(distinct media_storage_path) filter (where media_storage_path is not null), '{}')
+    into v_media_paths
+    from messages
+    where organization_id = p_organization_id
+      and conversation_id in (
+        select id from conversations
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      );
+
+  update contacts set
+    name = v_anon_label,
+    display_name = v_anon_label,
+    email = null,
+    phone_number = null,
+    cpf_encrypted = null,
+    cpf_hash = null,
+    birthdate = null,
+    is_anonymized = true,
+    anonymized_at = now(),
+    consent = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('contacts', v_count);
+
+  update conversations set
+    metadata = '{}'::jsonb,
+    last_message_preview = null,
+    updated_at = now()
+  where contact_id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('conversations', v_count);
+
+  update messages set
+    body = '[mensagem anonimizada]',
+    media_url = null,
+    media_mime = null,
+    media_size_bytes = null,
+    media_storage_path = null,
+    metadata = '{}'::jsonb,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('messages', v_count);
+
+  update crm_lead_activities set
+    payload = '{}'::jsonb,
+    metadata = '{}'::jsonb,
+    reason = null
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or lead_id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+      or lead_id in (
+        select id from crm_leads
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('activities', v_count);
+
+  update crm_leads set
+    title = v_anon_label,
+    description = null,
+    custom_fields = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('leads', v_count);
+
+  update orders set
+    payload = (coalesce(payload, '{}'::jsonb))
+      - 'customer'
+      - 'customer_name'
+      - 'customer_email'
+      - 'customer_phone'
+      - 'shipping_address'
+      - 'billing_address'
+      - 'contact_identification',
+    customer_external_id = null,
+    contact_id = null,
+    is_anonymized = true,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('orders', v_count);
+
+  if array_length(v_media_paths, 1) > 0 then
+    insert into storage_redaction_queue (organization_id, request_id, bucket, object_path)
+    select p_organization_id, p_request_id, 'whatsapp-media', path
+      from unnest(v_media_paths) as path
+      where path is not null and length(path) > 0
+    on conflict (bucket, object_path) do nothing;
+  end if;
+
+  -- `transcript` entra junto com `peer_phone`: uma transcrição de ligação de
+  -- voz é a pessoa falando, pode conter o próprio nome dela. Deixar
+  -- sobreviver ligada ao contact_id seria o mesmo buraco de reidentificação
+  -- que peer_phone já fecha.
+  update voice_calls set
+    peer_phone = v_anon_label,
+    owner_user_id = null,
+    created_by = null,
+    transcript = null,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('voice_calls', v_count);
+
+  insert into api_audit_log (organization_id, action, actor_user_id, resource_type, resource_id, metadata, bypassed_rls)
+  values (
+    p_organization_id,
+    'lgpd.redact_executed',
+    null,
+    'contact',
+    p_contact_id,
+    jsonb_build_object(
+      'cascaded_to', v_counts,
+      'media_queued', coalesce(array_length(v_media_paths, 1), 0),
+      'request_id', p_request_id
+    ),
+    true
+  );
+
+  return jsonb_build_object(
+    'already_anonymized', false,
+    'counts', v_counts,
+    'media_paths', v_media_paths
+  );
+end;
+$$;
+revoke all on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) to service_role;
+
+create or replace function public.fn_update_last_activity_at()
+  returns trigger
+  language plpgsql
+  set search_path to 'public', 'pg_temp'
+as $function$
+begin
+  if new.type not in (
+    'ai_turn', 'note', 'lead_edited', 'stage_changed', 'next_action_approved',
+    'voice_call'
+  ) then
+    return new;
+  end if;
+
+  update public.crm_leads
+     set last_activity_at = greatest(coalesce(last_activity_at, '-infinity'::timestamptz), new.performed_at)
+   where id = new.lead_id;
+
+  if new.contact_id is not null then
+    update public.contacts
+       set last_activity_at = greatest(coalesce(last_activity_at, '-infinity'::timestamptz), new.performed_at)
+     where id = new.contact_id;
+  end if;
+  return new;
+end$function$;
+
+create or replace function public.fn_attendant_metrics(
+  p_org uuid,
+  p_from timestamptz,
+  p_to timestamptz,
+  p_owner uuid default null
+) returns jsonb
+language sql stable
+set search_path = public
+as $$
+  with
+  lead_agg as (
+    select
+      owner_user_id as user_id,
+      count(*) filter (where status = 'won')  as won,
+      count(*) filter (where status = 'lost') as lost
+    from public.crm_leads
+    where organization_id = p_org
+      and status in ('won', 'lost')
+      and closed_at >= p_from and closed_at < p_to
+      and owner_user_id is not null
+      and (p_owner is null or owner_user_id = p_owner)
+    group by owner_user_id
+  ),
+  conv_agg as (
+    select
+      assigned_to_user_id as user_id,
+      count(*) as conversations_handled
+    from public.conversations
+    where organization_id = p_org
+      and assigned_to_user_id is not null
+      and assigned_at >= p_from and assigned_at < p_to
+      and (p_owner is null or assigned_to_user_id = p_owner)
+    group by assigned_to_user_id
+  ),
+  voice_agg as (
+    select
+      owner_user_id as user_id,
+      count(*) as calls_answered,
+      coalesce(sum(duration_ms), 0)::bigint as call_ms
+    from public.voice_calls
+    where organization_id = p_org
+      and owner_user_id is not null
+      and answered_at is not null
+      and answered_at >= p_from and answered_at < p_to
+      and (p_owner is null or owner_user_id = p_owner)
+    group by owner_user_id
+  ),
+  ttfr as (
+    select
+      c.assigned_to_user_id as user_id,
+      avg(extract(epoch from (fr.first_human_out - fr.first_in))) as avg_first_response_seconds
+    from public.conversations c
+    cross join lateral (
+      select
+        min(m.sent_at) filter (where m.direction = 'inbound') as first_in,
+        min(m.sent_at) filter (
+          where m.direction = 'outbound' and m.sent_by_user_id is not null
+        ) as first_human_out
+      from public.messages m
+      where m.conversation_id = c.id
+    ) fr
+    where c.organization_id = p_org
+      and c.assigned_to_user_id is not null
+      and (p_owner is null or c.assigned_to_user_id = p_owner)
+      and fr.first_in is not null
+      and fr.first_human_out is not null
+      and fr.first_human_out > fr.first_in
+      and fr.first_human_out >= p_from and fr.first_human_out < p_to
+    group by c.assigned_to_user_id
+  ),
+  attendant_ids as (
+    select user_id from lead_agg
+    union select user_id from conv_agg
+    union select user_id from ttfr
+    union select user_id from voice_agg
+  )
+  select jsonb_build_object(
+    'funnel', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'stage_id', s.id,
+          'stage_name', s.name,
+          'position', s.position,
+          'count', coalesce(l.cnt, 0)
+        ) order by s.position, s.name
+      )
+      from public.crm_stages s
+      left join (
+        select stage_id, count(*) as cnt
+        from public.crm_leads
+        where organization_id = p_org
+          and status = 'open'
+          and (p_owner is null or owner_user_id = p_owner)
+        group by stage_id
+      ) l on l.stage_id = s.id
+      where s.organization_id = p_org
+        and s.is_archived = false
+    ), '[]'::jsonb),
+    'attendants', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'user_id', a.user_id,
+          'won', coalesce(la.won, 0),
+          'lost', coalesce(la.lost, 0),
+          'conversations_handled', coalesce(ca.conversations_handled, 0),
+          'avg_first_response_seconds', tf.avg_first_response_seconds,
+          'calls_answered', coalesce(va.calls_answered, 0),
+          'call_seconds', (coalesce(va.call_ms, 0) / 1000)::bigint
+        ) order by coalesce(la.won, 0) desc, a.user_id
+      )
+      from attendant_ids a
+      left join lead_agg la on la.user_id = a.user_id
+      left join conv_agg ca on ca.user_id = a.user_id
+      left join ttfr tf on tf.user_id = a.user_id
+      left join voice_agg va on va.user_id = a.user_id
+    ), '[]'::jsonb)
+  );
+$$;
+revoke all on function public.fn_attendant_metrics(uuid,timestamptz,timestamptz,uuid) from public, anon;
+grant execute on function public.fn_attendant_metrics(uuid,timestamptz,timestamptz,uuid) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

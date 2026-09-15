@@ -11,17 +11,25 @@
  * silêncio. Limitação conhecida do chan_rtp/externalMedia pra esse padrão
  * de uso, não bug nosso.
  *
+ * Grava em `voice_calls` (provider='sip'), não numa tabela própria —
+ * unificada com a chamada de voz por WhatsApp (WaCalls, #628/#697) na
+ * migration 0252, porque duas tabelas de chamada que não conversam era o
+ * primeiro problema que a triagem do PR #677 apontou. O vocabulário de
+ * `status` (starting/ringing/connected/ended) é do binário WaCalls
+ * upstream — reaproveitado aqui, não estendido; granularidade extra
+ * (no_answer/busy/failed/canceled) vai em `end_reason`, livre de propósito.
+ *
  * Dois fluxos:
  *  - SAÍDA (POST /api/v1/calls): originateCall já entrega direto pro
  *    dialplan [voice-agent-out] (context/extension no create, não app) —
  *    esse canal NUNCA passa pela Stasis app deste worker.
  *  - ENTRADA (from-trunk): entra na Stasis só de PASSAGEM — o suficiente
  *    pra resolver org/agente pelo número discado e criar a linha em
- *    crm_calls — e devolve o controle pro dialplan (continueDialplan) rumo
+ *    voice_calls — e devolve o controle pro dialplan (continueDialplan) rumo
  *    ao [from-trunk-audiosocket], que chama AudioSocket() igual à saída.
  *
  * Os dois fluxos convergem no mesmo lugar: startAudioSocketServer() aceita
- * a conexão TCP, lê o frame de UUID, acha a linha em crm_calls por
+ * a conexão TCP, lê o frame de UUID, acha a linha em voice_calls por
  * asterisk_channel_id (== o UUID, de propósito) e sobe UMA
  * AudioSocketCallBridge — não importa se a chamada é de entrada ou saída.
  *
@@ -86,18 +94,18 @@ async function handleStasisStart(event: AriEvent) {
   // porque lá QUEM escolhe channel.id somos nós (route.ts gera o UUID e
   // passa em `channelId` pro ARI no originate) — na ENTRADA o Asterisk já
   // criou o canal, com o id dele, antes deste código rodar. Por isso aqui
-  // se gera um UUID SEPARADO só pra correlação do AudioSocket/crm_calls;
+  // se gera um UUID SEPARADO só pra correlação do AudioSocket/voice_calls;
   // as chamadas ARI continuam endereçando o canal por channel.id.
   const audioSocketUuid = randomUUID();
 
   const { data: callRow, error } = await supabaseAdmin
-    .from("crm_calls")
+    .from("voice_calls")
     .insert({
       organization_id: routing.organization_id,
+      provider: "sip",
       direction: "inbound",
       status: "ringing",
-      from_number: callerNumber,
-      to_number: dialedNumber,
+      peer_phone: callerNumber,
       contact_id: callerContactId,
       asterisk_channel_id: audioSocketUuid,
       started_at: new Date().toISOString(),
@@ -106,14 +114,14 @@ async function handleStasisStart(event: AriEvent) {
     .single();
 
   if (error || !callRow) {
-    console.error(`[voice-agent] falha ao criar crm_calls pra chamada de entrada:`, error?.message);
+    console.error(`[voice-agent] falha ao criar voice_calls pra chamada de entrada:`, error?.message);
     await hangupChannel(channel.id, "normal");
     return;
   }
 
   // A ligação é uma demanda nova, igual a uma mensagem de WhatsApp: sem isto,
   // quem liga e não é atendido fica de fora do funil e do radar de risco (os
-  // dois trabalham sobre crm_leads, não sobre crm_calls). Idempotente por
+  // dois trabalham sobre crm_leads, não sobre voice_calls). Idempotente por
   // contato — reusa o mesmo mecanismo do WhatsApp (nascimento-do-lead.ts),
   // só troca o rótulo/source de origem. Best-effort: não derruba a ligação.
   if (callerContactId) {
@@ -181,9 +189,10 @@ async function resolveInboundNumber(dialedNumber: string): Promise<RoteamentoInb
 interface ActiveAudioSocketCall {
   bridge: AudioSocketCallBridge;
   callRowId: string;
+  answeredAt: string;
   transcript: { speaker: string; text: string; ts: string }[];
 }
-const activeAudioSocketCalls = new Map<string, ActiveAudioSocketCall>(); // key = uuid (== crm_calls.asterisk_channel_id)
+const activeAudioSocketCalls = new Map<string, ActiveAudioSocketCall>(); // key = uuid (== voice_calls.asterisk_channel_id)
 
 function bytesToUuid(buf: Buffer): string {
   const hex = buf.toString("hex");
@@ -201,21 +210,32 @@ async function finalizeAudioSocketCall(uuid: string) {
   if (!call) return;
   activeAudioSocketCalls.delete(uuid);
 
+  const endedAt = new Date();
+  // duration_ms não é generated column em voice_calls (era em crm_calls) —
+  // calcula na mão a partir do answered_at que a gente mesmo gravou.
+  const durationMs = endedAt.getTime() - new Date(call.answeredAt).getTime();
+
   await supabaseAdmin
-    .from("crm_calls")
-    .update({ status: "completed", ended_at: new Date().toISOString(), transcript: call.transcript })
+    .from("voice_calls")
+    .update({
+      status: "ended",
+      end_reason: "user_ended",
+      ended_at: endedAt.toISOString(),
+      duration_ms: durationMs,
+      transcript: call.transcript,
+    })
     .eq("id", call.callRowId);
 }
 
 async function handleAudioSocketConnection(socket: net.Socket, uuid: string, leftover: Buffer) {
   const { data: callRow, error } = await supabaseAdmin
-    .from("crm_calls")
+    .from("voice_calls")
     .select("*")
     .eq("asterisk_channel_id", uuid)
     .single();
 
   if (error || !callRow) {
-    console.error(`[audiosocket] uuid ${uuid} não corresponde a nenhuma crm_calls — encerrando`);
+    console.error(`[audiosocket] uuid ${uuid} não corresponde a nenhuma voice_calls — encerrando`);
     socket.end();
     return;
   }
@@ -266,11 +286,12 @@ async function handleAudioSocketConnection(socket: net.Socket, uuid: string, lef
         : undefined,
   });
 
-  activeAudioSocketCalls.set(uuid, { bridge, callRowId: callRow.id, transcript: [] });
+  const answeredAt = new Date().toISOString();
+  activeAudioSocketCalls.set(uuid, { bridge, callRowId: callRow.id, answeredAt, transcript: [] });
 
   await supabaseAdmin
-    .from("crm_calls")
-    .update({ status: "in_progress", answered_at: new Date().toISOString(), handled_by: "ai" })
+    .from("voice_calls")
+    .update({ status: "connected", answered_at: answeredAt, handled_by: "ai" })
     .eq("id", callRow.id);
 
   // Se algum byte de áudio já chegou GRUDADO no mesmo pacote TCP do frame de
@@ -331,7 +352,7 @@ function assertEnv() {
  * sumido do Asterisk há muito tempo -- foi visto ao vivo assim.
  *
  * Só mexe em linha ainda "ringing": se o AudioSocket já rodou,
- * finalizeAudioSocketCall() já marcou "completed" e este handler não deve
+ * finalizeAudioSocketCall() já marcou "ended" e este handler não deve
  * sobrescrever isso (ChannelDestroyed chega DEPOIS, no fim normal da
  * ligação, não é exclusivo de "nunca atendida").
  */
@@ -340,20 +361,20 @@ async function handleChannelDestroyed(event: AriEvent) {
   if (!channelId) return;
 
   const { data, error } = await supabaseAdmin
-    .from("crm_calls")
-    .update({ status: "no_answer", ended_at: new Date().toISOString() })
+    .from("voice_calls")
+    .update({ status: "ended", end_reason: "timeout", ended_at: new Date().toISOString() })
     .eq("asterisk_channel_id", channelId)
     .eq("status", "ringing")
     .select("id")
     .maybeSingle();
 
   if (error) {
-    console.error(`[voice-agent] falha ao marcar no_answer pro canal ${channelId}:`, error.message);
+    console.error(`[voice-agent] falha ao marcar timeout pro canal ${channelId}:`, error.message);
     return;
   }
   if (data) {
     console.info(
-      `[voice-agent] chamada ${data.id} marcada no_answer (${event.cause_txt ?? "motivo desconhecido"})`,
+      `[voice-agent] chamada ${data.id} marcada sem resposta (${event.cause_txt ?? "motivo desconhecido"})`,
     );
   }
 }

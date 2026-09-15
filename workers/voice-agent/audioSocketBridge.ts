@@ -229,7 +229,11 @@ export class AudioSocketCallBridge {
                 // considerar que a pessoa terminou de falar, custa alguma
                 // latência mas evita a IA emendar resposta em cima de nada.
                 turn_detection: { type: "semantic_vad", eagerness: "low" },
-                transcription: { model: "whisper-1" },
+                // Sem `language`, o Whisper detecta automaticamente a cada
+                // trecho -- e erra de vez em quando (ruído de linha, palavra
+                // ambígua), transcrevendo em outro idioma no meio da
+                // ligação. Forçar "pt" corta a detecção errada de vez.
+                transcription: { model: "whisper-1", language: "pt" },
               },
               output: {
                 format: { type: "audio/pcmu" },

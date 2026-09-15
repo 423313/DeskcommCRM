@@ -1,9 +1,15 @@
 /**
  * POST /api/v1/calls
  *
- * Cria a linha em crm_calls como 'ringing' e origina via ARI. O worker
- * voice-agent (StasisStart, args[0] === "outbound") acha essa linha pelo
- * asterisk_channel_id e segue o fluxo dele.
+ * Cria a linha em voice_calls (provider='sip') como 'ringing' e origina via
+ * ARI. O worker voice-agent (StasisStart, args[0] === "outbound") acha essa
+ * linha pelo asterisk_channel_id e segue o fluxo dele.
+ *
+ * `voice_calls` é compartilhada com o canal de chamada por WhatsApp (WaCalls,
+ * #628/#697) — ver migration 0252. `provider` discrimina as duas origens;
+ * o vocabulário de `status` (starting/ringing/connected/ended) é do binário
+ * WaCalls upstream, reaproveitado aqui em vez de estender o CHECK. A rota GET
+ * traduz isso pra um `status` mais rico na resposta (ver mapStatusParaApi).
  *
  * "mode: human" fica pra quando o atendente quer discar direto (a IA não
  * entra na ponte de áudio) — mesmo endpoint, o worker decide com base nesse
@@ -25,16 +31,40 @@ import { originateCall } from "@/lib/voip/ariClient";
 export const dynamic = "force-dynamic";
 
 const LIST_COLS =
-  "id, direction, status, from_number, to_number, handled_by, started_at, answered_at, ended_at, duration_seconds, transcript";
+  "id, direction, status, end_reason, peer_phone, handled_by, started_at, answered_at, ended_at, duration_ms, transcript";
 
 /**
- * GET /api/v1/calls — lista chamadas da org ativa, mais recente primeiro.
- * Inclui `transcript` direto na listagem (sem rota de detalhe separada —
- * volume de chamadas não justifica ainda, e o transcript não é grande).
+ * Traduz o vocabulário compartilhado (status do binário WaCalls upstream +
+ * end_reason livre) pro vocabulário rico que a tela de chamadas SIP sempre
+ * teve (`ringing`/`in_progress`/`completed`/`no_answer`/`busy`/`failed`/`canceled`)
+ * — feito aqui, não no banco, porque o CHECK de `status` em `voice_calls` é
+ * vocabulário de terceiro (não é nosso pra estender).
+ */
+function mapStatusParaApi(status: string, endReason: string | null): string {
+  if (status === "connected") return "in_progress";
+  if (status !== "ended") return "ringing"; // starting|ringing
+  switch (endReason) {
+    case "timeout":
+      return "no_answer";
+    case "busy":
+      return "busy";
+    case "failed":
+      return "failed";
+    case "cancelled":
+      return "canceled";
+    default:
+      return "completed";
+  }
+}
+
+/**
+ * GET /api/v1/calls — lista chamadas SIP da org ativa, mais recente primeiro.
+ * `provider=eq.sip` sempre: chamada de WhatsApp (WaCalls) tem tela própria
+ * (app/api/v1/voice/calls/*), não entra aqui.
  */
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  const authz = await requireRole("manager", { requestId, resource: "crm_calls" });
+  const authz = await requireRole("manager", { requestId, resource: "voice_calls" });
   if (!authz.ok) return authz.response;
   const { org: activeOrg } = authz;
 
@@ -47,24 +77,48 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const supabase = await createClient();
   let query = supabase
-    .from("crm_calls")
+    .from("voice_calls")
     .select(LIST_COLS)
     .eq("organization_id", activeOrg.orgId)
+    .eq("provider", "sip")
     .order("started_at", { ascending: false })
     .limit(q.limit);
 
   if (q.direction) query = query.eq("direction", q.direction);
-  if (q.status) query = query.eq("status", q.status);
 
   const { data, error } = await query;
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  return ok(data ?? [], { requestId });
+  const rows = (data ?? []).map((row) => {
+    const apiStatus = mapStatusParaApi(row.status, row.end_reason);
+    return {
+      id: row.id,
+      direction: row.direction,
+      status: apiStatus,
+      // peer_phone é sempre o número do cliente — a UI só lê o campo que
+      // bate com a direção (counterpartNumber em app/app/calls/_client.tsx),
+      // então os dois recebem o mesmo valor.
+      from_number: row.peer_phone,
+      to_number: row.peer_phone,
+      handled_by: row.handled_by,
+      started_at: row.started_at,
+      answered_at: row.answered_at,
+      ended_at: row.ended_at,
+      duration_seconds: row.duration_ms != null ? Math.round(row.duration_ms / 1000) : null,
+      transcript: row.transcript,
+    };
+  });
+
+  // Filtro de status é pós-mapeamento (o vocabulário rico não existe no
+  // banco) — aplicado aqui em vez de no query builder acima.
+  const filtered = q.status ? rows.filter((r) => r.status === q.status) : rows;
+
+  return ok(filtered, { requestId });
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  const authz = await requireRole("manager", { requestId, resource: "crm_calls" });
+  const authz = await requireRole("manager", { requestId, resource: "voice_calls" });
   if (!authz.ok) return authz.response;
   const { user: authUser, org: activeOrg } = authz;
 
@@ -91,16 +145,16 @@ export async function POST(req: NextRequest): Promise<Response> {
   const channelId = randomUUID();
 
   const { data: callRow, error: insertError } = await supabase
-    .from("crm_calls")
+    .from("voice_calls")
     .insert({
       organization_id: activeOrg.orgId,
+      provider: "sip",
       direction: "outbound",
       status: "ringing",
-      from_number: process.env.VOIP_DEFAULT_CALLER_ID ?? "",
-      to_number: input.toNumber,
+      peer_phone: input.toNumber,
       lead_id: input.leadId ?? null,
       contact_id: input.contactId ?? null,
-      assigned_to_user_id: input.mode === "human" ? authUser.id : null,
+      owner_user_id: input.mode === "human" ? authUser.id : null,
       handled_by: input.mode === "human" ? "human" : "ai",
       started_at: new Date().toISOString(),
       asterisk_channel_id: channelId,
@@ -125,7 +179,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       action: "call.created",
       actorUserId: authUser.id,
       organizationId: activeOrg.orgId,
-      resourceType: "crm_calls",
+      resourceType: "voice_calls",
       resourceId: callRow.id,
       requestId,
       metadata: { direction: "outbound", mode: input.mode, to_number: input.toNumber },
@@ -133,7 +187,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     return ok({ callId: callRow.id, channelId: channel.id }, { status: 201, requestId });
   } catch (err) {
-    await supabase.from("crm_calls").update({ status: "failed" }).eq("id", callRow.id);
+    await supabase.from("voice_calls").update({ status: "ended", end_reason: "failed" }).eq("id", callRow.id);
     return fail("originate_failed", err instanceof Error ? err.message : "originate_failed", 502, { requestId });
   }
 }
