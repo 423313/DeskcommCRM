@@ -118,6 +118,16 @@ failed` e, no da IA, a frase inglesa do Postgres `insert or update on table
 "job_queue" violates foreign key constraint …`. O título genérico também leva
 `(media.persist_requested)`.
 
+**Consertado o corpo, não o título** (`d9a81523e`, branch `triagem/lote-9-qa-consertos`): o
+corpo dos dois avisos de evento morto e o do `midia_nao_lida` da falha permanente começam
+pelo que aconteceu e pelo que a pessoa pode fazer; o nome do evento, as tentativas e o
+motivo cru — sem tradução — ficam no fim, depois de "Detalhe técnico, para quem der
+suporte:". Provado por teste (`tests/unit/aviso-de-evento-morto-le-para-leigo.test.ts`,
+e a falha permanente pelo worker real em `tests/unit/media-derive-worker.test.ts`), **não
+em tela**. O título genérico segue com `(media.persist_requested)`: o invariante
+`aviso-da-ia-nao-some-atras-de-outro-evento-morto` conta avisos por esse título literal, e
+o pre-commit recusa editar invariante.
+
 **NÃO MEDIDO:** o aviso `midia_nao_lida` que o #872 passa a abrir quando a
 **derivação** (transcrição/leitura pela IA) estoura por exceção. Chegar lá exige a
 mídia persistida e uma chamada ao provedor de IA que falhe; sem WAHA servindo o
