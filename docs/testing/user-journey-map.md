@@ -2570,3 +2570,14 @@ Cobertura automatizada: `lib/channels/pairing-code.test.ts`,
 isolamento da consulta, RBAC/MFA, arquivado, estados não pareáveis, rate limit,
 timeout, sanitização, formulário, geração explícita e retorno ao QR.
 Teste de componente/contrato não prova pareamento real no celular.
+
+Prova em 15/09/2026: 853 arquivos / 8.791 testes aprovados + 1 falha esperada;
+typecheck e build local/amd64 aprovados; lint sem erros (avisos preexistentes).
+Imagem `1.24.0-saraiva-pairing.edae079` saudável na VPS. Pela tela real,
+Conectar novo WhatsApp abriu QR/código, telefone curto desabilitou o envio,
+telefone malformado exibiu validação do servidor e a volta ao QR funcionou.
+API real retornou 401 sem login, 400 para telefone inválido, 404 para sessão
+ausente, 409 para sessão já conectada e 429 para repetição. Sessão vazia de QA
+removida pelo fluxo de exclusão, após conferir zero histórico/vínculos; canal
+original permaneceu WORKING. Código gerado pelo transporte é coberto por teste
+de contrato; pareamento real por código ainda requer confirmação no celular.
