@@ -230,8 +230,10 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   await expect(linhaDoContato(page)).toBeVisible({ timeout: 30_000 });
   await evidencia(page, info, "5-contatos-filtro-cliente");
 
-  // "Cliente desde" é o dia em que o horário foi COMBINADO. O horário é da
-  // semana seguinte; a evidência da rodada anterior mostrava essa data futura.
+  // "Cliente desde" é `least(created_at, starts_at)` — o dia em que se combinou,
+  // ou o dia do atendimento quando ele for mais antigo, nunca uma data futura.
+  // Aqui o horário é da semana que vem, então quem vale é o dia em que se
+  // combinou; a evidência da rodada anterior mostrava a data futura.
   const { data: fatos } = await db
     .from("contacts")
     .select("first_service_at")
