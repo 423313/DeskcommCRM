@@ -116,7 +116,7 @@ describe("fatia S4 — vocabulário de tags", () => {
 
     const depois = await pool.query("select actions from public.automation_rules where id = $1", [regra]);
     const acoes = depois.rows[0].actions as Array<{ config?: { tags?: string[] } }>;
-    expect(acoes[0].config?.tags).toEqual(["vip"]);
+    expect(acoes[0]?.config?.tags).toEqual(["vip"]);
   });
 
   it("viewer é recusado antes de qualquer escrita", async () => {

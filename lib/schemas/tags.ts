@@ -20,7 +20,7 @@ export const ACOES_DE_VOCABULARIO = ["renomear", "juntar", "excluir"] as const;
 export type AcaoDeVocabulario = (typeof ACOES_DE_VOCABULARIO)[number];
 
 export const tagSchema = z
-  .string({ required_error: "tag_obrigatoria" })
+  .string({ error: "tag_obrigatoria" })
   .trim()
   .min(1, "tag_obrigatoria")
   .max(TAG_MAX, "tag_longa_demais");
@@ -33,7 +33,7 @@ export const tagSchema = z
 export const vocabularioDeTagsSchema = z
   .object({
     acao: z.enum(ACOES_DE_VOCABULARIO, {
-      errorMap: () => ({ message: "acao_invalida" }),
+      error: "acao_invalida",
     }),
     tag: tagSchema,
     destino: tagSchema.nullish(),
