@@ -493,7 +493,7 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     `);
     expect(
       linhas,
-      "o service_role perdeu o que os caminhos do produto usam (EXECUTE do sincronizador, DELETE/SELECT da desconexão), ou o sincronizador voltou a gravar o nome",
+      "o service_role perdeu o que os caminhos do produto usam (EXECUTE do sincronizador, DELETE/SELECT da desconexão), ou o sincronizador mudou o que grava — voltou a gravar o nome, ou passou a gravar/limpar o ical_uid (a prosa da 0261 descreve o resíduo)",
     ).toEqual([
       "papel=service_role",
       "executa=true",
@@ -517,7 +517,7 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
     `);
     expect(papel).toBe("papel=service_role");
     expect(executa).toBe("executa=true");
-    expect(espelho, "sem privilégio de tabela o sincronizador deixou de gravar — ele não grava pela definer").toBe(
+    expect(espelho, "sem privilégio de tabela o espelho saiu diferente — ou o sincronizador não grava pela definer, ou mudou o que faz com title/ical_uid").toBe(
       `espelho=ev-0261:(nulo):${ICAL_UID_RESIDUAL},ev-0261-novo:(nulo):(nulo)`,
     );
 
