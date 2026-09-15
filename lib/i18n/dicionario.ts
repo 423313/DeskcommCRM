@@ -8550,6 +8550,8 @@ export const DICIONARIO: Traducoes = {
   "Agendamento criado.": { es: "Cita creada." },
   "Agendamento remarcado.": { es: "Cita reprogramada." },
   "Agendamento cancelado.": { es: "Cita cancelada." },
+  "Horário confirmado.": { es: "Horario confirmado." },
+  "Confirmar horário": { es: "Confirmar horario" },
   "Marcado como realizado.": { es: "Marcado como realizado." },
   "Marcado como falta — o horário volta a ficar livre.": { es: "Marcado como inasistencia — el horario vuelve a quedar libre." },
   "Mídia": { es: "Multimedia" },
