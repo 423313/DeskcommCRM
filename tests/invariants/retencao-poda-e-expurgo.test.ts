@@ -205,17 +205,46 @@ describe("fn_expurgar_auditoria_vencida — a retenção que a doutrina prometia
 });
 
 describe("append-only: por onde o expurgo pode passar, e por onde não pode", () => {
-  it("NINGUÉM tem GRANT de DELETE/UPDATE em api_audit_log — nem service_role", () => {
+  it("NINGUÉM tem GRANT de DELETE/UPDATE/TRUNCATE em api_audit_log — nem service_role", () => {
     // É por isso que o expurgo precisa de uma `security definer`: o admin client
     // do produto não consegue apagar esta tabela, e é bom que não consiga.
+    //
+    // ⚠️ `TRUNCATE` ENTRA NA SONDA, e por muito tempo não entrava. Esta versão
+    // do caso perguntava só por DELETE/UPDATE, devolvia vazio, e deixava quem
+    // leu concluindo que a tabela não podia ser esvaziada — enquanto o
+    // privilégio que a esvazia INTEIRA estava concedido a anon, authenticated e
+    // service_role, resíduo do `pg_dump` (`api_audit_log` é a única tabela do
+    // dump com lista enumerada de privilégios em vez de `GRANT ALL`).
+    //
+    // TRUNCATE é a pior das três para a auditoria: não passa por RLS (RLS filtra
+    // linha, e ele não olha linha), não passa pelas policies (que só existem
+    // para INSERT e SELECT) e não deixa rastro, porque não sobra tabela. A
+    // migration 0257 o revogou; este caso é o que impede o retorno.
     const linhas = sql(`
       select coalesce(string_agg(grantee || ':' || privilege_type, ',' order by grantee), '')
         from information_schema.role_table_grants
        where table_schema = 'public' and table_name = 'api_audit_log'
-         and privilege_type in ('DELETE', 'UPDATE')
+         and privilege_type in ('DELETE', 'UPDATE', 'TRUNCATE')
          and grantee in ('anon', 'authenticated', 'service_role');
     `);
     expect(lastLine(linhas)).toBe("");
+  });
+
+  it("INSERT e SELECT continuam de pé (controle positivo do revoke)", () => {
+    // Sem este controle, um `revoke` largo demais — `revoke all` no lugar do
+    // `revoke truncate` — deixaria o caso acima verde e a auditoria MORTA:
+    // ninguém mais gravaria linha, e a tabela ficaria append-only no sentido
+    // mais literal possível, o de nunca receber nada.
+    const privilegios = lastLine(
+      sql(`
+      select coalesce(string_agg(distinct privilege_type, ',' order by privilege_type), '')
+        from information_schema.role_table_grants
+       where table_schema = 'public' and table_name = 'api_audit_log'
+         and grantee = 'service_role';
+    `),
+    );
+    expect(privilegios).toContain("INSERT");
+    expect(privilegios).toContain("SELECT");
   });
 
   it("as duas funções não são executáveis por anon nem por authenticated", () => {

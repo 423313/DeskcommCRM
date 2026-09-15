@@ -24689,6 +24689,29 @@ grant  execute on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, u
 
 comment on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) is
   'Cria o lead de entrada do ingest serializando por (organização, contato) com advisory lock. Devolve NULL quando já existe um aberto. Existe porque o check-then-act em TypeScript deixava três mensagens seguidas virarem três negócios; um índice único resolveria a corrida e quebraria o caso legítimo de dois negócios abertos criados à mão.';
+-- ---- o audit log perde o TRUNCATE (migration 0257) ----
+--
+-- `api_audit_log` é a única tabela do dump com lista enumerada de privilégios
+-- em vez de `GRANT ALL`: alguém tirou UPDATE e DELETE e deixou TRUNCATE, que
+-- estava no meio da lista. O resultado é que o "append-only é do schema" valia
+-- para linha e não valia para a tabela inteira.
+--
+-- Não é buraco de superfície (o PostgREST não emite `TRUNCATE`), mas era o
+-- único privilégio concedido capaz de apagar auditoria — e ele não passa por
+-- RLS, não passa pelas policies e não deixa rastro, porque não sobra tabela.
+-- O expurgo legítimo tem dono: `fn_expurgar_auditoria_vencida` (0167), sem
+-- seletor de linha, com piso de 90 dias no corpo.
+--
+-- `revoke` do que já não existe não é erro: idempotente por natureza, e o
+-- `update.sh` de um clone pode reaplicar à vontade.
+
+revoke truncate on table public.api_audit_log from anon, authenticated, service_role;
+
+comment on table public.api_audit_log is
+  'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0257) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
+
+notify pgrst, 'reload schema';
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
