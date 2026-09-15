@@ -24711,6 +24711,46 @@ comment on table public.api_audit_log is
   'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0257) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
 
 notify pgrst, 'reload schema';
+-- ---- três índices que não pagam o próprio aluguel (migration 0258) ----
+--
+-- Índice redundante custa em TODO insert/update, ocupa disco e entra no cálculo
+-- do planner sem nunca ser a melhor escolha. Numa VPS de 1 vCPU isso é pago
+-- todo dia por ninguém. Os três abaixo têm o trabalho JÁ feito por outro:
+--
+-- 1. `ai_models_provider_model_unique (provider, model_id)`, da migration 0127,
+--    contra a constraint `ai_models_unique (provider, model_id)` do schema
+--    original — mesmas colunas, mesma ordem, os dois UNIQUE. É o "índice
+--    duplicado em ai_models" que o advisor apontou numa VPS de cliente. Fica a
+--    constraint, que é a forma mais forte.
+-- 2. `idx_crm_lead_links_lead (lead_id)` contra
+--    `uniq_crm_lead_links_lead_target_link (lead_id, target_kind, target_id,
+--    link_kind)` — um btree responde por qualquer PREFIXO das suas colunas.
+-- 3. `calendar_connections_org_pessoa_idx (organization_id, user_id)` contra
+--    `calendar_connections_conta_key (organization_id, user_id, provider,
+--    account_email)` — mesmo argumento de prefixo.
+--
+-- ⚠️ O guard do caso 1 não é cerimônia: num clone onde alguém tenha removido a
+-- `ai_models_unique` à mão, o índice da 0127 é a ÚNICA coisa impedindo dois
+-- cadastros do mesmo modelo. Derrubá-lo abriria a duplicata que a 0127 fechou.
+--
+-- Os índices ainda são criados acima neste mesmo arquivo (o corpo do dump e o
+-- bloco da 0127). Derrubá-los aqui, no fim, é o que mantém o arquivo aplicável
+-- tanto em banco novo quanto em clone que atualiza — apagar as linhas de
+-- criação deixaria o baseline divergente da cadeia de migrations.
+
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'ai_models_unique'
+       and conrelid = 'public.ai_models'::regclass
+  ) then
+    drop index if exists public.ai_models_provider_model_unique;
+  end if;
+end $$;
+
+drop index if exists public.idx_crm_lead_links_lead;
+drop index if exists public.calendar_connections_org_pessoa_idx;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
