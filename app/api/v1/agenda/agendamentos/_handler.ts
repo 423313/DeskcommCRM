@@ -540,9 +540,25 @@ export function podeMarcarForaDaGrade(actor: Actor): boolean {
  *
  * Duas perguntas, conforme o ator (`podeMarcarForaDaGrade`):
  *
- * - **A grade** (IA, token, webhook): o horário é um dos slots oferecidos. O slot
- *   já desconta expediente, exceção de data, buffer, aviso mínimo, janela de
- *   reserva e ocupação — uma checagem segura tudo.
+ * - **A grade** (IA, token, webhook): o horário é um dos slots que
+ *   `horariosLivres` calcula para a janela `[inicio, fim]` DO PRÓPRIO PEDIDO —
+ *   não para o dia. Essa conta segura o alinhamento ao expediente, o aviso
+ *   mínimo, a janela de reserva e a ocupação que CRUZA o pedido.
+ *
+ *   ⚠️ Ela NÃO segura tudo o que o GET do dia esconde, porque a coleta acompanha
+ *   a janela estreita. Dois furos, anteriores ao encaixe, medidos em 2026-09-15
+ *   chamando este handler com a coleta de verdade sobre o banco em memória de
+ *   `tests/unit/pessoa-marca-fora-da-grade.test.ts` (sonda não versionada):
+ *   · **buffer contra vizinho** — `coletaOQueOcupa` só traz o que cruza
+ *     `[inicio, fim]`. Com `buffer_before_minutes = 30` e um compromisso que
+ *     termina 12:45Z, o pedido de 13:00Z não vê o vizinho e é ACEITO — e o GET
+ *     do dia não oferece 13:00Z (medição do revisor do lote 8). Para valer, a
+ *     janela de coleta teria de ser alargada por `buffer_before`/`buffer_after`.
+ *   · **exceção de data à noite em fuso negativo** — as exceções são colhidas
+ *     pela data UTC de `inicio`/`fim` (`diaISO`), e `exception_date` é data
+ *     LOCAL. Em São Paulo, 21:00 do dia 07 é 00:00Z do dia 08: a exceção do dia
+ *     07 fica de fora e o pedido é ACEITO num dia inteiro bloqueado. Para valer,
+ *     o recorte teria de ser feito no fuso da jornada, com um dia de margem.
  * - **O encaixe** (pessoa): as regras da grade são dispensadas — é a escolha
  *   explícita de quem atende —, mas a OCUPAÇÃO REAL não
  *   (`exigeSemSobreposicao`).
