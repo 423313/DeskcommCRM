@@ -2509,3 +2509,22 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
     log dos gates passou a declarar um SHA que já não era o HEAD. Proveniência entra **depois** dos
     gates, ou o resumo dos gates declara o **tree** (`git rev-parse HEAD^{tree}`), que é o que o
     teste mediu.
+
+71. **A vigia que engole a falha do `gh` fica calada durante uma queda de rede.** O monitor de um
+    re-run tinha `gh … || { sleep 30; continue; }` e expirou em 30 minutos "sem eventos": a rede tinha
+    caído (um agente morreu com `ENOTFOUND` no mesmo intervalo) e o run já tinha terminado verde.
+    Silêncio de vigia não é "ainda rodando". **Conte as falhas seguidas do instrumento e emita aviso a
+    partir de N**, como qualquer outro estado terminal.
+
+72. **Vermelho de e2e num lote que não toca a área: meça o intermitente antes de investigar o lote.**
+    O lote 9 (#893) caiu em `logo-moldura-no-tema-escuro` nas duas tentativas, sem nenhum arquivo de
+    marca, cache ou layout no diff. O trace mostrou `POST /api/v1/marca/logo` 200 e a barra lateral
+    ainda com a marca do produto 15 s depois — o sintoma de uma corrida que o próprio
+    `lib/branding/instalacao.ts` documenta. Re-run no mesmo SHA: verde. **A ordem é: diff do lote ×
+    área da spec; trace da falha; re-run no mesmo SHA; e só então concluir.** O intermitente vira
+    issue com o trace (#895), não conserto dentro do lote.
+
+73. **`git commit … | tail; echo "rc=$?"` imprime `rc=0` com o commit BARRADO.** Reincidência do
+    "pipe mascara exit" (lote 9, título do aviso da Central): o pre-commit recusou, o `tail` saiu 0, e
+    a linha seguinte afirmava o commit. **Em commit, a sonda é o HEAD ter andado**
+    (`antes=$(git rev-parse HEAD)` … comparar), nunca um exit impresso depois de pipe.
