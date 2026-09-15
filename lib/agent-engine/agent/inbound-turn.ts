@@ -1,4 +1,5 @@
 import { setExecutionAgentOperation } from '@/lib/atendimento/fronteira-server';
+import { TIPOS_DE_CASO, TIPOS_DE_CASO_PARA_A_IA } from "@/lib/ai/case-copy";
 import { DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
 import { applyPreviewPolicy, previewGateContext, type TurnPreview } from './preview';
 import { claimOfJob } from '../queue/claim';
@@ -39,7 +40,9 @@ import type { ChannelAdapter, ChannelSendResult } from '../channel-adapter';
 
 import { withFields, type Logger } from '../obs/logger';
 import {
+  corpoDaMensagem,
   getLeadContext,
+  type CorpoDaMensagemRow,
   type LeadContext,
   type LeadContextMessage,
   type LeadContextResult,
@@ -336,6 +339,19 @@ export const AGENT_TOOL_DEFS = {
         title: z.string().describe('título curto, ex.: "Liberar acesso ao painel"'),
         summary: z.string().describe('o que o lead precisa, em pt-br'),
         blocker: z.string().describe('por que você não consegue resolver sozinho'),
+        // O assunto serve para quem TRIA a fila separar antes de ler. O detalhe
+        // continua no título e no resumo — este campo não os substitui, e por
+        // isso a lista é curta: muitas opções produzem classificação
+        // inconsistente, e aí o filtro atrapalha em vez de ajudar.
+        kind: z
+          .enum(Object.keys(TIPOS_DE_CASO) as [string, ...string[]])
+          .describe(
+            'do que o caso trata, para a equipe triar: ' +
+              Object.entries(TIPOS_DE_CASO_PARA_A_IA)
+                .map(([k, o]) => `${k} (${o})`)
+                .join('; ') +
+              '. Na dúvida entre dois, escolha o que descreve o PEDIDO, não o obstáculo.',
+          ),
       })
       .passthrough(),
   },
@@ -436,6 +452,17 @@ const inboundTurnPayloadSchema = z
  * entrar entre o despacho e o turno, e o agente passa a responder ao registro
  * errado. A resposta deve sempre usar esta linha canônica.
  *
+ * ⚠️ Ela é COMPOSTA pelo mesmo caminho do histórico (`corpoDaMensagem`), nunca
+ * pela coluna `body` crua. Áudio e foto chegam do WhatsApp sem legenda — `body`
+ * NULL e o conteúdo no derivado (transcrição/visão, gravado DEPOIS pelo
+ * `workers/media-derive-worker.ts`: é essa a corrida que se mede aqui) ou no
+ * marcador `[tipo]`. Lida crua, a linha canônica valia `''` enquanto o histórico
+ * logo abaixo mostrava o texto do cliente — e os DOIS lados do defeito saem
+ * daqui: a abertura anunciava "não há texto utilizável" sobre uma mensagem que
+ * tem texto, e a barreira do falso-vazio desarmava, porque
+ * `claimsCurrentInboundIsEmpty` devolve `false` quando o texto canônico é `''`.
+ * (issue #617)
+ *
  * Exportada só para o teste: o recorte (org + conversa + id + `direction`) é o
  * que impede um id de outra conversa — ou uma outbound — de virar "a mensagem
  * atual", e um recorte não se prova lendo a chamada.
@@ -444,8 +471,8 @@ export async function loadInboundBodyForJob(
   db: Queryable,
   input: { tenantId: string; conversationId: string; inboundMessageId: string },
 ): Promise<string | null> {
-  const result = await db.query<{ body: string | null }>(
-    `select body
+  const result = await db.query<CorpoDaMensagemRow>(
+    `select type, body, media_url, media_storage_path, media_derived_text
        from messages
       where organization_id = $1
         and conversation_id = $2
@@ -455,7 +482,7 @@ export async function loadInboundBodyForJob(
     [input.tenantId, input.conversationId, input.inboundMessageId],
   );
   const row = result.rows[0];
-  return row === undefined ? null : (row.body ?? '');
+  return row === undefined ? null : corpoDaMensagem(row);
 }
 
 /** Conteúdo do checkpoint — o modelo devolve, o Zod valida, o Postgres guarda. */

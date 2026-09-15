@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCases, type CaseListItem } from "@/hooks/ai/useCases";
-import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/ai/case-copy";
+import { STATUS_BADGE_VARIANT, STATUS_LABEL, tipoDeCasoLabel } from "@/lib/ai/case-copy";
 import { Robot } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
@@ -109,7 +109,9 @@ function CaseRow({
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          {item.contact_name ?? t("Contato sem nome")} · {when}
+          {/* O assunto vem ANTES do nome: quem tria a fila decide por ele, e o
+              nome só importa depois de escolher o caso. */}
+          {t(tipoDeCasoLabel(item.kind))} · {item.contact_name ?? t("Contato sem nome")} · {when}
         </p>
       </button>
     </li>

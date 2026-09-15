@@ -450,6 +450,12 @@ export const AUDIT_ACTIONS = [
   // o que se quer responder depois é "o sistema cobrou?", e uma linha por caso
   // faria do audit log a própria fila.
   "ai.caso_parado_cobrado",
+  // Um pedido não confirmado soltou o horário que estava segurando. Audita
+  // porque é CANCELAMENTO — o compromisso deixa de existir para quem o pediu —,
+  // e sem esta linha a única explicação para o horário ter voltado a aparecer
+  // seria "sumiu". Só a rodada que expirou alguma coisa; varredura vazia não é
+  // mutação.
+  "agenda.pendente_expirado",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta
@@ -518,6 +524,10 @@ export const AUDIT_ACTIONS = [
   // exatamente o que faltou no incidente: o histórico foi destruído ANTES do
   // erro, sem rastro de nada.
   "contact.delete_blocked",
+  // Visão de plataforma sobre o agente de um cliente (fase A da spec 19). Entra
+  // porque toda leitura de `admin/` é auditada neste repo — e porque aqui o
+  // operador enxerga o agente publicado na organização de outra pessoa.
+  "platform_admin.tenant_agents_viewed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

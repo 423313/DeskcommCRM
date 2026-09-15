@@ -414,6 +414,13 @@ export async function publishAgentAction(
     .insert({
       organization_id: activeOrg.orgId,
       event_type: "ai_agent.published",
+      // `entity_kind` é NOT NULL sem default (`baseline.sql`): sem esta linha o
+      // insert viola a constraint e o evento de publicação NUNCA é gravado. E o
+      // insert é `void` + `.then()`, então a violação cai num `console.error`
+      // que ninguém lê — o Sistema Vivo perde o registro em silêncio. Visto no
+      // log do CI de hoje: `null value in column "entity_kind" ... violates
+      // not-null constraint`.
+      entity_kind: "ai_agent",
       payload: {
         agent_id: result.agent_id,
         version_id: result.version_id,
@@ -616,6 +623,13 @@ export async function revertToVersionAction(
     .insert({
       organization_id: activeOrg.orgId,
       event_type: "ai_agent.published",
+      // `entity_kind` é NOT NULL sem default (`baseline.sql`): sem esta linha o
+      // insert viola a constraint e o evento de publicação NUNCA é gravado. E o
+      // insert é `void` + `.then()`, então a violação cai num `console.error`
+      // que ninguém lê — o Sistema Vivo perde o registro em silêncio. Visto no
+      // log do CI de hoje: `null value in column "entity_kind" ... violates
+      // not-null constraint`.
+      entity_kind: "ai_agent",
       payload: {
         agent_id: result.agent_id,
         version_id: result.version_id,

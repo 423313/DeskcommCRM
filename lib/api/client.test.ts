@@ -152,7 +152,13 @@ describe("apiClient", () => {
   it("t9b: PATCH e DELETE seguem a mesma regra", async () => {
     for (const chamar of [
       () => apiClient.patch("/x", { a: 1 }, { timeoutMs: 5 }),
-      () => apiClient.delete("/x", { timeoutMs: 5 }),
+      // `delete(path, body?, opts?)` — o `body` opcional entrou no meio quando a
+      // rota de cancelar agendamento passou a exigir motivo. Escrito como
+      // `delete("/x", { timeoutMs: 5 })`, este objeto virava CORPO e o `opts`
+      // ficava vazio: o caso rodava com o prazo padrão e passava porque o
+      // padrão de então (10s) cabia no `testTimeout` de 15s — media a contagem
+      // de tentativas, nunca o prazo que dizia estar medindo.
+      () => apiClient.delete("/x", undefined, { timeoutMs: 5 }),
     ]) {
       fetchMock.mockClear();
       fetchMock.mockImplementation(abortaSempre());
@@ -179,6 +185,58 @@ describe("apiClient", () => {
     await apiClient.post("/x", { a: 1 });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * O ORÇAMENTO DE ESPERA DA ESCRITA (o vermelho de `followup-dossie:190`).
+   *
+   * Enquanto o método mutante era retentado, uma escrita tinha 10s + backoff +
+   * 10s + backoff + 10s ≈ 30,6s de parede. Parar de repetir era certo; o que
+   * passou despercebido é que a repetição também era o PRAZO — e ele caiu para
+   * 10s em toda mutação do produto de uma vez só.
+   *
+   * Medido no trace do CI (run 34876435491): `POST …/pause` cortado em
+   * 9999,558ms com `net::ERR_ABORTED` e UMA tentativa, num job onde os testes
+   * vizinhos correram mais rápido que na `main`. Quem desistiu foi o navegador.
+   *
+   * Estes dois casos prendem os dois prazos, que são diferentes de propósito:
+   * escrever espera 30s (desistir não cancela nada no servidor — só perde a
+   * resposta), ler desiste em 10s (a tela não fica presa, e a leitura é
+   * repetida, então o orçamento dela não mudou).
+   */
+  it("t12: escrita só desiste depois de 30s — aos 10s ela ainda está de pé", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(abortaSempre());
+
+    const desfecho = vi.fn();
+    void apiClient.post("/x", { a: 1 }).then(desfecho, desfecho);
+
+    // 10s é o prazo da LEITURA. Se ele estiver valendo aqui, a escrita já
+    // morreu neste ponto — que é exatamente o defeito.
+    await vi.advanceTimersByTimeAsync(10_500);
+    expect(desfecho).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(desfecho).toHaveBeenCalled();
+    // E continua sem repetir: o prazo mudou, a regra do #787 não.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("t13: leitura continua desistindo aos 10s — ela é repetida, prender a tela não paga", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(abortaSempre());
+
+    const desfecho = vi.fn();
+    void apiClient.get("/x").then(desfecho, desfecho);
+
+    // Aos 10,5s a primeira já estourou e a segunda tentativa começou.
+    await vi.advanceTimersByTimeAsync(10_500);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(desfecho).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
 
