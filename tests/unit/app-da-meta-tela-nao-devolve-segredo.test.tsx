@@ -219,6 +219,10 @@ describe("/admin/meta — o formulário", () => {
     await userEvent.click(screen.getByTestId("meta-copiar-token"));
     expect(copiar).toHaveBeenCalledWith(TOKEN_GERADO);
 
+    // A URL de callback mora em Conexões. Na mesma aba, ir buscá-la apagaria o
+    // token desta página — que não tem como ser lido de novo.
+    expect(screen.getByTestId("meta-abrir-conexoes").getAttribute("target")).toBe("_blank");
+
     // O token veio da resposta da action, e só dela: a tela não buscou nada.
     expect(fetch).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalled();

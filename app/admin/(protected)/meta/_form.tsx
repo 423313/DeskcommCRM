@@ -210,9 +210,20 @@ export function FormularioDaMeta({
         ) : null}
 
         <p className="text-xs text-muted-foreground">
-          {t("No painel da Meta, em WhatsApp › Configuração › Webhook, este token vai no campo “Verificar token”. O outro campo, “URL de callback”, é de cada número: ele aparece em Conexões › API Oficial (Meta), depois que o número é conectado.")}{" "}
-          <Link href="/app/connections?aba=oficial" className="font-medium text-foreground underline underline-offset-2">
-            {t("Abrir Conexões")}
+          {t("No painel da Meta, em WhatsApp › Configuração › Webhook, este token vai no campo “Verificar token”. O outro campo, “URL de callback”, é de cada número: ele aparece em Conexões › API Oficial (Meta), depois que o número é conectado. Abra Conexões em outra aba, para não perder o token desta página.")}{" "}
+          {/*
+            Outra aba de propósito: o token recém-gerado vive só nesta página, e
+            a URL de callback só em Conexões. Na mesma aba a pessoa perde o token
+            no caminho — e copiar a URL depois sobrescreve a área de transferência.
+          */}
+          <Link
+            href="/app/connections?aba=oficial"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="meta-abrir-conexoes"
+            className="font-medium text-foreground underline underline-offset-2"
+          >
+            {t("Abrir Conexões em outra aba")}
           </Link>
         </p>
 
