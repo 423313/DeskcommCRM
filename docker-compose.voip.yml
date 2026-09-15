@@ -72,6 +72,38 @@ services:
     networks:
       - deskcommcrm_default
 
+  # Motor de voz em Pipecat (Python) — roda ao lado do worker Node
+  # (voice-agent, porta 9092), numa porta DIFERENTE (9093) até a validação ao
+  # vivo do plano trocar o dialplan de produção pra cá. Não substitui nada
+  # ainda; é aditivo.
+  voice-agent-pipecat:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    build:
+      context: .
+      dockerfile: Dockerfile.voice-agent-pipecat
+    container_name: deskcomm-voice-agent-pipecat
+    restart: unless-stopped
+    depends_on:
+      asterisk:
+        condition: service_healthy
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      AUDIOSOCKET_PIPECAT_PORT: "9093"
+      # A app (Next.js) roda bare no host desta VPS, não em container — sem
+      # isto o serviço não alcançaria /api/internal/voice/knowledge-search.
+      INTERNAL_API_BASE: "http://host.docker.internal:3005"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - deskcommcrm_default
+
 networks:
   deskcommcrm_default:
     external: true   # mesma network que app/worker/scheduler já usam
