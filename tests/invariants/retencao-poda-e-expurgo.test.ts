@@ -219,7 +219,7 @@ describe("append-only: por onde o expurgo pode passar, e por onde não pode", ()
     // TRUNCATE é a pior das três para a auditoria: não passa por RLS (RLS filtra
     // linha, e ele não olha linha), não passa pelas policies (que só existem
     // para INSERT e SELECT) e não deixa rastro, porque não sobra tabela. A
-    // migration 0257 o revogou; este caso é o que impede o retorno.
+    // migration 0258 o revogou; este caso é o que impede o retorno.
     const linhas = sql(`
       select coalesce(string_agg(grantee || ':' || privilege_type, ',' order by grantee), '')
         from information_schema.role_table_grants

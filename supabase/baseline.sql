@@ -24689,7 +24689,7 @@ grant  execute on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, u
 
 comment on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, text, text, jsonb, text[]) is
   'Cria o lead de entrada do ingest serializando por (organização, contato) com advisory lock. Devolve NULL quando já existe um aberto. Existe porque o check-then-act em TypeScript deixava três mensagens seguidas virarem três negócios; um índice único resolveria a corrida e quebraria o caso legítimo de dois negócios abertos criados à mão.';
--- ---- o audit log perde o TRUNCATE (migration 0257) ----
+-- ---- o audit log perde o TRUNCATE (migration 0258) ----
 --
 -- `api_audit_log` é a única tabela do dump com lista enumerada de privilégios
 -- em vez de `GRANT ALL`: alguém tirou UPDATE e DELETE e deixou TRUNCATE, que
@@ -24708,10 +24708,10 @@ comment on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, te
 revoke truncate on table public.api_audit_log from anon, authenticated, service_role;
 
 comment on table public.api_audit_log is
-  'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0257) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
+  'L-10: Append-only, e agora do schema por inteiro — sem UPDATE, sem DELETE e (migration 0258) sem TRUNCATE para anon/authenticated/service_role. O único apagamento é fn_expurgar_auditoria_vencida (0167), com piso de 90 dias no corpo. Retencao default 5 anos, configuravel em AUDIT_LOG_RETENTION_DAYS.';
 
 notify pgrst, 'reload schema';
--- ---- três índices que não pagam o próprio aluguel (migration 0258) ----
+-- ---- três índices que não pagam o próprio aluguel (migration 0259) ----
 --
 -- Índice redundante custa em TODO insert/update, ocupa disco e entra no cálculo
 -- do planner sem nunca ser a melhor escolha. Numa VPS de 1 vCPU isso é pago

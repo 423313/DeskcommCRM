@@ -80,7 +80,7 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
     where table_name='api_audit_log' and privilege_type in ('DELETE','UPDATE','TRUNCATE');"
   ```
 
-  **`TRUNCATE` entra na consulta de propósito, e desde a migration 0257 o
+  **`TRUNCATE` entra na consulta de propósito, e desde a migration 0258 o
   resultado é vazio.** Até ela, estava concedido a `anon`, `authenticated` e
   `service_role` — resíduo de o dump enumerar os privilégios desta tabela (as
   demais recebem `GRANT ALL`, e quem as protege é a RLS). Nunca foi alcançável
