@@ -2117,3 +2117,96 @@ Produto `7f1d0f3e`, integrado à main `ca895850`: as dez specs de organizações
 Evidência local preservada em `.superpowers/evidence/comunidade-360/final-qa-targeted-r4/` e log `.superpowers/sdd/comunidade-360/final-qa-targeted-r4.log`. A rodada inclui atualização concorrente da interface sem perder formulário, sugestão obsoleta sem confirmação antiga de sucesso e encerramento de suporte com retorno ao contexto original.
 
 Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos aprovados + 1 falha esperada; 184 arquivos de banco / 1.466 casos aprovados + 1 falha esperada e 1 ignorado, com INSTALL e UPDATE; tipos, lint (0 erros, 344 avisos) e build aprovados. `lint:channels`, validadores shell e conferência de release também passaram. Os checks remotos continuam sendo condição do merge pelo revisor da PR #613.
+
+## J23 — Clientes pela agenda: o administrador liga, e quem tem horário vira cliente `[P1]` (2026-09-15)
+
+Contribuição de @423313 (PR #867), com a decisão do dono: a regra nasce
+**desligada** em toda organização, e só um administrador a liga, em
+Configurações › Tipos de agendamento (migration 0262). A porta secundária é o
+rodapé da tela de Funis, que diz onde ligar enquanto estiver desligada.
+
+Spec: `tests/e2e/cliente-pela-agenda.spec.ts` (organização e admin próprios,
+criados e apagados pela spec — ligar a regra na organização compartilhada do CI
+etiquetaria os contatos das outras specs). Banco: `tests/invariants/cliente-nasce-do-agendamento.test.ts`.
+
+| Caso | Prioridade | Resultado |
+|---|---|---|
+| J23.1 Marcar horário para um contato PELA AGENDA com a regra desligada: a lista de Contatos não mostra selo "Cliente", a célula Tags da linha não tem "cliente" e a ficha não tem o chip nem "Cliente desde" | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/1-contatos-regra-desligada.png` |
+| J23.2 Configurações › Tipos de agendamento (pelo hub) mostra "Desligado: …"; ligar abre a confirmação que diz que religar tira a etiqueta de quem ficou sem horário e que desligar não tira a etiqueta | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/2-regra-desligada.png`, `evidence/cliente-pela-agenda/3-confirmacao.png` |
+| J23.3 Confirmar: "1 contato ganhou a etiqueta “cliente”."; o interruptor fica `aria-checked=true`, habilitado e com opacidade 1 (medido por `getComputedStyle`) | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/4-regra-ligada.png` |
+| J23.4 Ligada: selo "Cliente" na lista, filtro "cliente" acha o contato, ficha mostra "Cliente desde" com a data do primeiro horário que conta — o dia em que se combinou, ou o dia do atendimento quando ele for mais antigo —, nunca uma data futura, Funis oferece "Funil de clientes" | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/5-contatos-filtro-cliente.png`, `evidence/cliente-pela-agenda/6-ficha-cliente-desde.png` |
+| J23.5 Marcar o funil de clientes, RECARREGAR: o selo "Clientes" e o botão "Deixar de ser funil de clientes" continuam | `[P1]` | **PASS** — `evidence/cliente-pela-agenda/7-funis-com-funil-de-clientes.png` |
+
+Execução (2026-09-15): build de produção (`pnpm e2e:build`) da árvore
+`f1fa08a19` + a spec, Supabase local próprio com o `baseline.sql` aplicado
+(`ON_ERROR_STOP=1`, 0 erros), Chromium real, `next start`. 1 passed.
+
+**Controle da spec:** com o trigger sabotado para ignorar o interruptor (no
+banco do teste, restaurado depois), a spec reprova — em J23.3, e não em J23.1
+como eu previra: o selo da lista é escondido pela própria regra desligada
+(`ActiveOrg.cliente_pela_agenda`), então o contato etiquetado indevidamente só
+aparece quando ligar diz "Nenhum contato tinha horário marcado ainda".
+
+**Achado da própria spec, não do produto:** a primeira versão conferia o botão
+de Funis com `toContainText`, que não exige visibilidade — passou com a tela
+ainda no esqueleto do `loading.tsx` (o conteúdo chega num `<div hidden>` do
+streaming), e a evidência capturada era o esqueleto. Agora a spec espera
+`toBeVisible` antes do texto. Uma rodada caiu por 504 do GoTrue local sob carga
+da máquina (`AuthRetryableFetchError`, média de carga 24); a seguinte passou sem
+nenhum 504.
+
+O que a tela NÃO prova, e onde está provado: cancelado e falta não contam, a
+etiqueta tirada à mão não volta, o `contact.tag_added` no formato do app, a
+classificação do histórico só da organização que liga e sem evento, e quem pode
+ligar (admin, MFA, suporte) — todos no invariante acima, contra Postgres real.
+
+**Rodada 2 (2026-09-15), sobre os achados da revisão.** Execução: build de
+produção da árvore `88461bda5`, Supabase local próprio (project `fx867-e2e`,
+portas 556xx) com o `baseline.sql` aplicado (`ON_ERROR_STOP=1`, 0 erros),
+Chromium real, `next start` na 3867. 1 passed (23s). A evidência 6 agora mostra
+"Criado em 15/09/2026 · Cliente desde 15/09/2026" — a da rodada 1 mostrava
+"Cliente desde 21/09/2026", o dia do horário, que ainda não tinha chegado.
+
+Controles, cada um com a previsão escrita antes:
+
+- **E2E-S1** (o trigger ignora o interruptor, no banco do teste, restaurado
+  depois): reprova no **J23.1**, na célula Tags (`toHaveCount(0)`, recebido 1).
+  Na rodada 1 esse passo não reprovava, porque só olhava o selo que a tela
+  esconde por `ActiveOrg`.
+- **E2E-S2** (`/app/kanban` sem `is_client_pipeline` no select, build
+  refeito): reprova no **J23.5**, depois do reload ("Funil de clientes" onde
+  devia estar "Deixar de ser funil de clientes"). Sem o reload, passava.
+
+Duas rodadas caíram antes da verde por carga da máquina (média 25–42, de outras
+sessões): um 502 do Kong em `fn_support_context` (`recv() failed (104:
+Connection reset by peer)` do PostgREST), que a rota do funil devolve como 503
+`upstream_unavailable`, e 504 do GoTrue em `/auth/v1/user`. Nenhuma das duas
+falhas tocou código desta feature; a terceira rodada, com a carga em 12, passou.
+
+**Rodada 3 (2026-09-15), sobre os achados da segunda revisão.** Três defeitos
+achados executando, nenhum deles alcançável pela spec atual — e é isso que os
+torna interessantes de registrar aqui:
+
+- **A frase da tela sobre a agenda que só tem cancelamento.** Organização cujo
+  único contato TEM horário marcado, todos cancelados: o corpo da RPC era
+  `{ganharam: 0, perderam: 0, clientes: 0}` — três números idênticos aos de uma
+  agenda vazia — e a tela dizia "Nenhum contato tinha horário marcado ainda".
+  Numa clínica com cancelamentos é a primeira frase depois de ligar. Provado e
+  guardado em `components/agenda/ClientePelaAgenda.test.tsx` (o corpo agora tem
+  um quarto número) e no invariante I38. **A spec não alcança**: ela monta uma
+  organização com um horário que CONTA, e montar a agenda só de cancelamento
+  seria uma segunda organização inteira pela tela.
+- **A etiqueta que a equipe repõe à mão.** O sistema a tirava no cancelamento
+  seguinte, porque o dono só era reconciliado quando a data mudava. Invariante
+  I34 (e I34b, o par). **A spec não alcança**: são quatro edições de etiqueta
+  pela tela de Contatos, com um cancelamento no meio.
+- **As três colunas gravadas por sessão.** Um `viewer` da própria organização
+  gravava `first_service_at = '2019-01-01'` com `UPDATE 1`. Invariante I36 (e
+  I37, o par). **A spec não alcança**: nenhuma tela oferece essa escrita — o
+  caminho é a API/PostgREST, e o que a fecha é um trigger.
+
+Não houve rodada nova de Playwright nesta rodada 3: nenhuma das três mudanças de
+comportamento é alcançável pela jornada da spec, e a única mudança de TEXTO na
+tela (a frase nova e a das automações) é medida pelo teste de componente. O que
+a rodada 2 provou pela tela continua valendo — a árvore mudou o corpo da RPC,
+não o caminho que a spec percorre.
