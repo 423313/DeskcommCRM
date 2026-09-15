@@ -45,7 +45,10 @@ import { motivoDoErro, sql } from "./psql-transporte";
  * 3. O BANCO INSTALADO, sem reaplicar nada. É o único caso que enxerga um bloco
  *    POSTERIOR (ou um remendo à mão no Supabase) que devolva o SELECT de tabela
  *    a `authenticated`: os casos do item 2 reaplicam a 0261 e a reaplicação
- *    revoga de novo, então ficariam verdes sobre um banco que vaza.
+ *    revoga de novo, então ficariam verdes sobre um banco que vaza. É também
+ *    onde mora a varredura das funções e views que o login alcança: uma
+ *    `security definer` lê com o privilégio do dono e passaria por cima do
+ *    grant de coluna com todos os outros casos verdes.
  * 4. SOB O DEFAULT ACL DO SUPABASE, simulado na transação (`alter default
  *    privileges … grant all on tables` para a view que o bloco recria, e `grant
  *    all on table` para a tabela que já existe — ver `DEFAULT_ACL_DO_SUPABASE`),
@@ -294,6 +297,49 @@ const DESCONECTA_COMO_SERVICE_ROLE = `
   reset role;
   select '${MARCA}' || 'depois_de_desconectar=' || count(*)::text
     from public.calendar_external_events where connection_id = '${CONEXAO}';
+`;
+
+/**
+ * Quem, em `public`, lê o espelho (a tabela ou a view) e cita `title` ou a linha
+ * inteira — e, desses, quem o login alcança (EXECUTE da função para
+ * `authenticated`/`anon`, SELECT da view). Duas linhas marcadas: `citam=` e
+ * `alcancaveis=`. `pg_get_functiondef` serve a `plpgsql`, `sql` e `begin atomic`;
+ * `pg_get_viewdef` devolve a view com o `e.*` já expandido, então a coluna
+ * `title` aparece pelo nome.
+ */
+const VARREDURA_DE_LEITORES_DO_TITULO = `
+  with objetos as (
+    select 'função ' || p.oid::regprocedure::text as objeto,
+           pg_get_functiondef(p.oid) as corpo,
+           has_function_privilege('authenticated', p.oid, 'EXECUTE')
+             or has_function_privilege('anon', p.oid, 'EXECUTE') as alcancavel
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.prokind in ('f', 'p')
+    union all
+    select 'view ' || c.oid::regclass::text,
+           pg_get_viewdef(c.oid),
+           has_table_privilege('authenticated', c.oid, 'SELECT')
+             or has_table_privilege('anon', c.oid, 'SELECT')
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind in ('v', 'm')
+  ),
+  leitores as (
+    select objeto, alcancavel
+      from objetos
+     where corpo ~* 'calendar_(selected_)?external_events'
+       and corpo ~* '(\\mtitle\\M|\\m[a-z_][a-z0-9_]*\\.\\*|select\\s+\\*|to_jsonb?\\s*\\(|jsonb?_agg\\s*\\(\\s*[a-z_][a-z0-9_]*\\s*\\))'
+  )
+  select linha from (
+    select 1 as ordem, '${MARCA}' || 'citam=' || coalesce(string_agg(objeto, ',' order by objeto), '(nenhum)') as linha
+      from leitores
+    union all
+    select 2, '${MARCA}' || 'alcancaveis=' ||
+              coalesce(string_agg(objeto, ',' order by objeto) filter (where alcancavel), '(nenhum)')
+      from leitores
+  ) as sondas
+  order by ordem;
 `;
 
 /**
@@ -656,6 +702,79 @@ describe("o banco instalado pelo baseline inteiro — sem reaplicar o bloco da 0
     `);
     expect(pelaView, "no banco instalado a view entrega o título").not.toBeNull();
     expect(pelaView).toContain('column "title" does not exist');
+  });
+
+  it("nenhuma função nem view que `authenticated` ou `anon` alcance lê o título do espelho — quem lê com o privilégio do dono passa por cima do grant de coluna", () => {
+    // O grant de coluna fecha o `title` para o LOGIN. Uma função `security
+    // definer`, ou uma view sem `security_invoker`, lê com o privilégio do DONO
+    // dela e passa por cima dele — e todas as asserções de privilégio acima
+    // seguem verdes. Medido na triagem: uma definer com EXECUTE para
+    // `authenticated` devolvendo `e.title` entregou "Terapia sigilosa" ao colega
+    // com `has_column_privilege(... 'title' ...)` = false.
+    //
+    // A varredura olha o que o login alcança em `public` (EXECUTE da função,
+    // SELECT da view) e cujo corpo cita o espelho — a tabela ou a view — junto
+    // com `title` ou com a LINHA INTEIRA (`e.*`, `select *`, `to_json`/`to_jsonb`,
+    // `json_agg(e)`). É conservadora de propósito: uma função que cite `title` de
+    // outra tabela no mesmo corpo também reprova, e a saída é escrever aqui por
+    // que ela não entrega o título do espelho. Uma tela do titular que um dia
+    // precise do nome nasce assim — e este caso muda junto com ela, de propósito.
+    //
+    // Fora do alcance da varredura, e escrito: SQL dinâmico que monte o nome da
+    // tabela por partes, e função de outro schema chamada por uma de `public`.
+    const [citam, alcancaveis] = sondasDesfeitas(VARREDURA_DE_LEITORES_DO_TITULO);
+    expect(alcancaveis, "uma função ou view que o login alcança lê o título (ou a linha inteira) do espelho").toBe(
+      "alcancaveis=(nenhum)",
+    );
+    expect(
+      citam,
+      "a varredura não enxerga mais só fn_google_calendar, a única função que cita o título (para gravá-lo nulo) — ou apareceu outra que só o service_role executa, ou a sonda ficou cega",
+    ).toBe("citam=função fn_google_calendar(uuid,uuid,text,jsonb)");
+
+    // Controle: a varredura pega o que precisa pegar, e só isso — três leitores
+    // alcançáveis que entregam o título (um deles lido de fato pelo colega), um
+    // alcançável que só lê ocupação e um que cita o título mas só o service_role
+    // executa.
+    const [tituloPeloColega, citamComSondas, alcancaveisComSondas] = sondasDesfeitas(`
+      ${FIXTURE}
+      create function public.fn_sonda_0261_titulo_do_titular(p_conexao uuid) returns setof text
+        language sql stable security definer set search_path = public
+        as $f$ select e.title from public.calendar_external_events e where e.connection_id = p_conexao $f$;
+      create function public.fn_sonda_0261_linha_inteira(p_conexao uuid) returns setof jsonb
+        language sql stable security definer set search_path = public
+        as $f$ select to_jsonb(e) from public.calendar_external_events e where e.connection_id = p_conexao $f$;
+      create view public.v_sonda_0261_espelho as select e.* from public.calendar_external_events e;
+      create function public.fn_sonda_0261_so_ocupacao(p_conexao uuid) returns setof timestamptz
+        language sql stable security definer set search_path = public
+        as $f$ select e.starts_at from public.calendar_selected_external_events e where e.connection_id = p_conexao $f$;
+      create function public.fn_sonda_0261_titulo_do_servico(p_conexao uuid) returns setof text
+        language sql stable security definer set search_path = public
+        as $f$ select e.title from public.calendar_external_events e where e.connection_id = p_conexao $f$;
+      revoke execute on function public.fn_sonda_0261_titulo_do_titular(uuid) from public, anon;
+      grant  execute on function public.fn_sonda_0261_titulo_do_titular(uuid) to authenticated;
+      revoke execute on function public.fn_sonda_0261_linha_inteira(uuid) from public, anon;
+      grant  execute on function public.fn_sonda_0261_linha_inteira(uuid) to authenticated;
+      revoke all on public.v_sonda_0261_espelho from public, anon;
+      grant  select on public.v_sonda_0261_espelho to authenticated;
+      revoke execute on function public.fn_sonda_0261_so_ocupacao(uuid) from public, anon;
+      grant  execute on function public.fn_sonda_0261_so_ocupacao(uuid) to authenticated;
+      revoke execute on function public.fn_sonda_0261_titulo_do_servico(uuid) from public, anon, authenticated;
+      grant  execute on function public.fn_sonda_0261_titulo_do_servico(uuid) to service_role;
+      ${COMO_COLEGA}
+      select '${MARCA}' || 'colega=' || string_agg(t, ',') from public.fn_sonda_0261_titulo_do_titular('${CONEXAO}') t;
+      reset role;
+      ${VARREDURA_DE_LEITORES_DO_TITULO}
+    `);
+    expect(tituloPeloColega, "a sonda não reproduz o furo — a definer não entregou o título ao colega").toBe(
+      `colega=${TITULO}`,
+    );
+    expect(citamComSondas).toBe(
+      "citam=função fn_google_calendar(uuid,uuid,text,jsonb),função fn_sonda_0261_linha_inteira(uuid)," +
+        "função fn_sonda_0261_titulo_do_servico(uuid),função fn_sonda_0261_titulo_do_titular(uuid),view v_sonda_0261_espelho",
+    );
+    expect(alcancaveisComSondas, "a varredura não pega um leitor alcançável do título, ou pega quem só lê ocupação").toBe(
+      "alcancaveis=função fn_sonda_0261_linha_inteira(uuid),função fn_sonda_0261_titulo_do_titular(uuid),view v_sonda_0261_espelho",
+    );
   });
 
   it("coluna do espelho legível por membro é decisão explícita: só o `title` fica de fora, e a view cabe no que foi concedido", () => {

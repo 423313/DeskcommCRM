@@ -25127,8 +25127,13 @@ notify pgrst, 'reload schema';
 --   SELECT/UPDATE na coluna, mas nenhum caminho do produto os usa: o sincronizador
 --   grava pela `fn_google_calendar`, `security definer`, com o privilégio do dono
 --   dela (do `service_role` só usa o EXECUTE), e a desconexão usa DELETE e SELECT
---   nas colunas do filtro. Nenhuma função lê o título (a única que o menciona é
---   `fn_google_calendar`, para gravá-lo nulo).
+--   nas colunas do filtro.
+-- * Não impede, sozinho, que uma função leia o título: o grant de coluna fecha o
+--   LOGIN, e uma `security definer` (ou view sem `security_invoker`) lê com o
+--   privilégio do dono. Hoje nenhuma função nem view que `authenticated` ou `anon`
+--   alcance cita o título ou a linha inteira do espelho — a única que cita o
+--   título é `fn_google_calendar`, só `service_role`, para gravá-lo nulo —, e o
+--   invariante varre `pg_proc` e as views de `public` para que continue assim.
 -- * Não concede nada a `anon`, que continua sem privilégio nesta tabela desde a
 --   0177 (`revoke all … from anon`).
 --

@@ -135,15 +135,23 @@
 -- o espelho fica com os dois títulos nulos — igual com todo privilégio de tabela
 -- do papel revogado —, e a desconexão apaga com o DELETE do papel.
 --
--- E nenhuma função do banco lê a coluna (a única que a menciona é
--- `fn_google_calendar`, para gravá-la nula).
+-- E nenhuma função nem view que `authenticated` ou `anon` alcance lê o título.
+-- Isso importa porque o grant de coluna fecha o LOGIN, não quem lê com o
+-- privilégio do dono: uma `security definer` com EXECUTE para `authenticated`
+-- que devolva `e.title` entrega o nome ao colega com todas as asserções de
+-- privilégio verdes (medido numa transação desfeita). O invariante varre
+-- `pg_proc` e as views de `public` atrás de quem cita o espelho junto com `title`
+-- ou com a linha inteira (`e.*`, `to_jsonb`, `json_agg` da linha) e reprova a que
+-- o login alcança; hoje a única que cita o título é `fn_google_calendar`, que só
+-- `service_role` executa, para gravá-lo nulo. A varredura não enxerga SQL
+-- dinâmico que monte o nome da tabela por partes, nem função de outro schema.
 --
 -- Nenhum login de usuário lê o título depois desta migration — nem o colega, nem
 -- o próprio dono da conexão. Nenhuma tela mostra o título de um evento externo —
 -- os guardas de tela citados acima vigiam isso —, então não há leitura de
 -- titular a preservar nos papéis do PostgREST; se um dia houver uma tela do
--- titular, ela nasce com função `security definer` própria e o invariante muda
--- junto, de propósito.
+-- titular, ela nasce com função `security definer` própria — e a varredura do
+-- invariante a reprova até ele mudar junto, de propósito.
 --
 -- ─── O que esta migration NÃO faz, de propósito ─────────────────────────────
 --
