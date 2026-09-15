@@ -60,6 +60,7 @@ export const AUDIT_ACTIONS = [
   "contact.anonymized",
   "contact.merge_pending",
   "contact.merged",
+  "contact.aniversario_emitido",
   "lgpd.anonymize_executed",
   // A cascata retomando o que uma execução interrompida não terminou (#310).
   "lgpd.anonymize_catchup",
@@ -324,6 +325,13 @@ export const AUDIT_ACTIONS = [
   // veem, e a pergunta "quem repintou isto?" só tem resposta aqui: não há
   // event_log (nenhum handler consumiria o tipo — ver register-handlers.ts).
   "platform_branding.updated",
+  // A política de cadastro da INSTALAÇÃO trocada em `platform_settings`
+  // (migration 0233) — mutação de plataforma, sem `organization_id`. Auditável
+  // porque decide quem consegue ENTRAR no sistema inteiro, e "por que ninguém
+  // mais cria conta?" só tem resposta aqui: não há event_log que cubra o tipo
+  // (nenhum handler o consumiria — ver register-handlers.ts) e a troca não
+  // deixa rastro em nenhuma outra tabela.
+  "platform.signup_mode_updated",
   "platform_google_oauth.updated",
   // A conexão da ORGANIZAÇÃO com a conta de anúncios (migration 0213).
   // Auditável porque o token gravado aqui escreve conversões na conta de

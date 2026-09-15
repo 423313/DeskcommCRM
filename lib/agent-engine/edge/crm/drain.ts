@@ -375,11 +375,24 @@ async function processEvent(
 
   // Coalescência: já existe job PENDING futuro deste contato → esta mensagem
   // entra de carona (o turno lê o histórico completo). Evento vira done.
+  //
+  // ⚠️ `run_after > now()` sozinho casa com um job em HOLD (`enforceHolds`,
+  // session-watchdog.ts) — que usa `run_after = 'infinity'` como marcador, e
+  // 'infinity' É maior que `now()`. Um job em hold por sessão MORTA (WhatsApp
+  // reconectado, sessão antiga arquivada) nunca libera — a condição de
+  // liberação exige a MESMA sessão antiga voltar a 'WORKING', o que não
+  // acontece nunca. Sem esta exclusão, TODA mensagem nova do mesmo contato —
+  // inclusive na sessão NOVA — coalescia nesse job morto para sempre: o
+  // cliente escrevia, o evento saía "done" sem erro nenhum, e nenhum turno
+  // rodava. Medido em produção (2026-09-14): 6 mensagens ao longo de 7h,
+  // zero resposta, zero job novo — só o coalescing silencioso repetido no
+  // mesmo job com `held_run_after` no payload.
   if (knobs.debounceMs > 0) {
     const { rows: pendingRows } = await pool.query<{ id: string }>(
       `select id from job_queue
        where organization_id = $1 and contact_id = $2
          and kind = 'inbound_turn' and status = 'pending' and run_after > now()
+         and not (payload ? 'held_run_after')
        limit 1`,
       [event.organization_id, p.contact_id],
     );

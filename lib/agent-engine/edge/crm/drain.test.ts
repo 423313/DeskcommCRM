@@ -93,6 +93,45 @@ it('mensagem de texto não espera nada', async () => {
   expect(calls.some((s) => s.includes('job_queue'))).toBe(true);
 });
 
+/**
+ * Coalescência não pode considerar job em HOLD (`held_run_after` no payload).
+ *
+ * `run_after > now()` sozinho casa com um job em hold — `enforceHolds`
+ * (session-watchdog.ts) usa `run_after = 'infinity'` como marcador, e
+ * 'infinity' É maior que `now()`. Um hold por sessão MORTA (WhatsApp
+ * reconectado, sessão antiga arquivada) nunca libera — a condição de release
+ * exige a MESMA sessão antiga voltar a 'WORKING'. Sem esta exclusão, toda
+ * mensagem nova do mesmo contato — inclusive numa sessão NOVA — coalescia
+ * nesse job morto para sempre: o evento saía "done", sem erro, e nenhum
+ * turno rodava. Medido em produção (2026-09-14): 6 mensagens em 7h, zero
+ * resposta.
+ */
+it('coalescência exclui job em hold (held_run_after) — sessão morta não sequestra mensagem nova', async () => {
+  process.env.__ESPERA__ = '0';
+  const debounceKnobs = { ...knobs, debounceMs: 500 };
+  const calls: string[] = [];
+  const query = vi.fn().mockImplementation((sql: string) => {
+    calls.push(sql);
+    if (sql.includes('returning e.id')) return { rows: [eventoDeAudio(0)] };
+    if (sql.includes('ai_dispatch_mode')) return { rows: [{ mode: null }] };
+    if (sql.includes('is_group')) return { rows: [{ is_group: false }] };
+    if (sql.includes('tem_agente')) return { rows: [{ tem_agente: true, tem_roteador: false }] };
+    if (sql.includes('media_derived_status')) return { rows: [{ type: 'text', media_derived_status: null }] };
+    // A coalescência real (com o predicado corrigido) não encontra nada — o
+    // único job pendente do contato está em hold e a query já o exclui.
+    if (sql.includes('select id from job_queue')) return { rows: [] };
+    if (sql.includes('insert into job_queue')) return { rows: [{ id: 'job-novo' }] };
+    return { rows: [] };
+  });
+  await drainTick({ query } as unknown as pg.Pool, debounceKnobs, log);
+
+  const coalescencia = calls.find((s) => s.includes('select id from job_queue'));
+  expect(coalescencia, 'a query de coalescência deveria ter rodado').toBeTruthy();
+  expect(coalescencia).toContain('held_run_after');
+  // Sem o job em hold como falso-positivo, o turno segue e enfileira um job novo.
+  expect(calls.some((s) => s.includes('insert into job_queue'))).toBe(true);
+});
+
 
 /**
  * Agente pausado não pode custar dinheiro.
