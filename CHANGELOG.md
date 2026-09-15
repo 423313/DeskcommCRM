@@ -8,6 +8,111 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.26.0] — 2026-09-15
+
+### Adicionado
+
+- **Quem opera a agenda agora pode confirmar um pedido de horário pela tela** Na agenda, a aba "Aguardando confirmação" e o painel de detalhe do compromisso ganharam o botão Confirmar. Em negócios que exigem aprovação de cada horário, o pedido que o assistente reservou só virava compromisso se o cliente respondesse no WhatsApp — caso contrário o prazo vencia e a reserva era cancelada automaticamente. Agora a decisão pode ser tomada por quem atende, com um clique.
+
+- **O App da Meta passa a ser cadastrado pela tela de administração, sem editar o servidor** Para receber mensagens pelo número oficial da Meta, era preciso abrir o arquivo de configuração do servidor e escrever lá a chave secreta do aplicativo e um código de confirmação inventado por quem instalou.
+
+  Agora quem administra a instalação faz isso em **Admin › API Oficial (Meta)**: cola a chave secreta do aplicativo e o sistema gera sozinho o token de verificação, mostrado uma única vez, pronto para copiar para o painel da Meta. A chave fica guardada cifrada e nunca volta a aparecer. Se o token se perder, dá para gerar outro na mesma tela — ela avisa antes que o novo precisa ser colado na Meta.
+
+  A tela de Conexões e o primeiro acesso passam a apontar para esse lugar, em vez de mandar configurar o servidor.
+
+  Você não precisa fazer nada. Quem já tem a chave e o token no arquivo de configuração continua funcionando como está: o arquivo segue valendo como reserva, e só deixa de ser usado quando alguém salvar pela tela.
+
+  A guarda da credencial na instalação é contribuição de @webtecnica.
+
+- **A agenda aceita encaixe fora da grade quando quem marca é da equipe** O sistema oferece horários numa grade fixa: a partir do começo de cada faixa do
+  expediente, de duração em duração. Isso vale para o que o assistente oferece ao
+  cliente — mas quem atende precisa poder marcar o que combinou por fora dela: o
+  cliente que só pode 10:30, o encaixe, o atendimento que começa mais cedo.
+
+  Antes, o servidor recusava todo horário fora da grade, viesse de quem viesse, e a
+  saída era mudar o horário do cliente para caber numa régua interna.
+
+  Agora, quando quem marca é **uma pessoa da equipe logada no sistema**, o servidor
+  aceita horário fora da grade, até fora do expediente, desde que o responsável já
+  tenha publicado seus horários de atendimento.
+
+  Na tela, isso fica em **Agenda › Novo agendamento**: depois de escolher o dia, abaixo
+  dos horários dele aparece **"Outro horário"**. A pessoa digita a hora e segue para a
+  mesma confirmação de sempre. O dia sem nenhum horário publicado (um domingo, por
+  exemplo) também pode ser escolhido — de hoje em diante, nos meses que o calendário
+  do painel deixa abrir —, e ali o campo de hora já abre direto. A hora digitada vale
+  no fuso que o painel mostra ("Horários no fuso …"). **Remarcar**, na lista de
+  compromissos, abre o mesmo painel e tem a mesma opção.
+
+  "Outro horário" não aparece para quem tem o papel **Somente leitura**, que não pode
+  marcar, nem enquanto o responsável não publicou seus horários. Clicar num horário
+  vazio da grade e arrastar um compromisso continuam oferecendo só os horários da
+  grade.
+
+  O assistente e as integrações por token não ganham o encaixe: para eles o horário
+  continua tendo de ser um da grade do expediente, respeitando a antecedência mínima
+  e a janela de reserva do tipo.
+
+  Para os dois, o sistema recusa marcar em cima de outro agendamento do mesmo
+  responsável (cancelado ou falta não contam), ou de um evento do Google Agenda dele
+  numa agenda marcada como "Conta como ocupado" (evento marcado como "Disponível" no
+  Google não conta). Quando a recusa acontece pelo painel, o motivo aparece logo acima
+  do botão Confirmar, o painel continua aberto e, no encaixe, a hora digitada continua
+  no campo. A conferência do Google tem dois limites.
+
+  O primeiro: ela só conhece o que a sincronização já trouxe, que vai de um dia atrás
+  até cerca de 90 dias à frente. Marcar depois desse período, ou em cima de um evento
+  criado no Google e ainda não sincronizado, passa. Para períodos fora da
+  sincronização, a tela de horários avisa "Ocupação do Google ainda não verificada
+  neste período."
+
+  O segundo: uma pessoa com papel de Atendente, marcando na agenda de outra pessoa,
+  não enxerga o Google Agenda dela, e a marcação passa. O próprio responsável,
+  gerentes e administradores enxergam.
+
+### Alterado
+
+- **A versão da Graph API passa a morar num lugar só** A versão da Graph API com que a instalação fala (hoje `v22.0`) deixa de estar copiada à mão em dez arquivos de produção e passa a viver num só, com uma catraca que reprova a suíte se alguém escrever a versão à mão em qualquer outro arquivo. Nada muda para quem opera: a instalação continua falando `v22.0`, e `META_GRAPH_VERSION` continua mandando quando existe — inclusive quando ela está preenchida com espaço ou vazia, que antes virava URL sem versão. O que muda é o dia do bump: subir de versão passa a ser uma edição deliberada num arquivo, em vez de dez edições com uma esquecível.
+
+  Crédito: @webtecnica.
+
+### Corrigido
+
+- **Sincronizar modelos e enviar modelo usam a credencial salva na tela do canal** O envio de texto do canal oficial já resolvia a credencial da conexão (sessão primeiro, ambiente como reserva). O caminho do MODELO não: tanto o POST de `/api/v1/channels/templates` quanto o envio de modelo liam `META_SYSTEM_USER_TOKEN` e `META_PHONE_NUMBER_ID` do `.env`. Numa instalação que conectou o número pela tela, "Sincronizar modelos" respondia **400 `missing_meta_token`** para quem tinha a credencial salva e visível na própria tela, e o segundo número oficial da instalação não sincronizava nem enviava um modelo — logo o modelo, que é o que a janela fechada exige.
+
+  Agora os dois caminhos resolvem pela sessão, com o ambiente só como reserva, pela mesma porta que o resto do canal usa. A ordem dos desfechos não muda: sem canal oficial a resposta continua `no_meta_channel`, e sem credencial nenhuma (nem na sessão, nem no ambiente) continua `missing_meta_token` e o envio segue o desfecho de "canal não conectado" (`meta_not_configured`, recuperável) em vez de virar falha.
+
+  Nada muda para quem só tem o ambiente: a instalação continua sincronizando e enviando pelo `.env` como antes.
+
+- **O botão Confirmar do painel de marcação volta a aparecer em telas de notebook** Em telas de notebook comuns, o painel de **Agenda › Novo agendamento** (e o de
+  **Remarcar**) cortava a parte de baixo sem mostrar barra de rolagem. Depois de
+  escolher o horário, o botão **Confirmar** ficava fora da área visível: inteiro
+  escondido em 1280×800 e 1366×768, e cortado ao meio em 1440×900. Não havia como
+  clicar nele com o mouse.
+
+  Agora a coluna do calendário rola por conta própria quando não cabe, e escolher um
+  horário leva a confirmação até a vista. O contexto à esquerda e a lista de horários
+  à direita ficam parados, e em telas grandes e no celular nada muda.
+
+- **Cadastrar um contato com telefone já usado explica o motivo, em vez de "Erro interno"** Criar pela tela um contato cujo telefone já pertencia a outro contato da mesma organização
+  terminava num aviso de "Erro interno. Tente de novo em instantes." — e tentar de novo dava o
+  mesmo erro, porque não havia nada de errado com o servidor: o telefone já estava em uso.
+
+  Agora o aviso diz o que aconteceu: "Já existe um contato com este telefone." (em espanhol,
+  "Ya existe un contacto con este teléfono."). O cadastro continua recusado, como antes; o que
+  muda é a explicação.
+
+  Por baixo, a resposta de `POST /api/v1/contacts` passou de 500 para 409, com o código
+  `contact_exists` e o id do contato que já usa o telefone em `details.contact_id`. Por
+  enquanto nenhuma tela usa esse id — ela só mostra a frase —, e essa rota aceita apenas a
+  sessão de quem está logado, não token de integração. O e-mail e o CPF também não podem se
+  repetir nessa tabela, e o 409 só sai quando já existe um contato ativo com aquele telefone:
+  qualquer outra recusa continua como antes.
+
+  Você não precisa fazer nada.
+
+  Achado e corrigido por @webtecnica.
+
 ## [1.25.1] — 2026-09-15
 
 ### Corrigido
@@ -4565,7 +4670,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.26.0...HEAD
+[1.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.1...v1.26.0
 [1.25.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.23.0...v1.24.0
