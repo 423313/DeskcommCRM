@@ -25057,12 +25057,11 @@ notify pgrst, 'reload schema';
 -- agenda que o sincronizador não lê não é regravada, futuro inclusive — conexão
 -- que não está saudável, membro revogado e agenda fora do catálogo do Google (a
 -- reserva é recusada ou não sai, medido no invariante), e agenda desmarcada, que
--- o cron adia sem ler. Dentro da janela, o evento
--- CANCELADO escapa do rebuild: o `page` final apaga o não visto com `and
--- status<>'cancelled'`, e a leitura completa do Google não devolve cancelados —
--- um cancelado FUTURO guarda o nome até o expurgo (medido no invariante). O
--- conserto fecha esse resíduo e vale como defesa em profundidade contra um
--- escritor futuro.
+-- o cron adia sem ler. Dentro da janela, o evento CANCELADO escapa do rebuild: o
+-- `page` final apaga o não visto com `and status<>'cancelled'`, e a leitura
+-- completa do Google não devolve cancelados — um cancelado FUTURO guarda o nome
+-- até o expurgo (medido no invariante). O conserto fecha esse resíduo e vale como
+-- defesa em profundidade contra um escritor futuro.
 --
 -- ## Por que o conserto é no PRIVILÉGIO — e o que a policy fecharia
 --
@@ -25101,13 +25100,12 @@ notify pgrst, 'reload schema';
 -- mesmo período do `title` (só o cron anterior à v1.17.0 o gravava) e, ao
 -- contrário dele, a ressincronização NÃO o limpa: o `on conflict` de
 -- `fn_google_calendar` não o põe no `set` (medido no invariante). Fica aberto, por
--- escrito. Revogar a COLUNA não serve:
--- a view é `security_invoker` e passa a coluna a `fn_google_counts_for_conflicts`,
--- então revogá-la derruba TODA leitura da view por membro, a do dono inclusive
--- (medido). O que fecha é a policy "dono da conexão OU manager ou acima" da seção
--- anterior, sem tocar em tela nem em rota — e o gestor já lê `account_email` em
--- `calendar_connections`. Decisão do dono. O invariante mede que o colega segue
--- lendo o id.
+-- escrito. Revogar a COLUNA não serve: a view é `security_invoker` e passa a
+-- coluna a `fn_google_counts_for_conflicts`, então revogá-la derruba TODA leitura
+-- da view por membro, a do dono inclusive (medido). O que fecha é a policy "dono
+-- da conexão OU manager ou acima" da seção anterior, sem tocar em tela nem em rota
+-- — e o gestor já lê `account_email` em `calendar_connections`. Decisão do dono. O
+-- invariante mede que o colega segue lendo o id.
 --
 -- ## A view precisa ser recriada, não substituída no lugar
 --
@@ -25122,14 +25120,13 @@ notify pgrst, 'reload schema';
 --
 -- ## O que este bloco NÃO faz, de propósito
 --
--- * Não apaga os títulos que sobraram de sincronizações anteriores à v1.17.0, nem os
---   `ical_uid` do mesmo período. Desde
---   a 0225 o sincronizador grava `title` nulo (`fn_google_calendar`, ação `item`:
---   `null` no insert e `set title=null` no `on conflict`, que zera o que encontra),
---   mas a 0225 não anulou as linhas antigas. O que se fecha é a LEITURA por login de
---   usuário — do colega e também do próprio dono, já que nenhuma tela o mostra.
---   Anular o resíduo é decisão do dono, e sai em migration própria — não de carona
---   num conserto de permissão.
+-- * Não apaga os títulos que sobraram de sincronizações anteriores à v1.17.0, nem
+--   os `ical_uid` do mesmo período. Desde a 0225 o sincronizador grava `title`
+--   nulo (`fn_google_calendar`, ação `item`: `null` no insert e `set title=null`
+--   no `on conflict`, que zera o que encontra), mas a 0225 não anulou as linhas
+--   antigas. O que se fecha é a LEITURA por login de usuário — do colega e também
+--   do próprio dono, já que nenhuma tela o mostra. Anular o resíduo é decisão do
+--   dono, e sai em migration própria — não de carona num conserto de permissão.
 -- * Não toca em `service_role` nem no dono do banco. `service_role` mantém
 --   SELECT/UPDATE na coluna, mas nenhum caminho do produto os usa: o sincronizador
 --   grava pela `fn_google_calendar`, `security definer`, com o privilégio do dono
