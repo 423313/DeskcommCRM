@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect as expectBase, test, type Page, type TestInfo } from "@playwright/test";
 
 import {
   criarAtoresDasExtensoes,
@@ -12,6 +12,14 @@ import {
   iniciarCatalogoInterrompido,
   type CatalogoInterrompido,
 } from "./fixtures/catalogo-interrompido";
+
+// Estas jornadas esperam, em quase toda asserção, DUAS idas reais ao servidor: a
+// mutação e a recarga da lista que a tela faz antes de anunciar o resultado. Medido
+// no trace da rodada de 15/set (load average entre 50 e 120): POST de admissão em
+// 4,9 s e o GET seguinte ainda sem resposta aos 5 s — o prazo padrão do Playwright
+// reprovava a tela certa. O prazo sobe só aqui; asserção de ausência que já é
+// verdadeira continua passando na hora.
+const expect = expectBase.configure({ timeout: 20_000 });
 
 const EVIDENCE = ".superpowers/evidence/extensoes-integracao/e2e/recuperacao";
 const CAPTURES = [

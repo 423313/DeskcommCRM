@@ -196,6 +196,10 @@ export function ExtensionsManager({
     const syncOtherTab = (event: StorageEvent) => {
       if (event.key === null || isReceiptStorageKey(event.key, actorId, organizationId)) {
         syncPendingFromStorage();
+        // Outra aba mexeu nos recibos: enviou um pedido ou confirmou um. Nos dois casos o
+        // servidor pode ter mudado, e esta aba seguia mostrando a lista de antes — medido
+        // no trace da jornada: a instalação reconciliada na outra aba nunca aparecia aqui.
+        void carregar(true);
       }
     };
     window.addEventListener("storage", syncOtherTab);

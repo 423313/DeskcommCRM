@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rm, writeFile } from "node:fs/promises";
 
 import {
-  expect,
+  expect as expectBase,
   test,
   type Browser,
   type BrowserContext,
@@ -17,6 +17,14 @@ import {
   type AtoresDasExtensoes,
   type CatalogoDeExtensoes,
 } from "./fixtures/catalogo-extensoes";
+
+// Estas jornadas esperam, em quase toda asserção, DUAS idas reais ao servidor: a
+// mutação e a recarga da lista que a tela faz antes de anunciar o resultado. Medido
+// no trace da rodada de 15/set (load average entre 50 e 120): POST de admissão em
+// 4,9 s e o GET seguinte ainda sem resposta aos 5 s — o prazo padrão do Playwright
+// reprovava a tela certa. O prazo sobe só aqui; asserção de ausência que já é
+// verdadeira continua passando na hora.
+const expect = expectBase.configure({ timeout: 20_000 });
 
 const EVIDENCE = ".superpowers/evidence/extensoes-integracao/e2e";
 const EXPECTED_ORGANIZATION_HEADER = "X-Expected-Organization-Id";

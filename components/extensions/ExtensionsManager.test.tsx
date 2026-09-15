@@ -336,11 +336,18 @@ describe("ExtensionsManager", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("o aviso de conexão caída acompanha o recibo e some quando outra aba o resolve", async () => {
+  it("quando outra aba resolve o recibo, esta aba tira o aviso e recarrega o estado sem reenviar", async () => {
+    // Só a lista recarregada traz este título: é o sinal de que a aba consultou o servidor.
+    const reconciliada = list();
+    reconciliada.installations[0]!.display = {
+      ...reconciliada.installations[0]!.display,
+      title: { "pt-BR": "Rotina comercial, estado reconciliado" },
+    };
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json({ data: list() }))
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(json({ data: reconciliada }));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     renderManager();
@@ -366,8 +373,14 @@ describe("ExtensionsManager", () => {
     fireEvent(window, new StorageEvent("storage", { key: chave }));
 
     await waitFor(() => expect(screen.queryByText(/A conexão caiu sem confirmação/)).toBeNull());
-    // Nada foi reenviado: o aviso some porque o recibo saiu, não por uma nova tentativa.
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // A outra aba mudou o estado do servidor: esta aba recarrega a lista em vez de
+    // seguir mostrando (e permitindo mutar sobre) a de antes.
+    expect(await screen.findByText("Rotina comercial, estado reconciliado")).toBeVisible();
+    // E nada foi reenviado: o único pedido de escrita é o que caiu.
+    const escritas = fetchMock.mock.calls.filter(
+      ([, init]) => ((init as RequestInit | undefined)?.method ?? "GET") !== "GET",
+    );
+    expect(escritas).toHaveLength(1);
   });
 
   it("sincroniza recibo criado por outra aba", async () => {
