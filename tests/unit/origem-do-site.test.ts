@@ -80,7 +80,9 @@ describe("o que NÃO vale como origem", () => {
   it("chave fora da lista conhecida é descartada", () => {
     const codigo = montarCodigoDeOrigemDoSite({
       utm_source: "instagram",
-      // @ts-expect-error — chave que a página não deveria mandar
+      // A chave fora da lista não é erro de tipo: `montarCodigoDeOrigemDoSite`
+      // recebe `Record<string, string>` e quem descarta o que não é UTM conhecida
+      // é o filtro em tempo de execução — que é o que este caso prova.
       telefone_do_cliente: "5511999999999",
     });
     const origem = extrairOrigemDaPagina(codigo);
