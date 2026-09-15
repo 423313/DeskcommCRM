@@ -50,16 +50,19 @@ export async function GET(): Promise<Response> {
   const { wacallsSessionId } = session;
 
   const upstream = await fetch(`${env.WACALLS_API_BASE_URL}/api/events`, {
-    headers: { "X-Client-Id": `web_${activeOrg.orgId.slice(0, 8)}` },
+    headers: {
+      "X-Client-Id": `web_${activeOrg.orgId.slice(0, 8)}`,
+      Authorization: `Bearer ${env.WACALLS_API_TOKEN.trim()}`,
+    },
   });
   if (!upstream.ok || !upstream.body) {
     return new Response(null, { status: 502 });
   }
 
+  const reader = upstream.body.getReader();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const encoder = new TextEncoder();
-      const reader = upstream.body!.getReader();
       const decoder = new TextDecoder();
       let buf = "";
       // Sem este primeiro byte, os headers desta resposta ficam retidos pelo
@@ -114,7 +117,8 @@ export async function GET(): Promise<Response> {
       }
     },
     cancel() {
-      upstream.body?.cancel().catch(() => {});
+      // O body está travado pelo reader; só ele consegue cancelar a conexão.
+      reader.cancel().catch(() => {});
     },
   });
 

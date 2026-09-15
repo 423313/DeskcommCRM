@@ -54,7 +54,7 @@ Não é um canal de mensagem — não implementa `ChannelAdapter` (`lib/channels
 └─────────────────────────┘
 ```
 
-**`wacalls` NUNCA publica porta HTTP de controle pra internet** — API sem autenticação própria (README do projeto: "no authentication... run only on trusted LAN"). Fica só na rede `internal` do compose, alcançável apenas pelo `app` e pelo `worker`.
+**`wacalls` não publica a porta HTTP de controle na internet.** A imagem autenticada exige `WACALLS_ADMIN_USER`/`WACALLS_ADMIN_PASSWORD` no boot e `WACALLS_API_TOKEN` nas chamadas de automação. A API fica na rede `internal` do compose, alcançável pelo `app` e pelo `worker`; apenas a porta UDP de áudio é publicada. Fontes: `docker-compose.prod.yml`, `lib/wacalls/client.ts` e `lib/wacalls/events-bridge.ts`.
 
 ---
 
@@ -128,38 +128,21 @@ create policy tenant_isolation_voice_calls_all on voice_calls
 
 ## 3. Serviço `wacalls`
 
-### 3.1 Imagem
+### 3.1 Imagem e ativação — CONFIRMADO em `docker-compose.prod.yml`
 
-`Dockerfile.wacalls` (multi-stage, non-root, Go 1.26+ build stage + client React/Vite build stage servido estático pelo binário — `-static client/dist`). WaCalls é vendorizado por **commit fixo** (`edeb31f0427aba896639db503153b777a405eccf`, HEAD da `main` em 2026-09-02), clonado dentro do Dockerfile — mesmo princípio de tag imutável da doutrina de packaging (invariante 4), aplicado a uma dependência sem release/tag própria. Publicado como `ghcr.io/melgarafael/deskcomm-wacalls:stable`, 4ª imagem na matriz de `publish-image.yml`. **Sem `build:`-only** — doutrina de packaging.
+O serviço usa a imagem do upstream `ghcr.io/jotadev66/wacalls`, fixada por digest no compose. Não há imagem própria para reconstruir. O serviço pertence ao profile `voz`, desligado por padrão; `COMPOSE_PROFILES=voz` o inclui nas próximas atualizações da instalação.
 
-Build e boot **provados localmente**: imagem constrói (client Vite + Go `CGO_ENABLED=0`, binário estático), container sobe, `GET /api/sessions` responde `200 {"sessions":[]}`, roda como uid 1001 (non-root).
+A API é autenticada. `WACALLS_ADMIN_USER` e `WACALLS_ADMIN_PASSWORD` permitem o boot; `WACALLS_API_TOKEN` é a credencial compartilhada pelo serviço, pelo app e pelo worker. O instalador e o atualizador completam os segredos ausentes. `WACALLS_API_BASE_URL=http://wacalls:8080` aponta os clientes para a rede interna.
 
-### 3.2 Compose (`docker-compose.prod.yml`)
+### 3.2 Persistência e rede
 
-```yaml
-wacalls:
-  mem_limit: 256m   # medir em staging antes de fixar — placeholder
-  image: ${WACALLS_IMAGE:-ghcr.io/melgarafael/deskcomm-wacalls:stable}
-  pull_policy: ${WACALLS_PULL_POLICY:-always}
-  restart: unless-stopped
-  command: ["-addr", ":8080", "-db", "/data/wacalls.db", "-static", "/app/client/dist"]
-  volumes:
-    - wacalls-data:/data
-  networks: [internal]
-  logging: *default-logging
-```
+A sessão fica no volume `wacalls-data`, em `/data`. A porta HTTP 8080 não é publicada. O compose publica somente UDP, com a mesma porta no host e no serviço, definida por `WACALLS_WEBRTC_UDP_PORT` (padrão 7881).
 
-Sem `ports:` — não publicado, nem pelo Caddy (ver §3.3 pro caminho de mídia).
+### 3.3 Mídia WebRTC
 
-### 3.3 Rede — mídia WebRTC (ponto em aberto, bloqueia produção)
+`WACALLS_PUBLIC_IP` precisa conter o IP público da VPS, e a porta UDP configurada precisa estar alcançável pelo navegador. O controle HTTP passa pelo backend do CRM; o áudio segue diretamente entre navegador e serviço. Caddy não transporta esse áudio.
 
-O `app` consegue proxear o control-plane HTTP do WaCalls (`/api/sessions`, `/calls`, SDP exchange) porque é request/response comum. **A mídia (ICE/SRTP) não** — é conexão direta navegador↔container, Caddy é L7 HTTP e não faz passthrough de UDP.
-
-Opções pra produção (decidir antes de sair de LAN/staging):
-1. Subdomínio dedicado (`calls.<domain>`) com Caddy proxeando só a parte HTTP de sinalização, e faixa de porta UDP fixa aberta direto no firewall da VPS pro pion (`-webrtc-udp-range` — flag a confirmar se o WaCalls expõe; senão fica em PR upstream ou fork).
-2. TURN relay próprio (mais infra, resolve NAT de forma mais robusta, mas é serviço a mais).
-
-**Não bloqueia o teste em LAN** (mesma rede, sem NAT hostil) — bloqueia deploy real na VPS Hostgator. Marcar como TODO explícito antes de anunciar a feature pra cliente.
+O estado HTTP saudável não comprova áudio. A prova de ligação exige aparelho pareado e participantes reais; redes que bloqueiam UDP podem exigir um relay TURN, que não faz parte desta instalação.
 
 ---
 
@@ -186,7 +169,14 @@ Todas exigem `getUser()` + verificação de organização (nunca confiar em `org
 
 ### 4.2 Ponte de eventos (worker)
 
-O serviço `worker` (já 24/7 pro agent-engine) mantém 1 conexão SSE por org com sessão pareada, contra `http://wacalls:8080/api/events`. Eventos medidos no código-fonte (`cmd/server/broker.go`), com `"type"` no envelope:
+**Contrato confirmado em código:** tanto o relay do QR como a ponte do worker
+autenticam `GET /api/events` com `Authorization: Bearer WACALLS_API_TOKEN`.
+No primeiro pareamento, a tela envia `POST /api/v1/voice/sessions/pair` com
+`{ "prepare_only": true }` para criar o vínculo da organização sem emitir QR;
+abre a SSE e, depois do `onopen`, repete o POST com `{}` para iniciar o
+pareamento. As duas etapas exigem o mesmo consentimento da organização.
+
+O serviço `worker` mantém uma conexão SSE por processo contra `http://wacalls:8080/api/events`. Cada evento resolve a sessão e sua organização antes de escrever no banco. Eventos medidos no código-fonte (`cmd/server/broker.go`), com `"type"` no envelope:
 
 | `type` | Payload | O que o worker faz |
 |---|---|---|

@@ -7433,6 +7433,9 @@ export const DICIONARIO: Traducoes = {
   "chamada de voz": { es: "llamada de voz" },
   "chamadas de voz": { es: "llamadas de voz" },
   "Não foi possível iniciar o pareamento.": { es: "No fue posible iniciar el emparejamiento." },
+  "Não foi possível receber o código de pareamento. Tente novamente.": {
+    es: "No fue posible recibir el código de emparejamiento. Inténtalo de nuevo.",
+  },
 
   // Mensajes de error de importación de planilha (lib/catalogo/planilha.ts)
   "A planilha está vazia.": { es: "La planilla está vacía." },
