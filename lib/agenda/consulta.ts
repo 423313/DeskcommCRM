@@ -43,6 +43,7 @@ import {
   ocupadosDoDono,
   type LinhaDeAgendamento,
   type LinhaDeEventoExterno,
+  type OQueOcupa,
 } from "./ocupados";
 import type { SituacaoDaConexao, SituacaoDoAgendamento } from "./tipos";
 
@@ -207,37 +208,35 @@ export async function horariosLivresDaOrg(
     };
   }
 
-  const [{ data: excecoesRaw, error: erroExc }, { data: agendaRaw, error: erroAg }] =
-    await Promise.all([
-      supabase
-        .from("calendar_availability_exceptions")
-        .select("exception_date, is_unavailable, start_minute, end_minute")
-        .eq("organization_id", organizationId)
-        .eq("user_id", donoId)
-        .gte("exception_date", diaISO(params.de))
-        .lte("exception_date", diaISO(params.ate)),
-      supabase
-        .from("calendar_appointments")
-        .select("starts_at, ends_at, status")
-        .eq("organization_id", organizationId)
-        .eq("owner_user_id", donoId)
-        .lt("starts_at", params.ate.toISOString())
-        .gt("ends_at", params.de.toISOString()),
-    ]);
+  const [{ data: excecoesRaw, error: erroExc }, oQueOcupa] = await Promise.all([
+    supabase
+      .from("calendar_availability_exceptions")
+      .select("exception_date, is_unavailable, start_minute, end_minute")
+      .eq("organization_id", organizationId)
+      .eq("user_id", donoId)
+      .gte("exception_date", diaISO(params.de))
+      .lte("exception_date", diaISO(params.ate)),
+    coletaOQueOcupa(supabase, organizationId, { donoId, de: params.de, ate: params.ate }),
+  ]);
 
-  const erroDeColeta = erroExc ?? erroAg;
-  if (erroDeColeta) {
+  if (erroExc) {
     return {
       ok: false,
       codigo: "erro_interno",
-      motivoParaOperador: erroDeColeta.message,
+      motivoParaOperador: erroExc.message,
       motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
     };
   }
+  if (!oQueOcupa.ok) {
+    return {
+      ok: false,
+      codigo: "erro_interno",
+      motivoParaOperador: oQueOcupa.erro,
+      motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
+    };
+  }
+  const { ocupados, fontesDefasadas } = oQueOcupa;
 
-  // `calendar_external_events` NÃO tem `user_id`: o dono vem por
-  // `connection_id → calendar_connections.user_id`. O join traz de carona a
-  // situação da conexão, que decide se o horário sai com aviso de defasagem.
   // A situação das conexões do dono, para distinguir "não tem Google" de "tem
   // Google que nunca foi lido". Sem `.select` de erro: conexão ilegível cai no
   // mesmo lado de "não sei", que é o lado seguro.
@@ -246,22 +245,6 @@ export async function horariosLivresDaOrg(
     .select("status, last_sync_at")
     .eq("organization_id", organizationId)
     .eq("user_id", donoId);
-
-  const { data: externosRaw, error: erroExt } = await supabase
-    .from("calendar_selected_external_events")
-    .select("starts_at, ends_at, transparency, status, calendar_connections!inner(user_id, status)")
-    .eq("organization_id", organizationId)
-    .eq("calendar_connections.user_id", donoId)
-    .lt("starts_at", params.ate.toISOString())
-    .gt("ends_at", params.de.toISOString());
-  if (erroExt) {
-    return {
-      ok: false,
-      codigo: "erro_interno",
-      motivoParaOperador: erroExt.message,
-      motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
-    };
-  }
 
   const excecoes: ExcecaoDeData[] = (excecoesRaw ?? []).map((linha) => ({
     // ⚠️ `exception_date` é `date` no Postgres e chega como "YYYY-MM-DD" pelo
@@ -272,20 +255,6 @@ export async function horariosLivresDaOrg(
     inicioMinuto: linha.start_minute,
     fimMinuto: linha.end_minute,
   }));
-
-  const { ocupados, fontesDefasadas } = ocupadosDoDono(
-    (agendaRaw ?? []) as LinhaDeAgendamento[],
-    (externosRaw ?? []).map((linha) => {
-      const conexao = linha.calendar_connections as unknown as { status?: string } | null;
-      return {
-        starts_at: linha.starts_at,
-        ends_at: linha.ends_at,
-        transparency: linha.transparency,
-        status: linha.status,
-        situacaoDaConexao: conexao?.status ?? "error",
-      } satisfies LinhaDeEventoExterno;
-    }),
-  );
 
   const slots = horariosLivres({
     jornada: leitura.jornada,
@@ -315,6 +284,86 @@ export async function horariosLivresDaOrg(
     fusoSuposto: leitura.fusoSuposto,
     fontesDefasadas,
     agendaExternaNuncaLida: agendaExternaNuncaLida(conexoesRaw ?? []),
+  };
+}
+
+
+export interface ParametrosDaOcupacao {
+  donoId: string;
+  de: Date;
+  ate: Date;
+  /**
+   * Um compromisso que NÃO conta: o que está sendo remarcado. Ele ocupa o
+   * horário de onde está saindo, e sem isto se veria como conflito ao ser movido
+   * para perto de si mesmo.
+   */
+  ignorarAgendamentoId?: string;
+}
+
+/**
+ * O QUE OCUPA a agenda de um dono numa janela — a coleta, num lugar só.
+ *
+ * Agendamentos do CRM e eventos do Google Agenda SELECIONADOS, classificados por
+ * `ocupadosDoDono` (que decide status que libera, evento transparente, conexão
+ * caída). Nada de jornada, exceção de data, buffer ou aviso mínimo: isso é regra
+ * da GRADE, e mora em `horariosLivres`.
+ *
+ * ⚠️ DOIS LEITORES, UMA COLETA. A grade (`horariosLivresDaOrg`, logo acima) e o
+ * encaixe fora da grade (`exigeSemSobreposicao`, no handler de agendamentos)
+ * perguntam a mesma coisa — "o que já está tomado?". Quando cada um tinha a sua
+ * consulta, o encaixe olhava só `calendar_appointments` e reescrevia à mão a
+ * lista de status que liberam: uma pessoa marcava em cima de um compromisso do
+ * Google sem aviso nenhum, enquanto a grade escondia aquele mesmo horário.
+ *
+ * O filtro de janela é o cruzamento ESTRITO (`starts_at < ate` e `ends_at > de`),
+ * a mesma régua de `colide`: encostar não é ocupar.
+ */
+export async function coletaOQueOcupa(
+  supabase: SupabaseClient,
+  organizationId: string,
+  params: ParametrosDaOcupacao,
+): Promise<({ ok: true } & OQueOcupa) | { ok: false; erro: string }> {
+  let agendamentos = supabase
+    .from("calendar_appointments")
+    .select("starts_at, ends_at, status")
+    .eq("organization_id", organizationId)
+    .eq("owner_user_id", params.donoId)
+    .lt("starts_at", params.ate.toISOString())
+    .gt("ends_at", params.de.toISOString());
+  if (params.ignorarAgendamentoId) agendamentos = agendamentos.neq("id", params.ignorarAgendamentoId);
+
+  const [{ data: agendaRaw, error: erroAg }, { data: externosRaw, error: erroExt }] = await Promise.all([
+    agendamentos,
+    // `calendar_external_events` NÃO tem `user_id`: o dono vem por
+    // `connection_id → calendar_connections.user_id`. O join traz de carona a
+    // situação da conexão, que decide se o horário sai com aviso de defasagem.
+    supabase
+      .from("calendar_selected_external_events")
+      .select("starts_at, ends_at, transparency, status, calendar_connections!inner(user_id, status)")
+      .eq("organization_id", organizationId)
+      .eq("calendar_connections.user_id", params.donoId)
+      .lt("starts_at", params.ate.toISOString())
+      .gt("ends_at", params.de.toISOString()),
+  ]);
+
+  const erro = erroAg ?? erroExt;
+  if (erro) return { ok: false, erro: erro.message };
+
+  return {
+    ok: true,
+    ...ocupadosDoDono(
+      (agendaRaw ?? []) as LinhaDeAgendamento[],
+      (externosRaw ?? []).map((linha) => {
+        const conexao = linha.calendar_connections as unknown as { status?: string } | null;
+        return {
+          starts_at: linha.starts_at,
+          ends_at: linha.ends_at,
+          transparency: linha.transparency,
+          status: linha.status,
+          situacaoDaConexao: conexao?.status ?? "error",
+        } satisfies LinhaDeEventoExterno;
+      }),
+    ),
   };
 }
 

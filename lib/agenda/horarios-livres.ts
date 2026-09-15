@@ -140,7 +140,7 @@ export interface FaixaEmMinutos {
 }
 
 /** Faixa em instantes (`getTime()`) — é assim que um compromisso existe. */
-interface FaixaEmInstantes {
+export interface FaixaEmInstantes {
   inicio: number;
   fim: number;
 }
@@ -279,8 +279,12 @@ function slotInflado(inicio: number, fim: number, tipo: TipoDeAgendamento): Faix
  * Um compromisso que termina 09:00 não impede o slot que começa 09:00 — é o
  * comportamento que o dono da agenda espera, e quem quiser folga entre um e
  * outro configura o buffer, que é o campo feito para isso.
+ *
+ * Exportada porque o ENCAIXE fora da grade (`exigeSemSobreposicao`, no handler
+ * de agendamentos) confere a ocupação real pela mesma régua — sem buffer. Duas
+ * definições de "cruzar" divergiriam justo no caso de horários encostados.
  */
-function colide(inicio: number, fim: number, faixa: FaixaEmInstantes): boolean {
+export function colide(inicio: number, fim: number, faixa: FaixaEmInstantes): boolean {
   return inicio < faixa.fim && fim > faixa.inicio;
 }
 

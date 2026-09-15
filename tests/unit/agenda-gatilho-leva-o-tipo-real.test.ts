@@ -126,7 +126,12 @@ function cliente(): SupabaseClient {
     const resposta = () => ({ data: dadoDaTabela(tabela), error: null });
     cadeia.maybeSingle = async () => resposta();
     cadeia.single = async () => resposta();
-    cadeia.then = (r: (v: unknown) => unknown) => r(resposta());
+    // Leitura em LISTA de `calendar_appointments` é a ocupação que o encaixe de
+    // uma pessoa confere (`coletaOQueOcupa`) — e lista é array, nunca a linha
+    // solta que `maybeSingle` devolve. Agenda vazia: este arquivo não é sobre
+    // sobreposição (essa mora em `pessoa-marca-fora-da-grade.test.ts`).
+    cadeia.then = (r: (v: unknown) => unknown) =>
+      r(tabela === "calendar_appointments" ? { data: [], error: null } : resposta());
     return cadeia;
   };
 

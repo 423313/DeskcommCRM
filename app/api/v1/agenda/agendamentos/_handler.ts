@@ -23,7 +23,8 @@ import type { Json } from "@/lib/database.types";
  * A recusa sai como `ApiError`: a rota a traduz em `fail()`, a tool a traduz
  * para o modelo, e nenhum dos dois reimplementa a decisão.
  */
-import { horariosLivresDaOrg } from "@/lib/agenda/consulta";
+import { coletaOQueOcupa, horariosLivresDaOrg } from "@/lib/agenda/consulta";
+import { colide } from "@/lib/agenda/horarios-livres";
 import {
   atividadeDaTransicao,
   autorParaTimeline,
@@ -162,21 +163,12 @@ export async function marcarAgendamentoHandler(
   }
 
   const fim = new Date(inicio.getTime() + tipo.duration_minutes * 60_000);
-  // Uma PESSOA marca fora da grade; a IA, não. Ver `podeMarcarForaDaGrade`.
-  const foraDaGrade = podeMarcarForaDaGrade(ctx.actor);
   const consulta = await exigeHorarioLivre(supabase, ctx, {
     eventTypeId: tipo.id,
     donoId,
     inicio,
     fim,
-    exigirGrade: !foraDaGrade,
   });
-  // A grade era quem segurava a sobreposição também. Sem ela, esta guarda passa
-  // a ser a única — e ela vale para os dois caminhos, porque duas pessoas na
-  // mesma cadeira não é exceção que alguém escolha.
-  if (foraDaGrade) {
-    await exigeSemSobreposicao(supabase, ctx, { donoId, inicio, fim });
-  }
 
   const booking = tipo.location_kind === "google_meet" ? ctx.meetingBooking : undefined;
   if (booking && (booking.boundary.organization_id !== ctx.organization_id || booking.boundary.contact_id !== input.contact_id || ctx.actor.type !== "ai_agent")) {
@@ -316,27 +308,16 @@ export async function alterarAgendamentoHandler(
     // a si mesmo.
     const mesmoHorario = new Date(atual.starts_at as string).getTime() === novoInicio.getTime();
     if (!mesmoHorario) {
-      // REMARCAR segue a mesma assimetria de marcar: a pessoa que combinou o
-      // encaixe por fora da grade precisa poder movê-lo também, senão o
-      // compromisso nasce possível e fica preso.
-      const foraDaGrade = podeMarcarForaDaGrade(ctx.actor);
+      // REMARCAR segue a mesma assimetria de marcar (`exigeHorarioLivre`): a
+      // pessoa que combinou o encaixe por fora da grade precisa poder movê-lo
+      // também, senão o compromisso nasce possível e fica preso.
       const consulta = await exigeHorarioLivre(supabase, ctx, {
         eventTypeId: tipo.id,
         donoId: atual.owner_user_id as string,
         inicio: novoInicio,
         fim: novoFim,
-        exigirGrade: !foraDaGrade,
+        ignorarAgendamentoId: atual.id as string,
       });
-      if (foraDaGrade) {
-        // `ignorarId`: o próprio compromisso já ocupa o horário antigo, e sem
-        // isto ele se veria como conflito ao ser movido para perto de si mesmo.
-        await exigeSemSobreposicao(supabase, ctx, {
-          donoId: atual.owner_user_id as string,
-          inicio: novoInicio,
-          fim: novoFim,
-          ignorarId: atual.id as string,
-        });
-      }
       mudanca.starts_at = novoInicio.toISOString();
       mudanca.ends_at = novoFim.toISOString();
       mudanca.time_zone = consulta.fusoDaRegra;
@@ -527,63 +508,6 @@ async function exigeAgendamento(
 }
 
 /**
- * O horário pedido está entre os que esta agenda oferece?
- *
- * ⚠️ Pela MESMA coleta que responde o GET e as ferramentas de leitura
- * (`horariosLivresDaOrg`), nunca por uma segunda. Duas coletas divergem no
- * primeiro ajuste: se a regra do que OCUPA mudar, uma muda e a outra não — e aí
- * a tela oferece horário que a escrita recusa, ou a escrita aceita um que a tela
- * não ofereceu e alguém chega numa hora que já tinha dono.
- */
-/**
- * O horário está livre de SOBREPOSIÇÃO — e só isso.
- *
- * ⚠️ É a metade de `exigeHorarioLivre` que vale para TODO MUNDO, inclusive para
- * quem pode marcar fora da grade. A outra metade (o horário ser um dos que a
- * agenda oferece) é regra de oferta, não de integridade: ignorá-la produz um
- * horário incomum, enquanto ignorar esta produz duas pessoas na mesma cadeira.
- *
- * Existe porque não há nada no schema que impeça a sobreposição: sem `exclude`
- * com `tstzrange` nem índice, a única guarda do produto era a lista de slots.
- * Quem relaxasse aquela checagem sem esta abriria o overbooking em silêncio.
- */
-export async function exigeSemSobreposicao(
-  supabase: SB,
-  ctx: HandlerCtx,
-  args: { donoId: string; inicio: Date; fim: Date; ignorarId?: string },
-): Promise<void> {
-  let q = supabase
-    .from("calendar_appointments")
-    .select("id")
-    .eq("organization_id", ctx.organization_id)
-    .eq("owner_user_id", args.donoId)
-    // Cancelado e falta liberam a cadeira; `completed` não entra porque é
-    // passado, e o cruzamento com o passado é impossível para uma marcação nova.
-    .not("status", "in", "(cancelled,no_show)")
-    // Cruzamento de intervalos: começa antes do meu fim E termina depois do meu
-    // começo. Encostar não é cruzar — um que termina 11:00 e outro que começa
-    // 11:00 convivem, e é assim que a grade sempre funcionou.
-    .lt("starts_at", args.fim.toISOString())
-    .gt("ends_at", args.inicio.toISOString())
-    .limit(1);
-  if (args.ignorarId) q = q.neq("id", args.ignorarId);
-
-  const { data, error } = await q;
-  if (error) {
-    throw new ApiError(500, "internal_error", undefined, ctx.requestId, "Não foi possível conferir a agenda.");
-  }
-  if (data && data.length > 0) {
-    throw new ApiError(
-      422,
-      "agenda_horario_indisponivel",
-      undefined,
-      ctx.requestId,
-      "Já existe um compromisso neste horário.",
-    );
-  }
-}
-
-/**
  * Quem pode marcar FORA da grade de horários.
  *
  * A grade (início da jornada + múltiplos da duração) é o que o sistema OFERECE.
@@ -597,16 +521,40 @@ export async function exigeSemSobreposicao(
  * pelo negócio. É a mesma separação que o envio já faz — pessoa passa por cima
  * do modo de teste do canal, agente não.
  *
- * ⚠️ `actor.type === "user"` só separa gente de integração DEPOIS do PR #848.
- * Hoje `deriveActor` devolve `type: "user"` para todo token sem escopo de
- * agente, então uma integração com token herda este poder. É uma ampliação
- * pequena — quem tem token de escrita já cria compromissos —, mas ela existe e
- * some quando aquele PR entrar.
+ * Integração por token também não: `deriveActor` (`lib/mcp/auth.ts`) devolve
+ * `api_token` para token sem escopo de agente, e `webhook_source` não é gente.
+ * Só `"user"` — a sessão de alguém da equipe — escolhe o encaixe.
  */
 export function podeMarcarForaDaGrade(actor: Actor): boolean {
   return actor.type === "user";
 }
 
+/**
+ * O horário pedido pode ser marcado por QUEM está pedindo?
+ *
+ * ⚠️ Pela MESMA coleta que responde o GET e as ferramentas de leitura
+ * (`horariosLivresDaOrg`), nunca por uma segunda. Duas coletas divergem no
+ * primeiro ajuste: se a regra do que OCUPA mudar, uma muda e a outra não — e aí
+ * a tela oferece horário que a escrita recusa, ou a escrita aceita um que a tela
+ * não ofereceu e alguém chega numa hora que já tinha dono.
+ *
+ * Duas perguntas, conforme o ator (`podeMarcarForaDaGrade`):
+ *
+ * - **A grade** (IA, token, webhook): o horário é um dos slots oferecidos. O slot
+ *   já desconta expediente, exceção de data, buffer, aviso mínimo, janela de
+ *   reserva e ocupação — uma checagem segura tudo.
+ * - **O encaixe** (pessoa): as regras da grade são dispensadas — é a escolha
+ *   explícita de quem atende —, mas a OCUPAÇÃO REAL não
+ *   (`exigeSemSobreposicao`).
+ *
+ * ⚠️ A decisão mora AQUI DENTRO, e não em quem chama, de propósito: quando cada
+ * chamador relaxava a grade e lembrava de chamar a sobreposição ao lado, nada
+ * impedia um terceiro caminho de relaxar e esquecer. Um chamador novo desta
+ * função não tem como dispensar a grade sem levar a conferência junto.
+ *
+ * A leitura de `horariosLivresDaOrg` acontece nos dois ramos porque é dela que
+ * sai `fusoDaRegra`, que vira `time_zone` do compromisso e viaja até o lembrete.
+ */
 async function exigeHorarioLivre(
   supabase: SB,
   ctx: HandlerCtx,
@@ -616,13 +564,11 @@ async function exigeHorarioLivre(
     inicio: Date;
     fim: Date;
     /**
-     * `false` pula a conferência do SLOT — e só ela. A leitura continua sendo
-     * feita porque é dela que sai `fusoDaRegra`, que vira `time_zone` do
-     * compromisso e viaja até o lembrete. Quem passa `false` fica devendo
-     * `exigeSemSobreposicao`: era a conferência do slot que segurava as duas
-     * coisas ao mesmo tempo.
+     * O compromisso sendo remarcado, que não conta como ocupação de si mesmo.
+     * Só o encaixe o usa. A grade não o repassa a `horariosLivresDaOrg`, então
+     * ali o compromisso segue ocupando o horário de onde sai.
      */
-    exigirGrade?: boolean;
+    ignorarAgendamentoId?: string;
   },
 ): Promise<{ fusoDaRegra: string }> {
   const consulta = await horariosLivresDaOrg(supabase, ctx.organization_id, {
@@ -646,7 +592,11 @@ async function exigeHorarioLivre(
       "Este responsável ainda não publicou horários de atendimento.",
     );
   }
-  if (args.exigirGrade !== false && !consulta.slots.some((s) => s.inicio.getTime() === args.inicio.getTime())) {
+
+  const foraDaGrade = podeMarcarForaDaGrade(ctx.actor);
+  if (foraDaGrade) {
+    await exigeSemSobreposicao(supabase, ctx, args);
+  } else if (!consulta.slots.some((s) => s.inicio.getTime() === args.inicio.getTime())) {
     throw new ApiError(
       422,
       "agenda_horario_indisponivel",
@@ -656,6 +606,47 @@ async function exigeHorarioLivre(
     );
   }
   return { fusoDaRegra: consulta.fusoDaRegra };
+}
+
+/**
+ * O encaixe não cruza a OCUPAÇÃO REAL do dono — a metade da grade que vale para
+ * todo mundo.
+ *
+ * Ocupação real é o que `coletaOQueOcupa` devolve, a mesma coleta da grade:
+ * outro agendamento que não liberou o horário (`LIBERAM_O_HORARIO`, em
+ * `lib/agenda/ocupados.ts`) e evento do Google Agenda selecionado que ocupa. SEM
+ * buffer, sem exceção de data e sem expediente — essas são regras de oferta, e o
+ * encaixe existe para passar por cima delas. Ignorar a ocupação, ao contrário,
+ * produz duas pessoas na mesma cadeira.
+ *
+ * Existe porque não há nada no schema que impeça a sobreposição: sem `exclude`
+ * com `tstzrange` nem índice, a única guarda do produto é esta leitura.
+ */
+async function exigeSemSobreposicao(
+  supabase: SB,
+  ctx: HandlerCtx,
+  args: { donoId: string; inicio: Date; fim: Date; ignorarAgendamentoId?: string },
+): Promise<void> {
+  const oQueOcupa = await coletaOQueOcupa(supabase, ctx.organization_id, {
+    donoId: args.donoId,
+    de: args.inicio,
+    ate: args.fim,
+    ignorarAgendamentoId: args.ignorarAgendamentoId,
+  });
+  if (!oQueOcupa.ok) {
+    throw new ApiError(500, "internal_error", undefined, ctx.requestId, "Não foi possível conferir a agenda.");
+  }
+  const pedido = { inicio: args.inicio.getTime(), fim: args.fim.getTime() };
+  const cruza = oQueOcupa.ocupados.some((o) => colide(o.inicio.getTime(), o.fim.getTime(), pedido));
+  if (cruza) {
+    throw new ApiError(
+      422,
+      "agenda_horario_indisponivel",
+      undefined,
+      ctx.requestId,
+      "Este horário já está ocupado na agenda de quem atende — por outro compromisso ou pelo Google Agenda.",
+    );
+  }
 }
 
 /** `Actor` → o vocabulário de `calendar_appointments.created_by_kind`. */
