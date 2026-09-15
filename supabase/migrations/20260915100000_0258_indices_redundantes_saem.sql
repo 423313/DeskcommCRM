@@ -1,4 +1,4 @@
--- 0256 — três índices que não pagam o próprio aluguel
+-- 0258 — três índices que não pagam o próprio aluguel
 --
 -- ─── O problema ─────────────────────────────────────────────────────────────
 --
