@@ -120,11 +120,16 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   const alvo = funis.find((f) => f.id === pipelineId);
   if (!alvo) return fail("not_found", t("Funil não encontrado."), 404, { requestId });
 
-  // ⚠️ ARQUIVADO NÃO SE EDITA. `uniq_crm_pipelines_org_default` é PARCIAL
-  // (`where is_archived = false`): marcar um funil arquivado como padrão passa
-  // pelo índice, libera o padrão de verdade e deixa a organização com o padrão
-  // numa linha que sumiu da lista. Alcançável sem má-fé: uma aba aberta antes de
-  // o funil ser arquivado.
+  // ⚠️ ARQUIVADO NÃO SE EDITA — e a guarda fica, mas o MOTIVO escrito aqui era
+  // falso. Dizia que `uniq_crm_pipelines_org_default` é parcial em
+  // `is_archived`, e que por isso marcar um arquivado como padrão "passa pelo
+  // índice". Medido em `supabase/baseline.sql`: ele é `where (is_default = true)`
+  // e mais nada, então essa marcação bate em 23505, não passa.
+  //
+  // O que a guarda evita de verdade é pior de explicar ao usuário: editar nome,
+  // posição ou marca de um funil que sumiu da lista dele. Alcançável sem má-fé —
+  // uma aba aberta antes de o funil ser arquivado — e o erro do banco, quando
+  // vem, fala de índice, não do que a pessoa fez.
   if (alvo.is_archived) {
     return fail(
       "state_conflict",

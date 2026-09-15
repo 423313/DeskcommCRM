@@ -3,10 +3,19 @@
  *
  * Existe como arquivo único porque as três precisam do MESMO recorte: os funis
  * da organização INTEIROS, arquivados incluídos. As regras de
- * `lib/pipelines/pipeline-editing.ts` dependem disso —
- * `uniq_crm_pipelines_org_slug` não é parcial (funil arquivado continua ocupando
- * o slug), enquanto `uniq_crm_pipelines_org_default` é. Cada rota montando o
- * próprio `select` divergiria no primeiro ajuste.
+ * `lib/pipelines/pipeline-editing.ts` dependem disso — nenhum dos três índices
+ * únicos de funil é parcial em `is_archived`: nem `uniq_crm_pipelines_org_slug`
+ * (funil arquivado continua ocupando o slug), nem `uniq_crm_pipelines_org_default`,
+ * nem `uniq_crm_pipelines_org_client`. Cada rota montando o próprio `select`
+ * divergiria no primeiro ajuste.
+ *
+ * ⚠️ ESTE PARÁGRAFO AFIRMAVA QUE O DE PADRÃO É PARCIAL, e era falso: medido em
+ * `supabase/baseline.sql`, ele é `where (is_default = true)` e mais nada. A
+ * afirmação aparecia em três lugares e fazia `updatesDePadrao` pular o funil
+ * arquivado — um update a menos, e um 23505 para quem arquivou o funil antigo
+ * antes de trocar o padrão. Para conferir sem acreditar nesta linha:
+ *
+ *   grep -n "uniq_crm_pipelines_org_" supabase/baseline.sql
  */
 import { fail } from "@/lib/api/wrappers";
 import {
