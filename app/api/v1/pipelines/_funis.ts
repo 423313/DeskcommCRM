@@ -20,7 +20,8 @@ import type { createClient } from "@/lib/supabase/server";
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 /** `position` entra: a reordenação calcula em cima dela. */
-const COLUNAS = "id, name, slug, description, position, is_default, is_archived";
+const COLUNAS =
+  "id, name, slug, description, position, is_default, is_client_pipeline, is_archived";
 
 /**
  * Os funis da organização, na ordem da lista, arquivados inclusive.
@@ -94,6 +95,7 @@ export function corpo(funis: FunilEditavel[]): {
     description: string | null;
     position: number;
     is_default: boolean;
+    is_client_pipeline: boolean;
   }>;
 } {
   return {
@@ -106,6 +108,11 @@ export function corpo(funis: FunilEditavel[]): {
         description: f.description ?? null,
         position: f.position,
         is_default: f.is_default,
+        // `?? false` e não `!` — um clone que ainda não aplicou a 0252 devolve
+        // `undefined` aqui, e a tela precisa de um booleano para decidir se
+        // mostra o badge. Ausente é "não é o funil de clientes", que é a
+        // verdade nesse banco.
+        is_client_pipeline: f.is_client_pipeline ?? false,
       })),
   };
 }
