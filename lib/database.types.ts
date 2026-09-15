@@ -7734,6 +7734,14 @@ export type Database = {
       fn_google_resolve: { Args: { p_org: string; p_id: string; p_revision: string; p_local_revision: string; p_etag: string | null; p_choice: string }; Returns: undefined }
       fn_google_counts_for_conflicts: { Args: { p_org: string; p_connection: string; p_calendar: string }; Returns: boolean }
       fn_google_coverage: { Args: { p_org: string; p_owner: string; p_start: string; p_end: string }; Returns: boolean }
+      fn_agenda_ocupacao_google_do_dono: {
+        Args: { p_org: string; p_owner: string; p_de: string; p_ate: string }
+        Returns: { starts_at: string; ends_at: string; transparency: string; status: string; connection_status: string }[]
+      }
+      fn_agenda_conexoes_google_do_dono: {
+        Args: { p_org: string; p_owner: string }
+        Returns: { status: string; last_sync_at: string | null }[]
+      }
       fn_appointment_change_core: { Args: { p_org: string; p_id: string; p_revision: number; p_patch: Json; p_remote: boolean; p_base: Json }; Returns: Json }
 
       fn_followup_job_current: { Args: { p_org: string; p_job: string; p_enrollment: string; p_node: string }; Returns: boolean }
