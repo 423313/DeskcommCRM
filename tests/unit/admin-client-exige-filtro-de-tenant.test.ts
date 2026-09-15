@@ -70,7 +70,20 @@ import { RAIZ_DO_REPO, arquivosDeCodigo, caminhoRelativo } from "./helpers/varre
  *     não do body). A régua cobra presença; a fonte continua matéria de revisão
  *     — o mesmo recorte do gate irmão;
  *   - o aceite de R1 olha a FORMA: um payload que ESPALHA uma linha que carrega
- *     `organization_id` passa, mesmo que a linha venha de outro tenant.
+ *     `organization_id` passa, mesmo que a linha venha de outro tenant;
+ *   - **R2 aceita QUALQUER filtro como escopo — inclusive só a chave.** Uma
+ *     cadeia `admin.from("conversations").select().eq("id", x)` passa, sem
+ *     `organization_id` nenhum. É exatamente a forma do anti-pattern 10 do
+ *     CLAUDE.md, e a forma do defeito de 14/set. Medido na triagem, com a
+ *     previsão escrita antes de rodar: tirar o filtro de org das duas buscas
+ *     da conversa em `messages/_handler.ts` → 6/6 verde (e ali ainda vale o
+ *     ponto cego do parâmetro); tirar o filtro de org de uma rota com cliente
+ *     admin LOCAL, deixando só `.eq("id")` → 6/6 verde; tirar TODOS os filtros
+ *     → vermelho em R2. Cobrar `organization_id` em toda leitura por chave é o
+ *     passo seguinte, e é mais ruidoso que este — por isso não entrou aqui.
+ *     O defeito de 14/set segue guardado por um invariante de COMPORTAMENTO,
+ *     `tests/invariants/envio-nao-alcanca-conversa-de-outro-tenant.test.ts`,
+ *     não por esta varredura.
  */
 
 const RAIZES = ["app", "lib", "workers"] as const;
