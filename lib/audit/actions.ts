@@ -211,6 +211,7 @@ export const AUDIT_ACTIONS = [
   "channel.reactivated",
   // Chamada de voz WhatsApp (WaCalls, spec 18) — pareamento do segundo
   // dispositivo vinculado, opt-in por org. Admin only.
+  "voice.session_prepared",
   "voice.session_pair_started",
   // As mutações da chamada em si. Todas auditadas porque todas têm efeito no
   // mundo: uma ligação sai do CRM para o telefone de uma pessoa, alguém a
