@@ -696,11 +696,21 @@ sem Google, sem IA, sem Resend. Evidência e régua de cada caso em
 |---|---|---|
 | L8.1 | #860 — Confirmar na aba "Aguardando confirmação" | **PROVADO EM TELA** — a linha sai da aba (2→1), aparece em Próximos, banco `confirmed`. "Exige aprovação" não tem tela: ligado por `PATCH /api/v1/agenda/tipos` com a sessão do dono. `evidence/triagem-15set-l8/860-03-linha-saiu-da-aba-aguardando.png` |
 | L8.2 | #860 — Confirmar horário no painel do compromisso | **PROVADO EM TELA** — o pendente vira "Agendado" e o botão some. `evidence/triagem-15set-l8/860-07-painel-confirmou-vira-agendado.png` |
-| L8.3 | #858 — Pessoa marca 10:30 numa grade de hora cheia | **FALHOU EM TELA** — não há porta: a grade desabilita o bloco ("fora dos horários que você publicou") e o painel só lista horas cheias. A rota aceita (`201`) quando chamada com a sessão, e fora do expediente também. Defeito reportado. `evidence/triagem-15set-l8/858-01-grade-de-hora-cheia-1030-nao-clicavel.png`, `evidence/triagem-15set-l8/858-02-painel-oferece-so-hora-cheia.png`, `evidence/triagem-15set-l8/858-03-encaixe-1030-marcado-pela-rota-aparece-na-grade.png` |
+| L8.3 | #858 — Pessoa marca 10:30 numa grade de hora cheia | **PROVADO EM TELA** na porta entregue depois da QA (`triagem/lote-8-encaixe-na-tela`, SHA `0c71973d4`, ambiente fresco próprio): Novo agendamento › segunda › "Outro horário" › 10:30 › Confirmar → `201`, banco `10:30-11:30` `user/ui`, e o card na grade na altura do bloco das 10:30. A grade e o arrastar seguem só com horário publicado, de propósito. **Antes:** FALHOU EM TELA — o painel só listava horas cheias e a rota só era alcançável chamando a API com a sessão (`evidence/triagem-15set-l8/858-02-painel-oferece-so-hora-cheia.png`). `evidence/triagem-15set-l8-encaixe/03-outro-horario-1030-confirmando.png`, `evidence/triagem-15set-l8-encaixe/05-grade-mostra-o-encaixe-1030.png` |
+| L8.3a | #858 — Encaixe por cima de outro encaixe | **PROVADO EM TELA** — 10:45 sobre o das 10:30: `422`, a frase da rota acima do Confirmar, painel aberto, campo com 10:45, um compromisso só no banco. `evidence/triagem-15set-l8-encaixe/06-recusa-por-cima-do-encaixe.png` |
+| L8.3b | #858 — Encaixe num dia sem horário publicado, e remarcar para fora da grade | **PROVADO EM TELA** — domingo abre direto no campo (`201`, `09:15`); Remarcar abre o mesmo painel (`PATCH` `200`, `11:15`). `evidence/triagem-15set-l8-encaixe/07-domingo-sem-grade-encaixe-0915.png`, `evidence/triagem-15set-l8-encaixe/09-grade-mostra-remarcado-1115.png` |
+| L8.3c | #858 — "Outro horário" a 400px no escuro, e escondido de quem só lê | **PROVADO EM TELA** — 400/400 sem elemento fora da tela; papel `viewer` não vê a opção (contagem 0). `evidence/triagem-15set-l8-encaixe/10-400px-escuro-outro-horario.png`, `evidence/triagem-15set-l8-encaixe/12-somente-leitura-sem-outro-horario.png` |
 | L8.4 | #858 — Marcar por cima de compromisso existente | **PROVADO EM TELA** — duas abas disputam 17:00; a segunda recebe `422` e o aviso "Este horário já está ocupado na agenda de quem atende — por outro compromisso ou pelo Google Agenda." `evidence/triagem-15set-l8/858-04-recusa-por-cima-de-compromisso-mensagem.png` |
 | L8.5 | #858 — Evento do Google Agenda ocupando o encaixe | **NÃO MEDIDO** — sem Google real |
 | L8.6 | #859 — Contato com telefone já usado | **PROVADO EM TELA** — `409 contact_exists`, aviso "Já existe um contato com este telefone.", diálogo aberto. `evidence/triagem-15set-l8/859-02-telefone-repetido-diz-o-motivo.png` |
 | L8.7 | #859 — O mesmo número sem o nono dígito | **PROVADO EM TELA** — mesmo `409` e mesma frase; uma linha no banco. `evidence/triagem-15set-l8/859-03-mesmo-numero-sem-nono-digito.png` |
+
+**Achado na prova do encaixe, consertado:** o botão Confirmar do painel de marcar
+ficava inteiro fora da caixa em 1280×800 e 1366×768, e cortado em 1440×900 — o
+painel tem a altura do Sheet, que não rola, e o `overflow-hidden` cortava sem barra.
+Valia para toda marcação, não só o encaixe. O corpo do painel passou a rolar a partir
+de `lg`; medido depois em seis larguras em
+`evidence/triagem-15set-l8-encaixe/README.md`.
 
 **Achado fora do lote:** marcar ou confirmar pela tela não emite o gatilho de
 automação da Agenda — o INSERT em `event_log` sai com o cliente da sessão e bate
