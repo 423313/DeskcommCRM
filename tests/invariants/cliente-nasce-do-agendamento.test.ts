@@ -36,6 +36,7 @@ import { pgComoSupabase } from "../pg-como-supabase";
  *   I17–I21        quem pode ligar: admin da própria organização, com MFA
  *                  comprovado e fora de suporte somente leitura
  *   I22–I26        o funil de clientes (do PR) só vale com a regra ligada
+ *   I27, I28       as duas corridas que as travas existem para impedir
  *
  * ORGANIZAÇÕES SEPARADAS POR PAPEL NO TESTE, para que um caso não verdeie outro
  * por estado compartilhado: A ligada no beforeAll, B sempre desligada, C é o
@@ -58,6 +59,8 @@ const ORG_B = "c11e0000-0000-4000-8000-000000000002";
 const ORG_C = "c11e0000-0000-4000-8000-000000000003";
 const ORG_D = "c11e0000-0000-4000-8000-000000000004";
 const ORG_E = "c11e0000-0000-4000-8000-000000000005";
+/** Só para a corrida entre ligar a regra e marcar um horário (I28). */
+const ORG_F = "c11e0000-0000-4000-8000-000000000006";
 
 const ADMIN_A = "c11e1111-0000-4000-8000-000000000001";
 const AGENT_A = "c11e1111-0000-4000-8000-000000000002";
@@ -70,6 +73,7 @@ const VIEWER_D = "c11e1111-0000-4000-8000-000000000008";
 const ADMIN_E = "c11e1111-0000-4000-8000-000000000009";
 /** Operador de plataforma que é TAMBÉM admin da D: isola a guarda de suporte da de papel. */
 const SUPORTE_D = "c11e1111-0000-4000-8000-00000000000a";
+const ADMIN_F = "c11e1111-0000-4000-8000-00000000000b";
 
 const CONVERSA = "c11e0000-0000-4000-8000-00000000c001";
 
@@ -215,7 +219,7 @@ async function crmDe(org: string): Promise<unknown> {
 
 beforeAll(async () => {
   const usuarios = [
-    ADMIN_A, AGENT_A, ADMIN_B, ADMIN_C, ADMIN_D, MANAGER_D, AGENT_D, VIEWER_D, ADMIN_E, SUPORTE_D,
+    ADMIN_A, AGENT_A, ADMIN_B, ADMIN_C, ADMIN_D, MANAGER_D, AGENT_D, VIEWER_D, ADMIN_E, SUPORTE_D, ADMIN_F,
   ];
   for (const u of usuarios) {
     await pool.query("insert into auth.users (id, email) values ($1, $2) on conflict (id) do nothing", [
@@ -229,6 +233,7 @@ beforeAll(async () => {
     [ORG_C, "cliente-agenda-c"],
     [ORG_D, "cliente-agenda-d"],
     [ORG_E, "cliente-agenda-e"],
+    [ORG_F, "cliente-agenda-f"],
   ] as const) {
     await pool.query(
       `insert into organizations (id, slug, legal_name, display_name)
@@ -247,6 +252,7 @@ beforeAll(async () => {
     [VIEWER_D, ORG_D, "viewer"],
     [ADMIN_E, ORG_E, "admin"],
     [SUPORTE_D, ORG_D, "admin"],
+    [ADMIN_F, ORG_F, "admin"],
   ] as const) {
     await pool.query(
       `insert into user_organizations (user_id, organization_id, role, accepted_at)
@@ -784,5 +790,117 @@ describe("o funil de clientes", () => {
     expect("erro" in destino, `esperava destino, veio ${JSON.stringify(destino)}`).toBe(false);
     if ("erro" in destino) return;
     expect(destino.pipelineId).not.toBe(semEtapaAberta);
+  });
+});
+
+/**
+ * AS CORRIDAS. Cada uma com duas conexões de verdade: a primeira segura a
+ * transação aberta, a segunda é disparada e fica esperando a trava, e só então
+ * a primeira commita. As asserções são sobre o DESFECHO (a data, a etiqueta),
+ * não sobre a trava: se a trava sumir, o desfecho errado é o que fica vermelho.
+ */
+describe("as corridas", () => {
+  /** Espera a conexão `pid` ficar bloqueada por `dono`, ou a promessa terminar. */
+  async function esperarBloqueio(pid: number, dono: number, terminou: () => boolean): Promise<void> {
+    for (let i = 0; i < 100 && !terminou(); i++) {
+      const { rows } = await pool.query<{ bloqueada: boolean }>(
+        "select $2::int = any(pg_blocking_pids($1::int)) as bloqueada",
+        [pid, dono],
+      );
+      if (rows[0]!.bloqueada) return;
+      await new Promise((r) => setTimeout(r, 30));
+    }
+  }
+
+  it("I27 · duas marcações simultâneas do mesmo contato: fica a data MAIS CEDO, não a do último a gravar", async () => {
+    // Por que o recálculo trava o contato ANTES de ler a agenda: a segunda
+    // transação, se lesse o min() antes da trava, não enxergaria o horário mais
+    // cedo que a primeira ainda não commitou — e gravaria o dela por cima.
+    const contato = await criarContato(ORG_A, "Corrida de marcação");
+    const a = await pool.connect();
+    const b = await pool.connect();
+    try {
+      await a.query("begin");
+      await a.query(
+        `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id)
+         values ($1, 'Cedo', '2026-10-01T09:00:00Z', '2026-10-01T10:00:00Z', $2)`,
+        [ORG_A, contato],
+      );
+      const pidA = (await a.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+      const pidB = (await b.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+
+      await b.query("begin");
+      let terminou = false;
+      const segunda = b
+        .query(
+          `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id)
+           values ($1, 'Tarde', '2026-10-01T15:00:00Z', '2026-10-01T16:00:00Z', $2)`,
+          [ORG_A, contato],
+        )
+        .finally(() => {
+          terminou = true;
+        });
+      await esperarBloqueio(pidB, pidA, () => terminou);
+
+      await a.query("commit");
+      await segunda;
+      await b.query("commit");
+    } finally {
+      await a.query("rollback").catch(() => undefined);
+      await b.query("rollback").catch(() => undefined);
+      a.release();
+      b.release();
+    }
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at?.toISOString()).toBe("2026-10-01T09:00:00.000Z");
+    expect(depois.tags.filter((t) => t === TAG_DE_CLIENTE)).toHaveLength(1);
+    expect(await eventosDeEtiqueta({ contato })).toBe(1);
+  });
+
+  it("I28 · ligar a regra enquanto um horário está sendo marcado: o contato não fica de fora", async () => {
+    // Por que o trigger e a ligação se serializam: sem isso o horário em voo lê
+    // a chave ainda desligada, e a classificação do histórico — que roda antes
+    // de ele commitar — não o enxerga. O contato ficaria sem etiqueta até alguém
+    // desligar e religar, sem erro nenhum.
+    const contato = await criarContato(ORG_F, "Marcou enquanto ligavam");
+    const a = await pool.connect();
+    const b = await pool.connect();
+    let resultado: Resultado | null = null;
+    try {
+      await a.query("begin");
+      await a.query(
+        `insert into calendar_appointments (organization_id, title, starts_at, ends_at, contact_id)
+         values ($1, 'Em voo', '2026-11-01T09:00:00Z', '2026-11-01T10:00:00Z', $2)`,
+        [ORG_F, contato],
+      );
+      const pidA = (await a.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+      const pidB = (await b.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+
+      await b.query("begin");
+      await b.query("set local role authenticated");
+      await b.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: ADMIN_F, role: "authenticated", aal: "aal1" }),
+      ]);
+      let terminou = false;
+      const ligacao = b.query<{ r: Resultado }>(RPC, [ORG_F, true]).finally(() => {
+        terminou = true;
+      });
+      await esperarBloqueio(pidB, pidA, () => terminou);
+
+      await a.query("commit");
+      resultado = (await ligacao).rows[0]!.r;
+      await b.query("commit");
+    } finally {
+      await a.query("rollback").catch(() => undefined);
+      await b.query("rollback").catch(() => undefined);
+      a.release();
+      b.release();
+    }
+
+    const depois = await lerContato(contato);
+    expect(depois.first_service_at?.toISOString()).toBe("2026-11-01T09:00:00.000Z");
+    expect(depois.tags).toContain(TAG_DE_CLIENTE);
+    expect(resultado).toMatchObject({ ligado: true, mudou: true, ganharam_etiqueta: 1 });
   });
 });
