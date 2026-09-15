@@ -21,6 +21,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 
 import { getAction } from "@/lib/automation/actions";
+import "@/lib/automation/actions/add-tag";
 import "@/lib/automation/actions/assign-owner";
 import { evaluateConditions } from "@/lib/automation/conditions";
 import { buildContext } from "@/lib/automation/engine";
@@ -31,6 +32,7 @@ import { createAutomationRuleSchema, ENTIDADE_ESPERADA_POR_GATILHO } from "@/lib
 import {
   historicoDeDemonstracao,
   REGRA_ORCAMENTO,
+  type MundoDaExecucao,
   REGRA_VIP,
   regrasDeDemonstracao,
   type RegraDeDemonstracao,
@@ -97,6 +99,34 @@ function eventoDeLeadCriado(): EventRow {
 }
 
 const CONTATO_LINHA = { id: CONTATO, organization_id: ORG, name: "Contato", tags: [] };
+
+/**
+ * O banco no MUNDO de uma execução do histórico: o lead com as etiquetas de
+ * então, o gerente dentro ou fora da organização, e a escrita aceita ou não.
+ * É o que deixa o teste rodar o motor de verdade sobre a história de cada linha,
+ * em vez de só conferir a forma dela.
+ */
+function mundoNoBanco(mundo: MundoDaExecucao): SupabaseClient {
+  const linhas: Record<string, Record<string, unknown> | null> = {
+    crm_leads: mundo.lead ? { id: LEAD, organization_id: ORG, contact_id: null, tags: mundo.lead.tags } : null,
+    contacts: CONTATO_LINHA,
+    user_organizations: mundo.gerenteNaOrganizacao ? { user_id: GERENTE, role: "manager" } : null,
+  };
+  const escrita = { error: mundo.escritaFalhou ? { message: mundo.escritaFalhou } : null };
+  const tabela = (nome: string) => {
+    let escrevendo = false;
+    const cadeia: Record<string, unknown> = {};
+    for (const m of ["select", "eq", "neq", "in", "is", "order", "limit"]) cadeia[m] = () => cadeia;
+    cadeia.update = () => {
+      escrevendo = true;
+      return cadeia;
+    };
+    cadeia.maybeSingle = async () => ({ data: linhas[nome] ?? null, error: null });
+    cadeia.then = (resolve: (v: unknown) => unknown) => resolve(escrevendo ? escrita : { error: null });
+    return cadeia;
+  };
+  return { from: tabela, rpc: async () => ({ error: null }) } as unknown as SupabaseClient;
+}
 
 describe("regras de demonstração", () => {
   it("todas passam pelo createAutomationRuleSchema da API — com e sem o funil do CRM Vivo", () => {
@@ -205,11 +235,61 @@ describe("histórico de demonstração", () => {
     }
   });
 
+  it("cada execução é POSSÍVEL: a regra casa com o mundo dela, e as ações de verdade devolvem o que ela grava", async () => {
+    // A forma sozinha aceitava uma linha que o motor nunca escreveria: `failed`
+    // da regra VIP com as duas ações puladas por falta de lead — e sem lead a
+    // condição `lead.tags contém vip` é falsa, então o motor nem executa a regra.
+    for (const h of historico) {
+      const dona = regra(h.regra);
+      const evento =
+        dona.trigger_event === "lead.created"
+          ? eventoDeLeadCriado()
+          : dona.trigger_event === "message.received"
+            ? eventoDeMensagem(h.mundo.mensagem ?? "")
+            : null;
+      if (!evento) throw new Error(`gatilho "${dona.trigger_event}" sem evento de teste`);
+
+      const admin = mundoNoBanco(h.mundo);
+      const context = await buildContext(admin, evento);
+      expect(
+        evaluateConditions(dona.conditions, context),
+        `"${h.regra}" (${h.status}): a condição não casa no mundo desta execução — o motor nem a executaria`,
+      ).toBe(true);
+
+      const resultados = [];
+      for (const acao of dona.actions) {
+        const executor = getAction(acao.type);
+        expect(executor, `${acao.type} não registrado`).toBeDefined();
+        resultados.push(
+          await executor!.execute(
+            {
+              admin,
+              serviceBoundaries: new Map(),
+              organizationId: ORG,
+              ruleId: "regra",
+              ruleName: dona.name,
+              event: evento,
+              context,
+              requestId: evento.id,
+            },
+            acao.config,
+          ),
+        );
+      }
+      expect(resultados, `"${h.regra}" (${h.status}): o motor gravaria outra coisa neste mundo`).toEqual(
+        h.actions_result,
+      );
+    }
+  });
+
   it("todo código de erro ou motivo é um que a ação de verdade devolve", () => {
     for (const h of historico) {
       for (const a of h.actions_result) {
         const codigo = a.error ?? (a.detail?.reason as string | undefined);
         if (codigo === undefined) continue;
+        // A mensagem que o BANCO devolveu não é código da ação: ela a repassa
+        // (`error: error.message`). Quem prova que ela chega assim é o caso acima.
+        if (codigo === h.mundo.escritaFalhou) continue;
         const fonte = readFileSync(
           path.join(process.cwd(), "lib/automation/actions", `${a.type.replaceAll("_", "-")}.ts`),
           "utf8",
