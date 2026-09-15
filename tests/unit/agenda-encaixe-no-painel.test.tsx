@@ -213,3 +213,32 @@ describe("a recusa do servidor fica no painel", () => {
     expect(screen.queryByTestId("recusa-da-marcacao")).toBeNull();
   });
 });
+
+describe("a confirmação é levada até a vista", () => {
+  // De `lg` para cima o corpo rola e a confirmação nasce embaixo do mês, longe
+  // de onde se clicou (a coluna de horários, o "Usar"). Sem rolar até ela, o
+  // clique parece mudo — medido pela tela em 1280×800 e 1366×768.
+  const original = Element.prototype.scrollIntoView;
+  afterEach(() => {
+    Element.prototype.scrollIntoView = original;
+  });
+
+  it("escolher o horário do encaixe rola o bloco de confirmação, e a recusa rola de novo", async () => {
+    const rolou = vi.fn();
+    Element.prototype.scrollIntoView = rolou;
+    const onConfirmar = vi.fn(async () => {
+      throw new ApiError(422, "agenda_horario_indisponivel", undefined, "req-4", "Ocupado.");
+    });
+    montar({ permiteEncaixe: true, onConfirmar });
+
+    escolherEncaixe("2026-09-16", "10:30");
+    expect(rolou).toHaveBeenCalledWith({ block: "nearest" });
+    expect(rolou.mock.contexts.at(-1)).toBe(screen.getByTestId("confirmacao"));
+
+    const antes = rolou.mock.calls.length;
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await screen.findByTestId("recusa-da-marcacao");
+    expect(rolou.mock.calls.length).toBeGreaterThan(antes);
+    expect(rolou.mock.contexts.at(-1)).toBe(screen.getByTestId("confirmacao"));
+  });
+});

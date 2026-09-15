@@ -189,6 +189,24 @@ export function PainelDeMarcacao({
   const [recusa, setRecusa] = React.useState<{ instante: string; mensagem: string } | null>(null);
 
   /**
+   * A confirmação nasce ONDE a pessoa possa vê-la.
+   *
+   * Ela aparece embaixo do mês, e quem a provoca clica em outro lugar: na coluna
+   * de horários, ou no "Usar" do encaixe. Com o corpo rolando (telas baixas) ou
+   * com o diálogo empilhado (celular), o bloco surgia abaixo da dobra e o clique
+   * parecia não ter feito nada — o "nada acontece" que esta tela já pagou.
+   * `nearest` só rola o necessário, e não rola nada quando já está à vista. A
+   * recusa entra na lista porque aumenta o bloco e pode empurrar o botão para fora.
+   */
+  const confirmacaoRef = React.useRef<HTMLDivElement>(null);
+  const instanteEscolhido = horario?.instante;
+  const mensagemDaRecusa = recusa?.mensagem;
+  React.useEffect(() => {
+    if (!instanteEscolhido) return;
+    confirmacaoRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [instanteEscolhido, mensagemDaRecusa]);
+
+  /**
    * O painel pode continuar montado entre duas aberturas (o `Sheet` decide
    * isso, não nós), e aí o estado inicial acima não roda de novo — clicar num
    * segundo bloco abriria o painel no horário do primeiro.
@@ -455,9 +473,25 @@ export function PainelDeMarcacao({
 
       {/* CORPO — o mês. 420–480px é a faixa medida no cal.com; aqui ela é
           `min-width` e não largura fixa, porque no celular a coluna ocupa tudo. */}
+      {/*
+        ⚠️ `lg:min-h-0 lg:overflow-y-auto` — A CONFIRMAÇÃO FICAVA FORA DO ALCANCE.
+
+        De `lg` para cima o painel tem a altura do Sheet, e o Sheet não rola
+        (`_client.tsx`). O corpo não tinha teto nem rolagem: mês + confirmação
+        passavam da caixa, e o `overflow-hidden` do painel cortava EM SILÊNCIO.
+        Medido em 2026-09-15 pela tela, com o bloco "Quem será atendido" acima:
+        o botão Confirmar começava em 840px numa janela de 800 (1280×800) e em
+        821px numa de 768 (1366×768), com o painel terminando em 776 e 744 —
+        inteiro fora da caixa, sem barra e sem como clicar. Em 1440×900 ele saía
+        cortado ao meio, e a recusa do servidor logo acima dele também.
+
+        Rolar o CORPO, e não o Sheet, pelo mesmo motivo que a lista rola sozinha:
+        o contexto e os horários ficam parados, e não nasce barra horizontal no
+        Sheet. Abaixo de `lg` nada muda — ali quem rola é o diálogo.
+      */}
       <div
         data-testid="corpo-da-marcacao"
-        className="flex min-w-0 flex-1 flex-col p-4 lg:min-w-[420px]"
+        className="flex min-w-0 flex-1 flex-col p-4 lg:min-h-0 lg:min-w-[420px] lg:overflow-y-auto"
       >
         <div className="mb-3 flex items-center justify-between">
           <span className="text-sm font-semibold first-letter:uppercase">
@@ -652,7 +686,7 @@ export function PainelDeMarcacao({
         </div>
 
         {tempo === "confirmando" && horario && (
-          <div className="mt-4 border-t border-border pt-4" data-testid="confirmacao">
+          <div ref={confirmacaoRef} className="mt-4 border-t border-border pt-4" data-testid="confirmacao">
             <p className="text-sm">
               <span className="text-text-muted">{t("Confirmar")} </span>
               <span className="font-semibold">
