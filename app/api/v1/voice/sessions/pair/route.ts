@@ -12,6 +12,7 @@
  * rota). Aqui só garante a linha em `channel_sessions` e dispara o pareamento.
  */
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 
 import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
@@ -24,7 +25,9 @@ import { getWacallsClient, wacallsFriendlyError } from "@/lib/wacalls/client";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(): Promise<Response> {
+const PareamentoSchema = z.object({ prepare_only: z.boolean().optional().default(false) });
+
+export async function POST(request: Request): Promise<Response> {
   // Acompanhamento administrativo somente-leitura não liga, não atende, não
   // desliga e não pareia: o efeito é do tenant, não de quem observa.
   const suporteNegado = await requireSupportWrite();
@@ -40,11 +43,23 @@ export async function POST(): Promise<Response> {
   if (!authz.ok) return authz.response;
   const { user, org: activeOrg } = authz;
 
+  let prepareOnly: boolean;
+  try {
+    const texto = await request.text();
+    const corpo = PareamentoSchema.safeParse(texto ? JSON.parse(texto) : {});
+    if (!corpo.success) {
+      return fail("invalid_request", "Opções de pareamento inválidas.", 400, { requestId });
+    }
+    prepareOnly = corpo.data.prepare_only;
+  } catch {
+    return fail("invalid_request", "Corpo da solicitação inválido.", 400, { requestId });
+  }
+
   const wacalls = getWacallsClient();
   if (!wacalls) {
     return fail(
       "wacalls_not_configured",
-      "Chamada de voz não está configurada neste ambiente: falta WACALLS_API_BASE_URL.",
+      "Configure o endereço e a credencial do serviço de voz: WACALLS_API_BASE_URL e WACALLS_API_TOKEN.",
       503,
       { requestId },
     );
@@ -94,7 +109,8 @@ export async function POST(): Promise<Response> {
         await supabase
           .from("channel_sessions")
           .update({ wacalls_session_id: wacallsSessionId })
-          .eq("id", channelSessionId);
+          .eq("id", channelSessionId)
+          .eq("organization_id", activeOrg.orgId);
       } else {
         // webhook_path_token/webhook_secret_encrypted são NOT NULL na tabela
         // mas não fazem sentido pra este provider — o WaCalls empurra estado
@@ -118,22 +134,26 @@ export async function POST(): Promise<Response> {
           })
           .select("id")
           .single();
-        if (insertErr || !inserted) throw new Error(`channel_sessions insert: ${insertErr?.message}`);
+        if (insertErr || !inserted)
+          throw new Error(`channel_sessions insert: ${insertErr?.message}`);
         channelSessionId = (inserted as { id: string }).id;
       }
     }
 
-    await wacalls.pairSession(wacallsSessionId);
+    // No primeiro uso ainda não há sessão para o relay de eventos resolver.
+    // Prepara o vínculo sem emitir QR; a tela abre a SSE e então pede o par.
+    if (!prepareOnly) await wacalls.pairSession(wacallsSessionId);
 
-    void audit({
-      action: "voice.session_pair_started",
-      actorUserId: user.id,
-      organizationId: activeOrg.orgId,
-      resourceType: "channel_session",
-      resourceId: channelSessionId ?? null,
-      requestId,
-      metadata: { wacalls_session_id: wacallsSessionId },
-    });
+    if (!prepareOnly || !existing?.wacalls_session_id)
+      void audit({
+        action: prepareOnly ? "voice.session_prepared" : "voice.session_pair_started",
+        actorUserId: user.id,
+        organizationId: activeOrg.orgId,
+        resourceType: "channel_session",
+        resourceId: channelSessionId ?? null,
+        requestId,
+        metadata: { wacalls_session_id: wacallsSessionId },
+      });
 
     return ok({ channelSessionId, wacallsSessionId }, { requestId });
   } catch (err) {

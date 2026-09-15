@@ -78,6 +78,9 @@ export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boole
     setPareando(true);
     setQrDataUrl(null);
     try {
+      // O relay só abre quando há sessão da organização. Criá-la aqui sem
+      // emitir QR evita o 404 do primeiro uso e preserva a ordem SSE → pair.
+      await apiClient.post("/api/v1/voice/sessions/pair", { prepare_only: true });
       // A stream tem que estar ABERTA antes de disparar o pareamento: o
       // WaCalls emite o QR no INSTANTE do `pair` (whatsmeow gera na hora),
       // não em resposta a quem está ouvindo. Chamar o POST primeiro e só
@@ -113,6 +116,7 @@ export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boole
         es.close();
         esRef.current = null;
         setPareando(false);
+        toast.error(t("Não foi possível receber o código de pareamento. Tente novamente."));
       };
     } catch (err) {
       toast.error(errMsg(err, "Não foi possível iniciar o pareamento.", t));
