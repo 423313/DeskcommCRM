@@ -7485,6 +7485,10 @@ export const DICIONARIO: Traducoes = {
   // `hooks/voice/useVoiceCallSession.ts` (`EstadoDaMidia`).
   "Abrindo o áudio…": { es: "Abriendo el audio…" },
   "Sem áudio: o canal de voz não abriu": { es: "Sin audio: el canal de voz no se abrió" },
+  "O áudio desta ligação está em outra aba": { es: "El audio de esta llamada está en otra pestaña" },
+  "Ouvir aqui": { es: "Escuchar aquí" },
+  "O áudio caiu": { es: "El audio se cayó" },
+  "Reconectar o áudio": { es: "Reconectar el audio" },
   "Chamada de voz": { es: "Llamada de voz" },
   "Chamada de voz sem resposta": { es: "Llamada de voz sin respuesta" },
   "A chamada de voz não está configurada.": { es: "La llamada de voz no está configurada." },

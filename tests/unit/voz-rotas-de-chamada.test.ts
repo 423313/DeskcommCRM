@@ -490,6 +490,18 @@ describe("só quem está na linha desliga", () => {
     expect(wacalls.endCall).toHaveBeenCalledTimes(1);
   });
 
+  it("ligação que JÁ acabou: 204 sem pedir ao serviço de voz e sem gravar encerramento falso", async () => {
+    // Produção, 2026-09-15: o celular desligou, o painel ficou preso, e o clique
+    // 66 s depois gravou dois `voice.call_ended` atribuindo ao atendente o fim
+    // de uma ligação que o cliente tinha encerrado.
+    const { audit } = await import("@/lib/audit");
+    respostas["voice_calls"] = chamadaNoBanco({ owner_user_id: EU, status: "ended" });
+    const res = await desligar();
+    expect(res.status).toBe(204);
+    expect(wacalls.endCall).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
   it("colega da mesma organização NÃO derruba a ligação alheia", async () => {
     respostas["voice_calls"] = chamadaNoBanco({ owner_user_id: COLEGA, created_by: COLEGA });
     const res = await desligar();
@@ -508,6 +520,32 @@ describe("só quem está na linha desliga", () => {
     const res = await desligar();
     expect(res.status).toBe(403);
     expect(wacalls.endCall).not.toHaveBeenCalled();
+  });
+
+  it("a troca de SDP grava a aba no audit — a pergunta 'quantas abas abriram áudio?' tem resposta", async () => {
+    const { audit } = await import("@/lib/audit");
+    respostas["voice_calls"] = chamadaNoBanco({ owner_user_id: EU });
+    const { POST } = await import("@/app/api/v1/voice/calls/[id]/webrtc/route");
+    const aba = "66666666-6666-4666-8666-666666666666";
+    const res = await POST(
+      new Request("http://x", { method: "POST", body: JSON.stringify({ sdpOffer: "v=0", aba }) }),
+      { params: Promise.resolve({ id: CHAMADA }) },
+    );
+    expect(res.status).toBe(200);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "voice.call_media_attached", metadata: expect.objectContaining({ aba }) }),
+    );
+  });
+
+  it("aba que não é uuid é recusada antes de falar com o serviço de voz", async () => {
+    respostas["voice_calls"] = chamadaNoBanco({ owner_user_id: EU });
+    const { POST } = await import("@/app/api/v1/voice/calls/[id]/webrtc/route");
+    const res = await POST(
+      new Request("http://x", { method: "POST", body: JSON.stringify({ sdpOffer: "v=0", aba: "<script>" }) }),
+      { params: Promise.resolve({ id: CHAMADA }) },
+    );
+    expect(res.status).toBe(400);
+    expect(wacalls.exchangeWebrtc).not.toHaveBeenCalled();
   });
 
   it("o áudio de uma ligação alheia não abre no navegador de um colega", async () => {
