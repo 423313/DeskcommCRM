@@ -8,6 +8,28 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.27.3] — 2026-09-15
+
+### Corrigido
+
+- **O áudio da chamada de voz sai e chega, e o painel some quando a ligação acaba** Quem ligava pelo CRM com o sistema aberto em mais de uma aba, ou em mais de um
+  computador, ficava com a ligação muda dos dois lados: cada aba abria o próprio
+  áudio, o serviço de voz ficava só com a última, e ela podia ser a aba que
+  ninguém estava olhando. Agora o áudio abre só na aba onde você clicou em
+  "Chamar" ou "Atender", já no clique. As outras abas avisam que o áudio está em
+  outra aba e oferecem trazer para ela.
+
+  Consertos que vinham junto:
+
+  - Quando o cliente desligava, o painel da ligação podia continuar na tela, com
+    o botão de encerrar ativo. Agora ele confere com o servidor e some sozinho.
+  - O aviso de áudio passou a separar "o áudio não abriu" de "o áudio caiu", cada
+    um com um botão para tentar de novo.
+  - Clicar duas vezes em encerrar deixou de registrar dois encerramentos, e
+    encerrar uma ligação que já tinha acabado não registra mais nada.
+  - O canal que atualiza a tela em tempo real voltava de uma queda e, pouco
+    depois, caía de novo sozinho. Isso afetava também a caixa de entrada.
+
 ## [1.27.2] — 2026-09-15
 
 ### Corrigido
@@ -4731,7 +4753,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.3...HEAD
+[1.27.3]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.2...v1.27.3
 [1.27.2]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.1...v1.27.2
 [1.27.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.26.0...v1.27.0
