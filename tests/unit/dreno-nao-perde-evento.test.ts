@@ -31,7 +31,7 @@ vi.mock("@/lib/event-log/dispatcher", () => ({
   dispatchEvent: (row: unknown) => dispatch(row),
 }));
 
-import { IA_QUE_NAO_RESPONDEU } from "@/lib/event-log/aviso-de-evento-morto";
+import { DETALHE_TECNICO, IA_QUE_NAO_RESPONDEU } from "@/lib/event-log/aviso-de-evento-morto";
 import { drainEventLog } from "@/lib/event-log/drain";
 
 interface Chamada {
@@ -252,6 +252,11 @@ describe("drainEventLog — evento morto abre aviso na Central", () => {
     });
     expect(String(aviso!.payload?.body)).toContain("transcription_401");
     expect(String(aviso!.payload?.title)).toContain(MORIBUNDO.event_type);
+    // No corpo, o nome do evento vai para o detalhe técnico, no fim — o começo é
+    // lido por quem não programa (ver `aviso-de-evento-morto.ts`).
+    const corpo = String(aviso!.payload?.body);
+    expect(corpo.indexOf(DETALHE_TECNICO), "o corpo sem o rótulo de detalhe técnico").toBeGreaterThan(0);
+    expect(corpo.slice(corpo.indexOf(DETALHE_TECNICO))).toContain(MORIBUNDO.event_type);
     // O corpo só pede o que a tela oferece: não existe tela de `event_log` nem
     // botão de reprocessar. O que existe é "Marcar resolvido" — e é ele que
     // rearma o aviso, porque o dedupe é por kind.

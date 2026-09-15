@@ -19,6 +19,7 @@ import { deriveVideoText } from "@/lib/messaging/media/video-derive";
 import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { DETALHE_TECNICO } from "@/lib/event-log/aviso-de-evento-morto";
 
 export const MEDIA_DERIVE_CONSUMER_KEY = "media_derive_v1";
 const DRAIN_MAX_ATTEMPTS = 5; // espelho de lib/event-log/drain.ts
@@ -201,12 +202,14 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       //
       // O `detail` entra porque é a frase do PROVEDOR, e é ela que distingue
       // "chave errada" de "modelo que sua conta não assina" — duas ações
-      // diferentes para quem opera.
+      // diferentes para quem opera. Mas entra no FIM, como detalhe técnico:
+      // é inglês de API, e quem lê a Central não programa.
       await avisarMidiaNaoLida(
         msg.organization_id,
         rotuloDoTipo,
-        detail.slice(0, 200),
+        "a leitura deu erro em todas as tentativas, ao abrir o arquivo ou ao chamar o provedor de IA",
         "O conteúdo do arquivo não chegou ao agente.",
+        detail.slice(0, 200),
       );
     }
     return { consumer_key, status: "error", detail };
@@ -371,6 +374,26 @@ export const MARCADOR_NAO_LIDA = "[o cliente enviou uma mídia que não consegui
  *
  * Fire-and-forget: falhar ao avisar não pode derrubar a derivação da mídia.
  */
+/**
+ * O título e o corpo do aviso `midia_nao_lida`. Primeiro o que houve e o que
+ * fazer, em português; a frase crua do provedor, quando existe, no fim e
+ * rotulada (`DETALHE_TECNICO`) — mesma regra do aviso de evento morto.
+ */
+export function textoDoAvisoDeMidiaNaoLida(aviso: {
+  tipo: string;
+  motivo: string;
+  consequencia: string;
+  detalheTecnico?: string;
+}): { title: string; body: string } {
+  return {
+    title: `O agente não conseguiu ler ${aviso.tipo} que o cliente enviou`,
+    body:
+      `Motivo: ${aviso.motivo}. ${aviso.consequencia} ` +
+      `Para resolver, ajuste o modelo desse ponto em Agente de IA → Provedores, ou cadastre a chave necessária em Credenciais.` +
+      (aviso.detalheTecnico ? ` ${DETALHE_TECNICO} ${aviso.detalheTecnico}` : ""),
+  };
+}
+
 async function avisarMidiaNaoLida(
   organizationId: string,
   tipo: string,
@@ -380,6 +403,8 @@ async function avisarMidiaNaoLida(
    * entregam o marcador ao agente; a falha permanente não entrega nada.
    */
   consequencia = "Enquanto isso, o agente responde avisando que não conseguiu abrir o arquivo.",
+  /** A frase crua do provedor ou do armazenamento, quando houver — vai no fim, rotulada. */
+  detalheTecnico?: string,
 ): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -401,10 +426,7 @@ async function avisarMidiaNaoLida(
       organization_id: organizationId,
       kind: "midia_nao_lida",
       severity: "warn",
-      title: `O agente não conseguiu ler ${tipo} que o cliente enviou`,
-      body:
-        `Motivo: ${motivo}. ${consequencia} ` +
-        `Para resolver, ajuste o modelo desse ponto em Agente de IA → Provedores, ou cadastre a chave necessária em Credenciais.`,
+      ...textoDoAvisoDeMidiaNaoLida({ tipo, motivo, consequencia, detalheTecnico }),
     });
     // E o retorno é CONFERIDO. O supabase-js devolve `{ error }` em vez de
     // lançar, então o `catch` abaixo era inalcançável para erro de banco: a
