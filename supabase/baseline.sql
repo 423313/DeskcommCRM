@@ -24602,7 +24602,7 @@ revoke execute on function public.fn_configurar_pre_go_live_canal(uuid, uuid, te
 grant execute on function public.fn_configurar_pre_go_live_canal(uuid, uuid, text, text[])
   to service_role;
 
--- ---- cliente nasce do agendamento (migration 0252) ----
+-- ---- cliente nasce do agendamento (migration 0255) ----
 --
 -- Idempotente e auto-curativo: add column if not exists, create index if not
 -- exists, create or replace function, drop trigger if exists, e um backfill

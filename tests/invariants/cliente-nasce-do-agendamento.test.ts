@@ -7,7 +7,7 @@ import { funilDeEntrada, garantirLeadDaConversa } from "@/lib/leads/nascimento-d
 import { pgComoSupabase } from "../pg-como-supabase";
 
 /**
- * O CONTATO VIRA CLIENTE QUANDO TEM HORA MARCADA (migration 0252).
+ * O CONTATO VIRA CLIENTE QUANDO TEM HORA MARCADA (migration 0255).
  *
  * Invariante de banco, e não teste de unidade, porque o que se mede aqui É o
  * banco: um TRIGGER (`trg_agendamento_marca_cliente`), um índice único parcial e
