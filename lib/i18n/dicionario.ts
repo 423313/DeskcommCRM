@@ -7035,6 +7035,9 @@ export const DICIONARIO: Traducoes = {
   "Este horário não está disponível. Consulte os horários livres e escolha outro.": {
     es: "Este horario no está disponible. Consulta los horarios libres y elige otro.",
   },
+  "Este horário já está ocupado na agenda de quem atende — por outro compromisso ou pelo Google Agenda.": {
+    es: "Este horario ya está ocupado en la agenda de quien atiende — por otro compromiso o por Google Calendar.",
+  },
   "listagem sem recorte: informe contato, lead, dia, período (de+ate) ou responsável.": {
     es: "listado sin recorte: indica contacto, lead, día, período (de+ate) o responsable.",
   },

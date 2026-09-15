@@ -12,6 +12,11 @@ atende precisa poder marcar o que combinou por fora dela: o cliente que só pode
 Antes, nem pela tela isso era possível: só existiam os horários da grade, e a
 saída era mudar o horário do cliente para caber numa régua interna.
 
-Agora **uma pessoa da equipe marca em qualquer horário**; o assistente continua
-oferecendo só o que a agenda publicou. O que ninguém pode, nem pessoa nem
-assistente, é marcar em cima de um compromisso que já existe.
+Agora **uma pessoa da equipe marca em qualquer horário livre**, até fora do
+expediente — basta que o responsável já tenha publicado seus horários de
+atendimento. O assistente e as integrações por token continuam marcando só nos
+horários que a agenda oferece.
+
+O que ninguém pode, nem pessoa nem assistente, é marcar em cima de um
+compromisso que já existe: outro agendamento do sistema ou um evento do Google
+Agenda numa agenda marcada como "Conta como ocupado".
