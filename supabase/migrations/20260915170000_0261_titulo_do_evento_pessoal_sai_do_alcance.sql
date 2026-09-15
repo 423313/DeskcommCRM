@@ -31,8 +31,17 @@
 -- `title: lido.evento.title`) e que a ressincronização ainda não regravou: o
 -- rebuild completo, a cada 24h, regrava de 1 dia atrás a 90 dias à frente; o
 -- passado espera o expurgo do espelho (`fn_expurgar_espelho_da_agenda`, por
--- padrão 90 dias depois de `ends_at`); e uma conexão que não está saudável não
--- sincroniza.
+-- padrão 90 dias depois de `ends_at`); e há agendas que o sincronizador não lê,
+-- cujas linhas ficam com o nome inteiro — futuras inclusive — até o expurgo:
+--
+-- * a de conexão que não está saudável e a de membro revogado —
+--   `fn_google_calendar` recusa a reserva com `google_connection_unavailable`;
+-- * a que saiu do catálogo do Google (`available=false`) — a reserva não sai;
+-- * a desmarcada: não conta para conflito, não é destino e não tem agendamento
+--   vinculado — o cron a adia 24h e segue, sem chamar a reserva
+--   (`app/api/v1/cron/agenda-google-sync/route.ts`).
+--
+-- As três primeiras o invariante mede; a quarta mora no cron.
 --
 -- E nem tudo o que está DENTRO da janela é regravado. O evento CANCELADO escapa
 -- do rebuild: o `page` que o fecha apaga o que a leitura não viu com `and

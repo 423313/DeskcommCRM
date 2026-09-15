@@ -715,6 +715,57 @@ describe("o alcance do resíduo que a 0261 descreve — o que a ressincronizaç�
       "o rebuild passou a regravar/apagar o evento cancelado, ou deixou de apagar o confirmado que sumiu — a prosa do resíduo na 0261 muda junto",
     ).toBe("espelho=ev-0261:confirmed:(nulo),ev-0261-cancelado:cancelled:Consulta cancelada");
   });
+
+  it("a agenda que o sincronizador não lê não é regravada, futuro inclusive: fora do catálogo a reserva não sai, e de membro revogado ou de conexão com o token vencido ela é recusada", () => {
+    // Sem reserva não há `item` nem `page`: as linhas daquela agenda ficam como
+    // estão, com o nome, até o expurgo (90 dias depois do fim). A terceira forma
+    // — agenda desmarcada (não conta, não é destino e não tem agendamento
+    // vinculado) — mora no cron, que nem chama a reserva
+    // (`app/api/v1/cron/agenda-google-sync/route.ts`), e não é medida aqui.
+    const RESERVA = `
+      set local role service_role;
+      select '${MARCA}' || 'reserva=' ||
+        coalesce(public.fn_google_calendar('${ORG}', '${CALENDARIO}', 'claim') -> 'sync_cursor' ->> 'mode', '(nenhuma)');
+    `;
+    const [comTudoEmOrdem, foraDoCatalogo] = sondasDesfeitas(`
+      ${FIXTURE}
+      ${CATALOGO_DO_DONO}
+      savepoint controle;
+      ${RESERVA}
+      reset role;
+      rollback to savepoint controle;
+      update public.calendar_connection_calendars set available = false where id = '${CALENDARIO}';
+      ${RESERVA}
+    `);
+    expect(comTudoEmOrdem, "o controle falhou: com a agenda disponível, o membro ativo e a conexão saudável a reserva não saiu").toBe(
+      "reserva=full",
+    );
+    expect(foraDoCatalogo, "o sincronizador passou a reservar agenda fora do catálogo — a prosa do resíduo na 0261 muda junto").toBe(
+      "reserva=(nenhuma)",
+    );
+
+    const membroRevogado = erroDo(`
+      begin;
+      ${FIXTURE}
+      ${CATALOGO_DO_DONO}
+      update public.user_organizations set revoked_at = now() where organization_id = '${ORG}' and user_id = '${DONO}';
+      ${RESERVA}
+      rollback;
+    `);
+    expect(membroRevogado, "o sincronizador passou a reservar a agenda de membro revogado — a prosa do resíduo na 0261 muda junto").not.toBeNull();
+    expect(membroRevogado).toContain("google_connection_unavailable");
+
+    const tokenVencido = erroDo(`
+      begin;
+      ${FIXTURE}
+      ${CATALOGO_DO_DONO}
+      update public.calendar_connections set status = 'token_expired' where id = '${CONEXAO}';
+      ${RESERVA}
+      rollback;
+    `);
+    expect(tokenVencido, "o sincronizador passou a reservar agenda de conexão fora do ar — a prosa do resíduo na 0261 muda junto").not.toBeNull();
+    expect(tokenVencido).toContain("google_connection_unavailable");
+  });
 });
 
 describe("o banco instalado pelo baseline inteiro — sem reaplicar o bloco da 0261", () => {
