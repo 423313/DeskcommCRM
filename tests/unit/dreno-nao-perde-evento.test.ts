@@ -44,7 +44,11 @@ interface Chamada {
  * Dublê que REGISTRA o que foi pedido. Devolve linhas só para o `select` do
  * dreno; os `update` devolvem o que o código precisa para seguir.
  */
-function dublarAdmin(linhas: Array<Record<string, unknown>>) {
+function dublarAdmin(
+  linhas: Array<Record<string, unknown>>,
+  /** O que a Central já tem aberto do mesmo kind. `null` = nada aberto. */
+  avisoAberto: Record<string, unknown> | null = null,
+) {
   const chamadas: Chamada[] = [];
 
   function cadeia(tabela: string) {
@@ -83,12 +87,30 @@ function dublarAdmin(linhas: Array<Record<string, unknown>>) {
         registro.filtros.push(["in", c, v]);
         return self;
       },
+      insert: (payload: Record<string, unknown>) => {
+        registro.op = "insert";
+        registro.payload = payload;
+        chamadas.push(registro);
+        return self;
+      },
       order: () => self,
       limit: () => self,
+      maybeSingle: () => self,
       then: (resolve: (r: unknown) => void) => {
+        if (registro.op === "insert") {
+          resolve({ error: null });
+          return;
+        }
         if (registro.op === "update") {
           // Reclamação de órfão devolve lista vazia; claim devolve a linha.
           resolve({ data: ehClaim ? [{ id: "e1" }] : ehUpdateDeReclamacao ? [] : [{ id: "e1" }] });
+          return;
+        }
+        // A Central responde pelo que ELA tem — devolver `linhas` aqui faria o
+        // dedupe enxergar um evento como se fosse aviso aberto, e o teste do
+        // aviso passaria por engano.
+        if (tabela === "agent_inbox_items") {
+          resolve({ data: avisoAberto, error: null });
           return;
         }
         resolve({ data: linhas, error: null });
@@ -179,5 +201,89 @@ describe("drainEventLog — o motivo de um `skipped` sobrevive à linha", () => 
 
     const final = chamadas.filter((c) => c.op === "update" && c.payload?.status === "done").pop();
     expect(final!.payload).not.toHaveProperty("last_error");
+  });
+});
+
+/**
+ * O EVENTO QUE MORRE AVISA ALGUÉM.
+ *
+ * O kind `event_dead` estava na constraint de `agent_inbox_items`, na cópia e
+ * na política de destino desde a migration 0050 — e **sem um único produtor**.
+ * Evento que esgotava as tentativas virava `status='dead'` e sumia. Medido numa
+ * VPS em produção: quatro `media.derive_requested` mortos, cliente ouvindo "não
+ * consigo ouvir áudio", ninguém do lado de cá sabendo.
+ */
+describe("drainEventLog — evento morto abre aviso na Central", () => {
+  const MORIBUNDO = { ...LINHA, attempts: 4 }; // a 5ª falha é a que mata
+
+  function avisos(chamadas: Chamada[]) {
+    return chamadas.filter((c) => c.op === "insert" && c.tabela === "agent_inbox_items");
+  }
+
+  it("na tentativa que mata, insere `event_dead` com o motivo e a organização", async () => {
+    dispatch.mockResolvedValue([
+      { consumer_key: "media-derive.v1", status: "error", detail: "transcription_401" },
+    ]);
+    const { admin, chamadas } = dublarAdmin([MORIBUNDO]);
+
+    const resumo = await drainEventLog(admin as never);
+
+    expect(resumo.dead, "o evento não foi dado como morto").toBe(1);
+    const [aviso] = avisos(chamadas);
+    expect(aviso, "evento morreu sem abrir aviso na Central").toBeDefined();
+    expect(aviso!.payload).toMatchObject({
+      organization_id: "org-1",
+      kind: "event_dead",
+      severity: "critical",
+    });
+    expect(String(aviso!.payload?.body)).toContain("transcription_401");
+    expect(String(aviso!.payload?.title)).toContain(MORIBUNDO.event_type);
+    // `refs: []` é a política de `event_dead` (lib/ai/inbox-destino.ts): não há
+    // tela de `event_log`, e um ref sem destino viraria botão que não leva a
+    // lugar nenhum.
+    expect(aviso!.payload).not.toHaveProperty("ref_kind");
+  });
+
+  it("falha que ainda VAI tentar de novo não avisa (controle)", async () => {
+    // Sem este controle, o caso acima passaria com o dreno abrindo aviso a cada
+    // tentativa — cinco avisos por evento, que é como a Central deixa de ser lida.
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "error", detail: "timeout" }]);
+    const { admin, chamadas } = dublarAdmin([{ ...LINHA, attempts: 0 }]);
+
+    const resumo = await drainEventLog(admin as never);
+
+    expect(resumo.failed).toBe(1);
+    expect(resumo.dead).toBe(0);
+    expect(avisos(chamadas), "avisou antes de o evento morrer").toHaveLength(0);
+  });
+
+  it("com aviso do mesmo kind já aberto, não abre outro", async () => {
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "error", detail: "boom" }]);
+    const { admin, chamadas } = dublarAdmin([MORIBUNDO], { id: "aviso-1" });
+
+    await drainEventLog(admin as never);
+
+    expect(avisos(chamadas), "Central inundada é Central que ninguém abre").toHaveLength(0);
+  });
+
+  it("recusa do INSERT não derruba o dreno", async () => {
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "error", detail: "boom" }]);
+    const { admin } = dublarAdmin([MORIBUNDO]);
+    const original = admin.from;
+    admin.from = (t: string) => {
+      const c = original(t) as Record<string, unknown>;
+      if (t === "agent_inbox_items") {
+        const insert = c.insert as (p: unknown) => unknown;
+        c.insert = (p: unknown) => {
+          insert(p);
+          return { then: (r: (x: unknown) => void) => r({ error: { message: "23514" } }) };
+        };
+      }
+      return c as never;
+    };
+
+    const resumo = await drainEventLog(admin as never);
+
+    expect(resumo.dead, "aviso recusado derrubou o dreno").toBe(1);
   });
 });
