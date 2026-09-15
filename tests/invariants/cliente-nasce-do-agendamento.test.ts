@@ -593,14 +593,17 @@ describe("quem pode ligar", () => {
     expect(await retrato(ORG_D)).toEqual(antes);
   });
 
+  // Do I18 ao I21 a régua é ANTES × DEPOIS, e não "a chave está ausente": se
+  // uma guarda falhar, o vermelho fica no caso que a derrubou, em vez de se
+  // espalhar pelos seguintes como "a D já estava ligada".
   it("I18 · admin de OUTRA organização (B) chamando para a D: 42501 e nada muda", async () => {
-    const antes = await retrato(ORG_D);
+    const antes = { crm: await crmDe(ORG_D), contatos: await retrato(ORG_D) };
     await expect(ligar(ADMIN_B, ORG_D, true)).rejects.toMatchObject({ code: "42501" });
-    expect(await crmDe(ORG_D)).toBeNull();
-    expect(await retrato(ORG_D)).toEqual(antes);
+    expect({ crm: await crmDe(ORG_D), contatos: await retrato(ORG_D) }).toEqual(antes);
   });
 
   it("I19 · sem sessão: authenticated sem sub e service_role — 42501", async () => {
+    const antes = await crmDe(ORG_D);
     await expect(
       comoUsuario(null, RPC, [ORG_D, true], { semClaims: true }),
     ).rejects.toMatchObject({ code: "42501" });
@@ -608,7 +611,7 @@ describe("quem pode ligar", () => {
     await expect(
       comoUsuario(null, RPC, [ORG_D, true], { papel: "service_role" }),
     ).rejects.toMatchObject({ code: "42501" });
-    expect(await crmDe(ORG_D)).toBeNull();
+    expect(await crmDe(ORG_D)).toEqual(antes);
   });
 
   it("I20 · admin com fator TOTP verificado: aal1 recusa pela MFA, aal2 liga", async () => {
@@ -648,7 +651,7 @@ describe("quem pode ligar", () => {
        values ($1, $2, $3, $4, 'support_readonly', now() + interval '30 minutes')`,
       [suporte, ORG_D, SUPORTE_D, sessao],
     );
-    const antes = await retrato(ORG_D);
+    const antes = { crm: await crmDe(ORG_D), contatos: await retrato(ORG_D) };
     try {
       await expect(ligar(SUPORTE_D, ORG_D, true, { sessao })).rejects.toMatchObject({ code: "42501" });
 
@@ -660,8 +663,7 @@ describe("quem pode ligar", () => {
       );
       await expect(ligar(SUPORTE_D, ORG_D, true, { sessao })).rejects.toMatchObject({ code: "42501" });
 
-      expect(await crmDe(ORG_D)).toBeNull();
-      expect(await retrato(ORG_D)).toEqual(antes);
+      expect({ crm: await crmDe(ORG_D), contatos: await retrato(ORG_D) }).toEqual(antes);
     } finally {
       await pool.query("delete from platform_support_sessions where id = $1", [suporte]);
       await pool.query("delete from platform_admins where user_id = $1", [SUPORTE_D]);
