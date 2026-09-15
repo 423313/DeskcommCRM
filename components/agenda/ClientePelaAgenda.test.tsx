@@ -8,10 +8,18 @@
  * a action. O número mostrado depois vem do CORPO da action (o que o banco
  * contou), não de uma releitura.
  *
- * ⚠️ O CORPO TEM TRÊS NÚMEROS INDEPENDENTES. A fixture anterior montava
+ * ⚠️ O CORPO TEM QUATRO NÚMEROS INDEPENDENTES. A fixture anterior montava
  * `clientes = ganharam`, e foi isso que escondeu a tela afirmando "Nenhum
  * contato tinha horário marcado ainda" sobre dois clientes: religar sem nada
  * novo devolve `{ganharam: 0, clientes: 2}`, medido num banco real.
+ *
+ * O quarto número entrou depois, e pelo mesmo modo de falha do lado IRMÃO: uma
+ * organização cujo único contato tem horário marcado, todos cancelados,
+ * devolve `{ganharam: 0, clientes: 0, perderam: 0}` — e a tela dizia que
+ * ninguém tinha horário. O caso estava PINADO aqui como correto
+ * (`corpo({ganharam: 0, clientes: 0})`), então nenhum gate reprovava. Ele
+ * continua pinado, agora com o quarto número explícito: os dois corpos são
+ * diferentes e têm frases diferentes.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -25,13 +33,19 @@ vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 
 import { ClientePelaAgenda } from "./ClientePelaAgenda";
 
-const corpo = (n: { ganharam: number; clientes: number; perderam?: number }) => ({
+const corpo = (n: {
+  ganharam: number;
+  clientes: number;
+  perderam?: number;
+  soCancelados?: number;
+}) => ({
   ok: true,
   ligado: true,
   mudou: true,
   ganharam_etiqueta: n.ganharam,
   perderam_etiqueta: n.perderam ?? 0,
   clientes: n.clientes,
+  com_agendamento_que_nao_conta: n.soCancelados ?? 0,
 });
 
 async function ligarCom(resposta: ReturnType<typeof corpo>) {
@@ -103,6 +117,19 @@ describe("ClientePelaAgenda", () => {
         "Nenhum contato tinha horário marcado ainda. Quem marcar daqui em diante ganha a etiqueta.",
       ),
     );
+  });
+
+  it("a agenda só tem cancelamento: NÃO diz que ninguém tinha horário marcado", async () => {
+    // O corpo medido em Postgres descartável: organização cujo único contato tem
+    // horário marcado, todos cancelados →
+    // `{clientes: 0, ganharam: 0, perderam: 0, com_agendamento_que_nao_conta: 1}`.
+    // Os três primeiros números são iguais aos do caso acima; só o quarto separa
+    // "a agenda está vazia" de "a agenda só tem cancelamento".
+    const resultado = await ligarCom(corpo({ ganharam: 0, clientes: 0, soCancelados: 1 }));
+    expect(resultado).toHaveTextContent(
+      "Nenhum contato virou cliente: os horários que existem estão cancelados ou marcados como falta.",
+    );
+    expect(resultado).not.toHaveTextContent(/Nenhum contato tinha horário/);
   });
 
   it("religar sem nada novo, com clientes: diz quantos já eram, e NUNCA que ninguém tinha horário", async () => {

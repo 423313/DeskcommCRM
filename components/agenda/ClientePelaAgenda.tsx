@@ -51,12 +51,19 @@ const TEXTO_DO_ERRO: Record<ErroClientePelaAgenda, string> = {
 };
 
 /**
- * A frase do resultado, escolhida pelos TRÊS números que o banco devolve.
+ * A frase do resultado, escolhida pelos QUATRO números que o banco devolve.
  *
  * A versão anterior escolhia só por `ganharam_etiqueta`, e medido num banco
  * real: religar sem nada novo devolve `{ganharam: 0, clientes: 2}`, e a tela
  * afirmava "Nenhum contato tinha horário marcado ainda" sobre dois clientes.
- * Zero etiquetas novas tem três causas diferentes, e cada uma tem sua frase.
+ *
+ * O conserto daquela vez cobriu `clientes > 0` e deixou o RAMO IRMÃO de pé —
+ * medido depois, no mesmo banco: uma organização cujo único contato TEM horário
+ * marcado, todos cancelados, devolve `{ganharam: 0, clientes: 0, perderam: 0}`
+ * e caía na última frase, dizendo que ninguém tinha horário. Numa clínica com
+ * cancelamentos é a primeira frase que se lê depois de ligar. Por isso o banco
+ * passou a contar `com_agendamento_que_nao_conta`: zero etiquetas novas tem
+ * QUATRO causas, e cada uma tem a sua frase.
  */
 function frasesDoResultado(
   r: ResultadoClientePelaAgenda,
@@ -76,7 +83,13 @@ function frasesDoResultado(
             ? t("Nenhum contato novo ganhou a etiqueta: 1 contato já era cliente.")
             : r.perderam_etiqueta > 0
               ? t("Nenhum contato ganhou a etiqueta.")
-              : t("Nenhum contato tinha horário marcado ainda. Quem marcar daqui em diante ganha a etiqueta.");
+              : r.com_agendamento_que_nao_conta > 0
+                ? t(
+                    "Nenhum contato virou cliente: os horários que existem estão cancelados ou marcados como falta.",
+                  )
+                : t(
+                    "Nenhum contato tinha horário marcado ainda. Quem marcar daqui em diante ganha a etiqueta.",
+                  );
 
   const perda =
     r.perderam_etiqueta > 1
@@ -126,6 +139,7 @@ export function ClientePelaAgenda({
           ganharam_etiqueta: r.ganharam_etiqueta,
           perderam_etiqueta: r.perderam_etiqueta,
           clientes: r.clientes,
+          com_agendamento_que_nao_conta: r.com_agendamento_que_nao_conta,
         });
       }
     });
@@ -174,7 +188,7 @@ export function ClientePelaAgenda({
 
       <p className="text-sm text-text-muted">
         {t(
-          "As automações “Quando um contato ganhar uma tag” disparam uma vez por contato: na primeira vez que ele vira cliente com a regra ligada. Não disparam para quem já era cliente ao ligar, nem de novo para quem cancela e marca outra vez.",
+          "As automações “Quando um contato ganhar uma tag” disparam uma vez por contato: na primeira vez que o sistema acrescenta a etiqueta. Não disparam para quem já era cliente ao ligar, para quem já tinha a etiqueta posta à mão, nem de novo para quem cancela e marca outra vez.",
         )}
       </p>
 

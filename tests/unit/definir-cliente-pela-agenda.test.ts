@@ -42,7 +42,14 @@ vi.mock("@/lib/supabase/server", () => ({
 
 const { definirClientePelaAgenda } = await import("@/app/actions/settings/definirClientePelaAgenda");
 
-const LIGOU = { ligado: true, mudou: true, ganharam_etiqueta: 3, perderam_etiqueta: 0, clientes: 3 };
+const LIGOU = {
+  ligado: true,
+  mudou: true,
+  ganharam_etiqueta: 3,
+  perderam_etiqueta: 0,
+  clientes: 3,
+  com_agendamento_que_nao_conta: 0,
+};
 
 beforeEach(() => {
   papel = "admin";
@@ -126,6 +133,17 @@ describe("definirClientePelaAgenda", () => {
     const r = await definirClientePelaAgenda(true);
     expect(r).toMatchObject({ ok: true, mudou: false });
     expect(auditadas).toEqual([]);
+  });
+
+  it("corpo SEM o quarto número (banco que ainda não aplicou o apêndice) → 0, e a action não falha", async () => {
+    // `com_agendamento_que_nao_conta` é novo no corpo da RPC. Exigi-lo
+    // transformaria a versão antiga da função — que existe, no clone que ainda
+    // não rodou o `update.sh` — em "Não consegui salvar essa mudança agora", com
+    // a regra JÁ ligada no banco: o pior desfecho, porque a tela mente sobre um
+    // efeito que aconteceu. O campo tem default, e a tela cai na frase antiga.
+    const { com_agendamento_que_nao_conta: _, ...antigo } = LIGOU;
+    respostaDaRpc = { data: antigo, error: null };
+    expect(await definirClientePelaAgenda(true)).toEqual({ ok: true, ...LIGOU });
   });
 
   it("corpo inesperado da RPC → falha, sem auditoria", async () => {

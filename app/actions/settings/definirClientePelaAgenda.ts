@@ -38,6 +38,15 @@ const resultadoSchema = z.object({
   ganharam_etiqueta: z.number().int().nonnegative(),
   perderam_etiqueta: z.number().int().nonnegative(),
   clientes: z.number().int().nonnegative(),
+  /**
+   * Contatos que TÊM horário e nenhum que conte (todos cancelados ou faltas).
+   * É o que distingue "esta agenda está vazia" de "esta agenda só tem
+   * cancelamento" — sem ele a tela dizia a primeira frase sobre a segunda
+   * organização. `.default(0)` porque a coluna é nova no corpo da RPC: um banco
+   * que ainda não aplicou o apêndice devolve o corpo antigo, e um campo
+   * obrigatório transformaria isso em "Não consegui salvar essa mudança agora".
+   */
+  com_agendamento_que_nao_conta: z.number().int().nonnegative().default(0),
 });
 
 export type ResultadoClientePelaAgenda = z.infer<typeof resultadoSchema>;
