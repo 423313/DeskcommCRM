@@ -24082,6 +24082,28 @@ comment on column public.calendar_appointments.reminder_sent_offsets_minutes is
 
 comment on column public.calendar_appointments.reminder_sent_at is
   'Instante do último lembrete enviado. Informativo: quem decide o que ainda falta enviar é reminder_sent_offsets_minutes.';
+-- ---- aniversário do contato (migration 0252) ----
+-- `contacts.birthdate` existia e não acionava nada. `birthday_md` é o mês e o
+-- dia num inteiro (914 = 14 de setembro), gerado e armazenado, para a varredura
+-- diária buscar por igualdade em vez de varrer a tabela.
+--
+-- `extract` sobre `date` é immutable, que é o que a coluna gerada exige;
+-- `to_char` não é (depende de configuração regional) e o Postgres a recusaria.
+alter table public.contacts
+  add column if not exists birthday_md integer
+  generated always as (
+    case
+      when birthdate is null then null
+      else (extract(month from birthdate)::integer * 100 + extract(day from birthdate)::integer)
+    end
+  ) stored;
+
+create index if not exists contacts_org_aniversario_idx
+  on public.contacts (organization_id, birthday_md)
+  where birthday_md is not null;
+
+comment on column public.contacts.birthday_md is
+  'Mês e dia do aniversário num inteiro (914 = 14 de setembro), derivado de birthdate. Existe para a varredura diária do cron contact-birthdays poder buscar por igualdade em vez de varrer a tabela.';
 
 notify pgrst, 'reload schema';
 
@@ -24192,7 +24214,7 @@ update public.event_log
    and public.fn_event_log_e_registro(event_type);
 -- ---- Credencial de enfeite não derruba a leitura (migration 0240) ----
 --
--- Racional completo no cabeçalho da migration 0242. Em uma linha: não tente
+-- Racional completo no cabeçalho da migration 0252. Em uma linha: não tente
 -- decifrar o que não pode ser cifra — devolva null, que é o contrato que os
 -- leitores já tratam (`lib/webhooks/secrets.ts`).
 --

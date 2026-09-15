@@ -3185,6 +3185,7 @@ export type Database = {
           avatar_storage_path: string | null
           avatar_updated_at: string | null
           birthdate: string | null
+          birthday_md: number | null
           blocked_at: string | null
           blocked_reason: string | null
           consent: Json
