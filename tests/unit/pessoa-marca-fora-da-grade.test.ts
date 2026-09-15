@@ -28,6 +28,15 @@
  * barrarem por acidente, ou não barrarem por acidente. Método que o dublê não
  * conhece estoura, em vez de devolver vazio.
  *
+ * ## A metade GRADE da coleta única
+ *
+ * A grade (IA) e o encaixe (pessoa) leem a mesma `coletaOQueOcupa`, mas por
+ * caminhos diferentes: o encaixe a chama direto; a grade a recebe dentro de
+ * `horariosLivresDaOrg` e a entrega ao motor. Os casos do encaixe não enxergam o
+ * caminho da grade — medido pelo revisor do lote 8: com `ocupados: []` na
+ * chamada do motor, ou sem o filtro de dono do Google na coleta, a suíte seguia
+ * verde. Por isso a IA também é conferida aqui, NA grade, contra o que ocupa.
+ *
  * ## Comando
  *
  *     npx vitest run tests/unit/pessoa-marca-fora-da-grade.test.ts
@@ -150,8 +159,8 @@ function agendamento(inicio: string, fim: string, extra: Linha = {}): Linha {
   };
 }
 
-/** Uma linha de `calendar_selected_external_events`, com o embed da conexão. */
-function eventoDoGoogle(inicio: string, fim: string): Linha {
+/** Uma linha de `calendar_selected_external_events`, com o embed da conexão — por padrão do mesmo dono. */
+function eventoDoGoogle(inicio: string, fim: string, dono: string = DONO): Linha {
   return {
     organization_id: ORG,
     connection_id: CONEXAO,
@@ -159,7 +168,7 @@ function eventoDoGoogle(inicio: string, fim: string): Linha {
     ends_at: fim,
     transparency: "opaque",
     status: "confirmed",
-    calendar_connections: { user_id: DONO, status: "healthy" },
+    calendar_connections: { user_id: dono, status: "healthy" },
   };
 }
 
@@ -312,6 +321,42 @@ describe("marcar — a regra no ponto de uso", () => {
       criados(banco),
       "o encaixe marcou em cima de um compromisso do Google Agenda que a grade estava escondendo",
     ).toHaveLength(0);
+  });
+});
+
+describe("a grade (IA) — a mesma coleta que o encaixe lê", () => {
+  // Todos NA grade e dentro do expediente: a única razão para recusar é o que
+  // ocupa. O CONTROLE de "marcar — a regra no ponto de uso" prova que, com a
+  // agenda livre, este mesmo pedido passa.
+
+  it("a IA NA grade em cima de um evento do GOOGLE do mesmo responsável é RECUSADA", async () => {
+    const banco = agenda({ eventosDoGoogle: [eventoDoGoogle(NA_GRADE, "2026-10-07T14:00:00.000Z")] });
+    await expect(
+      marcarAgendamentoHandler(banco.client, ctx(AGENTE), { event_type_id: TIPO, starts_at: NA_GRADE }),
+    ).rejects.toMatchObject(RECUSA);
+    expect(
+      criados(banco),
+      "a IA marcou em cima do Google Agenda do responsável — a grade não recebeu o que a coleta trouxe",
+    ).toHaveLength(0);
+  });
+
+  it("a IA NA grade com evento do Google de OUTRO responsável MARCA — a agenda dele não é a deste dono", async () => {
+    const banco = agenda({
+      eventosDoGoogle: [eventoDoGoogle(NA_GRADE, "2026-10-07T14:00:00.000Z", OUTRO_DONO)],
+    });
+    await marcarAgendamentoHandler(banco.client, ctx(AGENTE), { event_type_id: TIPO, starts_at: NA_GRADE });
+    expect(
+      criados(banco),
+      "o Google de outra pessoa ocupou a agenda deste responsável — a coleta perdeu o filtro de dono",
+    ).toHaveLength(1);
+  });
+
+  it("a IA NA grade em cima de OUTRO AGENDAMENTO é RECUSADA", async () => {
+    const banco = agenda({ agendamentos: [agendamento(NA_GRADE, "2026-10-07T14:00:00.000Z")] });
+    await expect(
+      marcarAgendamentoHandler(banco.client, ctx(AGENTE), { event_type_id: TIPO, starts_at: NA_GRADE }),
+    ).rejects.toMatchObject(RECUSA);
+    expect(criados(banco), "a IA marcou em cima de um compromisso que já existe").toHaveLength(0);
   });
 });
 
