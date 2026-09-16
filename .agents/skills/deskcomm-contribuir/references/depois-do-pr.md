@@ -46,9 +46,10 @@ faltar, resolve conflito preservando os seus commits, e responde com um veredito
 que **não** mediu. O merge e o corte da versão são do mantenedor; a versão só chega em quem instalou
 quando a tag sai — merge na `main` não é entrega.
 
-Onde o conserto do lado de cá entra: se o PR permite edição por mantenedores, na **sua** branch —
-sempre commit novo ou merge da `main`, nunca `--force` nem rebase, com aviso no PR antes; se não
-permite, numa branch nossa.
+Onde o conserto do lado de cá entra: se o PR permite edição por mantenedores, ajustes e a `main`
+trazida para dentro podem ir na **sua** branch — sempre commit novo ou merge da `main`, nunca
+`--force` nem rebase, com aviso no PR antes. Vai numa branch nossa quando o PR não permite edição,
+ou quando o trabalho precisa separar escopo: tirar uma parte para outro PR, reimplementar, extrair.
 
 Crédito: os seus commits ficam com o seu nome. Se o PR foi reconstruído do lado de cá (acontece
 quando o conflito é grande), o commit que leva o seu trabalho sai com **você como autor** —

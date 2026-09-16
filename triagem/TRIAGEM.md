@@ -815,10 +815,13 @@ fora.
 
 ## 8-0. O PR que não se mergeia — se reconstrói
 
-O passe 8-bis abaixo diz que a saída para conflito é `git merge <head-do-PR>`. Há **uma** exceção, e
-ela é absoluta: quando o branch traz um arquivo que **não pode entrar** — dump de banco, binário,
+O passe 8-bis abaixo diz que a saída para conflito é trazer a `main` para dentro — na branch do PR,
+quando ele permite edição por mantenedores, ou numa branch nossa com `git merge <head-do-PR>`. Há
+**uma** exceção, e ela é absoluta: quando o branch traz um arquivo que **não pode entrar** — dump de banco, binário,
 credencial, artefato de sessão. Aí `merge` está fora, e `--squash` também: os dois levam a árvore do
 branch, e **história de git público é permanente**. Commit posterior de remoção não tira o blob.
+Isto vale também para o PR que permite edição: empurrar a remoção na branch dele deixa o blob no
+histórico do PR, então o caso se reconstrói numa branch nossa.
 
 ```bash
 git worktree add --detach <wt> origin/main && cd <wt> && git switch -c triagem/<n>-<slug>
@@ -1214,8 +1217,9 @@ gh release list --limit 1                                # a release é a Latest
 
 ## 12-ter. O PR cujo conteúdo entrou DERIVADO — o merge de proveniência
 
-Reconciliação (passe 8) produz uma branch **nossa** que não contém o head do contribuinte: o
-conteúdo foi reimplementado a partir do que ele achou, porque a versão original conflitava com o
+Quando a reconciliação (passe 8) não pôde acontecer na branch do PR — ele não permite edição por
+mantenedores, ou o trabalho separou escopo —, ela produz uma branch **nossa** que não contém o head
+do contribuinte: o conteúdo foi reimplementado a partir do que ele achou, porque a versão original conflitava com o
 estado de hoje ou carregava um defeito que a reconciliação consertou. O commit que traz esse
 conteúdo sai com a autoria dele — `--author` com o nome e o e-mail que ele usa nos próprios commits
 (passe 8). O merge de proveniência abaixo registra a origem no grafo; um não substitui o outro.
@@ -1317,8 +1321,10 @@ O que **não** muda quando ela passa, porque não era ela que segurava:
 - **Nada de UI entra sem prova pela tela.** DoD 12.
 - **Nenhum PR é fechado em silêncio.** Fechar é a única ação verdadeiramente irreversível para o
   contribuidor — o código dele sobrevive num fork, mas a disposição de contribuir de novo, não.
-  Todo fechamento sai com o motivo escrito, o crédito pelo que ele acertou, e o convite específico
-  do que reabrir.
+  Todo fechamento sai com o motivo escrito e o crédito pelo que ele acertou. Quando há o que
+  reabrir, o convite é específico. Quando o PR fecha porque entrou só em parte e o resto foi
+  descartado, o texto diz o que entrou, com o link, e por que o resto não entra (12-ter): convidar a
+  reabrir o que foi descartado desmentiria o descarte.
 - **O que é decisão de PRODUTO continua sendo do dono.** Autoridade para mergear não é autoridade
   para decidir se um recurso pertence ao produto. Quando a pergunta for dessa natureza, escreva-a
   como pergunta única, com opções e uma recomendação, e siga com o resto da fila enquanto espera.

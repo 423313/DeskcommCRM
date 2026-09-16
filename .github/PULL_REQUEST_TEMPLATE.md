@@ -48,4 +48,4 @@
 
 Convenções completas em [`CLAUDE.md`](../CLAUDE.md) · fluxo em [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
-<sub>Seu trabalho aparece no seu perfil do GitHub? Se você commitou de um servidor, pode estar assinado como `root`, e o GitHub não associa isso à sua conta. `git config --global user.email "<e-mail da sua conta>"` resolve dali em diante — e se pedir, a gente corrige o histórico.</sub>
+<sub>Seu trabalho aparece no seu perfil do GitHub? Se você commitou de um servidor, pode estar assinado como `root`, e o GitHub não associa isso à sua conta. `git config --global user.email "<e-mail da sua conta>"` resolve dali em diante — e se pedir, a gente associa os commits antigos à sua conta pelo `.mailmap`, sem reescrever nada.</sub>
