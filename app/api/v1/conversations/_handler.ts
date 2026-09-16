@@ -17,7 +17,7 @@ import type {
 } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
 import { normalizarTermoDeBusca } from "@/lib/inbox/termo-de-busca";
-import { ORDEM_DA_ESPERA } from "@/lib/inbox/comando-da-conversa";
+import { ORDEM_DA_ESPERA, ehAFila } from "@/lib/inbox/comando-da-conversa";
 
 /**
  * Prepara o termo digitado para viajar dentro de um `or=` do PostgREST.
@@ -159,7 +159,7 @@ export async function listConversationsHandler(
   // a ordenação por tempo de espera sumiria **sem nenhum sintoma na tela**: a
   // lista continuaria populada, só que ordenada por atividade recente, e quem
   // espera desde ontem afundaria embaixo de quem escreveu agora.
-  const isQueue = q.comando?.includes("aguardando") ?? q.assigned_to === "unassigned";
+  const isQueue = ehAFila(q);
   // A régua da Fila não se escreve aqui: vem de `ORDEM_DA_ESPERA`, a mesma que
   // numera a posição da linha na tela e o número que o cliente ouve. Enquanto
   // cada lugar tinha a sua cópia, trocar uma só fazia a lista ordenar por uma

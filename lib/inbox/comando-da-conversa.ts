@@ -347,6 +347,23 @@ export function comandosDaFila(automaticoDaOrg?: boolean): ComandoDoBanco[] {
  * a sua, a mesma conversa poderia aparecer em 2º numa e 5ª na outra, ordenada por
  * uma pergunta e numerada por outra, sem nada ficar vermelho.
  */
+/**
+ * "Este pedido é o da Fila?" — a mesma pergunta na rota e na lista.
+ *
+ * A ordem já mora em `ORDEM_DA_ESPERA`, mas o PREDICADO que decide se ela vale
+ * continuava escrito duas vezes: em `app/api/v1/conversations/_handler.ts` (que
+ * ordena) e em `components/inbox/ConversationList.tsx` (que numera "1º, 2º…" e
+ * mostra o tempo de espera). Ganhar uma condição num só dos dois — uma aba nova,
+ * um filtro — produz a tela ordenada por uma pergunta e numerada por outra, sem
+ * nada ficar vermelho. É a mesma classe que o #994 veio fechar para a ordem.
+ */
+export function ehAFila(f: {
+  comando?: readonly string[] | null;
+  assigned_to?: string | null;
+}): boolean {
+  return f.comando?.includes("aguardando") ?? f.assigned_to === "unassigned";
+}
+
 export const ORDEM_DA_ESPERA = {
   coluna: "last_inbound_at",
   opcoes: { ascending: true, nullsFirst: false },

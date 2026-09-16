@@ -175,6 +175,30 @@ describe("a régua da ordem tem um lugar só", () => {
     }
   });
 
+  it("⭐ o PREDICADO da Fila também vem de um lugar só", () => {
+    // A ordem passou a ter dono (acima), e o predicado que decide se ela vale
+    // continuava em duas cópias: a rota (que ordena) e a lista (que numera "1º,
+    // 2º…" e mostra o tempo de espera). Ganhar uma condição num só dos dois
+    // produz a tela ordenada por uma pergunta e numerada por outra — sem nada
+    // ficar vermelho, que é exatamente o modo de falha que este arquivo vigia.
+    const PROIBIDO = /includes\(\s*["']aguardando["']\s*\)/;
+    // Controle: a régua morde quando o literal existe.
+    expect(PROIBIDO.test('filters.comando?.includes("aguardando")')).toBe(true);
+
+    for (const caminho of [
+      "app/api/v1/conversations/_handler.ts",
+      "components/inbox/ConversationList.tsx",
+    ]) {
+      const semComentarios = fonte(caminho)
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      expect(semComentarios, `${caminho}: o predicado da Fila voltou a ser escrito à mão`).not.toMatch(
+        PROIBIDO,
+      );
+      expect(fonte(caminho), `${caminho}: não usa ehAFila`).toContain("ehAFila");
+    }
+  });
+
   it("⛔ o literal não voltou como régua própria — e a cerca morde", () => {
     const PROIBIDO = /\.order\(\s*["']last_inbound_at["']/;
     // O controle: uma varredura que nasce com zero achados pode estar certa ou
