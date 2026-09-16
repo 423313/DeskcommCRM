@@ -8775,6 +8775,12 @@ export const DICIONARIO: Traducoes = {
   "Mostrando as 500 primeiras etiquetas em ordem alfabética. Se a que você procura não está aqui, arrume primeiro as que aparecem.": {
     es: "Mostrando las primeras 500 etiquetas en orden alfabético. Si la que buscas no está aquí, arregla primero las que aparecen.",
   },
+  // A recusa `mfa_required` do painel de etiquetas: a única frase do mapa de erros
+  // que ficou sem entrada — medida pela tela em
+  // `tests/unit/tags-vocabulario-painel-em-espanhol.test.tsx`.
+  "Confirme o segundo fator para mudar as etiquetas.": {
+    es: "Confirma el segundo factor para cambiar las etiquetas.",
+  },
 };
 
 /**
