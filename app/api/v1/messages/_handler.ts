@@ -1,3 +1,4 @@
+import { assertProspectingDelivery } from "@/lib/prospecting/guard";
 import { assertAgentOperationSupabase } from "@/lib/ai/agents/operation";
 import {
   assertApprovedReplySupabase,
@@ -288,6 +289,7 @@ export async function sendMessageHandler(
   ctx: HandlerCtx,
   input: SendMessageInput,
 ): Promise<Message> {
+  if (ctx.prospectingDelivery) await assertProspectingDelivery(supabase, ctx.prospectingDelivery);
   if (ctx.meetingDelivery) await assertMeetingDeliverySupabase(supabase, ctx.meetingDelivery);
   if (ctx.approvedReply) await assertApprovedReplySupabase(supabase, ctx.approvedReply);
   if (ctx.agentOperation) await assertAgentOperationSupabase(supabase, ctx.agentOperation);
@@ -681,6 +683,7 @@ export async function sendMessageHandler(
       const checkBoundary = async () => {
         await guardServiceEffect();
         await guardAgendaEffect();
+        if (ctx.prospectingDelivery) await assertProspectingDelivery(supabase, ctx.prospectingDelivery);
         if (ctx.meetingDelivery) await assertMeetingDeliverySupabase(supabase, ctx.meetingDelivery);
         if (ctx.proactiveContext) await assertAgendaEffectSupabase(supabase, ctx.proactiveContext);
         if (ctx.serviceBoundary) await assertServiceBoundarySupabase(supabase, ctx.serviceBoundary);

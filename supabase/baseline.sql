@@ -4895,10 +4895,12 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
--- =====================================================================-- COMPLEMENTO DO BASELINE (não capturado pelo dump --schema public):
+-- ============================================================================
+-- COMPLEMENTO DO BASELINE (não capturado pelo dump --schema public):
 --   storage buckets + policies (migrations 0014/0017) e realtime publication.
 --   Aplicar DEPOIS do schema public (dependem de public.user_organizations).
--- =====================================================================
+-- ============================================================================
+
 -- ---- storage: bucket ai-policy + policies (migration 0014) ----
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -6420,13 +6422,15 @@ create policy "user_orgs_select" on public.user_organizations
     or public.fn_is_platform_admin()
   );
 
--- =====================================================================-- Dumps do Supabase zeram o search_path (set_config('search_path','',false));
+-- ============================================================================
+-- Dumps do Supabase zeram o search_path (set_config('search_path','',false));
 -- os apêndices da fusão criam objetos NÃO-qualificados — restaura o público.
 select pg_catalog.set_config('search_path', 'public, extensions', false);
 
 -- APÊNDICE 0050_agent_harness (fusão Vendaval) — idempotente, espelho exato da
 -- migration 20260719000000 (kit self-host aplica via install.sh/update.sh).
--- =====================================================================
+-- ============================================================================
+
 -- 0050_agent_harness — schema do motor SDR (harness) portado do Vendaval para o
 -- banco do CRM (fusão). Mapeamento canônico (lib/agent-engine/PORT-NOTES.md):
 --   tenants → organizations · tenant_id → organization_id · leads → contacts ·
@@ -6437,10 +6441,12 @@ select pg_catalog.set_config('search_path', 'public, extensions', false);
 -- is_anonymized / conversations.bot_silenced_until já existem).
 -- Idempotente (if not exists / or replace / do $$); SEM begin/commit; psql puro.
 
--- =====================================================================-- Escalação humana do RUNTIME (ex-inbox_items do Vendaval; a UI lê daqui).
+-- ============================================================================
+-- Escalação humana do RUNTIME (ex-inbox_items do Vendaval; a UI lê daqui).
 -- organization_id NULL = plataforma (ex.: infra) — visível só ao service role.
 -- Kind já inclui 'judge_unaligned' (extensão da 0025 do Vendaval, embutida).
--- =====================================================================create table if not exists agent_inbox_items (
+-- ============================================================================
+create table if not exists agent_inbox_items (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid references organizations(id) on delete cascade,
   kind text not null check (kind in
@@ -6457,8 +6463,10 @@ select pg_catalog.set_config('search_path', 'public, extensions', false);
 create index if not exists idx_agent_inbox_items_open on agent_inbox_items (organization_id, created_at desc)
   where status = 'open';
 
--- =====================================================================-- 0002 — fila durável FOR UPDATE SKIP LOCKED com lane por contact_id.
--- =====================================================================create table if not exists job_queue (
+-- ============================================================================
+-- 0002 — fila durável FOR UPDATE SKIP LOCKED com lane por contact_id.
+-- ============================================================================
+create table if not exists job_queue (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   contact_id uuid references contacts(id) on delete cascade, -- NULL para watchdog/flywheel (jobs sem contato)
@@ -6491,9 +6499,11 @@ create unique index if not exists uniq_job_queue_one_running_per_contact on job_
 create unique index if not exists uniq_job_queue_source_event on job_queue (organization_id, source_event_id)
   where source_event_id is not null;
 
--- =====================================================================-- 0003 — ledger de envio idempotente. Uma linha por mensagem `seq` do turno; `id`
+-- ============================================================================
+-- 0003 — ledger de envio idempotente. Uma linha por mensagem `seq` do turno; `id`
 -- É a idempotency_key da tentativa LÓGICA (re-attempt após 'failed' rotaciona o id).
--- =====================================================================create table if not exists send_ledger (
+-- ============================================================================
+create table if not exists send_ledger (
   id uuid primary key default gen_random_uuid(), -- a idempotency_key da tentativa lógica corrente
   organization_id uuid not null references organizations(id) on delete cascade,
   contact_id uuid references contacts(id) on delete cascade,
@@ -6519,11 +6529,13 @@ create unique index if not exists uniq_job_queue_source_event on job_queue (orga
 -- O throttle/spinning da cadeia before_send consulta envios recentes por org.
 create index if not exists idx_send_ledger_recent on send_ledger (organization_id, created_at desc);
 
--- =====================================================================-- Imutabilidade compartilhada das tabelas *_versions: conteúdo publicado é
+-- ============================================================================
+-- Imutabilidade compartilhada das tabelas *_versions: conteúdo publicado é
 -- imutável — mudança = versão nova; rollback = mover o ponteiro. DELETE fica de
 -- fora de propósito (o cascade de organizations precisa passar; versão apontada
 -- é protegida pelo FK do ponteiro correspondente).
--- =====================================================================create or replace function fn_agent_versions_immutable() returns trigger
+-- ============================================================================
+create or replace function fn_agent_versions_immutable() returns trigger
 language plpgsql as $fn$
 begin
   raise exception '% é imutável: mudança = versão nova; rollback = mover o ponteiro (%)',
@@ -6531,11 +6543,13 @@ begin
 end;
 $fn$;
 
--- =====================================================================-- 0004 — playbook em camadas versionado + carga por ponteiro. 1 linha por CAMADA
+-- ============================================================================
+-- 0004 — playbook em camadas versionado + carga por ponteiro. 1 linha por CAMADA
 -- (platform|tenant|campaign); o runtime carrega por ponteiro no início de cada
 -- run: trocar versão/rollback = mover ponteiro, sem restart. Camada platform é
 -- global (organization_id NULL); tenant/campaign pertencem a uma org.
--- =====================================================================create table if not exists playbook_versions (
+-- ============================================================================
+create table if not exists playbook_versions (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid references organizations(id) on delete cascade, -- NULL = plataforma (global)
   layer text not null check (layer in ('platform', 'tenant', 'campaign')),
@@ -6567,10 +6581,12 @@ create unique index if not exists uniq_playbook_pointers_org
 create unique index if not exists uniq_playbook_pointers_platform
   on playbook_pointers (layer) where organization_id is null;
 
--- =====================================================================-- 0005 + 0012 — espelho de saúde da sessão WAHA + circuito de saúde do número.
+-- ============================================================================
+-- 0005 + 0012 — espelho de saúde da sessão WAHA + circuito de saúde do número.
 -- status_changed_at só avança quando o status MUDA (métrica "tempo no estado").
 -- Os holds de status e de saúde coexistem — job retido sob QUALQUER hold.
--- =====================================================================create table if not exists channel_session_health (
+-- ============================================================================
+create table if not exists channel_session_health (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   channel_session_id uuid not null references channel_sessions(id) on delete cascade,
@@ -6602,10 +6618,12 @@ create table if not exists watchdog_cursors (
   updated_at timestamptz not null default now()
 );
 
--- =====================================================================-- 0006 — toda chamada de modelo (custo, cache, atribuição); agregado mensal =
+-- ============================================================================
+-- 0006 — toda chamada de modelo (custo, cache, atribuição); agregado mensal =
 -- enforcement do budget. Credenciais BYOK são do CRM (ai_provider_credentials) —
 -- org_llm_credentials do Vendaval NÃO foi portada.
--- =====================================================================create table if not exists llm_calls (
+-- ============================================================================
+create table if not exists llm_calls (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   contact_id uuid references contacts(id) on delete set null,
@@ -6624,10 +6642,12 @@ create table if not exists watchdog_cursors (
 );
 create index if not exists idx_llm_calls_org_time on llm_calls (organization_id, created_at);
 
--- =====================================================================-- 0007 — artefato durável do loop do agente: cada run fecha escrevendo um
+-- ============================================================================
+-- 0007 — artefato durável do loop do agente: cada run fecha escrevendo um
 -- checkpoint; o run seguinte do MESMO contato abre lendo o mais recente —
 -- sessões descartáveis, artefatos duráveis. Conteúdo validado por Zod no handler.
--- =====================================================================create table if not exists lead_checkpoints (
+-- ============================================================================
+create table if not exists lead_checkpoints (
   id uuid primary key default gen_random_uuid(),
   -- ordem de escrita estrita (created_at pode empatar) — abertura lê por seq.
   seq bigint generated always as identity,
@@ -6643,9 +6663,11 @@ create index if not exists idx_llm_calls_org_time on llm_calls (organization_id,
 create index if not exists idx_lead_checkpoints_latest
   on lead_checkpoints (organization_id, contact_id, seq desc);
 
--- =====================================================================-- 0008 — estado do funil por contato. O modelo MARCA avanços via tool; quem
+-- ============================================================================
+-- 0008 — estado do funil por contato. O modelo MARCA avanços via tool; quem
 -- valida a transição é a máquina de estados NO CÓDIGO — o CHECK é backstop.
--- =====================================================================create table if not exists lead_state (
+-- ============================================================================
+create table if not exists lead_state (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   contact_id uuid not null references contacts(id) on delete cascade,
@@ -6673,9 +6695,11 @@ create table if not exists lead_state_transitions (
 create index if not exists idx_lead_state_transitions_contact
   on lead_state_transitions (organization_id, contact_id, seq desc);
 
--- =====================================================================-- 0009 — métricas de 1ª classe persistidas. Labels SÓ com ids/contagens — PII
+-- ============================================================================
+-- 0009 — métricas de 1ª classe persistidas. Labels SÓ com ids/contagens — PII
 -- jamais entra. organization_id NULL = plataforma.
--- =====================================================================create table if not exists metrics (
+-- ============================================================================
+create table if not exists metrics (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid references organizations(id) on delete cascade, -- null = plataforma
   name text not null,
@@ -6686,10 +6710,12 @@ create index if not exists idx_lead_state_transitions_contact
 create index if not exists idx_metrics_name_time on metrics (name, created_at desc);
 create index if not exists idx_metrics_org_name_time on metrics (organization_id, name, created_at desc);
 
--- =====================================================================-- 0010 + 0011 + 0012 — knobs anti-ban por número/sessão + ledger de pacing.
+-- ============================================================================
+-- 0010 + 0011 + 0012 — knobs anti-ban por número/sessão + ledger de pacing.
 -- Coluna NULL = default conservador no código (knobs, nunca constantes). O cap
 -- diário ABSOLUTO não mora aqui: fonte única é channel_sessions.daily_message_limit.
--- =====================================================================create table if not exists channel_knobs (
+-- ============================================================================
+create table if not exists channel_knobs (
   organization_id uuid not null references organizations(id) on delete cascade,
   channel_session_id uuid not null references channel_sessions(id) on delete cascade,
   throttle_ms integer,                -- intervalo mínimo entre envios do número
@@ -6744,10 +6770,12 @@ create table if not exists outbound_copies (
 create index if not exists idx_outbound_copies_session
   on outbound_copies (organization_id, channel_session_id, sent_at desc);
 
--- =====================================================================-- 0013 — cron persistente POR CONTATO. Irmão da fila: a fila processa AGORA, o
+-- ============================================================================
+-- 0013 — cron persistente POR CONTATO. Irmão da fila: a fila processa AGORA, o
 -- cron AGENDA e, no disparo, ENFILEIRA um job em job_queue. Sobrevive a restart
 -- porque TODO o estado mora aqui.
--- =====================================================================create table if not exists cron_jobs (
+-- ============================================================================
+create table if not exists cron_jobs (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   contact_id uuid not null references contacts(id) on delete cascade,
@@ -6780,10 +6808,12 @@ create index if not exists idx_outbound_copies_session
 create index if not exists idx_cron_jobs_due on cron_jobs (next_run_at)
   where enabled = true;
 
--- =====================================================================-- 0014 — templates de re-entrada versionados + ponteiro. Uma versão guarda N
+-- ============================================================================
+-- 0014 — templates de re-entrada versionados + ponteiro. Uma versão guarda N
 -- VARIANTES pt-br de spinning; a re-entrada determinística envia a variante
 -- DIRETO pela cadeia de guardrails, sem LLM — custo $0.
--- =====================================================================create table if not exists reentry_template_versions (
+-- ============================================================================
+create table if not exists reentry_template_versions (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   variants text[] not null check (array_length(variants, 1) >= 1),
@@ -6801,12 +6831,14 @@ create table if not exists reentry_template_pointers (
   updated_at timestamptz not null default now()
 );
 
--- =====================================================================-- 0015 + 0016 — memória durável por contato. O ÍNDICE (headlines) é injetado no
+-- ============================================================================
+-- 0015 + 0016 — memória durável por contato. O ÍNDICE (headlines) é injetado no
 -- sufixo do prompt com orçamento fixo; o CORPO vem sob demanda. Hard cap imposto
 -- na ESCRITA (recusa nota que estouraria) — sem truncamento silencioso.
 -- Nota de um contato NUNCA aparece em run de outro (query sempre filtra
 -- organization_id + contact_id de fonte confiável).
--- =====================================================================create table if not exists lead_notes (
+-- ============================================================================
+create table if not exists lead_notes (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   contact_id uuid not null references contacts(id) on delete cascade,
@@ -6823,11 +6855,13 @@ create table if not exists reentry_template_pointers (
 create index if not exists idx_lead_notes_contact
   on lead_notes (organization_id, contact_id, created_at);
 
--- =====================================================================-- 0017 — playbooks SITUACIONAIS como skills versionadas com disclosure
+-- ============================================================================
+-- 0017 — playbooks SITUACIONAIS como skills versionadas com disclosure
 -- progressivo: só name+description (o ÍNDICE) reside no prompt; o body carrega
 -- SÓ quando o matcher if-then DETERMINÍSTICO dispara. platform = global
 -- (organization_id NULL, ex.: "STOP ambíguo"/compliance).
--- =====================================================================create table if not exists skill_versions (
+-- ============================================================================
+create table if not exists skill_versions (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid references organizations(id) on delete cascade, -- NULL = plataforma (global)
   name text not null check (length(name) > 0),
@@ -6854,9 +6888,11 @@ create unique index if not exists uniq_skill_pointers_org
 create unique index if not exists uniq_skill_pointers_platform
   on skill_pointers (name) where organization_id is null;
 
--- =====================================================================-- 0018 — tabela de preços/promessas versionada por ponteiro (anti-"vendo por
+-- ============================================================================
+-- 0018 — tabela de preços/promessas versionada por ponteiro (anti-"vendo por
 -- R$1"): o gate before_send carrega por ponteiro sob o lock de cada tentativa.
--- =====================================================================create table if not exists promise_table_versions (
+-- ============================================================================
+create table if not exists promise_table_versions (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   -- { minPriceCents?, maxDiscountPercent?, maxInstallments? } — shape validado no
@@ -6878,10 +6914,12 @@ create table if not exists promise_table_pointers (
 create unique index if not exists uniq_promise_table_pointers_org
   on promise_table_pointers (organization_id);
 
--- =====================================================================-- 0019 — template de disclosure "assistente virtual" versionado por ponteiro
+-- ============================================================================
+-- 0019 — template de disclosure "assistente virtual" versionado por ponteiro
 -- (disclosure by design — CDC hoje / PL 2338 amanhã). Injetado na 1ª mensagem
 -- (modo inject) ou exigido do modelo (modo veto).
--- =====================================================================create table if not exists disclosure_template_versions (
+-- ============================================================================
+create table if not exists disclosure_template_versions (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   body text not null, -- texto pt-br do disclosure
@@ -6901,11 +6939,13 @@ create table if not exists disclosure_template_pointers (
 create unique index if not exists uniq_disclosure_template_pointers_org
   on disclosure_template_pointers (organization_id);
 
--- =====================================================================-- 0021 — trace de auditoria da cadeia before_send por tentativa: array de gates
+-- ============================================================================
+-- 0021 — trace de auditoria da cadeia before_send por tentativa: array de gates
 -- avaliados + gate/código do veto (null = passou). Escrita autônoma (fora da tx
 -- serializada) — a auditoria do veto SOBREVIVE ao rollback. PII fora: só
 -- gate/verdict/code/detail — o CORPO da mensagem NUNCA entra aqui.
--- =====================================================================create table if not exists before_send_traces (
+-- ============================================================================
+create table if not exists before_send_traces (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   job_id uuid not null references job_queue(id) on delete cascade, -- RUN = job_queue.id
@@ -6920,10 +6960,12 @@ create unique index if not exists uniq_disclosure_template_pointers_org
 create index if not exists idx_before_send_traces_run
   on before_send_traces (organization_id, job_id, created_at);
 
--- =====================================================================-- 0023 — vereditos dos judges em produção, batch offline (NUNCA inline por
+-- ============================================================================
+-- 0023 — vereditos dos judges em produção, batch offline (NUNCA inline por
 -- mensagem). Idempotente/resumível: unique (dataset, trace_id, dimension) +
 -- on conflict do nothing. PII fora do DB: só metadata/proveniência anonimizada.
--- =====================================================================create table if not exists flywheel_judge_verdicts (
+-- ============================================================================
+create table if not exists flywheel_judge_verdicts (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   dataset text not null,               -- namespace da proveniência (replay)
@@ -6945,10 +6987,12 @@ create index if not exists idx_flywheel_judge_verdicts_run
 create index if not exists idx_flywheel_judge_verdicts_dataset
   on flywheel_judge_verdicts (dataset, dimension);
 
--- =====================================================================-- 0024 — CANDIDATOS de melhoria propostos pelo distiller isolado. NUNCA aplica:
+-- ============================================================================
+-- 0024 — CANDIDATOS de melhoria propostos pelo distiller isolado. NUNCA aplica:
 -- aplicar é o merge sob gate humano. Este é o ÚNICO store de escrita do distiller
 -- (anti "curator-takeover"). Cada proposta REFERENCIA a evidência que a motivou.
--- =====================================================================create table if not exists flywheel_distiller_proposals (
+-- ============================================================================
+create table if not exists flywheel_distiller_proposals (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   run_id uuid not null,
@@ -6964,11 +7008,13 @@ create index if not exists idx_flywheel_distiller_proposals_run
 create index if not exists idx_flywheel_distiller_proposals_dataset
   on flywheel_distiller_proposals (dataset, type);
 
--- =====================================================================-- 0025 — MANUTENÇÃO do judge: rotaciona casos frescos julgados em produção para
+-- ============================================================================
+-- 0025 — MANUTENÇÃO do judge: rotaciona casos frescos julgados em produção para
 -- um POOL de alinhamento (candidatos a novo lote de labels humanos no drift).
 -- A unique é o DEDUP da rotação. (A extensão de kind 'judge_unaligned' já está
 -- embutida no CHECK de agent_inbox_items acima.)
--- =====================================================================create table if not exists judge_alignment_pool (
+-- ============================================================================
+create table if not exists judge_alignment_pool (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   dataset text not null,
@@ -6981,10 +7027,12 @@ create unique index if not exists uq_judge_alignment_pool_key
 create index if not exists idx_judge_alignment_pool_dim
   on judge_alignment_pool (organization_id, dimension);
 
--- =====================================================================-- 0026 — knobs de re-entrada (timing de follow-up + segmentação) versionados +
+-- ============================================================================
+-- 0026 — knobs de re-entrada (timing de follow-up + segmentação) versionados +
 -- ponteiro. O 1º alvo concreto do flywheel: timing não é constante nem env —
 -- é config versionada por org, otimizável e rollbackável pelo ponteiro.
--- =====================================================================create table if not exists reentry_knob_versions (
+-- ============================================================================
+create table if not exists reentry_knob_versions (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   -- { follow_up_window_hours: number>0, enabled_segments: string[] } — shape
@@ -7004,12 +7052,14 @@ create table if not exists reentry_knob_pointers (
   updated_at timestamptz not null default now()
 );
 
--- =====================================================================-- RLS — padrão do repo: tenant_isolation_<tabela>_all via fn_user_org_ids() +
+-- ============================================================================
+-- RLS — padrão do repo: tenant_isolation_<tabela>_all via fn_user_org_ids() +
 -- revoke de anon. Nas tabelas com organization_id nullable (agent_inbox_items,
 -- playbook_versions/pointers, skill_versions/pointers, metrics) a MESMA policy
 -- serve: `null in (...)` nunca é true ⇒ linhas de plataforma são visíveis só ao
 -- service role (que bypassa RLS).
--- =====================================================================do $$
+-- ============================================================================
+do $$
 declare
   t text;
 begin
@@ -7247,9 +7297,11 @@ $$;
 comment on function public.fn_publish_ai_agent_version(uuid, uuid, uuid) is
   'EPIC-13 S-13.06 (fixed in 0026): compares channel_sessions.status against WORKING (uppercase), matching channel_sessions_status_check. 0024/0025 compared against lowercase working and always raised channel_session_offline.';
 
--- =====================================================================-- 0053 — Operação Visível F3: rastro de aplicação de proposta do flywheel
+-- ============================================================================
+-- 0053 — Operação Visível F3: rastro de aplicação de proposta do flywheel
 -- (applied_at/applied_version_id/applied_by; null = pendente). Idempotente.
--- =====================================================================alter table flywheel_distiller_proposals
+-- ============================================================================
+alter table flywheel_distiller_proposals
   add column if not exists applied_at timestamptz,
   add column if not exists applied_version_id uuid references ai_agent_versions(id) on delete set null,
   add column if not exists applied_by uuid;
@@ -9346,7 +9398,7 @@ alter table public.channel_sessions
   add constraint channel_sessions_provider_ref_check check (
     (provider = 'waha'       and waha_session_name    is not null) or
     (provider = 'meta_cloud' and meta_phone_number_id is not null) or
-    (provider in ('zernio', 'zernio_social') and zernio_account_id is not null) or
+    (provider in ('zernio', 'zernio_social') and zernio_account_id    is not null) or
     (provider = 'wacalls'    and wacalls_session_id    is not null)
   );
 
@@ -13039,7 +13091,8 @@ where unread_count_for_assignee <> coalesce((
 notify pgrst, 'reload schema';
 
 -- ---- contato: última atividade carimbada por mensagem (migration 0162) ----
--- =====================================================================-- 0162 — Mensagem de conversa carimba `contacts.last_activity_at`.
+-- ============================================================================
+-- 0162 — Mensagem de conversa carimba `contacts.last_activity_at`.
 --
 -- A lista /app/contacts mostra "Última atividade" de `contacts.last_activity_at`,
 -- denormalizado hoje só pelo trigger de `crm_lead_activities`. Mensagens de
@@ -13047,7 +13100,8 @@ notify pgrst, 'reload schema';
 -- `conversations.last_message_at` — mas o contato ficava parado (— ou data velha).
 --
 -- O relógio do LEAD continua na lista positiva da 0079; aqui só o contato.
--- =====================================================================
+-- ============================================================================
+
 create or replace function public.fn_mark_conversation_message(
   p_conv uuid, p_direction text, p_preview text, p_at timestamptz
 ) returns void language plpgsql security definer set search_path = public as $$
@@ -24911,31 +24965,6 @@ comment on column public.user_organizations.provisional_until_handover is
   'quando o tenant foi criado para OUTRA pessoa (owner_email <> e-mail de quem '
   'cria). Nunca deduzir este valor depois: a ausência dele foi o que fez a '
   'primeira versão desta regra expulsar alguém da própria empresa.';
-
--- ---- Redes sociais nativas (migration 0261) ----
--- Social connections reuse channel sessions, the inbox and the outbound ledger.
--- Credentials are server-only; tenant admins use authenticated API routes.
-create table if not exists public.channel_integrations (
-  organization_id uuid primary key references public.organizations(id) on delete cascade,
-  profile_id text not null,
-  credential_encrypted bytea not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-alter table public.channel_integrations enable row level security;
-revoke all on public.channel_integrations from public, anon, authenticated;
-grant all on public.channel_integrations to service_role;
-
-alter table public.contacts add column if not exists social_identity text;
-create unique index if not exists contacts_org_social_identity_unique
-  on public.contacts (organization_id, social_identity);
-comment on column public.contacts.social_identity is
-  'Opaque network/account/participant key. Never interpreted as a telephone or WhatsApp identity.';
-
--- Provider constraints include social channels in their single block above.
-alter table public.conversations drop constraint if exists conversations_channel_check;
-alter table public.conversations add constraint conversations_channel_check
-  check (channel in ('whatsapp', 'instagram', 'facebook'));
 -- ---- política de cadastro da instalação (migration 0253) ----
 create table if not exists public.platform_settings (
   id           smallint    primary key default 1,
@@ -25012,3 +25041,89 @@ drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_
 create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
+
+-- APÊNDICE 20260915230000_0261_redes_sociais_nativas.sql
+-- Social connections reuse channel sessions, the inbox and the outbound ledger.
+-- Credentials are server-only; tenant admins use authenticated API routes.
+create table if not exists public.channel_integrations (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  profile_id text not null,
+  credential_encrypted bytea not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.channel_integrations enable row level security;
+revoke all on public.channel_integrations from public, anon, authenticated;
+grant all on public.channel_integrations to service_role;
+
+alter table public.contacts add column if not exists social_identity text;
+create unique index if not exists contacts_org_social_identity_unique
+  on public.contacts (organization_id, social_identity);
+comment on column public.contacts.social_identity is
+  'Opaque network/account/participant key. Never interpreted as a telephone or WhatsApp identity.';
+
+-- Provider constraints include social channels in their single block above.
+alter table public.conversations drop constraint if exists conversations_channel_check;
+alter table public.conversations add constraint conversations_channel_check
+  check (channel in ('whatsapp', 'instagram', 'facebook'));
+
+
+-- APÊNDICE 20260916010000_0262_prospeccao_nativa.sql
+-- Native prospecting is an adapter to discovery, CRM creation and existing AI delivery.
+-- Server-only tables: authenticated routes resolve the tenant and authorize every command.
+create table if not exists public.prospecting_settings (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  credential_encrypted bytea not null,
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.prospecting_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  request_id uuid not null,
+  name text not null,
+  search jsonb not null,
+  config jsonb,
+  status text not null default 'draft' check (status in ('draft','running','paused','completed')),
+  search_status text not null default 'starting' check (search_status in ('starting','running','succeeded','failed','unknown')),
+  run_id text,
+  dataset_id text,
+  cost_usd numeric,
+  result_count integer not null default 0,
+  skipped_count integer not null default 0,
+  error text,
+  next_send_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, id),
+  unique (organization_id, request_id)
+);
+create unique index if not exists prospecting_one_running_org on public.prospecting_campaigns(organization_id) where status='running';
+create table if not exists public.prospecting_candidates (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  campaign_id uuid not null,
+  place_id text not null,
+  phone text,
+  data jsonb not null,
+  status text not null default 'new' check (status in ('new','queued','sending','sent','skipped','failed')),
+  contact_id uuid references public.contacts(id) on delete set null,
+  lead_id uuid references public.crm_leads(id) on delete set null,
+  conversation_id uuid references public.conversations(id) on delete set null,
+  service_boundary jsonb,
+  message_id uuid not null default gen_random_uuid(),
+  attempted_at timestamptz,
+  error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  foreign key (organization_id, campaign_id) references public.prospecting_campaigns(organization_id,id) on delete cascade,
+  unique (organization_id, place_id)
+);
+create unique index if not exists prospecting_phone_once_org on public.prospecting_candidates(organization_id,phone) where phone is not null;
+create index if not exists prospecting_pending_campaign on public.prospecting_candidates(organization_id,campaign_id,status);
+create index if not exists prospecting_conversation on public.prospecting_candidates(organization_id,conversation_id) where conversation_id is not null;
+alter table public.prospecting_settings enable row level security;
+alter table public.prospecting_campaigns enable row level security;
+alter table public.prospecting_candidates enable row level security;
+revoke all on public.prospecting_settings, public.prospecting_campaigns, public.prospecting_candidates from public, anon, authenticated;
+grant all on public.prospecting_settings, public.prospecting_campaigns, public.prospecting_candidates to service_role;
+notify pgrst, 'reload schema';

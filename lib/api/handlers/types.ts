@@ -1,3 +1,4 @@
+import type { ProspectingDelivery } from "@/lib/prospecting/guard";
 import type { AgentOperationContext } from "@/lib/ai/agents/operation";
 import type { ApprovedReplyContext } from "@/lib/ai/replies/delivery";
 import type { MeetingDeliveryContext, MeetingBookingContext } from "@/lib/agenda/meet-delivery";
@@ -58,6 +59,7 @@ export type Actor =
   | { type: "webhook_source"; id: string };
 
 export interface HandlerCtx {
+  prospectingDelivery?: ProspectingDelivery;
   agentOperation?: AgentOperationContext;
   meetingDelivery?: MeetingDeliveryContext;
   approvedReply?: ApprovedReplyContext;

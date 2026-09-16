@@ -14,6 +14,7 @@ import type { VercelConfig } from "@vercel/config/v1";
 
 const config: VercelConfig = {
   crons: [
+    { path: "/api/v1/cron/prospecting", schedule: "* * * * *" },
     { path: "/api/v1/cron/agent-dispatcher", schedule: "* * * * *" },
     { path: "/api/v1/cron/followup-flow-worker", schedule: "* * * * *" },
     { path: "/api/v1/cron/event-log-drain", schedule: "* * * * *" },
@@ -44,6 +45,7 @@ const config: VercelConfig = {
     { path: "/api/v1/cron/data-retention", schedule: "40 4 * * *" },
   ],
   functions: {
+    "app/api/v1/cron/prospecting/route.ts": { maxDuration: 300 },
     "app/api/v1/cron/**/route.ts": { maxDuration: 120 },
     "app/api/v1/system/relogio/tick/route.ts": { maxDuration: 60 },
     "app/api/internal/agents/run/route.ts": { maxDuration: 300 },
