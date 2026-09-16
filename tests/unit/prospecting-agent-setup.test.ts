@@ -130,6 +130,8 @@ function database() {
         state.members.push(params[2] as string);
       }
       if (sql.startsWith("update ai_routers")) state.router!.config.sticky = true;
+      if (sql.startsWith("update ai_agents set config=jsonb_set"))
+        state.agent!.config.prospecting_setup = JSON.parse(params[2] as string);
       if (sql.startsWith("update ai_agents set paused_at")) {
         state.agent!.paused_at = null;
         state.agent!.config.prospecting_setup.state = "ready";
@@ -164,6 +166,51 @@ beforeEach(() => {
 const admin = {} as SupabaseClient;
 
 describe("inline prospecting agent setup", () => {
+  it("prepares a paused draft without publication or continuity changes, then publishes that exact draft after explicit choice", async () => {
+    const { state, pool } = database();
+    state.router!.config.sticky = false;
+    const prepared = await setupProspectingAgent(pool, admin, context, input, {
+      prepareOnly: true,
+    });
+    expect(await setupProspectingAgent(pool, admin, context, input, { prepareOnly: true })).toEqual(
+      prepared,
+    );
+    expect(state.agent!.paused_at).not.toBeNull();
+    expect(state.agent!.published_version_id).toBeNull();
+    expect(state.router!.config.sticky).toBe(false);
+    expect(state.members).toEqual(["existing-agent"]);
+    expect(mocks.publish).not.toHaveBeenCalled();
+    await expect(setupProspectingAgent(pool, admin, context, input)).rejects.toThrow(
+      "Ative a continuidade",
+    );
+    const published = await setupProspectingAgent(pool, admin, context, {
+      ...input,
+      enable_router_continuity: true,
+    });
+    expect(published).toEqual(prepared);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.publish).toHaveBeenCalledTimes(1);
+    expect(state.agent!.paused_at).toBeNull();
+    expect(state.router!.config.sticky).toBe(true);
+  });
+  it("refuses an edited proposal or draft under an already prepared attempt", async () => {
+    const { state, pool } = database();
+    await setupProspectingAgent(pool, admin, context, input, { prepareOnly: true });
+    await expect(
+      setupProspectingAgent(
+        pool,
+        admin,
+        context,
+        { ...input, name: "Outro agente" },
+        { prepareOnly: true },
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    state.version!.system_prompt = "Edição externa depois do teste";
+    await expect(setupProspectingAgent(pool, admin, context, input)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
   it("prepares a published agent with scoped tools, preserving router members and never starting campaign", async () => {
     const { state, db, pool } = database();
     const result = await setupProspectingAgent(pool, admin, context, input);

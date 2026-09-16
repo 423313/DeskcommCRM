@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prospectingAgentSetupSchema } from "./agent-setup-schema";
+import type { AgentSetupSession } from "./agent-session-schema";
 
 export const agentProposalSchema = prospectingAgentSetupSchema.omit({
   request_id: true,
@@ -10,6 +11,7 @@ export const agentChatDraftSchema = agentProposalSchema.partial();
 export const agentChatInputSchema = z
   .object({
     campaign_id: z.string().uuid(),
+    revision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     messages: z
       .array(
         z
@@ -33,6 +35,8 @@ export const agentChatInputSchema = z
 export type AgentChatDraft = z.infer<typeof agentChatDraftSchema>;
 export type AgentChatInput = z.infer<typeof agentChatInputSchema>;
 export interface AgentChatResponse {
+  revision?: number;
+  session?: AgentSetupSession;
   message: string;
   draft: AgentChatDraft;
   ready: boolean;

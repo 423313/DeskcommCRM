@@ -85,7 +85,35 @@
       "lane": "app",
       "col": 2,
       "type": "component",
-      "label": "Criação inline: agente, publicação e roteamento existentes"
+      "label": "Conversa persistente, resumo e publicação explícita"
+    },
+    {
+      "id": "setup-session",
+      "lane": "db",
+      "col": 1,
+      "type": "component",
+      "label": "Sessão de configuração por campanha e revisão"
+    },
+    {
+      "id": "agent-preview",
+      "lane": "app",
+      "col": 3,
+      "type": "component",
+      "label": "Rascunho pausado e sandbox canônico"
+    },
+    {
+      "id": "voice-settings",
+      "lane": "app",
+      "col": 4,
+      "type": "component",
+      "label": "Editor do agente: voz e instruções"
+    },
+    {
+      "id": "voice-provider",
+      "lane": "app",
+      "col": 5,
+      "type": "component",
+      "label": "ElevenLabs Agents privado e teste no navegador"
     }
   ],
   "edges": [
@@ -148,6 +176,41 @@
       "from": "agent-setup",
       "to": "operator",
       "label": "erros visíveis e retomada sem duplicação"
+    },
+    {
+      "from": "agent-setup",
+      "to": "setup-session",
+      "label": "salvar sem sobrescrever outra revisão"
+    },
+    {
+      "from": "setup-session",
+      "to": "agent-setup",
+      "label": "retomar após recarregar"
+    },
+    {
+      "from": "agent-setup",
+      "to": "agent-preview",
+      "label": "testar antes de publicar"
+    },
+    {
+      "from": "agent-preview",
+      "to": "operator",
+      "label": "resposta simulada e propostas de ferramentas"
+    },
+    {
+      "from": "agent-setup",
+      "to": "voice-settings",
+      "label": "configurar voz do agente salvo"
+    },
+    {
+      "from": "voice-settings",
+      "to": "voice-provider",
+      "label": "chave cifrada, configuração e autorização temporária"
+    },
+    {
+      "from": "voice-provider",
+      "to": "voice-settings",
+      "label": "resultado, falha e revisão antes de novo teste"
     }
   ]
 }

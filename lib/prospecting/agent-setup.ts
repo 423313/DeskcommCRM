@@ -13,6 +13,7 @@ import { PROVIDERS } from "@/lib/ai/agents/validation";
 import { capabilitiesOf } from "@/lib/channels/capabilities";
 import type { ChannelProvider } from "@/lib/channels/types";
 import { prospectingAgentSetupSchema, type ProspectingAgentSetupInput } from "./agent-setup-schema";
+import { agentSessionLock, agentSetupSessionSchema } from "./agent-session-schema";
 
 export class AgentSetupError extends Error {
   constructor(
@@ -24,6 +25,9 @@ export class AgentSetupError extends Error {
   }
 }
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export function setupProposalHash(input: ProspectingAgentSetupInput) {
+  return hash({ ...input, enable_router_continuity: false });
+}
 export function setupAgentId(orgId: string, campaignId: string, requestId: string) {
   const h = hash(["prospecting-agent", orgId, campaignId, requestId]);
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
@@ -113,6 +117,7 @@ async function preflight(
   orgId: string,
   input: ProspectingAgentSetupInput,
   agentId: string,
+  prepareOnly = false,
 ) {
   const campaign = await db.query(
     "select id from prospecting_campaigns where organization_id=$1 and id=$2",
@@ -147,7 +152,7 @@ async function preflight(
     const router = await lockRouter(db, orgId, routers.rows[0].id);
     if (!router.is_active || router.channel_session_id !== input.channel_session_id)
       throw new AgentSetupError("O roteador mudou durante a configuração. Tente novamente.", 409);
-    if (router.config?.sticky === false && !input.enable_router_continuity)
+    if (!prepareOnly && router.config?.sticky === false && !input.enable_router_continuity)
       throw new AgentSetupError(
         "Ative a continuidade do agente nesta tela para que ele acompanhe as respostas no canal.",
       );
@@ -172,6 +177,8 @@ interface SetupMetadata {
   state: "draft" | "ready";
   version_hash: string;
   paused_at: string;
+  proposal_hash?: string;
+  prepared_only?: boolean;
 }
 function versionHash(row: Record<string, unknown>) {
   const keys = Object.keys(versionCreateSchema.shape);
@@ -193,6 +200,7 @@ export async function setupProspectingAgent(
   admin: SupabaseClient,
   context: { orgId: string; userId: string; requestId: string },
   raw: unknown,
+  options: { prepareOnly?: boolean } = {},
 ) {
   const input = prospectingAgentSetupSchema.parse(raw);
   const agentId = setupAgentId(context.orgId, input.campaign_id, input.request_id);
@@ -206,11 +214,32 @@ export async function setupProspectingAgent(
     // Otherwise two distinct requests can each publish a paused incumbent and
     // then prevent one another from completing. Fixed order: channel, request.
     for (const key of [
+      agentSessionLock(context.orgId, input.campaign_id),
       `prospecting-agent-channel:${context.orgId}:${input.channel_session_id}`,
       `prospecting-agent:${agentId}`,
     ]) {
       await db.query("select pg_advisory_lock(hashtextextended($1,0))", [key]);
       locked.push(key);
+    }
+    const savedSession = await db.query(
+      "select agent_setup,agent_setup_revision from prospecting_campaigns where organization_id=$1 and id=$2",
+      [context.orgId, input.campaign_id],
+    );
+    if (Number(savedSession.rows[0]?.agent_setup_revision ?? 0) > 0) {
+      const session = agentSetupSessionSchema.parse(savedSession.rows[0].agent_setup);
+      if (
+        session.attempt_action &&
+        session.attempt_action !== (options.prepareOnly ? "prepare" : "publish")
+      )
+        throw new AgentSetupError(
+          "A ação mudou. Salve a confirmação atual antes de continuar.",
+          409,
+        );
+      if (!session.attempt || hash(session.attempt) !== requestHash || session.input.trim())
+        throw new AgentSetupError(
+          "O resumo mudou. Salve a configuração atual antes de preparar o agente.",
+          409,
+        );
     }
     await db.query("begin");
     const existing = await db.query(
@@ -222,7 +251,15 @@ export async function setupProspectingAgent(
       saved = true;
       const agent = existing.rows[0];
       metadata = agent.config?.prospecting_setup;
-      if (!metadata || metadata.hash !== requestHash || agent.archived_at)
+      const changedContinuityAfterPreview =
+        metadata?.prepared_only &&
+        !agent.published_version_id &&
+        metadata.proposal_hash === setupProposalHash(input);
+      if (
+        !metadata ||
+        (metadata.hash !== requestHash && !changedContinuityAfterPreview) ||
+        agent.archived_at
+      )
         throw new AgentSetupError(
           "Esta tentativa já foi usada com outra configuração. Revise o agente existente antes de criar outro.",
           409,
@@ -250,9 +287,16 @@ export async function setupProspectingAgent(
           409,
           agentId,
         );
-      await preflight(db, context.orgId, input, agentId);
+      await preflight(db, context.orgId, input, agentId, options.prepareOnly);
+      if (metadata.prepared_only && !options.prepareOnly) {
+        metadata = { ...metadata, hash: requestHash, prepared_only: false };
+        await db.query(
+          "update ai_agents set config=jsonb_set(config,'{prospecting_setup}',$3::jsonb) where organization_id=$1 and id=$2",
+          [context.orgId, agentId, JSON.stringify(metadata)],
+        );
+      }
     } else {
-      await preflight(db, context.orgId, input, agentId);
+      await preflight(db, context.orgId, input, agentId, options.prepareOnly);
       const model = await resolveSetupModel(db, context.orgId, input.channel_session_id);
       const version = versionCreateSchema.parse({
         system_prompt: prospectingAgentPrompt(input),
@@ -290,6 +334,8 @@ export async function setupProspectingAgent(
         state: "draft",
         version_hash: versionHash(version),
         paused_at: new Date().toISOString(),
+        proposal_hash: setupProposalHash(input),
+        prepared_only: options.prepareOnly === true,
       };
       await createMcpAgentDraft(
         db,
@@ -316,6 +362,12 @@ export async function setupProspectingAgent(
         requestId: context.requestId,
         metadata: { source: "prospecting", campaign_id: input.campaign_id, draft: true },
       });
+    if (options.prepareOnly)
+      return {
+        agent: { id: agentId, name: input.name },
+        version_id: metadata.version_id,
+        model_label: metadata.model_label,
+      };
     // Publication is canonical; the agent remains paused until routing commits.
     const current = await db.query(
       "select published_version_id from ai_agents where organization_id=$1 and id=$2",

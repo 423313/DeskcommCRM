@@ -10,7 +10,8 @@ Depois da pesquisa, defina agente, conexão, funil, etapa de entrada, etapa de q
 
 ### Criar um agente sem sair da campanha
 
-O botão **Criar agente para esta campanha**, junto do seletor, abre uma conversa.
+**Configurar por conversa** é o caminho principal de preparação da campanha.
+**Usar agente existente** conserva a seleção e configuração manual.
 Descreva o objetivo em suas palavras; a IA faz perguntas curtas sobre o que falta,
 aproveita os dados da campanha e propõe nome, abordagem, critério de qualificação,
 conexão e etapas. Você pode continuar conversando para corrigir o resumo.
@@ -21,7 +22,17 @@ orçamento e registro de custo. Ela só propõe: não recebe ferramentas de escr
 não cria agentes e não envia mensagens a contatos. IDs de conexão, funil e etapas
 são conferidos contra os recursos reais da organização.
 
-O cartão de revisão mostra a abordagem, os critérios, o canal e o funil. **Criar e usar agente**
+O resumo acompanha a conversa desde o início, mostra o que já foi definido e o que
+ainda falta. Sugestões permitem responder com um clique. O progresso fica salvo
+na campanha, separado da configuração que inicia a fila; duas abas não podem
+sobrescrever uma à outra silenciosamente. Falha ao salvar aparece na tela.
+
+**Testar como cliente** prepara um rascunho pausado e usa o mesmo sandbox do editor
+de agentes. O teste não publica, não muda o roteamento e não envia mensagens a
+contatos. Ferramentas de escrita são propostas, sem execução. Se a configuração
+mudar, o teste anterior deixa de representar o novo rascunho.
+
+O cartão de revisão mostra a abordagem, os critérios, o canal e o funil. **Publicar e usar agente**
 é a confirmação que publica o agente, prepara as capacidades comerciais e de
 transferência humana e o seleciona no formulário, com acesso ao funil escolhido.
 Ele pode receber conversas no canal; a campanha continua aguardando o comando
@@ -33,8 +44,22 @@ exige uma escolha explícita no cartão de revisão; a IA não pode autorizar es
 Sem roteador, um canal atendido por outro agente exige reutilizar o agente atual
 ou configurar o roteamento, evitando trocar o atendimento existente sem aviso.
 Falhas mantêm a conversa e os dados da campanha. Repetir a mesma confirmação
-recupera a criação anterior sem produzir outro agente. O histórico do chat fica
-na página enquanto ela estiver aberta; ele não é uma conversa de cliente no Inbox.
+recupera a criação anterior sem produzir outro agente. O histórico de configuração
+é retomado ao recarregar a página; ele não é uma conversa de cliente no Inbox.
+Cancelar uma resposta interrompe a espera e propaga o cancelamento à chamada de IA.
+Isso não garante estorno de tokens que o provedor já tenha processado.
+
+### Assistente de voz
+
+O editor do agente oferece **Assistente de voz**, com configuração de ElevenLabs
+Agents. A integração é opcional e usa a conta ElevenLabs da organização. A chave
+fica cifrada no servidor; o navegador recebe somente uma autorização temporária
+para o teste. Voz, idioma, primeira mensagem e instruções podem ser revisados.
+
+O teste usa o microfone e o áudio do navegador. Ele não inicia chamadas para clientes
+nem conecta automaticamente o assistente a chamadas WhatsApp. A configuração de
+voz e a publicação do agente de texto são ações independentes. Alterações posteriores
+no prompt de texto precisam ser revisadas e salvas também na configuração de voz.
 
 A ativação cria contatos e negócios usando os handlers existentes. Telefones e identificadores de empresa são únicos por organização; contatos anteriores são preservados. Uma preparação interrompida deve ser retomada com a mesma configuração. A fila começa após um minuto e envia somente a primeira abordagem. Respostas passam pelo atendimento normal; a qualificação exige os critérios definidos pelo operador e só é contada quando a etapa do negócio muda. Encontrar uma empresa não significa qualificá-la.
 
@@ -53,6 +78,28 @@ Há uma campanha ativa por organização, até 50 tentativas em 24 horas no conj
 Entrada: administrador e pesquisa → `prospecting_campaigns/candidates`. Saída: `createContactHandler`, `createLeadHandler`, `sendMessageHandler` e turno do agente no Inbox. Comandos emitem `prospecting.changed`; cadastro e atendimento conservam as atividades canônicas. Resultados, erros e próximos envios aparecem em `/app/prospecting`, registrado no catálogo de navegação. A falha pausa a fila e exige revisão, e o resultado da conversa altera o estado exibido. A continuidade humana e IA usa o Inbox existente. Não responder não inicia novas insistências automaticamente; o operador revisa o histórico para decidir o próximo passo.
 
 Mapa: `docs/architecture/prospeccao-nativa.architecture.json`.
+
+### Checklist de continuidade: configuração e voz
+
+- **Entrada e saída:** o administrador conversa em `ProspectingAgentBuilder`; a sessão
+  pertence à campanha e prepara uma versão canônica em `ai_agents/ai_agent_versions`.
+  `VoiceAssistantPanel` usa esse agente para configurar um agente privado na ElevenLabs.
+- **Registro e superfície:** rotas de configuração usam a auditoria canônica; operações
+  de voz registram `ai_agent.updated` ou `ai_agent.tested`, sem credenciais. Resumo,
+  salvamento, resultado do teste e falhas aparecem nos respectivos painéis.
+- **Acesso e configuração:** menu Prospecção → Configurar por conversa; menu Agentes →
+  editor → Assistente de voz. O rascunho também oferece um link direto para essa aba.
+  Chave ausente e falha ao listar vozes têm mensagens e ações próprias.
+- **Recuperação:** revisão de sessão impede sobrescrita entre abas; tentativas mantêm
+  o mesmo identificador e distinguem preparar de publicar. Criação remota incerta
+  é reconciliada pelo marcador persistido antes de aceitar uma nova criação.
+- **Continuidade humana:** o teste pausado não transfere contatos. A publicação prepara
+  o handoff canônico do agente de texto. A voz neste incremento é uma sessão de teste
+  no navegador, sem ferramentas, transferência ou chamada para clientes; não abre
+  demanda no Inbox nem promete executar ações comerciais.
+- **Retorno e mapa:** conflito exige recarregar o estado; erro de provedor permite
+  corrigir e repetir a mesma tentativa. Divergência da configuração privada bloqueia
+  o teste de voz até nova sincronização. As entradas e saídas constam no mapa acima.
 
 ### Anonimização e nova extração
 

@@ -6619,6 +6619,80 @@ export type Database = {
           },
         ]
       }
+      prospecting_campaigns: {
+        Row: {
+          agent_setup: Json
+          agent_setup_revision: number
+          config: Json | null
+          cost_usd: number | null
+          created_at: string
+          dataset_id: string | null
+          error: string | null
+          id: string
+          name: string
+          next_send_at: string
+          organization_id: string
+          request_id: string
+          result_count: number
+          run_id: string | null
+          search: Json
+          search_status: string
+          skipped_count: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_setup?: Json
+          agent_setup_revision?: number
+          config?: Json | null
+          cost_usd?: number | null
+          created_at?: string
+          dataset_id?: string | null
+          error?: string | null
+          id?: string
+          name: string
+          next_send_at?: string
+          organization_id: string
+          request_id: string
+          result_count?: number
+          run_id?: string | null
+          search: Json
+          search_status?: string
+          skipped_count?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_setup?: Json
+          agent_setup_revision?: number
+          config?: Json | null
+          cost_usd?: number | null
+          created_at?: string
+          dataset_id?: string | null
+          error?: string | null
+          id?: string
+          name?: string
+          next_send_at?: string
+          organization_id?: string
+          request_id?: string
+          result_count?: number
+          run_id?: string | null
+          search?: Json
+          search_status?: string
+          skipped_count?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospecting_campaigns_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       push_subscriptions: {
         Row: {
           auth: string

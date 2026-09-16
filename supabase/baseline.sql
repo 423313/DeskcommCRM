@@ -25313,6 +25313,14 @@ grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) 
 
 notify pgrst, 'reload schema';
 
+-- ---- Conversa de configuração da prospecção (migration 0264) ----
+-- The administrator's unfinished setup belongs to the campaign, not to Inbox.
+-- Existing rows keep the empty default. Server-only RLS/grants remain unchanged.
+alter table public.prospecting_campaigns
+  add column if not exists agent_setup jsonb not null default '{}'::jsonb,
+  add column if not exists agent_setup_revision bigint not null default 0;
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

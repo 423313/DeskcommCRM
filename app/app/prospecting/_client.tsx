@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/lib/api/client";
 import { useT } from "@/hooks/i18n/useT";
 import { safePublicLink, type CampaignConfig, type Prospect } from "@/lib/prospecting/schema";
-import { CreateProspectingAgentDialog } from "./_create-agent";
+import { ProspectingAgentBuilder, type CreatedProspectingAgent } from "./_create-agent";
+import type { ProspectingAgentSetupInput } from "@/lib/prospecting/agent-setup-schema";
 
 type Campaign = {
   id: string;
@@ -99,12 +100,13 @@ export function ProspectingClient() {
   const [budget, setBudget] = useState(1);
   const [enrich, setEnrich] = useState(true);
   const [campaignDrafts, setCampaignDrafts] = useState<Record<string, CampaignConfig>>({});
-  const [createAgentOpen, setCreateAgentOpen] = useState(false);
+  const [manualCampaigns, setManualCampaigns] = useState<Record<string, boolean>>({});
   const [createdAgents, setCreatedAgents] = useState<{ id: string; name: string }[]>([]);
   const campaign = data?.campaigns.find((c) => c.id === selected) ?? data?.campaigns[0];
   // A stored config is frozen by activation; unsaved choices belong to one campaign.
   const config = campaign?.config ?? (campaign && campaignDrafts[campaign.id]) ?? emptyConfig;
   const funil = config.pipeline_id;
+  const manual = !!campaign && (manualCampaigns[campaign.id] || !!campaign.config);
   const agents = [
     ...new Map(
       [...(data?.agents ?? []), ...createdAgents].map((agent) => [agent.id, agent]),
@@ -117,6 +119,37 @@ export function ProspectingClient() {
       [campaign.id]:
         typeof update === "function" ? update(drafts[campaign.id] ?? emptyConfig) : update,
     }));
+  }
+  async function selectCreatedAgent(
+    campaignId: string,
+    result: CreatedProspectingAgent,
+    setup: Omit<
+      ProspectingAgentSetupInput,
+      "request_id" | "campaign_id" | "enable_router_continuity"
+    >,
+  ) {
+    setCreatedAgents((current) => [
+      ...current.filter((agent) => agent.id !== result.agent.id),
+      result.agent,
+    ]);
+    setCampaignDrafts((drafts) => ({
+      ...drafts,
+      [campaignId]: {
+        ...(drafts[campaignId] ?? emptyConfig),
+        agent_id: result.agent.id,
+        channel_session_id: setup.channel_session_id,
+        pipeline_id: setup.pipeline_id,
+        stage_id: setup.stage_id,
+        qualified_stage_id: setup.qualified_stage_id,
+        instruction: setup.instruction,
+        qualification: setup.qualification,
+      },
+    }));
+    setManualCampaigns((current) => ({ ...current, [campaignId]: false }));
+    await query.refetch();
+    setNotice(
+      `${t("Agente publicado e selecionado.")} ${result.model_label}. ${t("Revise o ritmo e inicie a campanha quando estiver pronto.")}`,
+    );
   }
   const candidates = data?.candidates.filter((c) => c.campaign_id === campaign?.id) ?? [];
   async function perform(body: unknown, message: string) {
@@ -321,7 +354,6 @@ export function ProspectingClient() {
                   onClick={() => {
                     setSelected(c.id);
                     setNotice(null);
-                    setCreateAgentOpen(false);
                   }}
                   className={`w-full rounded-lg border p-3 text-left ${campaign?.id === c.id ? "border-primary bg-primary/5" : "bg-card"}`}
                 >
@@ -427,242 +459,309 @@ export function ProspectingClient() {
                         "A IA usa o agente escolhido para abrir a conversa e atender as respostas. As proteções do canal continuam valendo.",
                       )}
                     </p>
-                    <form
-                      className="mt-5 space-y-4"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void perform(
-                          { action: "start", id: campaign.id, config },
-                          t(
-                            "Campanha iniciada. A primeira abordagem será preparada após um minuto.",
-                          ),
-                        );
-                      }}
-                    >
-                      {campaign.config && (
-                        <p className="text-sm text-muted-foreground">
-                          {t(
-                            "Esta campanha já começou a preparar contatos. Sua configuração foi preservada para retomar com segurança.",
-                          )}
-                        </p>
-                      )}
-                      <fieldset disabled={!!campaign.config} className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <Label htmlFor="prospecting-agent">{t("Agente de IA")}</Label>
-                            <select
-                              id="prospecting-agent"
-                              className={`${selectClass} mt-1`}
-                              value={config.agent_id}
-                              onChange={(e) => update("agent_id", e.target.value)}
-                              required
-                            >
-                              <option value="">{t("Escolha um agente publicado")}</option>
-                              {agents.map((a) => (
-                                <option key={a.id} value={a.id}>
-                                  {a.name}
-                                </option>
-                              ))}
-                            </select>
-                            {!campaign.config && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="mt-2 h-auto w-full py-2 text-xs whitespace-normal"
-                                disabled={busy}
-                                onClick={() => setCreateAgentOpen(true)}
-                              >
-                                {t("Criar agente para esta campanha")}
-                              </Button>
-                            )}
-                            {config.agent_id && (
+                    {!campaign.config && (
+                      <div className="mt-4 space-y-4">
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant={!manual ? "secondary" : "outline"}
+                            onClick={() =>
+                              setManualCampaigns((current) => ({
+                                ...current,
+                                [campaign.id]: false,
+                              }))
+                            }
+                          >
+                            {t("Configurar por conversa")}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={manual ? "secondary" : "outline"}
+                            onClick={() =>
+                              setManualCampaigns((current) => ({ ...current, [campaign.id]: true }))
+                            }
+                          >
+                            {t("Usar agente existente / configurar manualmente")}
+                          </Button>
+                        </div>
+                        {!manual && !config.agent_id && data && (
+                          <ProspectingAgentBuilder
+                            key={campaign.id}
+                            campaign={campaign}
+                            config={config}
+                            channels={data.channels}
+                            stages={data.stages}
+                            onCreated={selectCreatedAgent}
+                          />
+                        )}
+                        {!manual && config.agent_id && (
+                          <section
+                            aria-label={t("Agente selecionado")}
+                            className="space-y-2 rounded-xl border bg-muted/20 p-4 text-sm"
+                          >
+                            <p className="font-semibold">
+                              {agents.find((agent) => agent.id === config.agent_id)?.name ??
+                                t("Agente selecionado")}
+                            </p>
+                            <p className="whitespace-pre-wrap text-muted-foreground">
+                              {config.instruction}
+                            </p>
+                            <div className="flex flex-wrap gap-4">
                               <Link
-                                className="mt-2 block text-xs underline"
+                                className="underline"
                                 href={`/app/ai/agents/${config.agent_id}`}
                               >
                                 {t("Configurações avançadas do agente")}
                               </Link>
-                            )}
-                          </div>
-                          <div>
-                            <Label htmlFor="prospecting-channel">{t("Conexão de saída")}</Label>
-                            <select
-                              id="prospecting-channel"
-                              className={`${selectClass} mt-1`}
-                              value={config.channel_session_id}
-                              onChange={(e) => update("channel_session_id", e.target.value)}
-                              required
-                            >
-                              <option value="">{t("Escolha uma conexão ativa")}</option>
-                              {data?.channels
-                                .filter((c) => c.status === "WORKING")
-                                .map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.display_name ?? c.phone_number ?? c.id}
-                                  </option>
-                                ))}
-                            </select>
-                            <Link className="text-xs underline" href="/app/connections">
-                              {t("Ver conexões e proteções de envio")}
-                            </Link>
-                          </div>
-                        </div>
-                        <div>
-                          <Label htmlFor="prospecting-pipeline">{t("Funil")}</Label>
-                          <select
-                            id="prospecting-pipeline"
-                            className={`${selectClass} mt-1`}
-                            value={funil}
-                            required
-                            onChange={(e) => {
-                              setConfig((c) => ({
-                                ...c,
-                                pipeline_id: e.target.value,
-                                stage_id: "",
-                                qualified_stage_id: "",
-                              }));
-                            }}
-                          >
-                            <option value="">{t("Escolha o funil")}</option>
-                            {[
-                              ...new Map(
-                                data?.stages.map((s) => [s.pipeline_id, s.pipeline_name]),
-                              ).entries(),
-                            ].map(([id, name]) => (
-                              <option key={id} value={id}>
-                                {name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          {(
-                            [
-                              ["stage_id", "Etapa inicial"],
-                              ["qualified_stage_id", "Etapa de qualificados"],
-                            ] as const
-                          ).map(([field, label]) => (
-                            <div key={field}>
-                              <Label htmlFor={`prospecting-${field}`}>{t(label)}</Label>
-                              <select
-                                id={`prospecting-${field}`}
-                                className={`${selectClass} mt-1`}
-                                required
-                                value={config[field]}
-                                onChange={(e) => update(field, e.target.value)}
+                              <Link
+                                className="underline"
+                                href={`/app/ai/agents/${config.agent_id}#voice-assistant`}
                               >
-                                <option value="">{t("Escolha a etapa")}</option>
-                                {data?.stages
-                                  .filter((s) => s.pipeline_id === funil)
-                                  .map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name}
-                                    </option>
-                                  ))}
-                              </select>
+                                {t("Configurar assistente de voz")}
+                              </Link>
                             </div>
-                          ))}
-                        </div>
-                        <div>
-                          <Label htmlFor="prospecting-instruction">
-                            {t("O que a IA deve oferecer e como iniciar")}
-                          </Label>
-                          <Textarea
-                            id="prospecting-instruction"
-                            value={config.instruction}
-                            onChange={(e) => update("instruction", e.target.value)}
-                            required
-                            minLength={10}
-                            maxLength={2000}
-                            className="mt-1"
-                            placeholder={t(
-                              "Descreva sua oferta e o objetivo da primeira conversa.",
-                            )}
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="prospecting-qualification">
-                            {t("Quando considerar o cliente qualificado")}
-                          </Label>
-                          <Textarea
-                            id="prospecting-qualification"
-                            value={config.qualification}
-                            onChange={(e) => update("qualification", e.target.value)}
-                            required
-                            minLength={10}
-                            maxLength={2000}
-                            className="mt-1"
-                            placeholder={t(
-                              "Ex.: confirmou a necessidade, participa da decisão e deseja conversar sobre a solução.",
-                            )}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="prospecting-daily">{t("Máximo em 24 horas")}</Label>
-                            <Input
-                              id="prospecting-daily"
-                              type="number"
-                              min={1}
-                              max={50}
-                              required
-                              value={config.daily_limit}
-                              onChange={(e) => update("daily_limit", Number(e.target.value))}
-                              className="mt-1"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="prospecting-spacing">
-                              {t("Intervalo mínimo (minutos)")}
-                            </Label>
-                            <Input
-                              id="prospecting-spacing"
-                              type="number"
-                              min={5}
-                              max={1440}
-                              required
-                              value={config.interval_minutes}
-                              onChange={(e) => update("interval_minutes", Number(e.target.value))}
-                              className="mt-1"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label htmlFor="prospecting-basis">
-                            {t("Referência da avaliação de legítimo interesse")}
-                          </Label>
-                          <Input
-                            id="prospecting-basis"
-                            value={config.legal_basis_ref}
-                            onChange={(e) => update("legal_basis_ref", e.target.value)}
-                            minLength={3}
-                            maxLength={500}
-                            required
-                            className="mt-1"
-                          />
-                          <p className="mt-1 text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
+                              {t(
+                                "Agente pronto. Escolha o ritmo abaixo e inicie quando estiver preparado.",
+                              )}
+                            </p>
+                          </section>
+                        )}
+                      </div>
+                    )}
+                    {(manual || config.agent_id) && (
+                      <form
+                        className="mt-5 space-y-4"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void perform(
+                            { action: "start", id: campaign.id, config },
+                            t(
+                              "Campanha iniciada. A primeira abordagem será preparada após um minuto.",
+                            ),
+                          );
+                        }}
+                      >
+                        {campaign.config && (
+                          <p className="text-sm text-muted-foreground">
                             {t(
-                              "Informe a referência real da avaliação que fundamenta esta prospecção. Isso não registra consentimento dos contatos.",
+                              "Esta campanha já começou a preparar contatos. Sua configuração foi preservada para retomar com segurança.",
                             )}
                           </p>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {t(
-                            "Ao iniciar, os contatos novos com telefone entram no funil. Contatos já existentes são preservados. A fila faz uma primeira abordagem; respostas seguem no Inbox. Uma mensagem já em transmissão pode concluir após a pausa.",
+                        )}
+                        <fieldset disabled={!!campaign.config} className="space-y-4">
+                          {manual && (
+                            <div className="space-y-4">
+                              <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                  <Label htmlFor="prospecting-agent">{t("Agente de IA")}</Label>
+                                  <select
+                                    id="prospecting-agent"
+                                    className={`${selectClass} mt-1`}
+                                    value={config.agent_id}
+                                    onChange={(e) => update("agent_id", e.target.value)}
+                                    required
+                                  >
+                                    <option value="">{t("Escolha um agente publicado")}</option>
+                                    {agents.map((a) => (
+                                      <option key={a.id} value={a.id}>
+                                        {a.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {config.agent_id && (
+                                    <Link
+                                      className="mt-2 block text-xs underline"
+                                      href={`/app/ai/agents/${config.agent_id}`}
+                                    >
+                                      {t("Configurações avançadas do agente")}
+                                    </Link>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label htmlFor="prospecting-channel">
+                                    {t("Conexão de saída")}
+                                  </Label>
+                                  <select
+                                    id="prospecting-channel"
+                                    className={`${selectClass} mt-1`}
+                                    value={config.channel_session_id}
+                                    onChange={(e) => update("channel_session_id", e.target.value)}
+                                    required
+                                  >
+                                    <option value="">{t("Escolha uma conexão ativa")}</option>
+                                    {data?.channels
+                                      .filter((c) => c.status === "WORKING")
+                                      .map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                          {c.display_name ?? c.phone_number ?? c.id}
+                                        </option>
+                                      ))}
+                                  </select>
+                                  <Link className="text-xs underline" href="/app/connections">
+                                    {t("Ver conexões e proteções de envio")}
+                                  </Link>
+                                </div>
+                              </div>
+                              <div>
+                                <Label htmlFor="prospecting-pipeline">{t("Funil")}</Label>
+                                <select
+                                  id="prospecting-pipeline"
+                                  className={`${selectClass} mt-1`}
+                                  value={funil}
+                                  required
+                                  onChange={(e) => {
+                                    setConfig((c) => ({
+                                      ...c,
+                                      pipeline_id: e.target.value,
+                                      stage_id: "",
+                                      qualified_stage_id: "",
+                                    }));
+                                  }}
+                                >
+                                  <option value="">{t("Escolha o funil")}</option>
+                                  {[
+                                    ...new Map(
+                                      data?.stages.map((s) => [s.pipeline_id, s.pipeline_name]),
+                                    ).entries(),
+                                  ].map(([id, name]) => (
+                                    <option key={id} value={id}>
+                                      {name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="grid gap-4 md:grid-cols-2">
+                                {(
+                                  [
+                                    ["stage_id", "Etapa inicial"],
+                                    ["qualified_stage_id", "Etapa de qualificados"],
+                                  ] as const
+                                ).map(([field, label]) => (
+                                  <div key={field}>
+                                    <Label htmlFor={`prospecting-${field}`}>{t(label)}</Label>
+                                    <select
+                                      id={`prospecting-${field}`}
+                                      className={`${selectClass} mt-1`}
+                                      required
+                                      value={config[field]}
+                                      onChange={(e) => update(field, e.target.value)}
+                                    >
+                                      <option value="">{t("Escolha a etapa")}</option>
+                                      {data?.stages
+                                        .filter((s) => s.pipeline_id === funil)
+                                        .map((s) => (
+                                          <option key={s.id} value={s.id}>
+                                            {s.name}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </div>
+                                ))}
+                              </div>
+                              <div>
+                                <Label htmlFor="prospecting-instruction">
+                                  {t("O que a IA deve oferecer e como iniciar")}
+                                </Label>
+                                <Textarea
+                                  id="prospecting-instruction"
+                                  value={config.instruction}
+                                  onChange={(e) => update("instruction", e.target.value)}
+                                  required
+                                  minLength={10}
+                                  maxLength={2000}
+                                  className="mt-1"
+                                  placeholder={t(
+                                    "Descreva sua oferta e o objetivo da primeira conversa.",
+                                  )}
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="prospecting-qualification">
+                                  {t("Quando considerar o cliente qualificado")}
+                                </Label>
+                                <Textarea
+                                  id="prospecting-qualification"
+                                  value={config.qualification}
+                                  onChange={(e) => update("qualification", e.target.value)}
+                                  required
+                                  minLength={10}
+                                  maxLength={2000}
+                                  className="mt-1"
+                                  placeholder={t(
+                                    "Ex.: confirmou a necessidade, participa da decisão e deseja conversar sobre a solução.",
+                                  )}
+                                />
+                              </div>
+                            </div>
                           )}
-                        </p>
-                      </fieldset>
-                      <Button
-                        type="submit"
-                        disabled={
-                          busy ||
-                          !agents.length ||
-                          !data?.channels.some((c) => c.status === "WORKING")
-                        }
-                      >
-                        {t("Iniciar abordagens com IA")}
-                      </Button>
-                    </form>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="prospecting-daily">{t("Máximo em 24 horas")}</Label>
+                              <Input
+                                id="prospecting-daily"
+                                type="number"
+                                min={1}
+                                max={50}
+                                required
+                                value={config.daily_limit}
+                                onChange={(e) => update("daily_limit", Number(e.target.value))}
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="prospecting-spacing">
+                                {t("Intervalo mínimo (minutos)")}
+                              </Label>
+                              <Input
+                                id="prospecting-spacing"
+                                type="number"
+                                min={5}
+                                max={1440}
+                                required
+                                value={config.interval_minutes}
+                                onChange={(e) => update("interval_minutes", Number(e.target.value))}
+                                className="mt-1"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label htmlFor="prospecting-basis">
+                              {t("Referência da avaliação de legítimo interesse")}
+                            </Label>
+                            <Input
+                              id="prospecting-basis"
+                              value={config.legal_basis_ref}
+                              onChange={(e) => update("legal_basis_ref", e.target.value)}
+                              minLength={3}
+                              maxLength={500}
+                              required
+                              className="mt-1"
+                            />
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {t(
+                                "Informe a referência real da avaliação que fundamenta esta prospecção. Isso não registra consentimento dos contatos.",
+                              )}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {t(
+                              "Ao iniciar, os contatos novos com telefone entram no funil. Contatos já existentes são preservados. A fila faz uma primeira abordagem; respostas seguem no Inbox. Uma mensagem já em transmissão pode concluir após a pausa.",
+                            )}
+                          </p>
+                        </fieldset>
+                        <Button
+                          type="submit"
+                          disabled={
+                            busy ||
+                            !agents.length ||
+                            !data?.channels.some((c) => c.status === "WORKING")
+                          }
+                        >
+                          {t("Iniciar abordagens com IA")}
+                        </Button>
+                      </form>
+                    )}
                   </Card>
                 )}
               {candidates.length > 0 && (
@@ -748,39 +847,6 @@ export function ProspectingClient() {
           )}
         </div>
       </div>
-      {campaign && data && (
-        <CreateProspectingAgentDialog
-          open={createAgentOpen && !campaign.config}
-          onOpenChange={setCreateAgentOpen}
-          campaign={campaign}
-          config={config}
-          channels={data.channels}
-          stages={data.stages}
-          onCreated={async (campaignId, result, setup) => {
-            setCreatedAgents((current) => [
-              ...current.filter((agent) => agent.id !== result.agent.id),
-              result.agent,
-            ]);
-            setCampaignDrafts((drafts) => ({
-              ...drafts,
-              [campaignId]: {
-                ...(drafts[campaignId] ?? emptyConfig),
-                agent_id: result.agent.id,
-                channel_session_id: setup.channel_session_id,
-                pipeline_id: setup.pipeline_id,
-                stage_id: setup.stage_id,
-                qualified_stage_id: setup.qualified_stage_id,
-                instruction: setup.instruction,
-                qualification: setup.qualification,
-              },
-            }));
-            await query.refetch();
-            setNotice(
-              `${t("Agente criado e selecionado.")} ${result.model_label}. ${t("Revise o ritmo e inicie a campanha quando estiver pronto.")}`,
-            );
-          }}
-        />
-      )}
     </main>
   );
 }

@@ -9,6 +9,14 @@ vi.mock("@/lib/ai/runtime/agent", () => ({
 }));
 import { setupProspectingAgent } from "@/lib/prospecting/agent-setup";
 import { prospectingAgentSetupSchema } from "@/lib/prospecting/agent-setup-schema";
+import {
+  beginAgentChat,
+  finishAgentChat,
+  getAgentSession,
+  saveAgentSession,
+} from "@/lib/prospecting/agent-session";
+import { agentSessionWriteSchema } from "@/lib/prospecting/agent-session-schema";
+import { agentProposalSchema } from "@/lib/prospecting/agent-chat-schema";
 
 const pool = new pg.Pool({
   connectionString: `postgresql://postgres:postgres@127.0.0.1:${process.env.TEST_DB_PORT ?? 54329}/postgres`,
@@ -101,6 +109,186 @@ async function fixture() {
   const context = { orgId: org, userId: GOV_ADMIN, requestId: randomUUID() };
   return { org, channel, campaign, input, context };
 }
+
+async function setupSessionFixture() {
+  const f = await fixture();
+  await pool.query(
+    "update prospecting_campaigns set search_status='succeeded' where organization_id=$1 and id=$2",
+    [f.org, f.campaign],
+  );
+  return f;
+}
+
+it("persists setup within its tenant, blocks stale edits and never writes the operational campaign config", async () => {
+  const f = await setupSessionFixture(),
+    other = await setupSessionFixture();
+  const initial = await getAgentSession(pool, f.org, f.campaign);
+  expect(initial).toMatchObject({ revision: 0, session: { messages: [], ready: false } });
+  const next = agentSessionWriteSchema.parse({
+    messages: [{ role: "user", content: "Quero atender clínicas" }],
+    draft: { name: "Consultor", tone: "cordial" },
+    input: "Ainda estou configurando",
+  });
+  const saved = await saveAgentSession(pool, f.context, f.campaign, 0, next);
+  expect(saved.revision).toBe(1);
+  expect(await getAgentSession(pool, f.org, f.campaign)).toEqual(saved);
+  await expect(
+    saveAgentSession(pool, f.context, f.campaign, 0, { ...next, input: "Resposta atrasada" }),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(getAgentSession(pool, other.org, f.campaign)).rejects.toMatchObject({ status: 404 });
+  await expect(saveAgentSession(pool, other.context, f.campaign, 1, next)).rejects.toMatchObject({
+    status: 404,
+  });
+  expect(
+    (
+      await pool.query(
+        "select status,config from prospecting_campaigns where organization_id=$1 and id=$2",
+        [f.org, f.campaign],
+      )
+    ).rows[0],
+  ).toEqual({ status: "draft", config: null });
+  const db = await pool.connect();
+  try {
+    await db.query("begin");
+    await db.query("set local role authenticated");
+    await expect(
+      db.query("select agent_setup from prospecting_campaigns where id=$1", [f.campaign]),
+    ).rejects.toMatchObject({ code: "42501" });
+  } finally {
+    await db.query("rollback");
+    db.release();
+  }
+});
+
+it("keeps the pending user turn across reload and retries it once; canceled and stale model results cannot overwrite edits", async () => {
+  const f = await setupSessionFixture();
+  const input = {
+    campaign_id: f.campaign,
+    revision: 0,
+    messages: [{ role: "user" as const, content: "Quero oferecer diagnóstico" }],
+    draft: {},
+  };
+  const pending = await beginAgentChat(pool, f.context, input);
+  expect((await getAgentSession(pool, f.org, f.campaign)).session).toMatchObject({
+    messages: input.messages,
+    input: input.messages[0]!.content,
+    ready: false,
+  });
+  const retry = await beginAgentChat(pool, f.context, { ...input, revision: pending.revision });
+  expect(retry.session.messages).toEqual(input.messages);
+  const response = {
+    message: "Como considerar alguém qualificado?",
+    draft: {},
+    ready: false,
+    choices: [],
+    model_label: "Modelo do CRM",
+    needs_continuity: false,
+  };
+  await expect(
+    finishAgentChat(pool, f.context, f.campaign, pending.revision, response),
+  ).rejects.toMatchObject({ status: 409 });
+  const abort = new AbortController();
+  abort.abort();
+  await expect(
+    finishAgentChat(pool, f.context, f.campaign, retry.revision, response, abort.signal),
+  ).rejects.toThrow();
+  expect((await getAgentSession(pool, f.org, f.campaign)).revision).toBe(retry.revision);
+  const finished = await finishAgentChat(pool, f.context, f.campaign, retry.revision, response);
+  expect(finished.session.messages).toEqual([
+    ...input.messages,
+    { role: "assistant", content: response.message },
+  ]);
+  expect(finished.session.input).toBe("");
+});
+
+it("recovers a prepared paused agent and its successful publication from the exact saved attempt", async () => {
+  const f = await setupSessionFixture(),
+    admin = publicationClient();
+  const proposal = agentProposalSchema.parse({
+    name: f.input.name,
+    tone: f.input.tone,
+    instruction: f.input.instruction,
+    qualification: f.input.qualification,
+    channel_session_id: f.input.channel_session_id,
+    pipeline_id: f.input.pipeline_id,
+    stage_id: f.input.stage_id,
+    qualified_stage_id: f.input.qualified_stage_id,
+  });
+  const saved = await saveAgentSession(
+    pool,
+    f.context,
+    f.campaign,
+    0,
+    agentSessionWriteSchema.parse({
+      messages: [],
+      draft: proposal,
+      attempt: f.input,
+      attempt_action: "prepare",
+      uncertain: true,
+    }),
+  );
+  const prepared = await setupProspectingAgent(pool, admin, f.context, f.input, {
+    prepareOnly: true,
+  });
+  const row = (
+    await pool.query(
+      "select paused_at,published_version_id from ai_agents where organization_id=$1 and id=$2",
+      [f.org, prepared.agent.id],
+    )
+  ).rows[0];
+  expect(row.paused_at).not.toBeNull();
+  expect(row.published_version_id).toBeNull();
+  expect((await getAgentSession(pool, f.org, f.campaign)).session).toMatchObject({
+    prepared,
+    uncertain: false,
+  });
+  expect(
+    (
+      await pool.query(
+        "select count(*)::int as n from event_log where organization_id=$1 and event_type='ai_agent.published'",
+        [f.org],
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  await expect(
+    setupProspectingAgent(pool, admin, f.context, { ...f.input, name: "Outra proposta" }),
+  ).rejects.toMatchObject({ status: 409 });
+  // A retry of an unconfirmed preview must never become publication.
+  await expect(setupProspectingAgent(pool, admin, f.context, f.input)).rejects.toMatchObject({
+    status: 409,
+  });
+  const confirmed = await saveAgentSession(
+    pool,
+    f.context,
+    f.campaign,
+    saved.revision,
+    agentSessionWriteSchema.parse({
+      messages: [],
+      draft: proposal,
+      attempt: f.input,
+      attempt_action: "publish",
+      uncertain: true,
+    }),
+  );
+  expect((await getAgentSession(pool, f.org, f.campaign)).session).toMatchObject({
+    prepared,
+    uncertain: true,
+    attempt_action: "publish",
+  });
+  expect(await setupProspectingAgent(pool, admin, f.context, f.input)).toEqual(prepared);
+  expect((await getAgentSession(pool, f.org, f.campaign)).session).toMatchObject({
+    completed: prepared,
+    uncertain: false,
+  });
+  expect((await getAgentSession(pool, f.org, f.campaign)).revision).toBe(confirmed.revision);
+  const counts = (
+    await pool.query(
+      "select (select count(*) from messages where organization_id=$1)::int as messages,(select count(*) from prospecting_candidates where organization_id=$1)::int as candidates",
+      [f.org],
+    )
+  ).rows[0];
+  expect(counts).toEqual({ messages: 0, candidates: 0 });
+});
 
 it("publishes through the canonical function, retries the same agent and leaves campaign/contact queues untouched", async () => {
   const f = await fixture(),
