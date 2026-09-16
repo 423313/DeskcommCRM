@@ -359,6 +359,13 @@ export async function redriveQueued(
       log.warn('watchdog: queued sem destino/corpo — pulada', { message_id: m.id });
       continue;
     }
+    // `jaSaiu` separa os dois desfechos que o `catch` de baixo confundia: a
+    // mensagem que nunca saiu (reenviar é certo) e a que JÁ chegou ao cliente
+    // (reenviar é mandar duas vezes). Declarado FORA do `try` porque é lá que o
+    // `catch` o lê — dentro, ele não existiria para o tratamento do erro, e foi
+    // exatamente isso que o `pnpm typecheck` pegou na primeira versão deste
+    // conserto (TS2304: Cannot find name 'jaSaiu').
+    let jaSaiu = false;
     try {
       // A lista pode mudar enquanto a mensagem espera ou entre itens do lote.
       // Este redrive fala direto com o WAHA, portanto também precisa da guarda
@@ -383,11 +390,6 @@ export async function redriveQueued(
         log.info('watchdog: reenvio bloqueado pelo modo de teste', { message_id: m.id });
         continue;
       }
-      // `jaSaiu` separa os dois desfechos que o `catch` de baixo confundia: a
-      // mensagem que nunca saiu (reenviar é certo) e a que JÁ chegou ao cliente
-      // (reenviar é mandar duas vezes). Ele vive fora do `try` do laço de
-      // propósito — dentro, o `catch` não o enxergaria.
-      let jaSaiu = false;
       const res = await fetch(`${cfg.wahaBaseUrl}/api/sendText`, {
         method: 'POST',
         headers: { 'X-Api-Key': cfg.wahaApiKey, 'Content-Type': 'application/json' },
