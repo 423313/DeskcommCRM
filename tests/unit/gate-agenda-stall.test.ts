@@ -200,3 +200,69 @@ describe("fiação do gate — a EXECUÇÃO da ferramenta de agenda arma o sinal
     expect(FONTE_INBOUND).toMatch(/agendaToolCalledThisTurn = true/);
   });
 });
+
+/**
+ * ─── #1019: o substantivo do SERVIÇO também é substantivo de agenda ──────────
+ *
+ * Medido no relato: um agente com as três capacidades de agenda ligadas chamou
+ * `crm_list_event_types` 7× (todas com sucesso no `api_audit_log`) e ZERO vezes
+ * `crm_find_free_slots` — e o que saiu para o lead foi "vou verificar/organizar
+ * seu atendimento". O gate estava armado e não vetou: o VERBO casava
+ * ("verificar"), mas o substantivo não — "atendimento" não estava na lista, e é
+ * justamente a palavra que este produto usa para o serviço que se agenda (o
+ * rótulo da própria capacidade é "Marcar consulta ou sessão").
+ *
+ * Dois buracos, um por frase: o substantivo ("atendimento", "consulta",
+ * "sessão") e o verbo ("organizar" — o modelo pediu para organizar, não para
+ * verificar).
+ */
+describe("#1019 — a promessa de agenda que o padrão deixava passar", () => {
+  const armado = { active: true, podeMarcar: true, toolCalledThisTurn: false };
+
+  it("⭐ veta 'vou verificar seu atendimento' (a promessa do relato)", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({ agenda: armado, body: "Vou verificar seu atendimento e já te retorno." }),
+    );
+    expect(v.pass).toBe(false);
+    if (v.pass) throw new Error("inalcançável");
+    expect(v.code).toBe("agenda_stall_sem_ferramenta");
+  });
+
+  it("⭐ veta 'vou organizar seu atendimento' (o VERBO do relato)", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({
+        agenda: armado,
+        body: "Deixa comigo, vou organizar seu atendimento e já te aviso.",
+      }),
+    );
+    expect(v.pass).toBe(false);
+  });
+
+  it("veta a promessa com o substantivo que a própria tela usa ('consulta', 'sessão')", () => {
+    for (const body of [
+      "Estou verificando sua consulta e já confirmo.",
+      "Vou consultar os horários para a sua sessão.",
+    ]) {
+      expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
+    }
+  });
+
+  it("a MESMA frase do relato passa quando a ferramenta rodou neste turno", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({
+        agenda: { active: true, podeMarcar: true, toolCalledThisTurn: true },
+        body: "Vou organizar seu atendimento e já te aviso.",
+      }),
+    );
+    expect(v.pass).toBe(true);
+  });
+
+  it("continua sem falso positivo em conversa que não promete checar nada", () => {
+    for (const body of [
+      "O atendimento de vocês é excelente, obrigado!",
+      "Vou verificar o seu endereço de entrega e já te retorno.",
+    ]) {
+      expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(true);
+    }
+  });
+});
