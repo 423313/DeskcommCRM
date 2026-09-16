@@ -37,6 +37,16 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Site": { es: "Sitio web" },
+  "Sobre a empresa": { es: "Sobre la empresa" },
+  "Não foi possível carregar o enriquecimento.": { es: "No se pudo cargar el enriquecimiento." },
+  "Sem dados de enriquecimento para este contato.": { es: "Sin datos de enriquecimiento para este contacto." },
+  "Avaliações no Google": { es: "Reseñas en Google" },
+  "E-mails comerciais": { es: "Correos comerciales" },
+  "Fonte: pesquisa de empresas": { es: "Fuente: búsqueda de empresas" },
+  "Ver no Google Maps": { es: "Ver en Google Maps" },
+  "Dados públicos coletados na busca; podem ter mudado.": { es: "Datos públicos recopilados en la búsqueda; pueden haber cambiado." },
+
   "Mensagens rápidas": { es: "Mensajes rápidos" },
   "Voltar às conversas": { es: "Volver a las conversaciones" },
   "Minimizar mensagens": { es: "Minimizar mensajes" },

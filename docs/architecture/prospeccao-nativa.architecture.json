@@ -211,6 +211,11 @@
       "from": "voice-provider",
       "to": "voice-settings",
       "label": "resultado, falha e revisão antes de novo teste"
+    },
+    {
+      "from": "candidates",
+      "to": "inbox",
+      "label": "crm-summary autorizado: contexto comercial e fontes no painel lateral"
     }
   ]
 }

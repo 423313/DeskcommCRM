@@ -94,3 +94,17 @@ export function safePublicLink(value: string | null): string | undefined {
     return undefined;
   }
 }
+
+/** Public business context shared by prospecting and the Inbox; no raw provider payload. */
+export const prospectEnrichmentSchema = z.object({
+  name: z.string().max(200),
+  category: z.string().max(500).nullable(),
+  address: z.string().max(500).nullable(),
+  website: z.string().max(500).nullable(),
+  maps_url: z.string().max(500).nullable(),
+  rating: z.number().min(0).max(5).nullable(),
+  reviews: z.number().int().nonnegative().nullable(),
+  emails: z.array(z.string().max(500)).max(5),
+  socials: z.array(z.string().max(500)).max(15),
+});
+export type ProspectEnrichment = z.infer<typeof prospectEnrichmentSchema>;
