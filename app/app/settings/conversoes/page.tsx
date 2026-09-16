@@ -194,7 +194,7 @@ export default async function ConversoesPage() {
               )}
             </li>
           </ol>
-          <code className="mt-3 block overflow-x-auto rounded bg-muted/50 p-2 text-xs break-all">
+          <code className="mt-3 block overflow-x-auto rounded-md bg-muted/50 p-2 text-xs break-all">
             {linkDeExemplo}
           </code>
           <p className="mt-3 text-xs text-muted-foreground">
