@@ -215,6 +215,21 @@ describe("extensões: publicação transacional e recibos", () => {
     expect((await query("select id from extension_installations where id=$1", [id])).rowCount).toBe(1);
   });
 
+  it("admissão repetida com a mesma chave e corpo diferente é conflito, não um segundo recibo", async () => {
+    const key = randomUUID();
+    const url = origin();
+    const primeira = await admit([base.entry], 1, url, key);
+    expect(await admit([base.entry], 1, url, key)).toEqual(primeira);
+    // Mesma chave, catálogo diferente: devolver o recibo antigo esconderia que o pedido novo
+    // não foi aplicado; aplicar criaria dois efeitos para uma chave.
+    await expect(admit([], 2, url, key)).rejects.toThrow("extension_idempotency_conflict");
+    await expect(admit([base.entry], 1, origin(), key)).rejects.toThrow("extension_idempotency_conflict");
+    const recibos = await query("select count(*)::int n from extension_operations where id=$1", [key]);
+    expect(recibos.rows[0].n).toBe(1);
+    const cat = await query("select revision from extension_catalogs where origin=$1", [url]);
+    expect(cat.rows[0].revision).toBe(1);
+  });
+
   it("mesma versão/digest diferente conflita, upgrade é recusado, origens diferentes coexistem", async () => {
     await install();
     const c = (await query("select origin from extension_catalogs where id=$1", [catalog])).rows[0];
@@ -352,6 +367,34 @@ describe("extensões: coordenação com atualização do core", () => {
       await c.query("commit");
       await assertion;
     } finally { await c.query("rollback"); c.release(); }
+  });
+
+  it("preparação ainda não confirmada segura a atualização do core na trava, não por sorte de tempo", async () => {
+    // O teste acima pega a trava por fora antes de inserir a atualização, então ele passa com ou
+    // sem a trava do GATILHO. Aqui a ordem é a outra: a preparação existe numa transação aberta,
+    // invisível para as demais conexões. Sem a trava do gatilho, o INSERT de `dispatched` não vê
+    // o `preparing` e passa — é a corrida que a trava existe para fechar.
+    const a = await pool.connect();
+    const b = await pool.connect();
+    try {
+      await a.query("begin");
+      await a.query("select public.fn_extensions_prepare_install($1,$2,$3,$4,$5,$6)", [
+        actor, randomUUID(), catalog, base.entry.publisher, base.entry.name, base.entry.version,
+      ]);
+      await b.query("begin");
+      await b.query("set local lock_timeout = '700ms'");
+      await expect(b.query("insert into system_update_runs(requested_by) values($1)", [actor]))
+        .rejects.toMatchObject({ code: "55P03" });
+      await b.query("rollback");
+      await a.query("commit");
+      await expect(query("insert into system_update_runs(requested_by) values($1)", [actor]))
+        .rejects.toThrow("extension_preparation_in_progress");
+    } finally {
+      await a.query("rollback").catch(() => undefined);
+      await b.query("rollback").catch(() => undefined);
+      a.release();
+      b.release();
+    }
   });
 
   it("cancelamento sob trava encerra autoridade antes de finish tardio e permite atualizar", async () => {

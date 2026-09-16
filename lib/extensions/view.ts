@@ -1,11 +1,12 @@
 /** Contrato de apresentação; não importa cliente de banco nem configuração do servidor. */
 import type { CatalogEntry, ExtensionConfiguration, ExtensionManifest } from "./manifest";
+import type { ExtensionOperationKind, ExtensionOperationStatus } from "./vocabulario";
 
 export interface ExtensionOperationView {
   id: string;
   organization_id: string | null;
-  kind: "catalog_admission" | "install" | "configure";
-  status: "preparing" | "completed" | "failed" | "cancelled";
+  kind: ExtensionOperationKind;
+  status: ExtensionOperationStatus;
   catalog_id: string | null;
   installation_id: string | null;
   publisher: string | null;

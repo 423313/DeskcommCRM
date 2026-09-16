@@ -1,6 +1,8 @@
+import { ehTipoDeOperacao, type ExtensionOperationKind } from "@/lib/extensions/vocabulario";
+
 export type PendingReceipt = {
   id: string;
-  kind: "catalog_admission" | "install" | "configure";
+  kind: ExtensionOperationKind;
   label: string;
   targetKey: string;
   createdAt: string;
@@ -28,7 +30,7 @@ function isPendingReceipt(value: unknown): value is PendingReceipt {
     typeof receipt.label === "string" &&
     typeof receipt.targetKey === "string" &&
     typeof receipt.createdAt === "string" &&
-    ["catalog_admission", "install", "configure"].includes(receipt.kind)
+    ehTipoDeOperacao(receipt.kind)
   );
 }
 

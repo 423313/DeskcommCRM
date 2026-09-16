@@ -1,16 +1,6 @@
 import type { ExtensionOperationView } from "@/lib/extensions/view";
+import { ehEstadoDeOperacao, ehTipoDeOperacao } from "@/lib/extensions/vocabulario";
 
-const KINDS = new Set<ExtensionOperationView["kind"]>([
-  "catalog_admission",
-  "install",
-  "configure",
-]);
-const STATUSES = new Set<ExtensionOperationView["status"]>([
-  "preparing",
-  "completed",
-  "failed",
-  "cancelled",
-]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function nullableString(value: unknown): value is string | null {
@@ -26,8 +16,8 @@ export function parseExtensionOperationView(value: unknown): ExtensionOperationV
     !UUID.test(operation.id) ||
     !(typeof operation.organization_id === "string" || operation.organization_id === null) ||
     (typeof operation.organization_id === "string" && !UUID.test(operation.organization_id)) ||
-    !KINDS.has(operation.kind as ExtensionOperationView["kind"]) ||
-    !STATUSES.has(operation.status as ExtensionOperationView["status"]) ||
+    !ehTipoDeOperacao(operation.kind) ||
+    !ehEstadoDeOperacao(operation.status) ||
     !nullableString(operation.catalog_id) ||
     !nullableString(operation.installation_id) ||
     !nullableString(operation.publisher) ||

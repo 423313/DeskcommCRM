@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { assertCatalogOrigin, downloadArtifact } from "./download";
 import { causaSegura, ExtensionError } from "./errors";
 import { lerManifestoAdmitido, montarInstalada, MOTIVO_PACOTE_ILEGIVEL } from "./instalada";
+import { EXTENSION_OPERATION_KINDS, EXTENSION_OPERATION_STATUSES } from "./vocabulario";
 import { ExtensionServiceError, requireExtensionPlatform } from "./http";
 import {
   checkCompatibility,
@@ -64,8 +65,8 @@ const bindingRowSchema = z.object({
 });
 const operationRowSchema = z.object({
   id: uuid,
-  kind: z.enum(["catalog_admission", "install", "configure"]),
-  status: z.enum(["preparing", "completed", "failed", "cancelled"]),
+  kind: z.enum(EXTENSION_OPERATION_KINDS),
+  status: z.enum(EXTENSION_OPERATION_STATUSES),
   actor_id: uuid.nullable(),
   organization_id: uuid.nullable(),
   catalog_id: uuid.nullable(),
