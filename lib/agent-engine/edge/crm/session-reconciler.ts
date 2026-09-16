@@ -383,6 +383,11 @@ export async function redriveQueued(
         log.info('watchdog: reenvio bloqueado pelo modo de teste', { message_id: m.id });
         continue;
       }
+      // `jaSaiu` separa os dois desfechos que o `catch` de baixo confundia: a
+      // mensagem que nunca saiu (reenviar é certo) e a que JÁ chegou ao cliente
+      // (reenviar é mandar duas vezes). Ele vive fora do `try` do laço de
+      // propósito — dentro, o `catch` não o enxergaria.
+      let jaSaiu = false;
       const res = await fetch(`${cfg.wahaBaseUrl}/api/sendText`, {
         method: 'POST',
         headers: { 'X-Api-Key': cfg.wahaApiKey, 'Content-Type': 'application/json' },
@@ -396,6 +401,7 @@ export async function redriveQueued(
         });
         continue;
       }
+      jaSaiu = true;
       const data = (await res.json().catch(() => null)) as unknown;
       const externalId = parseWahaMessageId(data);
       // Daqui em diante a mensagem JÁ SAIU para o cliente. Devolvê-la a `queued`
@@ -414,10 +420,26 @@ export async function redriveQueued(
       sent += 1;
       log.info('watchdog: mensagem presa reenviada', { message_id: m.id, has_external_id: externalId !== null });
     } catch (err) {
-      log.warn('watchdog: redrive com erro transiente — mantida queued', {
-        message_id: m.id,
-        error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
-      });
+      const erro = (err instanceof Error ? err.message : String(err)).slice(0, 120);
+      if (jaSaiu) {
+        // O comentário acima promete que a mensagem que já saiu não volta para
+        // `queued`. A promessa vale para o `23505` (tratado em
+        // `markRedriveSent`) e NÃO vale para qualquer outra falha de banco: ali
+        // a linha continua `queued` e o próximo tick reenvia ao cliente uma
+        // mensagem que ele já recebeu. Não há como consertar daqui — se o banco
+        // não aceita escrita, nenhuma marcação passa —, então o mínimo honesto é
+        // não chamar isso de transiente e dizer, no nível certo, o que está em
+        // risco.
+        log.error('watchdog: a mensagem SAIU para o cliente e o banco não registrou — o próximo tick pode reenviar', {
+          message_id: m.id,
+          error: erro,
+        });
+      } else {
+        log.warn('watchdog: redrive com erro transiente — mantida queued', {
+          message_id: m.id,
+          error: erro,
+        });
+      }
     }
     // espaçamento anti-rajada entre reenvios
     await new Promise((r) => setTimeout(r, cfg.redriveSpacingMs + Math.random() * cfg.redriveSpacingMs));
