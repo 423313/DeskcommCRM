@@ -14,11 +14,13 @@ negócio, e fechar como perdido sem causa registrada não é permitido). Quem es
 errado era a tela, que deixava a pergunta chegar ao banco e devolvia a recusa como
 falha de servidor.
 
-Agora a resposta é a recusa de negócio, com o que fazer: no arrasto, a tela de
-motivo pede o motivo antes de mover; no lote, a recusa NOMEIA os cards que ainda
-não têm motivo — antes, um único card sem motivo derrubava o lote inteiro; e o
-assistente de IA não move o card: ele avisa na Central que o negócio deveria ser
-marcado como perdido e que o motivo é uma decisão de quem está no negócio.
+Agora a resposta é a recusa de negócio, com o que fazer: no arrasto, o card volta
+para a coluna de origem e a tela avisa "Informe o motivo da perda." — para
+registrar a perda, use a ação Perder do próprio card, que já pede o motivo; no
+lote, a recusa avisa antes de tentar, em vez de derrubar o lote inteiro por causa
+de um card; e o assistente de IA não move o card: ele avisa na Central que o
+negócio deveria ser marcado como perdido e que o motivo é uma decisão de quem
+está no negócio.
 
 Nenhuma ação é necessária na instalação: a regra do banco não mudou e nenhum dado
 foi tocado.

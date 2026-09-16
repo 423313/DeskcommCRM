@@ -87,15 +87,34 @@ function stub(estado: Estado) {
       select: () => select(tabela),
       update: (payload: Record<string, unknown>) => {
         estado.updates.push(payload);
+        // O BANCO DE VERDADE: a CHECK recusa a etapa de perda SEM motivo, e
+        // aceita a escrita que leva o motivo junto.
+        //
+        // ⚠️ O duplo devolvia a recusa SEMPRE, e isso apagava a prova do caso
+        // com motivo: `recusaDeMotivoDaPerdaPeloBanco` (a rede de segurança)
+        // devolve o MESMO 422 que a decisão, então os dois caminhos chegavam à
+        // mesma saída e o caso ficava verde com a decisão sabotada. Ramo
+        // redundante não distingue conserto de defeito.
         return {
           eq: () => ({
             eq: () => ({
-              select: () => ({ maybeSingle: async () => ({ data: null, error: RECUSA_DO_BANCO }) }),
+              select: () => ({
+                maybeSingle: async () =>
+                  payload.lost_reason
+                    ? {
+                        data: { id: LEAD_ID, stage_id: PERDIDO_ID, updated_at: UPDATED_AT },
+                        error: null,
+                      }
+                    : { data: null, error: RECUSA_DO_BANCO },
+              }),
             }),
           }),
         };
       },
     }),
+    // A rota emite o evento de domínio depois do movimento (`.then` sobre o
+    // resultado do RPC) — sem isto o caminho FELIZ estouraria antes de responder.
+    rpc: () => Promise.resolve({ data: null, error: null }),
   };
 }
 
@@ -167,11 +186,11 @@ describe("arrastar o card para a etapa de perda sem motivo (#917)", () => {
       { params: Promise.resolve({ id: LEAD_ID }) },
     );
 
-    // A escrita foi tentada com o motivo junto (o duplo devolve a recusa do
-    // banco, então a resposta é a rede de segurança — o que este caso prende é
-    // que o motivo sai NA MESMA escrita da etapa, nunca numa segunda).
+    // O motivo sai NA MESMA escrita da etapa, nunca numa segunda — e a escrita
+    // PASSA: este é o caminho feliz, que faltava. Sem ele os três casos mediam
+    // só recusa, e nada provava que mover para a perda COM motivo funciona.
     expect(estado.updates).toHaveLength(1);
     expect(estado.updates[0]).toMatchObject({ stage_id: PERDIDO_ID, lost_reason: "Cliente desistiu" });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(200);
   });
 });
