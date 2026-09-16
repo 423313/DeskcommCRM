@@ -37,8 +37,16 @@ interface BulkActionBarProps {
    * trocando só as palavras. Sem isto a barra dizia "lead" para todo mundo.
    */
   vocabulary?: PipelineVocabulary | null;
-  /** Tags dos leads do quadro — sem isto o menu só oferecia "nova tag" (#852). */
-  tagsExistentes?: string[];
+  /**
+   * Tags dos leads do quadro — sem isto o menu só oferecia "nova tag" (#852).
+   *
+   * ⚠️ OBRIGATÓRIA, e sem default. Como opcional com `= []`, apagar a linha que
+   * a liga em `app/app/pipelines/[id]/_client.tsx` — o ÚNICO ponto de uso do
+   * repo — fazia o recurso inteiro sumir do produto em silêncio: sem erro, sem
+   * typecheck vermelho, com a lista simplesmente vazia. O default silencioso é
+   * a fiação esquecida que ninguém vê.
+   */
+  tagsExistentes: string[];
   onClear: () => void;
 }
 
@@ -47,7 +55,7 @@ export function BulkActionBar({
   stages,
   pipelineId,
   vocabulary,
-  tagsExistentes = [],
+  tagsExistentes,
   onClear,
 }: BulkActionBarProps) {
   const t = useT();

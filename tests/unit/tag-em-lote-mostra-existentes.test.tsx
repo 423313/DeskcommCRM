@@ -134,10 +134,14 @@ describe("BulkActionBar — tag em lote", () => {
  * O PONTO DE USO — sem ele, apagar uma linha da página faz o recurso sumir do
  * produto com a suíte 100% verde.
  *
- * `tagsExistentes` é prop OPCIONAL com default `[]`, e o único call site do
- * repositório é `app/app/pipelines/[id]/_client.tsx`. Os casos acima passam a
- * lista na mão: tirar o `tagsExistentes={tagsDoQuadro}` da página deixaria
- * TODOS eles verdes, com o menu vazio na tela.
+ * O único call site do repositório é `app/app/pipelines/[id]/_client.tsx`, e os
+ * casos acima passam a lista na mão: tirar o `tagsExistentes={tagsDoQuadro}` da
+ * página deixaria TODOS eles verdes, com o menu vazio na tela.
+ *
+ * A prop deixou de ser opcional com default `[]` na triagem — hoje apagar
+ * aquela linha também reprova o `pnpm typecheck`. Os dois gates ficam: o tipo
+ * pega a linha apagada, este caso pega a linha que passa a lista ERRADA (um
+ * `[]` literal, a lista de outro quadro), que o tipo aceita sem reclamar.
  */
 describe("a página do funil ENTREGA as tags do quadro à barra", () => {
   it("as tags dos leads do quadro chegam ao menu de tag em lote", async () => {
