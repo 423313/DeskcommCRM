@@ -84,8 +84,11 @@ describe("a release chega à página de changelog da LP", () => {
     // O `changelog.html` que o site gera hoje vem em UMA linha só e NÃO dispara isso — a medição
     // INJETOU uma quebra logo depois do link para alcançar o defeito. Ela vale mesmo assim porque
     // o formato do HTML é do gerador, não do contrato: ele ganha quebra sem avisar ninguém daqui.
-    // No ubuntu:24.04 (bash 5.2.21), contra o `changelog.html` do build do `deskcomm-site`
-    // (230.073 bytes, zero quebras), 20 rodadas de cada forma:
+    // Medido contra as TRÊS páginas do build do `deskcomm-site`
+    // (`.next/server/app/{,en/,es/}changelog.html`), cada uma com `wc -l` = 0 — o tamanho em bytes
+    // muda a cada release e por isso não está escrito aqui; a propriedade que importa é a ausência
+    // de quebra, e ela se confere com `wc -l`. 20 rodadas de cada forma, nos três idiomas, em bash
+    // 5.2.21/grep 3.11 (ubuntu:24.04) e em bash 5.3.9/BSD grep 2.6.0 (macOS), com o mesmo placar:
     //
     //   arquivo real          pipeline 20/20 listada · [[ ]] 20/20 · grep <<< 20/20
     //   uma quebra injetada   pipeline  0/20 listada · [[ ]] 20/20 · grep <<< 20/20

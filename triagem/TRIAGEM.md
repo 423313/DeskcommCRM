@@ -1186,9 +1186,15 @@ conferir uma vez só. Se persistir, a ordem de investigação está em `docs/doc
 (seção "A vitrine").
 
 O `grep -c` é de propósito: ele conta, e para contar lê a entrada inteira. Um `grep -q` no lugar
-sai no primeiro casamento, o `curl` do outro lado do cano morre de SIGPIPE e, num terminal com
-`set -o pipefail`, o status vira 141 — a versão LISTADA aparece como faltando assim que o HTML
-tiver uma quebra de linha depois do link.
+sai no primeiro casamento, o `curl` do outro lado do cano leva EPIPE e desiste — e a versão
+LISTADA aparece como faltando assim que o HTML tiver uma quebra de linha depois do link.
+
+**O status desse caso é 23, não 141.** O `curl` ignora o SIGPIPE e escolhe o próprio código de
+saída (`CURLE_WRITE_ERROR`); com `set -o pipefail` o status do cano vira 23, e o `-s` engole a
+única frase que explicaria (`curl: (23) Failure writing output to destination` — troque por `-S -s`
+para vê-la). O **141** que a lista de erros registra é o caso vizinho — `echo "$DIFF" | grep -q`
+no `complemento.sh` —, em que a esquerda do cano é builtin do shell: builtin morre de sinal mesmo,
+e aí sim 128+13. Procurar 141 numa triagem vermelha por ESTA receita não acha nada.
 
 ---
 
