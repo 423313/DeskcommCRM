@@ -715,7 +715,15 @@ jobs:
       redis-http:
         # O MESMO par do docker-compose.prod.yml: quem traduz o REST do Upstash
         # para o Redis acima. Sem ele o produto fala Upstash e não tem com quem.
-        image: hiett/serverless-redis-http:latest
+        #
+        # E o MESMO digest do compose, pela razão do WAHA logo acima: `:latest`
+        # é tag móvel e o job existe para provar o que o self-hoster recebe. O
+        # compose explica por que o pin é por digest e não por `:0.0.10` (não
+        # são a mesma imagem). Medido em 2026-09-16 com `docker buildx
+        # imagetools inspect`: o `:latest` de hoje É este índice (5b0bb923…,
+        # com linux/amd64), então o pin não troca um bit do que rodou — tira do
+        # registry o poder de trocar debaixo do CI. Bumpar é junto com o compose.
+        image: hiett/serverless-redis-http@sha256:5b0bb9239fce53abf87b2018a7a0deb9ec7bd900c5360738fe5fbeeb426f9150
         ports: ["8079:80"]
         env:
           SRH_MODE: env
