@@ -7,8 +7,7 @@
  *
  *   supabase/baseline.sql (trg_conversation_routing_requested)   open+pending
  *   lib/routing/queue.ts  getQueuePosition  (o nº que o CLIENTE ouve)  open+pending
- *   lib/routing/queue.ts  getQueuePositions (o nº do `queue_position`: das tools
- *                                            MCP E do selo da aba Fila)        open
+ *   lib/routing/queue.ts  getQueuePositions (o nº que a TELA mostra)   open
  *   lib/routing/queue.ts  getQueueStatus    (o painel do gerente)      open
  *   app/api/v1/conversations/counts         (o badge da aba)           open
  *   components/inbox/InboxLayout            (a aba Fila)               open

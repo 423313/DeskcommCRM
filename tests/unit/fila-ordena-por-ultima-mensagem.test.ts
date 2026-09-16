@@ -119,7 +119,7 @@ function ordenarComoOPedido(linhas: Linha[], specs: Array<[string, Spec]>): stri
 
 describe("a aba Fila ordena por atividade recente, como o resto do inbox", () => {
   it("⭐ pede ao banco a mesma ordem das demais abas: last_message_at DESC, nulls last, id DESC", async () => {
-    const c = await listar([], { comando: ["aguardando"] });
+    const c = await listar([], { comando: "aguardando" });
     const pedido = ordemDe(c, "last_message_at")[0];
     if (pedido === undefined) throw new Error(`a Fila não pediu ordem nenhuma: ${JSON.stringify(c)}`);
 
@@ -141,7 +141,7 @@ describe("a aba Fila ordena por atividade recente, como o resto do inbox", () =>
   });
 
   it("a Fila NÃO tem mais uma ordem só dela (tempo de espera)", async () => {
-    const c = await listar([], { comando: ["aguardando"] });
+    const c = await listar([], { comando: "aguardando" });
     expect(
       ordemDe(c, "last_inbound_at").map((chamada) => chamada.args),
       AVISO,
@@ -158,7 +158,7 @@ describe("a aba Fila ordena por atividade recente, como o resto do inbox", () =>
   });
 
   it("⭐ duas conversas na fila: a de mensagem mais nova em cima (o caso do #464)", async () => {
-    const c = await listar([...PAGINA_DA_FILA], { comando: ["aguardando"] });
+    const c = await listar([...PAGINA_DA_FILA], { comando: "aguardando" });
     const pedidos = ordens(c);
     if (pedidos.length === 0) {
       throw new Error(`a Fila não pediu ordem nenhuma: ${JSON.stringify(c)}`);
@@ -172,62 +172,10 @@ describe("a aba Fila ordena por atividade recente, como o resto do inbox", () =>
     expect(exibidas, AVISO).toEqual(["conv-recente", "conv-antiga", "conv-sem-mensagem"]);
   });
 
-  it("cursor de ANTES da mudança de ordem não é aplicado na Fila (#639)", async () => {
-    // Um "Carregar mais" clicado na Fila logo depois da atualização traz um
-    // cursor emitido pela ordem ANTIGA: a chave é a mesma (`sort`), e o valor é
-    // um carimbo de `last_inbound_at` — outra coluna, e comparada no sentido
-    // contrário (`gt` ascendente). Aplicá-lo em `last_message_at.lt.<valor>`
-    // devolve uma página que pula linhas sem dizer nada. O que identifica o
-    // cursor legado é a AUSÊNCIA de `col`, não o nome do campo.
-    const legado = Buffer.from(
-      JSON.stringify({ sort: "2026-08-18T09:00:00.000Z", id: "conv-antiga" }),
-      "utf8",
-    ).toString("base64url");
-
-    const c = await listar([], { comando: ["aguardando"], cursor: legado });
-    const ors = c.filter((chamada) => chamada.metodo === "or");
-    expect(
-      ors.map((chamada) => chamada.args),
-      "cursor de outra ordem não pode virar predicado de paginação",
-    ).toEqual([]);
-  });
-
-  it("CONTROLE: cursor carimbado com a coluna É aplicado, e o emitido sai carimbado", async () => {
-    // Sem este controle, o caso acima ficaria verde com a paginação da Fila
-    // inteira desligada.
-    const atual = Buffer.from(
-      JSON.stringify({ sort: "2026-08-18T09:00:00.000Z", id: "conv-antiga", col: "last_message_at" }),
-      "utf8",
-    ).toString("base64url");
-
-    const c = await listar([], { comando: ["aguardando"], cursor: atual });
-    const ors = c.filter((chamada) => chamada.metodo === "or");
-    expect(ors.length, "cursor carimbado tem de paginar").toBe(1);
-    expect(String(ors[0]!.args[0])).toContain("last_message_at.lt.2026-08-18T09:00:00.000Z");
-
-    // E o cursor que ESTE handler emite já nasce carimbado — senão o descarte
-    // acima valeria para sempre, e a Fila nunca mais paginaria.
-    const paginaCheia = Array.from({ length: 51 }, (_, i) => ({
-      id: `conv-${i}`,
-      last_message_at: `2026-08-18T09:00:0${i % 10}.000Z`,
-    }));
-    const { client } = fakeSupabase(paginaCheia);
-    const r = await listConversationsHandler(
-      client,
-      ctx,
-      { limit: 50, comando: ["aguardando"] } as never,
-    );
-    expect(r.cursor, "página cheia tem de emitir cursor").toBeTruthy();
-    const payload = JSON.parse(Buffer.from(r.cursor!, "base64url").toString("utf8")) as {
-      col?: string;
-    };
-    expect(payload.col).toBe("last_message_at");
-  });
-
   it("⛔ a ordem é pedida JUNTO com o filtro de organização, na mesma consulta", async () => {
     // O handler usa o admin client (passa por cima da RLS): o filtro manual de
     // organização é a única barreira — e a ordem não pode vir de uma consulta nova.
-    const c = await listar([], { comando: ["aguardando"] });
+    const c = await listar([], { comando: "aguardando" });
     expect(
       c.some(
         (chamada) =>

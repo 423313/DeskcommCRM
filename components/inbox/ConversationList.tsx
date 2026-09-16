@@ -53,17 +53,11 @@ export function ConversationList({
   const maisDeUmCanal = canais.length > 1;
 
   // Fila (G5-03): a lista vem ordenada por ATIVIDADE RECENTE (`last_message_at`
-  // DESC, igual às demais abas — #639), e o selo mostra `queue_position` — a
-  // posição de ESPERA que a borda HTTP calcula com `getQueuePositions`
-  // (`last_inbound_at` ASC), o MESMO número das tools MCP e da mensagem que o
-  // cliente recebe no WhatsApp.
-  //
-  // ⚠️ NÃO use o índice da lista (`i + 1`). Ele coincidia com a posição enquanto
-  // a Fila tinha ordem própria; depois do #639 deixou de coincidir, e o selo
-  // continua rotulado "Posição N na fila" — desenhar o índice ali faz o mesmo
-  // produto dizer dois números para a mesma conversa. O número e o "aguardando
-  // há X" ao lado saem os dois de `last_inbound_at`, e por isso concordam entre
-  // si mesmo quando a lista não está nessa ordem.
+  // DESC, igual às demais abas — #639), então o "1º, 2º…" é o índice na lista
+  // visível e NÃO a posição de espera do `getQueuePositions` (`last_inbound_at`
+  // ASC), que é o número das tools MCP. São perguntas diferentes: aqui "onde ela
+  // está na lista", lá "minha vez na fila". O "aguardando há X" continua saindo de
+  // `last_inbound_at`, linha a linha. Só mostramos posição/espera nessa visão.
   // A Fila deixou de mandar `assigned_to=unassigned` (agora pede `comando`), e
   // sem esta linha a numeração "1º, 2º…" e o tempo de espera sumiriam da única
   // visão em que servem para alguma coisa — sem erro nenhum, só sumiriam.
@@ -169,13 +163,13 @@ export function ConversationList({
         {items.length === 0 && filtrosAtivos.length > 0 && (
           <EmptyPorFiltro filtros={filtrosAtivos} onLimpar={onLimparFiltros} />
         )}
-        {items.map((c) => (
+        {items.map((c, i) => (
           <ConversationListItem
             key={c.id}
             conversation={c}
             isSelected={c.id === selectedId}
             onSelect={onSelect}
-            queuePosition={isQueue ? (c.queue_position ?? undefined) : undefined}
+            queuePosition={isQueue ? i + 1 : undefined}
             mostrarCanal={maisDeUmCanal}
             mostrarAtendente={mostrarAtendente}
             mostrarAutomatico={mostrarAutomatico}

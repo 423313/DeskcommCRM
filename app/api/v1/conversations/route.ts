@@ -12,8 +12,6 @@ import { listConversationsQuerySchema } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 import { comNomeDoAtendente } from "@/lib/users/com-nome-do-atendente";
 
-import { comPosicaoNaFila, ehAVisaoDaFila } from "@/lib/inbox/posicao-na-fila";
-
 import { listConversationsHandler } from "./_handler";
 
 export const dynamic = "force-dynamic";
@@ -85,20 +83,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     // handler é compartilhado com as tools MCP, que já resolvem o nome por conta
     // própria (`lib/mcp/tools/conversations.ts`) — enriquecer lá faria a mesma
     // leitura duas vezes por chamada do agente.
-    //
-    // A POSIÇÃO NA FILA entra pela MESMA porta e pela mesma razão (a tool
-    // `crm_list_conversations` também já a resolve). Ela é o número do selo da
-    // aba Fila: desde que a lista passou a ordenar por atividade recente (#639),
-    // o índice da lista deixou de ser a posição de espera, e o selo continuava
-    // desenhando o índice sob o rótulo "Posição N na fila" — outro número, para
-    // a mesma conversa, do que o MCP e o WhatsApp dizem.
-    const comFila = await comPosicaoNaFila(
-      supabase,
-      activeOrg.orgId,
-      conversations,
-      ehAVisaoDaFila(qsParsed.data),
-    );
-    return ok(await comNomeDoAtendente(comFila), {
+    return ok(await comNomeDoAtendente(conversations), {
       requestId,
       meta: { cursor, has_more },
     });
