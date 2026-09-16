@@ -66,6 +66,26 @@ describe("GET /api/v1/contact-tags", () => {
     expect(body.data).toEqual(["google", "vip"]);
   });
 
+  /**
+   * O rótulo do chip tem de dizer exatamente o que o clique grava. Cru, "VIP",
+   * "vip " e "vip" viravam TRÊS chips que gravam a MESMA tag — e os dois
+   * primeiros nunca sumiam da tela, porque o filtro do editor compara com
+   * sensibilidade a caixa. Controle decorativo, e a duplicação que a sugestão
+   * veio impedir. Os três exemplos são os da própria issue #852.
+   */
+  it("normaliza como o editor grava: 'VIP', 'vip ' e 'vip' são UMA tag", async () => {
+    vi.mocked(createClient).mockResolvedValue(bancoFalso([
+      { organization_id: ORG, tags: ["VIP"] },
+      { organization_id: ORG, tags: ["vip "] },
+      { organization_id: ORG, tags: ["vip"] },
+    ]));
+
+    const { status, body } = await chamaRota();
+
+    expect(status).toBe(200);
+    expect(body.data).toEqual(["vip"]);
+  });
+
   it("falha na leitura vira erro, não lista vazia", async () => {
     vi.mocked(createClient).mockResolvedValue(bancoFalso([], { message: "boom" }));
 

@@ -15,6 +15,7 @@ import type { NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { normalizarTag } from "@/lib/contacts/tag-normalizada";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,18 @@ export async function GET(_req: NextRequest): Promise<Response> {
   // A falha SOBE: lista vazia diria "não há tags" em cima de um erro.
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  const tags = [...new Set((data ?? []).flatMap((c: { tags: string[] | null }) => c.tags ?? []))]
+  // NORMALIZADA, com a mesma função que o editor usa ao gravar: o rótulo do
+  // chip tem de dizer exatamente o que o clique grava. Devolvendo a tag crua,
+  // "VIP", "vip " e "vip" viravam TRÊS chips que gravam a mesma coisa, e dois
+  // deles nunca sumiam da tela.
+  const tags = [
+    ...new Set(
+      (data ?? [])
+        .flatMap((c: { tags: string[] | null }) => c.tags ?? [])
+        .map(normalizarTag)
+        .filter(Boolean),
+    ),
+  ]
     .sort((a, b) => a.localeCompare(b, "pt-BR"))
     .slice(0, TETO_DE_TAGS);
   return ok(tags, { requestId });

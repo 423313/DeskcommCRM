@@ -48,4 +48,37 @@ describe("ContactTagsEditor", () => {
 
     expect(mutate).toHaveBeenCalledWith({ tags: ["vip", "google"] });
   });
+
+  /**
+   * As duas direções da mesma cegueira: o filtro comparava com sensibilidade a
+   * caixa, então bastava a tag estar gravada fora da forma normalizada — de um
+   * lado ou do outro — para o chip nunca sumir. Clicar nele gravava a variante
+   * minúscula, o contato ficava com as DUAS, e do segundo clique em diante o
+   * botão não fazia nada.
+   */
+  it("tag do vocabulário em caixa mista não vira chip para quem já a tem", async () => {
+    get.mockResolvedValue({ data: ["VIP"] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ContactTagsEditor contactId="c-1" orgId={ORG} tags={["vip"]} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByLabelText("Adicionar tag ao contato");
+    expect(screen.queryByRole("button", { name: /\+ ?VIP/i })).toBeNull();
+  });
+
+  it("contato com a tag em caixa mista não recebe o chip da versão minúscula", async () => {
+    get.mockResolvedValue({ data: ["vip"] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ContactTagsEditor contactId="c-1" orgId={ORG} tags={["VIP"]} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByLabelText("Adicionar tag ao contato");
+    expect(screen.queryByRole("button", { name: /\+ ?vip/i })).toBeNull();
+  });
 });
