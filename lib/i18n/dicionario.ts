@@ -4520,6 +4520,7 @@ export const DICIONARIO: Traducoes = {
   "Entrou por": { es: "Entró por" },
   "Posição": { es: "Posición" },
   "na fila": { es: "en la cola" },
+  "Última mensagem do cliente": { es: "Último mensaje del cliente" },
   Arquivada: { es: "Archivada" },
   "Aguardando o cliente": { es: "Esperando al cliente" },
 
