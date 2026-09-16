@@ -67,7 +67,10 @@ import { describe, expect, it } from "vitest";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RAIZ = process.cwd();
-const DIRS_DE_CODIGO = ["app", "lib", "workers", "components", "hooks"];
+// `scripts` entra porque hoje é de graça (zero `.rpc(` lá) e amanhã não seria: um
+// script que chame uma função inexistente falha na mão de quem opera, longe de
+// qualquer gate. Medido ao integrar: `git grep -c '\.rpc(' -- scripts/` → 0.
+const DIRS_DE_CODIGO = ["app", "lib", "workers", "components", "hooks", "scripts"];
 const SUPABASE = "supabase";
 const BASELINE = "supabase/baseline.sql";
 

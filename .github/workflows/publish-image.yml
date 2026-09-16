@@ -420,8 +420,11 @@ jobs:
           push: false
           load: true
           tags: deskcomm-worker:pr
-          # Mesmo escopo de cache do build-and-push, por imagem: as camadas são
-          # idênticas, então este job reaproveita aquele build em vez de repeti-lo.
+          # Mesmo escopo de cache do build-and-push, por imagem. Os dois jobs
+          # correm em PARALELO, então o cache costuma estar frio no primeiro run
+          # de um push e quente nos seguintes — "reaproveita aquele build" só
+          # vale a partir do segundo. Medido em 16/09/2026 no primeiro run deste
+          # gate: manifesto importado, camadas reconstruídas.
           cache-from: type=gha,scope=deskcommcrm-worker
 
       - name: Build local da imagem do scheduler (sem push)

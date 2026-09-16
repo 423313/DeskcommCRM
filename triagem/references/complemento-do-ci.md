@@ -208,7 +208,7 @@ Para não gastar passe à toa:
 | migration nova com `NNNN`/timestamp já tomados na `origin/main` | passo `Colisão de número de migration` do job `verify` (`pnpm checar:colisao-de-migration`, issue #285) |
 | DoD 14, "tela nova tem porta" | `pnpm test:unit` → `navegacao-completude.test.ts` |
 | provider nomeado fora de `lib/channels/` | `pnpm lint:channels` |
-| baseline aplica fresh **e** idempotente | `pnpm test:db` (job `invariants`) |
+| baseline aplica fresh **e** idempotente | `pnpm test:db` (job `invariants-majors`, sob a fachada `invariants`) |
 | isolamento RLS nas 10 tabelas listadas | `pnpm test:db` |
 | tipos, lint, unit, shell, build | job `verify` + `build-and-size` |
 | a imagem Docker do self-host constrói | job `build-and-push` (PR #233) — **ainda não obrigatório** |
