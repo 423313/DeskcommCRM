@@ -329,3 +329,25 @@ export type ComandoDoBanco = (typeof COMANDOS_DO_BANCO)[number];
 export function comandosDaFila(automaticoDaOrg?: boolean): ComandoDoBanco[] {
   return automaticoDaOrg === false ? ["aguardando", "automatico"] : ["aguardando"];
 }
+
+/**
+ * A ORDEM DA FILA, num lugar só — mais tempo esperando primeiro.
+ *
+ * `last_inbound_at` é a última mensagem DO CLIENTE, e é a única das três datas
+ * que mede espera: `last_message_at` anda quando o atendente responde (a conversa
+ * que o cliente abandonou há dois dias volta ao topo assim que ele recebe uma
+ * resposta hoje) e `created_at` pode ser de uma conversa antiga reaberta.
+ * `nullsFirst: false` põe quem nunca recebeu mensagem no fim; o `id` é o
+ * desempate, e sem ele duas conversas com o mesmo instante trocam de lugar entre
+ * duas leituras — a linha "pula" sozinha na tela.
+ *
+ * Quem consome: a rota da lista (`app/api/v1/conversations/_handler.ts`, a aba
+ * Fila) e o mapa de posições (`lib/routing/queue.ts` — o "3º" que o atendente lê
+ * na linha e o número que o cliente ouve no WhatsApp). Enquanto cada um escrevia
+ * a sua, a mesma conversa poderia aparecer em 2º numa e 5ª na outra, ordenada por
+ * uma pergunta e numerada por outra, sem nada ficar vermelho.
+ */
+export const ORDEM_DA_ESPERA = {
+  coluna: "last_inbound_at",
+  opcoes: { ascending: true, nullsFirst: false },
+} as const;
