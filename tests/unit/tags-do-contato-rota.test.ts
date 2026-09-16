@@ -16,6 +16,8 @@ import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+const logError = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/logger", () => ({ logger: { error: logError, info: vi.fn(), warn: vi.fn(), debug: vi.fn() } }));
 
 const ORG = "org-1";
 type Linha = Record<string, unknown>;
@@ -53,10 +55,14 @@ function bancoFalso(linhas: Linha[], erro: { message: string } | null = null) {
 async function chamaRota() {
   const { GET } = await import("@/app/api/v1/contact-tags/route");
   const res = await GET(new NextRequest("http://x/api/v1/contact-tags"));
-  return { status: res.status, body: (await res.json()) as { data?: string[] } };
+  return {
+    status: res.status,
+    body: (await res.json()) as { data?: string[]; error?: { message: string } },
+  };
 }
 
 beforeEach(() => {
+  logError.mockReset();
   vi.mocked(requireRole).mockResolvedValue({ ok: true, org: { orgId: ORG, name: "Org", role: "agent" } } as never);
 });
 
@@ -147,5 +153,25 @@ describe("GET /api/v1/contact-tags", () => {
     const { status } = await chamaRota();
 
     expect(status).toBe(500);
+  });
+
+  /**
+   * Fechada na AÇÃO, aberta na INFORMAÇÃO. A mensagem crua do Postgres é para
+   * quem opera a instalação, não para o navegador; e trocá-la por uma frase
+   * fixa SEM registrar a causa deixaria o operador com um 500 mudo e nenhum
+   * lugar onde procurar — pior que o estado anterior. Os dois lados juntos,
+   * porque separados um estraga o outro.
+   */
+  it("o cliente recebe a frase do produto e o log recebe a causa", async () => {
+    vi.mocked(createClient).mockResolvedValue(bancoFalso([], { message: "permission denied for table contacts" }));
+
+    const { body } = await chamaRota();
+
+    expect(body.error?.message).toBe("Não foi possível carregar as tags.");
+    expect(JSON.stringify(body)).not.toContain("permission denied");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ cause: "permission denied for table contacts", orgId: ORG }),
+    );
   });
 });

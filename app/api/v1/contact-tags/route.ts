@@ -16,6 +16,7 @@ import type { NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { normalizarTag } from "@/lib/contacts/tag-normalizada";
+import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +41,20 @@ export async function GET(_req: NextRequest): Promise<Response> {
     .order("updated_at", { ascending: false })
     .limit(CONTATOS_LIDOS);
   // A falha SOBE: lista vazia diria "não há tags" em cima de um erro.
-  if (error) return fail("internal_error", error.message, 500, { requestId });
+  //
+  // Fechada na AÇÃO, aberta na INFORMAÇÃO: o cliente recebe uma frase do
+  // produto — a mensagem crua do Postgres é para quem opera, não para o
+  // navegador — e a causa vai inteira para o log, junto do `requestId` que a
+  // resposta carrega. Trocar uma pela outra sem o log seria pior que o estado
+  // anterior: o operador ficaria com um 500 mudo e nenhum lugar onde procurar.
+  if (error) {
+    logger.error("contact-tags: leitura das tags do contato falhou", {
+      requestId,
+      orgId: authz.org.orgId,
+      cause: error.message,
+    });
+    return fail("internal_error", "Não foi possível carregar as tags.", 500, { requestId });
+  }
 
   // NORMALIZADA, com a mesma função que o editor usa ao gravar: o rótulo do
   // chip tem de dizer exatamente o que o clique grava. Devolvendo a tag crua,
