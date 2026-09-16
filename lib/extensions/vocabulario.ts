@@ -9,7 +9,14 @@
  *
  * Módulo puro: é importado também pelo navegador.
  */
-export const EXTENSION_OPERATION_KINDS = ["catalog_admission", "install", "configure"] as const;
+export const EXTENSION_OPERATION_KINDS = [
+  "catalog_admission",
+  "install",
+  "update",
+  "revert",
+  "removal",
+  "configure",
+] as const;
 export type ExtensionOperationKind = (typeof EXTENSION_OPERATION_KINDS)[number];
 
 export const EXTENSION_OPERATION_STATUSES = [
@@ -26,4 +33,13 @@ export function ehTipoDeOperacao(valor: unknown): valor is ExtensionOperationKin
 
 export function ehEstadoDeOperacao(valor: unknown): valor is ExtensionOperationStatus {
   return (EXTENSION_OPERATION_STATUSES as readonly unknown[]).includes(valor);
+}
+
+/**
+ * Espelho de `extension_operations_scope`: todo recibo é da plataforma (sem organização),
+ * menos `configure`, que é da organização. Quem valida a organização de um recibo usa esta
+ * regra em vez de uma lista paralela de tipos, que envelheceria no primeiro tipo novo.
+ */
+export function ehOperacaoDaPlataforma(kind: ExtensionOperationKind): boolean {
+  return kind !== "configure";
 }

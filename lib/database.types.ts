@@ -4535,7 +4535,11 @@ export type Database = {
           installed_at: string
           installed_by: string | null
           name: string
+          previous_artifact_id: string | null
           publisher: string
+          removed_at: string | null
+          removed_by: string | null
+          revision: number
           version: string
         }
         Insert: {
@@ -4545,7 +4549,11 @@ export type Database = {
           installed_at?: string
           installed_by?: string | null
           name: string
+          previous_artifact_id?: string | null
           publisher: string
+          removed_at?: string | null
+          removed_by?: string | null
+          revision?: number
           version: string
         }
         Update: {
@@ -4555,7 +4563,11 @@ export type Database = {
           installed_at?: string
           installed_by?: string | null
           name?: string
+          previous_artifact_id?: string | null
           publisher?: string
+          removed_at?: string | null
+          removed_by?: string | null
+          revision?: number
           version?: string
         }
         Relationships: [
@@ -4571,6 +4583,13 @@ export type Database = {
             columns: ["catalog_id"]
             isOneToOne: false
             referencedRelation: "extension_catalogs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extension_installations_previous_artifact_id_fkey"
+            columns: ["previous_artifact_id"]
+            isOneToOne: false
+            referencedRelation: "extension_artifacts"
             referencedColumns: ["id"]
           },
         ]
@@ -6400,6 +6419,7 @@ export type Database = {
       organization_extensions: {
         Row: {
           configuration: Json
+          deactivated_by_removal_at: string | null
           enabled: boolean
           installation_id: string
           organization_id: string
@@ -6409,6 +6429,7 @@ export type Database = {
         }
         Insert: {
           configuration: Json
+          deactivated_by_removal_at?: string | null
           enabled: boolean
           installation_id: string
           organization_id: string
@@ -6418,6 +6439,7 @@ export type Database = {
         }
         Update: {
           configuration?: Json
+          deactivated_by_removal_at?: string | null
           enabled?: boolean
           installation_id?: string
           organization_id?: string
@@ -7989,6 +8011,7 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_extensions_core_update_in_progress: { Args: never; Returns: boolean }
       fn_extensions_fail_install: {
         Args: { p_actor: string; p_error_code: string; p_operation: string }
         Returns: Json
@@ -8005,14 +8028,41 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_extensions_installation_counts: {
+        Args: never
+        Returns: {
+          active_organizations: number
+          awaiting_reactivation: number
+          installation_id: string
+        }[]
+      }
       fn_extensions_prepare_install: {
         Args: {
           p_actor: string
           p_catalog: string
+          p_expected_installation_revision: number
           p_name: string
           p_operation: string
           p_publisher: string
           p_version: string
+        }
+        Returns: Json
+      }
+      fn_extensions_remove_installation: {
+        Args: {
+          p_actor: string
+          p_expected_installation_revision: number
+          p_installation: string
+          p_operation: string
+        }
+        Returns: Json
+      }
+      fn_extensions_revert_install: {
+        Args: {
+          p_actor: string
+          p_expected_installation_revision: number
+          p_installation: string
+          p_operation: string
         }
         Returns: Json
       }
