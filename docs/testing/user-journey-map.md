@@ -2151,4 +2151,5 @@ de contrato; pareamento real por código ainda requer confirmação no celular.
 - [P1] Falha na assinatura do webhook fica visível e retenta com reconciliação por URL.
 - Evidência automatizada: `social/parser.test.ts`, `social/client.test.ts`, rota social,
   `RedesSociaisClient.test.tsx`, invariante de banco `social-native.test.ts`.
-- QA visual e publicação: pendentes até registro da verificação final.
+- QA local com Supabase e provedor de teste: entrada assinada, resposta manual, deduplicação, assinatura inválida, conta incorreta e concorrência de registro aprovadas.
+- QA visual local e na instalação self-host concluída; app/worker `788b0fe` saudáveis e testes de webhook do provedor aprovados. DM real e pareamento confirmado no celular permanecem pendentes.

@@ -24912,7 +24912,7 @@ comment on column public.user_organizations.provisional_until_handover is
   'cria). Nunca deduzir este valor depois: a ausência dele foi o que fez a '
   'primeira versão desta regra expulsar alguém da própria empresa.';
 
--- ---- Redes sociais nativas (migration 0252) ----
+-- ---- Redes sociais nativas (migration 0261) ----
 -- Social connections reuse channel sessions, the inbox and the outbound ledger.
 -- Credentials are server-only; tenant admins use authenticated API routes.
 create table if not exists public.channel_integrations (
