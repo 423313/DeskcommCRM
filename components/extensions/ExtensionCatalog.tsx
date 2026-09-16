@@ -1,7 +1,17 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,6 +26,7 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import { localize, type CatalogEntry, type ExtensionManifest } from "@/lib/extensions/manifest";
+import { compararVersoes } from "@/lib/extensions/versao";
 import {
   BookOpen,
   CheckCircle,
@@ -27,6 +38,8 @@ import {
   UploadSimple,
   X,
 } from "@/lib/ui/icons";
+
+import { continuamAtivas, usavamAntesDaRemocao } from "./frases-de-versao";
 
 const CATEGORY_VALUES = ["all", "productivity", "sales", "service"] as const;
 export type CategoryFilter = (typeof CATEGORY_VALUES)[number];
@@ -222,12 +235,28 @@ export function CatalogAdmission({
   );
 }
 
+/**
+ * A relação entre uma entrada do catálogo e o que já está instalado. A identidade casa por
+ * catálogo + publicador + nome: a mesma extensão vinda de outra origem é outra instalação, e o
+ * catálogo não oferece trocá-la.
+ */
+export type CatalogIdentityState =
+  | { kind: "absent" }
+  | {
+      kind: "installed";
+      version: string;
+      installationRevision: number;
+      activeOrganizations: number | null;
+    }
+  | { kind: "removed"; revision: number; removedAt: string; awaitingReactivation: number }
+  | { kind: "other_origin"; origin: string; version: string };
+
 export function CatalogExtensionCard({
   entry,
   origin,
   canInstall,
   actionsDisabled,
-  installedVersion,
+  identity,
   blockedReason,
   busy,
   onInstall,
@@ -236,26 +265,47 @@ export function CatalogExtensionCard({
   origin: string;
   canInstall: boolean;
   actionsDisabled: boolean;
-  installedVersion: string | null;
+  identity: CatalogIdentityState;
   blockedReason?: string;
   busy: boolean;
-  onInstall: () => void;
+  /** Recebe a revisão da instalação que esta tela exibiu (`null` quando não havia linha). */
+  onInstall: (expectedInstallationRevision: number | null) => void;
 }) {
   const t = useT();
   const locale = useIdioma();
+  const [confirming, setConfirming] = useState(false);
   const Icon = ICONS[entry.display.icon];
-  const sameVersion = installedVersion === entry.version;
+  const title = localize(entry.display.title, locale).text;
+  const identidade = `${entry.publisher}-${entry.name}-${entry.version}`;
+  const installed = identity.kind === "installed" ? identity : null;
+  const sameVersion = installed?.version === entry.version;
+  const upgrade = installed ? compararVersoes(entry.version, installed.version) > 0 : false;
+  const confirmable = (installed && !sameVersion) || identity.kind === "removed";
+  const actionLabel = installed
+    ? upgrade
+      ? t("Atualizar para {versao}").replace("{versao}", entry.version)
+      : t("Trocar para {versao}").replace("{versao}", entry.version)
+    : identity.kind === "removed"
+      ? t("Reinstalar versão {versao}").replace("{versao}", entry.version)
+      : t("Instalar versão revisada");
+  const expectedRevision =
+    identity.kind === "installed"
+      ? identity.installationRevision
+      : identity.kind === "removed"
+        ? identity.revision
+        : null;
+
   return (
     <Card
       className="flex h-full flex-col p-5"
-      data-testid={`extension-catalog-${entry.publisher}-${entry.name}-${entry.version}`}
+      data-testid={`extension-catalog-${identidade}`}
     >
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface-elevated text-muted-foreground">
           <Icon size={22} weight="duotone" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold">{localize(entry.display.title, locale).text}</h2>
+          <h2 className="text-base font-semibold">{title}</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             {localize(entry.display.summary, locale).text}
           </p>
@@ -282,44 +332,118 @@ export function CatalogExtensionCard({
         </div>
       </dl>
       <div className="mt-auto pt-4">
-        {installedVersion ? (
+        {sameVersion ? (
+          <div className="rounded-md border border-border p-3 text-sm">
+            <p className="font-medium">{t("Esta versão já está instalada.")}</p>
+          </div>
+        ) : identity.kind === "other_origin" ? (
           <div className="rounded-md border border-border p-3 text-sm">
             <p className="font-medium">
-              {sameVersion
-                ? t("Esta versão já está instalada.")
-                : t("Outra versão desta extensão já está instalada.")}
+              {t("Já instalada a partir de outra origem ({origem}, versão {versao}).")
+                .replace("{origem}", identity.origin)
+                .replace("{versao}", identity.version)}
             </p>
-            {!sameVersion ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("Atualização de versão ainda não faz parte desta integração.")}
-              </p>
-            ) : null}
           </div>
         ) : canInstall ? (
           <div>
+            {installed ? (
+              <p className="mb-2 text-xs text-muted-foreground">
+                {t("Instalada hoje: versão {versao}.").replace("{versao}", installed.version)}
+              </p>
+            ) : identity.kind === "removed" ? (
+              <p className="mb-2 text-xs text-muted-foreground">
+                {t("Removida da instalação em {data}.").replace(
+                  "{data}",
+                  new Date(identity.removedAt).toLocaleDateString(locale),
+                )}
+              </p>
+            ) : null}
             <Button
-              data-testid={`extension-install-${entry.publisher}-${entry.name}-${entry.version}`}
+              data-testid={`extension-install-${identidade}`}
               className="w-full sm:w-auto"
               disabled={busy || actionsDisabled}
-              onClick={onInstall}
+              onClick={() => (confirmable ? setConfirming(true) : onInstall(expectedRevision))}
             >
               {busy ? (
                 <CircleNotch className="animate-spin" aria-hidden />
               ) : (
                 <UploadSimple aria-hidden />
               )}
-              {busy ? t("Preparando…") : t("Instalar versão revisada")}
+              {busy ? t("Preparando…") : actionLabel}
             </Button>
             {blockedReason ? (
               <p className="mt-2 text-xs text-muted-foreground">{blockedReason}</p>
             ) : null}
           </div>
+        ) : installed ? (
+          <p className="text-sm text-muted-foreground">
+            {t("Instalada hoje: versão {versao}.").replace("{versao}", installed.version)}
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground">
             {blockedReason ?? t("Somente o responsável pela instalação pode instalar este pacote.")}
           </p>
         )}
       </div>
+
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent data-testid={`extension-install-dialog-${identidade}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {installed
+                ? (upgrade
+                    ? t("Atualizar {titulo} para a versão {versao}?")
+                    : t("Trocar {titulo} para a versão {versao}?")
+                  )
+                    .replace("{titulo}", title)
+                    .replace("{versao}", entry.version)
+                : t("Reinstalar {titulo}?").replace("{titulo}", title)}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {installed ? (
+                  <>
+                    <p>
+                      {t("A versão {versao} é substituída em todas as organizações.").replace(
+                        "{versao}",
+                        installed.version,
+                      )}
+                    </p>
+                    {installed.activeOrganizations !== null ? (
+                      <p>{continuamAtivas(t, installed.activeOrganizations)}</p>
+                    ) : null}
+                    <p>
+                      {t(
+                        "Depois você pode desfazer esta troca, mesmo com o catálogo fora do ar.",
+                      )}
+                    </p>
+                  </>
+                ) : identity.kind === "removed" ? (
+                  <>
+                    <p>
+                      {t("Ela foi removida em {data}.").replace(
+                        "{data}",
+                        new Date(identity.removedAt).toLocaleDateString(locale),
+                      )}
+                    </p>
+                    <p>{usavamAntesDaRemocao(t, identity.awaitingReactivation)}</p>
+                    <p>{t("A versão é baixada de novo do catálogo.")}</p>
+                  </>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid={`extension-install-confirm-${identidade}`}
+              onClick={() => onInstall(expectedRevision)}
+            >
+              {installed ? (upgrade ? t("Atualizar") : t("Trocar")) : t("Reinstalar")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

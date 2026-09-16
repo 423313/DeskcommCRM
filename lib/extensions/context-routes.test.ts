@@ -77,7 +77,7 @@ const routes: Array<{
   {
     name: "abertura de Tarefas",
     call: (org) =>
-      open(request("POST", org, { capability: "tasks.open", expected_revision: 0 }), {
+      open(request("POST", org, { capability: "tasks.open", expected_revision: 0, card_id: "prioridades" }), {
         params: Promise.resolve({ id: INSTALLATION }),
       }),
   },
@@ -148,6 +148,28 @@ describe("contexto exibido pela extensão e cookie compartilhado entre abas", ()
     );
     expect(response.status).toBe(422);
     expectNoEffectOrRead();
+  });
+
+  it("abertura confere que o card existe na versão vigente", async () => {
+    const card = (id: string) => ({ id, action: { capability: "tasks.open" } });
+    mocks.guide.mockResolvedValue({
+      organization_id: ORGANIZATION_B,
+      revision: 2,
+      manifest: { contributions: { crm_cards: [card("prioridades")] } },
+    });
+    const abrir = (cardId: string) =>
+      open(request("POST", ORGANIZATION_B, { capability: "tasks.open", expected_revision: 2, card_id: cardId }), {
+        params: Promise.resolve({ id: INSTALLATION }),
+      });
+
+    const existente = await abrir("prioridades");
+    expect(existente.status).toBe(200);
+    expect((await existente.json()).data).toEqual({ href: "/app/tasks" });
+
+    // Uma aba aberta antes de uma troca de versão pede um card que a versão vigente não tem.
+    const ausente = await abrir("card-que-saiu");
+    expect(ausente.status).toBe(409);
+    expect((await ausente.json()).error.code).toBe("extension_card_unavailable");
   });
 
   it("o guard de papel precede o contexto informado pelo cliente", async () => {

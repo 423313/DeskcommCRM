@@ -1,10 +1,27 @@
 import type { ExtensionOperationView } from "@/lib/extensions/view";
-import { ehEstadoDeOperacao, ehTipoDeOperacao } from "@/lib/extensions/vocabulario";
+import {
+  ehEstadoDeOperacao,
+  ehOperacaoDaPlataforma,
+  ehTipoDeOperacao,
+  type ExtensionOperationKind,
+} from "@/lib/extensions/vocabulario";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function nullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
+}
+
+function nullableCount(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isInteger(value) && value >= 0);
+}
+
+/**
+ * Tipos que um mesmo pedido pode devolver. Instalar e atualizar passam pela mesma rota, e quem
+ * decide entre os dois é o banco (a identidade já estava instalada ou não).
+ */
+export function compatibleKinds(kind: ExtensionOperationKind): readonly ExtensionOperationKind[] {
+  return kind === "install" || kind === "update" ? ["install", "update"] : [kind];
 }
 
 /** Validação client-side: o cast genérico do fetch não prova o JSON recebido. */
@@ -25,6 +42,10 @@ export function parseExtensionOperationView(value: unknown): ExtensionOperationV
     !nullableString(operation.version) ||
     !nullableString(operation.error_code) ||
     !nullableString(operation.error_message) ||
+    !nullableCount(operation.from_revision) ||
+    !nullableString(operation.from_version) ||
+    !nullableString(operation.to_version) ||
+    !nullableCount(operation.organizations_affected) ||
     typeof operation.created_at !== "string" ||
     typeof operation.updated_at !== "string"
   ) {
@@ -37,18 +58,16 @@ export function operationMatchesOrganization(
   operation: ExtensionOperationView,
   organizationId: string,
 ): boolean {
-  if (operation.organization_id === organizationId) return true;
-  return (
-    operation.organization_id === null &&
-    (operation.kind === "catalog_admission" || operation.kind === "install")
-  );
+  // Espelho de `extension_operations_scope`: configurar é da organização; o resto, da plataforma.
+  if (!ehOperacaoDaPlataforma(operation.kind)) return operation.organization_id === organizationId;
+  return operation.organization_id === null;
 }
 
 export function expectedOperation(
   value: unknown,
   expected: {
     id: string;
-    kind: ExtensionOperationView["kind"];
+    kinds: readonly ExtensionOperationKind[];
     organizationId: string;
   },
 ): ExtensionOperationView | null {
@@ -56,7 +75,7 @@ export function expectedOperation(
   if (
     !operation ||
     operation.id !== expected.id ||
-    operation.kind !== expected.kind ||
+    !expected.kinds.includes(operation.kind) ||
     !operationMatchesOrganization(operation, expected.organizationId)
   ) {
     return null;

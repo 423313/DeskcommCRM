@@ -47,6 +47,8 @@ export function ExtensionGuide({
   const [guideFresh, setGuideFresh] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // O código decide o que a tela oferece: removida de todas as organizações não tem "tente de novo".
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [openingCard, setOpeningCard] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const requestSequence = useRef(0);
@@ -74,6 +76,7 @@ export function ExtensionGuide({
         if (controller.signal.aborted && result.uncertain) return;
         setGuide(null);
         setError(t(result.error.message));
+        setErrorCode(result.error.code);
         if (result.error.code === "extension_context_changed") router.refresh();
         return;
       }
@@ -85,12 +88,14 @@ export function ExtensionGuide({
         setError(
           t("A organização ativa mudou em outra aba. Recarregue a página antes de continuar."),
         );
+        setErrorCode("extension_context_changed");
         router.refresh();
         return;
       }
       setGuide(result.data);
       setGuideFresh(true);
       setError(null);
+      setErrorCode(null);
     },
     [installationId, organizationId, router, t],
   );
@@ -125,7 +130,8 @@ export function ExtensionGuide({
           "content-type": "application/json",
           [EXPECTED_ORGANIZATION_HEADER]: organizationId,
         },
-        body: JSON.stringify({ capability, expected_revision: guide.revision }),
+        // O card vai junto: depois de uma troca de versão, a rota confere que ele ainda existe.
+        body: JSON.stringify({ capability, expected_revision: guide.revision, card_id: cardId }),
       },
     );
     setOpeningCard(null);
@@ -159,6 +165,7 @@ export function ExtensionGuide({
   }
 
   if (!guide || error) {
+    const removed = errorCode === "extension_removed";
     return (
       <main
         className="mx-auto w-full max-w-4xl p-4 sm:p-6"
@@ -170,9 +177,11 @@ export function ExtensionGuide({
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
             {error ?? t("Não foi possível confirmar o estado atual desta extensão.")}
           </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {t("Volte à gestão para conferir se ela está ativa e qual é o próximo passo.")}
-          </p>
+          {removed ? null : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t("Volte à gestão para conferir se ela está ativa e qual é o próximo passo.")}
+            </p>
+          )}
           <div className="mt-5 flex flex-col gap-2 sm:flex-row">
             <Button asChild variant="outline">
               <Link href="/app/extensions">
@@ -180,10 +189,12 @@ export function ExtensionGuide({
                 {t("Voltar às extensões")}
               </Link>
             </Button>
-            <Button onClick={() => void carregar()}>
-              <ArrowsClockwise aria-hidden />
-              {t("Tentar novamente")}
-            </Button>
+            {removed ? null : (
+              <Button onClick={() => void carregar()}>
+                <ArrowsClockwise aria-hidden />
+                {t("Tentar novamente")}
+              </Button>
+            )}
           </div>
         </Card>
       </main>
@@ -199,6 +210,9 @@ export function ExtensionGuide({
     return 0;
   });
   const compact = guide.configuration.density === "compact";
+  // Um link para um card que a versão vigente não tem: antes o destaque só se perdia, calado.
+  const missingCard =
+    selectedCardId !== undefined && !cards.some((card) => card.id === selectedCardId);
 
   return (
     <main
@@ -232,6 +246,17 @@ export function ExtensionGuide({
           </div>
         </div>
       </header>
+
+      {missingCard ? (
+        <Card className="border-info/40 bg-info-bg p-4" role="status" data-testid="extension-guide-missing-card">
+          <p className="text-sm">
+            {t("O card indicado não existe na versão {versao} desta extensão.").replace(
+              "{versao}",
+              guide.version,
+            )}
+          </p>
+        </Card>
+      ) : null}
 
       {actionError ? (
         <Card className="border-warning/40 bg-warning-bg p-4" role="alert">

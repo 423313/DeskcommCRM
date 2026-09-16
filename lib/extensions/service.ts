@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-import { audit } from "@/lib/audit";
+import { audit, auditForOrganizations } from "@/lib/audit";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
@@ -11,9 +11,20 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 import { assertCatalogOrigin, downloadArtifact } from "./download";
+import { SQL_ERRORS } from "./erros-do-banco";
 import { causaSegura, ExtensionError } from "./errors";
-import { lerManifestoAdmitido, montarInstalada, MOTIVO_PACOTE_ILEGIVEL } from "./instalada";
-import { EXTENSION_OPERATION_KINDS, EXTENSION_OPERATION_STATUSES } from "./vocabulario";
+import {
+  lerManifestoAdmitido,
+  montarAnterior,
+  montarInstalada,
+  MOTIVO_PACOTE_ILEGIVEL,
+} from "./instalada";
+import {
+  EXTENSION_OPERATION_KINDS,
+  EXTENSION_OPERATION_STATUSES,
+  ehEstadoDeOperacao,
+  ehTipoDeOperacao,
+} from "./vocabulario";
 import { ExtensionServiceError, requireExtensionPlatform } from "./http";
 import {
   checkCompatibility,
@@ -52,9 +63,12 @@ const installationRowSchema = z.object({
   id: uuid,
   catalog_id: uuid,
   artifact_id: uuid,
+  previous_artifact_id: uuid.nullable(),
   publisher: z.string(),
   name: z.string(),
   version: z.string(),
+  revision: z.number().int().positive(),
+  removed_at: z.string().nullable(),
 });
 const bindingRowSchema = z.object({
   organization_id: uuid,
@@ -62,6 +76,12 @@ const bindingRowSchema = z.object({
   enabled: z.boolean(),
   configuration: configurationSchema,
   revision: z.number().int(),
+  deactivated_by_removal_at: z.string().nullable(),
+});
+const countRowSchema = z.object({
+  installation_id: uuid,
+  active_organizations: z.number().int(),
+  awaiting_reactivation: z.number().int(),
 });
 const operationRowSchema = z.object({
   id: uuid,
@@ -75,89 +95,22 @@ const operationRowSchema = z.object({
   name: z.string().nullable(),
   version: z.string().nullable(),
   entry: z.unknown(),
+  result: z.unknown(),
   error_code: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
-
-const SQL_ERRORS: Record<string, { message: string; status: number }> = {
-  extension_forbidden: {
-    message: "Seu acesso mudou. Entre novamente para continuar.",
-    status: 403,
-  },
-  extension_invalid_input: {
-    message: "Confira os dados do pedido e tente novamente.",
-    status: 422,
-  },
-  extension_idempotency_conflict: {
-    message: "Este pedido já foi usado com outros dados. Recarregue a página.",
-    status: 409,
-  },
-  extension_catalog_not_found: {
-    message: "Catálogo não encontrado. Recarregue a lista de extensões.",
-    status: 404,
-  },
-  extension_catalog_revision_conflict: {
-    message:
-      "O catálogo tem uma revisão anterior ou diferente da já admitida. Peça o arquivo atual ao mantenedor.",
-    status: 409,
-  },
-  extension_catalog_stale: {
-    message: "O catálogo mudou durante a preparação. Recarregue a lista antes de instalar.",
-    status: 409,
-  },
-  extension_entry_not_found: {
-    message: "Esta versão não está no catálogo admitido. Recarregue a lista.",
-    status: 404,
-  },
-  extension_operation_not_found: {
-    message: "Pedido não encontrado. Consulte o histórico da instalação.",
-    status: 404,
-  },
-  extension_operation_conflict: {
-    message: "Este pedido mudou de estado. Consulte o histórico antes de continuar.",
-    status: 409,
-  },
-  extension_installation_not_found: { message: "Extensão não encontrada.", status: 404 },
-  extension_version_conflict: {
-    message: "Já existe conteúdo diferente para esta versão. Peça uma nova versão ao mantenedor.",
-    status: 409,
-  },
-  extension_version_update_unsupported: {
-    message: "Esta versão do sistema ainda não atualiza extensões já instaladas.",
-    status: 409,
-  },
-  extension_artifact_mismatch: {
-    message:
-      "O arquivo recebido não corresponde à versão admitida. Peça ao mantenedor para conferir a publicação.",
-    status: 422,
-  },
-  extension_revision_conflict: {
-    message: "A configuração mudou em outra sessão. Recarregue antes de salvar.",
-    status: 409,
-  },
-  extension_active_limit: {
-    message: "O limite de extensões ativas foi atingido. Desative uma antes de ativar outra.",
-    status: 409,
-  },
-  extension_catalog_limit: {
-    message: "O limite de catálogos desta instalação foi atingido.",
-    status: 409,
-  },
-  extension_installation_limit: {
-    message: "O limite de pacotes desta instalação foi atingido.",
-    status: 409,
-  },
-  extension_core_update_in_progress: {
-    message: "O sistema está sendo atualizado. Aguarde a conclusão para instalar extensões.",
-    status: 409,
-  },
-  extension_preparation_in_progress: {
-    message:
-      "Já existe uma preparação em andamento. Consulte o histórico para verificar ou cancelar o pedido.",
-    status: 409,
-  },
-};
+/** O que a tela usa do `result` de uma troca. Recibo antigo sem esses campos projeta `null`. */
+const tradeResultSchema = z.object({
+  from_revision: z.number().int().nullable().optional(),
+  from_version: z.string().nullable().optional(),
+  to_version: z.string().nullable().optional(),
+  organizations_active: z.number().int().optional(),
+  organizations_disabled: z.array(uuid).optional(),
+  organizations_disabled_count: z.number().int().optional(),
+});
+/** Toda RPC que escreve diz se ESTA chamada fez a transição; a repetição idempotente diz `false`. */
+const appliedSchema = z.object({ applied_now: z.boolean() });
 
 function dbFailure(error: { code?: string; message?: string } | null): void {
   if (!error) return;
@@ -169,6 +122,16 @@ function dbFailure(error: { code?: string; message?: string } | null): void {
     "Não foi possível confirmar o resultado. Consulte o histórico antes de repetir o pedido.",
     503,
   );
+}
+
+function serviceError(code: keyof typeof SQL_ERRORS): ExtensionServiceError {
+  const known = SQL_ERRORS[code]!;
+  return new ExtensionServiceError(code, known.message, known.status);
+}
+
+function tradeResult(value: unknown): z.infer<typeof tradeResultSchema> {
+  const parsed = tradeResultSchema.safeParse(value);
+  return parsed.success ? parsed.data : {};
 }
 
 function operationView(value: unknown): ExtensionOperationView {
@@ -190,6 +153,13 @@ function operationView(value: unknown): ExtensionOperationView {
       ? new ExtensionError(code).message
       : "Não foi possível concluir a preparação. Confira o catálogo e faça um novo pedido.";
   }
+  const result = tradeResult(row.result);
+  const affected =
+    row.kind === "update" || row.kind === "revert"
+      ? (result.organizations_active ?? null)
+      : row.kind === "removal"
+        ? (result.organizations_disabled_count ?? null)
+        : null;
   return {
     id: row.id,
     organization_id: row.organization_id,
@@ -202,17 +172,61 @@ function operationView(value: unknown): ExtensionOperationView {
     version: row.version,
     error_code: row.error_code,
     error_message: message,
+    from_revision: result.from_revision ?? null,
+    from_version: result.from_version ?? null,
+    to_version: result.to_version ?? null,
+    organizations_affected: row.status === "completed" ? affected : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
 
+/**
+ * Leitor tolerante da lista. Um recibo gravado por uma versão MAIS NOVA do sistema (um tipo ou
+ * estado que esta não conhece) sai da lista em vez de derrubar a gestão inteira. Precisa estar
+ * na imagem para a qual um rollback volta; por isso nasce junto com os tipos novos.
+ */
+function readableOperations(rows: unknown[]): ExtensionOperationView[] {
+  return rows.flatMap((value) => {
+    const identity = z.object({ id: uuid, kind: z.unknown(), status: z.unknown() }).parse(value);
+    if (!ehTipoDeOperacao(identity.kind) || !ehEstadoDeOperacao(identity.status)) {
+      logger.warn("[extensions] recibo de versão mais nova", { operation_id: identity.id });
+      return [];
+    }
+    return [operationView(value)];
+  });
+}
+
 const OP_COLS =
-  "id,kind,status,actor_id,organization_id,catalog_id,installation_id,publisher,name,version,entry,error_code,created_at,updated_at";
+  "id,kind,status,actor_id,organization_id,catalog_id,installation_id,publisher,name,version,entry,result,error_code,created_at,updated_at";
 const CATALOG_COLS = "id,origin,revision,digest,snapshot,admitted_at";
-const INSTALL_COLS = "id,catalog_id,artifact_id,publisher,name,version";
+const INSTALL_COLS =
+  "id,catalog_id,artifact_id,previous_artifact_id,publisher,name,version,revision,removed_at";
 const ARTIFACT_COLS = "id,sha256,byte_length,manifest,document";
-const BINDING_COLS = "organization_id,installation_id,enabled,configuration,revision";
+const BINDING_COLS =
+  "organization_id,installation_id,enabled,configuration,revision,deactivated_by_removal_at";
+
+/**
+ * Leitura por lista de ids em lotes. O filtro `in` vai na URL do PostgREST; 256 uuids passam de
+ * 9 KB e esbarram no limite de linha de requisição de proxies comuns.
+ */
+const IN_BATCH = 64;
+type DbRead = { data: unknown; error: { code?: string; message?: string } | null };
+async function readInBatches(
+  ids: readonly string[],
+  read: (batch: string[]) => PromiseLike<DbRead>,
+): Promise<unknown[]> {
+  const unique = [...new Set(ids)];
+  const batches: string[][] = [];
+  for (let index = 0; index < unique.length; index += IN_BATCH) {
+    batches.push(unique.slice(index, index + IN_BATCH));
+  }
+  const results = await Promise.all(batches.map((batch) => read(batch)));
+  return results.flatMap((result) => {
+    dbFailure(result.error);
+    return (result.data as unknown[] | null) ?? [];
+  });
+}
 
 function admittedManifest(value: z.infer<typeof artifactRowSchema>): ExtensionManifest {
   const leitura = lerManifestoAdmitido(value);
@@ -251,18 +265,36 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
   const scoped = canInstall
     ? operations.or(`organization_id.eq.${org.orgId},organization_id.is.null`)
     : operations.eq("organization_id", org.orgId);
-  const results = await Promise.all([
+  const none: DbRead = { data: [], error: null };
+  const [
+    catalogResult,
+    installationResult,
+    markedResult,
+    operationResult,
+    preparingResult,
+    removedResult,
+    countResult,
+  ] = await Promise.all([
     admin
       .from("extension_catalogs")
       .select(CATALOG_COLS)
       .order("admitted_at", { ascending: false })
       .limit(8),
-    admin.from("extension_installations").select(INSTALL_COLS).order("installed_at").limit(128),
-    admin.from("extension_artifacts").select(ARTIFACT_COLS).limit(128),
+    // Removidas filtradas NO BANCO, antes do limite: senão o acúmulo de removidas empurra as
+    // vigentes para fora da lista.
+    admin
+      .from("extension_installations")
+      .select(INSTALL_COLS)
+      .is("removed_at", null)
+      .order("installed_at")
+      .limit(128),
+    // Vínculos desta organização que a remoção desligou: dão o card "Removida" e o
+    // "Estava ativa até…" depois de uma reinstalação.
     session
       .from("organization_extensions")
-      .select(BINDING_COLS)
+      .select("installation_id")
       .eq("organization_id", org.orgId)
+      .not("deactivated_by_removal_at", "is", null)
       .limit(128),
     scoped.neq("status", "preparing").order("created_at", { ascending: false }).limit(50),
     canInstall
@@ -273,30 +305,102 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
           .eq("status", "preparing")
           .order("created_at", { ascending: false })
           .limit(128)
-      : Promise.resolve({ data: [], error: null }),
+      : Promise.resolve(none),
+    canInstall
+      ? admin
+          .from("extension_installations")
+          .select(INSTALL_COLS)
+          .not("removed_at", "is", null)
+          .order("removed_at", { ascending: false })
+          .limit(128)
+      : Promise.resolve(none),
+    // Exceção declarada na spec à regra "service role filtra organization_id": a contagem
+    // atravessa organizações, e por isso devolve só números, e só a quem administra a instalação.
+    canInstall ? admin.rpc("fn_extensions_installation_counts") : Promise.resolve(none),
   ]);
-  for (const result of results) dbFailure(result.error);
-  const catalogs = z.array(catalogRowSchema).parse(results[0]!.data ?? []);
-  const installations = z.array(installationRowSchema).parse(results[1]!.data ?? []);
+  for (const result of [
+    catalogResult,
+    installationResult,
+    markedResult,
+    operationResult,
+    preparingResult,
+    removedResult,
+    countResult,
+  ]) {
+    dbFailure(result.error);
+  }
+  const catalogs = z.array(catalogRowSchema).parse(catalogResult.data ?? []);
+  const installations = z.array(installationRowSchema).parse(installationResult.data ?? []);
+  const activeIds = new Set(installations.map((item) => item.id));
+  const markedIds = z
+    .array(z.object({ installation_id: uuid }))
+    .parse(markedResult.data ?? [])
+    .map((item) => item.installation_id)
+    .filter((id) => !activeIds.has(id));
+  const removedForOrganization = z.array(installationRowSchema).parse(
+    await readInBatches(markedIds, (batch) =>
+      admin
+        .from("extension_installations")
+        .select(INSTALL_COLS)
+        .in("id", batch)
+        .not("removed_at", "is", null),
+    ),
+  );
+  const rows = [...installations, ...removedForOrganization];
+  const previousIds = canInstall
+    ? installations.flatMap((item) => (item.previous_artifact_id ? [item.previous_artifact_id] : []))
+    : [];
+  // Artefatos por id, e não um `limit` cego: com o acúmulo de versões ele deixava de fora
+  // justamente os vigentes, que apareciam como "pacote ilegível".
+  const [artifactRows, bindingRows] = await Promise.all([
+    readInBatches([...rows.map((item) => item.artifact_id), ...previousIds], (batch) =>
+      admin.from("extension_artifacts").select(ARTIFACT_COLS).in("id", batch),
+    ),
+    readInBatches(
+      rows.map((item) => item.id),
+      (batch) =>
+        session
+          .from("organization_extensions")
+          .select(BINDING_COLS)
+          .eq("organization_id", org.orgId)
+          .in("installation_id", batch),
+    ),
+  ]);
   const artifacts = new Map(
     z
       .array(artifactRowSchema)
-      .parse(results[2]!.data ?? [])
+      .parse(artifactRows)
       .map((item) => [item.id, item]),
   );
   const bindings = new Map(
     z
       .array(bindingRowSchema)
-      .parse(results[3]!.data ?? [])
+      .parse(bindingRows)
       .map((item) => [item.installation_id, item]),
   );
+  const counts = new Map(
+    z
+      .array(countRowSchema)
+      .parse(countResult.data ?? [])
+      .map((item) => [item.installation_id, item]),
+  );
+  const catalogEntries = new Map(catalogs.map((row) => [row.id, entradasLegiveis(row)]));
 
-  const views: InstalledExtensionView[] = installations.map((item) => {
+  const views: InstalledExtensionView[] = rows.map((item) => {
     const view = montarInstalada({
       item,
       artifact: artifacts.get(item.artifact_id),
       catalog: catalogs.find((source) => source.id === item.catalog_id),
       binding: bindings.get(item.id),
+      previous:
+        canInstall && item.previous_artifact_id
+          ? montarAnterior(
+              artifacts.get(item.previous_artifact_id),
+              item,
+              catalogEntries.get(item.catalog_id) ?? [],
+            )
+          : null,
+      activeOrganizations: canInstall ? (counts.get(item.id)?.active_organizations ?? 0) : null,
     });
     if (view.compatibility_reason === MOTIVO_PACOTE_ILEGIVEL) {
       // Registra a identidade, nunca o conteúdo do pacote.
@@ -306,6 +410,7 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
     }
     return view;
   });
+  const removed = z.array(installationRowSchema).parse(removedResult.data ?? []);
   return {
     organization_id: org.orgId,
     can_manage: org.role === "admin" && !user.support,
@@ -315,10 +420,23 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
       origin: row.origin,
       revision: row.revision,
       admitted_at: row.admitted_at,
-      entries: entradasLegiveis(row),
+      entries: catalogEntries.get(row.id) ?? [],
     })),
     installations: views,
-    operations: [...(results[5]!.data ?? []), ...(results[4]!.data ?? [])].map(operationView),
+    removed_installations: removed.map((item) => ({
+      id: item.id,
+      catalog_id: item.catalog_id,
+      publisher: item.publisher,
+      name: item.name,
+      version: item.version,
+      revision: item.revision,
+      removed_at: item.removed_at ?? "",
+      awaiting_reactivation: counts.get(item.id)?.awaiting_reactivation ?? 0,
+    })),
+    operations: readableOperations([
+      ...((preparingResult.data as unknown[] | null) ?? []),
+      ...((operationResult.data as unknown[] | null) ?? []),
+    ]),
   };
 }
 
@@ -327,6 +445,18 @@ export async function loadExtensionGuide(
   organizationId: string,
   installationId: string,
 ): Promise<ExtensionGuideView> {
+  const admin = createAdminClient();
+  // A instalação ANTES do vínculo: removida, a organização precisa ouvir "removeu de todas as
+  // organizações", e não "desativada nesta organização", que manda procurar quem ativa.
+  const installed = await admin
+    .from("extension_installations")
+    .select(INSTALL_COLS)
+    .eq("id", installationId)
+    .maybeSingle();
+  dbFailure(installed.error);
+  const installation = installationRowSchema.nullable().parse(installed.data);
+  if (!installation) throw serviceError("extension_installation_not_found");
+  if (installation.removed_at) throw serviceError("extension_removed");
   const session = await createClient();
   const bindingResult = await session
     .from("organization_extensions")
@@ -340,20 +470,6 @@ export async function loadExtensionGuide(
     throw new ExtensionServiceError(
       "extension_inactive",
       "Esta extensão está desativada nesta organização. Consulte o administrador para ativá-la.",
-      404,
-    );
-  const admin = createAdminClient();
-  const installed = await admin
-    .from("extension_installations")
-    .select(INSTALL_COLS)
-    .eq("id", installationId)
-    .maybeSingle();
-  dbFailure(installed.error);
-  const installation = installationRowSchema.nullable().parse(installed.data);
-  if (!installation)
-    throw new ExtensionServiceError(
-      "extension_installation_not_found",
-      "Extensão não encontrada.",
       404,
     );
   const artifactResult = await admin
@@ -429,7 +545,15 @@ export async function readExtensionOperation(
   dbFailure(result.error);
   if (!result.data)
     throw new ExtensionServiceError("extension_operation_not_found", "Pedido não encontrado.", 404);
-  return operationView(result.data);
+  const [operation] = readableOperations([result.data]);
+  if (!operation) {
+    throw new ExtensionServiceError(
+      "extension_operation_unreadable",
+      "Este pedido foi registrado por uma versão mais nova do sistema.",
+      409,
+    );
+  }
+  return operation;
 }
 
 export async function admitExtensionCatalog(
@@ -451,14 +575,16 @@ export async function admitExtensionCatalog(
   });
   dbFailure(result.error);
   const operation = operationView(result.data);
-  await audit({
-    action: "extension.catalog_admitted",
-    actorUserId: actorId,
-    actingAsPlatformAdmin: true,
-    resourceType: "extension_catalog",
-    resourceId: operation.catalog_id,
-    metadata: { operation_id: operation.id, revision: snapshot.revision, digest },
-  });
+  if (appliedSchema.parse(result.data).applied_now) {
+    await audit({
+      action: "extension.catalog_admitted",
+      actorUserId: actorId,
+      actingAsPlatformAdmin: true,
+      resourceType: "extension_catalog",
+      resourceId: operation.catalog_id,
+      metadata: { operation_id: operation.id, revision: snapshot.revision, digest },
+    });
+  }
   return operation;
 }
 
@@ -467,8 +593,11 @@ export interface InstallExtensionRequest {
   publisher: string;
   name: string;
   version: string;
+  /** Revisão da instalação que a tela exibiu; `null` quando não havia linha para a identidade. */
+  expected_installation_revision: number | null;
 }
 
+/** Instalar, atualizar, trocar para versão menor e reinstalar: o recibo diz qual foi. */
 export async function installExtension(
   actorId: string,
   operationId: string,
@@ -482,10 +611,13 @@ export async function installExtension(
     p_publisher: input.publisher,
     p_name: input.name,
     p_version: input.version,
+    p_expected_installation_revision: input.expected_installation_revision,
   });
   dbFailure(prepared.error);
   const receipt = operationRowSchema.parse(prepared.data);
   if (receipt.status !== "preparing") return operationView(receipt);
+  const isUpdate = receipt.kind === "update";
+  const from = tradeResult(receipt.result);
 
   const source = await admin
     .from("extension_catalogs")
@@ -530,6 +662,7 @@ export async function installExtension(
     logger.warn("[extensions] instalação falhou", {
       operation_id: operationId,
       catalog_id: input.catalog_id,
+      kind: receipt.kind,
       error_code: error.code,
       ...causa,
     });
@@ -540,9 +673,9 @@ export async function installExtension(
     });
     dbFailure(failed.error);
     const falha = operationView(failed.data);
-    if (falha.status === "failed") {
+    if (appliedSchema.parse(failed.data).applied_now) {
       await audit({
-        action: "extension.install_failed",
+        action: isUpdate ? "extension.update_failed" : "extension.install_failed",
         actorUserId: actorId,
         actingAsPlatformAdmin: true,
         resourceType: "extension_operation",
@@ -554,6 +687,7 @@ export async function installExtension(
           publisher: entry.publisher,
           name: entry.name,
           version: entry.version,
+          ...(isUpdate ? { from_version: from.from_version ?? null } : {}),
           ...causa,
         },
       });
@@ -572,15 +706,32 @@ export async function installExtension(
   });
   dbFailure(finished.error);
   const operation = operationView(finished.data);
-  if (operation.status === "completed") {
-    await audit({
-      action: "extension.installed",
-      actorUserId: actorId,
-      actingAsPlatformAdmin: true,
-      resourceType: "extension_installation",
-      resourceId: operation.installation_id,
-      metadata: { operation_id: operation.id, version: entry.version, digest: entry.sha256 },
-    });
+  if (appliedSchema.parse(finished.data).applied_now) {
+    await audit(
+      operation.kind === "update"
+        ? {
+            action: "extension.updated",
+            actorUserId: actorId,
+            actingAsPlatformAdmin: true,
+            resourceType: "extension_installation",
+            resourceId: operation.installation_id,
+            metadata: {
+              operation_id: operation.id,
+              from_version: operation.from_version,
+              to_version: operation.to_version,
+              digest: entry.sha256,
+              organizations_active: operation.organizations_affected,
+            },
+          }
+        : {
+            action: "extension.installed",
+            actorUserId: actorId,
+            actingAsPlatformAdmin: true,
+            resourceType: "extension_installation",
+            resourceId: operation.installation_id,
+            metadata: { operation_id: operation.id, version: entry.version, digest: entry.sha256 },
+          },
+    );
   }
   return operation;
 }
@@ -595,15 +746,136 @@ export async function cancelExtensionInstall(
   });
   dbFailure(result.error);
   const operation = operationView(result.data);
-  if (operation.status === "cancelled") {
+  if (appliedSchema.parse(result.data).applied_now) {
     await audit({
       action: "extension.preparation_cancelled",
       actorUserId: actorId,
       actingAsPlatformAdmin: true,
       resourceType: "extension_operation",
       resourceId: operation.id,
-      metadata: { operation_id: operation.id },
+      metadata: { operation_id: operation.id, kind: operation.kind },
     });
+  }
+  return operation;
+}
+
+/**
+ * Desfazer a última troca. A compatibilidade da versão de destino é conferida aqui, antes da
+ * RPC, sobre a revisão que o pedido traz: a RPC exige a mesma revisão sob a trava, então o
+ * anterior conferido é o que será aplicado. Um pedido repetido (mesma chave) vai direto à RPC,
+ * que devolve o recibo original.
+ */
+export async function revertExtension(
+  actorId: string,
+  operationId: string,
+  installationId: string,
+  input: { expected_installation_revision: number },
+): Promise<ExtensionOperationView> {
+  const admin = createAdminClient();
+  const existing = await admin
+    .from("extension_operations")
+    .select("id")
+    .eq("id", operationId)
+    .maybeSingle();
+  dbFailure(existing.error);
+  if (!existing.data) {
+    const installed = await admin
+      .from("extension_installations")
+      .select(INSTALL_COLS)
+      .eq("id", installationId)
+      .maybeSingle();
+    dbFailure(installed.error);
+    const installation = installationRowSchema.nullable().parse(installed.data);
+    // Sem linha, removida, revisão divergente ou sem anterior: a RPC dá o código certo, na ordem
+    // certa (inclusive "sistema em atualização" antes de tudo).
+    if (
+      installation &&
+      !installation.removed_at &&
+      installation.revision === input.expected_installation_revision &&
+      installation.previous_artifact_id
+    ) {
+      const artifact = await admin
+        .from("extension_artifacts")
+        .select(ARTIFACT_COLS)
+        .eq("id", installation.previous_artifact_id)
+        .single();
+      dbFailure(artifact.error);
+      if (!checkCompatibility(admittedManifest(artifactRowSchema.parse(artifact.data))).compatible) {
+        throw new ExtensionError("extension_incompatible");
+      }
+    }
+  }
+  const result = await admin.rpc("fn_extensions_revert_install", {
+    p_actor: actorId,
+    p_operation: operationId,
+    p_installation: installationId,
+    p_expected_installation_revision: input.expected_installation_revision,
+  });
+  dbFailure(result.error);
+  const operation = operationView(result.data);
+  if (appliedSchema.parse(result.data).applied_now) {
+    await audit({
+      action: "extension.reverted",
+      actorUserId: actorId,
+      actingAsPlatformAdmin: true,
+      resourceType: "extension_installation",
+      resourceId: installationId,
+      metadata: {
+        operation_id: operation.id,
+        from_version: operation.from_version,
+        to_version: operation.to_version,
+        organizations_active: operation.organizations_affected,
+      },
+    });
+  }
+  return operation;
+}
+
+/**
+ * Remover da instalação. Além do registro da instância, cada organização desligada recebe a
+ * própria linha `extension.deactivated` com o motivo: é por ela que `/app/audit` da organização
+ * explica por que o guia sumiu. Nenhuma linha numa repetição idempotente.
+ */
+export async function removeExtension(
+  actorId: string,
+  operationId: string,
+  installationId: string,
+  input: { expected_installation_revision: number },
+): Promise<ExtensionOperationView> {
+  const result = await createAdminClient().rpc("fn_extensions_remove_installation", {
+    p_actor: actorId,
+    p_operation: operationId,
+    p_installation: installationId,
+    p_expected_installation_revision: input.expected_installation_revision,
+  });
+  dbFailure(result.error);
+  const operation = operationView(result.data);
+  if (appliedSchema.parse(result.data).applied_now) {
+    const row = operationRowSchema.parse(result.data);
+    const disabled = tradeResult(row.result).organizations_disabled ?? [];
+    await audit({
+      action: "extension.removed",
+      actorUserId: actorId,
+      actingAsPlatformAdmin: true,
+      resourceType: "extension_installation",
+      resourceId: installationId,
+      metadata: {
+        operation_id: operation.id,
+        version: operation.version,
+        organizations_disabled_count: disabled.length,
+      },
+    });
+    await auditForOrganizations(
+      {
+        action: "extension.deactivated",
+        actorUserId: actorId,
+        actingAsPlatformAdmin: true,
+        resourceType: "extension_installation",
+        resourceId: installationId,
+        metadata: { operation_id: operation.id, reason: "installation_removed" },
+      },
+      disabled,
+    );
   }
   return operation;
 }
@@ -620,25 +892,29 @@ export async function configureExtension(
   if (input.enabled) {
     const result = await admin
       .from("extension_installations")
-      .select("artifact_id")
+      .select("artifact_id,removed_at")
       .eq("id", installationId)
       .maybeSingle();
     dbFailure(result.error);
-    const installed = z.object({ artifact_id: uuid }).nullable().parse(result.data);
-    if (!installed)
-      throw new ExtensionServiceError(
-        "extension_installation_not_found",
-        "Extensão não encontrada.",
-        404,
-      );
-    const artifact = await admin
-      .from("extension_artifacts")
-      .select(ARTIFACT_COLS)
-      .eq("id", installed.artifact_id)
-      .single();
-    dbFailure(artifact.error);
-    if (!checkCompatibility(admittedManifest(artifactRowSchema.parse(artifact.data))).compatible) {
-      throw new ExtensionError("extension_incompatible");
+    const installed = z
+      .object({ artifact_id: uuid, removed_at: z.string().nullable() })
+      .nullable()
+      .parse(result.data);
+    if (!installed) throw serviceError("extension_installation_not_found");
+    // Removida: a RPC recusa com `extension_removed` (ou devolve o recibo de uma repetição);
+    // conferir a compatibilidade antes daria o motivo errado.
+    if (!installed.removed_at) {
+      const artifact = await admin
+        .from("extension_artifacts")
+        .select(ARTIFACT_COLS)
+        .eq("id", installed.artifact_id)
+        .single();
+      dbFailure(artifact.error);
+      if (
+        !checkCompatibility(admittedManifest(artifactRowSchema.parse(artifact.data))).compatible
+      ) {
+        throw new ExtensionError("extension_incompatible");
+      }
     }
   }
   const result = await admin.rpc("fn_extensions_configure", {
@@ -652,17 +928,19 @@ export async function configureExtension(
   });
   dbFailure(result.error);
   const operation = operationView(result.data);
-  await audit({
-    action: input.enabled ? "extension.configured" : "extension.deactivated",
-    actorUserId: actorId,
-    organizationId,
-    resourceType: "extension_installation",
-    resourceId: installationId,
-    metadata: {
-      operation_id: operation.id,
-      expected_revision: input.expected_revision,
-      enabled: input.enabled,
-    },
-  });
+  if (appliedSchema.parse(result.data).applied_now) {
+    await audit({
+      action: input.enabled ? "extension.configured" : "extension.deactivated",
+      actorUserId: actorId,
+      organizationId,
+      resourceType: "extension_installation",
+      resourceId: installationId,
+      metadata: {
+        operation_id: operation.id,
+        expected_revision: input.expected_revision,
+        enabled: input.enabled,
+      },
+    });
+  }
   return operation;
 }

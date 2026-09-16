@@ -103,7 +103,74 @@ describe("ExtensionGuide", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       capability: "tasks.open",
       expected_revision: 7,
+      card_id: "prioridades",
     });
+  });
+
+  it("extensão removida da instalação diz isso e não oferece tentar de novo", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        json(
+          {
+            error: {
+              code: "extension_removed",
+              message:
+                "O responsável pela instalação removeu esta extensão de todas as organizações.",
+            },
+          },
+          410,
+        ),
+      ),
+    );
+
+    render(
+      <IdiomaProvider locale="pt-BR">
+        <ExtensionGuide
+          organizationId={GUIDE.organization_id}
+          installationId={GUIDE.installation_id}
+        />
+      </IdiomaProvider>,
+    );
+
+    expect(
+      await screen.findByText(
+        "O responsável pela instalação removeu esta extensão de todas as organizações.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tentar novamente" })).toBeNull();
+    expect(
+      screen.queryByText("Volte à gestão para conferir se ela está ativa e qual é o próximo passo."),
+    ).toBeNull();
+    expect(screen.getByRole("link", { name: "Voltar às extensões" })).toBeInTheDocument();
+  });
+
+  it("um card indicado que a versão vigente não tem é avisado, não perdido em silêncio", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ data: GUIDE })));
+
+    const { rerender } = render(
+      <IdiomaProvider locale="pt-BR">
+        <ExtensionGuide
+          organizationId={GUIDE.organization_id}
+          installationId={GUIDE.installation_id}
+          selectedCardId="card-que-saiu"
+        />
+      </IdiomaProvider>,
+    );
+
+    expect(await screen.findByTestId("extension-guide-missing-card")).toHaveTextContent(
+      "O card indicado não existe na versão 1.0.0 desta extensão.",
+    );
+    rerender(
+      <IdiomaProvider locale="pt-BR">
+        <ExtensionGuide
+          organizationId={GUIDE.organization_id}
+          installationId={GUIDE.installation_id}
+          selectedCardId="prioridades"
+        />
+      </IdiomaProvider>,
+    );
+    await waitFor(() => expect(screen.queryByTestId("extension-guide-missing-card")).toBeNull());
   });
 
   it("mantém a pessoa no guia quando a revalidação recusa a ação", async () => {

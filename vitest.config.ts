@@ -35,5 +35,12 @@ export default defineConfig({
       "experiments/extensoes/**",
     ],
   },
-  resolve: { alias: { "@": path.resolve(__dirname, ".") } },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "."),
+      // `server-only` não é dependência do projeto: o Next o resolve para o próprio módulo vazio
+      // quando o código roda no servidor. Os testes rodam como servidor, então usam o mesmo vazio.
+      "server-only": path.resolve(__dirname, "node_modules/next/dist/compiled/server-only/empty.js"),
+    },
+  },
 });

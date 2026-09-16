@@ -6,7 +6,10 @@ import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import type { ExtensionOperationView } from "@/lib/extensions/view";
+import { compararVersoes } from "@/lib/extensions/versao";
 import { ArrowsClockwise, X } from "@/lib/ui/icons";
+
+import { organizacoesComElaAtiva, organizacoesDesativadas } from "./frases-de-versao";
 
 const OPERATION_STATUS: Record<
   ExtensionOperationView["status"],
@@ -18,11 +21,43 @@ const OPERATION_STATUS: Record<
   cancelled: { label: "Cancelada", variant: "neutral" },
 };
 
-const OPERATION_KIND: Record<ExtensionOperationView["kind"], string> = {
-  catalog_admission: "Admissão de catálogo",
-  install: "Instalação",
-  configure: "Configuração",
-};
+/** Título do recibo. `update` para uma versão menor não é "Atualização": é troca de versão. */
+function operationTitle(operation: ExtensionOperationView, t: (texto: string) => string): string {
+  switch (operation.kind) {
+    case "catalog_admission":
+      return t("Admissão de catálogo");
+    case "install":
+      return t("Instalação");
+    case "update":
+      return operation.from_version &&
+        operation.to_version &&
+        compararVersoes(operation.to_version, operation.from_version) < 0
+        ? t("Troca de versão")
+        : t("Atualização");
+    case "revert":
+      return t("Troca desfeita");
+    case "removal":
+      return t("Remoção");
+    case "configure":
+      return t("Configuração");
+  }
+}
+
+function operationSubject(operation: ExtensionOperationView, t: (texto: string) => string): string {
+  if (!operation.publisher || !operation.name) return t("Operação da plataforma");
+  const identity = `${operation.publisher}/${operation.name}`;
+  const count = operation.organizations_affected;
+  if ((operation.kind === "update" || operation.kind === "revert") && operation.from_version && operation.to_version) {
+    const base = `${identity} ${operation.from_version} → ${operation.to_version}`;
+    return operation.kind === "update" && count !== null
+      ? `${base} · ${organizacoesComElaAtiva(t, count)}`
+      : base;
+  }
+  const base = `${identity}${operation.version ? `@${operation.version}` : ""}`;
+  return operation.kind === "removal" && count !== null
+    ? `${base} · ${organizacoesDesativadas(t, count)}`
+    : base;
+}
 
 export function ExtensionOperations({
   operations,
@@ -52,6 +87,7 @@ export function ExtensionOperations({
       <div className="space-y-2">
         {operations.map((operation) => {
           const status = OPERATION_STATUS[operation.status];
+          const isUpdate = operation.kind === "update";
           return (
             <Card
               key={operation.id}
@@ -61,13 +97,11 @@ export function ExtensionOperations({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold">{t(OPERATION_KIND[operation.kind])}</h3>
+                    <h3 className="text-sm font-semibold">{operationTitle(operation, t)}</h3>
                     <Badge variant={status.variant}>{t(status.label)}</Badge>
                   </div>
                   <p className="mt-1 text-xs break-all text-muted-foreground">
-                    {operation.publisher && operation.name
-                      ? `${operation.publisher}/${operation.name}${operation.version ? `@${operation.version}` : ""}`
-                      : t("Operação da plataforma")}
+                    {operationSubject(operation, t)}
                   </p>
                   <p className="mt-1 font-mono text-[11px] text-text-subtle">
                     {operation.id} · {new Date(operation.updated_at).toLocaleString(locale)}
@@ -78,7 +112,11 @@ export function ExtensionOperations({
                       <p className="mt-1 text-xs text-muted-foreground">
                         {operation.kind === "install"
                           ? t("Confira o catálogo admitido e tente a instalação novamente.")
-                          : t("Revise o arquivo ou a configuração indicada e tente novamente.")}
+                          : isUpdate
+                            ? t(
+                                "A versão instalada continua a mesma. Confira o catálogo admitido e tente a atualização novamente.",
+                              )
+                            : t("Revise o arquivo ou a configuração indicada e tente novamente.")}
                       </p>
                     </div>
                   ) : null}
@@ -93,7 +131,7 @@ export function ExtensionOperations({
                       onClick={() => void onVerify(operation)}
                     >
                       <ArrowsClockwise aria-hidden />
-                      {t("Verificar instalação")}
+                      {isUpdate ? t("Verificar atualização") : t("Verificar instalação")}
                     </Button>
                     <Button
                       data-testid={`extension-operation-cancel-${operation.id}`}
@@ -103,7 +141,7 @@ export function ExtensionOperations({
                       onClick={() => void onCancel(operation)}
                     >
                       <X aria-hidden />
-                      {t("Cancelar preparação")}
+                      {isUpdate ? t("Cancelar atualização") : t("Cancelar preparação")}
                     </Button>
                   </div>
                 ) : null}

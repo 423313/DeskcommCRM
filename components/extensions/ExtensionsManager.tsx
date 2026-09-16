@@ -21,6 +21,7 @@ import { requestExtensionApi, type ExtensionApiResult } from "./api-client";
 import {
   CatalogAdmission,
   CatalogExtensionCard,
+  type CatalogIdentityState,
   type CategoryFilter,
   ExtensionEmptyList,
   ExtensionFilterBar,
@@ -29,6 +30,7 @@ import {
 } from "./ExtensionCatalog";
 import { InstalledExtensionCard } from "./InstalledExtensionCard";
 import {
+  compatibleKinds,
   expectedOperation,
   operationMatchesOrganization,
   parseExtensionOperationView,
@@ -308,7 +310,7 @@ export function ExtensionsManager({
       }
       const confirmed = expectedOperation(result.data, {
         id: receipt.id,
-        kind,
+        kinds: compatibleKinds(kind),
         organizationId,
       });
       if (!confirmed) {
@@ -398,11 +400,29 @@ export function ExtensionsManager({
     toast.success(t("Catálogo admitido e disponível para instalação."));
   }, [catalogFile, runMutation, t]);
 
+  /** A outra sessão mudou a instalação antes deste pedido: o estado da tela não vale mais. */
+  const versionChanged = useCallback(async () => {
+    toast.warning(
+      t("A extensão mudou em outra sessão. Recarregamos o estado atual; revise antes de repetir."),
+    );
+    await carregar(true);
+  }, [carregar, t]);
+
   const install = useCallback(
-    async (catalogId: string, entry: CatalogEntry) => {
-      const targetKey = `install:${catalogId}:${entry.publisher}:${entry.name}:${entry.version}`;
+    async (catalogId: string, entry: CatalogEntry, expectedInstallationRevision: number | null) => {
+      // A precondição entra na chave: a mesma versão pedida sobre outra revisão é outra intenção,
+      // e não pode reaproveitar o recibo pendente da anterior.
+      const targetKey = `install:${catalogId}:${entry.publisher}:${entry.name}:${entry.version}:${expectedInstallationRevision ?? "none"}`;
+      const reinstall =
+        expectedInstallationRevision !== null &&
+        (data?.removed_installations ?? []).some(
+          (item) =>
+            item.catalog_id === catalogId &&
+            item.publisher === entry.publisher &&
+            item.name === entry.name,
+        );
       const result = await runMutation({
-        kind: "install",
+        kind: expectedInstallationRevision === null || reinstall ? "install" : "update",
         label: `${entry.publisher}/${entry.name}@${entry.version}`,
         targetKey,
         request: (idempotencyKey) =>
@@ -417,11 +437,13 @@ export function ExtensionsManager({
               publisher: entry.publisher,
               name: entry.name,
               version: entry.version,
+              expected_installation_revision: expectedInstallationRevision,
             }),
           }),
       });
       if (!result.ok) {
-        if (!result.uncertain) toast.error(t(result.error.message));
+        if (result.error.code === "extension_version_changed") await versionChanged();
+        else if (!result.uncertain) toast.error(t(result.error.message));
         return;
       }
       // A rota responde 200 com o recibo em QUALQUER desfecho; o status é que diz o
@@ -435,13 +457,56 @@ export function ExtensionsManager({
         );
         return;
       }
+      if (result.data.status === "preparing") {
+        toast.success(t("Preparação iniciada. O recibo continuará visível até a conclusão."));
+      } else if (result.data.kind === "update") {
+        toast.success(t("Extensão atualizada. As organizações que a usavam continuam com ela ativa."));
+      } else if (reinstall) {
+        toast.success(t("Extensão reinstalada. Cada organização precisa ativá-la de novo."));
+      } else {
+        toast.success(t("Extensão instalada. Agora um administrador da organização pode ativá-la."));
+      }
+    },
+    [data?.removed_installations, runMutation, t, versionChanged],
+  );
+
+  const changeInstallation = useCallback(
+    async (extension: InstalledExtensionView, action: "revert" | "remove") => {
+      const kind = action === "revert" ? "revert" : "removal";
+      const result = await runMutation({
+        kind,
+        label: `${extension.publisher}/${extension.name}@${extension.version}`,
+        targetKey: `${kind}:${extension.id}:${extension.installation_revision}`,
+        request: (idempotencyKey) =>
+          requestExtensionApi(
+            `/api/v1/extensions/${encodeURIComponent(extension.id)}/${action}`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "Idempotency-Key": idempotencyKey,
+              },
+              body: JSON.stringify({
+                expected_installation_revision: extension.installation_revision,
+              }),
+            },
+          ),
+      });
+      if (!result.ok) {
+        if (result.error.code === "extension_version_changed") await versionChanged();
+        else if (!result.uncertain) toast.error(t(result.error.message));
+        return;
+      }
       toast.success(
-        result.data.status === "completed"
-          ? t("Extensão instalada. Agora um administrador da organização pode ativá-la.")
-          : t("Preparação iniciada. O recibo continuará visível até a conclusão."),
+        action === "revert"
+          ? t("Troca desfeita: a versão {versao} voltou a valer em todas as organizações.").replace(
+              "{versao}",
+              result.data.to_version ?? result.data.version ?? "",
+            )
+          : t("Extensão removida de todas as organizações."),
       );
     },
-    [runMutation, t],
+    [runMutation, t, versionChanged],
   );
 
   const configure = useCallback(
@@ -506,7 +571,7 @@ export function ExtensionsManager({
       const readReceipt = result.ok
         ? expectedOperation(result.data, {
             id: operation.id,
-            kind: operation.kind,
+            kinds: compatibleKinds(operation.kind),
             organizationId,
           })
         : null;
@@ -519,7 +584,7 @@ export function ExtensionsManager({
       }
       if (
         readReceipt?.status === "preparing" &&
-        readReceipt.kind === "install" &&
+        (readReceipt.kind === "install" || readReceipt.kind === "update") &&
         readReceipt.catalog_id &&
         readReceipt.publisher &&
         readReceipt.name &&
@@ -536,6 +601,8 @@ export function ExtensionsManager({
             publisher: readReceipt.publisher,
             name: readReceipt.name,
             version: readReceipt.version,
+            // O pedido retomado é o MESMO: a precondição é a revisão que a preparação encontrou.
+            expected_installation_revision: readReceipt.from_revision,
           }),
         });
       }
@@ -560,7 +627,7 @@ export function ExtensionsManager({
       if (
         !expectedOperation(result.data, {
           id: operation.id,
-          kind: operation.kind,
+          kinds: compatibleKinds(operation.kind),
           organizationId,
         })
       ) {
@@ -598,7 +665,7 @@ export function ExtensionsManager({
       if (
         !expectedOperation(result.data, {
           id: receipt.id,
-          kind: receipt.kind,
+          kinds: compatibleKinds(receipt.kind),
           organizationId,
         })
       ) {
@@ -645,7 +712,7 @@ export function ExtensionsManager({
       }
       const confirmed = expectedOperation(result.data, {
         id: operation.id,
-        kind: operation.kind,
+        kinds: compatibleKinds(operation.kind),
         organizationId,
       });
       if (!confirmed) {
@@ -655,7 +722,11 @@ export function ExtensionsManager({
         return;
       }
       if (confirmed.status === "cancelled") {
-        toast.success(t("Preparação cancelada. Este pedido não instalará a extensão."));
+        toast.success(
+          confirmed.kind === "update"
+            ? t("Atualização cancelada. A versão instalada continua a mesma.")
+            : t("Preparação cancelada. Este pedido não instalará a extensão."),
+        );
       } else if (confirmed.status === "completed") {
         toast.info(t("A instalação já havia sido concluída; o recibo foi atualizado."));
       } else if (confirmed.status === "failed") {
@@ -846,7 +917,7 @@ export function ExtensionsManager({
                 <div className="grid gap-4 lg:grid-cols-2">
                   {filteredInstalled.map((extension) => (
                     <InstalledExtensionCard
-                      key={`${extension.id}:${extension.revision}`}
+                      key={`${extension.id}:${extension.revision}:${extension.installation_revision}`}
                       extension={extension}
                       canManage={data.can_manage}
                       actionsDisabled={!mutationsReady}
@@ -859,6 +930,14 @@ export function ExtensionsManager({
                         const { message } = await configure(alvo, enabled, configuration);
                         setConfigFeedback((atual) => ({ ...atual, [alvo.id]: message }));
                       }}
+                      canInstall={data.can_install}
+                      platformBusy={
+                        busyTarget === `revert:${extension.id}:${extension.installation_revision}` ||
+                        busyTarget === `removal:${extension.id}:${extension.installation_revision}`
+                      }
+                      platformBlockedReason={data.can_install ? mutationBlockedReason : undefined}
+                      onRevert={(alvo) => changeInstallation(alvo, "revert")}
+                      onRemove={(alvo) => changeInstallation(alvo, "remove")}
                     />
                   ))}
                 </div>
@@ -881,10 +960,14 @@ export function ExtensionsManager({
               {filteredCatalog.length > 0 ? (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {filteredCatalog.map(({ catalog, entry }) => {
-                    const installedIdentity = installed.find(
-                      (item) => item.publisher === entry.publisher && item.name === entry.name,
-                    );
-                    const target = `install:${catalog.id}:${entry.publisher}:${entry.name}:${entry.version}`;
+                    const identity = catalogIdentity(data, catalog.id, entry);
+                    const expected =
+                      identity.kind === "installed"
+                        ? identity.installationRevision
+                        : identity.kind === "removed"
+                          ? identity.revision
+                          : null;
+                    const target = `install:${catalog.id}:${entry.publisher}:${entry.name}:${entry.version}:${expected ?? "none"}`;
                     return (
                       <CatalogExtensionCard
                         key={`${catalog.id}:${entry.publisher}:${entry.name}:${entry.version}`}
@@ -893,9 +976,11 @@ export function ExtensionsManager({
                         canInstall={data.can_install}
                         actionsDisabled={!mutationsReady}
                         blockedReason={data.can_install ? mutationBlockedReason : undefined}
-                        installedVersion={installedIdentity?.version ?? null}
+                        identity={identity}
                         busy={busyTarget === target}
-                        onInstall={() => void install(catalog.id, entry)}
+                        onInstall={(expectedRevision) =>
+                          void install(catalog.id, entry, expectedRevision)
+                        }
                       />
                     );
                   })}
@@ -931,4 +1016,39 @@ export function ExtensionsManager({
       ) : null}
     </main>
   );
+}
+
+/** Onde uma entrada do catálogo está em relação ao que já foi instalado (ver `CatalogIdentityState`). */
+function catalogIdentity(
+  data: ExtensionListView,
+  catalogId: string,
+  entry: CatalogEntry,
+): CatalogIdentityState {
+  const sameIdentity = (item: { publisher: string; name: string }) =>
+    item.publisher === entry.publisher && item.name === entry.name;
+  const active = data.installations.filter((item) => !item.removed_at && sameIdentity(item));
+  const here = active.find((item) => item.catalog_id === catalogId);
+  if (here) {
+    return {
+      kind: "installed",
+      version: here.version,
+      installationRevision: here.installation_revision,
+      activeOrganizations: here.active_organizations,
+    };
+  }
+  const removed = data.removed_installations.find(
+    (item) => item.catalog_id === catalogId && sameIdentity(item),
+  );
+  if (removed) {
+    return {
+      kind: "removed",
+      revision: removed.revision,
+      removedAt: removed.removed_at,
+      awaitingReactivation: removed.awaiting_reactivation,
+    };
+  }
+  const elsewhere = active[0];
+  return elsewhere
+    ? { kind: "other_origin", origin: elsewhere.origin, version: elsewhere.version }
+    : { kind: "absent" };
 }

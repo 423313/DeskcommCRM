@@ -30,6 +30,15 @@ export async function POST(
         "A configuração mudou em outra sessão. Recarregue antes de continuar.",
       );
     }
+    // O card tem de existir na versão VIGENTE. Uma aba aberta antes de uma troca de versão
+    // pediria uma ação que a versão instalada talvez não tenha mais.
+    const card = guide.manifest.contributions.crm_cards.find((item) => item.id === input.card_id);
+    if (card?.action.capability !== input.capability) {
+      throw new ExtensionServiceError(
+        "extension_card_unavailable",
+        "Este card não existe na versão instalada. Recarregamos o guia.",
+      );
+    }
     // Esta capacidade só resolve um destino do núcleo. Nenhum dado de tarefa
     // vai ao pacote; a rota de Tarefas continua exigindo sua autorização própria.
     return ok({ href: "/app/tasks" });
