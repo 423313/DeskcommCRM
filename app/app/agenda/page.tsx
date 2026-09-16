@@ -242,9 +242,12 @@ export default async function AgendaPage() {
         // morria aqui. `dados-de-mentira.ts` preenche este campo nos 11 cards,
         // então a tela pareceu pronta o tempo todo — e o `?? a.titulo` do
         // histórico transformou a ausência em silêncio, não em erro.
-        // `name` antes de `display_name` segue o precedente do produto
-        // (`app/app/lgpd/requests/[id]/PreviewPanel.tsx`); as duas colunas são
-        // reescritas pelo cascade de LGPD, então nenhuma vaza titular anonimizado.
+        // A ordem entre `name` e `display_name` não se decide aqui: vem de
+        // `lib/contacts/rotulo-do-contato.ts`. Este comentário apontava para
+        // `PreviewPanel.tsx` como precedente, e aquele arquivo deixou de remontar
+        // a cadeia — precedente por cópia envelhece; módulo, não. As duas colunas
+        // são reescritas pelo cascade de LGPD, então nenhuma vaza titular
+        // anonimizado.
         quemSeraAtendido: contatoDoEmbed(a.contacts),
       })) as AgendamentoDaTela[]).concat(
         /**

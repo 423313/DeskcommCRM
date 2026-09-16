@@ -677,7 +677,8 @@ export async function listaAgendamentos(
       // O ID sozinho não serve a nenhum dos dois consumidores: a grade precisa do
       // nome para dizer "com quem", e o AGENTE recebia um uuid cru onde devia
       // dizer "você já tem consulta marcada, Maria". Mesma coluna que a tela do
-      // produto lê, mesmo precedente de `name` antes de `display_name`.
+      // produto lê, e a MESMA decisão de nome — `lib/contacts/rotulo-do-contato.ts`,
+      // não um precedente copiado de outro arquivo.
       contatoNome: contatoDoEmbed(l.contacts),
     })),
   };
