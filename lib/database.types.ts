@@ -8029,7 +8029,7 @@ export type Database = {
         Returns: Json
       }
       fn_extensions_installation_counts: {
-        Args: never
+        Args: { p_actor: string }
         Returns: {
           active_organizations: number
           awaiting_reactivation: number

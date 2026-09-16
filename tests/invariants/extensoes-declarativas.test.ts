@@ -183,10 +183,11 @@ describe("extensões: autoridade e isolamento reais", () => {
     }
     for (const table of ["extension_artifacts", "extension_installations"]) await expect(withRole("service_role", `delete from ${table}`)).rejects.toMatchObject({ code: "42501" });
     for (const role of ["anon", "authenticated"] as const) {
-      await expect(withRole(role, "select * from fn_extensions_installation_counts()")).rejects.toMatchObject({ code: "42501" });
+      await expect(withRole(role, "select * from fn_extensions_installation_counts($1)", [actor])).rejects.toMatchObject({ code: "42501" });
     }
     // A assinatura antiga do prepare, sem a precondição, não sobrevive como sobrecarga.
     expect((await query("select to_regprocedure('public.fn_extensions_prepare_install(uuid,uuid,uuid,text,text,text)') is null as sumiu")).rows[0].sumiu).toBe(true);
+    expect((await query("select to_regprocedure('public.fn_extensions_installation_counts()') is null as sumiu")).rows[0].sumiu).toBe(true);
   });
 
   it("ator revogado, viewer, manager, convite não aceito e organização vizinha são recusados na RPC", async () => {
@@ -738,7 +739,11 @@ describe("extensões: atualizar, desfazer a última troca e remover", () => {
     await configure(segundo, 1, false, null, randomUUID(), orgB, adminB);
     await remover(segundo, 1);
     await atualizar(outro, 2);
-    const contagem = await withRole("service_role", "select * from fn_extensions_installation_counts()");
+    // A contagem atravessa organizações: quem administra só uma organização é recusado no banco.
+    for (const who of [adminA, viewer]) {
+      await expect(withRole("service_role", "select * from fn_extensions_installation_counts($1)", [who])).rejects.toThrow("extension_forbidden");
+    }
+    const contagem = await withRole("service_role", "select * from fn_extensions_installation_counts($1)", [actor]);
     expect(contagem.fields.map(f => f.name)).toEqual(["installation_id", "active_organizations", "awaiting_reactivation"]);
     const direta = await query(`select installation_id, count(*) filter (where enabled)::int active_organizations,
       count(*) filter (where not enabled and deactivated_by_removal_at is not null)::int awaiting_reactivation

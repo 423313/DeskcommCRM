@@ -26606,16 +26606,21 @@ begin
 end $$;
 
 -- Contagem entre organizações para quem administra a instalação: só números, nunca ids. É a
--- única leitura de organization_extensions que atravessa organizações, e a spec a declara.
-create or replace function public.fn_extensions_installation_counts()
+-- única leitura de organization_extensions que atravessa organizações, e a spec a declara. Confere
+-- o ator no banco, como as funções que escrevem: a barreira não depende só de quem a chama.
+drop function if exists public.fn_extensions_installation_counts();
+create or replace function public.fn_extensions_installation_counts(p_actor uuid)
 returns table(installation_id uuid, active_organizations integer, awaiting_reactivation integer)
-language sql stable set search_path = public, pg_temp as $$
-  select e.installation_id,
-    (count(*) filter (where e.enabled))::integer,
-    (count(*) filter (where not e.enabled and e.deactivated_by_removal_at is not null))::integer
-  from public.organization_extensions e
-  group by e.installation_id;
-$$;
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  perform public.fn_extensions_assert_actor(p_actor);
+  return query
+    select e.installation_id,
+      (count(*) filter (where e.enabled))::integer,
+      (count(*) filter (where not e.enabled and e.deactivated_by_removal_at is not null))::integer
+    from public.organization_extensions e
+    group by e.installation_id;
+end $$;
 
 create or replace function public.fn_extensions_guard_core_update()
 returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
@@ -26644,7 +26649,7 @@ revoke execute on function public.fn_extensions_cancel_install(uuid,uuid) from p
 revoke execute on function public.fn_extensions_configure(uuid,uuid,uuid,uuid,integer,boolean,jsonb) from public,anon,authenticated;
 revoke execute on function public.fn_extensions_revert_install(uuid,uuid,uuid,integer) from public,anon,authenticated;
 revoke execute on function public.fn_extensions_remove_installation(uuid,uuid,uuid,integer) from public,anon,authenticated;
-revoke execute on function public.fn_extensions_installation_counts() from public,anon,authenticated;
+revoke execute on function public.fn_extensions_installation_counts(uuid) from public,anon,authenticated;
 grant execute on function public.fn_extensions_admit_catalog(uuid,uuid,jsonb,text) to service_role;
 grant execute on function public.fn_extensions_prepare_install(uuid,uuid,uuid,text,text,text,integer) to service_role;
 grant execute on function public.fn_extensions_finish_install(uuid,uuid,jsonb,text,integer,text) to service_role;
@@ -26653,7 +26658,7 @@ grant execute on function public.fn_extensions_cancel_install(uuid,uuid) to serv
 grant execute on function public.fn_extensions_configure(uuid,uuid,uuid,uuid,integer,boolean,jsonb) to service_role;
 grant execute on function public.fn_extensions_revert_install(uuid,uuid,uuid,integer) to service_role;
 grant execute on function public.fn_extensions_remove_installation(uuid,uuid,uuid,integer) to service_role;
-grant execute on function public.fn_extensions_installation_counts() to service_role;
+grant execute on function public.fn_extensions_installation_counts(uuid) to service_role;
 -- END 0263_extensoes_declarativas
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
