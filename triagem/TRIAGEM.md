@@ -1166,10 +1166,30 @@ E confira o desfecho, porque "a tag saiu" não é "a versão chegou":
 ```bash
 git ls-remote --tags origin 'refs/tags/vX.Y.Z'          # a tag existe
 gh release list --limit 1                                # a release é a Latest
-curl -s https://www.deskcomm.com.br/changelog | grep -c 'href="/changelog/X.Y.Z"'   # a vitrine lista (≥1)
+
+# A vitrine lista, nos TRÊS idiomas. O href carrega o prefixo da PÁGINA, então o padrão
+# se monta com ele: trocar só a URL e manter `href="/changelog/..."` devolve 0 nas
+# páginas em en e es COM a versão listada. Cada linha tem de dar ≥1.
+V=X.Y.Z
+for p in /changelog /en/changelog /es/changelog; do
+  echo "$p: $(curl -s "https://www.deskcomm.com.br$p" | grep -c "href=\"$p/$V\"")"
+done
+
 # e as três imagens no digest da versão, contra `stable` — receita em
 # docs/runbooks/ativar-packaging.md
 ```
+
+**Deu 0? Repita antes de concluir qualquer coisa.** A página revalida a cada 10 minutos: o
+primeiro acesso depois da janela devolve a lista antiga e agenda a nova — a segunda visita já
+traz a versão. É a mesma razão pela qual o passo do `release.yml` repete a sonda em vez de
+conferir uma vez só. Se persistir, a ordem de investigação está em `docs/doctrine/versionamento.md`
+(seção "A vitrine").
+
+O `grep -c` é de propósito: ele conta, e para contar lê a entrada inteira. Um `grep -q` no lugar
+sai no primeiro casamento, o `curl` do outro lado do cano morre de SIGPIPE e, num terminal com
+`set -o pipefail`, o status vira 141 — a versão LISTADA aparece como faltando assim que o HTML
+tiver uma quebra de linha depois do link.
+
 ---
 
 ## 12-ter. O PR cujo conteúdo entrou DERIVADO — o merge de proveniência

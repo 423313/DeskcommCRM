@@ -231,9 +231,20 @@ seção com o cabeçalho certo? → o formato mudou sem o leitor da LP mudar jun
 **Depois de consertar a LP, não re-rode o job para conferir.** Um "Re-run failed jobs" roda no
 mesmo commit, onde a tag já existe: a guarda de idempotência do passo `pendente` grava
 `cortar=nao`, e este passo — como o das imagens — aparece como pulado. O job fica verde sem ter
-olhado a LP. A conferência depois do conserto é à mão, com o `curl … | grep -c` de
+olhado a LP. A conferência depois do conserto é à mão, com o laço de `curl … | grep -c` de
 `triagem/TRIAGEM.md` (seção "Depois do merge, a versão sai"), nos três caminhos: `/changelog`,
 `/en/changelog` e `/es/changelog`.
+
+Duas coisas fazem essa conferência à mão mentir, e as duas mentem no sentido do susto:
+
+- **Não basta trocar a URL.** O `href` procurado carrega o prefixo da própria página —
+  `/en/changelog/X.Y.Z` na inglesa, `/es/changelog/X.Y.Z` na espanhola. Procurar o link do pt nas
+  outras duas devolve 0 **com a versão listada**. O passo do `release.yml` monta o padrão com
+  `${p}` justamente por isso; o laço da receita monta igual.
+- **0 na primeira volta não é veredito.** A página revalida a cada 10 minutos: o primeiro acesso
+  depois da janela devolve a lista antiga e agenda a nova, e a segunda visita já traz a versão.
+  Repita antes de concluir que a vitrine não mostra — é a mesma razão pela qual o passo do
+  `release.yml` repete a sonda em vez de conferir uma vez só.
 
 ---
 

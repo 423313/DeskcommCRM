@@ -79,10 +79,30 @@ describe("a release chega à página de changelog da LP", () => {
     expect(bloco).toContain('href=\\"${p}/${VERSAO}\\"');
     // E procura sem pipeline. Sob `pipefail`, `printf "$html" | grep -q` dá a versão como faltando
     // quando o HTML tem quebra de linha depois do link: o grep sai no primeiro casamento e o printf
-    // morre de SIGPIPE (141). Medido no ubuntu:24.04 contra o changelog.html real: 0/20 listada.
+    // morre de SIGPIPE (141).
+    //
+    // O `changelog.html` que o site gera hoje vem em UMA linha só e NÃO dispara isso — a medição
+    // INJETOU uma quebra logo depois do link para alcançar o defeito. Ela vale mesmo assim porque
+    // o formato do HTML é do gerador, não do contrato: ele ganha quebra sem avisar ninguém daqui.
+    // No ubuntu:24.04 (bash 5.2.21), contra o `changelog.html` do build do `deskcomm-site`
+    // (230.073 bytes, zero quebras), 20 rodadas de cada forma:
+    //
+    //   arquivo real          pipeline 20/20 listada · [[ ]] 20/20 · grep <<< 20/20
+    //   uma quebra injetada   pipeline  0/20 listada · [[ ]] 20/20 · grep <<< 20/20
     const sonda = bloco.split("\n").filter((l) => l.includes('href=\\"${p}/${VERSAO}\\"'));
     expect(sonda, "a sonda do link deixou de ser uma linha só").toHaveLength(1);
-    expect(sonda[0]?.trim()).toBe('if [[ "$html" == *"href=\\"${p}/${VERSAO}\\""* ]]; then');
+    // Duas formas alimentam o grep sem pipeline, e o teste aceita as DUAS: a comparação de padrão
+    // do bash e a here-string. Prender uma só faria a outra — que a medição acima mostra igualmente
+    // imune — reprovar sem defeito, e vermelho que não aponta defeito ensina a contornar o guarda.
+    // O que segue proibido é PIPELINE, e é a asserção logo abaixo que o cobra.
+    const SONDAS_SEM_PIPELINE = [
+      'if [[ "$html" == *"href=\\"${p}/${VERSAO}\\""* ]]; then',
+      'if grep -qF "href=\\"${p}/${VERSAO}\\"" <<< "$html"; then',
+    ];
+    expect(
+      SONDAS_SEM_PIPELINE,
+      `a sonda virou uma forma que este teste não reconhece como segura:\n  ${sonda[0]?.trim()}`,
+    ).toContain(sonda[0]?.trim());
     const codigo = bloco
       .split("\n")
       .filter((l) => !l.trim().startsWith("#"))
