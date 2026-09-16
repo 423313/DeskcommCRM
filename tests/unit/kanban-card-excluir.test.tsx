@@ -14,10 +14,20 @@ import type { Lead } from "@/lib/types/leads";
 
 const estado = vi.hoisted(() => ({ podeMover: true }));
 const post = vi.hoisted(() => vi.fn());
+/**
+ * O dublê RECEBE a chave. Um `usePermission: () => estado.podeMover` sem
+ * parâmetro prova que EXISTE um gate, não que o gate é `pipeline.move_card`:
+ * trocar a chave por outra — inclusive uma de piso mais alto, que esconderia o
+ * item de todo `agent` — deixaria a suíte verde, e o `ACTION_MIN_ROLE` é
+ * `Record<string, Role>`, então nem o typecheck acusaria.
+ */
+const permissao = vi.hoisted(() => vi.fn((_chave: string) => true));
 
 vi.mock("@/lib/api/client", () => ({ apiClient: { post, get: vi.fn(), patch: vi.fn() } }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
-vi.mock("@/hooks/auth/AuthProvider", () => ({ usePermission: () => estado.podeMover }));
+vi.mock("@/hooks/auth/AuthProvider", () => ({
+  usePermission: (chave: string) => permissao(chave),
+}));
 vi.mock("@/hooks/kanban/useUpdateLead", () => ({
   useWinLead: () => ({ mutate: vi.fn(), isPending: false }),
   useEditLead: () => ({ mutate: vi.fn(), isPending: false }),
@@ -47,6 +57,8 @@ function renderMenu() {
 
 beforeEach(() => {
   estado.podeMover = true;
+  permissao.mockReset();
+  permissao.mockImplementation(() => estado.podeMover);
   post.mockReset();
   post.mockResolvedValue({ data: { updated_count: 1 } });
 });
@@ -61,6 +73,9 @@ describe("menu do card — Excluir", () => {
 
     expect(await screen.findByText('Excluir "Proposta da ACME"?')).toBeTruthy();
     expect(post).not.toHaveBeenCalled();
+    // Qual gate, e não só "algum gate": é `pipeline.move_card` que decide se
+    // Excluir aparece, a mesma chave que a rota em lote cobra.
+    expect(permissao).toHaveBeenCalledWith("pipeline.move_card");
 
     await user.click(screen.getByRole("button", { name: "Excluir" }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
@@ -69,6 +84,38 @@ describe("menu do card — Excluir", () => {
       lead_ids: ["l-1"],
       params: {},
     });
+  });
+
+  it("cancelar fecha a confirmação e segue sem excluir", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "Ações do lead" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Excluir" }));
+    await screen.findByText('Excluir "Proposta da ACME"?');
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(screen.queryByText('Excluir "Proposta da ACME"?')).toBeNull());
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("confirmar é o que exclui — e uma vez só, mesmo com dois cliques", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "Ações do lead" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Excluir" }));
+    await screen.findByText('Excluir "Proposta da ACME"?');
+
+    const confirmar = screen.getByRole("button", { name: "Excluir" });
+    await user.click(confirmar);
+    // Segundo clique no MESMO botão: enquanto a rota não responde ele está
+    // `disabled`, e excluir em dobro é o erro que não tem desfazer.
+    await user.click(confirmar);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledTimes(1);
   });
 
   it("sem permissão de mexer no funil, Excluir não é oferecido", async () => {
@@ -89,5 +136,8 @@ describe("menu do card — Excluir", () => {
     expect(botao.className).toContain("[@media(hover:hover)]:opacity-0");
     expect(botao.className).toContain("[@media(hover:hover)]:group-hover:opacity-100");
     expect(botao.className.split(/\s+/)).not.toContain("opacity-0");
+    // No desktop quem navega por teclado tabula até aqui: sem isto o foco
+    // pousa num botão invisível, que só aparece depois que o menu abre.
+    expect(botao.className).toContain("focus-visible:opacity-100");
   });
 });
