@@ -55,46 +55,6 @@ export const CONVERSAS_IGNORADAS = {
 } as const;
 
 /**
- * O ACERVO DO NÚMERO — o histórico que existe ANTES da vinculação.
- *
- * ─── Medido numa instalação real (issue #999) ───────────────────────────────
- *
- * A sessão do NOWEB nascia sem `store`: 3 conversas no inbox e um arquivo de
- * 1 MB, num número com movimento. A mesma vinculação com o acervo ligado
- * trouxe 825 conversas e 57 MB. Sem acervo o canal não guarda nem entrega o
- * que já estava no aparelho — ele só entrega o que acontece depois.
- *
- * ─── Por que o padrão é o lado errado ──────────────────────────────────────
- *
- * `store { enabled: false, fullSync: false }` é o DEFAULT da engine, e não há
- * variável de ambiente que o mude no contêiner: quem cria a sessão é que
- * precisa PEDIR. A criação é a única porta de entrada de uma sessão, e ela
- * pedia apenas o filtro de `CONVERSAS_IGNORADAS`.
- *
- * O acervo não é conveniência: `resolvePhoneForLid`, mais abaixo neste
- * arquivo, depende dele — a tabela que traduz `<lid>` em telefone "só existe
- * com o STORE habilitado na sessão", e sem ela todo pedido volta 400. O canal
- * estava tratado como pré-requisito num caminho e dispensado no outro.
- *
- * `fullSync` manda baixar o histórico ANTERIOR à vinculação: ligar só
- * `enabled` deixaria o passado de fora — o mesmo defeito com outra roupa.
- *
- * ─── Sessão que já existe não é reconfigurada por aqui ─────────────────────
- *
- * `POST /api/sessions` devolve 422 quando a sessão já existe, e a config não é
- * aplicada nesse caminho. Sessão criada ANTES desta constante segue sem o
- * acervo até ser recriada — quem re-vincula (desconectar e conectar) ganha.
- * Exigir `noweb` na compatibilidade seria a tentação errada: faria toda sessão
- * já pareada deixar de subir, trocando um inbox vazio por um canal parado.
- */
-export const ACERVO_DO_HISTORICO = {
-  /** Liga o acervo: sem ele o canal não guarda nem entrega o que já passou. */
-  enabled: true,
-  /** Baixa o histórico anterior à vinculação, não só o que vier depois. */
-  fullSync: true,
-} as const;
-
-/**
  * Teto de relógio das chamadas ao WAHA.
  *
  * 15s não é número escolhido aqui: é o que `docs/specs/03-spec-whatsapp-waha.md`
@@ -284,13 +244,7 @@ export class WahaClient {
     const res = await this.fetchComTeto(`${this.baseUrl}/api/sessions`, {
       method: "POST",
       headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
-      // O acervo vai JUNTO com o filtro: sessão criada sem `store` não recebe
-      // o histórico do número. Ver ACERVO_DO_HISTORICO.
-      body: JSON.stringify({
-        name,
-        start: false,
-        config: { ignore: CONVERSAS_IGNORADAS, noweb: { store: ACERVO_DO_HISTORICO } },
-      }),
+      body: JSON.stringify({ name, start: false, config: { ignore: CONVERSAS_IGNORADAS } }),
     });
     if (!res.ok && !knownSessionConflict(await res.json().catch(() => null), res.status, "create", name)) {
       throw new WahaSessionError("create", res.status);
