@@ -652,7 +652,13 @@ jobs:
         ports: ["3000:3000"]
         env:
           WHATSAPP_HOOK_URL: http://127.0.0.1:3001/api/whatsapp/webhook
-          WAHA_API_KEY: e2e-waha-chave-nao-e-segredo
+          # A chave do WAHA tem UMA fonte: `.env.e2e`, gerado por
+          # `scripts/gerar-env-e2e.sh` e publicado no ambiente do job. Sem
+          # `WAHA_API_KEY` configurada aqui o contêiner não autentica, então o
+          # valor que o app manda (o do `.env.e2e`) é o que vale — e não há
+          # segunda fonte para divergir. Escrever a chave aqui foi reprovado pelo
+          # guard `tests/unit/e2e-workflow-honra-o-env.test.ts`: eram DOIS valores
+          # diferentes (o desta linha e o do `.env.e2e`), e o app levaria 401.
         options: >-
           --health-cmd "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))\""
           --health-interval 10s --health-timeout 5s --health-retries 12
@@ -870,8 +876,11 @@ jobs:
           #    WAHA ativo, Redis local, e Resend SEM chave — instalação nova não
           #    tem chave de SaaS nenhuma, e é isso que a spec cobra.
           {
+            # `WAHA_API_KEY` NÃO entra aqui: ela vem do `.env.e2e` (fonte única,
+            # já publicada no ambiente do job). Redigitá-la — com outro valor,
+            # que era o caso — é a segunda fonte que o guard
+            # `tests/unit/e2e-workflow-honra-o-env.test.ts` reprova.
             echo "WAHA_API_BASE_URL=http://127.0.0.1:3000"
-            echo "WAHA_API_KEY=e2e-waha-chave-nao-e-segredo"
             echo "UPSTASH_REDIS_REST_URL=http://127.0.0.1:8079"
             echo "UPSTASH_REDIS_REST_TOKEN=e2e-token-nao-e-segredo"
             echo "RESEND_API_BASE_URL=http://127.0.0.1:3997"
