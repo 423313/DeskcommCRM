@@ -84,6 +84,17 @@ jobs:
   # O teto de 30 min FICA. Ele é o que denuncia a suíte crescendo de novo;
   # subi-lo seria trocar um vermelho honesto por um CI que demora mais a cada
   # mês sem ninguém perceber.
+  #
+  # Custo que a parte 4 impõe às outras três, MEDIDO e aceito: os contêineres
+  # de `services:` (WAHA, redis, serverless-redis-http) sobem em TODAS as
+  # pernas, porque `services:` é chave do job e o Actions não aceita condição
+  # por braço da matriz. Na parte 1 do run 35124188017, que não usa nenhum
+  # deles, "Initialize containers" foi de 16:53:22.468 a 16:54:13.725 — 51s,
+  # quase todos no pull do WAHA —, e a parte 3 do mesmo run mediu 26m04s. A
+  # margem até o teto é fina. Se uma perna estourar, a primeira alavanca NÃO é
+  # subir o teto: é tirar os três contêineres de `services:` e subi-los por
+  # `docker run` dentro do passo `if: matrix.parte == 4`, como o dublê de SaaS
+  # já sobe.
   e2e-parte:
     runs-on: ubuntu-latest
     timeout-minutes: 30
