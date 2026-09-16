@@ -10,7 +10,7 @@ BASE=http://localhost:3217 OUT=/tmp/telas node evidence/lp-guias-changelog/2026-
 
 | o que | resultado |
 |---|---|
-| verificações | 533 verdes, 0 vermelhas (`run.log`) |
+| verificações | 533 verdes, 0 vermelhas (`run.txt`) |
 | erros de console e de rede | 0 |
 | larguras do cabeçalho | 360, 390, 640, 768, 900, 1024, 1100, 1180, 1280 e 1440 px, nos três idiomas |
 
@@ -39,7 +39,7 @@ Três defeitos apareceram nas rodadas anteriores e foram consertados antes desta
 ## Segunda rodada: o preview da Vercel
 
 Em 2026-09-16 a mesma prova rodou contra o preview do PR na Vercel, com um segredo de bypass
-temporário, revogado logo depois. O resultado está em `run-vercel-preview.log`.
+temporário, revogado logo depois. O resultado está em `run-vercel-preview.txt`.
 
 | o que | resultado |
 |---|---|

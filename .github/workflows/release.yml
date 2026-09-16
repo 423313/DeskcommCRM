@@ -385,8 +385,11 @@ jobs:
             for p in $paginas; do
               # O link para a página da versão, e não o número solto: "1.2.1"
               # aparece dentro de "1.2.10"; o href fecha a aspa.
+              # Sem pipeline: sob pipefail, `printf | grep -q` dá "faltando" com a
+              # versão listada assim que o HTML tiver quebra de linha depois do link
+              # (o grep sai cedo e o printf morre de SIGPIPE, 141).
               html=$(curl -fsSL --max-time 30 "${LP}${p}" 2>/dev/null || true)
-              if printf '%s' "$html" | grep -qF "href=\"${p}/${VERSAO}\""; then
+              if [[ "$html" == *"href=\"${p}/${VERSAO}\""* ]]; then
                 echo "  ${p}: v${VERSAO} listada"
               else
                 faltando="${faltando} ${p}"

@@ -228,6 +228,13 @@ atualizar a LP" — regra que não protege quem a escreve —, e sim:
 Se o passo falhar, a ordem de investigação é: a LP responde? → o `CHANGELOG.md` da `main` tem a
 seção com o cabeçalho certo? → o formato mudou sem o leitor da LP mudar junto?
 
+**Depois de consertar a LP, não re-rode o job para conferir.** Um "Re-run failed jobs" roda no
+mesmo commit, onde a tag já existe: a guarda de idempotência do passo `pendente` grava
+`cortar=nao`, e este passo — como o das imagens — aparece como pulado. O job fica verde sem ter
+olhado a LP. A conferência depois do conserto é à mão, com o `curl … | grep -c` de
+`triagem/TRIAGEM.md` (seção "Depois do merge, a versão sai"), nos três caminhos: `/changelog`,
+`/en/changelog` e `/es/changelog`.
+
 ---
 
 ## Os invariantes

@@ -77,6 +77,17 @@ describe("a release chega à página de changelog da LP", () => {
     expect(bloco).not.toContain("continue-on-error");
     // A sonda procura o LINK da versão: o número solto casa "1.2.1" dentro de "1.2.10".
     expect(bloco).toContain('href=\\"${p}/${VERSAO}\\"');
+    // E procura sem pipeline. Sob `pipefail`, `printf "$html" | grep -q` dá a versão como faltando
+    // quando o HTML tem quebra de linha depois do link: o grep sai no primeiro casamento e o printf
+    // morre de SIGPIPE (141). Medido no ubuntu:24.04 contra o changelog.html real: 0/20 listada.
+    const sonda = bloco.split("\n").filter((l) => l.includes('href=\\"${p}/${VERSAO}\\"'));
+    expect(sonda, "a sonda do link deixou de ser uma linha só").toHaveLength(1);
+    expect(sonda[0]?.trim()).toBe('if [[ "$html" == *"href=\\"${p}/${VERSAO}\\""* ]]; then');
+    const codigo = bloco
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("#"))
+      .join("\n");
+    expect(codigo, "a sonda voltou a passar o HTML por pipeline").not.toMatch(/(^|[^|])\|\s*grep\b/m);
   });
 
   it("a doutrina de versionamento declara a vitrine", () => {
