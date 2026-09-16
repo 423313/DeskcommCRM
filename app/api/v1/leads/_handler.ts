@@ -17,6 +17,7 @@ import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitte
 import { listaLegivel } from "@/lib/leads/activity-vocabulary";
 import { camposAlterados } from "@/lib/leads/campos-alterados";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
+import { moedaDaOrganizacao } from "@/lib/catalogo/moeda-da-org";
 import type { CreateLeadInput, UpdateLeadInput } from "@/lib/schemas";
 import { ehCorrecaoDeMovimentoDaIa } from "@/lib/leads/correcao-humana";
 
@@ -303,6 +304,19 @@ export async function createLeadHandler(
     (await ownerPatchOrThrow(supabase, ctx, input)) ??
     ({ owner_user_id: null, owner_agent_id: null, owner_kind: null } satisfies OwnerPatch);
 
+  // A moeda de um lead novo é a que a ORGANIZAÇÃO declarou, não um literal.
+  // `"BRL"` aqui (e o `.default("BRL")` que saiu de `createLeadSchema`) fazia
+  // toda organização em peso ou dólar cadastrar lead em real: o valor certo com
+  // o símbolo errado, que é o defeito que a migration 0208 já tinha consertado
+  // no catálogo de produtos. Mesma função daquele conserto, pelo mesmo motivo
+  // (uma leitura só, que não diverge entre caminhos de escrita).
+  //
+  // A leitura extra só acontece quando quem chamou NÃO mandou moeda — a REST
+  // com `currency` no corpo, o import e o webhook passam direto. E ela não pode
+  // derrubar a criação: `moedaDaOrganizacao` degrada para o padrão e deixa
+  // rastro (console.error + Sentry) em vez de lançar.
+  const currency = input.currency ?? (await moedaDaOrganizacao(supabase, ctx.organization_id));
+
   const serviceOrigin = ctx.serviceOrigin ?? await observeServiceOrigin(createAdminClient(), ctx.organization_id, input.contact_id ?? null);
   const { data: lead, error: insErr } = await supabase
     .from("crm_leads")
@@ -314,7 +328,7 @@ export async function createLeadHandler(
       description: input.description ?? null,
       contact_id: input.contact_id ?? null,
       value_cents: input.value_cents ?? null,
-      currency: input.currency ?? "BRL",
+      currency,
       ...ownerPatch,
       assigned_at:
         ownerPatch.owner_kind === null ? null : new Date().toISOString(),
