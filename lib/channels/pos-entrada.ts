@@ -326,32 +326,32 @@ async function pedirDespachoDoAgente(admin: Admin, entrada: EntradaDeMensagem): 
  *
  * Roda ANTES de `abrirDemanda`: o card COPIA a origem do contato quando nasce
  * (ver `ROTULO_DE_ANUNCIO` em `lib/leads/nascimento-do-lead.ts`). Estampar
- * depois deixaria o card com a origem de sempre e o dado só no contato — que e
- * exatamente onde ninguem olha.
+ * depois deixaria o card com a origem de sempre e o dado só no contato — que é
+ * exatamente onde ninguém olha.
  *
- * Duas condicoes da decisao da #924 estao aqui, e nenhuma delas e re-medida:
- * (a) a origem vale SO na PRIMEIRA mensagem do contato — um link encaminhado
- * adiante nao vira atribuicao de quem o recebeu (o filtro roda no banco, em
- * `ehAPrimeiraMensagemDoContato`); (b) o PRIMEIRO TOQUE nunca e sobrescrito, e
- * isso continua sendo da `fn_estampar_atribuicao_de_anuncio`, nao deste arquivo.
+ * Duas condições da decisão da #924 estão aqui, e nenhuma delas é re-medida:
+ * (a) a origem vale SÓ na PRIMEIRA mensagem do contato — um link encaminhado
+ * adiante não vira atribuição de quem o recebeu (o filtro roda no banco, em
+ * `ehAPrimeiraMensagemDoContato`); (b) o PRIMEIRO TOQUE nunca é sobrescrito, e
+ * isso continua sendo da `fn_estampar_atribuicao_de_anuncio`, não deste arquivo.
  *
- * Falha aqui e LOG, nunca excecao: a mensagem do cliente JA esta gravada, e
- * devolver erro ao provider faria ele reenviar a mensagem. Trocar um rotulo de
- * origem faltando por uma tempestade de reentregas e um pessimo negocio.
+ * Falha aqui é LOG, nunca exceção: a mensagem do cliente JÁ está gravada, e
+ * devolver erro ao provider faria ele reenviar a mensagem. Trocar um rótulo de
+ * origem faltando por uma tempestade de reentregas é um péssimo negócio.
  */
 async function guardarOrigemDaPagina(admin: Admin, entrada: EntradaDeMensagem): Promise<void> {
   const achada = extrairOrigemDaPagina(entrada.texto);
-  // O caso comum: quase nenhuma mensagem traz codigo de pagina.
+  // O caso comum: quase nenhuma mensagem traz código de página.
   if (!achada) return;
 
   const origem = { ...achada, capturadaEm: new Date().toISOString() };
 
   try {
     // A consulta vem ANTES de qualquer escrita, e DENTRO do try: falha de
-    // leitura nao pode virar estampa. O `estampar` so roda depois de a
+    // leitura não pode virar estampa. O `estampar` só roda depois de a
     // primeira mensagem estar confirmada.
     if (!(await ehAPrimeiraMensagemDoContato(admin, entrada.contactId, entrada.messageId))) {
-      logger.info("pos-entrada: codigo de origem fora da primeira mensagem (ignorado)", {
+      logger.info("pos-entrada: código de origem fora da primeira mensagem (ignorado)", {
         contactId: entrada.contactId,
         messageId: entrada.messageId,
       });
@@ -360,18 +360,18 @@ async function guardarOrigemDaPagina(admin: Admin, entrada: EntradaDeMensagem): 
 
     const gravou = await estamparOrigemDaPagina(admin, entrada.contactId, origem);
     if (!gravou) {
-      logger.warn("pos-entrada: origem da pagina NAO gravada (a mensagem entra assim mesmo)", {
+      logger.warn("pos-entrada: origem da página NÃO gravada (a mensagem entra assim mesmo)", {
         contactId: entrada.contactId,
         utm_source: origem.utm.utm_source ?? null,
       });
       return;
     }
-    logger.info("pos-entrada: origem da pagina gravada", {
+    logger.info("pos-entrada: origem da página gravada", {
       contactId: entrada.contactId,
       utm: Object.keys(origem.utm),
     });
   } catch (erro) {
-    logger.error("pos-entrada: origem da pagina falhou (a mensagem entra assim mesmo)", {
+    logger.error("pos-entrada: origem da página falhou (a mensagem entra assim mesmo)", {
       contactId: entrada.contactId,
       error: erro instanceof Error ? erro.message.slice(0, 160) : String(erro).slice(0, 160),
     });
