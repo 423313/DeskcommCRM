@@ -8734,6 +8734,8 @@ export const DICIONARIO: Traducoes = {
   "Aplicando...": {
     es: "Aplicando...",
   },
+  // ---- agenda: conexão com o Google (grupo G4, lote 12 — PRs #931/#933) ----
+  "Conectar outra conta": { es: "Conectar otra cuenta" },
 };
 
 /**

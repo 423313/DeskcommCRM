@@ -119,10 +119,15 @@ export function CartaoDaConexaoGoogle({
   }
 
   if (contaConectada) {
+    // `flex-wrap` aqui é SEGURO, e não medida: esta linha passou de duas ações
+    // para três, e um `flex` sem quebra empurra a terceira para FORA em tela
+    // estreita em vez de descê-la. Não observei o estouro em navegador — a
+    // régua da casa é medir por ferramenta, e sem essa medida a escolha
+    // defensiva é deixar a linha quebrar.
     return (
       <div
         data-testid="google-conectado"
-        className="flex items-center gap-2 rounded-lg border border-border bg-surface p-3"
+        className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-3"
       >
         <GoogleLogo size={16} weight="bold" className="shrink-0 text-text-muted" aria-hidden />
         <p className="min-w-0 flex-1 truncate text-sm">
@@ -130,6 +135,33 @@ export function CartaoDaConexaoGoogle({
           <span className="font-medium">{contaConectada}</span>
         </p>
         <a href="/app/settings/tenant/agenda" className="text-xs underline">{t("Configurar suas agendas")}</a>
+        {/*
+          A PORTA PARA A SEGUNDA CONTA — e por que ela não é o botão de cima.
+
+          O botão "Conectar Google" some daqui de propósito, e a decisão tem
+          teste: a segunda conexão não podia ser um clique no MESMO botão de
+          sempre, porque quem não enxergava o estado clicava de novo achando
+          que não tinha conectado.
+
+          Só que sumir sem substituto fecha um beco. Desde que os PRs #931/#933
+          devolveram o seletor de contas, escolher a ERRADA virou um clique — e
+          a chave única inclui o e-mail, então a conta errada não substitui a
+          certa: ela CRIA linha. Sem esta porta, a saída era "Desconectar", que
+          apaga TODAS as conexões Google da pessoa e os eventos e calendários
+          delas para trocar uma.
+
+          Nome próprio resolve as duas coisas: quem clica aqui está dizendo
+          "outra", não repetindo um clique perdido. E é o que torna alcançável
+          o que a tela já sabia desenhar — `contaConectada` chega como os
+          e-mails juntados por `, `, ou seja, escrita para N contas.
+        */}
+        <a
+          href="/api/v1/agenda/google/connect"
+          data-testid="conectar-outra-conta"
+          className="text-xs underline"
+        >
+          {t("Conectar outra conta")}
+        </a>
         <Button
           variant="outline"
           size="sm"

@@ -636,6 +636,9 @@ mais humilhante é que **a conexão sempre funcionou**: ninguém conseguia ver.
 | J16.3 | A conexão que o callback grava é encontrada pelo predicado do worker | **PASS** — mesmo invariante: 1 achada com o valor certo, 0 com o antigo |
 | J16.4 | Nenhuma consulta filtra por valor que a coluna proíbe | **PASS** — varredura `consulta-usa-o-vocabulario-do-banco`; previ 3 achados antes de rodar e vieram os 3 |
 | J16.5 | A lista de horários rola, e o último horário é clicável | **PASS** — `agenda-painel-cabe-na-tela.spec.ts`, viewport 1280×700. Evidência: `evidence/calendario/d4-lista-rola-1280x700.png` |
+| J16.6 | A ida ao Google pede o SELETOR de contas, e só SUGERE a do login | **PASS** — `agenda-google-connect-route.test.ts:67-80`, sobre o header `Location` de verdade: `accounts.google.com/o/oauth2/v2/auth`, `prompt` = {`consent`,`select_account`}, `login_hint` = o e-mail de quem clicou. A regra pura tem o par em `agenda-google-oauth.test.ts:46-68` |
+| J16.7 | O botão da tela leva à rota que produz essa ida | **PASS** — `agenda-cartao-conexao-google.test.tsx`, `href` do `conectar-google`. Era o único elo da corrente tela→Google que nenhum teste segurava |
+| J16.8 | Escolher a conta ERRADA tem saída que não seja desconectar tudo | **PASS** — mesmo arquivo, porta `conectar-outra-conta`. Antes dos PRs #931/#933 o estado era quase inalcançável (o Google pulava o seletor); com o seletor de volta é um clique, e a chave única inclui o e-mail, então a conta errada CRIA linha em vez de substituir |
 
 **Três correções ao briefing, todas medidas:**
 1. A retenção do cookie no segundo salto era **dedução** marcada NÃO MEDIDA. Foi
@@ -651,6 +654,25 @@ mais humilhante é que **a conexão sempre funcionou**: ninguém conseguia ver.
 **Dívida declarada, não consertada aqui:** com o painel aberto em 1280×700 o body
 vai a 1566px contra 700 de janela. É anterior a este PR e misturá-la esconderia
 as duas.
+
+**Duas dívidas do lote 12 (grupo G4, PRs #931/#933), declaradas e não pagas:**
+
+1. **Ninguém abriu a tela do Google com duas contas logadas.** J16.6 mede o que o
+   CRM ENVIA, que é o que nos cabe; que o Google DESENHE o seletor com as duas
+   contas é dedução a partir da documentação dele, não observação. Provar exige
+   conta Google de teste com consentimento pré-aprovado — o mesmo bloqueio que
+   mantém o caso 2 de `agenda-conectar-google.spec.ts` em `test.skip`.
+2. **Desconectar continua sendo tudo-ou-nada.** Com a porta `conectar-outra-conta`
+   a pessoa alcança a conta certa, mas a errada fica na lista, e o único remédio
+   (`DELETE /api/v1/agenda/google/desconectar`) apaga TODAS as conexões Google
+   dela, com os `calendar_external_events` e `calendar_connection_calendars`
+   delas (`.in("id", ids)`). Desconectar POR conexão é a dívida: a rota já lê
+   `id, account_email`, então é aceitar `connection_id` no corpo com o mesmo
+   filtro explícito de organização.
+3. **O arranjo das três ações não foi medido em navegador.** A linha do cartão
+   conectado passou de duas ações para três; recebeu `flex-wrap` como seguro
+   contra estouro em tela estreita, o que é escolha defensiva e não medida por
+   `getBoundingClientRect`.
 
 ---
 
