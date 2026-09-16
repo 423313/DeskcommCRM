@@ -8,6 +8,22 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.28.0] — 2026-09-16
+
+### Adicionado
+
+- **O CRM pode reconhecer quem já é cliente pela agenda** Nova regra em Configurações › Tipos de agendamento, desligada em toda organização: quando um administrador liga “Clientes pela agenda”, todo contato com horário marcado ganha a etiqueta “cliente” e a data de “Cliente desde” na ficha — a data do primeiro horário que conta — o dia em que se combinou, ou o dia do atendimento quando ele for mais antigo —, nunca uma data futura —, e quem já tinha horário marcado ganha na hora de ligar. Horário cancelado, falta e horário apagado não contam: se não sobrar nenhum, sai a etiqueta que o sistema pôs, e a que a equipe pôs à mão fica. Se alguém da equipe tirar a etiqueta, ela não volta — e a etiqueta que a equipe puser à mão o sistema nunca tira. As automações “Quando um contato ganhar uma tag” disparam uma vez por contato, na primeira vez que o sistema acrescenta a etiqueta: não disparam para quem já era cliente ao ligar, para quem já tinha a etiqueta posta à mão, nem de novo para quem cancela e marca outra vez, nem ao juntar contatos duplicados. Com a regra ligada, a tela de Funis permite marcar um “funil de clientes”, onde abre o negócio de quem já é cliente e volta a escrever. Atualizar não muda nada em organização nenhuma até alguém ligar a regra. Contribuição de @423313 (PR #867).
+
+### Corrigido
+
+- **O nome do compromisso pessoal da agenda do Google deixa de ficar ao alcance dos colegas** Quem conecta a agenda pessoal do Google ao CRM costuma fazer isso só para os horários ocupados contarem na agenda da equipe. A tela nunca mostrou o nome desses compromissos, mas a permissão do banco deixava qualquer pessoa da organização, inclusive com acesso somente leitura, consultá-lo diretamente com o próprio login.
+
+  Na prática, só havia nome para ler em agendas sincronizadas antes da versão 1.17.0. Desde ela, o serviço que sincroniza com o Google guarda só o horário, sem o nome, e apaga o nome que encontra quando atualiza o evento. O que sobra são compromissos gravados antes disso e que a sincronização não voltou a atualizar: os que já passaram, os cancelados, e os de agendas que ela deixou de ler — desmarcadas, removidas da conta do Google, de quem saiu da equipe ou com a conexão caída. Eles ficam até a limpeza automática removê-los, por padrão 90 dias depois de terminarem.
+
+  Agora nenhum login de usuário lê esse nome — nem os colegas, nem a própria pessoa que conectou a agenda, já que nenhuma tela o exibia. Os horários ocupados continuam contando exatamente como antes. Esta versão não apaga os nomes que sobraram: ela fecha a leitura.
+
+  Continua ao alcance de qualquer pessoa da organização o identificador de cada agenda sincronizada — que, na agenda principal do Google, é o e-mail da conta conectada. Dá para fechar isso sem mudar nenhuma tela — limitando a leitura dessas linhas a quem conectou a agenda e a quem gerencia a equipe, que já vê essa conta —, mas isso muda quem enxerga o quê e não entra nesta correção.
+
 ## [1.27.3] — 2026-09-15
 
 ### Corrigido
@@ -4753,7 +4769,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.3...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.28.0...HEAD
+[1.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.3...v1.28.0
 [1.27.3]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.2...v1.27.3
 [1.27.2]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.1...v1.27.2
 [1.27.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.0...v1.27.1
