@@ -5595,6 +5595,11 @@ export const DICIONARIO: Traducoes = {
   },
   "CPF (opcional)": { es: "CPF (opcional)" },
   "Criar contato": { es: "Crear contacto" },
+  "Trocar contato": { es: "Cambiar contacto" },
+  "Procure pelo nome ou telefone": { es: "Busque por nombre o teléfono" },
+  "Nenhum contato com esse nome ou telefone.": {
+    es: "Ningún contacto con ese nombre o teléfono.",
+  },
   "Contato criado": { es: "Contacto creado" },
   "Não foi possível carregar as sugestões agora.": { es: "No se pudieron cargar las sugerencias ahora." },
   "Não foi possível registrar a decisão.": { es: "No se pudo registrar la decisión." },

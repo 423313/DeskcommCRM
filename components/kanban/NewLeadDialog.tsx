@@ -1,7 +1,7 @@
 "use client";
 
 import { useT } from "@/hooks/i18n/useT";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -27,7 +27,10 @@ import { useCreateLead } from "@/hooks/kanban/useCreateLead";
 import type { Stage } from "@/lib/kanban/types";
 import { createLeadSchema, type CreateLeadInput } from "@/lib/schemas/leads";
 import { parseReaisToCents } from "@/lib/money";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import type { Contact } from "@/lib/types/contacts";
 import { EcoDoValor } from "./EcoDoValor";
+import { SeletorDeContato } from "./SeletorDeContato";
 
 interface FormShape {
   title: string;
@@ -65,6 +68,8 @@ export function NewLeadDialog({
   const t = useT();
   const create = useCreateLead(pipelineId);
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
+  // Quem abre o diálogo já sabendo o contato (Inbox) não escolhe de novo.
+  const [contato, setContato] = useState<Contact | null>(null);
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -108,7 +113,8 @@ export function NewLeadDialog({
       source: "manual",
       tags,
     };
-    if (contactId) payload.contact_id = contactId;
+    const idDoContato = contactId ?? contato?.id ?? null;
+    if (idDoContato) payload.contact_id = idDoContato;
     if (values.description.trim()) payload.description = values.description.trim();
     if (valueCents !== null) payload.value_cents = valueCents;
     if (values.expected_close_date) payload.expected_close_date = values.expected_close_date;
@@ -132,6 +138,7 @@ export function NewLeadDialog({
         tagsRaw: "",
         expected_close_date: "",
       });
+      setContato(null);
       onOpenChange(false);
     } catch {
       // toast already shown
@@ -139,6 +146,18 @@ export function NewLeadDialog({
   }
 
   const stageId = form.watch("stage_id");
+  // Pelo funil, negócio sem pessoa não tem para quem o WhatsApp falar nem com
+  // quem a automação casar — foi assim que o quadro encheu de lead órfão.
+  // Obrigatório só AQUI: a importação e as automações seguem criando sem
+  // contato, de propósito, e `createLeadSchema` continua aceitando nulo.
+  const faltaContato = !contactId && !contato;
+
+  function escolherContato(escolhido: Contact | null) {
+    setContato(escolhido);
+    if (escolhido && !form.getValues("title").trim()) {
+      form.setValue("title", rotuloDoContato(escolhido, t));
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -150,6 +169,8 @@ export function NewLeadDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {!contactId && <SeletorDeContato escolhido={contato} onEscolher={escolherContato} />}
+
           <div className="space-y-2">
             <Label htmlFor="title">{t("Título")}</Label>
             <Input
@@ -234,7 +255,7 @@ export function NewLeadDialog({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={create.isPending || !stageId}>
+            <Button type="submit" disabled={create.isPending || !stageId || faltaContato}>
               {create.isPending ? "Criando…" : "Criar lead"}
             </Button>
           </DialogFooter>

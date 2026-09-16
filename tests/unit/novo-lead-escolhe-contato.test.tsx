@@ -92,7 +92,7 @@ describe("Novo Lead pelo funil — o lead nasce com contato", () => {
     await user.click(screen.getByRole("button", { name: "Criar lead" }));
 
     await waitFor(() => expect(criarLead).toHaveBeenCalledTimes(1));
-    expect(criarLead.mock.calls[0][0]).toMatchObject({ contact_id: MICHELLE.id });
+    expect(criarLead.mock.calls[0]?.[0]).toMatchObject({ contact_id: MICHELLE.id });
   });
 
   it("sem contato escolhido, o funil não deixa criar o lead", async () => {
