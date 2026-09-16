@@ -52,10 +52,24 @@
  *
  * E falta, para o caso 2 rodar em CI de verdade, uma conta Google de teste com
  * consentimento pré-aprovado — que é o motivo de ele ser `test.skip`, e não de
- * a spec ficar sem existir. A SPEC roda no CI: ela está em `SPECS_PARTE` no
- * `e2e.yml`, é o caso 1 que a sustenta lá, e a única spec em `FORA_DO_CI` é
- * `vps-fresh-onboarding`. Para conferir em vez de acreditar nesta linha:
- * `grep -n 'agenda-conectar-google' .github/workflows/e2e.yml`.
+ * a spec ficar sem existir. O `skip` é do CASO; a SPEC roda no CI, e é o caso 1
+ * que a sustenta lá.
+ *
+ * Esta frase já afirmou, aqui mesmo, que `vps-fresh-onboarding` era a única
+ * entrada de `FORA_DO_CI` — e era falso no instante em que foi escrito (a
+ * variável listava três). `CLAUDE.md` registra o mesmo erro cometido e
+ * corrigido na própria doutrina. Por isso não há mais afirmação de estado
+ * nestas linhas: quem precisa da resposta roda o comando, que não envelhece.
+ * `grep` no arquivo inteiro não serve — ele conta quem é CITADO, não quem é
+ * INVOCADO, e a `FORA_DO_CI` é uma variável YAML como as outras. O probe abaixo
+ * é o de `CLAUDE.md`, de propósito: uma linha só, para sobreviver ao copiar-colar
+ * daqui de dentro (bloco python indentado vira `IndentationError` quando o
+ * prefixo do comentário vem junto — medido).
+ *
+ *     f=.github/workflows/e2e.yml
+ *     python3 -c "import re;y=open('$f').read();print('fora:',sorted({s for _,c in re.findall(r'(FORA_DO_CI):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)}))"
+ *     python3 -c "import re;y=open('$f').read();print('roda:','agenda-conectar-google.spec.ts' in {s for _,c in re.findall(r'(SPECS_PARTE_\d+):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)})"
+ *
  */
 import { expect, test, type Page } from "@playwright/test";
 
@@ -129,7 +143,11 @@ test.describe("conectar a agenda do Google", () => {
 
   test.skip("conectar a agenda do Google pela tela e ver a faixa mudar", async () => {
     // Continua bloqueada, e NÃO pela frente 2: o botão existe agora. Falta uma
-    // conta Google de teste com consentimento pré-aprovado — por isso esta spec
-    // fica em FORA_DO_CI, e não sem existir.
+    // conta Google de teste com consentimento pré-aprovado — por isso ESTE CASO
+    // é `test.skip`, e não a spec que fica sem existir: ela roda no CI pelo
+    // caso 1. (Este comentário dizia "esta spec fica em FORA_DO_CI" — o gêmeo
+    // literal da frase corrigida no cabeçalho, 77 linhas acima, e que passou
+    // batido porque o conserto foi por instância. `grep -n 'FORA_DO_CI'` neste
+    // arquivo fecha a classe.)
   });
 });
