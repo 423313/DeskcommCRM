@@ -34,7 +34,7 @@ extensões**, e é isso que mantém o produto genérico enquanto os nichos ganha
 | Destino | O que sustenta a classificação |
 |---|---|
 | **Núcleo** | Operação comum ou garantia compartilhada: contatos, conversas, funis, identidade, autorização, trilha de ações, infraestrutura de IA, cadeia de envio. Correção de comportamento já entregue continua no componente responsável. |
-| **Extensão** | Jornada adicional, aparência, integração ou especialização de nicho, com configuração, dados e manutenção próprios, cuja ausência não compromete a operação comum. Exemplos: comanda, comissão, fidelidade, financeiro, temas. |
+| **Extensão** | Jornada adicional, aparência, integração ou especialização de nicho, com configuração, dados e manutenção próprios, cuja ausência não compromete a operação comum. Exemplos: comanda, comissão, fidelidade, temas. **"Financeiro" não é um destino só:** o caixa (contas, formas de pagamento, plano de contas, lançamento avulso) é NÚCLEO por decisão do dono do produto — a opção (d) do doc 18 —, e o que vira extensão é o que fica em cima dele. |
 | **Ambos** | Um ponto genérico no núcleo e uma extensão que o consome. O ponto só entra com **consumidor real, contrato e prova dos dois lados**; não existe inventário de ganchos hipotéticos. |
 | **Infraestrutura/documentação** | Mudança em build, CI, kit de instalação, ferramenta interna ou documentação, inclusive a correção de um comportamento desses componentes (um `update.sh` que falhava é infraestrutura). Correção de comportamento do produto fica no destino do componente que corrige: núcleo ou extensão. Declare a superfície que ela mantém. |
 
