@@ -1175,8 +1175,8 @@ gh release list --limit 1                                # a release é a Latest
 V=X.Y.Z
 for p in /changelog /en/changelog /es/changelog; do
   u="https://www.deskcomm.com.br$p"
-  echo "$p: http=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$u")" \
-       "listada=$(curl -s --max-time 30 "$u" | grep -c "href=\"$p/$V\"")"
+  echo "$p: http=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 30 "$u")" \
+       "listada=$(curl -sL --max-time 30 "$u" | grep -c "href=\"$p/$V\"")"
 done
 
 # e as três imagens no digest da versão, contra `stable` — receita em

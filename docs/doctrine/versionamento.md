@@ -206,7 +206,7 @@ mudou sem abrir o GitHub.
 
 **Enquanto as três páginas não responderem 200, o parágrafo acima descreve o alvo e não o estado.**
 Elas nascem num PR do repositório `deskcomm-site`, e o corte depende delas: com a vitrine fora do
-ar, o passo abaixo reprova **toda** release depois de 35 minutos de espera. Quem for cortar confere
+ar, o passo abaixo reprova **toda** release depois de 35 tentativas, cerca de meia hora de espera. Quem for cortar confere
 antes — o comando não envelhece, a frase envelheceria:
 
 ```bash
@@ -231,7 +231,7 @@ atualizar a LP" — regra que não protege quem a escreve —, e sim:
    repositórios no mesmo movimento.
 3. **O corte confere a consequência.** O último passo do job `cortar-tag` —
    *"A versão aparece na página de changelog da LP?"* — procura o link da versão nas três
-   páginas por até 35 minutos e **reprova** o job se ela não aparecer. Vermelho ali não quer
+   páginas em 35 tentativas, cerca de meia hora (até ~47 min se o site responder devagar), e **reprova** o job se ela não aparecer. Vermelho ali não quer
    dizer que a versão não saiu (tag, Release e imagens já foram conferidas antes); quer dizer
    que a vitrine não mostra, e isso se conserta na LP.
 4. **O texto é escrito em português.** Em inglês e espanhol a página traduz a moldura, avisa que

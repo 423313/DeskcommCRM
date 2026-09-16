@@ -483,8 +483,7 @@ Toda versão publicada aparece também em [deskcomm.com.br/changelog](https://ww
 (pt-BR, en, es): a LP lê o `CHANGELOG.md` da `main`, ninguém escreve release no site, e o último
 passo do corte reprova se a versão não chegou lá. Mudar o cabeçalho `## [X.Y.Z] — AAAA-MM-DD` quebra
 essa página — ver "A vitrine" em `docs/doctrine/versionamento.md`. Enquanto as três páginas não
-responderem 200 esse passo reprova TODO corte: a vitrine vem de um PR do `deskcomm-site` e entra no
-ar antes da próxima release; o `curl` que mede isso abre aquela seção.
+responderem 200, esse passo reprova TODO corte; o `curl` que mede isso abre aquela seção.
 
 **Regra final — não invente.** Este repositório tem PRDs, specs, regras de negócio e doutrina
 escritos. Nunca invente regra de negócio, número, SLA ou comportamento de produto. Se a regra não
