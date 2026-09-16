@@ -51,10 +51,12 @@ trazida para dentro podem ir na **sua** branch — sempre commit novo ou merge d
 `--force` nem rebase, com aviso no PR antes. Vai numa branch nossa quando o PR não permite edição,
 ou quando o trabalho precisa separar escopo: tirar uma parte para outro PR, reimplementar, extrair.
 
-Crédito: os seus commits ficam com o seu nome. Se o PR foi reconstruído do lado de cá (acontece
-quando o conflito é grande), o commit que leva o seu trabalho sai com **você como autor** —
-`--author` com o nome e o e-mail que você usa nos seus próprios commits.
+Crédito: os seus commits ficam com o seu nome. Quando o seu trabalho precisa ser levado de outro
+jeito — uma parte tirada para outro PR, reimplementado, ou reconstruído porque o PR trazia algo que
+não pode entrar —, o commit que leva o seu trabalho sai com **você como autor** (`--author`, com o
+nome e o e-mail que você usa nos seus próprios commits), inclusive quando ele junta o seu trabalho
+com um ajuste nosso.
 
 Se só parte do PR entrou, ele fica aberto enquanto o que sobrou tiver destino, escrito no próprio
-PR (uma decisão pendente, um acompanhamento, uma resposta sua). Se o resto foi descartado, o PR
+PR (uma decisão pendente, um acompanhamento, uma resposta sua, ou o destino de virar extensão). Se o resto foi descartado, o PR
 fecha dizendo o que entrou, com o link, e por que o resto não entra.

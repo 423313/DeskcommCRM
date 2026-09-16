@@ -1217,10 +1217,11 @@ gh release list --limit 1                                # a release é a Latest
 
 ## 12-ter. O PR cujo conteúdo entrou DERIVADO — o merge de proveniência
 
-Quando a reconciliação (passe 8) não pôde acontecer na branch do PR — ele não permite edição por
-mantenedores, ou o trabalho separou escopo —, ela produz uma branch **nossa** que não contém o head
-do contribuinte: o conteúdo foi reimplementado a partir do que ele achou, porque a versão original conflitava com o
-estado de hoje ou carregava um defeito que a reconciliação consertou. O commit que traz esse
+Este passe é para o caso em que a reconciliação (passe 8) **reimplementou** o conteúdo numa branch
+**nossa** que não contém o head do contribuinte — porque a versão original conflitava com o estado de
+hoje de um jeito que o merge não resolvia, ou carregava um defeito que a reconciliação consertou.
+Não é o caso do PR que só não permite edição por mantenedores: aí o 8-bis mescla o head numa branch
+nossa, os commits dele ficam como ancestrais, e o PR fecha como incorporado sem proveniência. O commit que traz esse
 conteúdo sai com a autoria dele — `--author` com o nome e o e-mail que ele usa nos próprios commits
 (passe 8). O merge de proveniência abaixo registra a origem no grafo; um não substitui o outro.
 

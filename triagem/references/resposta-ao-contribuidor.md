@@ -1,6 +1,6 @@
 # Resposta ao contribuidor
 
-> Puxe nos passes 1 e 10. Este reference é o **como falar**; o que medir está em
+> Puxe nos passes 1 e 10, e no 12-ter quando só parte de um PR entrou. Este reference é o **como falar**; o que medir está em
 > `complemento-do-ci.md`.
 
 O objetivo não é ser simpático. É que a pessoa saiba exatamente onde está, o que foi medido, e o que
@@ -114,7 +114,9 @@ O PR parcialmente incorporado fica aberto só se o que sobrou tem destino (decis
 - **O resto tem destino** (decisão pendente, acompanhamento planejado, espera por resposta dele,
   destino de extensão): diga qual, e que é por isso que o PR continua aberto. PR aberto sem destino
   escrito lê como esquecido.
-- **O resto foi descartado:** o PR fecha no mesmo comentário. O motivo é sobre a parte, não sobre
+- **O resto foi descartado:** o PR fecha — por quem tem a autoridade de fechar naquela rodada
+  (fronteira do `TRIAGEM.md`); sem ela, o comentário diz o que entrou e o fechamento vai para o
+  relatório ao mantenedor. O motivo é sobre a parte, não sobre
   ele — por exemplo, *"serve à sua instalação e não a todas"*, ou *"a `main` já resolve isto de outro
   jeito, aqui"*.
 
@@ -131,7 +133,7 @@ Parte deste PR entrou na `main`, nos commits com você como autor: <o que entrou
 Por isso o PR continua aberto: <o destino — a decisão que falta e de quem ela é, o acompanhamento
 planejado, ou o que eu preciso de você>.
 
-<!-- se o resto foi descartado -->
+<!-- se o resto foi descartado, e só quando quem escreve tem a autoridade de fechar nesta rodada -->
 Por isso estou fechando o PR. Fechar aqui só registra que o resto não entra; o que entrou está
 dentro, com o seu nome.
 ```
