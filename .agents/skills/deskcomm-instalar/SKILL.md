@@ -35,7 +35,7 @@ Três perguntas, uma por vez, antes de qualquer comando:
 | pergunta | por que importa |
 |---|---|
 | **Onde estamos rodando?** — dentro da VPS (por SSH), no computador da pessoa, ou no computador de uma agência que vai instalar na VPS de um cliente | O instalador roda **dentro da VPS**. Fora dela, você só prepara (domínio, Supabase, chaves) e monta o comando que ela vai colar no servidor |
-| **Já tem servidor?** | Sem servidor: `bash hostgator-setup-kit/comecar.sh` no computador da pessoa nomeia o plano (2 vCPU / 4 GB, 80 GB, Ubuntu 22.04/24.04, datacenter em São Paulo — o de 1 vCPU / 2 GB **não** dá conta do WhatsApp) e abre o link de parceria |
+| **Já tem servidor?** | Sem servidor: o `comecar.sh`, no computador da pessoa, nomeia o plano (2 vCPU / 4 GB, 80 GB, Ubuntu 22.04/24.04, datacenter em São Paulo — o de 1 vCPU / 2 GB **não** dá conta do WhatsApp) e abre o link de parceria. Ele roda de qualquer pasta, sem clone — e este guia pode ter sido aberto fora de um: `curl -fsSL https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/hostgator-setup-kit/comecar.sh \| bash` (dentro de um clone, `bash hostgator-setup-kit/comecar.sh`) |
 | **É para você ou para um cliente?** | Para cliente, leia `references/agencia.md` antes de pedir qualquer chave: o token do Supabase é uma chave mestra da **conta**, e o plano grátis permite **2 projetos por usuário** |
 
 ## O caminho principal, na ordem

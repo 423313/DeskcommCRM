@@ -137,10 +137,21 @@ computador —, rode uma vez:
 curl -fsSL https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/scripts/instalar-guias.sh | bash
 ```
 
-Depois abra uma sessão nova do seu assistente e diga *"quero instalar o CRM na minha VPS"* — ou
-digite `/deskcomm-instalar`. Rodar o comando de novo atualiza os guias; `--remover` desfaz.
+Depois abra uma sessão nova do seu assistente e diga *"quero instalar o CRM na minha VPS"*: pedir o
+assunto em português aciona o guia certo em qualquer um dos cinco. Para chamar um guia pelo nome,
+cada um tem o seu jeito — `/deskcomm-instalar` no Claude Code, no Cursor e no Antigravity;
+`$deskcomm-instalar` no Codex; no OpenCode, peça pelo nome, em linguagem natural.
 
-Com o repositório já clonado, os guias vêm dentro dele (`.agents/skills/`) e nem isso é preciso.
+Os guias **não** se atualizam sozinhos: rodar o mesmo comando de novo traz a versão nova. Para
+desfazer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/scripts/instalar-guias.sh | bash -s -- --remover
+```
+
+Com o repositório já clonado, os guias vêm dentro dele (`.agents/skills/`) e nem isso é preciso. Se
+você rodou o comando mesmo assim, saiba que no Claude Code o guia instalado vale mais que o do clone
+— e fica na versão do dia em que rodou, até rodar de novo (ou desfazer).
 Também funciona o jeito antigo: jogar só a pasta `hostgator-setup-kit/` no chat do **Claude Code**
 dentro da VPS — ele lê o [`CLAUDE.md`](hostgator-setup-kit/CLAUDE.md) do kit e conduz tudo em português.
 

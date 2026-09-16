@@ -28,8 +28,13 @@ fork: zero. O que trava é retrabalho — e retrabalho se evita medindo.
 
 ## Passo 0 — quem está contribuindo
 
+Este passo vem **antes** de trazer a `main` (Passo 1), então chame o script pela pasta **deste
+guia** — a do `SKILL.md` que você está lendo, que o assistente recebe junto com o guia —, e não por
+`.agents/skills/` do clone: um fork anterior a 2026-09-10 ainda não tem o script ali, e o guia pode
+ter vindo da instalação global, fora de qualquer clone. Com o terminal na raiz do clone:
+
 ```bash
-bash .agents/skills/deskcomm-contribuir/scripts/quem-sou.sh
+bash <pasta deste guia>/scripts/quem-sou.sh   # num clone em dia, a pasta é .agents/skills/deskcomm-contribuir
 ```
 
 Se a resposta começar com `mantenedor`, este guia fica quieto — o mantenedor tem o próprio ritual
