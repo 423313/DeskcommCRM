@@ -115,24 +115,80 @@ describe("nomeDoContato — o nome de gente, sem telefone nem literal", () => {
 });
 
 describe("a sétima cópia não nasce", () => {
+  /**
+   * A ASSINATURA DA CADEIA — `name` nu de um lado, `display_name` do outro,
+   * ligados por `||` OU `??`, em qualquer ordem.
+   *
+   * As duas metades são correções pagas, e cada uma deixava a guarda verde com o
+   * defeito vivo:
+   *
+   *  - **o coalescente.** A versão anterior exigia `||`. Os oito pontos que a
+   *    issue #906 consertou usavam `??` (`contact.display_name ?? contact.name`),
+   *    então esta varredura passou verde enquanto o defeito rodava em produção
+   *    desde a v1.27.1.
+   *  - **a ordem.** Exigia `display_name` à ESQUERDA. Depois de #906 a cadeia
+   *    certa começa por `name` — toda cópia nova nasceria do lado cego.
+   *
+   * ESCOPO, escrito porque a guarda NÃO é total: o par `name`+`display_name` é o
+   * que identifica um CONTATO. `channel_sessions` não tem coluna `name` (só
+   * `display_name` e `phone_number`), e o rótulo do CANAL é outro conceito, com
+   * função central própria (`nomeDoCanal`, lib/channels/estado.ts). Por isso a
+   * varredura não enxerga `display_name ?? phone_number` — nem sobre um contato.
+   * Uma cópia que largue `name` fora da expressão passa batida; fechar esse
+   * buraco reprovaria toda leitura legítima de canal, e o preço não compensa.
+   */
+  const CADEIA =
+    /(display_name\s*(\?\.\s*trim\(\)\s*)?(\|\||\?\?)[^;\n]*?(?<![\w$])name\b)|((?<![\w$])name\b\s*(\?\.\s*trim\(\)\s*)?(\|\||\?\?)[^;\n]*?display_name)/;
+
+  /**
+   * `hooks` e `workers` ENTRAM. Ficavam de fora, e dois dos oito pontos que a
+   * #906 consertou moravam exatamente lá (`hooks/notifications/
+   * useInboundMessageAlerts.ts` e `workers/ai-response-worker.ts`): a guarda não
+   * teria reprovado nenhum deles.
+   */
+  const DIRETORIOS = ["ls-files", "app", "lib", "components", "hooks", "workers"];
+
+  it("a regex RECONHECE a cadeia — e não confunde com leitura legítima", () => {
+    // Sem este caso, quem "simplificar" a regex desarma a varredura sem que nada
+    // fique vermelho: uma regex que não casa com nada devolve lista vazia, que é
+    // exatamente o que a guarda chama de sucesso.
+    for (const defeito of [
+      `const n = c.display_name || c.name || "Sem nome";`,
+      `const n = c.display_name ?? c.name ?? "Sem nome";`,
+      `const n = c.name || c.display_name || "Sem nome";`,
+      `const n = c.name ?? c.display_name ?? c.phone_number ?? "Lead da automação";`,
+      `const n = contato.display_name?.trim() || contato.name || "—";`,
+    ]) {
+      expect(CADEIA.test(defeito), defeito).toBe(true);
+    }
+
+    for (const legitima of [
+      `display_name: input.display_name ?? null,`,
+      `const apelido = s.display_name ?? s.phone_number ?? "sem nome";`,
+      `const rotuloCanal = canal?.phone_number ?? canal?.display_name ?? null;`,
+      `<dd>{contact.display_name ?? "—"}</dd>`,
+      `display_name: m.display_name ?? m.model_id,`,
+    ]) {
+      expect(CADEIA.test(legitima), legitima).toBe(false);
+    }
+  });
+
   it("nenhum arquivo remonta a cadeia de fallback à mão", () => {
     // A função central só resolve o problema enquanto for a ÚNICA. Seis cópias
     // não divergiram por descuido: cada tela nova reescreveu a cadeia do jeito
     // que parecia certo naquele arquivo, e nasceram quatro finais diferentes.
-    const arquivos = execFileSync("git", ["ls-files", "app", "lib", "components"], { encoding: "utf8" })
+    const arquivos = execFileSync("git", DIRETORIOS, { encoding: "utf8" })
       .split("\n")
       .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\.tsx?$/.test(f))
       .filter((f) => f !== "lib/contacts/rotulo-do-contato.ts");
 
-    // `display_name` seguido de `||` na MESMA expressão: a assinatura da cadeia.
-    const cadeia = /display_name\s*(\?\.\s*trim\(\)\s*)?\|\|/;
     const reincidentes: string[] = [];
 
     for (const f of arquivos) {
       const conteudo = fs.readFileSync(path.join(process.cwd(), f), "utf8");
       // Fora as organizações: `organizations.display_name` é outro conceito e
       // tem cadeia própria e legítima.
-      const linhas = conteudo.split("\n").filter((l) => cadeia.test(l) && !/org|tenant|session/i.test(l));
+      const linhas = conteudo.split("\n").filter((l) => CADEIA.test(l) && !/org|tenant|session/i.test(l));
       if (linhas.length > 0) reincidentes.push(`${f}: ${linhas[0]!.trim().slice(0, 90)}`);
     }
 
@@ -140,7 +196,7 @@ describe("a sétima cópia não nasce", () => {
   });
 
   it("a varredura ENXERGA arquivos — controle positivo", () => {
-    const n = execFileSync("git", ["ls-files", "app", "lib", "components"], { encoding: "utf8" })
+    const n = execFileSync("git", DIRETORIOS, { encoding: "utf8" })
       .split("\n")
       .filter((f) => /\.(ts|tsx)$/.test(f)).length;
     expect(n).toBeGreaterThan(100);

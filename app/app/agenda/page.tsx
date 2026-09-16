@@ -5,6 +5,7 @@ import { enderecoDeRetorno, faltaParaConectarOGoogle, googleEstaConfigurado } fr
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,12 +34,15 @@ export const dynamic = "force-dynamic";
  * O embed do PostgREST devolve objeto quando a FK é para-um e array quando o
  * gerador de tipos não consegue provar isso. Aceitar as duas formas evita que a
  * tela dependa de qual das duas o `database.types.ts` do dia declarou.
+ *
+ * Quem se chama como é decidido por `nomeDoContato` — esta função só desfaz o
+ * embed. A cadeia estava remontada aqui, sem a guarda de identificador
+ * técnico, e punha `Contato 543134@lid` no card da grade.
  */
-function nomeDoContato(
-  c: { name: string | null; display_name: string | null } | { name: string | null; display_name: string | null }[] | null,
+function contatoDoEmbed(
+  c: ContatoNomeavel | ContatoNomeavel[] | null,
 ): string | undefined {
-  const alvo = Array.isArray(c) ? c[0] : c;
-  return alvo?.name ?? alvo?.display_name ?? undefined;
+  return nomeDoContato(Array.isArray(c) ? (c[0] ?? null) : c) ?? undefined;
 }
 
 export default async function AgendaPage() {
@@ -241,7 +245,7 @@ export default async function AgendaPage() {
         // `name` antes de `display_name` segue o precedente do produto
         // (`app/app/lgpd/requests/[id]/PreviewPanel.tsx`); as duas colunas são
         // reescritas pelo cascade de LGPD, então nenhuma vaza titular anonimizado.
-        quemSeraAtendido: nomeDoContato(a.contacts),
+        quemSeraAtendido: contatoDoEmbed(a.contacts),
       })) as AgendamentoDaTela[]).concat(
         /**
          * A ocupação do Google entra na MESMA lista, com `origem: "google_sync"`.
