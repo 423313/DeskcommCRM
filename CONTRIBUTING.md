@@ -146,6 +146,22 @@ local. **Não travamos PR externo nisso** — mande o que conseguiu provar (unit
 que testou na mão), que a prova de tela fica com o mantenedor. Exigir prova sem entregar a
 ferramenta de produzi-la seria pedágio, não rigor.
 
+### `tests/invariants/` é congelado — e isso vale para o COMPORTAMENTO, não só para o arquivo
+
+Os arquivos de `tests/invariants/` guardam leis do produto, e mexer neles pede justificativa
+escrita. Duas coisas que não estão óbvias e já custaram tempo a quem contribui:
+
+1. **O guarda é um hook local do mantenedor** (`core.hooksPath=loop/hooks`), não um check do CI.
+   Você não vai vê-lo reprovar no seu fork — o que você vê é a integração travar depois.
+2. **Um PR pode reprovar um invariante sem tocar no arquivo dele.** Se o seu conserto muda o
+   comportamento que a lei afirma, o vermelho aparece lá. Isso **não é um descuido seu** — é o
+   sinal de que existem duas regras concorrentes, a que está escrita e a que você propõe.
+
+Quando acontecer, **não apague nem afrouxe a asserção**: diga no PR qual é a sua razão e deixe a
+escolha explícita. Quem tria escreve a mudança do invariante com a justificativa exigida, ou ajusta
+o conserto para preservar a lei antiga — e a decisão fica registrada no PR, que é onde ela serve
+para a próxima pessoa.
+
 ### Texto de tela: toda frase nova precisa do espanhol
 
 O produto fala português e espanhol, e o CI reprova **frase nova sem tradução**. A regra não
