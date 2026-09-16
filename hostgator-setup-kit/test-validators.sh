@@ -974,7 +974,11 @@ fi
 # (2) A outra metade da issue: a senha do banco. Ela tem de existir em arquivo de
 #     600, com 32 caracteres, e ser EXATAMENTE a que entrou na connection string.
 senha1="$(senha_do_estado "$PROV_TMP/estado-novo")"
-modo1="$(stat -c '%a' "$PROV_TMP/estado-novo" 2>/dev/null || printf '?')"
+# `stat -c` é GNU; no macOS o equivalente é `stat -f '%Lp'`. Sem o segundo ramo, a
+# asserção abaixo reprova na máquina de quem tria (o `|| printf '?'` engole o erro
+# e o modo vira '?'), com um ✗ que não é do conserto. Medido em Darwin 25.4.0:
+# `stat -c '%a' /etc/hosts` → "stat: illegal option -- c".
+modo1="$(stat -c '%a' "$PROV_TMP/estado-novo" 2>/dev/null || stat -f '%Lp' "$PROV_TMP/estado-novo" 2>/dev/null || printf '?')"
 if [ "${#senha1}" -eq 32 ] && [ "$modo1" = 600 ] && url_do_estado "$senha1" "$PROV_TMP/out"; then
   printf '  ✓ senha guardada em 600 e é a mesma que foi para a connection string\n'
 else
