@@ -1,5 +1,5 @@
 const { chromium } = require("/Users/rafaelmelgaco/DeskcommCRM/node_modules/@playwright/test");
-const BASE = "http://localhost:3217";
+const BASE = process.env.BASE || "http://localhost:3217";
 const OUT = process.env.OUT;
 const achados = []; const ok = [];
 const falha = (m) => { achados.push(m); console.log("  ✗ " + m); };
@@ -32,9 +32,15 @@ async function vazamentos(page, rotulo) {
 }
 
 (async () => {
+  // A régua vem da FONTE, não de um número escrito à mão: releases novas mudam a contagem.
+  const md = await (await fetch("https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/CHANGELOG.md")).text();
+  const VERSOES = [...md.matchAll(/^## \[(\d+\.\d+\.\d+)\] \u2014 \d{4}-\d{2}-\d{2}$/gm)].map((m) => m[1]);
+  const N = VERSOES.length, ULTIMA = VERSOES[0], PENULTIMA = VERSOES[1];
+  const esc = (v) => v.replace(/\./g, "\\.");
+  console.log(`régua: ${N} versões no CHANGELOG, mais nova v${ULTIMA}`);
   const browser = await chromium.launch();
   const erros = [];
-  const ctx = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
+  const ctx = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"], ...(process.env.BYPASS ? { extraHTTPHeaders: { "x-vercel-protection-bypass": process.env.BYPASS, "x-vercel-set-bypass-cookie": "true" } } : {}) });
   const nova = async (w) => {
     const p = await ctx.newPage();
     await p.setViewportSize({ width: w, height: 900 });
@@ -164,11 +170,11 @@ async function vazamentos(page, rotulo) {
       await vazamentos(p, `changelog ${L.id} ${w}px`);
       const cards = p.locator("ol > li > a[href*='/changelog/']");
       const total = await cards.count();
-      checa(total === 40, `${L.id}: 40 versões listadas (${total})`);
+      checa(total === N, `${L.id}: ${N} versões listadas (${total})`);
       const busca = p.locator("input[type=search]");
       await busca.fill("whatsapp");
       const comBusca = await cards.count();
-      checa(comBusca > 0 && comBusca < 40, `${L.id} ${w}px: busca "whatsapp" filtra (${comBusca})`);
+      checa(comBusca > 0 && comBusca < N, `${L.id} ${w}px: busca "whatsapp" filtra (${comBusca})`);
       await busca.fill("instalacao");
       const semAcento = await cards.count();
       checa(semAcento > 0, `${L.id}: busca sem acento acha "instalação" (${semAcento})`);
@@ -177,34 +183,34 @@ async function vazamentos(page, rotulo) {
       const limpar = p.getByRole("button", { name: { "pt-BR": "Limpar filtros", en: "Clear filters", es: "Limpiar filtros" }[L.id] });
       checa(await limpar.isVisible(), `${L.id}: "limpar filtros" aparece no vazio`);
       await limpar.click();
-      checa((await cards.count()) === 40, `${L.id}: limpar volta às 40`);
+      checa((await cards.count()) === N, `${L.id}: limpar volta às ${N}`);
       const filtroAtencao = p.locator("[role=group] button").nth(1);
       await filtroAtencao.click();
       const atencao = await cards.count();
-      checa(atencao >= 1 && atencao < 40, `${L.id} ${w}px: filtro "requer atenção" (${atencao} versões)`);
+      checa(atencao >= 1 && atencao < N, `${L.id} ${w}px: filtro "requer atenção" (${atencao} versões)`);
       await filtroAtencao.click();
       // filtro sticky não cobre o conteúdo nem sai da tela
       const sticky = await p.evaluate(() => { const s = document.querySelector("input[type=search]").closest(".sticky").getBoundingClientRect(); return { w: s.width, right: s.right, h: s.height }; });
       checa(sticky.right <= w + 1, `${L.id} ${w}px: barra de filtros cabe na largura (altura ${Math.round(sticky.h)}px)`);
       // hero: abrir a mais recente
       await p.locator("main section a").first().click();
-      await p.waitForURL(/\/changelog\/1\.27\.2$/);
-      checa(/\/changelog\/1\.27\.2$/.test(p.url()), `${L.id} ${w}px: cartão da mais recente abre a v1.27.2`);
-      await vazamentos(p, `versão 1.27.2 ${L.id} ${w}px`);
+      await p.waitForURL(new RegExp(`/changelog/${esc(ULTIMA)}$`), { waitUntil: "load" });
+      checa(p.url().endsWith(`/changelog/${ULTIMA}`), `${L.id} ${w}px: cartão da mais recente abre a v${ULTIMA}`);
+      await vazamentos(p, `versão ${ULTIMA} ${L.id} ${w}px`);
       const artigoLang = await p.getAttribute("article", "lang");
       checa(artigoLang === "pt-BR", `${L.id}: texto da versão marcado lang=pt-BR`);
       if (L.id !== "pt-BR") {
         const traduzir = p.locator("a[href*='translate.goog']");
         checa(await traduzir.isVisible(), `${L.id}: aviso de idioma com link de tradução visível`);
         const href = await traduzir.getAttribute("href");
-        checa(href.includes(`/changelog/1.27.2`) && href.includes(`_x_tr_tl=${L.id}`), `${L.id}: link de tradução aponta para esta versão (${href})`);
+        checa(href.includes(`/changelog/${ULTIMA}`) && href.includes(`_x_tr_tl=${L.id}`), `${L.id}: link de tradução aponta para esta versão (${href})`);
       }
-      await p.screenshot({ path: `${OUT}/versao-1.27.2-${L.id}-${w}.png`, fullPage: false });
+      await p.screenshot({ path: `${OUT}/versao-${ULTIMA}-${L.id}-${w}.png`, fullPage: false });
       const anterior = p.locator("article nav a").first();
       await anterior.scrollIntoViewIfNeeded();
       await anterior.click();
-      await p.waitForURL(/\/changelog\/1\.27\.1$/);
-      checa(/1\.27\.1$/.test(p.url()), `${L.id} ${w}px: "versão anterior" leva à v1.27.1`);
+      await p.waitForURL(new RegExp(`/changelog/${esc(PENULTIMA)}$`), { waitUntil: "load" });
+      checa(p.url().endsWith(`/changelog/${PENULTIMA}`), `${L.id} ${w}px: "versão anterior" leva à v${PENULTIMA}`);
       await p.close();
     }
   }

@@ -36,5 +36,29 @@ Três defeitos apareceram nas rodadas anteriores e foram consertados antes desta
 - **Changelog em 360px.** A data transbordava 4px da coluna. Esse defeito nasceu do conserto de
   outro.
 
-Não medido aqui: o site no ar (a Vercel ainda não tem a branch) e o passo novo do `release.yml`,
-que só roda num corte de release real.
+## Segunda rodada: o preview da Vercel
+
+Em 2026-09-16 a mesma prova rodou contra o preview do PR na Vercel, com um segredo de bypass
+temporário, revogado logo depois. O resultado está em `run-vercel-preview.log`.
+
+| o que | resultado |
+|---|---|
+| verificações | 533 verdes, 0 vermelhas |
+| versões lidas | 42, com a mais nova v1.28.0 |
+
+A régua do script passou a vir do próprio `CHANGELOG.md`: o número de versões e a mais nova são
+lidos na hora, e não escritos à mão.
+
+O preview foi construído com 40 versões. A 1.27.3 e a 1.28.0 saíram depois do build e apareceram
+sem nova implantação. As páginas dessas duas versões, que não existiam no build, abriram com 200
+nos três idiomas.
+
+Duas coisas vistas no caminho, as duas esperadas:
+
+- **O primeiro acesso depois da janela de 10 minutos devolve a lista antiga e agenda a nova.** A
+  página em inglês mostrou 40 na primeira visita. A em espanhol listou a 1.28.0 só no segundo
+  pedido. Por isso o passo do `release.yml` repete a sonda em vez de conferir uma vez só.
+- **Um script com o número de versões escrito à mão quebra a cada release.** A versão anterior
+  deste script reprovou por isso.
+
+Não medido: o passo novo do `release.yml`, que só roda num corte de release real.
