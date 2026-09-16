@@ -78,4 +78,21 @@ Duas coisas vistas no caminho, as duas esperadas:
 - **Um script com o número de versões escrito à mão quebra a cada release.** A versão anterior
   deste script reprovou por isso.
 
+## Terceira rodada: o preview do commit final do site
+
+Em 2026-09-16, depois dos consertos da revisão adversarial dos três PRs, a prova rodou de novo
+contra o preview do commit `af09d9e` do `deskcomm-site`, com outro segredo de bypass temporário,
+revogado logo depois. O resultado está em `run-preview-commit-final.txt`.
+
+| o que | resultado |
+|---|---|
+| verificações | 533 verdes, 0 vermelhas |
+| versões lidas | 43, com a mais nova v1.29.0 |
+
+O script mudou num ponto: o seletor de idioma passou a ser achado pelo `hreflang`, porque o
+`aria-label` da navegação de idiomas agora é traduzido e deixou de ser "Idioma" em inglês.
+
+O log desse deploy na Vercel mostra `pnpm run build` rodando o `prebuild` e os 32 testes do site
+antes do `next build`.
+
 Não medido: o passo novo do `release.yml`, que só roda num corte de release real.

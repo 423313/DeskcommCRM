@@ -145,7 +145,8 @@ async function vazamentos(page, rotulo) {
       // seletor de idioma leva à MESMA página (só visível >= 768)
       if (w >= 768) {
         const outro = IDIOMAS.find((x) => x.id !== L.id);
-        await p.locator('nav[aria-label="Idioma"] a[hreflang="' + outro.id + '"]').click();
+        // Pelo hreflang, não pelo aria-label da nav: o rótulo é traduzido em cada idioma.
+        await p.locator('header a[hreflang="' + outro.id + '"]').click();
         await p.waitForURL(BASE + outro.guias);
         checa(p.url() === BASE + outro.guias, `${L.id}: seletor de idioma leva a ${outro.guias}`);
         await p.goBack();
