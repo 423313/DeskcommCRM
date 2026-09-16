@@ -261,6 +261,49 @@ describe("worker de mídia: base_url do binding de visão (#855)", () => {
     expect(corpos.some((b) => b.includes("unsafe_url:private_host"))).toBe(true);
   });
 
+  it("com endereço da organização e chave da INSTALAÇÃO, recusa antes de a chave sair", async () => {
+    // `resolveOrgLlmConfig` devolve "chave-do-binding" neste arquivo. Igualando
+    // a chave do .env a ela, reproduzimos o degrau real da escada de
+    // credenciais: a organização não tem credencial própria e o worker cai na
+    // chave da INSTALAÇÃO — enquanto o endereço continua sendo o que a
+    // organização escolheu no painel. É a combinação que manda a chave que paga
+    // a conta de todas as empresas para um endereço escolhido por uma delas.
+    vi.stubEnv("OPENROUTER_API_KEY", "chave-do-binding");
+    bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://gateway.publico.exemplo/v1" };
+    dns.resposta = [{ address: "93.184.216.34", family: 4 }];
+
+    await deriveMessageMedia(eventRow());
+    const texto = await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+    // O endereço é público e passa no guarda de destino: quem recusa aqui é a
+    // regra de credencial, não a de SSRF.
+    expect(factoryMock).not.toHaveBeenCalled();
+    expect(texto).toBeTruthy();
+    const corpos = inboxInsertMock.mock.calls.map((c) =>
+      String((c[0] as { body?: string } | undefined)?.body ?? ""),
+    );
+    expect(corpos.some((b) => b.includes("cadastre a chave da empresa"))).toBe(true);
+  });
+
+  it("com endereço da organização e credencial DELA, segue enviando", async () => {
+    // O controle que separa "recusa a combinação errada" de "recusou tudo":
+    // sem a chave da instalação no ambiente, a chave resolvida é a da
+    // organização e o endereço próprio continua valendo — que é o recurso que
+    // o #855 veio consertar.
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://gateway.publico.exemplo/v1" };
+    dns.resposta = [{ address: "93.184.216.34", family: 4 }];
+
+    await deriveMessageMedia(eventRow());
+    await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+    expect(factoryMock).toHaveBeenCalledWith(
+      "chave-do-binding",
+      "acme/visao-1",
+      "https://gateway.publico.exemplo/v1",
+    );
+  });
+
   it("recusa nome de aparência pública que resolve para IP interno", async () => {
     bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://coletor.exemplo/v1" };
     dns.resposta = [{ address: "10.1.2.3", family: 4 }];

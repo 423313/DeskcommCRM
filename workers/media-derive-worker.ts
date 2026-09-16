@@ -177,9 +177,28 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       }
     }
 
+    // ─── A chave de QUEM vai para o endereço de QUEM ────────────────────────
+    //
+    // `resolveOrgLlmConfig` cai na chave da INSTALAÇÃO (`.env`) quando a
+    // organização não tem credencial própria ativa e validada — é o último
+    // degrau da escada em `credentials.ts`. O endereço, por outro lado, é
+    // escolhido por quem administra a ORGANIZAÇÃO, no painel de Provedores.
+    // Juntando os dois, a chave que paga a conta de todas as empresas da
+    // instalação sai para um endereço que uma delas escolheu. `motivoDaRecusaDeDestino`
+    // não tem nada a dizer sobre isso: ele recusa destino INTERNO, e este caso é
+    // um destino externo perfeitamente público.
+    //
+    // Enquanto o dono do produto não decide a regra (documento de decisão 22),
+    // a triagem escolhe o desfecho conservador: com endereço da organização e
+    // chave da instalação, a leitura é RECUSADA com aviso na Central, em vez de
+    // a chave sair. Quem cadastra a credencial da própria empresa segue
+    // funcionando — que é o caminho que o produto já oferece na mesma tela.
+    const chaveEhDaInstalacao = [llmCfg.anthropicApiKey, llmCfg.openaiApiKey, llmCfg.openrouterApiKey]
+      .some((k) => typeof k === "string" && k !== "" && k === llm.apiKey);
+
     // O 5º argumento é a `base_url` do binding: o factory precisa dela para não
     // cair no endpoint padrão do provedor (ver o comentário lá em cima).
-    const deps = buildDeriveDeps(llm, openaiKey, row.organization_id, admin, baseUrlDaVisao);
+    const deps = buildDeriveDeps(llm, openaiKey, row.organization_id, admin, baseUrlDaVisao, chaveEhDaInstalacao);
 
     const text = await deriveMediaText(msg.type, buffer, msg.media_mime ?? "application/octet-stream", deps);
     await admin.from("messages")
@@ -284,6 +303,7 @@ function buildDeriveDeps(
   // Endpoint próprio do binding de visão, quando houver. `null` = usa o padrão
   // do provedor, que é o comportamento do turno do agente sem `baseUrl`.
   baseUrlDaVisao: string | null = null,
+  chaveEhDaInstalacao = false,
 ): DeriveDeps {
   const registry = createDefaultRegistry();
   // Thunk, não consulta: nada vai ao banco até a visão ser de fato perguntada,
@@ -349,6 +369,17 @@ function buildDeriveDeps(
     // compose — recebe credencial da instalação e ainda pode devolver resposta
     // forjada ao agente. Mesma recusa das saídas de webhook, e antes de a
     // chave sair daqui.
+    // Endereço escolhido pela organização + chave da instalação: a recusa vem
+    // ANTES da checagem de destino, porque aqui nem o endereço mais público do
+    // mundo torna a saída aceitável — o que está errado é de quem é a chave.
+    if (baseUrlDaVisao && chaveEhDaInstalacao) {
+      await avisarMidiaNaoLida(
+        orgId,
+        "imagem",
+        "o endereço de IA configurado para esta empresa só é usado com a credencial dela: cadastre a chave da empresa em Agente de IA e Provedores, ou tire o endereço próprio para voltar ao provedor padrão da instalação",
+      );
+      return MARCADOR_NAO_LIDA;
+    }
     if (baseUrlDaVisao) {
       const recusa = await motivoDaRecusaDeDestino(baseUrlDaVisao);
       if (recusa) {
