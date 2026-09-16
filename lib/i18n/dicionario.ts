@@ -91,6 +91,7 @@ export const DICIONARIO: Traducoes = {
   "Aprender e evoluir": { es: "Aprender y evolucionar" },
   "O agente consulta o que a empresa já sabe, aprende com os atendimentos e sugere melhorias para você aprovar.": {
     es: "El agente consulta lo que la empresa ya sabe, aprende de las atenciones y sugiere mejoras para que las apruebes.",
+  },
   // vocabulario.ts (followups) — ESPERA_PELA_RESPOSTA.ajuda era string pronta
   // em português; virou função composta com t() (ver lib/followup/vocabulario.ts).
   "Se o contato não responder dentro desse tempo, o fluxo segue sozinho pelo caminho": {
