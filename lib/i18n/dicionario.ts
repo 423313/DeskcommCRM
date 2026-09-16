@@ -887,6 +887,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Agentes de IA: seletor de modelo, capacidades, credencial, handoff ───
   Modelo: { es: "Modelo" },
   "Selecione um modelo": { es: "Selecciona un modelo" },
+  "Digite o identificador do modelo": { es: "Escribe el identificador del modelo" },
   "Nenhum modelo disponível": { es: "Ningún modelo disponible" },
   "Nenhuma capacidade disponível ainda para esta jornada.": {
     es: "Todavía no hay capacidades disponibles para esta jornada.",
