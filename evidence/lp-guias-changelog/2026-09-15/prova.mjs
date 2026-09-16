@@ -1,4 +1,5 @@
-const { chromium } = require("/Users/rafaelmelgaco/DeskcommCRM/node_modules/@playwright/test");
+// Rode da raiz do repositório: o @playwright/test vem do node_modules do projeto.
+import { chromium } from "@playwright/test";
 const BASE = process.env.BASE || "http://localhost:3217";
 const OUT = process.env.OUT;
 const achados = []; const ok = [];
@@ -36,7 +37,6 @@ async function vazamentos(page, rotulo) {
   const md = await (await fetch("https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/CHANGELOG.md")).text();
   const VERSOES = [...md.matchAll(/^## \[(\d+\.\d+\.\d+)\] \u2014 \d{4}-\d{2}-\d{2}$/gm)].map((m) => m[1]);
   const N = VERSOES.length, ULTIMA = VERSOES[0], PENULTIMA = VERSOES[1];
-  const esc = (v) => v.replace(/\./g, "\\.");
   console.log(`régua: ${N} versões no CHANGELOG, mais nova v${ULTIMA}`);
   const browser = await chromium.launch();
   const erros = [];
@@ -194,7 +194,8 @@ async function vazamentos(page, rotulo) {
       checa(sticky.right <= w + 1, `${L.id} ${w}px: barra de filtros cabe na largura (altura ${Math.round(sticky.h)}px)`);
       // hero: abrir a mais recente
       await p.locator("main section a").first().click();
-      await p.waitForURL(new RegExp(`/changelog/${esc(ULTIMA)}$`), { waitUntil: "load" });
+      // Predicado sobre o caminho, e não RegExp montada com a versão: nada a escapar.
+      await p.waitForURL((u) => u.pathname.endsWith(`/changelog/${ULTIMA}`), { waitUntil: "load" });
       checa(p.url().endsWith(`/changelog/${ULTIMA}`), `${L.id} ${w}px: cartão da mais recente abre a v${ULTIMA}`);
       await vazamentos(p, `versão ${ULTIMA} ${L.id} ${w}px`);
       const artigoLang = await p.getAttribute("article", "lang");
@@ -209,7 +210,7 @@ async function vazamentos(page, rotulo) {
       const anterior = p.locator("article nav a").first();
       await anterior.scrollIntoViewIfNeeded();
       await anterior.click();
-      await p.waitForURL(new RegExp(`/changelog/${esc(PENULTIMA)}$`), { waitUntil: "load" });
+      await p.waitForURL((u) => u.pathname.endsWith(`/changelog/${PENULTIMA}`), { waitUntil: "load" });
       checa(p.url().endsWith(`/changelog/${PENULTIMA}`), `${L.id} ${w}px: "versão anterior" leva à v${PENULTIMA}`);
       await p.close();
     }

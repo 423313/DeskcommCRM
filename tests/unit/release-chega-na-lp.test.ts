@@ -67,10 +67,10 @@ describe("a release chega à página de changelog da LP", () => {
     const bloco = passo(PASSO_LP);
     for (const p of ["/changelog", "/en/changelog", "/es/changelog"]) expect(bloco).toContain(p);
     expect(bloco).toContain("https://www.deskcomm.com.br");
-    // TODO ramo que anuncia erro precisa sair com 1. Contar "existe um exit 1" não basta: o passo
+    // Todo ramo que anuncia erro precisa sair com 1. Contar "existe um exit 1" não basta: o passo
     // tem dois ramos de erro (a lista e a página da versão), e a sabotagem que tirou só o
     // primeiro passou verde com essa régua.
-    const ramos = [...bloco.matchAll(/\n(\s+)if \[[^\n]*\]; then\n([\s\S]*?)\n\1fi\b/g)].map((m) => m[2]);
+    const ramos = [...bloco.matchAll(/\n(\s+)if \[[^\n]*\]; then\n([\s\S]*?)\n\1fi\b/g)].map((m) => m[2] ?? "");
     const ramosDeErro = ramos.filter((r) => r.includes("::error::"));
     expect(ramosDeErro.length, "o passo deixou de ter os dois ramos de erro").toBe(2);
     for (const r of ramosDeErro) expect(r, "ramo de erro que não reprova o job").toMatch(/\n\s+exit 1(\n|$)/);

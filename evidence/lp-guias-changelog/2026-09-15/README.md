@@ -5,7 +5,7 @@ Medido em 2026-09-15 contra `next build` + `next start` do `deskcomm-site` (bran
 real da `main` do produto (40 versões).
 
 ```bash
-OUT=./telas node prova.cjs      # com o site em http://localhost:3217
+BASE=http://localhost:3217 OUT=/tmp/telas node evidence/lp-guias-changelog/2026-09-15/prova.mjs
 ```
 
 | o que | resultado |
