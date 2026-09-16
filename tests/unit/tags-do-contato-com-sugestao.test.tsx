@@ -46,6 +46,12 @@ describe("ContactTagsEditor", () => {
     // do primeiro render do arquivo sob concorrência, não a consulta, que já
     // está resolvida no mock.
     const sugestao = await screen.findByRole("button", { name: "+ google" }, { timeout: 5000 });
+    // Nada mais no repositório amarra o hook à rota: `/api/v1/contact-tags`
+    // aparece em três lugares e nenhum deles é um portão. Trocar a URL por
+    // `/api/v1/conversation-tags`, que existe, deixava typecheck, eslint e a
+    // suíte inteira verdes — e o editor do CONTATO passaria a sugerir tags de
+    // CONVERSA, que é outro vocabulário, sem ninguém notar.
+    expect(get).toHaveBeenCalledWith("/api/v1/contact-tags");
     expect(screen.queryByRole("button", { name: "+ vip" })).toBeNull();
 
     await userEvent.click(sugestao);
