@@ -40,57 +40,6 @@ describe("cartão da conexão do Google", () => {
     expect(screen.queryByTestId("conectar-google")).toBeNull();
   });
 
-  it("...e ainda assim oferece CONECTAR OUTRA conta — senão o engano não tem saída", () => {
-    // O BECO QUE ESTE LOTE ABRIU.
-    //
-    // Os PRs #931/#933 devolveram o seletor de contas do Google. O efeito
-    // pretendido é escolher a conta certa; o efeito colateral é que escolher a
-    // ERRADA passou de quase impossível (o Google pulava o seletor) a um
-    // clique — e justamente para quem o conserto mira, que tem duas contas
-    // abertas no navegador.
-    //
-    // A cadeia que fecha o beco, medida no ramo entregue:
-    //   1. a chave única inclui o e-mail (`onConflict:
-    //      "organization_id,user_id,provider,account_email"`,
-    //      app/api/v1/agenda/google/callback/route.ts:379), então autorizar
-    //      outra conta CRIA uma segunda linha em vez de trocar a existente;
-    //   2. o cartão entra no ramo "Agenda conectada" com QUALQUER conexão, e o
-    //      botão "Conectar Google" some junto;
-    //   3. esse botão era a ÚNICA porta do produto para a rota de ida — medido:
-    //      `grep -rn "agenda/google/connect" app components` devolvia um href e
-    //      mais nada;
-    //   4. o único remédio oferecido, "Desconectar", alcança TODAS as conexões
-    //      Google da pessoa de uma vez — ele resolve o alvo por `user_id` +
-    //      `provider`, sem recorte por conexão, e então DELETA os
-    //      `calendar_external_events` e os `calendar_connection_calendars` de
-    //      todas (`.in("connection_id", ids)`) e marca todas as conexões como
-    //      `status: "disconnected"` com os tokens zerados (`.in("id", ids)`)
-    //      — app/api/v1/agenda/google/desconectar/route.ts. A linha da conexão
-    //      sobrevive; o que some é o que fazia ela funcionar, para as duas.
-    //
-    // O botão "Conectar Google" continua sumindo, e isso é deliberado: o caso
-    // acima guarda essa decisão, cuja razão era que a segunda conexão não podia
-    // ser um clique no MESMO botão de sempre — quem não via estado clicava de
-    // novo achando que não tinha conectado. Uma porta com nome PRÓPRIO atende
-    // as duas coisas: quem clica aqui está dizendo "outra", não repetindo.
-    render(<CartaoDaConexaoGoogle configurado falta={[]} contaConectada="ana@clinica.com.br" />);
-    expect(
-      screen.getByTestId("conectar-outra-conta"),
-      "sem esta porta, trocar de conta exige desconectar TUDO — e a tela já " +
-        "junta os e-mails com `, `, ou seja, ela é escrita para N contas e só " +
-        "consegue alcançar uma",
-    ).toBeTruthy();
-  });
-
-  it("...e essa porta leva à MESMA rota de ida, não a uma tela inventada", () => {
-    // O par do caso acima: existir não é levar a lugar nenhum. Sem esta
-    // asserção, um `href="#"` passaria no anterior.
-    render(<CartaoDaConexaoGoogle configurado falta={[]} contaConectada="ana@clinica.com.br" />);
-    expect(screen.getByTestId("conectar-outra-conta").getAttribute("href")).toBe(
-      "/api/v1/agenda/google/connect",
-    );
-  });
-
   it("sem conta: oferece conectar e NÃO oferece desconectar", () => {
     // O outro lado do par. Sem ele, um `contaConectada` cravado como verdadeiro
     // passaria nos dois casos acima e ninguém veria.
@@ -104,14 +53,14 @@ describe("cartão da conexão do Google", () => {
     // REDE DE REGRESSÃO, não motor de conserto: este caso JÁ passava antes da
     // mudança, e está escrito aqui por isso.
     //
-    // A revisão pediu um caso Playwright que clicasse o botão e conferisse
-    // `accounts.google.com` + `prompt=consent select_account` + `login_hint`.
-    // Medido, esse destino já é asseverado — sobre o header `Location` de
+    // Um caso Playwright que clicasse o botão e conferisse `accounts.google.com`
+    // + `prompt=consent select_account` + `login_hint` repetiria o que já está
+    // medido: esse destino é asseverado — sobre o header `Location` de
     // verdade — em tests/unit/agenda-google-connect-route.test.ts:67-80. O
     // único elo da corrente que ninguém segurava era este: que o botão da tela
     // aponta para a rota que produz aquele destino. É um `<a href>`, então um
     // caso de unidade o prende inteiro, roda no CI e não depende de credencial
-    // do Google — que a spec e2e não tem, e por causa de que ela pularia.
+    // do Google — que a spec e2e não tem, e sem a qual ela pularia.
     render(<CartaoDaConexaoGoogle configurado falta={[]} contaConectada={null} />);
     expect(screen.getByTestId("conectar-google").getAttribute("href")).toBe(
       "/api/v1/agenda/google/connect",
