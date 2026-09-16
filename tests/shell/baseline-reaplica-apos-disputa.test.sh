@@ -22,7 +22,11 @@
 #   5. o ruído benigno de sempre não dispara passada nenhuma;
 #   6. uma lista de erros maior que o buffer do pipe não cega a função (pipefail);
 #   7. conexão que nem chega a abrir também é refeita, e o veredito cita a causa,
-#      não a linha de dica do psql.
+#      não a linha de dica do psql;
+#   8. nome de host que não existe NÃO é refeito (é configuração), e a falha
+#      temporária de DNS é;
+#   9. a listagem de uma nova passada põe a linha de disputa primeiro, mesmo atrás
+#      de muitas outras, e diz quantas ficaram de fora.
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -217,6 +221,39 @@ rodar
 check "recusada nas 3 passadas devolve falha" e_igual "$(rc)" 1
 check "  o veredito cita a causa (Network unreachable)" contem "$(inesperado)" "não chegou ao fim do arquivo \(o psql saiu com código 2\): connection to server .*Network unreachable"
 check "  e não a linha de dica do psql" nao_contem "$(inesperado)" "Is the server running"
+
+novo_caso conexao-recusada-ipv4
+# Só IPv4, sem a tentativa IPv6 "Network unreachable" — que casa outro termo da
+# regra e escondia a remoção de "Connection refused".
+roteiro 1 'psql: error: connection to server at "db.exemplo" (10.0.0.5), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?' 2
+roteiro 2 ""
+rodar
+check "recusa só em IPv4 também vira nova passada" e_igual "$(passadas)" 2
+
+echo "── 8. Nome de host: inexistente é configuração, falha temporária de DNS é conexão"
+novo_caso host-inexistente
+roteiro 1 'psql: error: could not translate host name "db.exemplo.errado" to address: Name or service not known' 2
+roteiro 2 ""
+rodar
+check "host que não existe não é refeito (1 passada)" e_igual "$(passadas)" 1
+check "  e devolve falha" e_igual "$(rc)" 1
+
+novo_caso dns-temporario
+roteiro 1 'psql: error: could not translate host name "db.exemplo" to address: Temporary failure in name resolution' 2
+roteiro 2 ""
+rodar
+check "falha temporária de DNS vira nova passada" e_igual "$(passadas)" 2
+check "  e, resolvida, devolve sucesso" e_igual "$(rc)" 0
+
+echo "── 9. A listagem põe a disputa primeiro e conta o que ficou de fora"
+novo_caso listagem
+LISTA="$(for i in $(seq 1 15); do printf 'psql:/b.sql:%s: ERROR:  must be owner of table tabela_%s\n' "$i" "$i"; done; printf '%s\n' 'psql:/b.sql:16766: ERROR:  deadlock detected')"
+roteiro 1 "$LISTA"
+roteiro 2 ""
+rodar
+check "a linha do deadlock aparece na tela mesmo sendo a 16ª" grep -q "psql:/b.sql:16766: ERROR:  deadlock detected" "$WORK/tela"
+check "  e a listagem diz quantas ficaram de fora" grep -q "(e mais 6 linhas)" "$WORK/tela"
 
 if [ "$FAILS" -gt 0 ]; then printf '\n%d falha(s)\n' "$FAILS"; exit 1; fi
 printf '\ntudo verde\n'

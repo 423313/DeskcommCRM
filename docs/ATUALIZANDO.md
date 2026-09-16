@@ -33,13 +33,19 @@ recente**, é porque não havia nada novo pra baixar; está tudo certo.
   do banco: **é esperado e inofensivo** — são coisas que já existiam. O comando filtra
   esse ruído e, se estiver tudo certo, mostra **`✓ banco atualizado`**.
 - Se o banco estiver ocupado com o CRM atendendo, o comando **aplica de novo sozinho** (até
-  3 passadas) e mostra na tela o que precisou refazer. Isso é normal.
+  3 passadas) e mostra na tela o que precisou refazer. Isso é normal, e vale a partir da
+  atualização seguinte à v1.28.0.
 - Se aparecer **`⚠ Apareceram avisos no banco que NÃO são os esperados`**, aí sim vale prestar
-  atenção: o app provavelmente ainda funciona, mas guarde a mensagem. Se o fim da saída disser
-  que **o banco NÃO terminou limpo**, rode, num horário de pouco movimento, o comando que ela
-  mostra (`bash hostgator-setup-kit/update.sh --to <versão> --force`) — ele repete a
-  atualização e completa o banco. Só em último caso volte ao estado anterior com o backup:
-  `bash hostgator-setup-kit/restore.sh`.
+  atenção: o app provavelmente ainda funciona, mas guarde a mensagem. Quando o banco **NÃO
+  termina limpo**, o **fim** da saída diz o que fazer, e a resposta depende da causa:
+  - **banco ocupado ou fora de alcance:** repita a atualização num horário de pouco movimento,
+    com o comando que a própria tela mostra
+    (`bash hostgator-setup-kit/update.sh --to <versão> --force`);
+  - **permissão** (`must be owner`, `permission denied`): repetir não resolve — a conexão do
+    `.env` não é a dona do banco. Declare `SUPABASE_DB_ADMIN_URL` e repita;
+  - **qualquer outra coisa:** guarde a mensagem e peça ajuda.
+  Só em último caso volte ao estado anterior com o backup: `bash hostgator-setup-kit/restore.sh`
+  (ele desfaz também o que o CRM gravou depois dele).
 
 ## Dicas
 

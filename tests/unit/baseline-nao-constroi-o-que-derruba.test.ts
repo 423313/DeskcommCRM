@@ -4,74 +4,78 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * O BASELINE NÃO CONSTRÓI UM ÍNDICE PARA O PRÓPRIO APÊNDICE DERRUBAR.
+ * O BASELINE NÃO RECONSTRÓI, A CADA UPDATE, O QUE ELE MESMO DERRUBA OU SUBSTITUI.
  *
- * O `baseline.sql` é aplicado inteiro em toda instalação e em todo `update.sh`.
- * Um índice criado no corpo (ou num bloco antigo do apêndice) e derrubado num
- * bloco posterior é construído e jogado fora TODA vez — `CREATE INDEX` não
- * concorrente, que trava escrita na tabela enquanto constrói. Numa tabela
- * pequena são milissegundos; numa instalação com histórico é lock e tempo em
- * cada atualização, pago por ninguém.
+ * O `baseline.sql` é aplicado inteiro em toda instalação e em todo `update.sh`,
+ * em autocommit: cada comando vale na hora. Um objeto criado no corpo (ou num
+ * bloco antigo do apêndice) e derrubado ou substituído adiante é refeito TODA
+ * vez, e fica valendo até o comando que o desfaz.
  *
- * Foi o que a migration 0259 trouxe na primeira versão: os três índices
- * redundantes seguiam criados acima (linha do dump, bloco da 0127, bloco do
- * calendário) e o apêndice os derrubava no fim. Medido em pg17, aplicando o
- * baseline até o rótulo da 0259: os três existiam naquele ponto.
+ * ## Índice (a regra original)
  *
- * A regra: o índice que o arquivo derruba e não recria depois não pode ter um
- * `create … index … X` antes do drop — a não ser dentro de um bloco `do` que
- * decide por uma condição de verdade. Drop seguido de nova criação é redefinição
- * e fica fora.
+ * `CREATE INDEX` não concorrente trava escrita enquanto constrói. Foi o que a
+ * migration 0259 trouxe na primeira versão: três índices redundantes criados
+ * acima e derrubados no fim. Medido em pg17, aplicando o baseline até o rótulo
+ * da 0259: os três existiam naquele ponto.
  *
- * ## Vale também para constraint que constrói índice (UNIQUE, PRIMARY KEY, EXCLUDE)
+ * ## Constraint que constrói índice (UNIQUE, PRIMARY KEY, EXCLUDE)
  *
- * Até 2026-09-16 a régua só lia `create index`. Das três criações únicas que a
- * 0181 e a 0205 derrubam, duas estavam congeladas aqui como dívida e a terceira —
- * a constraint `ai_kbv_version_unique` — nem aparecia. E o custo deixou de ser
- * só tempo: o modelo novo PERMITE o que o índice velho proibia (várias fontes por
- * agente, cada uma com a sua versão 1), então num clone que usa o acervo a
- * recriação falhava por duplicata a cada atualização. Medido numa VPS real: os
- * três erros nos dois `update.sh` com log guardado (v1.27.2 e v1.27.3), e o
- * `deadlock detected` que apagou uma policy na v1.27.3 saiu na tela no meio
+ * Até 2026-09-16 a régua só lia `create index`, e três criações únicas que a 0181
+ * e a 0205 derrubam passaram (duas congeladas como dívida, a constraint
+ * `ai_kbv_version_unique` nem aparecia). O modelo novo PERMITE o que o índice
+ * velho proibia — várias fontes por agente, cada uma com a sua versão 1 —, então
+ * num clone que usa o acervo a recriação falhava por duplicata. Medido numa VPS
+ * real: os três erros nos dois `update.sh` com log guardado (v1.27.2 e v1.27.3),
+ * e o `deadlock detected` que apagou uma policy na v1.27.3 saiu na tela no meio
  * deles. A prova em banco é `tests/invariants/baseline-reaplica-sobre-acervo-real.test.ts`.
  *
- * O `DO $baseline_guard$` do dump NÃO conta como condicional: ele só pergunta se
- * a própria constraint já existe — é o `IF NOT EXISTS` de quem não tem
- * `IF NOT EXISTS`, o mesmo que o `create unique index if not exists` que esta
- * regra já reprova.
+ * ## Policy — a mesma classe, com dano de acesso
  *
- * ## E para policy — a mesma classe, com dano de acesso
+ * A revisão da mesma correção achou 21 policies criadas e derrubadas adiante sem
+ * recriação (17 no corpo do dump, 2 em blocos antigos do apêndice, 2 num laço
+ * `foreach … execute format(…)` da 0085) e 2 reinstaladas numa versão
+ * intermediária MAIS LARGA que a final (`conversations_select` na 0030,
+ * `cae_select` na 0031). Policies permissivas somam com OR: nesse intervalo um
+ * `viewer` gravava, apagava e inseria em `crm_leads` (medido em pg: 0 hoje, 1 com
+ * o bloco antigo), e cada passada extra de `reaplicar_baseline` reabria a janela.
+ * A chave é nome + tabela. Redefinição intermediária idêntica à final é permitida:
+ * reinstala o mesmo texto (há 6 assim, de `attendant_availability` e `voice_calls`).
  *
- * A revisão da mesma correção achou 19 policies criadas (17 no corpo do dump, 2
- * em blocos antigos do apêndice) e derrubadas adiante sem nunca serem recriadas
- * com o mesmo nome. Aplicado em autocommit, cada `update.sh` fazia a policy
- * AMPLA antiga (só "é da organização") valer de novo até o drop — policies
- * permissivas somam com OR, então nessa janela um `viewer` gravava e apagava o
- * que as policies novas negam; e cada passada extra de `reaplicar_baseline`
- * reabria a janela. A chave é nome + tabela: o mesmo nome em outra tabela é
- * outra policy.
+ * ## O que conta como guarda
+ *
+ * - `condição`: um `do` com `if` sobre OUTRA coisa que não a existência do próprio
+ *   objeto (ex.: a 0127 só cria o índice onde a constraint falta). Isenta.
+ * - `existência`: o `DO $baseline_guard$` do dump, um `if` que só pergunta pelo
+ *   próprio nome, ou `exception when duplicate_object`. NÃO isenta a criação
+ *   antes de um drop (o drop apagou o objeto, então a guarda cria de novo), mas
+ *   impede a reinstalação de versão intermediária (o objeto final já existe).
+ * - `nenhuma`: comando de topo, ou `do` sem `if` nenhum.
  *
  * ## Escopo, escrito para não ser lido maior do que é
  *
- * Drop por nome LITERAL, com ou sem `if exists`. `execute format('… %I', …)`
- * resolve o nome em tempo de execução e fica fora. CHECK e FOREIGN KEY ficam
- * fora de propósito: não constroem índice, e as instâncias medidas validam
- * coluna recriada vazia.
+ * Nome literal, com ou sem `if exists`, mais o laço `foreach t in array[...]`
+ * com `format('… %s … public.%I')`. Outras formas dinâmicas ficam fora. CHECK e
+ * FOREIGN KEY ficam fora: não constroem índice, e as instâncias medidas validam
+ * coluna recriada vazia. Função, grant e trigger ficam fora — a mesma classe
+ * existe neles (medido na mesma revisão) e é trabalho próprio.
  *
  * Lê texto; que o ciclo install→update sai 0 é o job `invariants` quem mede, e
  * `tests/invariants/indices-redundantes-saem.test.ts` mede o estado final.
  */
 const SQL = readFileSync(join(process.cwd(), "supabase/baseline.sql"), "utf8");
 
+type Guarda = "nenhuma" | "existencia" | "condicao";
+
 interface Par {
   nome: string;
   linhaDaCriacao: number;
   linhaDoDrop: number;
-  condicional: boolean;
+  guarda: Guarda;
 }
 
 interface Ocorrencia {
   chave: string;
+  nomeProprio: string;
   pos: number;
 }
 
@@ -79,34 +83,44 @@ function linhaDe(sql: string, pos: number): number {
   return sql.slice(0, pos).split("\n").length;
 }
 
-/**
- * A posição está dentro de um `do $x$ … end $x$;` aberto e ainda não fechado,
- * que não seja a guarda de existência do dump?
- */
-function dentroDeBlocoCondicional(sql: string, pos: number): boolean {
-  const antes = sql.slice(0, pos);
-  const aberturas = [...antes.matchAll(/^\s*do\s+\$([a-z_]*)\$/gim)];
-  const ultima = aberturas.at(-1);
-  if (!ultima || ultima.index === undefined) return false;
-  if (ultima[1]!.toLowerCase() === "baseline_guard") return false;
-  const marca = `$${ultima[1]}$`;
-  const trecho = antes.slice(ultima.index + ultima[0].length);
-  return !trecho.toLowerCase().includes(`end ${marca.toLowerCase()}`);
+/** O bloco `do $tag$ … $tag$` que contém a posição, se houver. Fecha no próximo `$tag$`. */
+function blocoDoEm(sql: string, pos: number): { tag: string; corpo: string } | null {
+  let achado: { tag: string; corpo: string } | null = null;
+  for (const m of sql.matchAll(/^\s*do\s+(\$[a-z_]*\$)/gim)) {
+    const inicio = m.index! + m[0].length;
+    if (inicio > pos) break;
+    const tag = m[1]!;
+    const fim = sql.indexOf(tag, inicio);
+    if (fim !== -1 && fim < pos) continue;
+    achado = { tag: tag.toLowerCase(), corpo: sql.slice(inicio, fim === -1 ? sql.length : fim) };
+  }
+  return achado;
 }
 
-function ocorrencias(sql: string, rx: RegExp, chave: (m: RegExpMatchArray) => string): Ocorrencia[] {
-  return [...sql.matchAll(rx)].map((m) => ({ chave: chave(m).toLowerCase(), pos: m.index! }));
+function guardaEm(sql: string, pos: number, nomeProprio: string): Guarda {
+  const bloco = blocoDoEm(sql, pos);
+  if (!bloco) return "nenhuma";
+  const condicoes = [...bloco.corpo.matchAll(/(?<!\bend\s+)\bif\b([\s\S]*?)\bthen\b/gi)].map((m) => m[1]!.toLowerCase());
+  if (condicoes.length === 0) {
+    return /exception\s+when\s+duplicate_object/i.test(bloco.corpo) ? "existencia" : "nenhuma";
+  }
+  return condicoes.every((c) => c.includes(nomeProprio.toLowerCase())) ? "existencia" : "condicao";
+}
+
+function ocorrencias(sql: string, rx: RegExp, chave: (m: RegExpMatchArray) => [string, string]): Ocorrencia[] {
+  return [...sql.matchAll(rx)].map((m) => {
+    const [k, nomeProprio] = chave(m);
+    return { chave: k.toLowerCase(), nomeProprio: nomeProprio.toLowerCase(), pos: m.index! };
+  });
 }
 
 /**
  * Pares cria→derruba cujo objeto NÃO sobrevive ao arquivo. Uma recriação da
- * mesma chave depois do último drop é REDEFINIÇÃO (trocar predicado de índice
- * parcial, o `drop … if exists` + `create` do apêndice, a constraint que volta
- * como índice único do mesmo nome) e fica fora.
+ * mesma chave depois do último drop é REDEFINIÇÃO e fica fora desta regra.
  */
 function pares(sql: string, drops: Ocorrencia[], criacoes: Ocorrencia[], recriacoes: Ocorrencia[]): Par[] {
   const ultimoDrop = new Map<string, number>();
-  for (const d of drops) ultimoDrop.set(d.chave, d.pos);
+  for (const d of [...drops].sort((a, b) => a.pos - b.pos)) ultimoDrop.set(d.chave, d.pos);
   const achados: Par[] = [];
   for (const [chave, posDrop] of ultimoDrop) {
     if (recriacoes.some((r) => r.chave === chave && r.pos > posDrop)) continue;
@@ -115,15 +129,15 @@ function pares(sql: string, drops: Ocorrencia[], criacoes: Ocorrencia[], recriac
         nome: chave,
         linhaDaCriacao: linhaDe(sql, c.pos),
         linhaDoDrop: linhaDe(sql, posDrop),
-        condicional: dentroDeBlocoCondicional(sql, c.pos),
+        guarda: guardaEm(sql, c.pos, c.nomeProprio),
       });
     }
   }
   return achados;
 }
 
-const nome = (m: RegExpMatchArray) => m[1]!;
-const nomeNaTabela = (m: RegExpMatchArray) => `${m[1]} on ${m[2]}`;
+const nome = (m: RegExpMatchArray): [string, string] => [m[1]!, m[1]!];
+const nomeNaTabela = (m: RegExpMatchArray): [string, string] => [`${m[1]} on ${m[2]}`, m[1]!];
 
 function criacoesDeIndice(sql: string): Ocorrencia[] {
   return ocorrencias(sql, /create (?:unique )?index (?:concurrently )?(?:if not exists )?"?([a-z0-9_]+)"?(?=\s|$)/gi, nome);
@@ -146,27 +160,87 @@ function paresDeConstraint(sql: string): Par[] {
   return pares(sql, drops, criacoes, recriacoes);
 }
 
+const ALVO_DE_POLICY = String.raw`"?([a-z0-9_]+)"?\s+on\s+(?:"?public"?\.)?"?([a-z0-9_]+)"?`;
+
+/** `foreach t in array[...] loop … format('… policy x_%s_y on public.%I …')`, expandido por tabela. */
+function policiesEmLaco(sql: string, verbo: "create" | "drop"): Ocorrencia[] {
+  const achadas: Ocorrencia[] = [];
+  const laco = /foreach\s+\w+\s+in\s+array\s+(?:array\s*)?\[([^\]]*)\]\s*loop([\s\S]*?)end\s+loop/gi;
+  const comando =
+    verbo === "create"
+      ? /create policy\s+([a-z0-9_]*)%s([a-z0-9_]*)\s+on\s+public\.%I/gi
+      : /drop policy\s+(?:if exists\s+)?([a-z0-9_]*)%s([a-z0-9_]*)\s+on\s+public\.%I/gi;
+  for (const m of sql.matchAll(laco)) {
+    const tabelas = [...m[1]!.matchAll(/'([a-z0-9_]+)'/g)].map((t) => t[1]!);
+    const inicioDoCorpo = m.index! + m[0].indexOf(m[2]!);
+    for (const f of m[2]!.matchAll(comando)) {
+      for (const t of tabelas) {
+        const nomeDaPolicy = `${f[1]}${t}${f[2]}`;
+        achadas.push({ chave: `${nomeDaPolicy} on ${t}`, nomeProprio: nomeDaPolicy, pos: inicioDoCorpo + f.index! });
+      }
+    }
+  }
+  return achadas;
+}
+
+function criacoesDePolicy(sql: string): Ocorrencia[] {
+  return [
+    ...ocorrencias(sql, new RegExp(String.raw`create policy\s+` + ALVO_DE_POLICY, "gi"), nomeNaTabela),
+    ...policiesEmLaco(sql, "create"),
+  ];
+}
+
 function paresDePolicy(sql: string): Par[] {
-  const alvo = String.raw`"?([a-z0-9_]+)"?\s+on\s+(?:"?public"?\.)?"?([a-z0-9_]+)"?`;
-  const criacoes = ocorrencias(sql, new RegExp(String.raw`create policy\s+` + alvo, "gi"), nomeNaTabela);
-  const drops = ocorrencias(sql, new RegExp(String.raw`drop policy\s+(?:if exists\s+)?` + alvo, "gi"), nomeNaTabela);
+  const criacoes = criacoesDePolicy(sql);
+  const drops = [
+    ...ocorrencias(sql, new RegExp(String.raw`drop policy\s+(?:if exists\s+)?` + ALVO_DE_POLICY, "gi"), nomeNaTabela),
+    ...policiesEmLaco(sql, "drop"),
+  ];
   return pares(sql, drops, criacoes, criacoes);
+}
+
+/** O comando `create policy … ;` a partir da posição, normalizado para comparar definições. */
+function textoDaPolicy(sql: string, pos: number): string {
+  const fim = sql.indexOf(";", pos);
+  return sql.slice(pos, fim === -1 ? sql.length : fim).replace(/"/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Definições LITERAIS de policy que rodam a cada update (sem guarda) e diferem da
+ * definição final da mesma chave: a versão intermediária vale até a final chegar.
+ */
+function redefinicoesIntermediarias(sql: string): string[] {
+  const porChave = new Map<string, Ocorrencia[]>();
+  for (const c of ocorrencias(sql, new RegExp(String.raw`create policy\s+` + ALVO_DE_POLICY, "gi"), nomeNaTabela)) {
+    porChave.set(c.chave, [...(porChave.get(c.chave) ?? []), c]);
+  }
+  const achadas: string[] = [];
+  for (const [chave, lista] of porChave) {
+    if (lista.length < 2) continue;
+    const final = lista[lista.length - 1]!;
+    for (const c of lista.slice(0, -1)) {
+      if (guardaEm(sql, c.pos, c.nomeProprio) !== "nenhuma") continue;
+      if (textoDaPolicy(sql, c.pos) !== textoDaPolicy(sql, final.pos)) {
+        achadas.push(`${chave}: linha ${linhaDe(sql, c.pos)} difere da final na linha ${linhaDe(sql, final.pos)}`);
+      }
+    }
+  }
+  return achadas;
 }
 
 function proibidos(achados: Par[]): string[] {
   return achados
-    .filter((p) => !p.condicional)
+    .filter((p) => p.guarda !== "condicao")
     .map((p) => `${p.nome}: criado na linha ${p.linhaDaCriacao}, derrubado na ${p.linhaDoDrop}`);
 }
 
-const nomes = (achados: Par[]) => achados.map((p) => p.nome).sort();
+const nomes = (achados: Par[]) => [...new Set(achados.map((p) => p.nome))].sort();
+const nomesProibidos = (achados: Par[]) => nomes(achados.filter((p) => p.guarda !== "condicao"));
 
 /**
- * As formas que o arquivo teve até 2026-09-16, e as que NÃO são defeito.
- * Controle do instrumento: sem ele, um regex que parasse de casar devolveria
- * lista vazia, e "nenhum par proibido" ficaria verde vigiando nada. Cada
- * propriedade tem o seu caso, para que uma régua cega e uma guarda contada como
- * condição não reprovem com a mesma mensagem.
+ * As formas que o arquivo teve até 2026-09-16, e as que NÃO são defeito. Cada
+ * propriedade tem o seu caso, para que cada sabotagem reprove com a mensagem da
+ * propriedade que quebrou, e não com a de outra.
  */
 const SINTETICO = `
 CREATE UNIQUE INDEX IF NOT EXISTS "velho_idx" ON "public"."t" USING "btree" ("a") WHERE "ativo";
@@ -199,7 +273,31 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'outra_uk') then
     create unique index if not exists cond_idx on public.t (a);
   end if;
+end$$;
+
+create policy "depois_de_end_colado" on public.t using (true);
+
+do $$ begin create policy pol_sem_if on public.t using (true); end $$;
+
+do $$ begin
+  create policy pol_duplicate_object on public.t using (true);
+exception when duplicate_object then null;
 end $$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['tab_a', 'tab_b'] loop
+    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
+    execute format('create policy tenant_isolation_%s_all on public.%I for all using (true)', t, t);
+  end loop;
+end $$;
+
+drop policy if exists "sel_larga" on public.t;
+create policy "sel_larga" on public.t for select using (true);
+
+drop policy if exists "sel_igual" on public.t;
+create policy "sel_igual" on public.t for select using (dono = auth.uid());
 
 -- ---- apêndice (migration 9999) ----
 drop index if exists public.velho_idx;
@@ -213,6 +311,14 @@ alter table public.t drop constraint if exists redefinida_uk;
 alter table public.t add constraint redefinida_uk unique (b);
 drop policy if exists velha_pol on public.t;
 drop policy if exists "mesmo_nome" on public.t;
+drop policy if exists depois_de_end_colado on public.t;
+drop policy if exists pol_sem_if on public.t;
+drop policy if exists pol_duplicate_object on public.t;
+drop policy if exists tenant_isolation_tab_a_all on public.tab_a;
+drop policy if exists "sel_larga" on public.t;
+create policy "sel_larga" on public.t for select using (dono = auth.uid());
+drop policy if exists "sel_igual" on public.t;
+create policy "sel_igual" on public.t for select using (dono = auth.uid());
 `;
 
 describe("o instrumento, contra formas conhecidas", () => {
@@ -220,15 +326,16 @@ describe("o instrumento, contra formas conhecidas", () => {
     expect(proibidos(paresDeIndice(SINTETICO))).toEqual([
       expect.stringMatching(/^velho_idx: criado na linha 2, derrubado na \d+$/),
     ]);
-    expect(paresDeIndice(SINTETICO).find((p) => p.nome === "cond_idx")?.condicional).toBe(true);
+    expect(paresDeIndice(SINTETICO).find((p) => p.nome === "cond_idx")?.guarda).toBe("condicao");
   });
 
   it("constraint: a régua enxerga UNIQUE, PRIMARY KEY e EXCLUDE, com drop com ou sem if exists", () => {
-    expect(nomes(paresDeConstraint(SINTETICO))).toEqual(["velha_ex", "velha_pk", "velha_uk"]);
+    expect(nomes(paresDeConstraint(SINTETICO))).toEqual(expect.arrayContaining(["velha_ex", "velha_pk", "velha_uk"]));
   });
 
-  it("constraint: a guarda de existência do dump não conta como condição", () => {
-    expect(paresDeConstraint(SINTETICO).find((p) => p.nome === "velha_uk")?.condicional).toBe(false);
+  it("guarda de existência não é condição: nem a do dump, nem exception when duplicate_object", () => {
+    expect(paresDeConstraint(SINTETICO).find((p) => p.nome === "velha_uk")?.guarda).toBe("existencia");
+    expect(paresDePolicy(SINTETICO).find((p) => p.nome === "pol_duplicate_object on t")?.guarda).toBe("existencia");
   });
 
   it("constraint: voltar como índice único do mesmo nome é redefinição, e drop + add também", () => {
@@ -237,19 +344,38 @@ describe("o instrumento, contra formas conhecidas", () => {
     expect(achados).not.toContain("redefinida_uk");
   });
 
-  it("policy: casa nome E tabela, e a guarda de existência não conta como condição", () => {
-    expect(proibidos(paresDePolicy(SINTETICO))).toEqual([
-      expect.stringMatching(/^velha_pol on t: criado na linha \d+, derrubado na \d+$/),
-    ]);
+  it("policy: casa nome E tabela", () => {
+    const achados = nomesProibidos(paresDePolicy(SINTETICO));
+    expect(achados).toContain("velha_pol on t");
+    expect(achados).not.toContain("mesmo_nome on outra");
+  });
+
+  it("um bloco fechado com end$$ colado não esconde o que vem depois dele", () => {
+    expect(nomesProibidos(paresDePolicy(SINTETICO))).toContain("depois_de_end_colado on t");
+  });
+
+  it("do sem if nenhum não é condicional", () => {
+    expect(paresDePolicy(SINTETICO).find((p) => p.nome === "pol_sem_if on t")?.guarda).toBe("nenhuma");
+  });
+
+  it("laço foreach … format('… %s … public.%I') é expandido por tabela", () => {
+    const achados = nomesProibidos(paresDePolicy(SINTETICO));
+    expect(achados).toContain("tenant_isolation_tab_a_all on tab_a");
+    expect(achados).not.toContain("tenant_isolation_tab_b_all on tab_b");
+  });
+
+  it("redefinição intermediária: acusa a que difere da final e poupa a idêntica", () => {
+    expect(redefinicoesIntermediarias(SINTETICO)).toEqual([expect.stringMatching(/^sel_larga on t: /)]);
   });
 });
 
-describe("baseline.sql não constrói o que ele mesmo derruba", () => {
-  it("o instrumento está vivo no arquivo real: acha drops", () => {
+describe("baseline.sql não reconstrói o que ele mesmo derruba ou substitui", () => {
+  it("o instrumento está vivo no arquivo real: acha pares e redefinições", () => {
     expect(paresDeIndice(SQL).length, "nenhum par cria→derruba encontrado — o parser mudou?").toBeGreaterThan(0);
+    expect(policiesEmLaco(SQL, "create").length, "nenhum laço de policy encontrado — o parser mudou?").toBeGreaterThan(10);
   });
 
-  it("nenhuma criação incondicional de índice antes do drop", () => {
+  it("nenhuma criação de índice antes do próprio drop, fora de condição de verdade", () => {
     expect(
       proibidos(paresDeIndice(SQL)),
       "Índice construído e jogado fora a cada install/update. Tire a criação (ou a torne " +
@@ -273,12 +399,21 @@ describe("baseline.sql não constrói o que ele mesmo derruba", () => {
     ).toEqual([]);
   });
 
+  it("nenhuma policy é reinstalada numa versão intermediária diferente da final", () => {
+    expect(
+      redefinicoesIntermediarias(SQL),
+      "Definição intermediária roda a cada update e vale até a final chegar. Tire a intermediária " +
+        "(o drop da final já cuida do clone antigo).\n",
+    ).toEqual([]);
+  });
+
   it("a criação condicional de ai_models_provider_model_unique depende da AUSÊNCIA da constraint", () => {
     // O bloco `do` sozinho não prova nada: um `if true then create …` passaria no
     // caso acima. O que torna a criação inofensiva é o predicado ser o inverso do
     // guard do drop da 0259 — os dois nunca agem sobre o mesmo banco.
     const par = paresDeIndice(SQL).find((p) => p.nome === "ai_models_provider_model_unique");
     expect(par, "a criação da 0127 sumiu — confira se a unicidade ainda tem fallback").toBeDefined();
+    expect(par!.guarda).toBe("condicao");
     const linhas = SQL.split("\n");
     const janela = linhas.slice(Math.max(0, par!.linhaDaCriacao - 8), par!.linhaDaCriacao).join("\n");
     expect(janela).toMatch(/if not exists \(\s*select 1 from pg_constraint\s+where conname = 'ai_models_unique'/);

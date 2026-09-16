@@ -5004,6 +5004,9 @@ grant execute on function public.fn_mark_conversation_message(uuid, text, text, 
 -- G2-03: spec 13 §4 — pipelines/stages (config) write manager+; conversations
 -- write agent+ (viewer read-only). SELECT permanece org-flat (escopo own é G4).
 -- Idempotente: drop if exists + create (auto-curativo no update.sh de clones).
+-- Em conversations este bloco só DERRUBA a policy ampla: o SELECT e a escrita
+-- que valem hoje nascem na 0035. Recriar aqui a versão intermediária (SELECT
+-- org-flat, escrita agent+ FOR ALL) fazia cada update.sh reabri-la até a 0035.
 
 drop policy if exists "tenant_isolation_crm_pipelines_all" on public.crm_pipelines;
 drop policy if exists "crm_pipelines_select" on public.crm_pipelines;
@@ -5050,14 +5053,7 @@ create policy "crm_stages_manager_write" on public.crm_stages
   );
 
 drop policy if exists "conversations_tenant_isolation_all" on public.conversations;
-drop policy if exists "conversations_select" on public.conversations;
 drop policy if exists "conversations_agent_write" on public.conversations;
-
-create policy "conversations_select" on public.conversations
-  for select using (
-    (organization_id in (select public.fn_user_org_ids()))
-    or public.fn_is_platform_admin()
-  );
 
 -- ---- Auditoria de atribuição de conversas + fn_conversation_assign (migration 0031) ----
 -- G3-01 (gov-loop): toda mudança de dono de conversa vira evento estruturado
@@ -5083,12 +5079,8 @@ create index if not exists idx_cae_conversation
 
 alter table public.conversation_assignment_events enable row level security;
 
-drop policy if exists cae_select on public.conversation_assignment_events;
-create policy cae_select on public.conversation_assignment_events
-  for select using (
-    (organization_id in (select public.fn_user_org_ids()))
-    or public.fn_is_platform_admin()
-  );
+-- cae_select nasce na 0173, com o escopo da conversa. A versão org-flat que
+-- vivia aqui era reinstalada a cada update.sh e valia até aquele bloco.
 
 drop policy if exists cae_insert on public.conversation_assignment_events;
 create policy cae_insert on public.conversation_assignment_events
@@ -9022,16 +9014,18 @@ declare t text;
 begin
   foreach t in array array['ai_routers', 'ai_router_members', 'ai_router_decisions'] loop
     execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
     execute format('revoke all on public.%I from anon', t);
   end loop;
 end $$;
+
+-- A policy ampla (só "é da organização") fica só para ai_router_decisions.
+-- ai_routers e ai_router_members têm policies por papel desde a 0150, que
+-- derruba a ampla delas; recriá-la aqui fazia cada update.sh (em autocommit)
+-- reabrir escrita a qualquer membro da organização até aquele drop.
+drop policy if exists tenant_isolation_ai_router_decisions_all on public.ai_router_decisions;
+create policy tenant_isolation_ai_router_decisions_all on public.ai_router_decisions for all
+  using (organization_id in (select * from public.fn_user_org_ids()))
+  with check (organization_id in (select * from public.fn_user_org_ids()));
 
 -- ---- knowledge_searches: telemetria de busca de conhecimento (migration 0086) ----
 

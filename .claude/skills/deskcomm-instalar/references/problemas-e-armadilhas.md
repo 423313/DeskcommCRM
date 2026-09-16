@@ -74,10 +74,15 @@ curar, e aí o fim da saída diz "banco NÃO terminou limpo" e mostra
 (refaz a atualização inteira, com backup). Não restaure o backup por causa disso. Pelo botão da tela
 o aviso não aparece: leia `.update.log` na pasta do projeto.
 
-**Três "could not create unique index" (`ai_kbv_version_unique`, `ai_kbv_one_active_per_agent`,
-`ai_knowledge_sources_unique_per_agent`).** Aviso falso de atualizações até a v1.28.0, quando um
-agente tem mais de um material no acervo: o instalador tentava recriar regras antigas que ele mesmo
-apaga logo depois. Nenhum dado está errado — não apague nada. Some na atualização seguinte.
+**"must be owner" / "permission denied" ao atualizar.** Repetir NÃO cura: a conexão do `.env` não é a
+dona do banco (o caso típico é Supabase próprio com a role menor). Declare `SUPABASE_DB_ADMIN_URL` no
+`.env` e repita com `--force`. O fim da saída do `update.sh` já diz isso.
+
+**Até três "could not create unique index" (`ai_kbv_version_unique`, `ai_kbv_one_active_per_agent`,
+`ai_knowledge_sources_unique_per_agent`).** Aviso falso de atualizações até a v1.28.0, em quem tem
+materiais do acervo ligados a um agente (o primeiro e o segundo aparecem com dois materiais do mesmo
+agente; o terceiro, com dois ATIVOS do mesmo tipo): o instalador tentava recriar regras antigas que
+ele mesmo apaga logo depois. Nenhum dado está errado — não apague nada. Some na atualização seguinte.
 
 **Seletor de modelo vazio ao criar agente de IA.** O seed de modelos não entrou (instalação antiga).
 `bash hostgator-setup-kit/update.sh` re-aplica o baseline, que traz o insert.

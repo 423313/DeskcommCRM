@@ -270,6 +270,11 @@ check "a atualização termina com sucesso" test "$RC" -eq 0
 check "o update.sh aplicou o baseline duas vezes" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 2
 check "e diz ✓ banco atualizado" grep -q "✓ banco atualizado" "$OUTFILE"
 check "  contando que foi na 2ª passada (o ✓ depois de disputa não é mudo)" grep -q "✓ banco atualizado na passada 2" "$OUTFILE"
+# linha_de <texto fixo>: número da primeira linha da saída que contém o texto (0 se nenhuma).
+linha_de() { grep -nF -- "$1" "$OUTFILE" | head -1 | cut -d: -f1 | grep . || echo 0; }
+check "  e a linha que perdeu a disputa foi listada ANTES do ✓" \
+  test "$(linha_de 'psql:/b.sql:16766: ERROR:  deadlock detected')" -gt 0 -a \
+       "$(linha_de 'psql:/b.sql:16766: ERROR:  deadlock detected')" -lt "$(linha_de '✓ banco atualizado na passada 2')"
 check "  sem o aviso de banco" test -z "$(grep 'NÃO são os esperados' "$OUTFILE" || true)"
 check "  e o fim diz Atualização concluída" grep -q "✓ Atualização concluída" "$OUTFILE"
 # Com --force na mesma tag ninguém conferiu a imagem: a frase antiga ("o app está
@@ -292,6 +297,11 @@ check "  e ensina a repetir de um jeito que re-aplica" grep -qF "update.sh --to 
 check "  o FIM da tela repete que o banco NÃO terminou limpo" grep -q "banco NÃO terminou limpo" "$OUTFILE"
 check "  e não diz Atualização concluída" test -z "$(grep 'Atualização concluída' "$OUTFILE" || true)"
 check "  a dica aparece no passo do banco E no fim" test "$(grep -cF 'update.sh --to v1.1.0 --force' "$OUTFILE")" -eq 2
+# Restaurar o backup desfaz também o que o CRM gravou desde ele: é o último recurso.
+check "  no passo do banco, repetir vem ANTES de restaurar" \
+  test "$(linha_de 'update.sh --to v1.1.0 --force')" -lt "$(linha_de 'Só em último caso, volte ao backup')"
+check "  e a orientação é a ÚLTIMA coisa da saída, depois do passo 7" \
+  test -n "$(tail -n 8 "$OUTFILE" | grep -F 'update.sh --to v1.1.0 --force' || true)"
 
 # Lista grande (role sem dono: milhares de "must be owner") com a disputa no topo.
 # `printf | head -20` sob pipefail levava SIGPIPE e o set -e matava o update.sh
@@ -305,6 +315,18 @@ check "lista de erros maior que o buffer do pipe não mata o update.sh" test "$R
 check "  a disputa no topo foi reconhecida (3 passadas)" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 3
 check "  o aviso de PERMISSÃO chegou à tela" grep -q "Os erros são de PERMISSÃO" "$OUTFILE"
 check "  e o fim diz que o banco NÃO terminou limpo" grep -q "banco NÃO terminou limpo" "$OUTFILE"
+# Com permissão no meio, repetir não cura: a orientação é a da conexão do dono.
+check "  com erros de permissão junto, não manda só repetir" test -z "$(grep 'seguiu ocupado' "$OUTFILE" || true)"
+check "  e o fim orienta a conexão do dono" test -n "$(tail -n 8 "$OUTFILE" | grep -F 'SUPABASE_DB_ADMIN_URL' || true)"
+
+# Só permissão, sem disputa nenhuma: uma passada, e o fim diz o que fazer.
+rm -rf "$ROTEIRO_UG"; mkdir -p "$ROTEIRO_UG"
+for i in $(seq 1 200); do printf 'psql:/b.sql:%s: ERROR:  must be owner of table tabela_%s\n' "$i" "$i"; done > "$ROTEIRO_UG/passada.1"
+: > "$DOCKER_LOG"
+BASELINE_ROTEIRO="$ROTEIRO_UG" BASELINE_ESPERA_S=0 run_update --to v1.1.0 --force
+check "só permissão: uma passada (repetir não cura)" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 1
+check "  sem a frase de banco ocupado" test -z "$(grep 'seguiu ocupado' "$OUTFILE" || true)"
+check "  e o FIM orienta a conexão do dono" test -n "$(tail -n 8 "$OUTFILE" | grep -F 'SUPABASE_DB_ADMIN_URL' || true)"
 
 # ── Clone RASO: a topologia que o install.sh realmente entrega ───────────────
 # `install.sh` instala com `git clone --depth 1`. Num repositório raso o

@@ -464,13 +464,16 @@ psql_run() { docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" -v ON
 # comando que COPIA dado guardado por uma checagem de catálogo, e que perde a
 # disputa enquanto o comando seguinte (o que destrói a origem) passa, não tem o
 # que copiar na passada seguinte — ela sai limpa e o dado não veio. O ✓ depois
-# de uma disputa nunca é mudo: as linhas perdidas ficam na tela e no log.
+# de uma disputa nunca é mudo: cada nova passada lista na tela as linhas que não
+# aplicaram (as de disputa primeiro, até 10, dizendo quantas ficaram de fora) e,
+# quando quem chama passa um log, a saída inteira de cada passada vai para ele.
 #
-# Nada de `printf | grep -q` nem `| head` aqui: com `pipefail`, o leitor que sai
-# cedo mata o `printf` com SIGPIPE quando a saída passa do buffer do pipe (os
-# milhares de "must be owner" de uma role sem dono passam), e o pipeline inteiro
-# vira falha — medido: a disputa deixava de ser reconhecida. Here-string e
-# `sed -n` leem até o fim.
+# Nada de `| grep -q` nem `| head` aqui: com `pipefail`, o leitor que sai cedo
+# mata o `printf` com SIGPIPE quando a saída passa do buffer do pipe (os milhares
+# de "must be owner" de uma role sem dono passam), e o pipeline inteiro vira
+# falha — medido: a disputa deixava de ser reconhecida. `grep` sem `-q`, `sed`
+# e `awk` leem até o fim; o `grep -q` que sobra lê de here-string, e se ela
+# falhar a função devolve 1 (aviso), nunca 0.
 #
 #   reaplicar_baseline <baseline.sql> [log]
 #     0 → a última passada não teve erro fora dos benignos
@@ -480,7 +483,19 @@ psql_run() { docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" -v ON
 #   BASELINE_TENTATIVAS (padrão 3) e BASELINE_ESPERA_S (padrão 10, vezes o número
 #   da passada) existem para a suíte de shell não esperar de verdade.
 BASELINE_ERROS_BENIGNOS='already exists|multiple primary keys|multiple default values|is already a member|already a partition'
-BASELINE_ERROS_DE_DISPUTA='deadlock detected|could not serialize access|lock timeout|could not obtain lock|terminating connection|server closed the connection|connection to server was lost|SSL connection has been closed unexpectedly|SSL SYSCALL error|remaining connection slots|too many clients|max client(s| connections) reached|the database system is (starting up|shutting down|in recovery mode|not yet accepting connections)|could not translate host name|Connection refused|Connection timed out|timeout expired|Network (is )?unreachable'
+BASELINE_ERROS_DE_DISPUTA='deadlock detected|could not serialize access|lock timeout|could not obtain lock|terminating connection|server closed the connection|connection to server was lost|SSL connection has been closed unexpectedly|SSL SYSCALL error|remaining connection slots|too many clients|max client(s| connections) reached|the database system is (starting up|shutting down|in recovery mode|not yet accepting connections)|Temporary failure in name resolution|Connection refused|Connection timed out|timeout expired|Network (is )?unreachable'
+# listar_erros_do_banco <linhas> <máximo> [recuo]: as de disputa ou conexão primeiro
+# — são as que explicam uma nova passada, e numa lista de milhares de "must be
+# owner" ficariam fora do corte —, depois o resto, dizendo quantas ficaram de fora.
+listar_erros_do_banco() {
+  local linhas="$1" maximo="$2" recuo="${3:-}" total
+  total="$(printf '%s\n' "$linhas" | grep -c . || true)"
+  { printf '%s\n' "$linhas" | grep -iE "$BASELINE_ERROS_DE_DISPUTA" || true
+    printf '%s\n' "$linhas" | grep -viE "$BASELINE_ERROS_DE_DISPUTA" || true
+  } | sed -n "1,${maximo}s/^/${recuo}/p"
+  [ "${total:-0}" -le "$maximo" ] || printf '%s(e mais %s linhas)\n' "$recuo" "$((total - maximo))"
+}
+
 reaplicar_baseline() {
   local arquivo="$1" log="${2:-}" tentativas="${BASELINE_TENTATIVAS:-3}" espera="${BASELINE_ESPERA_S:-10}"
   local raw rc causa
@@ -491,7 +506,7 @@ reaplicar_baseline() {
     raw="$(docker run --rm -i -v "$arquivo:/b.sql:ro" postgres:17-alpine \
           psql "$(url_do_schema)" -q -f /b.sql 2>&1)" || rc=$?
     [ -z "$log" ] || printf '── passada %s de %s (saída %s) ──\n%s\n' "$BASELINE_PASSADAS" "$tentativas" "$rc" "$raw" >> "$log"
-    BASELINE_INESPERADO="$(grep -iE 'ERROR|FATAL' <<<"$raw" | grep -viE "$BASELINE_ERROS_BENIGNOS" || true)"
+    BASELINE_INESPERADO="$(printf '%s\n' "$raw" | grep -iE 'ERROR|FATAL' | grep -viE "$BASELINE_ERROS_BENIGNOS" || true)"
     # Sem ON_ERROR_STOP o psql sai 0 mesmo com erro de SQL: saída diferente de
     # zero é o psql (ou o docker) que NÃO chegou ao fim do arquivo. Sem isto, uma
     # conexão que cai no meio sem imprimir a palavra ERROR terminaria em
@@ -499,7 +514,7 @@ reaplicar_baseline() {
     # última linha que não é continuação indentada — a última de todas costuma ser
     # a dica "Is the server running…", e não o motivo.
     if [ "$rc" -ne 0 ]; then
-      causa="$(awk 'NF && !/^[[:space:]]/ { l = $0 } END { print l }' <<<"$raw")"
+      causa="$(printf '%s\n' "$raw" | awk 'NF && !/^[[:space:]]/ { l = $0 } END { print l }')"
       BASELINE_INESPERADO="$(printf '%s\n' "$BASELINE_INESPERADO" \
         "a aplicação não chegou ao fim do arquivo (o psql saiu com código $rc): $causa" | sed '/^$/d')"
     fi
@@ -507,7 +522,7 @@ reaplicar_baseline() {
     [ "$BASELINE_PASSADAS" -lt "$tentativas" ] || return 1
     grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BASELINE_INESPERADO" || return 1
     c_ylw "• parte do banco não aplicou (disputa com o app no ar ou conexão instável) — aplicando de novo, é seguro (passada $((BASELINE_PASSADAS + 1)) de $tentativas). O que não aplicou:"
-    sed -n '1,10s/^/    /p' <<<"$BASELINE_INESPERADO"
+    listar_erros_do_banco "$BASELINE_INESPERADO" 10 "    "
     sleep "$((espera * BASELINE_PASSADAS))"
     BASELINE_PASSADAS=$((BASELINE_PASSADAS + 1))
   done

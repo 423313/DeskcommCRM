@@ -107,7 +107,11 @@ if [ -n "$MESMA_TAG" ] && [ -n "$FORCE" ]; then
   # Com --force na mesma tag ninguém conferiu a imagem: quem chega aqui pediu
   # para refazer (é a saída que a própria atualização ensina quando o banco não
   # termina limpo). Dizer "o app está rodando uma imagem antiga" seria inventar.
-  c_ylw "Refazendo a versão $TARGET_TAG, como pedido (--force): backup, banco e app de novo."
+  if [ -n "$SKIP_BACKUP" ]; then
+    c_ylw "Refazendo a versão $TARGET_TAG, como pedido (--force): banco de novo, e confere o app."
+  else
+    c_ylw "Refazendo a versão $TARGET_TAG, como pedido (--force): backup e banco de novo, e confere o app."
+  fi
 elif [ -n "$MESMA_TAG" ]; then
   c_ylw "O código já está na $TARGET_TAG, mas o app está rodando uma imagem antiga. Vou atualizar a imagem."
 else
@@ -152,17 +156,32 @@ fi
 # `.env` como recomendamos, este passo passava a falhar em silêncio a cada
 # atualização — e é o update.sh que entrega migration nova ao clone (issue #192).
 step "Atualizando o banco de dados"
-# O que sobrou de errado no banco, para ser repetido no FIM da execução — ver o
-# passo 6. Vazio = o banco terminou limpo (ou não havia baseline para aplicar).
+# O que sobrou de errado no banco, para ser repetido no FIM da execução.
+# Vazio = o banco terminou limpo (ou não havia baseline para aplicar).
 BANCO_INCOMPLETO=""
-# A saída que re-aplica, dita no passo 4 e repetida no fim. Rodar o update.sh de
-# novo sem --force responderia "já está na versão mais recente" e não tocaria no
-# banco. E ele refaz a atualização INTEIRA (backup, banco, app), não só o que faltou.
-dica_de_repetir() {
-  c_ylw "  O banco seguiu ocupado ou fora de alcance nas $BASELINE_PASSADAS passadas, e parte dele pode ter"
-  c_ylw "  ficado para trás. Para completar, repita a atualização num horário de pouco movimento — ela faz"
-  c_ylw "  o backup de novo e reinicia o app por alguns segundos:"
-  c_ylw "    bash hostgator-setup-kit/update.sh --to $TARGET_TAG --force"
+# As linhas que repetir NÃO cura: as que não são de disputa nem de conexão
+# (permissão, dado). Vazio com BANCO_INCOMPLETO cheio = só o banco ocupado.
+BANCO_RESTANTE=""
+# O que fazer, dito por causa, no passo 4 e de novo no fim. Rodar o update.sh sem
+# --force responderia "já está na versão mais recente" e não tocaria no banco.
+# O restore vem por ÚLTIMO: ele desfaz também o que o CRM gravou desde o backup.
+orientar_banco_incompleto() {
+  if [ -z "$BANCO_RESTANTE" ]; then
+    c_ylw "  O banco seguiu ocupado ou fora de alcance nas $BASELINE_PASSADAS passadas, e parte dele pode ter"
+    c_ylw "  ficado para trás. Confira se o banco está no ar e repita a atualização, de preferência num"
+    c_ylw "  horário de pouco movimento (reaplica o banco; o site pode piscar por alguns segundos):"
+    c_ylw "    bash hostgator-setup-kit/update.sh --to $TARGET_TAG --force"
+  else
+    case "$BANCO_RESTANTE" in
+      *permission\ denied*|*must\ be\ owner*|*permissão\ negada*)
+        c_ylw "  Os erros são de PERMISSÃO: a conexão do .env não é o dono do banco. Num Supabase próprio,"
+        c_ylw "  declare SUPABASE_DB_ADMIN_URL no .env — é ela que roda o schema — e repita a atualização:"
+        c_ylw "    bash hostgator-setup-kit/update.sh --to $TARGET_TAG --force" ;;
+      *)
+        c_ylw "  Repetir a atualização não resolve esses erros: guarde a mensagem acima e peça ajuda." ;;
+    esac
+  fi
+  c_ylw "  Só em último caso, volte ao backup feito antes desta atualização (restore.sh)."
 }
 if [ -f supabase/baseline.sql ]; then
   # Extensões que o schema exige (idempotente; iguais ao install.sh).
@@ -172,26 +191,20 @@ if [ -f supabase/baseline.sql ]; then
 
   if reaplicar_baseline "$PROJECT_DIR/supabase/baseline.sql"; then
     if [ "$BASELINE_PASSADAS" -gt 1 ]; then
-      c_grn "✓ banco atualizado na passada $BASELINE_PASSADAS — as anteriores perderam para o app no ar (o que não aplicou está listado acima)."
+      c_grn "✓ banco atualizado na passada $BASELINE_PASSADAS — as anteriores não aplicaram tudo (banco ocupado ou conexão instável; o que faltou está listado acima)."
     else
       c_grn "✓ banco atualizado (e conversas reorganizadas, se havia bagunça)."
     fi
   else
     BANCO_INCOMPLETO="$BASELINE_INESPERADO"
+    BANCO_RESTANTE="$(printf '%s\n' "$BANCO_INCOMPLETO" | grep -viE "$BASELINE_ERROS_DE_DISPUTA" || true)"
     c_ylw "⚠ Apareceram avisos no banco que NÃO são os esperados:"
-    # `sed -n`, e não `| head`: com pipefail, o head que fecha cedo mata o printf
-    # com SIGPIPE numa lista grande — e o set -e derrubava o script aqui, antes
-    # do aviso de PERMISSÃO logo abaixo, que foi escrito justamente para ela.
-    sed -n '1,20p' <<<"$BANCO_INCOMPLETO"
-    c_ylw "  O app pode ainda funcionar. Se algo estiver errado, restaure o backup (restore.sh)."
-    case "$BANCO_INCOMPLETO" in
-      *permission\ denied*|*must\ be\ owner*|*permissão\ negada*)
-        c_ylw "  Os erros são de PERMISSÃO: a conexão do .env não é o dono do banco. Num Supabase"
-        c_ylw "  próprio, declare SUPABASE_DB_ADMIN_URL no .env — é ela que roda o schema." ;;
-    esac
-    if grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BANCO_INCOMPLETO"; then
-      dica_de_repetir
-    fi
+    # Sem `| head`: com pipefail, o head que fecha cedo mata o printf com SIGPIPE
+    # numa lista grande — e o set -e derrubava o script aqui, antes do aviso de
+    # PERMISSÃO, que foi escrito justamente para ela.
+    listar_erros_do_banco "$BANCO_INCOMPLETO" 20
+    c_ylw "  O app pode ainda funcionar."
+    orientar_banco_incompleto
   fi
 else
   c_ylw "⚠ supabase/baseline.sql não encontrado — pulei a parte do banco."
@@ -328,14 +341,7 @@ ok=""
 wait_app_healthy 20 3 >/dev/null && ok=1
 if [ -n "$ok" ]; then
   if [ -n "$BANCO_INCOMPLETO" ]; then
-    # Repetido aqui porque é no fim que o dono lê: na v1.27.3 de uma VPS real o
-    # aviso do passo 4 ficou soterrado por centenas de linhas do docker pull, e a
-    # última frase da tela era "Atualização concluída".
-    c_ylw "⚠ App no ar e saudável, mas o banco NÃO terminou limpo — os avisos estão no passo"
-    c_ylw "  \"Atualizando o banco de dados\", acima."
-    if grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BANCO_INCOMPLETO"; then
-      dica_de_repetir
-    fi
+    c_ylw "⚠ App no ar e saudável, mas o banco NÃO terminou limpo — o que fazer está no fim desta saída."
   else
     c_grn "✓ Atualização concluída — app no ar e saudável."
   fi
@@ -382,3 +388,13 @@ fi
 step "Conferindo as automações"
 ensure_encryption_key .env
 setup_event_log_drain_cron
+
+# ── Fim: o banco que não terminou limpo é a ÚLTIMA coisa na tela ─────────────
+# Na v1.27.3 de uma VPS real o aviso do passo 4 ficou soterrado por centenas de
+# linhas do docker pull, e as últimas linhas da tela eram ✓ verdes. É aqui,
+# depois de tudo, que o dono lê.
+if [ -n "$BANCO_INCOMPLETO" ]; then
+  step "Atenção: o banco NÃO terminou limpo nesta atualização"
+  c_ylw "  Os avisos completos estão no passo \"Atualizando o banco de dados\", acima."
+  orientar_banco_incompleto
+fi
