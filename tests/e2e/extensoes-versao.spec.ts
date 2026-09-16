@@ -17,10 +17,45 @@ const expect = expectBase.configure({ timeout: 20_000 });
 const EVIDENCE = "evidence/extensoes/versao";
 
 test.use({ trace: "on" });
+// O prazo vale para o arquivo inteiro, e não só dentro do corpo: gravar o trace de uma jornada de
+// quatro minutos acontece depois do corpo e estourava os 30 s da configuração global (medido na
+// segunda rodada: oito capturas gravadas, trace.zip incompleto, "Test timeout of 30000ms").
+test.describe.configure({ timeout: 480_000 });
 
 let atores: AtoresDasExtensoes | undefined;
 let catalogo: CatalogoDeVersoes | undefined;
 const contextosExtras: BrowserContext[] = [];
+
+/**
+ * Registra cada aviso (toast) assim que ele entra na página. Um aviso dura 4 s na tela; com a
+ * máquina carregada, o Playwright chegou a olhar só depois de ele sair (medido na terceira
+ * rodada: admissão concluída no banco, aviso nunca flagrado). O registro não perde o aviso, e a
+ * asserção continua sendo sobre o texto que a pessoa viu.
+ */
+async function registrarAvisos(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const vistos: string[] = [];
+    Object.defineProperty(window, "__avisosVistos", { value: vistos });
+    new MutationObserver(() => {
+      for (const aviso of document.querySelectorAll("[data-sonner-toast]")) {
+        const texto = aviso.textContent ?? "";
+        if (texto && !vistos.includes(texto)) vistos.push(texto);
+      }
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+  });
+}
+
+async function esperarAviso(page: Page, texto: string): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          (window as unknown as { __avisosVistos?: string[] }).__avisosVistos?.join("\n") ?? "",
+        ),
+      { timeout: 30_000 },
+    )
+    .toContain(texto);
+}
 
 async function login(page: Page, email: string, senha: string): Promise<void> {
   await page.goto("/login");
@@ -103,6 +138,8 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
   test.setTimeout(480_000);
   let installationId = "";
 
+  await registrarAvisos(page);
+
   await test.step("admite o catálogo com as duas versões e instala a 1.0.0", async () => {
     await login(page, atores!.usuarios.owner.email, atores!.senha);
     await page.goto("/app/extensions");
@@ -111,14 +148,12 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     await expect(page.getByTestId("extension-catalog-admission")).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("extension-catalog-file").setInputFiles(catalogo!.catalogo);
     await page.getByTestId("extension-catalog-submit").click();
-    await expect(page.getByText("Catálogo admitido e disponível para instalação.")).toBeVisible();
+    await esperarAviso(page, "Catálogo admitido e disponível para instalação.");
     await page.getByRole("tab", { name: "Catálogo" }).click();
 
     await expect(botaoDoCatalogo(page, "1.0.0")).toHaveText("Instalar versão revisada");
     await botaoDoCatalogo(page, "1.0.0").click();
-    await expect(
-      page.getByText("Extensão instalada. Agora um administrador da organização pode ativá-la."),
-    ).toBeVisible();
+    await esperarAviso(page, "Extensão instalada. Agora um administrador da organização pode ativá-la.");
     const linha = await instalacao();
     installationId = linha.id;
     expect(linha).toMatchObject({ version: "1.0.0", revision: 1, previous_artifact_id: null });
@@ -155,9 +190,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     await page
       .getByTestId(`extension-install-confirm-${catalogo!.publisher}-${catalogo!.name}-1.1.0`)
       .click();
-    await expect(
-      page.getByText("Extensão atualizada. As organizações que a usavam continuam com ela ativa."),
-    ).toBeVisible();
+    await esperarAviso(page, "Extensão atualizada. As organizações que a usavam continuam com ela ativa.");
 
     const linha = await instalacao();
     expect(linha).toMatchObject({ id: installationId, version: "1.1.0", revision: 2 });
@@ -168,8 +201,11 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     });
     expect(await vinculo(atores!.organizacaoB, installationId)).toBeNull();
     await expect(
-      page.locator('[data-testid^="extension-operation-"]').filter({ hasText: "Atualização" }).first(),
-    ).toContainText(`${catalogo!.publisher}/${catalogo!.name} 1.0.0 → 1.1.0`);
+      page
+        .locator('[data-testid^="extension-operation-"]')
+        .filter({ hasText: `${catalogo!.publisher}/${catalogo!.name} 1.0.0 → 1.1.0` })
+        .first(),
+    ).toContainText("Atualização");
 
     await page.goto(`/app/extensions/${installationId}`);
     await expect(page.getByTestId(`extension-guide-card-${catalogo!.cardNovo.id}`)).toContainText(
@@ -186,6 +222,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     const contexto = await browser.newContext();
     contextosExtras.push(contexto);
     const antiga = await contexto.newPage();
+    await registrarAvisos(antiga);
     await login(antiga, atores!.usuarios.owner.email, atores!.senha);
     await gestao(antiga, "Instaladas");
     await expect(antiga.getByTestId(`extension-revert-${installationId}`)).toHaveText(
@@ -201,9 +238,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     await expect(dialogo).toContainText(`Voltar ${catalogo!.title} para a versão 1.0.0?`);
     await expect(dialogo).toContainText("1 organização está com esta extensão ativa.");
     await page.getByTestId(`extension-revert-confirm-${installationId}`).click();
-    await expect(
-      page.getByText("Troca desfeita: a versão 1.0.0 voltou a valer em todas as organizações."),
-    ).toBeVisible();
+    await esperarAviso(page, "Troca desfeita: a versão 1.0.0 voltou a valer em todas as organizações.");
     expect(await instalacao()).toMatchObject({ version: "1.0.0", revision: 3 });
 
     // A aba antiga ainda mostra a revisão 2; se tivesse recarregado, o botão diria "1.1.0" e
@@ -213,15 +248,15 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     );
     await antiga.getByTestId(`extension-revert-${installationId}`).click();
     await antiga.getByTestId(`extension-revert-confirm-${installationId}`).click();
-    await expect(
-      antiga.getByText(
-        "A extensão mudou em outra sessão. Recarregamos o estado atual; revise antes de repetir.",
-      ),
-    ).toBeVisible();
+    await esperarAviso(antiga, "A extensão mudou em outra sessão. Recarregamos o estado atual; revise antes de repetir.");
     await expect(antiga.getByTestId(`extension-revert-${installationId}`)).toHaveText(
       "Desfazer a última troca (volta para 1.1.0)",
     );
     await antiga.screenshot({ path: `${EVIDENCE}/3-aba-antiga-recusada.png`, fullPage: true });
+    // Fecha aqui, e não no afterAll: gravar o trace deste contexto na limpeza estourava o prazo.
+    contextosExtras.splice(contextosExtras.indexOf(contexto), 1);
+    await contexto.close();
+    await page.bringToFront();
     expect(await instalacao()).toMatchObject({ version: "1.0.0", revision: 3 });
   });
 
@@ -240,7 +275,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     );
     await page.screenshot({ path: `${EVIDENCE}/4-confirmar-remocao.png` });
     await page.getByTestId(`extension-remove-confirm-${installationId}`).click();
-    await expect(page.getByText("Extensão removida de todas as organizações.")).toBeVisible();
+    await esperarAviso(page, "Extensão removida de todas as organizações.");
 
     expect((await instalacao()).removed_at).not.toBeNull();
     const desligado = await vinculo(atores!.organizacaoA, installationId);
@@ -294,9 +329,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     await page
       .getByTestId(`extension-install-confirm-${catalogo!.publisher}-${catalogo!.name}-1.0.0`)
       .click();
-    await expect(
-      page.getByText("Extensão reinstalada. Cada organização precisa ativá-la de novo."),
-    ).toBeVisible();
+    await esperarAviso(page, "Extensão reinstalada. Cada organização precisa ativá-la de novo.");
     expect(await instalacao()).toMatchObject({
       id: installationId,
       version: "1.0.0",
@@ -328,8 +361,12 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
       .getByTestId(`extension-install-confirm-${catalogo!.publisher}-${catalogo!.name}-1.1.0`)
       .click();
 
+    // A Atividade recente lista recibos de rodadas anteriores: sem a identidade desta rodada, um
+    // "Atualização · Falhou" antigo satisfazia o filtro antes de esta falha existir (medido na
+    // quarta rodada: a tela passou e o banco ainda não tinha o recibo).
     const recibo = page
       .locator('[data-testid^="extension-operation-"]')
+      .filter({ hasText: `${catalogo!.publisher}/${catalogo!.name}` })
       .filter({ hasText: "Atualização" })
       .filter({ hasText: "Falhou" })
       .first();

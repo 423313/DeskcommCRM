@@ -1,0 +1,9 @@
+{
+  "publisher": "versoes-84fcf077ea",
+  "name": "guia-84fcf077ea",
+  "revision": 22,
+  "package_sha256": {
+    "1.0.0": "b5b0e2807a7828d5f23c3bf5e6c50c6917928cb3f464a00c9c3c8fd88cd0187b",
+    "1.1.0": "a6db824bb3d3f2ad6eb229b06e726fdf251c3da993cc05336d565fa3640258f6"
+  }
+}
