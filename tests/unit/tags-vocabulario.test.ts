@@ -129,6 +129,22 @@ describe("fatia S4 — vocabulário de tags (contrato do que foi escrito)", () =
     expect(existsSync(join(raiz, "app/app/settings/tags/page.tsx"))).toBe(true);
   });
 
+  it("o teto da tela é o MESMO `limit` do SQL — e a tela avisa quando bate nele", () => {
+    // Duas cópias do mesmo número em arquivos diferentes: o `limit` da função e
+    // o `TETO_DA_LISTA` do painel. Divergir não dá erro nenhum — dá uma tela que
+    // corta em 500 e avisa em 400, ou que corta em 500 e nunca avisa. Este caso
+    // liga as duas, e é o único lugar do repo que pode.
+    const sql = ler(MIGRATION);
+    const teto = /limit (\d+);/.exec(sql)?.[1];
+    expect(teto, "a função precisa ter um `limit` explícito").toBeDefined();
+
+    const painel = ler("app/app/settings/tags/_painel.tsx");
+    expect(painel).toContain(`const TETO_DA_LISTA = ${teto};`);
+    expect(painel).toContain("tags.length >= TETO_DA_LISTA");
+    // E a frase do aviso nomeia o mesmo número — quem lê a tela não abre o SQL.
+    expect(painel).toContain(`Mostrando as ${teto} primeiras etiquetas`);
+  });
+
   it("a rota usa ok()/fail(), exige manager e chama a operação transacional", () => {
     const rota = ler("app/api/v1/tags/vocabulario/route.ts");
     expect(rota).toMatch(/from "@\/lib\/api\/wrappers"/);

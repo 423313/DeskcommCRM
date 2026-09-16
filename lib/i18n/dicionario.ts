@@ -8738,6 +8738,43 @@ export const DICIONARIO: Traducoes = {
   "Aplicando...": {
     es: "Aplicando...",
   },
+  // ── Frases do painel de etiquetas que ANTES eram template literal ──────────
+  // `traduzir()` casa a string EXATA: uma frase montada em runtime
+  // (`t(`Renomear "${tag}" para:`)`) nunca casa chave nenhuma, e o painel inteiro
+  // saía em português para quem escolheu espanhol — sem o guarda de i18n ver
+  // nada, porque ele só registra `StringLiteral` e `NoSubstitutionTemplateLiteral`.
+  // O dado agora entra FORA do `t()`, e o que sobra são estas chaves estáticas.
+  "para:": { es: "a:" },
+  "em outra etiqueta existente:": { es: "en otra etiqueta existente:" },
+  // `"de"` NÃO entra aqui: a chave já existe mais acima no arquivo (linha ~896),
+  // e repeti-la é TS1117 — o `as const` do dicionário reprova chave duplicada.
+  "contato(s),": { es: "contacto(s)," },
+  "lead(s) e": { es: "lead(s) y" },
+  "conversa(s).": { es: "conversación(es)." },
+  "Atenção:": { es: "Atención:" },
+  "regra(s) de agente continuam escrevendo esta etiqueta. Excluir aqui não apaga a regra — o agente vai recriar a etiqueta no próximo atendimento.": {
+    es: "regla(s) de agente siguen escribiendo esta etiqueta. Eliminar aquí no borra la regla — el agente volverá a crear la etiqueta en la próxima atención.",
+  },
+  "Etiqueta removida de": { es: "Etiqueta eliminada de" },
+  "Etiqueta atualizada em": { es: "Etiqueta actualizada en" },
+  "registro(s).": { es: "registro(s)." },
+  "registro(s) e em": { es: "registro(s) y en" },
+  "regra(s) de agente.": { es: "regla(s) de agente." },
+  // As frases de recusa do servidor. Três delas não tinham entrada: o argumento
+  // de `t()` ali é uma expressão `??`, que o guarda também não resolve.
+  "Confira a etiqueta e o novo nome.": { es: "Revisa la etiqueta y el nombre nuevo." },
+  "Só um gerente ou administrador da organização pode mudar as etiquetas.": {
+    es: "Solo un gerente o administrador de la organización puede cambiar las etiquetas.",
+  },
+  "Não foi possível concluir agora. Tente de novo.": {
+    es: "No se pudo completar ahora. Inténtalo de nuevo.",
+  },
+  "Não foi possível falar com o servidor. Recarregue a página e confira antes de tentar de novo.": {
+    es: "No se pudo contactar al servidor. Recarga la página y comprueba antes de intentarlo de nuevo.",
+  },
+  "Mostrando as 500 primeiras etiquetas em ordem alfabética. Se a que você procura não está aqui, arrume primeiro as que aparecem.": {
+    es: "Mostrando las primeras 500 etiquetas en orden alfabético. Si la que buscas no está aquí, arregla primero las que aparecen.",
+  },
 };
 
 /**

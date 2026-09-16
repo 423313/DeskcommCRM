@@ -2280,3 +2280,28 @@ healthcheck, levando junto o `psql` do baseline — o log do CLI é que diz
 `container is not ready: unhealthy`; e um Realtime unhealthy varrendo o WAL levou o
 Postgres a `57014 statement timeout` e o GoTrue a `504`. **O Realtime não foi
 exercitado nesta rodada.**
+
+---
+
+## J24 — O vocabulário de etiquetas da organização `[P1]` (2026-09-15)
+
+Tela nova de Configurações › Tags (PR #955, issue #852 fatia S4): a lista das
+etiquetas com o peso de cada uma e as três operações — renomear, juntar, excluir.
+
+**As três ações são irreversíveis na prática** (não há desfazer) e uma delas é
+destrutiva. Registrado aqui porque a tela foi para o lote **sem ninguém ter
+clicado nos botões uma vez**: o autor declara no PR "a tela não foi aberta em
+navegador nem coberta por Playwright", e o aceite da própria issue #852 pedia
+Playwright.
+
+Regra no banco: `tests/invariants/tags-vocabulario.test.ts` (`pnpm test:db`).
+Contrato da rota, sem banco: `tests/unit/tags-vocabulario-rota.test.ts`.
+
+| # | Caso | Resultado |
+|---|---|---|
+| J24.1 | Renomear uma etiqueta que está numa regra de automação de DOIS tipos de ação deixa a regra com as duas | **PASS por invariante** (`renomear preserva TODAS as ações da regra`). Era o defeito BLOQUEADOR achado na triagem: o `group by (regra, tipo)` truncava a regra ao subconjunto de um tipo, em toda organização, mesmo numa regra que nunca citou a etiqueta. Medido num Postgres real antes do conserto: regra com `add_tag` + `assign_owner` ficava com 1 ação |
+| J24.2 | Juntar duas etiquetas de chaves diferentes não deixa a etiqueta repetida no array | **PASS por invariante** (`juntar duas etiquetas de chaves DIFERENTES…`). Medido antes do conserto: `{VIP, obra}` juntando `obra` em `VIP` devolvia `{VIP, VIP}` — e a leitura conta OCORRÊNCIAS, então o registro passava a pesar 2 na tela que deveria arrumá-lo |
+| J24.3 | A lista carrega com as contagens, pela tela | **NÃO COBERTO** — falta Playwright e evidência visual |
+| J24.4 | Excluir mostra o aviso de quantas regras continuam escrevendo a etiqueta | **NÃO COBERTO pela tela** — a regra está no invariante (`excluir … NÃO apaga a regra`), o AVISO não foi visto por ninguém |
+| J24.5 | Quem é `viewer`/`agent` não chega à tela | **PASS por leitura de código + invariante** (`viewer é recusado antes de qualquer escrita`). O atalho de platform admin saiu da página e da rota na triagem: `fn_role_at_least` não conhece platform admin, então a tela oferecia três botões que todos voltavam 403 |
+| J24.6 | O painel em espanhol | **CORRIGIDO na triagem, sem prova de tela** — seis chamadas `t()` recebiam template literal com interpolação, que `traduzir()` nunca casa: o diálogo inteiro e os dois toasts saíam em português para quem escolheu espanhol, e o guarda de i18n não vê `TemplateExpression` |

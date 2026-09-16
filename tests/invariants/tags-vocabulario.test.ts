@@ -102,6 +102,54 @@ describe("fatia S4 — vocabulário de tags", () => {
     }
   });
 
+  it("juntar duas etiquetas de chaves DIFERENTES não deixa a etiqueta repetida", async () => {
+    // O caso acima passa por acidente: 'vip' e 'VIP' já têm a MESMA chave
+    // canônica ANTES da substituição, então deduplicar pela entrada resolve.
+    // No `juntar` de verdade as chaves são diferentes por definição — é o que
+    // torna as duas etiquetas duas —, e elas só colidem DEPOIS da troca de nome.
+    // Medido num Postgres real com a versão anterior de `fn_tags_normalizar`:
+    // {VIP, obra} juntando 'obra' em 'VIP' devolvia {VIP, VIP}.
+    await pool.query(
+      "update public.crm_leads set tags = array['VIP','obra'] where organization_id = $1",
+      [GOV_ORG],
+    );
+    await operar(GOV_ORG, "juntar", "obra", "VIP");
+
+    const linhas = await pool.query(
+      "select tags from public.crm_leads where organization_id = $1",
+      [GOV_ORG],
+    );
+    for (const linha of linhas.rows) {
+      expect(linha.tags as string[]).toEqual(["VIP"]);
+    }
+  });
+
+  it("renomear preserva TODAS as ações da regra, não só as do tipo add_tag", async () => {
+    // O bloco (d) agrupava por (regra, TIPO de ação): o `update ... from alvo`
+    // casava uma linha por tipo e o Postgres usava uma arbitrária, truncando a
+    // regra ao subconjunto de um tipo só — em TODA organização, mesmo numa regra
+    // que nunca citou a etiqueta renomeada. Medido num Postgres real: regra com
+    // `add_tag` + `assign_owner` ficava com UMA ação, e a operação reportava
+    // "atualizada em 1 regra(s) de agente".
+    const regra = "cccccccc-7777-4000-8000-000000000002";
+    await pool.query(
+      `insert into public.automation_rules(id,organization_id,name,trigger_event,actions)
+       values($1,$2,'Regra de dois tipos','message.received',
+              '[{"type":"add_tag","config":{"tags":["promo"]}},{"type":"assign_owner","config":{"user_id":"${GOV_MANAGER}"}}]'::jsonb)
+       on conflict (id) do update set actions = excluded.actions`,
+      [regra, GOV_ORG],
+    );
+
+    await operar(GOV_ORG, "renomear", "promo", "Promoção");
+
+    const depois = await pool.query("select actions from public.automation_rules where id = $1", [regra]);
+    const acoes = depois.rows[0].actions as Array<{ type: string; config?: { tags?: string[] } }>;
+    expect(acoes).toHaveLength(2);
+    expect(acoes[0]?.config?.tags).toEqual(["Promoção"]);
+    // A ação do OUTRO tipo continua inteira — é ela que a versão anterior comia.
+    expect(acoes[1]?.type).toBe("assign_owner");
+  });
+
   it("excluir tira dos arrays e NÃO apaga a regra add_tag (só informa quantas sobram)", async () => {
     const regra = "cccccccc-7777-4000-8000-000000000001";
     await pool.query(
