@@ -53,6 +53,21 @@ export interface EtapaDoFunil {
   is_archived: boolean;
 }
 
+/**
+ * A recusa de fronteira de funil (P-01), UMA string para os DOIS call sites: a
+ * rota `/move` (o quadro) e o `moveLeadHandler` (IA, lote e automações).
+ *
+ * ⚠️ Constante, e não literal repetido, porque o texto é CHAVE do dicionário: o
+ * PR que a reescreveu mudou os dois lugares e deixou as duas entradas de espanhol
+ * órfãs, então quem usa o produto em espanhol voltou a ler português. O gate de
+ * i18n não pega isso — `tests/unit/i18n-espanhol-cobre-a-tela.test.ts` varre
+ * `app` e `components`, e ignora `api`. Com uma fonte só, mudar a frase e
+ * esquecer a tradução deixa `tests/unit/recusa-de-funil-fala-espanhol.test.ts`
+ * vermelho.
+ */
+export const RECUSA_DE_TROCA_DE_FUNIL =
+  "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.";
+
 export interface Recusa {
   status: number;
   code: string;

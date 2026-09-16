@@ -16,6 +16,7 @@ import { resolveOwnerPatch, type OwnerPatch, type OwnerPatchInput } from "@/lib/
 import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitter";
 import { listaLegivel } from "@/lib/leads/activity-vocabulary";
 import { camposAlterados } from "@/lib/leads/campos-alterados";
+import { RECUSA_DE_TROCA_DE_FUNIL } from "@/lib/leads/clonar-para-funil";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import {
   decideMotivoDaPerda,
@@ -647,10 +648,7 @@ export async function moveLeadHandler(
       "pipeline_immutable_use_clone",
       { use: "/api/v1/leads/{id}/clone" },
       ctx.requestId,
-      traduzir(
-        "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.",
-        ctx.idioma ?? "pt-BR",
-      ),
+      traduzir(RECUSA_DE_TROCA_DE_FUNIL, ctx.idioma ?? "pt-BR"),
     );
   }
 
