@@ -713,13 +713,6 @@ export async function moveLeadHandler(
     );
   }
 
-  const { data: fresh } = await supabase
-    .from("crm_leads")
-    .select("*")
-    .eq("id", leadId)
-    .maybeSingle();
-  const finalLead = (fresh ?? updated) as Record<string, unknown>;
-
   const a = actorAuditPayload(ctx.actor);
   await createAdminClient()
     .rpc("emit_event", {
@@ -732,7 +725,10 @@ export async function moveLeadHandler(
         from_stage_id: lead.stage_id,
         to_stage_id: input.to_stage_id,
         position_in_stage: position,
-        status: (finalLead as { status: string }).status,
+        // `updated` é o retorno do próprio UPDATE, e `trg_crm_lead_close_on_stage`
+        // é BEFORE (baseline.sql): o `status` que o gatilho escreveu já está
+        // aqui. Ler a releitura do fim seria amarrar este evento à ordem dela.
+        status: (updated as { status: string }).status,
       },
       p_metadata: { request_id: ctx.requestId, ...a.metadataActor },
       p_organization_id: lead.organization_id,
@@ -853,6 +849,28 @@ export async function moveLeadHandler(
       requestId: ctx.requestId,
     });
   }
+
+  // ── A ÚLTIMA LEITURA VEM DEPOIS DA ÚLTIMA ESCRITA (issue #916) ─────────────
+  //
+  // Reler o lead ANTES de gravar a atividade devolvia um `updated_at` que a
+  // própria requisição já invalidava: o INSERT de `stage_changed` dispara
+  // `trg_update_last_activity_at`, cuja lista positiva inclui `stage_changed`
+  // (baseline.sql), e o `update crm_leads` dele passa por `fn_set_updated_at`
+  // (`new.updated_at := now()`, incondicional). Quem guardar esta resposta para
+  // a próxima trava otimista leva 409 no gesto seguinte.
+  //
+  // Este é o caminho da IA, do lote e das automações — o irmão de
+  // `app/api/v1/leads/[id]/move/route.ts`, onde a mesma inversão já foi
+  // corrigida. `agent_move_corrected` NÃO está na lista positiva, mas a
+  // releitura vem depois dele também: a ordem certa não depende de qual tipo
+  // está na lista hoje.
+  const { data: fresh } = await supabase
+    .from("crm_leads")
+    .select("*")
+    .eq("id", leadId)
+    .eq("organization_id", ctx.organization_id)
+    .maybeSingle();
+  const finalLead = (fresh ?? updated) as Record<string, unknown>;
 
   await audit({
     action: "lead.moved",

@@ -17,13 +17,14 @@
  * produzem, sem depender de arrastar pixels no jsdom.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BoardData } from "@/lib/kanban/types";
 
 const post = vi.hoisted(() => vi.fn());
+const patch = vi.hoisted(() => vi.fn());
 const capturado = vi.hoisted(() => ({
   onDragEnd: null as ((r: unknown) => void) | null,
 }));
@@ -58,11 +59,12 @@ vi.mock("@/hooks/realtime/useRefetchDeSeguranca", () => ({
 // intervalo entre a resposta do move e o refetch do `onSettled` chegar. Um GET
 // que responde fecha essa janela e o teste passaria a medir o refetch.
 vi.mock("@/lib/api/client", () => ({
-  apiClient: { post, get: vi.fn(() => new Promise<never>(() => {})) },
+  apiClient: { post, patch, get: vi.fn(() => new Promise<never>(() => {})) },
 }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
 
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { useEditLead, useLoseLead, useWinLead } from "@/hooks/kanban/useUpdateLead";
 
 const PIPELINE = "p-1";
 const LEAD = "l-1";
@@ -110,6 +112,7 @@ async function arrastar(): Promise<void> {
 
 beforeEach(() => {
   post.mockReset();
+  patch.mockReset();
   capturado.onDragEnd = null;
   qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -158,6 +161,106 @@ describe("o quadro manda o updated_at do card que ele renderiza", () => {
     expect(post).toHaveBeenLastCalledWith(
       `/api/v1/leads/${LEAD}/move`,
       expect.objectContaining({ expected_updated_at: DEPOIS_DO_PRIMEIRO }),
+    );
+  });
+});
+
+/**
+ * OS IRMÃOS DO ARRASTO — ganhar, perder e editar (issue #916, segunda metade).
+ *
+ * O conserto do #919 parou no `useMoveCard`. As outras três mutações do quadro
+ * recebiam o lead na resposta e a descartavam, então o 409 continuava alcançável
+ * por outro gesto, e por um caminho MAIS provável que arrastar duas vezes: abrir
+ * o dossiê, editar o negócio, fechar e arrastar o card. O quadro segue lendo o
+ * `updated_at` de antes da edição enquanto o refetch do `onSettled` não chega.
+ *
+ * O teste mede o que o fio carrega, no ponto de uso — não o que o hook escreve
+ * no cache: entre o `setQueryData` do hook e o `expected_updated_at` do arrasto
+ * está `KanbanBoard`, que é quem escolhe de onde ler.
+ */
+const DEPOIS_DA_EDICAO = "2026-09-15T12:00:02.000Z";
+
+async function quadroMontado(): Promise<void> {
+  render(<KanbanBoard pipelineId={PIPELINE} />, { wrapper });
+  await waitFor(() => expect(capturado.onDragEnd).not.toBeNull());
+}
+
+/**
+ * Deixa o quadro RE-RENDERIZAR antes do arrasto.
+ *
+ * `capturado.onDragEnd` é o callback da última renderização, e ele fecha sobre o
+ * `data` daquele instante — é assim no produto também (`handleDragEnd` é um
+ * `useCallback` com `[data]` nas dependências). Sem este flush o teste mediria o
+ * fechamento velho e diria "não gravou" sobre um cache que gravou.
+ */
+async function quadroRedesenhado(esperado: string): Promise<void> {
+  await waitFor(() =>
+    expect(
+      qc.getQueryData<BoardData>(["board", PIPELINE])!.leads.find((l) => l.id === LEAD)!.updated_at,
+    ).toBe(esperado),
+  );
+  await act(async () => {});
+}
+
+describe("mexer no negócio e arrastar em seguida", () => {
+  it("depois de EDITAR, o arrasto manda o updated_at que a edição devolveu", async () => {
+    patch.mockResolvedValue({
+      data: { id: LEAD, stage_id: "s-1", updated_at: DEPOIS_DA_EDICAO },
+    });
+    post.mockResolvedValue({
+      data: { id: LEAD, stage_id: "s-2", position_in_stage: 500, updated_at: "2026-09-15T12:00:09.000Z" },
+    });
+    await quadroMontado();
+
+    const { result } = renderHook(() => useEditLead(PIPELINE), { wrapper });
+    await act(() => result.current.mutateAsync({ leadId: LEAD, patch: { title: "novo" } }));
+    await quadroRedesenhado(DEPOIS_DA_EDICAO);
+
+    await arrastar();
+
+    expect(post).toHaveBeenCalledWith(
+      `/api/v1/leads/${LEAD}/move`,
+      expect.objectContaining({ expected_updated_at: DEPOIS_DA_EDICAO }),
+    );
+  });
+
+  it("depois de PERDER, o arrasto manda o updated_at que a perda devolveu", async () => {
+    post.mockImplementation(async (url: string) =>
+      url.endsWith("/lose")
+        ? { data: { id: LEAD, stage_id: "s-1", status: "lost", updated_at: DEPOIS_DA_EDICAO } }
+        : { data: { id: LEAD, stage_id: "s-2", position_in_stage: 500, updated_at: "2026-09-15T12:00:09.000Z" } },
+    );
+    await quadroMontado();
+
+    const { result } = renderHook(() => useLoseLead(PIPELINE), { wrapper });
+    await act(() => result.current.mutateAsync({ leadId: LEAD, lostReason: "price" }));
+    await quadroRedesenhado(DEPOIS_DA_EDICAO);
+
+    await arrastar();
+
+    expect(post).toHaveBeenLastCalledWith(
+      `/api/v1/leads/${LEAD}/move`,
+      expect.objectContaining({ expected_updated_at: DEPOIS_DA_EDICAO }),
+    );
+  });
+
+  it("depois de GANHAR, o arrasto manda o updated_at que o ganho devolveu", async () => {
+    post.mockImplementation(async (url: string) =>
+      url.endsWith("/win")
+        ? { data: { id: LEAD, stage_id: "s-1", status: "won", updated_at: DEPOIS_DA_EDICAO } }
+        : { data: { id: LEAD, stage_id: "s-2", position_in_stage: 500, updated_at: "2026-09-15T12:00:09.000Z" } },
+    );
+    await quadroMontado();
+
+    const { result } = renderHook(() => useWinLead(PIPELINE), { wrapper });
+    await act(() => result.current.mutateAsync({ leadId: LEAD }));
+    await quadroRedesenhado(DEPOIS_DA_EDICAO);
+
+    await arrastar();
+
+    expect(post).toHaveBeenLastCalledWith(
+      `/api/v1/leads/${LEAD}/move`,
+      expect.objectContaining({ expected_updated_at: DEPOIS_DA_EDICAO }),
     );
   });
 });
