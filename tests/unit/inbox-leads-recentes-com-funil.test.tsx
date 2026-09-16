@@ -20,17 +20,11 @@ const conversation = {
   contacts: { id: CONTACT, display_name: "Fulana", name: null, phone_number: "5511999", tags: [] },
 } as unknown as React.ComponentProps<typeof CRMSidePanel>["conversation"];
 
-function leadRow(
-  id: string,
-  funil: string,
-  etapa: string,
-  status: string,
-  vocabulario: Record<string, string> | null = null,
-) {
+function leadRow(id: string, funil: string, etapa: string, status: string) {
   return {
     id, title: "Felipe", status, value_cents: null, currency: null,
     updated_at: "2026-09-15T12:00:00Z", pipeline_id: `p-${id}`, custom_fields: {}, field_defs: [],
-    funil_nome: funil, etapa_nome: etapa, vocabulario,
+    funil_nome: funil, etapa_nome: etapa,
   };
 }
 
@@ -84,34 +78,6 @@ describe("painel do inbox — leads recentes dizem funil, etapa e status traduzi
   });
 
   /**
-   * Quem nomeia os dois desfechos é o FUNIL (`crm_pipelines.vocabulary`), e o
-   * DEFAULT do baseline é o de e-commerce — "Pago"/"Cancelado". Uma tela que
-   * cravasse "Ganho" nasceria divergindo da fonte declarada: o prompt do
-   * agente já lê `{{vocabulary.won}}`, e a IA chamaria de "Pago" o negócio que
-   * este painel chamaria de "Ganho", na mesma conversa.
-   */
-  it("o desfecho usa a palavra DO FUNIL — e-commerce lê 'Pago', não 'Ganho'", async () => {
-    get.mockResolvedValue(resposta([
-      leadRow("l-1", "Loja", "Checkout", "won", { won: "Pago", lost: "Cancelado" }),
-      leadRow("l-2", "Loja", "Checkout", "lost", { won: "Pago", lost: "Cancelado" }),
-    ]));
-    renderPainel();
-
-    const um = await screen.findByTestId("inbox-lead-l-1");
-    const dois = screen.getByTestId("inbox-lead-l-2");
-    expect(um.textContent).toContain("Pago");
-    expect(dois.textContent).toContain("Cancelado");
-    expect(`${um.textContent}${dois.textContent}`).not.toMatch(/Ganho|Perdido/);
-  });
-
-  it("funil sem vocabulário próprio cai no padrão do produto", async () => {
-    get.mockResolvedValue(resposta([leadRow("l-1", "Padrão", "Novo", "won", null)]));
-    renderPainel();
-
-    expect((await screen.findByTestId("inbox-lead-unico")).textContent).toContain("Ganho");
-  });
-
-  /**
    * `truncate` corta numa linha e o corte some pela DIREITA — a metade perdida
    * é sempre a ETAPA, que é o dado novo. Isto guarda o MECANISMO (a classe e o
    * `title`), não o pixel: jsdom não faz layout, então a largura em que a
@@ -131,6 +97,33 @@ describe("painel do inbox — leads recentes dizem funil, etapa e status traduzi
     expect(linha?.title).toBe(`${longo} · Proposta enviada`);
     expect(linha?.className).toContain("line-clamp-2");
     expect(linha?.className).not.toContain("truncate");
+  });
+
+  /**
+   * O desfecho NÃO sai de `crm_pipelines.vocabulary` — e a razão é o que essa
+   * coluna guarda numa instalação de verdade, não gosto. O DEFAULT dela é o de
+   * e-commerce (`won: Pago`, `lost: Cancelado`, supabase/baseline.sql), e nada
+   * no caminho normal a reescreve: o onboarding troca as ETAPAS pelo quadro do
+   * ramo (`fn_aplicar_quadro_do_onboarding` só atualiza nome e slug do funil), e
+   * `POST /api/v1/pipelines` não a preenche. Uma clínica recém-instalada tem
+   * "Consulta marcada" como etapa de ganho e "Pago" na coluna.
+   *
+   * A fixture traz o vocabulário EXATAMENTE como o banco o entregaria a essa
+   * clínica. Ler dele faria o painel dizer "Pago" sobre uma consulta.
+   */
+  it("clínica com o vocabulário que a coluna herda do e-commerce lê 'Ganho', não 'Pago'", async () => {
+    const herdado = { lead: "Cliente", deal: "Pedido", won: "Pago", lost: "Cancelado" };
+    get.mockResolvedValue(resposta([
+      { ...leadRow("l-1", "Clínica", "Consulta marcada", "won"), vocabulario: herdado, vocabulary: herdado },
+      { ...leadRow("l-2", "Clínica", "Não compareceu", "lost"), vocabulario: herdado, vocabulary: herdado },
+    ]));
+    renderPainel();
+
+    const um = await screen.findByTestId("inbox-lead-l-1");
+    const dois = screen.getByTestId("inbox-lead-l-2");
+    expect(um.textContent).toContain("Ganho");
+    expect(dois.textContent).toContain("Perdido");
+    expect(`${um.textContent}${dois.textContent}`).not.toMatch(/Pago|Cancelado/);
   });
 
   it("com um lead só, a linha também diz funil, etapa e status traduzido", async () => {
