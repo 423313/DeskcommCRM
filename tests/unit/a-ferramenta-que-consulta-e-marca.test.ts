@@ -185,4 +185,52 @@ describe("temFerramentaDeMarcacao (#831)", () => {
     // Consultar NÃO é marcar.
     expect(temFerramentaDeMarcacao(["crm_find_free_slots"])).toBe(false);
   });
+
+  it("REMARCAR sozinho não é marcar — o portão não alarga além do que a #831 pede", () => {
+    // `crm_reschedule_appointment` grava na agenda, mas só MOVE um compromisso
+    // que já existe. Com ela dentro, o agente que tem SÓ a remarcação (e que
+    // antes recebia o bloco de só-consulta) passava a receber o
+    // AGENDA_SYSTEM_BLOCK, que nomeia ferramentas de marcar que ele não tem —
+    // e o docstring do bloco irmão diz, com todas as letras, que ensinar uma
+    // ferramenta ausente faz o modelo tentar chamá-la.
+    expect(temFerramentaDeMarcacao(["crm_reschedule_appointment"])).toBe(false);
+    expect(temFerramentaDeMarcacao(["crm_reschedule_appointment", "crm_find_free_slots"])).toBe(
+      false,
+    );
+    // E quem tem remarcação JUNTO de uma ferramenta de marcar continua marcando.
+    expect(temFerramentaDeMarcacao(["crm_reschedule_appointment", "crm_book_appointment"])).toBe(
+      true,
+    );
+  });
+
+  it("o PONTO DE USO: quem só remarca recebe o bloco de CONSULTA, não o de marcar", async () => {
+    const { blocoResidenteDaAgenda } = await import("@/lib/agent-engine/agent/inbound-turn");
+
+    const soRemarca = blocoResidenteDaAgenda([
+      "crm_reschedule_appointment",
+      "crm_find_free_slots",
+    ]);
+    expect(soRemarca).not.toBeNull();
+    // O bloco de consulta é o que NÃO manda marcar — é o que lhe cabe.
+    expect(soRemarca!).toContain("quem confirma");
+    expect(soRemarca!).not.toContain("sua ferramenta de marcar");
+  });
+
+  it("o bloco de quem MARCA não nomeia uma ferramenta de marcar fixa", async () => {
+    // Quem tem SÓ `crm_find_and_book_appointment` — o "caminho preferido" que o
+    // próprio bloco descreve — recebia um texto que mandava chamar
+    // `crm_book_appointment` em três frases: ensinar uma ferramenta ausente faz
+    // o modelo tentar chamá-la.
+    const { blocoResidenteDaAgenda } = await import("@/lib/agent-engine/agent/inbound-turn");
+
+    const bloco = blocoResidenteDaAgenda(["crm_find_and_book_appointment"]);
+    expect(bloco).not.toBeNull();
+    expect(bloco!).toContain("sua ferramenta de marcar");
+    expect(bloco!).toContain("crm_find_and_book_appointment");
+  });
+
+  it("agente sem ferramenta de agenda nenhuma não recebe bloco", async () => {
+    const { blocoResidenteDaAgenda } = await import("@/lib/agent-engine/agent/inbound-turn");
+    expect(blocoResidenteDaAgenda(["crm_update_lead_state"])).toBeNull();
+  });
 });

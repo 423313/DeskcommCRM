@@ -804,7 +804,13 @@ const TRANSPARENCIA_SYSTEM_BLOCK =
 const AGENDA_SYSTEM_BLOCK =
   '## Agenda — nunca confirme sem checar\n' +
   'Você só pode dizer a um lead que um horário/consulta/visita está confirmado DEPOIS de chamar ' +
-  'crm_book_appointment (ou crm_reschedule_appointment, para remarcação) e ver o retorno confirmando o ' +
+  // ⚠️ A ferramenta de MARCAR é nomeada como conjunto, e não como um nome fixo:
+  // desde a #831 há agente que recebe SÓ `crm_find_and_book_appointment` (o
+  // caminho preferido do parágrafo abaixo), e este bloco dizia a ele para
+  // chamar `crm_book_appointment` em três frases — ensinar uma ferramenta que
+  // o agente não tem é o modo de falha que o bloco irmão existe para evitar.
+  'sua ferramenta de marcar (`crm_book_appointment` ou `crm_find_and_book_appointment`, a que estiver ' +
+  'na sua lista; `crm_reschedule_appointment` para remarcação) e ver o retorno confirmando o ' +
   'sucesso. Isso vale mesmo quando o lead já aceitou um horário que você ofereceu — aceite verbal não é ' +
   'reserva. NUNCA diga "confirmado", "está marcado" ou equivalente baseado só no histórico da conversa. ' +
   // ⚠️ A ressalva é obrigatória: sem ela este parágrafo ENSINA o erro. Num tipo
@@ -822,7 +828,8 @@ const AGENDA_SYSTEM_BLOCK =
   '"vou verificar" só é aceitável na MESMA resposta em que você já chamou a ferramenta e ela falhou ou não ' +
   'trouxe resultado; nunca como substituto de chamar.\n' +
   'Se o lead escolheu um horário que VOCÊ já ofereceu nesta conversa com `crm_find_free_slots`, ele já ' +
-  'foi checado: preserve o `inicio` que a ferramenta devolveu e chame `crm_book_appointment` diretamente. ' +
+  'foi checado: preserve o `inicio` que a ferramenta devolveu e chame sua ferramenta de marcar ' +
+  'diretamente. ' +
   'NÃO consulte de novo montando datas/horas em UTC; só consulte outra vez se a reserva recusar o horário.\n' +
   // Issue #831: consultar e encerrar o turno é o meio-caminho que deixa o lead sem
   // agendamento. Quando a ferramenta conjunta existe, ela é o caminho PREFERIDO —
@@ -831,7 +838,7 @@ const AGENDA_SYSTEM_BLOCK =
   'confere a disponibilidade e grava o compromisso na MESMA chamada. Ela é o caminho preferido nesse caso ' +
   '— não chame só `crm_find_free_slots` e pare por aí, deixando o lead sem horário marcado. Se o horário ' +
   'pedido não estiver livre, ela devolve os horários do dia; ofereça um deles ao lead.\n' +
-  'Checar e marcar horário usando crm_find_free_slots/crm_book_appointment está SEMPRE dentro da sua ' +
+  'Checar e marcar horário com as ferramentas de agenda está SEMPRE dentro da sua ' +
   'autonomia quando essas ferramentas estão disponíveis para você — mesmo que as instruções da empresa ' +
   'peçam para encaminhar decisões fora da sua autonomia a um gerente/responsável nomeado (ex.: "fale com o ' +
   'Fernando"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
@@ -892,18 +899,24 @@ const AGENDA_TOOL_NAMES = new Set([
 /**
  * O agente consegue GRAVAR um horário sozinho (marcar ou remarcar)?
  *
- * Três ferramentas gravam agenda: `crm_book_appointment`,
- * `crm_reschedule_appointment` e, desde a issue #831, a que consulta e marca numa
- * chamada só (`crm_find_and_book_appointment`). A regra mora aqui, e não em cada
- * ponto de uso, porque as duas condições — o bloco residente de ensino e o
- * `podeMarcar` do gate — precisam ser a MESMA: divergindo, o bloco diria "você
- * NÃO tem ferramenta para marcar" a um agente que tem, ou o gate cobraria marcação
- * de quem só pode consultar.
+ * Duas ferramentas MARCAM um horário novo: `crm_book_appointment` e, desde a issue
+ * #831, a que consulta e marca numa chamada só (`crm_find_and_book_appointment`).
+ * A regra mora aqui, e não em cada ponto de uso, porque as duas condições — o
+ * bloco residente de ensino e o `podeMarcar` do gate — precisam ser a MESMA:
+ * divergindo, o bloco diria "você NÃO tem ferramenta para marcar" a um agente que
+ * tem, ou o gate cobraria marcação de quem só pode consultar.
+ *
+ * ⚠️ `crm_reschedule_appointment` está FORA, de propósito. Ela grava na agenda,
+ * mas só MOVE um compromisso que já existe — não cria um. Incluí-la alargava o
+ * portão além do que a #831 pede: o agente que tem só a remarcação (e que antes
+ * caía no bloco de só-consulta) passava a receber o AGENDA_SYSTEM_BLOCK, que
+ * nomeia ferramentas de marcar que ele não tem — exatamente o modo de falha que
+ * o bloco irmão existe para evitar, e que um dono aparando capacidades para caber
+ * no teto de 25 tende a produzir.
  */
 export function temFerramentaDeMarcacao(toolIds: readonly string[]): boolean {
   return (
     toolIds.includes('crm_book_appointment') ||
-    toolIds.includes('crm_reschedule_appointment') ||
     toolIds.includes('crm_find_and_book_appointment')
   );
 }
@@ -918,6 +931,23 @@ export function temFerramentaDeMarcacao(toolIds: readonly string[]): boolean {
  */
 export function temFerramentaDeAgenda(toolIds: readonly string[]): boolean {
   return toolIds.some((t) => AGENDA_TOOL_NAMES.has(t));
+}
+
+/**
+ * QUAL bloco residente de Agenda este agente recebe — ou nenhum.
+ *
+ * A escolha vivia inline dentro de `executarTurnoDoAgente`, inalcançável sem o
+ * runtime inteiro: nenhum teste chegava nela, e o portão que a #831 alargou
+ * (`temFerramentaDeMarcacao`) só era exercitado pela própria função, nunca pelo
+ * ponto de uso. Aqui ela é chamável — e o que se prende é o par
+ * "quem recebe o bloco de marcar" × "quem recebe o de só consultar", que é
+ * exatamente onde o texto ensina, ou não, uma ferramenta que o agente não tem.
+ */
+export function blocoResidenteDaAgenda(toolIds: readonly string[]): string | null {
+  if (temFerramentaDeMarcacao(toolIds)) return AGENDA_SYSTEM_BLOCK;
+  // Só consulta: o bloco de cima nomeia ferramentas de marcar que ele não tem.
+  if (toolIds.includes('crm_find_free_slots')) return AGENDA_CONSULTA_SYSTEM_BLOCK;
+  return null;
 }
 
 export interface InboundTurnKnobs {
@@ -1982,12 +2012,8 @@ async function executarTurnoDoAgente(
   // não depende de nenhuma feature — todo agente publicado o recebe.
   const blocosResidentes = [systemWithMemory, TRANSPARENCIA_SYSTEM_BLOCK];
   if (agentConfig !== null && agentConfig.casesEnabled) blocosResidentes.push(CASES_SYSTEM_BLOCK);
-  if (agentConfig !== null && temFerramentaDeMarcacao(agentConfig.toolIds)) {
-    blocosResidentes.push(AGENDA_SYSTEM_BLOCK);
-  } else if (agentConfig !== null && agentConfig.toolIds.includes('crm_find_free_slots')) {
-    // Só consulta: o bloco de cima nomeia uma ferramenta que ele não tem.
-    blocosResidentes.push(AGENDA_CONSULTA_SYSTEM_BLOCK);
-  }
+  const blocoDaAgenda = agentConfig === null ? null : blocoResidenteDaAgenda(agentConfig.toolIds);
+  if (blocoDaAgenda !== null) blocosResidentes.push(blocoDaAgenda);
   if (preview)
     blocosResidentes.push(
       'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',

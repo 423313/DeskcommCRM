@@ -157,7 +157,7 @@ describe("agendaStallGate — veta a promessa vazia, nunca a checagem de verdade
     expect(v.pass).toBe(true);
   });
 
-  it("a razão do veto nomeia as três ferramentas — o modelo precisa saber QUAL chamar", () => {
+  it("a razão do veto nomeia as ferramentas de agenda — o modelo precisa saber QUAL chamar", () => {
     const v = agendaStallGate.evaluate(
       baseCtx({ agenda: { active: true, podeMarcar: true, toolCalledThisTurn: false }, body: FRASE_MEDIDA_1 }),
     );
@@ -165,6 +165,35 @@ describe("agendaStallGate — veta a promessa vazia, nunca a checagem de verdade
     expect(v.reason).toContain("crm_find_free_slots");
     expect(v.reason).toContain("crm_book_appointment");
     expect(v.reason).toContain("crm_reschedule_appointment");
+    // Desde a #831 há agente que tem SÓ `crm_find_and_book_appointment`. O veto
+    // nomeava três ferramentas que ele pode não ter e nunca a que ele tem —
+    // mandando o modelo chamar o que não existe na lista dele.
+    expect(v.reason).toContain("crm_find_and_book_appointment");
+  });
+
+  it("no outro ramo do veto (confirmação categórica) a lista é a mesma", () => {
+    // Dois textos, uma lista: o ramo `confirmedSemChecar` monta a frase com a
+    // MESMA variável, e é o ramo que o teste da lista não exercitava.
+    const v = agendaStallGate.evaluate(
+      baseCtx({
+        agenda: { active: true, podeMarcar: true, toolCalledThisTurn: false },
+        body: "Perfeito! Seu agendamento está confirmado para amanhã às 9h.",
+      }),
+    );
+    if (v.pass) throw new Error("inalcançável");
+    expect(v.reason).toContain("crm_find_and_book_appointment");
+  });
+
+  it("a quem SÓ consulta o veto continua nomeando só a consulta", () => {
+    // `podeMarcar` falso é o agente de clínica que só olha a agenda: cobrar dele
+    // uma marcação seria pedir o que ele não tem como fazer.
+    const v = agendaStallGate.evaluate(
+      baseCtx({ agenda: { active: true, podeMarcar: false, toolCalledThisTurn: false }, body: FRASE_MEDIDA_1 }),
+    );
+    if (v.pass) throw new Error("inalcançável");
+    expect(v.reason).toContain("crm_find_free_slots");
+    expect(v.reason).not.toContain("crm_book_appointment");
+    expect(v.reason).not.toContain("crm_find_and_book_appointment");
   });
 
   it("está na cadeia global e é o mesmo objeto exportado", () => {

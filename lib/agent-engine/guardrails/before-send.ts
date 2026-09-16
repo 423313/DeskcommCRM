@@ -516,10 +516,18 @@ export const agendaStallGate: Gate = {
     return {
       pass: false,
       code: 'agenda_stall_sem_ferramenta',
-      // As ferramentas nomeadas são as que ESTE agente tem. Ver `podeMarcar`.
+      // `podeMarcar` separa quem GRAVA agenda de quem só consulta — a quem só
+      // consulta o veto nomeia só `crm_find_free_slots`, para não cobrar uma
+      // marcação que ele não tem como fazer.
+      //
+      // ⚠️ Do lado de quem grava, a lista é a FAMÍLIA inteira, e não as tools
+      // exatas deste agente: `ctx.agenda` carrega um booleano, não os ids. O
+      // veto dizia `crm_find_free_slots, crm_book_appointment ou
+      // crm_reschedule_appointment` para um agente que, desde a #831, pode ter
+      // SÓ `crm_find_and_book_appointment` — e nunca nomeava a que ele tem.
       reason: (() => {
         const ferramentas = ctx.agenda.podeMarcar
-          ? 'crm_find_free_slots, crm_book_appointment ou crm_reschedule_appointment'
+          ? 'crm_find_and_book_appointment, crm_find_free_slots, crm_book_appointment ou crm_reschedule_appointment'
           : 'crm_find_free_slots';
         return confirmedSemChecar
           ? `Você afirmou que um horário está confirmado/agendado sem ter chamado ${ferramentas} ` +
