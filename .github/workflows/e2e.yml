@@ -683,6 +683,21 @@ jobs:
           # exercita é a jornada de onboarding, não o contrato de autenticação do
           # WAHA — esse tem fonte e teste no produto.
           WAHA_NO_API_KEY: "True"
+          # O MESMO motor do `docker-compose.prod.yml`
+          # (`WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}`). Sem
+          # esta linha o contêiner cai no default WEBJS — o log do run
+          # 35124188017 mostra `"engine":"WEBJS"` —, e o produto RECUSA essa
+          # sessão: `compatibleSession()` em `lib/waha/client.ts` devolve false
+          # para qualquer engine que não seja NOWEB, e o `createSession` lança.
+          # Com WEBJS a jornada do QR não teria como ficar verde nem com o WAHA
+          # alcançável.
+          #
+          # Limite escrito para não ser descoberto: isto é o WAHA CORE (o mesmo
+          # log diz `"tier":"CORE"`), não o WAHA Plus que a doutrina exige em
+          # produção. A licença do Plus não pode viver num CI que roda PR de
+          # fork sem segredo nenhum. Multi-sessão, retry e S3 — o que só o Plus
+          # tem — NÃO são exercitados aqui; a jornada de onboarding é.
+          WHATSAPP_DEFAULT_ENGINE: NOWEB
         # Probe TCP puro, para a saúde do CONTÊINER (liveness). Amarrar essa saúde
         # a um endpoint amarra também ao contrato de AUTENTICAÇÃO de uma versão do
         # upstream — o `/api/health` do `:latest` (2026.8.2) responde 401/404 e o
