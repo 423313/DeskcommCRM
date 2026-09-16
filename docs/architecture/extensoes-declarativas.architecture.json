@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Extensões declarativas v1",
-    "subtitle": "Código do marco 2; banco verificado, jornada visual em execução",
+    "subtitle": "Perfil declarativo com versões: instalar, atualizar, desfazer e remover",
     "output": "extensoes-declarativas.html",
     "quality_profile": "standard"
   },
@@ -157,6 +157,13 @@
       "col": 16,
       "type": "service",
       "label": "Remover da instalação · desliga vínculos ativos"
+    },
+    {
+      "id": "org_audit_view",
+      "lane": "human",
+      "col": 17,
+      "type": "ui",
+      "label": "Auditoria da organização /app/audit"
     }
   ],
   "edges": [
@@ -276,9 +283,9 @@
       "label": "consultar ações com acesso administrativo"
     },
     {
-      "from": "manager",
+      "from": "guards",
       "to": "revert",
-      "label": "desfazer com a revisão exibida"
+      "label": "desfazer com a revisão exibida, só plataforma"
     },
     {
       "from": "revert",
@@ -291,9 +298,9 @@
       "label": "recibo revert com de/para"
     },
     {
-      "from": "manager",
+      "from": "guards",
       "to": "removal",
-      "label": "remover com a revisão exibida"
+      "label": "remover com a revisão exibida, só plataforma"
     },
     {
       "from": "removal",
@@ -308,12 +315,22 @@
     {
       "from": "removal",
       "to": "audit",
-      "label": "extension.deactivated por organização"
+      "label": "extension.deactivated_by_removal por organização"
     },
     {
       "from": "removal",
       "to": "hub",
       "label": "guia responde 410 removida"
+    },
+    {
+      "from": "revert",
+      "to": "audit",
+      "label": "extension.reverted na instância"
+    },
+    {
+      "from": "audit",
+      "to": "org_audit_view",
+      "label": "organização vê a própria desativação pela remoção"
     }
   ],
   "contracts": {

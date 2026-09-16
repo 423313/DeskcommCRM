@@ -16,6 +16,7 @@ function receipt(kind: ExtensionOperationKind = "configure") {
   return {
     id: ID,
     organization_id: kind === "configure" ? ORG : null,
+    actor_id: "00000000-0000-4000-8000-000000000010",
     kind,
     status: "completed" as const,
     catalog_id: null,

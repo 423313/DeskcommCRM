@@ -163,6 +163,7 @@ function operationView(value: unknown): ExtensionOperationView {
   return {
     id: row.id,
     organization_id: row.organization_id,
+    actor_id: row.actor_id,
     kind: row.kind,
     status: row.status,
     catalog_id: row.catalog_id,
@@ -255,10 +256,29 @@ function entradasLegiveis(row: z.infer<typeof catalogRowSchema>): CatalogEntry[]
   }
 }
 
+/**
+ * Quem administra a instalação vê e faz as ações de plataforma. Negado e "não deu para conferir"
+ * são respostas diferentes: tratar a falha da conferência como negação rebaixava a gestão para a
+ * de um membro comum sem erro visível, e a leitura de um recibo de plataforma virava 404, que a
+ * tela lê como "recibo inexistente" e apaga.
+ */
+export async function canManageInstallation(user: AuthUser): Promise<boolean> {
+  if (!user.is_platform_admin || user.support) return false;
+  const check = await requireExtensionPlatform();
+  if (check.ok) return true;
+  if (check.response.status >= 500) {
+    throw new ExtensionServiceError(
+      "upstream_unavailable",
+      "Não foi possível confirmar a permissão de acesso.",
+      503,
+    );
+  }
+  return false;
+}
+
 /** Instância é lida pelo gestor autorizado; vínculos usam RLS e org explícita. */
 export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<ExtensionListView> {
-  const canInstall =
-    user.is_platform_admin && !user.support && (await requireExtensionPlatform()).ok;
+  const canInstall = await canManageInstallation(user);
   const admin = createAdminClient();
   const session = await createClient();
   const operations = admin.from("extension_operations").select(OP_COLS);
@@ -272,7 +292,6 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
     markedResult,
     operationResult,
     preparingResult,
-    removedResult,
     countResult,
   ] = await Promise.all([
     admin
@@ -295,6 +314,7 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
       .select("installation_id")
       .eq("organization_id", org.orgId)
       .not("deactivated_by_removal_at", "is", null)
+      .order("deactivated_by_removal_at", { ascending: false })
       .limit(128),
     scoped.neq("status", "preparing").order("created_at", { ascending: false }).limit(50),
     canInstall
@@ -306,17 +326,11 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
           .order("created_at", { ascending: false })
           .limit(128)
       : Promise.resolve(none),
-    canInstall
-      ? admin
-          .from("extension_installations")
-          .select(INSTALL_COLS)
-          .not("removed_at", "is", null)
-          .order("removed_at", { ascending: false })
-          .limit(128)
-      : Promise.resolve(none),
     // Exceção declarada na spec à regra "service role filtra organization_id": a contagem
     // atravessa organizações, e por isso devolve só números, e só a quem administra a instalação.
-    canInstall ? admin.rpc("fn_extensions_installation_counts") : Promise.resolve(none),
+    canInstall
+      ? admin.rpc("fn_extensions_installation_counts", { p_actor: user.id })
+      : Promise.resolve(none),
   ]);
   for (const result of [
     catalogResult,
@@ -324,7 +338,6 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
     markedResult,
     operationResult,
     preparingResult,
-    removedResult,
     countResult,
   ]) {
     dbFailure(result.error);
@@ -385,6 +398,31 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
       .map((item) => [item.installation_id, item]),
   );
   const catalogEntries = new Map(catalogs.map((row) => [row.id, entradasLegiveis(row)]));
+  // Removidas das identidades que os catálogos admitidos listam, e não "as 128 mais recentes":
+  // uma removida fora desse corte aparecia como nunca instalada, a tela pedia a instalação com
+  // revisão nula, e o banco respondia "mudou em outra sessão" para sempre.
+  const listedNames = [
+    ...new Set([...catalogEntries.values()].flatMap((entries) => entries.map((entry) => entry.name))),
+  ];
+  const removed = canInstall
+    ? z
+        .array(installationRowSchema)
+        .parse(
+          await readInBatches(listedNames, (batch) =>
+            admin
+              .from("extension_installations")
+              .select(INSTALL_COLS)
+              .in("catalog_id", catalogs.map((row) => row.id))
+              .in("name", batch)
+              .not("removed_at", "is", null),
+          ),
+        )
+        .filter((item) =>
+          (catalogEntries.get(item.catalog_id) ?? []).some(
+            (entry) => entry.publisher === item.publisher && entry.name === item.name,
+          ),
+        )
+    : [];
 
   const views: InstalledExtensionView[] = rows.map((item) => {
     const view = montarInstalada({
@@ -410,7 +448,6 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
     }
     return view;
   });
-  const removed = z.array(installationRowSchema).parse(removedResult.data ?? []);
   return {
     organization_id: org.orgId,
     can_manage: org.role === "admin" && !user.support,
@@ -833,7 +870,7 @@ export async function revertExtension(
 
 /**
  * Remover da instalação. Além do registro da instância, cada organização desligada recebe a
- * própria linha `extension.deactivated` com o motivo: é por ela que `/app/audit` da organização
+ * própria linha `extension.deactivated_by_removal`, separada da desativação que a própria organização faz: é por ela que `/app/audit` da organização
  * explica por que o guia sumiu. Nenhuma linha numa repetição idempotente.
  */
 export async function removeExtension(
@@ -867,7 +904,7 @@ export async function removeExtension(
     });
     await auditForOrganizations(
       {
-        action: "extension.deactivated",
+        action: "extension.deactivated_by_removal",
         actorUserId: actorId,
         actingAsPlatformAdmin: true,
         resourceType: "extension_installation",

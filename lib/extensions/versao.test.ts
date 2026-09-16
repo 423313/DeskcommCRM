@@ -9,5 +9,7 @@ describe("compararVersoes", () => {
     expect(compararVersoes("2.0.0", "10.0.0")).toBeLessThan(0);
     expect(compararVersoes("1.2.3", "1.2.3")).toBe(0);
     expect(compararVersoes("1.2.10", "1.2.9")).toBeGreaterThan(0);
+    // Acima de 2^53, Number iguala as duas partes; a comparação por dígitos não.
+    expect(compararVersoes("1.0.9007199254740993", "1.0.9007199254740992")).toBeGreaterThan(0);
   });
 });

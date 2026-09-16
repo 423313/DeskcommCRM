@@ -33,6 +33,7 @@ export function parseExtensionOperationView(value: unknown): ExtensionOperationV
     !UUID.test(operation.id) ||
     !(typeof operation.organization_id === "string" || operation.organization_id === null) ||
     (typeof operation.organization_id === "string" && !UUID.test(operation.organization_id)) ||
+    !(operation.actor_id === null || (typeof operation.actor_id === "string" && UUID.test(operation.actor_id))) ||
     !ehTipoDeOperacao(operation.kind) ||
     !ehEstadoDeOperacao(operation.status) ||
     !nullableString(operation.catalog_id) ||

@@ -59,7 +59,8 @@ export function InstalledExtensionCard({
   feedback,
   onConfigure,
   canInstall = false,
-  platformBusy = false,
+  platformBusyAction = null,
+  preparationInProgress = false,
   platformBlockedReason,
   onRevert,
   onRemove,
@@ -83,7 +84,10 @@ export function InstalledExtensionCard({
   ) => Promise<void>;
   /** Quem administra a instalação: vê o bloco "Em todas as organizações". */
   canInstall?: boolean;
-  platformBusy?: boolean;
+  /** Qual ação de plataforma está em curso, para o indicador ficar no botão certo. */
+  platformBusyAction?: "revert" | "remove" | null;
+  /** Há preparação de instalação ou atualização desta identidade: o banco recusa desfazer e remover. */
+  preparationInProgress?: boolean;
   platformBlockedReason?: string;
   onRevert?: (extension: InstalledExtensionView) => Promise<void>;
   onRemove?: (extension: InstalledExtensionView) => Promise<void>;
@@ -138,13 +142,17 @@ export function InstalledExtensionCard({
         className="mt-4 rounded-md border border-info/30 bg-info-bg p-3 text-sm"
         data-testid={`extension-reactivate-${extension.id}`}
       >
-        {(canManage
+        {(!extension.compatible
           ? t(
-              "Estava ativa até ser removida da instalação em {data}. Ative de novo para voltar a mostrar os guias.",
+              "Estava ativa até ser removida da instalação em {data}. A versão reinstalada não pode ser ativada; peça ao responsável pela instalação uma versão compatível.",
             )
-          : t(
-              "Estava ativa até ser removida da instalação em {data}. Peça a um administrador da organização para ativar de novo.",
-            )
+          : canManage
+            ? t(
+                "Estava ativa até ser removida da instalação em {data}. Ative de novo para voltar a mostrar os guias.",
+              )
+            : t(
+                "Estava ativa até ser removida da instalação em {data}. Peça a um administrador da organização para ativar de novo.",
+              )
         ).replace("{data}", formatDate(extension.deactivated_by_removal_at))}
       </p>
     ) : null;
@@ -339,7 +347,8 @@ export function InstalledExtensionCard({
         <PlatformBlock
           extension={extension}
           title={title}
-          busy={platformBusy}
+          busyAction={platformBusyAction}
+          preparationInProgress={preparationInProgress}
           actionsDisabled={actionsDisabled}
           blockedReason={platformBlockedReason}
           onRevert={onRevert}
@@ -358,7 +367,8 @@ export function InstalledExtensionCard({
 function PlatformBlock({
   extension,
   title,
-  busy,
+  busyAction,
+  preparationInProgress,
   actionsDisabled,
   blockedReason,
   onRevert,
@@ -366,7 +376,8 @@ function PlatformBlock({
 }: {
   extension: InstalledExtensionView;
   title: string;
-  busy: boolean;
+  busyAction: "revert" | "remove" | null;
+  preparationInProgress: boolean;
   actionsDisabled: boolean;
   blockedReason?: string;
   onRevert: (extension: InstalledExtensionView) => Promise<void>;
@@ -376,6 +387,8 @@ function PlatformBlock({
   const [dialog, setDialog] = useState<"revert" | "remove" | null>(null);
   const previous = extension.previous;
   const active = extension.active_organizations ?? 0;
+  const busy = busyAction !== null;
+  const blocked = busy || actionsDisabled || preparationInProgress;
   return (
     <section
       className="mt-4 space-y-3 rounded-md border border-border bg-surface-elevated/40 p-3"
@@ -393,9 +406,10 @@ function PlatformBlock({
             variant="outline"
             size="sm"
             data-testid={`extension-revert-${extension.id}`}
-            disabled={!previous.compatible || busy || actionsDisabled}
+            disabled={!previous.compatible || blocked}
             onClick={() => setDialog("revert")}
           >
+            {busyAction === "revert" ? <CircleNotch className="animate-spin" aria-hidden /> : null}
             {t("Desfazer a última troca (volta para {versao})").replace("{versao}", previous.version)}
           </Button>
         ) : null}
@@ -404,10 +418,10 @@ function PlatformBlock({
           size="sm"
           className="text-error-fg"
           data-testid={`extension-remove-${extension.id}`}
-          disabled={busy || actionsDisabled}
+          disabled={blocked}
           onClick={() => setDialog("remove")}
         >
-          {busy ? <CircleNotch className="animate-spin" aria-hidden /> : null}
+          {busyAction === "remove" ? <CircleNotch className="animate-spin" aria-hidden /> : null}
           {t("Remover da instalação")}
         </Button>
       </div>
@@ -416,6 +430,13 @@ function PlatformBlock({
           {t("A versão {versao} não é compatível com esta versão do CRM.").replace(
             "{versao}",
             previous.version,
+          )}
+        </p>
+      ) : null}
+      {preparationInProgress ? (
+        <p className="text-xs text-muted-foreground" data-testid={`extension-platform-preparing-${extension.id}`}>
+          {t(
+            "Há uma preparação desta extensão em andamento. Verifique ou cancele o pedido em Atividade recente antes de desfazer ou remover.",
           )}
         </p>
       ) : null}

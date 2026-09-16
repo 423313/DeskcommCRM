@@ -21,6 +21,17 @@ const OPERATION_STATUS: Record<
   cancelled: { label: "Cancelada", variant: "neutral" },
 };
 
+/**
+ * O destino de um recibo de atualização é `to_version` depois de concluído e `version` enquanto
+ * prepara ou quando falhou: sem isso, uma troca para versão menor que falhou saía "Atualização".
+ */
+function paraVersaoMenor(operation: ExtensionOperationView): boolean {
+  const destino = operation.to_version ?? operation.version;
+  return Boolean(
+    destino && operation.from_version && compararVersoes(destino, operation.from_version) < 0,
+  );
+}
+
 /** Título do recibo. `update` para uma versão menor não é "Atualização": é troca de versão. */
 function operationTitle(operation: ExtensionOperationView, t: (texto: string) => string): string {
   switch (operation.kind) {
@@ -29,11 +40,7 @@ function operationTitle(operation: ExtensionOperationView, t: (texto: string) =>
     case "install":
       return t("Instalação");
     case "update":
-      return operation.from_version &&
-        operation.to_version &&
-        compararVersoes(operation.to_version, operation.from_version) < 0
-        ? t("Troca de versão")
-        : t("Atualização");
+      return paraVersaoMenor(operation) ? t("Troca de versão") : t("Atualização");
     case "revert":
       return t("Troca desfeita");
     case "removal":
@@ -49,9 +56,7 @@ function operationSubject(operation: ExtensionOperationView, t: (texto: string) 
   const count = operation.organizations_affected;
   if ((operation.kind === "update" || operation.kind === "revert") && operation.from_version && operation.to_version) {
     const base = `${identity} ${operation.from_version} → ${operation.to_version}`;
-    return operation.kind === "update" && count !== null
-      ? `${base} · ${organizacoesComElaAtiva(t, count)}`
-      : base;
+    return count !== null ? `${base} · ${organizacoesComElaAtiva(t, count)}` : base;
   }
   const base = `${identity}${operation.version ? `@${operation.version}` : ""}`;
   return operation.kind === "removal" && count !== null
@@ -60,12 +65,15 @@ function operationSubject(operation: ExtensionOperationView, t: (texto: string) 
 }
 
 export function ExtensionOperations({
+  actorId,
   operations,
   busyTarget,
   actionsDisabled,
   onVerify,
   onCancel,
 }: {
+  /** Quem está vendo. Só o autor do pedido retoma uma preparação; qualquer responsável cancela. */
+  actorId: string;
   operations: ExtensionOperationView[];
   busyTarget: string | null;
   actionsDisabled: boolean;
@@ -88,6 +96,7 @@ export function ExtensionOperations({
         {operations.map((operation) => {
           const status = OPERATION_STATUS[operation.status];
           const isUpdate = operation.kind === "update";
+          const isDowngrade = isUpdate && paraVersaoMenor(operation);
           return (
             <Card
               key={operation.id}
@@ -114,7 +123,7 @@ export function ExtensionOperations({
                           ? t("Confira o catálogo admitido e tente a instalação novamente.")
                           : isUpdate
                             ? t(
-                                "A versão instalada continua a mesma. Confira o catálogo admitido e tente a atualização novamente.",
+                                "A versão instalada continua a mesma. Confira o catálogo admitido e peça a troca de novo.",
                               )
                             : t("Revise o arquivo ou a configuração indicada e tente novamente.")}
                       </p>
@@ -122,7 +131,17 @@ export function ExtensionOperations({
                   ) : null}
                 </div>
                 {operation.status === "preparing" ? (
-                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-start">
+                    {operation.actor_id !== actorId ? (
+                      <p
+                        className="max-w-56 text-xs text-muted-foreground"
+                        data-testid={`extension-operation-other-actor-${operation.id}`}
+                      >
+                        {t(
+                          "Pedido de outro responsável pela instalação: só quem pediu pode retomar. Você pode cancelar.",
+                        )}
+                      </p>
+                    ) : (
                     <Button
                       data-testid={`extension-operation-verify-${operation.id}`}
                       variant="outline"
@@ -131,8 +150,13 @@ export function ExtensionOperations({
                       onClick={() => void onVerify(operation)}
                     >
                       <ArrowsClockwise aria-hidden />
-                      {isUpdate ? t("Verificar atualização") : t("Verificar instalação")}
+                      {isDowngrade
+                        ? t("Verificar troca de versão")
+                        : isUpdate
+                          ? t("Verificar atualização")
+                          : t("Verificar instalação")}
                     </Button>
+                    )}
                     <Button
                       data-testid={`extension-operation-cancel-${operation.id}`}
                       variant="ghost"
@@ -141,7 +165,11 @@ export function ExtensionOperations({
                       onClick={() => void onCancel(operation)}
                     >
                       <X aria-hidden />
-                      {isUpdate ? t("Cancelar atualização") : t("Cancelar preparação")}
+                      {isDowngrade
+                        ? t("Cancelar troca de versão")
+                        : isUpdate
+                          ? t("Cancelar atualização")
+                          : t("Cancelar preparação")}
                     </Button>
                   </div>
                 ) : null}

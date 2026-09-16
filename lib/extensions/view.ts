@@ -5,6 +5,8 @@ import type { ExtensionOperationKind, ExtensionOperationStatus } from "./vocabul
 export interface ExtensionOperationView {
   id: string;
   organization_id: string | null;
+  /** Quem fez o pedido. Só essa pessoa retoma uma preparação: o pedido e a conclusão levam o ator. */
+  actor_id: string | null;
   kind: ExtensionOperationKind;
   status: ExtensionOperationStatus;
   catalog_id: string | null;

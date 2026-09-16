@@ -38,7 +38,8 @@ extensões**, e é isso que mantém o produto genérico enquanto os nichos ganha
 | **Ambos** | Um ponto genérico no núcleo e uma extensão que o consome. O ponto só entra com **consumidor real, contrato e prova dos dois lados**; não existe inventário de ganchos hipotéticos. |
 | **Infraestrutura/documentação** | Mudança sem capacidade nova para o usuário; declare a superfície que ela mantém. |
 
-Todo PR que muda comportamento declara o destino e a razão (DoD 18). Enquanto a plataforma está em
+Todo PR que muda comportamento declara o destino e a razão (DoD 18; a triagem aplica a mesma régua
+na seção 2-bis). Enquanto a plataforma está em
 construção, "extensão" é destino, não exigência de usar uma ferramenta que ainda não existe:
 preserve o trabalho do contribuidor e registre a dependência.
 
@@ -48,7 +49,9 @@ preserve o trabalho do contribuidor e registre a dependência.
 
 1. **Zero extensões é um estado de primeira classe.** Nenhuma tela, rota ou fluxo do núcleo pode
    exigir uma extensão ativa. Desligar ou remover uma extensão nunca tira do ar uma jornada do
-   núcleo. *Provado hoje em:* J24 — o guia só abre Tarefas, e Tarefas não dependem da ativação.
+   núcleo. *Onde se vê hoje:* o hub do CRM (`app/app/crm/page.tsx`) segue útil quando a leitura das
+   extensões falha, e nenhum arquivo de Tarefas importa código de extensões. É evidência de
+   estrutura, não uma jornada: nenhuma prova em tela cria tarefa numa organização sem extensão.
 
 2. **Extensão pede capacidade; não importa o código interno nem lê o banco.** O contrato é uma ação
    nomeada e estável (hoje, `tasks.open`), revalidada no servidor a cada uso. O pacote não recebe
@@ -58,7 +61,8 @@ preserve o trabalho do contribuidor e registre a dependência.
 3. **Instalar não é autorizar.** Instalar uma extensão não concede autoridade para enviar mensagem,
    movimentar dinheiro, mudar permissão ou alcançar outra organização. Toda escrita do framework
    é RPC `service_role` que revalida no banco o ator, a organização e o papel **atuais**; nenhum
-   dos dois vem do corpo HTTP.
+   deles vem do corpo HTTP. A única leitura que atravessa organizações, a contagem de organizações
+   ativas por instalação, também confere o ator no banco e devolve só números.
 
 4. **A instância decide o pacote; a organização decide o uso.** Admitir catálogo, instalar,
    atualizar, desfazer e remover são do administrador da instalação (plataforma, escopo `full`,
@@ -103,6 +107,17 @@ preserve o trabalho do contribuidor e registre a dependência.
     como "seria extensão" não autoriza removê-lo, desligá-lo em massa nem mudar o que um cliente
     já usa. A extração exige comportamento equivalente demonstrado e migração explícita.
 
+13. **As três políticas aprovadas no DEC-004 valem para todo o programa.**
+    - **Catálogo oficial é revisado.** Qualquer criador pode enviar; validação automática e revisão
+      proporcional ao perfil antecedem a publicação. Teste verde não é selo, e catálogo alternativo
+      não recebe o selo oficial.
+    - **Aviso sobre versão já instalada deixa a decisão local.** Nenhuma origem desliga, pausa ou
+      altera em silêncio uma extensão numa VPS. Suspensão automática só existe como política local
+      que o administrador autorizou antes, e um comunicado do catálogo nunca é comando no host.
+    - **Métricas começam por downloads e avaliações.** Nenhum identificador persistente de
+      adoção, nem relato de uso ligado entre instâncias, sem decisão própria com consentimento,
+      campos e retenção publicados.
+
 ---
 
 ## O que existe hoje e o que ainda não existe
@@ -113,10 +128,13 @@ preserve o trabalho do contribuidor e registre a dependência.
 | Pacote JSON estrito com cards de orientação e a capacidade `tasks.open` | Execução de código de terceiros, isolada |
 | Instalar, atualizar, trocar, desfazer a última troca, remover e reinstalar | Histórico de mais de um passo; versão por organização |
 | Ativação e configuração por organização, com teto de 8 ativas | Dados de domínio próprios da extensão e suas migrations |
-| Recibos, auditoria por organização na remoção, Atividade recente | Dependências entre extensões, avaliações, métricas de adoção |
+| Recibos, auditoria por organização na remoção, Atividade recente | Dependências entre extensões, avaliações e downloads no catálogo compartilhado |
 
-Quem propõe um item da coluna da direita abre decisão nova e prova antes; não amplia o perfil
-declarativo por dentro.
+A coluna da direita se divide em dois. O que já foi decidido no PROG-017 e no DEC-004 (catálogo
+compartilhado revisado, downloads e avaliações) pede **prova**, não decisão nova. O que nenhum dos
+dois decidiu pede **decisão antes**: execução de código de terceiros, schema próprio de extensão,
+versão por organização e qualquer relato de uso ligado entre instâncias. Nos dois casos, a
+proposta não amplia o perfil declarativo por dentro.
 
 ## Verificação
 

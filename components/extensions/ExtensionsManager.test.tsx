@@ -97,6 +97,7 @@ function operation({
   return {
     id,
     organization_id: organizationId === undefined ? (kind === "configure" ? ORG_A : null) : organizationId,
+    actor_id: ACTOR,
     kind,
     status,
     catalog_id: null,
@@ -741,6 +742,135 @@ describe("ExtensionsManager", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(toast.success).not.toHaveBeenCalled();
     expect(readPendingReceipts(window.localStorage, ACTOR, ORG_A)).toEqual([]);
+  });
+
+  it("remover o que outra sessão já removeu recarrega a tela em vez de manter as ações", async () => {
+    const removidaAgora = list(ORG_A, { installations: [] });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: list() }))
+      .mockResolvedValueOnce(
+        json(
+          {
+            error: {
+              code: "extension_removed",
+              message: "O responsável pela instalação removeu esta extensão de todas as organizações.",
+            },
+          },
+          410,
+        ),
+      )
+      .mockResolvedValue(json({ data: removidaAgora }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByTestId(`extension-remove-${INSTALLATION}`));
+    await user.click(await screen.findByTestId(`extension-remove-confirm-${INSTALLATION}`));
+
+    await waitFor(() =>
+      expect(toast.warning).toHaveBeenCalledWith(
+        "O responsável pela instalação removeu esta extensão de todas as organizações.",
+      ),
+    );
+    await waitFor(() => expect(screen.queryByTestId(`extension-remove-${INSTALLATION}`)).toBeNull());
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("com uma preparação da mesma extensão em curso, desfazer e remover ficam bloqueados com o motivo", async () => {
+    const preparando = operation({
+      kind: "update",
+      status: "preparing",
+      extra: { catalog_id: CATALOG, version: "1.1.0", from_revision: 2, from_version: "1.0.0" },
+    });
+    const dados = list(ORG_A, {
+      installations: [
+        installation({
+          installation_revision: 2,
+          previous: { version: "0.9.0", compatible: true, compatibility_reason: null, in_catalog: true },
+        }),
+      ],
+      operations: [preparando],
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ data: dados })));
+    renderManager();
+
+    expect(await screen.findByTestId(`extension-platform-preparing-${INSTALLATION}`)).toHaveTextContent(
+      "Há uma preparação desta extensão em andamento.",
+    );
+    expect(screen.getByTestId(`extension-revert-${INSTALLATION}`)).toBeDisabled();
+    expect(screen.getByTestId(`extension-remove-${INSTALLATION}`)).toBeDisabled();
+  });
+
+  it("pedido de outro responsável pela instalação não oferece retomar, só cancelar", async () => {
+    const deOutro = operation({
+      kind: "install",
+      status: "preparing",
+      extra: { catalog_id: CATALOG, actor_id: "00000000-0000-4000-8000-000000000099" },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ data: list(ORG_A, { operations: [deOutro] }) })));
+    renderManager();
+
+    expect(await screen.findByTestId(`extension-operation-other-actor-${deOutro.id}`)).toBeVisible();
+    expect(screen.queryByTestId(`extension-operation-verify-${deOutro.id}`)).toBeNull();
+    expect(screen.getByTestId(`extension-operation-cancel-${deOutro.id}`)).toBeEnabled();
+  });
+
+  it("o pedido pendente diz o tipo, porque o rótulo é igual para atualizar, desfazer e remover", async () => {
+    persistPendingReceipt(window.localStorage, ACTOR, ORG_A, {
+      ...RECEIPT,
+      kind: "removal",
+      label: "equipe-exemplo/rotina-comercial@1.1.0",
+      targetKey: `removal:${INSTALLATION}:2`,
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ data: list() })));
+    renderManager();
+
+    expect(await screen.findByTestId(`extension-local-receipt-${RECEIPT.id}`)).toHaveTextContent(
+      "Remoção da instalação · equipe-exemplo/rotina-comercial@1.1.0",
+    );
+  });
+
+  it("o diálogo do catálogo fecha quando outra sessão muda a instalação, em vez de confirmar sobre o estado novo", async () => {
+    const entrada: CatalogEntry = {
+      publisher: "equipe-exemplo",
+      name: "rotina-comercial",
+      version: "1.1.0",
+      license: "MIT",
+      host_api: { min: 1, max: 1 },
+      display: { ...DISPLAY },
+      permissions: ["navigation.tasks"],
+      sha256: "a".repeat(64),
+      byte_length: 100,
+    };
+    const catalogos = [
+      {
+        id: CATALOG,
+        origin: "https://extensions.example/catalog.json",
+        revision: 1,
+        admitted_at: "2026-09-15T00:00:00.000Z",
+        entries: [entrada],
+      },
+    ];
+    const antes = list(ORG_A, { catalogs: catalogos, installations: [installation({ installation_revision: 4 })] });
+    const depois = list(ORG_A, { catalogs: catalogos, installations: [installation({ installation_revision: 5 })] });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: antes }))
+      .mockResolvedValue(json({ data: depois }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByRole("tab", { name: "Catálogo" }));
+    const identidade = "equipe-exemplo-rotina-comercial-1.1.0";
+    await user.click(await screen.findByTestId(`extension-install-${identidade}`));
+    expect(await screen.findByTestId(`extension-install-dialog-${identidade}`)).toBeVisible();
+
+    fireEvent(window, new Event("focus"));
+
+    await waitFor(() => expect(screen.queryByTestId(`extension-install-dialog-${identidade}`)).toBeNull());
+    expect(fetchMock.mock.calls.every(([, init]) => ((init as RequestInit | undefined)?.method ?? "GET") === "GET")).toBe(true);
   });
 
   it("a organização vê a extensão removida e, depois de reinstalada, por que ela está desligada", async () => {

@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/hooks/i18n/useT";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import { randomId } from "@/lib/random-id";
+import { compararVersoes } from "@/lib/extensions/versao";
 import type { CatalogEntry, ExtensionConfiguration } from "@/lib/extensions/manifest";
 import type {
   ExtensionListView,
@@ -400,13 +401,28 @@ export function ExtensionsManager({
     toast.success(t("Catálogo admitido e disponível para instalação."));
   }, [catalogFile, runMutation, t]);
 
-  /** A outra sessão mudou a instalação antes deste pedido: o estado da tela não vale mais. */
-  const versionChanged = useCallback(async () => {
-    toast.warning(
-      t("A extensão mudou em outra sessão. Recarregamos o estado atual; revise antes de repetir."),
-    );
-    await carregar(true);
-  }, [carregar, t]);
+  /**
+   * A instalação mudou em outra sessão antes deste pedido: o estado da tela não vale mais. Uma
+   * remoção feita em outra sessão chega como `extension_removed` (410), porque o banco confere
+   * "removida" antes da revisão; sem recarregar, o card seguia oferecendo desfazer e remover.
+   * Devolve `true` quando tratou o código.
+   */
+  const staleInstallation = useCallback(
+    async (error: { code: string; message: string }): Promise<boolean> => {
+      if (error.code === "extension_version_changed") {
+        toast.warning(
+          t("A extensão mudou em outra sessão. Recarregamos o estado atual; revise antes de repetir."),
+        );
+      } else if (error.code === "extension_removed") {
+        toast.warning(t(error.message));
+      } else {
+        return false;
+      }
+      await carregar(true);
+      return true;
+    },
+    [carregar, t],
+  );
 
   const install = useCallback(
     async (catalogId: string, entry: CatalogEntry, expectedInstallationRevision: number | null) => {
@@ -442,8 +458,9 @@ export function ExtensionsManager({
           }),
       });
       if (!result.ok) {
-        if (result.error.code === "extension_version_changed") await versionChanged();
-        else if (!result.uncertain) toast.error(t(result.error.message));
+        if (!(await staleInstallation(result.error)) && !result.uncertain) {
+          toast.error(t(result.error.message));
+        }
         return;
       }
       // A rota responde 200 com o recibo em QUALQUER desfecho; o status é que diz o
@@ -460,14 +477,18 @@ export function ExtensionsManager({
       if (result.data.status === "preparing") {
         toast.success(t("Preparação iniciada. O recibo continuará visível até a conclusão."));
       } else if (result.data.kind === "update") {
-        toast.success(t("Extensão atualizada. As organizações que a usavam continuam com ela ativa."));
+        toast.success(
+          ehTrocaParaVersaoMenor(result.data)
+            ? t("Versão trocada. As organizações que a usavam continuam com ela ativa.")
+            : t("Extensão atualizada. As organizações que a usavam continuam com ela ativa."),
+        );
       } else if (reinstall) {
         toast.success(t("Extensão reinstalada. Cada organização precisa ativá-la de novo."));
       } else {
         toast.success(t("Extensão instalada. Agora um administrador da organização pode ativá-la."));
       }
     },
-    [data?.removed_installations, runMutation, t, versionChanged],
+    [data?.removed_installations, runMutation, staleInstallation, t],
   );
 
   const changeInstallation = useCallback(
@@ -493,8 +514,9 @@ export function ExtensionsManager({
           ),
       });
       if (!result.ok) {
-        if (result.error.code === "extension_version_changed") await versionChanged();
-        else if (!result.uncertain) toast.error(t(result.error.message));
+        if (!(await staleInstallation(result.error)) && !result.uncertain) {
+          toast.error(t(result.error.message));
+        }
         return;
       }
       toast.success(
@@ -506,7 +528,7 @@ export function ExtensionsManager({
           : t("Extensão removida de todas as organizações."),
       );
     },
-    [runMutation, t, versionChanged],
+    [runMutation, staleInstallation, t],
   );
 
   const configure = useCallback(
@@ -541,6 +563,11 @@ export function ExtensionsManager({
       });
       if (!result.ok) {
         if (result.error.code === "extension_context_changed") {
+          return { ok: false, message: t(result.error.message) };
+        }
+        // Removida em outra sessão: o formulário não pode seguir editável sobre ela.
+        if (result.error.code === "extension_removed") {
+          await carregar(true);
           return { ok: false, message: t(result.error.message) };
         }
         // Só a revisão divergente é "outra pessoa alterou". Os outros 409 (o limite de
@@ -728,7 +755,11 @@ export function ExtensionsManager({
             : t("Preparação cancelada. Este pedido não instalará a extensão."),
         );
       } else if (confirmed.status === "completed") {
-        toast.info(t("A instalação já havia sido concluída; o recibo foi atualizado."));
+        toast.info(
+          confirmed.kind === "update"
+            ? t("A troca de versão já havia sido concluída; o recibo foi atualizado.")
+            : t("A instalação já havia sido concluída; o recibo foi atualizado."),
+        );
       } else if (confirmed.status === "failed") {
         toast.info(t("A preparação já havia falhado; o recibo foi atualizado."));
       }
@@ -851,7 +882,9 @@ export function ExtensionsManager({
                     className="flex flex-col gap-2 rounded-md border border-info/25 bg-surface/70 p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{receipt.label}</p>
+                      <p className="truncate text-sm font-medium">
+                        {tituloDoPedido(receipt.kind, t)} · {receipt.label}
+                      </p>
                       <p className="font-mono text-[11px] text-muted-foreground">{receipt.id}</p>
                       {receipt.id === uncertainReceiptId ? (
                         <p role="status" className="mt-1 text-xs text-warning-fg">
@@ -931,10 +964,20 @@ export function ExtensionsManager({
                         setConfigFeedback((atual) => ({ ...atual, [alvo.id]: message }));
                       }}
                       canInstall={data.can_install}
-                      platformBusy={
-                        busyTarget === `revert:${extension.id}:${extension.installation_revision}` ||
-                        busyTarget === `removal:${extension.id}:${extension.installation_revision}`
+                      platformBusyAction={
+                        busyTarget === `revert:${extension.id}:${extension.installation_revision}`
+                          ? "revert"
+                          : busyTarget === `removal:${extension.id}:${extension.installation_revision}`
+                            ? "remove"
+                            : null
                       }
+                      preparationInProgress={data.operations.some(
+                        (operation) =>
+                          operation.status === "preparing" &&
+                          operation.catalog_id === extension.catalog_id &&
+                          operation.publisher === extension.publisher &&
+                          operation.name === extension.name,
+                      )}
                       platformBlockedReason={data.can_install ? mutationBlockedReason : undefined}
                       onRevert={(alvo) => changeInstallation(alvo, "revert")}
                       onRemove={(alvo) => changeInstallation(alvo, "remove")}
@@ -970,7 +1013,9 @@ export function ExtensionsManager({
                     const target = `install:${catalog.id}:${entry.publisher}:${entry.name}:${entry.version}:${expected ?? "none"}`;
                     return (
                       <CatalogExtensionCard
-                        key={`${catalog.id}:${entry.publisher}:${entry.name}:${entry.version}`}
+                        // A precondição entra na chave: se outra sessão mudar a instalação, o card
+                        // remonta e fecha um diálogo aberto, em vez de confirmar sobre o estado novo.
+                        key={`${catalog.id}:${entry.publisher}:${entry.name}:${entry.version}:${identity.kind}:${expected ?? "none"}`}
                         entry={entry}
                         origin={catalog.origin}
                         canInstall={data.can_install}
@@ -1005,6 +1050,7 @@ export function ExtensionsManager({
 
           {data.operations.length > 0 ? (
             <ExtensionOperations
+              actorId={actorId}
               operations={data.operations}
               busyTarget={busyTarget}
               actionsDisabled={!mutationsReady}
@@ -1051,4 +1097,30 @@ function catalogIdentity(
   return elsewhere
     ? { kind: "other_origin", origin: elsewhere.origin, version: elsewhere.version }
     : { kind: "absent" };
+}
+
+/** Uma atualização para versão menor é troca de versão, e o texto diz isso. */
+function ehTrocaParaVersaoMenor(operation: ExtensionOperationView): boolean {
+  const destino = operation.to_version ?? operation.version;
+  return Boolean(
+    destino && operation.from_version && compararVersoes(destino, operation.from_version) < 0,
+  );
+}
+
+/** O tipo do pedido pendente: o rótulo sozinho é igual para atualizar, desfazer e remover. */
+function tituloDoPedido(kind: PendingReceipt["kind"], t: (texto: string) => string): string {
+  switch (kind) {
+    case "catalog_admission":
+      return t("Admissão de catálogo");
+    case "install":
+      return t("Instalação");
+    case "update":
+      return t("Troca de versão");
+    case "revert":
+      return t("Desfazer a última troca");
+    case "removal":
+      return t("Remoção da instalação");
+    case "configure":
+      return t("Configuração");
+  }
 }

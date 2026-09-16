@@ -593,7 +593,7 @@ Antes de declarar uma task pronta:
     de release, que consome os fragmentos e deixa o diretório vazio. A presença é cobrada
     aqui, e por quem revisa.
 
-18. **Se o PR acrescenta ou muda capacidade, ele declara o destino: núcleo, extensão, ambos ou
+18. **Se o PR muda comportamento, ele declara o destino: núcleo, extensão, ambos ou
     infraestrutura** (lei em [`docs/doctrine/extensoes.md`](docs/doctrine/extensoes.md)), com a razão
     medida pela pergunta "se nenhuma organização ativar isto, a operação comum continua inteira?".
     "Ambos" traz o consumidor real do ponto novo do núcleo e a prova dos dois lados. Classificar como

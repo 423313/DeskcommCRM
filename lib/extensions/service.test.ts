@@ -50,6 +50,7 @@ const mocks = vi.hoisted(() => ({
   audit: vi.fn(),
   auditForOrganizations: vi.fn(),
   warn: vi.fn(),
+  platform: vi.fn(),
 }));
 vi.mock("@/lib/env", () => ({
   env: { EXTENSIONS_LOCAL_CATALOG_ORIGIN: "", NEXT_PUBLIC_APP_URL: "http://localhost:3000" },
@@ -68,7 +69,7 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 vi.mock("./http", async (importOriginal) => ({
   ...(await importOriginal<typeof HttpModule>()),
-  requireExtensionPlatform: async () => ({ ok: true }),
+  requireExtensionPlatform: () => mocks.platform(),
 }));
 
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
@@ -181,6 +182,8 @@ beforeEach(() => {
   mocks.audit.mockReset();
   mocks.auditForOrganizations.mockReset();
   mocks.warn.mockReset();
+  mocks.platform.mockReset();
+  mocks.platform.mockResolvedValue({ ok: true });
   mocks.session = fakeClient({});
 });
 
@@ -246,6 +249,58 @@ describe("listExtensions", () => {
   });
 });
 
+describe("listExtensions: removidas e conferência da plataforma", () => {
+  it("uma removida antiga continua reinstalável: a busca é pelas identidades do catálogo, não pelas mais recentes", async () => {
+    // 150 removidas; a listada no catálogo é a PRIMEIRA na ordem da tabela, fora de um corte das
+    // 128 mais recentes. Sem ela na view, a tela pedia a instalação com revisão nula e o banco
+    // respondia "mudou em outra sessão" para sempre.
+    const removidas = Array.from({ length: 150 }, (_, index) =>
+      installationRow(artifact(`removida-${index}`), {
+        revision: 3,
+        removed_at: `2026-09-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`,
+      }),
+    );
+    const listada = artifact("removida-0");
+    const manifesto = listada.manifest as Record<string, unknown>;
+    const entrada = {
+      publisher: manifesto.publisher,
+      name: manifesto.name,
+      version: manifesto.version,
+      license: manifesto.license,
+      host_api: manifesto.host_api,
+      display: manifesto.display,
+      permissions: manifesto.permissions,
+      sha256: listada.sha256,
+      byte_length: listada.byte_length,
+    };
+    mocks.admin = fakeClient({
+      extension_catalogs: [{ ...catalogRow, snapshot: { ...catalogRow.snapshot, entries: [entrada] } }],
+      extension_artifacts: [],
+      extension_installations: removidas,
+      extension_operations: [],
+    });
+
+    const view = await listExtensions(USER, ORG);
+
+    expect(view.catalogs[0]?.entries).toHaveLength(1);
+    expect(view.removed_installations).toEqual([
+      expect.objectContaining({ id: removidas[0]!.id, name: "removida-0", revision: 3 }),
+    ]);
+  });
+
+  it("falha ao conferir a plataforma é erro, e não a gestão de um membro comum", async () => {
+    mocks.admin = fakeClient({ extension_catalogs: [catalogRow] });
+    mocks.platform.mockResolvedValue({ ok: false, response: new Response(null, { status: 503 }) });
+    await expect(listExtensions(USER, ORG)).rejects.toMatchObject({
+      code: "upstream_unavailable",
+      status: 503,
+    });
+
+    mocks.platform.mockResolvedValue({ ok: false, response: new Response(null, { status: 403 }) });
+    expect((await listExtensions(USER, ORG)).can_install).toBe(false);
+  });
+});
+
 describe("auditoria só quando a chamada fez a transição", () => {
   it("remover grava a linha da instância e uma por organização desligada; a repetição não grava", async () => {
     const installation = randomUUID();
@@ -282,7 +337,7 @@ describe("auditoria só quando a chamada fez a transição", () => {
     );
     expect(mocks.auditForOrganizations).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: "extension.deactivated",
+        action: "extension.deactivated_by_removal",
         metadata: expect.objectContaining({ reason: "installation_removed" }),
       }),
       [ORG_A, ORG_B],

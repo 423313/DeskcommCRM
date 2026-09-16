@@ -90,6 +90,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  test.setTimeout(120_000);
   for (const contexto of contextosExtras) await contexto.close();
   await catalogo?.limpar();
   await atores?.limpar();
@@ -197,7 +198,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     await gestao(page, "Instaladas");
     await page.getByTestId(`extension-revert-${installationId}`).click();
     const dialogo = page.getByTestId(`extension-revert-dialog-${installationId}`);
-    await expect(dialogo).toContainText("Voltar");
+    await expect(dialogo).toContainText(`Voltar ${catalogo!.title} para a versão 1.0.0?`);
     await expect(dialogo).toContainText("1 organização está com esta extensão ativa.");
     await page.getByTestId(`extension-revert-confirm-${installationId}`).click();
     await expect(
@@ -229,6 +230,9 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     await guiaAberto.goto(`/app/extensions/${installationId}`);
     await expect(guiaAberto.getByTestId("extension-guide")).toBeVisible({ timeout: 30_000 });
 
+    // Uma página em segundo plano não anima: o Chromium congela os quadros dela, e todo clique
+    // espera "estável" para sempre (medido na primeira rodada: 8 min parado na aba Instaladas).
+    await page.bringToFront();
     await gestao(page, "Instaladas");
     await page.getByTestId(`extension-remove-${installationId}`).click();
     await expect(page.getByTestId(`extension-remove-dialog-${installationId}`)).toContainText(
@@ -243,6 +247,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     expect(desligado).toMatchObject({ enabled: false, revision: 2 });
     expect(desligado?.deactivated_by_removal_at).not.toBeNull();
 
+    await guiaAberto.bringToFront();
     await guiaAberto.reload();
     await expect(
       guiaAberto.getByText(
@@ -253,6 +258,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     await expect(guiaAberto.getByRole("button", { name: "Tentar novamente" })).toHaveCount(0);
     await guiaAberto.screenshot({ path: `${EVIDENCE}/5-guia-removido.png`, fullPage: true });
     await guiaAberto.close();
+    await page.bringToFront();
 
     await gestao(page, "Instaladas");
     await expect(page.getByTestId(`extension-removed-${installationId}`)).toContainText(
@@ -263,7 +269,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
       .from("api_audit_log")
       .select("action,metadata")
       .eq("organization_id", atores!.organizacaoA)
-      .eq("action", "extension.deactivated");
+      .eq("action", "extension.deactivated_by_removal");
     if (error) throw new Error(error.message);
     expect(linhas).toEqual([
       expect.objectContaining({
@@ -271,7 +277,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
       }),
     ]);
     await page.goto("/app/audit");
-    await expect(page.getByText("extension.deactivated").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("extension.deactivated_by_removal").first()).toBeVisible({ timeout: 30_000 });
     await page.screenshot({ path: `${EVIDENCE}/6-auditoria-da-organizacao.png`, fullPage: true });
   });
 
@@ -329,7 +335,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
       .first();
     await expect(recibo).toBeVisible();
     await expect(recibo).toContainText(
-      "A versão instalada continua a mesma. Confira o catálogo admitido e tente a atualização novamente.",
+      "A versão instalada continua a mesma. Confira o catálogo admitido e peça a troca de novo.",
     );
     await page.screenshot({ path: `${EVIDENCE}/8-atualizacao-falhou.png`, fullPage: true });
 

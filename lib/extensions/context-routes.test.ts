@@ -21,6 +21,7 @@ vi.mock("@/lib/extensions/service", () => ({
   loadExtensionGuide: mocks.guide,
   configureExtension: mocks.configure,
   readExtensionOperation: mocks.receipt,
+  canManageInstallation: async () => false,
 }));
 
 import { GET as list } from "@/app/api/v1/extensions/route";

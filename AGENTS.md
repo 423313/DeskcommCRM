@@ -435,7 +435,7 @@ Lei completa em [`docs/doctrine/packaging.md`](docs/doctrine/packaging.md). O n�
 
 `pnpm test:shell` é o único gate que exercita o kit. Rode-o.
 
-## Extensões — se sua mudança acrescenta ou muda uma capacidade
+## Extensões — se sua mudança muda comportamento
 
 Lei completa em [`docs/doctrine/extensoes.md`](docs/doctrine/extensoes.md); contrato vigente em
 [`docs/specs/extensoes-declarativas-v1.md`](docs/specs/extensoes-declarativas-v1.md). Declare o
