@@ -251,16 +251,17 @@ describe("listExtensions", () => {
 
 describe("listExtensions: removidas e conferência da plataforma", () => {
   it("uma removida antiga continua reinstalável: a busca é pelas identidades do catálogo, não pelas mais recentes", async () => {
-    // 150 removidas; a listada no catálogo é a PRIMEIRA na ordem da tabela, fora de um corte das
-    // 128 mais recentes. Sem ela na view, a tela pedia a instalação com revisão nula e o banco
-    // respondia "mudou em outra sessão" para sempre.
+    // 150 removidas; a listada no catálogo é a MAIS ANTIGA e a ÚLTIMA na ordem da tabela, fora de
+    // um corte das 128 mais recentes (o PostgREST em memória corta `limit` na ordem da tabela).
+    // Sem ela na view, a tela pedia a instalação com revisão nula e o banco respondia "mudou em
+    // outra sessão" para sempre.
     const removidas = Array.from({ length: 150 }, (_, index) =>
       installationRow(artifact(`removida-${index}`), {
         revision: 3,
-        removed_at: `2026-09-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`,
+        removed_at: new Date(Date.UTC(2026, 8, 16, 12, 0, 0) - index * 60_000).toISOString(),
       }),
     );
-    const listada = artifact("removida-0");
+    const listada = artifact("removida-149");
     const manifesto = listada.manifest as Record<string, unknown>;
     const entrada = {
       publisher: manifesto.publisher,
@@ -284,7 +285,7 @@ describe("listExtensions: removidas e conferência da plataforma", () => {
 
     expect(view.catalogs[0]?.entries).toHaveLength(1);
     expect(view.removed_installations).toEqual([
-      expect.objectContaining({ id: removidas[0]!.id, name: "removida-0", revision: 3 }),
+      expect.objectContaining({ id: removidas[149]!.id, name: "removida-149", revision: 3 }),
     ]);
   });
 
