@@ -42,8 +42,13 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
   // A comparação é entre formas NORMALIZADAS: um contato que já tem "VIP"
   // (gravado antes, pelo diálogo de contato, que não normaliza) recebia o chip
   // "+ vip" e ficava com as duas — a duplicação que a sugestão veio impedir.
+  // E o chip MOSTRA a forma normalizada, não a que a fonte mandou: o rótulo
+  // precisa ser o que o clique grava mesmo que a lista chegue crua (a rota a
+  // normaliza hoje, mas a fonte está marcada para trocar).
   const jaTem = new Set(tags.map(normalizarTag));
-  const suggestions = (vocabulary ?? []).filter((v) => !jaTem.has(normalizarTag(v))).slice(0, 8);
+  const suggestions = [...new Set((vocabulary ?? []).map(normalizarTag))]
+    .filter((v) => v && !jaTem.has(v))
+    .slice(0, 8);
 
   return (
     <div className="mt-2 space-y-2 rounded-md border border-border p-2">

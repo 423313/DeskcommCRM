@@ -116,4 +116,30 @@ describe("ContactTagsEditor", () => {
     await screen.findByRole("button", { name: "+ google" }, { timeout: 5000 });
     expect(screen.queryByRole("button", { name: /\+ ?vip/i })).toBeNull();
   });
+
+  /**
+   * O chip diz o que o clique grava MESMO que a lista chegue crua. Hoje quem
+   * normaliza a lista é `GET /api/v1/contact-tags`, mas o editor não pode
+   * depender disso: o cabeçalho daquela rota já manda trocar a consulta pela
+   * `fn_vocabulario_de_tags`, e o rótulo do chip não pode mudar de verdade
+   * junto com a fonte. "Google " cru viraria o chip "+ Google" que grava
+   * "google", e "VIP"/"vip" viraria dois chips que gravam a mesma tag.
+   */
+  it("lista crua da fonte: o chip já mostra a forma que o clique grava, uma vez só", async () => {
+    get.mockResolvedValue({ data: ["VIP", "vip", "Google "] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ContactTagsEditor contactId="c-1" orgId={ORG} tags={["cliente"]} />
+      </QueryClientProvider>,
+    );
+
+    const google = await screen.findByRole("button", { name: "+ google" }, { timeout: 5000 });
+    expect(screen.getAllByRole("button", { name: /^\+ ?vip$/i })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "+ vip" })).toBeTruthy();
+
+    await userEvent.click(google);
+
+    expect(mutate).toHaveBeenCalledWith({ tags: ["cliente", "google"] });
+  });
 });
