@@ -3,9 +3,16 @@
  *
  * Sem rede, sem `process.env` e sem relógio próprio: quem chama injeta a
  * configuração do app e o instante. É o que permite provar, em teste de
- * unidade, as quatro armadilhas desta integração em produção: três matam a
- * conexão em silêncio, e a quarta tranca quem tem a agenda num e-mail
- * diferente do login do CRM.
+ * unidade, as três primeiras armadilhas desta integração em produção — e a
+ * GUARDA contra a quarta. São quatro, e elas não se dividem só pelo estrago
+ * (três matam a conexão em silêncio, a quarta tranca quem tem a agenda num
+ * e-mail diferente do login do CRM): dividem-se também pelo que um teste de
+ * unidade alcança. Nas três primeiras o mecanismo É o que enviamos, então
+ * medir o que sai mede a armadilha inteira. Na quarta o mecanismo é a tela do
+ * Google pular o seletor — daqui só se prova que `select_account` SAI, nunca
+ * que o seletor aparece. O teste irmão já faz essa distinção, e o cabeçalho
+ * não pode desfazê-la: `tests/unit/agenda-google-oauth.test.ts` abre com
+ * "três armadilhas medidas" e só depois com "e uma quarta".
  *
  * ─── Armadilha 1: sem `prompt=consent` não vem `refresh_token` ────────────
  *
