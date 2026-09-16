@@ -16,6 +16,7 @@ import type {
   PatchConversationInput,
 } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
+import { ehAVisaoDaFila } from "@/lib/inbox/posicao-na-fila";
 import { normalizarTermoDeBusca } from "@/lib/inbox/termo-de-busca";
 
 /**
@@ -96,6 +97,20 @@ const SELECT_COLS = `
 interface CursorPayload {
   sort: string | null;
   id: string;
+  /**
+   * De QUAL coluna o `sort` saiu.
+   *
+   * O campo existe porque o NOME do campo nunca disse o SIGNIFICADO do valor:
+   * até a unificação da ordem (#639) a aba Fila emitia `{ sort: <last_inbound_at>,
+   * id }` — a MESMA chave `sort`, com um carimbo de OUTRA coluna e comparado no
+   * sentido oposto (`gt` ascendente). Um cursor desses, clicado em "Carregar
+   * mais" logo depois da atualização, entraria em `last_message_at.lt.<valor>` e
+   * pularia linhas em silêncio.
+   *
+   * Opcional porque cursor de antes desta linha não o tem — e é justamente a
+   * ausência que o identifica.
+   */
+  col?: string;
 }
 
 function encodeCursor(p: CursorPayload): string {
@@ -109,7 +124,7 @@ function decodeCursor(raw: string): CursorPayload | null {
     // `last_message_at` é o nome legado do campo de ordenação (cursores em voo
     // durante deploy); `sort` é o genérico atual (default OU fila).
     const sort = parsed.sort ?? parsed.last_message_at ?? null;
-    return { sort, id: parsed.id };
+    return { sort, id: parsed.id, col: typeof parsed.col === "string" ? parsed.col : undefined };
   } catch {
     return null;
   }
@@ -356,15 +371,25 @@ export async function listConversationsHandler(
         traduzir("Cursor inválido.", ctx.idioma ?? "pt-BR"),
       );
     }
+    // CURSOR EM VOO ATRAVÉS DA ATUALIZAÇÃO (#639). Um cursor sem `col` foi
+    // emitido antes de a ordem ser unificada; na aba Fila, o `sort` dele carrega
+    // um carimbo de `last_inbound_at` — outra coluna, e comparada no sentido
+    // contrário. Aplicá-lo devolveria uma página que pula linhas sem dizer nada.
+    // Descartamos: a página recomeça, e o cursor seguinte já nasce carimbado.
+    // Fora da Fila o cursor legado é válido (sempre foi `last_message_at`), e
+    // descartá-lo custaria uma página repetida a quem não tinha defeito nenhum.
+    const legadoDeOutraOrdem = c.col === undefined && ehAVisaoDaFila(q);
     const op = asc ? "gt" : "lt";
-    if (c.sort) {
-      query = query.or(
-        `${sortCol}.${op}.${c.sort},and(${sortCol}.eq.${c.sort},id.${op}.${c.id})`,
-      );
-    } else {
-      // Página já na região de sort NULL (nulls last): pagina só por id.
-      query = query.is(sortCol, null);
-      query = asc ? query.gt("id", c.id) : query.lt("id", c.id);
+    if (!legadoDeOutraOrdem) {
+      if (c.sort) {
+        query = query.or(
+          `${sortCol}.${op}.${c.sort},and(${sortCol}.eq.${c.sort},id.${op}.${c.id})`,
+        );
+      } else {
+        // Página já na região de sort NULL (nulls last): pagina só por id.
+        query = query.is(sortCol, null);
+        query = asc ? query.gt("id", c.id) : query.lt("id", c.id);
+      }
     }
   }
 
@@ -379,7 +404,7 @@ export async function listConversationsHandler(
   const last = page[page.length - 1];
   const cursor =
     hasMore && last
-      ? encodeCursor({ sort: (last[sortCol] as string | null) ?? null, id: last.id })
+      ? encodeCursor({ sort: (last[sortCol] as string | null) ?? null, id: last.id, col: sortCol })
       : null;
 
   return { conversations: page, cursor, has_more: hasMore };

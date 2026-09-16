@@ -48,6 +48,21 @@ export interface Conversation {
    * resposta de uma versão anterior, ainda em cache do react-query, não o tem.
    */
   comando_da_conversa?: string | null;
+  /**
+   * Posição 1-based na fila de ESPERA (`lib/routing/queue.ts`
+   * `getQueuePositions`), acrescentada na borda HTTP por
+   * `lib/inbox/posicao-na-fila.ts`. `null` fora da aba Fila.
+   *
+   * NÃO é o índice na lista visível: a lista é ordenada por atividade recente
+   * (`last_message_at` DESC, #639) e a fila de espera por `last_inbound_at` ASC.
+   * É este número — e não o índice — que o MCP devolve e que o cliente ouve pelo
+   * WhatsApp; desenhar o índice com o rótulo "Posição N na fila" fazia o mesmo
+   * produto dizer dois números para a mesma conversa.
+   *
+   * Opcional porque uma resposta de antes deste campo, ainda em cache do
+   * react-query, não o tem.
+   */
+  queue_position?: number | null;
   last_handoff_at: string | null;
   created_at: string;
   updated_at: string;

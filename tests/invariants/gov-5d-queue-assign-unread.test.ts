@@ -78,9 +78,15 @@ beforeAll(() => {
 });
 
 describe("G5-03 — coerência ordem↔posição (acceptance 1)", () => {
-  it("fila EXIBIDA ordena por last_message_at DESC, id DESC (a MESMA ordem do handler) ⇒ mais nova no topo, NULL no fim", () => {
-    // Espelha o ORDER BY do handler (app/api/v1/conversations/_handler.ts): o
-    // índice nesta lista é a numeração que a tela mostra, então provamos a lista.
+  it("o Postgres devolve a ordem que o handler PEDE: last_message_at DESC nulls last, id DESC (espelho — quem guarda o pedido é tests/unit/fila-ordena-por-ultima-mensagem.test.ts)", () => {
+    // Espelha o ORDER BY do handler (app/api/v1/conversations/_handler.ts).
+    // ⚠️ este arquivo NÃO chama o handler: reverter o ORDER BY do handler não o
+    // deixa vermelho. Ele prova que o Postgres ordena como pedido, não que o
+    // handler pede — a guarda do PEDIDO é o unit citado no título.
+    // O índice nesta lista NÃO é mais a numeração que a tela mostra: o selo da
+    // Fila passou a desenhar `queue_position` (`lib/inbox/posicao-na-fila.ts`),
+    // que é a ordem de ESPERA — outra pergunta, medida em
+    // tests/unit/fila-selo-mostra-a-posicao-de-espera.test.tsx.
     // A fixture põe last_message_at NÃO monotônico em relação ao tempo de espera
     // (MID 2min, OLD 10min, NEW 30min) — uma ordem por `last_inbound_at` ASC
     // devolveria OLD,MID,NEW e este teste reprova. CONV_STALE não tem

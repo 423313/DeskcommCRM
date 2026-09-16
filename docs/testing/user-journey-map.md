@@ -307,6 +307,7 @@ Regra no banco: `tests/invariants/comando-cala-o-automatico.test.ts` (6 casos).
 
 | J11.10 | A conversa que o automático ESCALOU aparece na Fila | `status='pending'` sem dono entra na aba e é contada pelo badge | FAIL → PASS |
 | J11.11 | O número da fila é o MESMO para o cliente e para a equipe | `getQueuePosition` (o "você é o 5º" que o cliente ouve) e `getQueuePositions` (o "3º" da tela) contam os mesmos estados | FAIL → PASS |
+| J11.12 | O selo "Posição N na fila" mostra a posição de ESPERA, não o índice da lista | ao unificar a ordem da lista em atividade recente (#639), o índice deixou de coincidir com a posição e o selo continuou desenhando o índice — a MESMA divergência da J11.11, de volta pelo outro lado. Conserto: `lib/inbox/posicao-na-fila.ts` carimba `queue_position` na borda HTTP e a lista o desenha | FAIL → PASS por unidade (`tests/unit/fila-selo-mostra-a-posicao-de-espera.test.tsx`, 5 casos) — **falta a prova pela tela**: abrir a aba Fila com três conversas de `last_inbound_at` e `last_message_at` não-monotônicos entre si (a fixture de `tests/invariants/gov-5d-queue-assign-unread.test.ts`), medir a ordem das linhas por `getBoundingClientRect().top` e conferir que o número do selo bate com o `queue_position` de `crm_list_conversations` |
 
 **O achado que esta jornada abriu, e como ele cresceu.** A primeira rodada
 registrou aqui "a conversa escalada não aparece em aba nenhuma" como pendência de
