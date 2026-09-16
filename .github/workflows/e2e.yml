@@ -923,13 +923,43 @@ jobs:
           # 3. A cadeia de Redis, provada pelo protocolo que o produto usa: um
           #    comando Upstash REST de verdade, que só responde PONG se o
           #    serverless-redis-http estiver de pé E falando com o redis:7.
+          #
+          #    Falha FECHADO, como o laço do WAHA logo abaixo. A versão anterior
+          #    terminava o `for` sem `exit 1`: nas 30 voltas sem PONG o passo
+          #    seguia verde e o vermelho aparecia minutos depois, dentro do
+          #    Playwright, sem nome. Medido no run 35124188017 (parte 4): a linha
+          #    "pronto" nunca foi impressa, 30,3s de vão entre o smoke do dublê e
+          #    o WAHA, e o passo verde.
+          #
+          #    O `Content-Type` é o motivo de nunca ter passado. Sem ele o `curl
+          #    -d` manda `application/x-www-form-urlencoded`, e o
+          #    serverless-redis-http recusa: HTTP 400 `{"error":"Invalid content
+          #    type. Expected application/json."}`. Com ele: 200
+          #    `{"result":"PONG"}`. Medido contra o MESMO digest do
+          #    `docker-compose.prod.yml`, com o redis:7-alpine atrás. O SDK
+          #    `@upstash/redis` do produto manda o cabeçalho; a sonda tem de
+          #    mandar também, senão prova um protocolo que ninguém usa.
+          redis_pronto=""
           for _ in $(seq 1 30); do
-            if curl -sf -X POST -H "Authorization: Bearer e2e-token-nao-e-segredo"                  -d '["PING"]' http://127.0.0.1:8079/ | grep -q PONG; then
+            resposta=$(curl -s -X POST \
+              -H "Authorization: Bearer e2e-token-nao-e-segredo" \
+              -H "Content-Type: application/json" \
+              -d '["PING"]' -w ' http=%{http_code}' \
+              http://127.0.0.1:8079/ || true)
+            if printf '%s' "$resposta" | grep -q PONG; then
               echo "Redis (REST do Upstash) pronto"
+              redis_pronto=1
               break
             fi
             sleep 1
           done
+          if [ -z "$redis_pronto" ]; then
+            echo "Redis (REST do Upstash) não respondeu PONG em 30s: $resposta"
+            echo "--- o que os contêineres do Redis dizem ---"
+            docker ps -a --filter name=redis --format '{{.Names}} {{.Status}} {{.Ports}}' || true
+            docker logs --tail 40 "$(docker ps -aq --filter name=serverlessredishttp | head -1)" 2>&1 || true
+            exit 1
+          fi
 
           # 4. Alguns scripts leem o disco em vez do ambiente.
           cp .env.e2e .env.local
