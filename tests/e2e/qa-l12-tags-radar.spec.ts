@@ -5,6 +5,7 @@
  * botões uma vez (J24 do mapa de jornadas). Aqui ela é clicada.
  */
 import { test } from "@playwright/test";
+import { randomInt } from "node:crypto";
 
 import {
   admin,
@@ -42,7 +43,7 @@ test.describe("Lote 12 — #955 o vocabulário de etiquetas", () => {
         await insere("contacts", {
           organization_id: c.org_id,
           name: nome,
-          phone_number: `+5511${Math.floor(Math.random() * 900000000 + 100000000)}`,
+          phone_number: `+5511${randomInt(100000000, 1000000000)}`,
           tags,
         }),
       );

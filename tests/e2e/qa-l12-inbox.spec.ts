@@ -12,6 +12,7 @@
 import { randomUUID } from "node:crypto";
 
 import { test } from "@playwright/test";
+import { randomInt } from "node:crypto";
 
 import {
   abreConversa,
@@ -60,7 +61,7 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
       await insere("contacts", {
         organization_id: c.org_id,
         name: nome,
-        phone_number: `+5511${Math.floor(Math.random() * 900000000 + 100000000)}`,
+        phone_number: `+5511${randomInt(100000000, 1000000000)}`,
         tags,
       });
     }
