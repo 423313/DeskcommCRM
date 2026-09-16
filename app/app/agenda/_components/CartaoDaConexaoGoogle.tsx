@@ -147,8 +147,8 @@ export function CartaoDaConexaoGoogle({
           devolveram o seletor de contas, escolher a ERRADA virou um clique — e
           a chave única inclui o e-mail, então a conta errada não substitui a
           certa: ela CRIA linha. Sem esta porta, a saída era "Desconectar", que
-          apaga TODAS as conexões Google da pessoa e os eventos e calendários
-          delas para trocar uma.
+          derruba TODAS as conexões Google da pessoa — e APAGA os eventos e
+          calendários de todas elas — para trocar uma.
 
           Nome próprio resolve as duas coisas: quem clica aqui está dizendo
           "outra", não repetindo um clique perdido. E é o que torna alcançável

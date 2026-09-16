@@ -59,10 +59,14 @@ describe("cartão da conexão do Google", () => {
     //   3. esse botão era a ÚNICA porta do produto para a rota de ida — medido:
     //      `grep -rn "agenda/google/connect" app components` devolvia um href e
     //      mais nada;
-    //   4. o único remédio oferecido, "Desconectar", apaga TODAS as conexões
-    //      Google da pessoa, com os `calendar_external_events` e
-    //      `calendar_connection_calendars` delas
-    //      (app/api/v1/agenda/google/desconectar/route.ts, `.in("id", ids)`).
+    //   4. o único remédio oferecido, "Desconectar", alcança TODAS as conexões
+    //      Google da pessoa de uma vez — ele resolve o alvo por `user_id` +
+    //      `provider`, sem recorte por conexão, e então DELETA os
+    //      `calendar_external_events` e os `calendar_connection_calendars` de
+    //      todas (`.in("connection_id", ids)`) e marca todas as conexões como
+    //      `status: "disconnected"` com os tokens zerados (`.in("id", ids)`)
+    //      — app/api/v1/agenda/google/desconectar/route.ts. A linha da conexão
+    //      sobrevive; o que some é o que fazia ela funcionar, para as duas.
     //
     // O botão "Conectar Google" continua sumindo, e isso é deliberado: o caso
     // acima guarda essa decisão, cuja razão era que a segunda conexão não podia

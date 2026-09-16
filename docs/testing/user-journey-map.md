@@ -664,9 +664,11 @@ as duas.
    mantém o caso 2 de `agenda-conectar-google.spec.ts` em `test.skip`.
 2. **Desconectar continua sendo tudo-ou-nada.** Com a porta `conectar-outra-conta`
    a pessoa alcança a conta certa, mas a errada fica na lista, e o único remédio
-   (`DELETE /api/v1/agenda/google/desconectar`) apaga TODAS as conexões Google
-   dela, com os `calendar_external_events` e `calendar_connection_calendars`
-   delas (`.in("id", ids)`). Desconectar POR conexão é a dívida: a rota já lê
+   (`DELETE /api/v1/agenda/google/desconectar`) alcança TODAS as conexões Google
+   dela de uma vez: resolve o alvo por `user_id` + `provider`, DELETA os
+   `calendar_external_events` e `calendar_connection_calendars` de todas
+   (`.in("connection_id", ids)`) e marca todas como `status: "disconnected"` com
+   os tokens zerados (`.in("id", ids)`). Desconectar POR conexão é a dívida: a rota já lê
    `id, account_email`, então é aceitar `connection_id` no corpo com o mesmo
    filtro explícito de organização.
 3. **O arranjo das três ações não foi medido em navegador.** A linha do cartão
