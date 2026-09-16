@@ -37,16 +37,24 @@ function valor(linha: Linha, caminho: string): unknown {
 
 function bancoFalso(tabelas: Record<string, Linha[]>) {
   const selects: string[] = [];
+  /**
+   * Sequência de chamadas POR TABELA. Uma trilha global não serviria: as três
+   * consultas da rota são montadas no mesmo `Promise.all`, uma depois da outra,
+   * então o `.eq` de `orders` cairia DEPOIS do `.limit` de `crm_leads` e a
+   * asserção de ordem falharia sem nenhum defeito no código.
+   */
+  const trilhas: Record<string, string[]> = {};
   const from = (tabela: string) => {
+    const trilha = (trilhas[tabela] ??= []);
     let linhas = [...(tabelas[tabela] ?? [])];
     let limite = Infinity;
     const chain = {
-      select: (cols: string) => (selects.push(cols), chain),
-      eq: (col: string, val: unknown) => ((linhas = linhas.filter((l) => valor(l, col) === val)), chain),
+      select: (cols: string) => (selects.push(cols), trilha.push("select"), chain),
+      eq: (col: string, val: unknown) => ((linhas = linhas.filter((l) => valor(l, col) === val)), trilha.push("eq"), chain),
       is: (col: string, val: unknown) => ((linhas = linhas.filter((l) => (valor(l, col) ?? null) === val)), chain),
       not: (col: string, _op: string, val: unknown) => ((linhas = linhas.filter((l) => (valor(l, col) ?? null) !== val)), chain),
       order: () => chain,
-      limit: (n: number) => ((limite = n), chain),
+      limit: (n: number) => ((limite = n), trilha.push("limit"), chain),
       maybeSingle: async () => ({ data: linhas[0] ?? null, error: null }),
       then: (res: (v: unknown) => unknown) =>
         Promise.resolve({ data: linhas.slice(0, limite), error: null }).then(res),
@@ -57,6 +65,7 @@ function bancoFalso(tabelas: Record<string, Linha[]>) {
     auth: { getUser: async () => ({ data: { user: { id: "u-1" } }, error: null }) },
     from,
     selects,
+    trilhas,
   };
 }
 
@@ -98,6 +107,18 @@ describe("crm-summary: leads recentes", () => {
     ]);
     // Sem `!inner` o PostgREST real não derruba o lead: anula o embed.
     expect(banco.selects.join("|")).toContain("crm_pipelines!inner");
+    // A etapa é o dado NOVO da linha (#943) e o dublê a serve da fixture, com
+    // ou sem o embed pedido: sem esta asserção, apagar `crm_stages(name)` do
+    // `select` deixa o arquivo verde e a tela volta a dizer só o funil.
+    expect(banco.selects.join("|")).toContain("crm_stages(name)");
+    // Filtrar NO BANCO, antes do `limit(3)`, é a metade que o comentário da
+    // rota declara — e que nenhuma asserção sobre o RESULTADO alcança, porque
+    // com dois leads os dois arranjos devolvem a mesma lista. Mover o `.eq` do
+    // funil arquivado para depois do `.limit` faria a rota pedir os 3 mais
+    // recentes e SÓ ENTÃO descartar os arquivados: quem tem lead velho em funil
+    // arquivado veria a lista encolher em vez de completar.
+    const trilha = banco.trilhas.crm_leads ?? [];
+    expect(trilha.lastIndexOf("eq")).toBeLessThan(trilha.indexOf("limit"));
   });
 
   /**
