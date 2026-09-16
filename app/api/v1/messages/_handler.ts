@@ -113,8 +113,9 @@ async function removerEcoDoProprioEnvio(
       .in("external_id", candidatos)
       // ⚠️ SEGUNDA CAMADA, SEM COBERTURA POSSÍVEL — escrito porque medi: trocar
       // este `neq` por um que nunca casa deixa a suíte VERDE. O filtro de
-      // `sent_via` acima já exclui a linha deste envio (que nasce `user`/`ai`,
-      // nunca `external_device`), então nenhum teste alcança esta cláusula.
+      // `sent_via` acima já exclui a linha deste envio (que nasce `user`/`ai`/
+      // `system`, nunca `external_device`), então nenhum teste alcança esta
+      // cláusula.
       // Fica porque o desfecho que ela impede é o pior que esta função poderia
       // produzir: apagar a própria mensagem que acabou de ser entregue. Quem
       // mexer no filtro de cima não vai ser avisado por teste nenhum.
@@ -131,6 +132,34 @@ async function removerEcoDoProprioEnvio(
 
 const MSG_COLS =
   "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, edited_at, revoked_at, reply_to_message_id, created_at";
+
+/**
+ * `Actor.type` → o vocabulário de `messages.sent_via` (o CHECK da coluna:
+ * 'crm', 'external_device', 'automation', 'ai', 'user', 'system').
+ *
+ * ⚠️ O TOKEN DE SERVIDOR NÃO É A IA — e o mapa é `Record<Actor["type"], …>` de
+ * propósito. O ternário que vivia aqui (`actor.type === "user" ? "user" : "ai"`)
+ * dizia `ai` para TUDO que não fosse pessoa, então uma variante NOVA de `Actor`
+ * caía nesse `ai` sem ninguém decidir nada: foi assim que o envio de uma
+ * integração passou a ser contado como fala da IA (issue #866) — a leitura de
+ * `por_ia` no baseline conta exatamente `sent_via = 'ai'`, e a ingestão de canal
+ * tratava a linha como envio NASCIDO aqui (álibi de eco que só a IA e o humano
+ * merecem). Com o `Record`, variante nova de `Actor` não COMPILA até alguém
+ * escrever a autoria dela — o defeito deixa de ser possível por omissão.
+ *
+ * `webhook_source` continua `ai`: é divergência CONHECIDA das outras escalas de
+ * autoria do repo (`actorParaAtividade`, `especieDe` e `autorParaTimeline` mandam
+ * tudo que não é pessoa nem agente para `system`), porque a automação hoje se
+ * apresenta como IA no balão da conversa e mover o valor dela mexe no dedup de
+ * eco e nas telas que contam "quanto a IA falou". Decisão de produto registrada
+ * em `components/inbox/MessageBubble.tsx`, com issue própria.
+ */
+const AUTORIA_DO_ENVIO: Record<Actor["type"], "user" | "ai" | "system"> = {
+  user: "user",
+  ai_agent: "ai",
+  api_token: "system",
+  webhook_source: "ai",
+};
 
 function actorAuditPayload(actor: Actor): {
   actorUserId: string | null;
@@ -544,7 +573,7 @@ export async function sendMessageHandler(
     media_mime: input.media_mime ?? null,
     media_storage_path: input.media_storage_path ?? null,
     media_size_bytes: input.media_size_bytes ?? null,
-    sent_via: ctx.actor.type !== "user" ? ("ai" as const) : ("user" as const),
+    sent_via: AUTORIA_DO_ENVIO[ctx.actor.type],
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {

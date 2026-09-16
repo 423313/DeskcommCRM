@@ -48,7 +48,7 @@ const SAIU = new Set(["sent", "delivered", "read"]);
  * Traduz o estado REAL da mensagem no desfecho que a automação registra.
  *
  * `postponed` para `queued` e não `failed`: a mensagem ainda pode sair (o
- * watchdog do agent-engine resgata `sent_via='ai'` em `queued` quando a sessão
+ * watchdog do agent-engine resgata `sent_via in ('ai','system')` em `queued` quando a sessão
  * volta a WORKING). Dizer que falhou faria quem lê desistir de uma mensagem que
  * está a caminho — o oposto do defeito, e igualmente mentiroso.
  */

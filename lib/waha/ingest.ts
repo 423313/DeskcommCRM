@@ -79,7 +79,12 @@ async function ehEcoDeEnvioNosso(
     .eq("direction", "outbound")
     // `sent_via` separa o que NASCEU aqui do que veio do celular: a linha do
     // celular é gravada como `external_device` e nunca pode servir de álibi.
-    .in("sent_via", ["ai", "user"])
+    // ⚠️ `system` ENTRA: é o valor que o envio por TOKEN DE SERVIDOR passou a
+    // gravar (#866 — ele não é a IA). Deixá-lo de fora não é neutro: a linha da
+    // integração deixa de ser reconhecida como envio NOSSO, o eco do próprio
+    // envio vira "resposta pelo celular" e cala a IA por três horas — o defeito
+    // do #519 de volta, por um caminho novo e com o sintoma idêntico.
+    .in("sent_via", ["ai", "user", "system"])
     // Sem `external_id` = ainda não confirmada pelo canal = ainda em voo. É esta
     // a janela exata em que o eco é indistinguível de digitação humana.
     .is("external_id", null)

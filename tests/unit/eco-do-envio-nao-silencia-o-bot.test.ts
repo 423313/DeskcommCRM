@@ -277,6 +277,22 @@ describe("eco do próprio envio — a IA não se cala por ter falado", () => {
     expect(conversa.bot_silenced_until).toBeNull();
   });
 
+  it("o envio da INTEGRAÇÃO (token) também é protegido — o valor novo entrou no filtro", async () => {
+    // `system` passou a ser gravado quando o token deixou de se disfarçar de IA
+    // (#866). Se o filtro desta checagem continuar em `['ai', 'user']`, a linha
+    // da integração não é reconhecida como envio NOSSO: o eco do próprio envio
+    // vira "resposta pelo celular" e cala a IA por três horas — o defeito do
+    // #519 de volta, por um caminho novo e com o sintoma idêntico.
+    const { admin, conversa } = banco([emVoo({ sent_via: "system" })]);
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(eco(TEXTO)), "req-5b");
+
+    expect(
+      conversa.bot_silenced_until,
+      "a linha gravada pela integração não foi reconhecida como envio nosso: o eco do próprio envio calou a IA",
+    ).toBeNull();
+  });
+
   it("⭐ a linha continua sendo GRAVADA — o gate barra o silêncio, nunca o insert", async () => {
     // A direção oposta, e ela é o coração do desenho: gravar é tolerante
     // (perder mensagem é pior que duplicar, é o #108), silenciar é estrito

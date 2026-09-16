@@ -80,19 +80,29 @@ export function MessageBubble({
   // sem nome: o dono lia a conversa como se tudo tivesse sido digitado no CRM.
   // Os rótulos passam por t() no render (ver dicionario.ts para o espanhol).
   //
+  // `'system'` TEM RAMO — e passou a ter porque passou a EXISTIR: `_handler.ts`
+  // grava esse valor quando quem envia é a INTEGRAÇÃO (token de servidor), que
+  // não é a IA (issue #866). Antes o motor carimbava `'ai'` em tudo que não
+  // fosse pessoa, então um ramo para "Sistema" seria controle decorativo.
+  //
   // NÃO HÁ RAMO PARA `'automation'`. O CHECK do banco aceita o valor e o union
   // de `Message` o declara, mas nenhuma linha de app/, lib/ ou workers/ o
   // grava: as ações de automação chamam `sendMessageHandler` com
-  // `actor.type === "webhook_source"`, e `_handler.ts` carimba `'ai'` em tudo
-  // que não é `"user"`. Um ramo aqui seria controle decorativo — a tela
-  // prometendo uma distinção que o motor não faz. Carimbar `'automation'` na
-  // origem é decisão de produto com efeito colateral medido (o dedup de eco da
-  // ingestão de canal filtra `sent_via in ('ai','user')`, e o valor novo
-  // duplicaria a mensagem na conversa), então fica para uma issue própria.
+  // `actor.type === "webhook_source"`, e o mapeamento de autoria de
+  // `_handler.ts` (`AUTORIA_DO_ENVIO`) carimba `'ai'` nele. Um ramo aqui seria
+  // controle decorativo — a tela prometendo uma distinção que o motor não faz.
+  // Carimbar `'automation'` na origem é decisão de produto com efeito colateral
+  // medido (o dedup de eco da ingestão de canal filtra
+  // `sent_via in ('ai','user','system')`, e o valor novo duplicaria a mensagem
+  // na conversa), então fica para uma issue própria.
   // Vigiado nas duas direções por tests/unit/rotulo-de-origem-tem-emissor.
   const senderLabel = (() => {
     if (!isOutbound) return null;
     if (message.sent_via === "ai") return "IA";
+    // A integração falou, a IA não. Sem este ramo a bolha omite a autoria e o
+    // dono lê a conversa como se tudo tivesse saído do CRM — que é o defeito do
+    // #866 visto de dentro da tela.
+    if (message.sent_via === "system") return "Sistema";
     if (message.sent_via === "external_device") return "Celular";
     if (message.sent_via === "user" || message.sent_via === "crm") {
       // "Você" exige as DUAS pontas: saber quem lê e saber quem enviou. Falta

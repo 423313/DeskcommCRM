@@ -130,6 +130,14 @@ function valoresEmitidos(): Map<string, string[]> {
       }
     }
   }
+  // O MAPA de autoria (`AUTORIA_DO_ENVIO`, ver `valoresDoMapaDeAutoria`): desde a
+  // #866 é ele que decide a autoria do envio, e a linha do `sent_via:` deixou de
+  // ter literais — sem esta leitura, `user` e `system` sumiriam do conjunto de
+  // emitidos e a primeira direção acusaria o componente por um defeito do
+  // instrumento.
+  for (const [v, onde] of valoresDoMapaDeAutoria()) {
+    mapa.set(v, [...(mapa.get(v) ?? []), ...onde]);
+  }
   return mapa;
 }
 
@@ -138,6 +146,32 @@ function defaultDaColuna(): string | null {
   const sql = readFileSync(BASELINE, "utf8");
   const m = /"sent_via"\s+"text"\s+DEFAULT\s+'([a-z_]+)'/.exec(sql);
   return m?.[1] ?? null;
+}
+
+/** Onde `Actor.type` vira `sent_via` — o mapa que decide a autoria do envio. */
+const AUTORIA_DO_ENVIO_TS = path.join(RAIZ, "app", "api", "v1", "messages", "_handler.ts");
+
+/**
+ * Os valores que o MAPA de autoria grava.
+ *
+ * ⚠️ Por que o mapa, e não mais a linha do `sent_via:`: com o token de servidor
+ * a decisão virou três vias e o valor deixou de ser literal na linha — a linha
+ * passou a ser `AUTORIA_DO_ENVIO[ctx.actor.type]`. Ancorado nela, um extrator
+ * devolveria CONJUNTO VAZIO, que é indistinguível de "ninguém grava" (o modo de
+ * falha 7 da triagem, o mesmo que o controle positivo existe para separar). O
+ * mapa tem nome e forma fixos: renomeá-lo estoura o controle positivo com o
+ * motivo, em vez de silenciar.
+ */
+function valoresDoMapaDeAutoria(): Map<string, string[]> {
+  const src = readFileSync(AUTORIA_DO_ENVIO_TS, "utf8");
+  const bloco = /const AUTORIA_DO_ENVIO[^{]*\{([\s\S]*?)\}/.exec(src);
+  const mapa = new Map<string, string[]>();
+  if (bloco === null) return mapa;
+  for (const m of bloco[1]!.matchAll(/:\s*"([a-z_]+)"/g)) {
+    const v = m[1]!;
+    mapa.set(v, [...(mapa.get(v) ?? []), path.relative(RAIZ, AUTORIA_DO_ENVIO_TS)]);
+  }
+  return mapa;
 }
 
 /** O vocabulário que o banco ACEITA — o CHECK. */
@@ -155,7 +189,7 @@ const vocabulario = vocabularioDoBanco();
 const produzidos = new Set<string>([...emitidos.keys(), ...(padrao ? [padrao] : [])]);
 
 describe("o rótulo de origem do balão", () => {
-  it("os quatro extratores estão vivos — controle positivo antes de concluir", () => {
+  it("os extratores estão vivos — controle positivo antes de concluir", () => {
     // Sem isto, um regex que parou de casar devolve conjunto vazio e as duas
     // asserções abaixo passam por VACUIDADE. É o modo de falha 7 da triagem:
     // grep vazio é indistinguível de instrumento morto.
@@ -163,6 +197,10 @@ describe("o rótulo de origem do balão", () => {
     expect(emitidos.size, "nenhum `sent_via: \"…\"` em app/, lib/ ou workers/").toBeGreaterThan(0);
     expect(padrao, "DEFAULT de messages.sent_via não encontrado no baseline").not.toBeNull();
     expect(vocabulario.size, "CHECK messages_sent_via_check não encontrado").toBeGreaterThan(0);
+    expect(
+      valoresDoMapaDeAutoria().size,
+      "o mapa de autoria (AUTORIA_DO_ENVIO) sumiu de messages/_handler.ts: renomeá-lo deixa a leitura cega, e cega ela concorda com tudo",
+    ).toBeGreaterThan(0);
 
     // E as âncoras concretas: se a fonte mudar de forma, isto estoura em vez de
     // devolver silêncio. O piso é bem abaixo do medido em 2026-09-08 (5 rótulos
@@ -170,6 +208,10 @@ describe("o rótulo de origem do balão", () => {
     // próximo PR que mova um arquivo de lugar.
     expect(oferecidos.has("ai"), "o rótulo da IA sumiu do componente").toBe(true);
     expect(emitidos.has("external_device"), "ninguém mais grava external_device?").toBe(true);
+    expect(
+      emitidos.has("system"),
+      "o valor que a #866 criou (token de servidor não é a IA) não foi lido em emissor nenhum",
+    ).toBe(true);
   });
 
   it("todo rótulo que a tela oferece corresponde a um valor que alguém GRAVA", () => {
