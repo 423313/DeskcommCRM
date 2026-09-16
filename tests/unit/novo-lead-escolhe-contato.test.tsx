@@ -19,6 +19,11 @@
  *
  * Consequência prática, já medida no mesmo quadro: lead sem contato não tem
  * para quem o WhatsApp falar, e a automação não tem contato para casar.
+ *
+ * O contato é obrigatório NA TELA DO FUNIL, e só ali: `createLeadSchema`
+ * continua aceitando `contact_id` nulo porque a importação grava o negócio sem
+ * contato quando o contato falha (comentário explícito em
+ * `app/api/v1/leads/import/route.ts`) e a automação de anúncio também nasce sem.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -90,7 +95,8 @@ describe("Novo Lead pelo funil — o lead nasce com contato", () => {
     expect(criarLead.mock.calls[0][0]).toMatchObject({ contact_id: MICHELLE.id });
   });
 
-  it("sem contato escolhido, a tela avisa que o lead não recebe WhatsApp", async () => {
+  it("sem contato escolhido, o funil não deixa criar o lead", async () => {
+    const user = userEvent.setup();
     render(
       <NewLeadDialog
         open
@@ -100,10 +106,16 @@ describe("Novo Lead pelo funil — o lead nasce com contato", () => {
       />,
     );
 
-    expect(await screen.findByText(/não recebe WhatsApp/i)).toBeTruthy();
+    await user.type(await screen.findByLabelText("Título"), "Consulta trabalhista");
+    const criar = screen.getByRole("button", { name: "Criar lead" });
+    expect(criar.hasAttribute("disabled")).toBe(true);
+
+    await user.click(criar);
+    expect(criarLead).not.toHaveBeenCalled();
   });
 
   it("aberto pelo Inbox, que já sabe o contato, o seletor não aparece", async () => {
+    const user = userEvent.setup();
     render(
       <NewLeadDialog
         open
@@ -114,8 +126,9 @@ describe("Novo Lead pelo funil — o lead nasce com contato", () => {
       />,
     );
 
-    await screen.findByLabelText("Título");
+    await user.type(await screen.findByLabelText("Título"), "Consulta trabalhista");
     expect(screen.queryByLabelText("Contato")).toBeNull();
-    expect(screen.queryByText(/não recebe WhatsApp/i)).toBeNull();
+    // O contato veio na prop: exigir escolha na tela travaria o Inbox.
+    expect(screen.getByRole("button", { name: "Criar lead" }).hasAttribute("disabled")).toBe(false);
   });
 });
