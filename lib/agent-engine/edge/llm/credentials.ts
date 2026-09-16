@@ -132,10 +132,28 @@ export interface OrcamentoDaOrg {
   limiarPct: number;
 }
 
+/**
+ * De QUEM é a chave que o resolvedor devolveu. Mesmo vocabulário de
+ * `lib/ai/embeddings/chave.ts`, que responde a mesma pergunta para embedding.
+ */
+export type OrigemDaChaveLlm = 'credencial_da_organizacao' | 'chave_da_instalacao';
+
 export interface OrgLlmConfig {
   provider: string;
   /** plaintext decifrado — existe só em memória, jamais logado/persistido */
   apiKey: string;
+  /**
+   * `chave_da_instalacao` = a organização não tinha credencial ativa e validada
+   * para o provedor (ou a escolhida foi revogada) e a escada caiu no `.env` —
+   * a chave que paga a conta de TODAS as empresas desta instalação.
+   *
+   * Existe para quem decide PARA ONDE a chave pode ir. O endereço de um ponto
+   * (`ai_purpose_bindings.base_url`) é escolhido por quem administra a
+   * organização; a chave da instalação não pode acompanhá-lo (decisão 22-a do
+   * dono do produto). Antes deste campo, o único jeito de saber era comparar o
+   * plaintext com as chaves do `.env`, e cada caminho fazia a sua comparação.
+   */
+  origemDaChave: OrigemDaChaveLlm;
   defaultModel: string | null;
   params: Record<string, unknown>;
   enabledModels: string[];
@@ -322,6 +340,9 @@ export async function resolveOrgLlmConfig(
       );
 
   let apiKey: string;
+  // Atribuída junto com a chave, em cada degrau: a origem é um fato de QUAL
+  // ramo escolheu a chave, e só este ponto sabe isso sem adivinhar.
+  let origemDaChave: OrigemDaChaveLlm;
   const cred = credRows[0];
   if (cred !== undefined) {
     apiKey = decryptKey({
@@ -329,12 +350,16 @@ export async function resolveOrgLlmConfig(
       iv: byteaToBuffer(cred.api_key_iv),
       tag: byteaToBuffer(cred.api_key_tag),
     });
+    origemDaChave = 'credencial_da_organizacao';
   } else if (provider === 'anthropic' && cfg.anthropicApiKey) {
     apiKey = cfg.anthropicApiKey;
+    origemDaChave = 'chave_da_instalacao';
   } else if (provider === 'openai' && cfg.openaiApiKey) {
     apiKey = cfg.openaiApiKey;
+    origemDaChave = 'chave_da_instalacao';
   } else if (provider === 'openrouter' && cfg.openrouterApiKey) {
     apiKey = cfg.openrouterApiKey;
+    origemDaChave = 'chave_da_instalacao';
   } else {
     throw new LlmNotConfiguredError();
   }
@@ -342,6 +367,7 @@ export async function resolveOrgLlmConfig(
   return {
     provider,
     apiKey,
+    origemDaChave,
     defaultModel: settings.default_model ?? null,
     params: settings.params,
     enabledModels: settings.enabled_models,
