@@ -988,7 +988,11 @@ fechar o PR (o histórico diria que o trabalho dele não entrou) estão certos.
 O desfecho é `git merge -s ours <head>` numa branch a partir da `main`: a história recebe os
 commits dele, o conteúdo fica como está, e o GitHub fecha o PR como **mergeado**.
 
-**A estratégia só é honesta com a medição ao lado, e a medição é a sobrevivência dos arquivos:**
+**A estratégia só é honesta se TUDO o que o PR trazia entrou** — é esse o critério (decisão do dono em
+16/09/2026), e ele se mede lendo o diff do PR contra a `main` por mudança, não por caminho de arquivo.
+A sonda abaixo é **apoio, e não decide sozinha**: `git cat-file -e` dá verdadeiro para qualquer
+arquivo que exista na `main`, inclusive um que já existia antes do PR, então um PR que só modifica
+arquivos existentes sai com 100% de sobrevivência mesmo que nenhuma mudança dele tenha entrado:
 
 ```bash
 tot=0; viv=0
@@ -998,9 +1002,9 @@ done
 echo "trazidos=$tot vivos_na_main=$viv"
 ```
 
-No épico da voz (PR #628, 11/09/2026) deu `trazidos=52 vivos_na_main=49`. **Com esse número, `-s
-ours` registra um fato; sem ele, é carimbo.** Se a sobrevivência for baixa, não é este o caso: o PR
-entrou só em parte, e o desfecho depende do que sobrou (decisão do dono em 16/09/2026). Se o que não
+No épico da voz (PR #628, 11/09/2026) deu `trazidos=52 vivos_na_main=49`, e a leitura do conteúdo
+confirmou o que o número sugeria. **Sem a leitura, `-s ours` é carimbo.** Se alguma mudança do PR
+não entrou — com sobrevivência alta ou baixa —, não é este o caso: o PR entrou só em parte, e o desfecho depende do que sobrou (decisão do dono em 16/09/2026). Se o que não
 entrou tem destino — decisão pendente, acompanhamento planejado, espera por resposta do autor,
 destino de extensão —, o PR fica aberto com esse destino escrito nele (12-ter). Se foi descartado, o
 PR fecha dizendo o que entrou, com o link, e por que o resto não entra; o crédito do que entrou fica
@@ -1219,7 +1223,9 @@ gh release list --limit 1                                # a release é a Latest
 
 Este passe é para o caso em que a reconciliação (passe 8) **reimplementou** o conteúdo numa branch
 **nossa** que não contém o head do contribuinte — porque a versão original conflitava com o estado de
-hoje de um jeito que o merge não resolvia, ou carregava um defeito que a reconciliação consertou.
+hoje de um jeito que o merge não resolvia, ou carregava um defeito que um commit por cima do head não
+resolvia. Defeito que um commit por cima conserta vai por cima: na branch do PR, quando ele permite
+edição, ou no head mesclado numa branch nossa (8-bis).
 Não é o caso do PR que só não permite edição por mantenedores: aí o 8-bis mescla o head numa branch
 nossa, os commits dele ficam como ancestrais, e o PR fecha como incorporado sem proveniência. O commit que traz esse
 conteúdo sai com a autoria dele — `--author` com o nome e o e-mail que ele usa nos próprios commits
