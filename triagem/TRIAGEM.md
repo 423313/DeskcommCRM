@@ -825,13 +825,20 @@ histórico do PR, então o caso se reconstrói numa branch nossa.
 
 ```bash
 git worktree add --detach <wt> origin/main && cd <wt> && git switch -c triagem/<n>-<slug>
-git diff --diff-filter=D --name-only origin/main..refs/triagem/pr<n>   # ele APAGA algo? replique
-git checkout refs/triagem/pr<n> -- .
-rm -f <o arquivo que não entra>
+base=$(git merge-base origin/main refs/triagem/pr<n>)
+git diff --binary "$base" refs/triagem/pr<n> -- . ':(exclude)<o arquivo que não entra>' \
+  | git apply --3way --index       # o que ELE mudou, apagou e criou — e nada além disso
 git status --porcelain | grep -c <padrão>   # 0
 git status --porcelain | wc -l              # controle positivo: >0, senão a sonda está morta
 git commit --author="<Nome> <email>" ...    # autoria E a razão do squash, escritas
 ```
+
+**O diff sai do `merge-base`, nunca de `origin/main`.** A receita anterior usava
+`origin/main..refs/triagem/pr<n>` para achar o que o PR apaga e `git checkout <head> -- .` para trazer
+o resto. As duas comparam a árvore do PR com a `main` de hoje: a primeira lista como "apagado pelo
+autor" todo arquivo que a `main` criou depois da base do PR, e a segunda devolve à versão velha todo
+arquivo que a `main` mudou nesse intervalo. Provado num repositório descartável, nos dois sentidos. E
+com o commit saindo com `--author` do contribuidor (passe 8), essas reversões iriam para o nome dele.
 
 **Sonde o conteúdo por CATEGORIA antes de dimensionar a coisa**, e reporte a categoria — nunca o
 material: `postgres://`, `service_role`, `$2a$/$2b$`, `PRIVATE KEY`, e a contagem de linhas por
@@ -1315,8 +1322,8 @@ Sem perguntas de sim/não a cada passo: faça tudo, pare no merge, reporte em lo
 
 ### Quando o mantenedor move esta fronteira
 
-A tabela acima é o **padrão**, não uma lei física: ela existe porque o mantenedor não delegou o
-merge, e some no dia em que ele delegar. Se ele disser, com estas palavras ou equivalentes,
+A tabela acima é o **padrão**, não uma lei física: ela existe porque o mantenedor não delegou, e
+some, na parte que ele delegar, no dia em que delegar — delegar o merge não delega fechar PR. Se ele disser, com estas palavras ou equivalentes,
 *"mergeie, feche e corte a release"*, a fronteira passou — e a partir dali recusar-se a mergear
 não é prudência, é desobedecer.
 
