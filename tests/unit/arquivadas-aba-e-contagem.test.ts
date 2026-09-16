@@ -23,6 +23,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { tabToFilter } from "@/components/inbox/InboxLayout";
+
 const raiz = process.cwd();
 const fonte = (rel: string) => readFileSync(join(raiz, rel), "utf8");
 
@@ -43,14 +45,25 @@ const semComentarios = (codigo: string) =>
   codigo.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 describe("aba Arquivadas — filtro da lista", () => {
+  // Estes dois casos eram medidos por TEXTO-FONTE do bloco do `case`, com a
+  // função exportada ao lado. Isso falha nos dois sentidos: mover a decisão para
+  // fora do `switch` deixando o literal no bloco mantinha o teste verde com a
+  // aba quebrada, e trocar o `switch` por um mapa reprovaria um refactor certo.
+  // `tabToFilter` é exportada — então a pergunta se faz a ela.
   it('pede exatamente status "archived"', () => {
-    const bloco = blocoDoCase("components/inbox/InboxLayout.tsx", "archived");
-    expect(bloco).toContain('status: "archived"');
+    expect(tabToFilter("archived")).toEqual({ status: "archived" });
   });
 
   it("não pede a lista de status terminais (senão a aba mostra as fechadas)", () => {
-    const bloco = blocoDoCase("components/inbox/InboxLayout.tsx", "archived");
-    expect(semComentarios(bloco)).not.toContain("CONVERSATION_TERMINAL_STATUSES");
+    const filtro = tabToFilter("archived") as Record<string, unknown>;
+    // Se a aba passasse a pedir a lista terminal, `status` viria como ARRAY
+    // (`["closed","archived",...]`) — é essa a forma que precisa não aparecer.
+    // O controle positivo é da SONDA, não de outra aba: medi que "Fechadas"
+    // também devolve string (`{ status: "closed" }`), então usá-la como
+    // contraste provaria o contrário do que eu quis dizer.
+    expect(Array.isArray(["closed", "archived"])).toBe(true);
+    expect(Array.isArray(filtro.status)).toBe(false);
+    expect(filtro.status).toBe("archived");
   });
 
   it("está na navegação do Inbox", () => {

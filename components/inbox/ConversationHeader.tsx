@@ -327,7 +327,19 @@ export function ConversationHeader({ conversation }: Props) {
             variant="ghost"
             disabled={arquivar.isPending}
             onClick={() => {
-              if (confirm(t("Arquivar esta conversa?"))) {
+              // A confirmação precisa dizer o que ACONTECE, e o que acontece
+              // depende do estado. `fn_conversation_set_status` trata
+              // `archived` como terminal: encerra o atendimento (grava
+              // `service_closed_at`, incrementa a revisão) e, com isso, desfaz
+              // a pausa do automático. Um atendente que leia "arquivar = tirar
+              // da vista, volto depois" encerraria o atendimento sem saber — e
+              // o robô voltaria a responder no próximo "oi" do cliente.
+              const aviso = encerrada
+                ? t("Arquivar esta conversa?")
+                : t(
+                    "Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta. Arquivar?",
+                  );
+              if (confirm(aviso)) {
                 arquivar.mutate({
                   conversation_id: conversation.id,
                   expected_revision: conversation.service_revision,
