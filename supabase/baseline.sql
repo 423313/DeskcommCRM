@@ -26118,3 +26118,15 @@ drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_
 create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
+
+-- ---- CSV como material de conhecimento (migration 0271) ----
+-- O bucket `ai-policy` (acima, migration 0014) tinha `allowed_mime_types`
+-- fechado em PDF/Markdown/texto. O acervo de IA passou a aceitar CSV
+-- (lib/ai/rag/extractors/csv.ts) — sem esta linha o Storage recusa o upload
+-- ANTES de qualquer código da aplicação rodar, com erro sem relação nenhuma
+-- com "extensão não suportada". `update`, não `insert ... on conflict`: o
+-- bucket já existe em todo clone; é a MIME list que precisa alcançar quem
+-- instalou antes desta mudança.
+update storage.buckets
+set allowed_mime_types = array['application/pdf', 'text/markdown', 'text/x-markdown', 'text/plain', 'text/csv']
+where id = 'ai-policy';

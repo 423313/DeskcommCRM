@@ -6736,7 +6736,7 @@ export const DICIONARIO: Traducoes = {
   "Por que não entrou": { es: "Por qué no entró" },
   "Ele consulta este material antes de responder sobre o seu negócio.": { es: "Consulta este material antes de responder sobre tu negocio." },
   "Que tipo de material é": { es: "Qué tipo de material es" },
-  "PDF, Markdown ou texto, até 20 MB. Um PDF só de imagens escaneadas não tem letra nenhuma para ler — envie uma versão com texto selecionável.": { es: "PDF, Markdown o texto, hasta 20 MB. Un PDF solo de imágenes escaneadas no tiene ninguna letra para leer — envía una versión con texto seleccionable." },
+  "PDF, Markdown, CSV ou texto, até 20 MB. Um PDF só de imagens escaneadas não tem letra nenhuma para ler — envie uma versão com texto selecionável. Planilha Excel? Salve como CSV primeiro.": { es: "PDF, Markdown, CSV o texto, hasta 20 MB. Un PDF solo de imágenes escaneadas no tiene ninguna letra para leer — envía una versión con texto seleccionable. ¿Planilla de Excel? Guárdala como CSV primero." },
   "…ou cole o texto aqui": { es: "…o pega el texto aquí" },
   "Sem uma chave da OpenAI, o material fica guardado e esperando — o agente só passa a conhecê-lo depois que a chave for cadastrada.": { es: "Sin una clave de OpenAI, el material queda guardado y esperando — el agente solo pasa a conocerlo después de que la clave sea registrada." },
   "São estes os trechos que ele procura antes de responder. Quando ele erra sobre este assunto, é aqui que se vê o porquê.": { es: "Estos son los fragmentos que busca antes de responder. Cuando se equivoca sobre este tema, aquí se ve por qué." },
@@ -7372,7 +7372,7 @@ export const DICIONARIO: Traducoes = {
   "Uma tela não folheia mil pedaços — o restante está no acervo e o agente alcança todos.": { es: "Una pantalla no hojea mil pedazos — el resto está en el acervo y el agente los alcanza todos." },
   "Perguntas e respostas": { es: "Preguntas y respuestas" },
   "As dúvidas que se repetem, com a resposta pronta. É o formato que o agente cita melhor, porque cada resposta chega inteira.": { es: "Las dudas que se repiten, con la respuesta lista. Es el formato que el agente cita mejor, porque cada respuesta llega entera." },
-  "Um texto do seu negócio — política de troca, tabela de preços, manual, contrato. Envie o arquivo (PDF, Markdown ou texto) ou cole o conteúdo.": { es: "Un texto de tu negocio — política de cambios, lista de precios, manual, contrato. Envía el archivo (PDF, Markdown o texto) o pega el contenido." },
+  "Um texto do seu negócio — política de troca, tabela de preços, manual, contrato. Envie o arquivo (PDF, Markdown, CSV ou texto) ou cole o conteúdo.": { es: "Un texto de tu negocio — política de cambios, lista de precios, manual, contrato. Envía el archivo (PDF, Markdown, CSV o texto) o pega el contenido." },
   "Conversas anteriores": { es: "Conversaciones anteriores" },
   "Atendimentos já resolvidos que alguém marcou como aproveitáveis, com os dados pessoais removidos.": { es: "Atenciones ya resueltas que alguien marcó como aprovechables, con los datos personales quitados." },
   "Entra sozinha: conversas resolvidas que alguém marcar como aproveitáveis pela IA são anonimizadas e indexadas em lote.": { es: "Entra sola: las conversaciones resueltas que alguien marque como aprovechables por la IA se anonimizan y se indexan en lote." },
@@ -8085,7 +8085,8 @@ export const DICIONARIO: Traducoes = {
   "Esse funil não está mais na sua lista. Recarregue a página e tente de novo.": {
     es: "Ese embudo ya no está en tu lista. Recarga la página e intenta de nuevo.",
   },
-  "Não sei ler esse tipo de arquivo. Envie PDF, Markdown (.md) ou texto (.txt).": { es: "No sé leer ese tipo de archivo. Envía PDF, Markdown (.md) o texto (.txt)." },
+  "Não sei ler esse tipo de arquivo. Envie PDF, Markdown (.md), CSV (.csv) ou texto (.txt).": { es: "No sé leer ese tipo de archivo. Envía PDF, Markdown (.md), CSV (.csv) o texto (.txt)." },
+  "Não leio Excel diretamente — no Excel use \"Salvar como\" → \"CSV UTF-8 (delimitado por vírgulas)\" e envie o CSV.": { es: "No leo Excel directamente — en Excel usa \"Guardar como\" → \"CSV UTF-8 (delimitado por comas)\" y envía el CSV." },
   "não consegui extrair texto deste PDF. Se ele for só imagens escaneadas, não há letra nenhuma para ler — envie uma versão com texto selecionável.": {
     es: "no conseguí extraer texto de este PDF. Si son solo imágenes escaneadas, no hay ninguna letra para leer — envía una versión con texto seleccionable.",
   },
