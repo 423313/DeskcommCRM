@@ -31,13 +31,14 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import {
   escolheEtapaDeDestino,
   montaPayloadDoClone,
-  motivoDaPerdaDaOrigem,
   recusaTrocaDeFunil,
   registroDoDestino,
   type EtapaDoFunil,
   type OrigemParaClonar,
 } from "@/lib/leads/clonar-para-funil";
+import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 import { encerraDemanda } from "@/lib/leads/encerramento";
+import { motivoDaPerdaDaOrigem } from "@/lib/leads/motivo-da-perda";
 import { cloneLeadSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 
@@ -69,8 +70,9 @@ export async function POST(
   try {
     const input = await validateRequest(cloneLeadSchema, req);
 
-    // ⚠️ Filtro por organização explícito: pelo MCP o client é service-role e a
-    // RLS não vale — sem ele a troca atravessaria tenants.
+    // Filtro por organização explícito como defesa em profundidade: a RLS já
+    // recorta o client do usuário, e o filtro continua valendo se esta rota um
+    // dia passar a receber um client service-role (é o que o `_handler` faz).
     const { data: origem, error: selErr } = await supabase
       .from("crm_leads")
       .select("*")
@@ -87,7 +89,7 @@ export async function POST(
 
     const { data: pipelineDestino, error: pipeErr } = await supabase
       .from("crm_pipelines")
-      .select("id")
+      .select("id, settings")
       .eq("id", input.pipeline_id)
       .eq("organization_id", handlerCtx.organization_id)
       .maybeSingle();
@@ -124,10 +126,51 @@ export async function POST(
       return fail(destino.code, t(destino.texto), destino.status, { requestId });
     }
 
+    // ── A ORIGEM PRECISA TER ONDE FECHAR, E ISSO SE PERGUNTA ANTES ─────────────
+    //
+    // `encerraDemanda` recusa com 422 `pipeline_no_lost_stage` quando o funil de
+    // ORIGEM não tem etapa de perda não arquivada — e ele roda DEPOIS da criação
+    // do clone. Nessa ordem o operador lia uma recusa de pedido ("nada mudou")
+    // com o negócio JÁ duplicado no funil de destino: o pior dos dois mundos,
+    // porque a meia-execução fica invisível.
+    //
+    // O estado é alcançável e o próprio repo o reconhece (lib/pipelines/
+    // pipeline-editing.ts cita o espelho deste caso no `/win`). A pergunta é
+    // barata e não tem corrida que importe: se alguém arquivar a etapa entre esta
+    // consulta e o encerramento, o 422 volta a acontecer — mas aí ele é honesto,
+    // e a ordem "clone primeiro" continua sendo a certa pelo motivo do cabeçalho.
+    const { data: etapaDePerdaDaOrigem, error: perdaErr } = await supabase
+      .from("crm_stages")
+      .select("id")
+      .eq("organization_id", handlerCtx.organization_id)
+      .eq("pipeline_id", (origem as OrigemParaClonar).pipeline_id)
+      .eq("is_lost", true)
+      .eq("is_archived", false)
+      .limit(1)
+      .maybeSingle();
+
+    if (perdaErr) {
+      return fail("internal_error", perdaErr.message, 500, { requestId });
+    }
+    if (!etapaDePerdaDaOrigem) {
+      return fail(
+        "pipeline_no_lost_stage",
+        t("O funil de origem não tem etapa de perda para encerrar o negócio."),
+        422,
+        { requestId },
+      );
+    }
+
     const clone = await createLeadHandler(
       supabase,
       handlerCtx,
-      montaPayloadDoClone(origem as OrigemParaClonar, destino.etapa),
+      montaPayloadDoClone(
+        origem as OrigemParaClonar,
+        destino.etapa,
+        camposDoFunil(
+          (pipelineDestino as { settings?: Record<string, unknown> | null }).settings ?? null,
+        ).map((campo) => campo.key),
+      ),
     );
 
     const motivo = motivoDaPerdaDaOrigem(input.lost_reason);

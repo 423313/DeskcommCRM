@@ -34,6 +34,34 @@ import { traduzir } from "@/lib/i18n/dicionario";
  * desenho ficar simétrico quebraria escritas que hoje passam.
  */
 
+/**
+ * ⚠️ A ÚNICA ESCRITA QUE FECHA COMO PERDA SEM PERGUNTAR O MOTIVO: a troca de
+ * funil (`POST /api/v1/leads/[id]/clone`). Ela mora AQUI, e não no módulo do
+ * clone, porque duas decisões sobre o motivo da perda em dois arquivos é
+ * exatamente o defeito que a #917 veio eliminar — e a divergência entraria
+ * calada, já que os dois lados nunca tocam a mesma linha.
+ *
+ * Por que a exceção é legítima: no clone o negócio NÃO se perdeu. Ele foi
+ * levado para outro funil, e a origem é encerrada como perda porque é o único
+ * desfecho que o schema oferece para "saiu daqui". Perguntar um motivo ao
+ * operador o obrigaria a inventar uma causa comercial para um movimento
+ * administrativo. `other` é canônico (`CANONICAL_LOST_REASONS`), então o trigger
+ * aceita; para onde o negócio foi fica em `source_metadata.movido_para`, que é
+ * onde a informação sobrevive. A instrução original da P-01 —
+ * `lost_reason='moved_to_pipeline_X'` — seria recusada com 22023
+ * `lost_reason_invalid` e perderia a troca inteira, não só a informação.
+ *
+ * ⚠️ Exigir motivo também na troca de funil é decisão do dono do produto, não
+ * um ajuste de consistência: hoje a troca funciona sem perguntar.
+ */
+export const MOTIVO_PADRAO_DA_TROCA = "other";
+
+/** O motivo com que a troca de funil encerra a ORIGEM. */
+export function motivoDaPerdaDaOrigem(informado?: string | null): string {
+  const limpo = informado?.trim();
+  return limpo && limpo.length > 0 ? limpo : MOTIVO_PADRAO_DA_TROCA;
+}
+
 /** O texto base da recusa — o dicionário (`traduzir`) traduz a partir daqui. */
 export const MOTIVO_DA_PERDA_OBRIGATORIO = "Informe o motivo da perda.";
 

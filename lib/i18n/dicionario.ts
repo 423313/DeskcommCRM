@@ -7990,7 +7990,7 @@ export const DICIONARIO: Traducoes = {
   "Lead foi modificado por outro usuário. Recarregue e tente novamente.": { es: "El lead fue modificado por otro usuario. Recarga e intenta de nuevo." },
   "Liberou a conversa de volta para a fila": { es: "Liberó la conversación de vuelta a la cola" },
   "Material não encontrado.": { es: "Material no encontrado." },
-  "Move cross-pipeline não é permitido. Clone o lead para o pipeline alvo.": { es: "Mover entre pipelines no está permitido. Clona el lead hacia el pipeline destino." },
+  "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.": { es: "Mover entre pipelines no está permitido. Usa POST /api/v1/leads/[id]/clone para llevar el negocio a otro embudo." },
   "Nada para alterar.": { es: "Nada para modificar." },
   "Nenhum arquivo foi enviado.": { es: "Ningún archivo fue enviado." },
   "Nenhum lead acessível na operação.": { es: "Ningún lead accesible en la operación." },
@@ -8061,7 +8061,6 @@ export const DICIONARIO: Traducoes = {
   "Stage não pertence ao pipeline informado.": {
     es: "El stage no pertenece al pipeline informado.",
   },
-  "Move cross-pipeline não é permitido.": { es: "Mover entre pipelines no está permitido." },
   "Lead foi modificado concorrentemente.": { es: "El lead fue modificado de forma concurrente." },
   "leads por bulk.": { es: "leads por lote." },
   "Esta sugestão já foi": { es: "Esta sugerencia ya fue" },

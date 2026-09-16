@@ -303,6 +303,77 @@ describe("POST /api/v1/leads/[id]/clone", () => {
     expect(response.status).toBe(404);
     expect(body.error.code).toBe("pipeline_not_found");
   });
+
+  it("recusa etapa de destino terminal (o clone nasceria fechado)", async () => {
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2, stage_id: S2_LOST }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("stage_destino_terminal");
+  });
+
+  it("recusa funil de destino sem etapa aberta para receber o negócio", async () => {
+    db = fakeDb({
+      ...seed(),
+      crm_stages: (seed().crm_stages ?? []).filter((row) => row.id !== S2_A && row.id !== S2_B),
+    });
+    vi.mocked(createClient).mockResolvedValue(db.client);
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("pipeline_without_initial_stage");
+  });
+
+  it("recusa ANTES de criar o clone quando o funil de origem não tem etapa de perda", async () => {
+    // A recusa de `encerraDemanda` (422 `pipeline_no_lost_stage`) acontecia
+    // DEPOIS da criação: o operador lia "nada mudou" com o negócio já duplicado
+    // no destino. A pergunta passa a ser feita antes, e o que se prova aqui é o
+    // ESTADO — nenhum clone no banco —, não só o código do erro.
+    db = fakeDb({
+      ...seed(),
+      crm_stages: (seed().crm_stages ?? []).filter((row) => row.id !== S1_LOST),
+    });
+    vi.mocked(createClient).mockResolvedValue(db.client);
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("pipeline_no_lost_stage");
+    expect(db.tables.crm_leads).toHaveLength(1);
+    expect((db.tables.crm_leads ?? [])[0]?.status).toBe("open");
+  });
+
+  it("o clone só leva os campos personalizados que o funil de destino declara", async () => {
+    // Campos personalizados são declarados POR FUNIL. Copiar o jsonb inteiro
+    // faria o clone nascer com chaves que nenhuma tela do destino mostra.
+    const base = seed();
+    const origem = (base.crm_leads ?? [])[0];
+    if (!origem) throw new Error("o teste espera um crm_leads semeado neste ponto");
+    origem.custom_fields = { metragem: "120m2", numero_da_os: "OS-99" };
+    db = fakeDb({
+      ...base,
+      crm_pipelines: (base.crm_pipelines ?? []).map((funil) =>
+        funil.id === P2
+          ? { ...funil, settings: { fields: [{ key: "metragem", label: "Metragem", type: "text" }] } }
+          : funil,
+      ),
+    });
+    vi.mocked(createClient).mockResolvedValue(db.client);
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect((body.data.lead as Row).custom_fields).toEqual({ metragem: "120m2" });
+  });
 });
 
 describe("POST /api/v1/leads/[id]/move cross-pipeline", () => {
