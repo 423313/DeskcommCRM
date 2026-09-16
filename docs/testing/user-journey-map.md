@@ -2112,8 +2112,12 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 ## J24 — Instalar e usar uma extensão declarativa publicada após o build `[P0]`
 
 Specs: `tests/e2e/extensoes-declarativas.spec.ts` e `tests/e2e/extensoes-recuperacao.spec.ts`.
-Estado: **as duas passaram inteiras em 15/09/2026**, sobre o build `ALAqeLI0VQJi4bpWWFbUL` gerado do
-commit `b4b186219` (a principal em 1,4 min; a de recuperação em 24 s, na mesma árvore). Foram sete
+Estado: **as duas passaram inteiras em 16/09/2026**, sobre o build `mpuyz81eEv5s9QLf96iqr` gerado do
+commit `6a5d46710` — a branch já integrada com a `main` —, a principal em 39,1 s e a de recuperação em
+16,6 s, rodando sozinhas depois de duas tentativas mortas por ambiente (a fixture recebeu
+`Processing this request timed out` com a máquina em load 53; depois o servidor de teste foi morto
+com 0,06 GB livres). A primeira vez que passaram inteiras foi em 15/09, sobre o build
+`ALAqeLI0VQJi4bpWWFbUL` do commit `b4b186219`. Foram sete
 rodadas até lá: quatro defeitos da própria prova (espera por URL que a aba já tinha, seletor
 `data-slot` que o Card do repositório não tem, clique no cabeçalho rolado para fora da vista, prazo
 de 5 s em asserções que dependem de duas idas ao servidor) e um defeito de produto que só ela achou
@@ -2157,23 +2161,23 @@ de encontrar `.next/BUILD_ID`, serve pelo processo HTTP real em `127.0.0.1:56331
 religar o catálogo no meio da jornada. Evidência: `evidence/extensoes/versao/` (oito capturas e o
 catálogo daquela rodada).
 
-Estado: **passou inteira em 16/09/2026**, em 39,8 s, sobre o build `FL9GZvWqPoj8aE9XSY2E_` (do
-commit `540a76082`), na mesma rodada em que a spec de recuperação do J24 passou em 39,2 s. Foram
-seis rodadas até lá, e os defeitos da própria prova estão listados abaixo. A repetição sobre o
-build seguinte não chegou a clicar em nada: as três specs de extensões falharam na fixture com
-`Processing this request timed out` do serviço de autenticação do Supabase sintético, com a máquina
-em load 53 e 64 MB livres por causa de outras sessões — é ambiente, e a repetição segue pendente
+Estado: **passou inteira em 16/09/2026**, em 28,3 s, sobre o build `mpuyz81eEv5s9QLf96iqr` (do
+commit `6a5d46710`, a branch já integrada com a `main`), na mesma rodada das duas specs do J24. As
+capturas abaixo são dessa rodada. Antes dela: seis rodadas até a primeira vez inteira (sobre o build
+`FL9GZvWqPoj8aE9XSY2E_`, commit `540a76082`), cujos defeitos da própria prova estão listados abaixo,
+e duas repetições mortas por ambiente — uma na fixture com a máquina em load 53, outra com o servidor
+de teste morto por falta de memória.
 
 | Caso | Prioridade | Prova |
 |---|---|---|
 | Admitir o catálogo com as duas versões e instalar a 1.0.0 | P0 | O catálogo oferece "Instalar versão revisada" para a 1.0.0 e "Atualizar para 1.1.0" para a mesma identidade, nunca uma segunda instalação; banco com revisão 1 e sem anterior |
 | Ativar em A; B sem nada | P0 | Vínculo de A ativo, revisão 1; B sem vínculo; o bloco "Em todas as organizações" diz "1 organização está com esta extensão ativa." |
-| Atualizar para 1.1.0 | P0 | O diálogo diz "1 organização tem esta extensão ativa e continua com ela ativa"; banco em 1.1.0, revisão 2, com anterior; o vínculo de A segue ativo e com a mesma revisão; o guia de A mostra o card novo da 1.1.0 e o card estável |
+| Atualizar para 1.1.0 | P0 | O diálogo diz "1 organização tem esta extensão ativa e continua com ela ativa" (`evidence/extensoes/versao/1-confirmar-atualizacao.png`); banco em 1.1.0, revisão 2, com anterior; o vínculo de A segue ativo e com a mesma revisão; o guia de A mostra o card novo da 1.1.0 e o card estável (`evidence/extensoes/versao/2-guia-na-1.1.0.png`) |
 | Desfazer com o catálogo desligado | P0 | O processo do catálogo é encerrado antes; o diálogo nomeia a versão de destino e a contagem; banco volta à 1.0.0, revisão 3, sem nenhum download |
-| Aba antiga recusada | P0 | Outra sessão aberta antes do desfazer ainda mostra "volta para 1.0.0"; ao confirmar, recebe "A extensão mudou em outra sessão" e recarrega para "volta para 1.1.0"; o banco continua na revisão 3 |
-| Remover | P0 | O diálogo diz "1 organização com ela ativa deixa de ver os guias agora"; banco com `removed_at`, vínculo de A desligado com a marca da remoção; o guia aberto de A diz "removeu esta extensão de todas as organizações", sem "desativada nesta organização" e sem "Tentar novamente"; a gestão de A mostra "Removida"; a auditoria de A tem exatamente uma `extension.deactivated_by_removal` com `reason = installation_removed`, visível em `/app/audit` |
-| Religar o catálogo, reinstalar e reativar em A | P0 | O catálogo oferece "Reinstalar versão 1.0.0"; o diálogo diz "1 organização a usava e não volta a vê-la sozinha"; banco sem remoção e sem anterior, revisão 5, na MESMA instalação; o card de A diz "Estava ativa até ser removida… Ative de novo"; ativar apaga a marca |
-| Atualização que falha no download | P0 | Com o catálogo desligado, o recibo desta identidade fica "Atualização · Falhou" com o motivo; banco com `extension_download_failed` e a instalação intacta; um `dispatched` do atualizador do core é aceito em seguida e encerrado na hora |
+| Aba antiga recusada | P0 | Outra sessão aberta antes do desfazer ainda mostra "volta para 1.0.0"; ao confirmar, recebe "A extensão mudou em outra sessão" e recarrega para "volta para 1.1.0" (`evidence/extensoes/versao/3-aba-antiga-recusada.png`); o banco continua na revisão 3 |
+| Remover | P0 | O diálogo diz "1 organização com ela ativa deixa de ver os guias agora" (`evidence/extensoes/versao/4-confirmar-remocao.png`); banco com `removed_at`, vínculo de A desligado com a marca da remoção; o guia aberto de A diz "removeu esta extensão de todas as organizações", sem "desativada nesta organização" e sem "Tentar novamente" (`evidence/extensoes/versao/5-guia-removido.png`); a gestão de A mostra "Removida"; a auditoria de A tem exatamente uma `extension.deactivated_by_removal` com `reason = installation_removed`, visível em `/app/audit` (`evidence/extensoes/versao/6-auditoria-da-organizacao.png`) |
+| Religar o catálogo, reinstalar e reativar em A | P0 | O catálogo oferece "Reinstalar versão 1.0.0"; o diálogo diz "1 organização a usava e não volta a vê-la sozinha"; banco sem remoção e sem anterior, revisão 5, na MESMA instalação; o card de A diz "Estava ativa até ser removida… Ative de novo" (`evidence/extensoes/versao/7-reinstalada-por-ativar.png`); ativar apaga a marca |
+| Atualização que falha no download | P0 | Com o catálogo desligado, o recibo desta identidade fica "Atualização · Falhou" com o motivo (`evidence/extensoes/versao/8-atualizacao-falhou.png`); banco com `extension_download_failed` e a instalação intacta; um `dispatched` do atualizador do core é aceito em seguida e encerrado na hora |
 
 Defeitos da própria prova, medidos antes de mexer:
 

@@ -1,9 +1,9 @@
 {
-  "publisher": "versoes-e8db26c975",
-  "name": "guia-e8db26c975",
-  "revision": 31,
+  "publisher": "versoes-a231a70653",
+  "name": "guia-a231a70653",
+  "revision": 34,
   "package_sha256": {
-    "1.0.0": "9c5bf56a2c37b65779fda681ca083bf724f8f0fccce7893f67f7ee60e64eb394",
-    "1.1.0": "eed202638d7c80f33de900256b6b74475572afaa792a5e8d49959517f619562b"
+    "1.0.0": "2a8703485c6a4f2f75e858c510e9cc65148a2671ae66b8958e588f9a34cbf7e6",
+    "1.1.0": "4d9768f75e60fefdff771f92db74ff79c036da635554cd7b17241746c24210e9"
   }
 }
