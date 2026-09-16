@@ -38,7 +38,10 @@ import {
 } from "@/lib/leads/clonar-para-funil";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 import { encerraDemanda } from "@/lib/leads/encerramento";
-import { motivoDaPerdaDaOrigem } from "@/lib/leads/motivo-da-perda";
+import {
+  motivoDaPerdaDaOrigem,
+  recusaDeMotivoForaDoVocabulario,
+} from "@/lib/leads/motivo-da-perda";
 import { cloneLeadSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 
@@ -104,6 +107,36 @@ export async function POST(
     const recusa = recusaTrocaDeFunil(origem as OrigemParaClonar, input.pipeline_id);
     if (recusa) {
       return fail(recusa.code, t(recusa.texto), recusa.status, { requestId });
+    }
+
+    // ── O MOTIVO DO CHAMADOR SE CONFERE ANTES DA PRIMEIRA ESCRITA ─────────────
+    //
+    // `lost_reason` chega do chamador como string livre (cloneLeadSchema só exige
+    // não-vazia), e quem o recusa é `fn_validate_lost_reason_required` — no
+    // encerramento da ORIGEM, que acontece DEPOIS de `createLeadHandler`. Nessa
+    // ordem, `{"lost_reason": "mudou de funil"}` produzia 500 com o clone já
+    // criado no destino e a origem ainda aberta: o negócio duplicado, e a
+    // resposta dizendo que algo quebrou em vez de dizer o que fazer.
+    //
+    // O vocabulário é o do funil de ORIGEM porque é a linha da origem que fecha,
+    // e o trigger lê `new.pipeline_id` (supabase/baseline.sql).
+    const { data: pipelineOrigem, error: origemPipeErr } = await supabase
+      .from("crm_pipelines")
+      .select("settings")
+      .eq("id", (origem as OrigemParaClonar).pipeline_id)
+      .eq("organization_id", handlerCtx.organization_id)
+      .maybeSingle();
+
+    if (origemPipeErr) {
+      return fail("internal_error", origemPipeErr.message, 500, { requestId });
+    }
+    const motivoRecusado = recusaDeMotivoForaDoVocabulario({
+      motivo: input.lost_reason,
+      settingsDoFunil: (pipelineOrigem as { settings?: unknown } | null)?.settings ?? null,
+      idioma: authz.user.idioma,
+    });
+    if (motivoRecusado) {
+      return fail(motivoRecusado.codigo, motivoRecusado.mensagem, 422, { requestId });
     }
 
     const { data: etapas, error: stagesErr } = await supabase
@@ -181,7 +214,15 @@ export async function POST(
     });
 
     // Onde a origem foi parar. Fica na ORIGEM porque o clone já carrega
-    // `clonado_de`; juntos os dois lados contam a mesma história na timeline.
+    // `clonado_de`: cada lado guarda o ponteiro para o outro.
+    //
+    // ⚠️ NÃO É TIMELINE, e a distinção importa para quem for ler isto depois:
+    // `source_metadata` é jsonb que NENHUMA tela lê — a linha do tempo do dossiê
+    // vem de `crm_lead_activities` (hooks/leads/useLeadTimeline.ts). A origem
+    // ganha a linha de `encerraDemanda` ("Perdido — <motivo>"), que não diz para
+    // onde o negócio foi, e o clone nasce com a timeline vazia. Escrever as duas
+    // linhas é fatia própria; até lá, o ponteiro serve a quem integra pela API e
+    // a quem depura, não ao operador na tela.
     const destination = registroDoDestino(clone);
     const sourceMetadata = {
       ...(((origem as OrigemParaClonar).source_metadata ?? {}) as Record<string, unknown>),
@@ -217,12 +258,15 @@ export async function POST(
       },
     });
 
+    // 201 e não 200: a rota CRIA um recurso, como `POST /api/v1/leads`
+    // (app/api/v1/leads/route.ts). Duas criações irmãs com códigos diferentes
+    // fazem quem integra tratar cada uma de um jeito sem que nada justifique.
     return ok(
       {
         lead: clone,
         origem: origemFinal ?? origemEncerrada,
       },
-      { requestId },
+      { requestId, status: 201 },
     );
   } catch (err) {
     if (err instanceof ApiError) {

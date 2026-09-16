@@ -1,5 +1,6 @@
 import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { CANONICAL_LOST_REASONS } from "@/lib/schemas/leads";
 
 /**
  * O MOTIVO DA PERDA — o ponto de decisão único de quem escreve ETAPA (issue #917).
@@ -64,6 +65,10 @@ export function motivoDaPerdaDaOrigem(informado?: string | null): string {
 
 /** O texto base da recusa — o dicionário (`traduzir`) traduz a partir daqui. */
 export const MOTIVO_DA_PERDA_OBRIGATORIO = "Informe o motivo da perda.";
+
+/** O texto base da recusa por vocabulário — o mesmo que a rede de segurança usa. */
+export const MOTIVO_DA_PERDA_FORA_DO_VOCABULARIO =
+  "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.";
 
 /**
  * A etapa de destino, com o mínimo que a decisão precisa saber dela. Aceita `null`
@@ -170,11 +175,50 @@ export function recusaDeMotivoDaPerdaPeloBanco(
   if (codigo === "22023" && texto.includes("lost_reason_invalid")) {
     return {
       codigo: "lost_reason_invalid",
-      mensagem: traduzir(
-        "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.",
-        idioma ?? IDIOMA_PADRAO,
-      ),
+      mensagem: traduzir(MOTIVO_DA_PERDA_FORA_DO_VOCABULARIO, idioma ?? IDIOMA_PADRAO),
     };
   }
   return null;
+}
+
+/**
+ * O motivo está no vocabulário do funil? — a MESMA pergunta que
+ * `fn_validate_lost_reason_required` faz (supabase/baseline.sql), antes de a
+ * escrita acontecer.
+ *
+ * ⚠️ POR QUE PERGUNTAR ANTES, se o banco já recusa: porque há um caminho em que a
+ * recusa do banco chega TARDE DEMAIS. A troca de funil
+ * (`POST /api/v1/leads/[id]/clone`) são duas escritas sem transação entre elas —
+ * cria o clone, depois encerra a origem. Um `lost_reason` fora do vocabulário só
+ * era recusado na SEGUNDA, e o operador recebia 500 com o negócio já duplicado no
+ * destino e a origem ainda aberta. Barrar aqui custa uma leitura e não deixa
+ * meia-execução nenhuma.
+ *
+ * `settingsDoFunil` é o `crm_pipelines.settings` cru: a lista do tenant vive em
+ * `settings.lost_reasons`, e `settings` sem ela significa "só os canônicos" — que
+ * é o que o `coalesce(..., '{}')` do trigger faz.
+ *
+ * Devolve `null` quando não há o que recusar (sem motivo informado, ou motivo
+ * aceito): quem decide se motivo AUSENTE é recusa é `decideMotivoDaPerda`.
+ */
+export function recusaDeMotivoForaDoVocabulario(input: {
+  motivo?: string | null;
+  settingsDoFunil: unknown;
+  idioma?: Idioma | null;
+}): { codigo: "lost_reason_invalid"; mensagem: string } | null {
+  const motivo = (input.motivo ?? "").trim();
+  if (motivo.length === 0) return null;
+
+  const extras = (input.settingsDoFunil as { lost_reasons?: unknown } | null | undefined)
+    ?.lost_reasons;
+  const aceitos = new Set<string>([
+    ...CANONICAL_LOST_REASONS,
+    ...(Array.isArray(extras) ? extras.filter((v): v is string => typeof v === "string") : []),
+  ]);
+  if (aceitos.has(motivo)) return null;
+
+  return {
+    codigo: "lost_reason_invalid",
+    mensagem: traduzir(MOTIVO_DA_PERDA_FORA_DO_VOCABULARIO, input.idioma ?? IDIOMA_PADRAO),
+  };
 }

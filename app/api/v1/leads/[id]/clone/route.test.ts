@@ -215,7 +215,7 @@ describe("POST /api/v1/leads/[id]/clone", () => {
     const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
     const body = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     const clone = body.data.lead as Row;
     expect(clone.pipeline_id).toBe(P2);
     expect(clone.stage_id).toBe(S2_A);
@@ -245,8 +245,49 @@ describe("POST /api/v1/leads/[id]/clone", () => {
     const response = await POST(cloneRequest({ pipeline_id: P2, stage_id: S2_B }), params);
     const body = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     expect((body.data.lead as Row).stage_id).toBe(S2_B);
+  });
+
+  it("motivo fora do vocabulário do funil: 422 e NENHUMA escrita", async () => {
+    // A recusa vinha do trigger, no encerramento da ORIGEM — que roda DEPOIS de o
+    // clone já existir. O operador recebia 500 com o negócio duplicado no destino
+    // e a origem ainda aberta; a pergunta agora é feita antes da primeira escrita.
+    const antes = (db.tables.crm_leads ?? []).length;
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      cloneRequest({ pipeline_id: P2, lost_reason: "mudou de funil" }),
+      params,
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("lost_reason_invalid");
+    expect((db.tables.crm_leads ?? []).length).toBe(antes);
+    const origem = (db.tables.crm_leads ?? []).find((row) => row.id === LEAD_ID) as Row;
+    expect(origem.status).toBe("open");
+  });
+
+  it("motivo ESTENDIDO pelo funil de origem passa", async () => {
+    const base = seed();
+    db = fakeDb({
+      ...base,
+      crm_pipelines: (base.crm_pipelines ?? []).map((funil) =>
+        funil.id === P1 ? { ...funil, settings: { lost_reasons: ["mudou de funil"] } } : funil,
+      ),
+    });
+    vi.mocked(createClient).mockResolvedValue(db.client);
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      cloneRequest({ pipeline_id: P2, lost_reason: "mudou de funil" }),
+      params,
+    );
+
+    expect(response.status).toBe(201);
+    const origem = (db.tables.crm_leads ?? []).find((row) => row.id === LEAD_ID) as Row;
+    expect(origem.lost_reason).toBe("mudou de funil");
   });
 
   it("usa o motivo de perda informado quando ele é canônico", async () => {
@@ -371,7 +412,7 @@ describe("POST /api/v1/leads/[id]/clone", () => {
     const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
     const body = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     expect((body.data.lead as Row).custom_fields).toEqual({ metragem: "120m2" });
   });
 });
