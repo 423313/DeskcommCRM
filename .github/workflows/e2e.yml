@@ -5,13 +5,13 @@ name: e2e
 #
 # NÃO conte aqui quantas são: o summary do job CONTA em vez de afirmar, e
 # `tests/unit/e2e-cobertura-completa.test.ts` reprova o build quando uma spec do
-# disco não está em nenhuma das três listas abaixo. Um número escrito nesta linha
+# disco não está em nenhuma das quatro listas abaixo. Um número escrito nesta linha
 # é a quarta fonte da mesma verdade, e as três anteriores já divergiram — este
 # cabeçalho dizia "29 de 33" quando o disco tinha 45 e o job rodava 44.
 #
 # A execução é dividida em DUAS invocações do playwright de propósito: o
 # limitador de login do produto é por IP (60/300s) e no CI todos os specs vêm do
-# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte 1 de 3".
+# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte 1 de 4".
 #
 # É CHECK OBRIGATÓRIO. A régua, para reconferir em vez de acreditar nesta linha:
 #   $ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
@@ -93,7 +93,7 @@ jobs:
       # uma rodada por parte.
       fail-fast: false
       matrix:
-        parte: [1, 2, 3]
+        parte: [1, 2, 3, 4]
     # ─────────────────────────────────────────────────────────────────────────
     # A COBERTURA DEIXA DE SER PROSA DIGITADA À MÃO.
     #
@@ -106,7 +106,7 @@ jobs:
     # Cobertura parcial silenciosa se lê como cobertura total. Agora há UMA fonte
     # por lista, o summary CONTA em vez de afirmar, e
     # `tests/unit/e2e-cobertura-completa.test.ts` reprova o build quando um arquivo
-    # de spec não está em nenhuma das três listas.
+    # de spec não está em nenhuma das quatro listas.
     #
     # FORA_DO_CI exige motivo escrito no próprio nome do bloco abaixo — spec fora
     # do gate sem razão declarada é a dívida voltando pela porta de serviço.
@@ -607,10 +607,74 @@ jobs:
         qa-equipe-pinta-na-hora.spec.ts
         qa-sugestao-rejeitada-e-motivo.spec.ts
 
-      FORA_DO_CI: >-
+      # ─── PARTE 4 — a spec de VPS fresca, e por que ela vem sozinha ───
+      #
+      # A `vps-fresh-onboarding` era a última spec fora do CI. A infraestrutura
+      # que faltava chegou em dois lugares:
+      #
+      #  * `services:` deste job: WAHA (devlikeapro/waha) e o par Redis do
+      #    `docker-compose.prod.yml` — `redis:7-alpine` + o
+      #    `hiett/serverless-redis-http` que fala o REST do Upstash;
+      #  * `scripts/duble-saas-e2e.mjs`: dublê HTTP REAL (recebe requisição de
+      #    verdade, na porta, com processo separado) do Resend e do handshake
+      #    OAuth da Nuvemshop. Não é mock em processo — a doutrina de QA visual
+      #    pede receiver real para efeito colateral externo.
+      #
+      # Ela fica SOZINHA numa parte por um motivo que não é relógio: as partes 1
+      # a 3 explicitamente NÃO resetam o banco entre specs (é a vizinhança que
+      # elas escolheram), e a fresca precisa do oposto — a instalação sem dono,
+      # sem tenant, sem fixtures. Por isso os dois passos de semeadura
+      # (`Semear credenciais de teste` e `Semear as fixtures`) recebem
+      # `if: matrix.parte != 4`, e o dono é criado pela própria spec, que é o
+      # que ela existe para afirmar.
+      SPECS_PARTE_4: >-
         vps-fresh-onboarding.spec.ts
+
+      # ─── FORA_DO_CI — as duas que ficaram, e o motivo continua onde sempre ───
+      #
+      # A `vps-fresh-onboarding` saiu desta lista no PR da issue #179 (a infra
+      # dela está no `SPECS_PARTE_4` logo acima). As duas abaixo continuam
+      # fora, e o motivo delas é o que o job `resumo` imprime no run.
+      FORA_DO_CI: >-
         inbox-tempo-real.spec.ts
         cadastro-sem-confirmacao-de-email.spec.ts
+    # ─── Serviços da parte 4 — a spec de VPS fresca (issue #179) ────────────
+    #
+    # Sobem para a matriz inteira (é assim que `services:` funciona no Actions:
+    # é chave do job, não do braço) e ficam ociosos nas partes 1 a 3. O que é
+    # por-parte é a INJEÇÃO: só o passo `Ligar a VPS fresca` publica estas URLs
+    # no ambiente, então nenhuma spec das partes 1 a 3 passa a ver WAHA ligado
+    # sem querer.
+    services:
+      waha:
+        # Sobe no runner; é a dificuldade "baixa" que a issue descreve.
+        image: devlikeapro/waha:latest
+        ports: ["3000:3000"]
+        env:
+          WHATSAPP_HOOK_URL: http://127.0.0.1:3001/api/whatsapp/webhook
+          WAHA_API_KEY: e2e-waha-chave-nao-e-segredo
+        options: >-
+          --health-cmd "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))\""
+          --health-interval 10s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 12
+      redis-http:
+        # O MESMO par do docker-compose.prod.yml: quem traduz o REST do Upstash
+        # para o Redis acima. Sem ele o produto fala Upstash e não tem com quem.
+        image: hiett/serverless-redis-http:latest
+        ports: ["8079:80"]
+        env:
+          SRH_MODE: env
+          SRH_TOKEN: e2e-token-nao-e-segredo
+          SRH_CONNECTION_STRING: redis://redis:6379
+        # Sem health-cmd de propósito: a imagem não traz wget/curl e um check que
+        # nunca passa travaria o job esperando saúde para sempre. Quem espera o
+        # 8079 responder é o próprio passo abaixo, com curl da máquina.
+
     steps:
       - uses: actions/checkout@v7
 
@@ -783,7 +847,67 @@ jobs:
       # O seed cria 1 org + 4 usuários com os 4 papéis e um TOTP verified de
       # secret conhecido no admin — sem ele, todo spec que loga fica de fora, que
       # era a maior parte da suíte.
-      - name: Semear credenciais de teste
+      # ─── A parte fresca: WAHA, Redis e o dublê de SaaS, antes da spec ──────
+      #
+      # O dublê é exercitado pelo SMOKE antes da spec: se ele não responder o
+      # contrato, o job falha aqui, com a rota nomeada, em vez de falhar seis
+      # minutos depois dentro do Playwright com "elemento não encontrado".
+      - if: matrix.parte == 4
+        name: Ligar a VPS fresca (WAHA, Redis e dublê de SaaS)
+        run: |
+          set -euo pipefail
+
+          # 1. O dublê de Resend/Nuvemshop: processo separado, porta de verdade.
+          nohup node scripts/duble-saas-e2e.mjs >/tmp/duble-saas.log 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3997/__duble/saude >/dev/null; then break; fi
+            sleep 1
+          done
+          cat /tmp/duble-saas.log
+          bash scripts/duble-saas-e2e-smoke.sh
+
+          # 2. O que a spec fresca exige do ambiente (cabeçalho dela):
+          #    WAHA ativo, Redis local, e Resend SEM chave — instalação nova não
+          #    tem chave de SaaS nenhuma, e é isso que a spec cobra.
+          {
+            echo "WAHA_API_BASE_URL=http://127.0.0.1:3000"
+            echo "WAHA_API_KEY=e2e-waha-chave-nao-e-segredo"
+            echo "UPSTASH_REDIS_REST_URL=http://127.0.0.1:8079"
+            echo "UPSTASH_REDIS_REST_TOKEN=e2e-token-nao-e-segredo"
+            echo "RESEND_API_BASE_URL=http://127.0.0.1:3997"
+            echo "RESEND_API_KEY="
+            echo "NUVEMSHOP_AUTH_BASE=http://127.0.0.1:3997"
+            echo "NUVEMSHOP_API_BASE=http://127.0.0.1:3997"
+            echo "NUVEMSHOP_CLIENT_ID=e2e-app-id"
+            echo "NUVEMSHOP_CLIENT_SECRET=e2e-placeholder-nao-e-segredo"
+          } >> "$GITHUB_ENV"
+
+          # 3. A cadeia de Redis, provada pelo protocolo que o produto usa: um
+          #    comando Upstash REST de verdade, que só responde PONG se o
+          #    serverless-redis-http estiver de pé E falando com o redis:7.
+          for _ in $(seq 1 30); do
+            if curl -sf -X POST -H "Authorization: Bearer e2e-token-nao-e-segredo"                  -d '["PING"]' http://127.0.0.1:8079/ | grep -q PONG; then
+              echo "Redis (REST do Upstash) pronto"
+              break
+            fi
+            sleep 1
+          done
+
+          # 4. Alguns scripts leem o disco em vez do ambiente.
+          cp .env.e2e .env.local
+
+          # 5. Espera o WAHA responder antes de entregar o turno para o Playwright.
+          for _ in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/api/health >/dev/null; then
+              echo "WAHA pronto"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "WAHA não respondeu em 120s"; tail -40 /tmp/duble-saas.log; exit 1
+
+      - if: matrix.parte != 4
+        name: Semear credenciais de teste
         run: |
           cp .env.e2e .env.local
           pnpm exec tsx scripts/seed-e2e-credentials.ts
@@ -810,7 +934,8 @@ jobs:
       # capacidades importa `lib/env.ts` (via lib/ai/embed.ts), que lê
       # `process.env`; o de escalação parseia o `.env.local` por conta própria.
       # Sem a flag o de capacidades morre na validação Zod das 3 vars do Supabase.
-      - name: Semear as fixtures que as specs não semeiam sozinhas
+      - if: matrix.parte != 4
+        name: Semear as fixtures que as specs não semeiam sozinhas
         run: |
           pnpm exec tsx scripts/seed-e2e-escalacao.ts
           pnpm exec tsx --env-file=.env.local scripts/seed-e2e-capacidades-ausentes.ts
@@ -852,7 +977,7 @@ jobs:
       # workers, dois specs gerando o mesmo código no mesmo intervalo de 30s
       # fazem o segundo ser recusado como replay. Foi o que derrubava a
       # `reset-password-mfa` (issue #80): ela passa sozinha e falha em paralelo.
-      - name: E2E — parte ${{ matrix.parte }} de 3
+      - name: E2E — parte ${{ matrix.parte }} de 4
         run: |
           set -euo pipefail
           # A lista sai da matrix, e as duas variáveis continuam existindo no
@@ -863,6 +988,7 @@ jobs:
             1) LISTA="$SPECS_PARTE_1" ;;
             2) LISTA="$SPECS_PARTE_2" ;;
             3) LISTA="$SPECS_PARTE_3" ;;
+            4) LISTA="$SPECS_PARTE_4" ;;
             *) echo "::error::parte ${{ matrix.parte }} sem lista"; exit 1 ;;
           esac
           # Falha alto se a variável vier vazia: sem isto, um typo no nome faria
@@ -981,13 +1107,13 @@ jobs:
                       dentro { exit }
                     ' .github/workflows/e2e.yml | grep -oE "[a-z0-9-]+\.spec\.ts" | sort -u; }
           NO_DISCO=$(ls tests/e2e/*.spec.ts | wc -l | tr -d " ")
-          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; } | sort -u | wc -l | tr -d " ")
+          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; bloco SPECS_PARTE_4; } | sort -u | wc -l | tr -d " ")
           FORA_LISTA=$(bloco FORA_DO_CI)
           FORA=$(echo "$FORA_LISTA" | grep -c . || true)
           # E o recorte passa a ter CONTROLE, não só um piso.
           #
           # `tests/unit/e2e-cobertura-completa.test.ts` já garante que toda spec
-          # do disco está em exatamente uma das três listas, sem duplicata e sem
+          # do disco está em exatamente uma das quatro listas, sem duplicata e sem
           # fantasma. Logo `RODOU + FORA` TEM de dar `NO_DISCO` — e quando não
           # der, o recorte leu a mais ou a menos. Sem esta linha, ler a mais é
           # invisível: o passo imprime um número maior e segue verde, que é
@@ -1005,8 +1131,8 @@ jobs:
             echo "**Rodou: ${RODOU} de ${NO_DISCO} specs**, em partes paralelas."
             echo ""
             echo "**Não rodou (${FORA}):**"
-            for s in $FORA_LISTA; do echo "- \`${s}\` — precisa de WAHA + Redis + Resend + Nuvemshop (P0 da doutrina de QA Visual)"; done
+            for s in $FORA_LISTA; do echo "- \`${s}\` — fora do CI de propósito: o motivo de cada uma está no comentário do bloco FORA_DO_CI, no topo deste workflow"; done
             echo ""
             echo "A soma é conferida mecanicamente por \`tests/unit/e2e-cobertura-completa.test.ts\`:"
-            echo "spec no disco que não esteja em nenhuma das três listas reprova o build."
+            echo "spec no disco que não esteja em nenhuma das quatro listas reprova o build."
           } >> "$GITHUB_STEP_SUMMARY"
