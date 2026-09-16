@@ -551,3 +551,166 @@ export async function criarCatalogoDeExtensoes(
     throw error;
   }
 }
+
+export interface CatalogoDeVersoes {
+  diretorio: string;
+  catalogo: string;
+  origem: string;
+  revisao: number;
+  publisher: string;
+  name: string;
+  title: string;
+  /** Existe nas duas versões: identidade estável entre versões (regra 1 do formato). */
+  cardEstavel: { id: string; titulo: string };
+  /** Só a 1.1.0 traz: é o que prova que a organização passou a ver a versão nova. */
+  cardNovo: { id: string; titulo: string };
+  estaLigado(): boolean;
+  desligar(): Promise<void>;
+  religar(): Promise<void>;
+  limpar(): Promise<void>;
+}
+
+/**
+ * Catálogo do J25: a MESMA identidade publicada em 1.0.0 e 1.1.0 depois do build, num SQLite
+ * próprio, servido pelo processo HTTP real na porta do ensaio. Diferente da fixture do J24, o
+ * catálogo pode ser desligado e religado: desfazer tem de funcionar com ele fora do ar, e
+ * reinstalar precisa dele de volta.
+ */
+export async function criarCatalogoDeVersoes(
+  db: SupabaseClient,
+  evidenceDir: string,
+): Promise<CatalogoDeVersoes> {
+  const buildPath = path.join(process.cwd(), ".next", "BUILD_ID");
+  const buildStat = await stat(buildPath).catch(() => null);
+  if (!buildStat?.isFile()) {
+    throw new Error("A publicação dos pacotes exige `.next/BUILD_ID` de um build já concluído.");
+  }
+  const { data: atual, error: erroAtual } = await db
+    .from("extension_catalogs")
+    .select("revision")
+    .eq("origin", ORIGEM_CATALOGO)
+    .maybeSingle();
+  if (erroAtual) throw new Error(erroAtual.message);
+  const revisaoAtual = (atual?.revision as number | undefined) ?? 0;
+
+  const diretorio = await mkdtemp(path.join(tmpdir(), "deskcomm-extensions-e2e-"));
+  let servidor: Awaited<ReturnType<typeof iniciarServidor>> | undefined;
+  try {
+    const banco = path.join(diretorio, "catalog.sqlite");
+    const sufixo = randomUUID().replaceAll("-", "").slice(0, 10);
+    const publisher = `versoes-${sufixo}`;
+    const name = `guia-${sufixo}`;
+    const title = `Guia versionado ${sufixo}`;
+    const cardEstavel = { id: `passo-${sufixo}`, titulo: `Passo que fica ${sufixo}` };
+    const cardNovo = { id: `novidade-${sufixo}`, titulo: `Novidade da 1.1.0 ${sufixo}` };
+
+    await aguardarDepoisDoBuild(buildStat.mtimeMs);
+    await catalogoCli(["init", "--db", banco, "--origin", ORIGEM_CATALOGO]);
+    const exemplo = path.join(diretorio, "exemplo.json");
+    await catalogoCli(["make-example", "--output", exemplo]);
+    const base = JSON.parse(await readFile(exemplo, "utf8")) as ExtensionManifest;
+    base.publisher = publisher;
+    base.name = name;
+    base.display.title["pt-BR"] = title;
+    base.display.summary["pt-BR"] = `Versão 1.0.0 publicada depois do build.`;
+    const primeiro = base.contributions.crm_cards[0];
+    if (!primeiro) throw new Error("O exemplo do CLI não contém um card CRM.");
+    primeiro.id = cardEstavel.id;
+    primeiro.title["pt-BR"] = cardEstavel.titulo;
+
+    const nova = structuredClone(base);
+    nova.version = "1.1.0";
+    nova.display.summary["pt-BR"] = `Versão 1.1.0 publicada depois do build.`;
+    nova.contributions.crm_cards.push({
+      ...structuredClone(primeiro),
+      id: cardNovo.id,
+      title: { "pt-BR": cardNovo.titulo },
+    });
+
+    const digests: Record<string, string> = {};
+    for (const [versao, manifesto] of [
+      ["1.0.0", base],
+      ["1.1.0", nova],
+    ] as const) {
+      const arquivo = path.join(diretorio, `guia-${versao}.json`);
+      await writeFile(arquivo, JSON.stringify(manifesto), "utf8");
+      if ((await stat(arquivo)).mtimeMs <= buildStat.mtimeMs) {
+        throw new Error("O pacote não foi criado depois do BUILD_ID.");
+      }
+      digests[versao] = await catalogoCli(["publish", "--db", banco, "--manifest", arquivo]);
+    }
+
+    let catalogo = "";
+    for (let revisao = 1; revisao <= revisaoAtual + 1; revisao += 1) {
+      catalogo = path.join(diretorio, `catalog-revision-${revisao}.json`);
+      await catalogoCli(["export", "--db", banco, "--output", catalogo]);
+    }
+    const snapshot = JSON.parse(await readFile(catalogo, "utf8")) as {
+      revision: number;
+      entries: Array<{ name: string; version: string }>;
+    };
+    if (snapshot.revision !== revisaoAtual + 1) {
+      throw new Error("A revisão exportada não sucede o catálogo já admitido.");
+    }
+    if (snapshot.entries.filter((entrada) => entrada.name === name).length !== 2) {
+      throw new Error("O catálogo exportado precisa listar as duas versões da mesma identidade.");
+    }
+
+    servidor = await iniciarServidor(banco);
+    await mkdir(evidenceDir, { recursive: true });
+    await writeFile(
+      path.join(evidenceDir, "catalogo-de-versoes.json"),
+      JSON.stringify(
+        { publisher, name, revision: snapshot.revision, package_sha256: digests },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    let ligado = true;
+    const encerrar = async () => {
+      if (!ligado || !servidor) return;
+      ligado = false;
+      await encerrarProcessoProprio(servidor.processo, servidor.pid);
+    };
+    return {
+      diretorio,
+      catalogo,
+      origem: ORIGEM_CATALOGO,
+      revisao: snapshot.revision,
+      publisher,
+      name,
+      title,
+      cardEstavel,
+      cardNovo,
+      estaLigado: () => ligado && servidor?.processo.exitCode === null,
+      desligar: encerrar,
+      async religar() {
+        if (ligado) return;
+        servidor = await iniciarServidor(banco);
+        ligado = true;
+      },
+      async limpar() {
+        let erroDoProcesso: unknown;
+        try {
+          await encerrar();
+        } catch (error) {
+          erroDoProcesso = error;
+        }
+        const raizPermitida = path.join(tmpdir(), "deskcomm-extensions-e2e-");
+        if (!diretorio.startsWith(raizPermitida)) {
+          throw new Error("Diretório temporário inesperado; cleanup recusado.");
+        }
+        await rm(diretorio, { recursive: true, force: true });
+        if (erroDoProcesso) throw erroDoProcesso;
+      },
+    };
+  } catch (error) {
+    if (servidor) {
+      await encerrarProcessoProprio(servidor.processo, servidor.pid).catch(() => undefined);
+    }
+    await rm(diretorio, { recursive: true, force: true });
+    throw error;
+  }
+}

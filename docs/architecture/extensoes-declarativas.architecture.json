@@ -143,6 +143,20 @@
       "col": 14,
       "type": "ui",
       "label": "Auditoria existente /admin/audit"
+    },
+    {
+      "id": "revert",
+      "lane": "app",
+      "col": 15,
+      "type": "service",
+      "label": "Desfazer a última troca · sem download"
+    },
+    {
+      "id": "removal",
+      "lane": "app",
+      "col": 16,
+      "type": "service",
+      "label": "Remover da instalação · desliga vínculos ativos"
     }
   ],
   "edges": [
@@ -260,21 +274,63 @@
       "from": "operator",
       "to": "audit_view",
       "label": "consultar ações com acesso administrativo"
+    },
+    {
+      "from": "manager",
+      "to": "revert",
+      "label": "desfazer com a revisão exibida"
+    },
+    {
+      "from": "revert",
+      "to": "artifact",
+      "label": "trocar ponteiro vigente com o anterior"
+    },
+    {
+      "from": "revert",
+      "to": "operations",
+      "label": "recibo revert com de/para"
+    },
+    {
+      "from": "manager",
+      "to": "removal",
+      "label": "remover com a revisão exibida"
+    },
+    {
+      "from": "removal",
+      "to": "binding",
+      "label": "desligar vínculos ativos, marca e configuração preservada"
+    },
+    {
+      "from": "removal",
+      "to": "operations",
+      "label": "recibo removal com organizações desligadas"
+    },
+    {
+      "from": "removal",
+      "to": "audit",
+      "label": "extension.deactivated por organização"
+    },
+    {
+      "from": "removal",
+      "to": "hub",
+      "label": "guia responde 410 removida"
     }
   ],
   "contracts": {
-    "status": "implementado nesta branch; suíte de banco e revisão aprovadas; as duas jornadas em tela passaram em 15/09/2026 (build ALAqeLI0VQJi4bpWWFbUL); nada publicado",
+    "status": "implementado nesta branch; instalação e recuperação provadas em tela no J24 (15/09/2026); atualizar, desfazer e remover provados no banco, com a jornada em tela J25; nada publicado",
     "spec": "docs/specs/extensoes-declarativas-v1.md",
     "no_links": [
       "Catálogo não recebe contatos, conversas, tarefas ou identidade persistente da VPS.",
       "Pacote não recebe cliente Supabase, ambiente, shell, JavaScript ou SQL.",
       "tasks.open não lê nem escreve tarefas em nome da extensão.",
-      "Desativação preserva configuração e dados de domínio existentes."
+      "Desativação preserva configuração e dados de domínio existentes.",
+      "Remover não reativa nem apaga a configuração de nenhuma organização; a plataforma não decide pela organização."
     ],
     "limits": [
       "Admissão manual de catálogo não é TUF nem distribuição pública.",
       "Coordenação cobre o atualizador pelo app, não comandos externos arbitrários.",
-      "Atualização de versão de pacote e remoção física não são oferecidas neste marco."
+      "Desfazer guarda um passo de histórico; versões mais antigas voltam pelo catálogo, se a revisão admitida ainda as listar.",
+      "Remoção é lógica: nenhuma linha é apagada, e reinstalar exige que cada organização ative de novo."
     ]
   }
 }

@@ -2144,8 +2144,9 @@ publica dois pacotes pelo CLI depois de encontrar `.next/BUILD_ID` e inicia o ca
 | Auditoria visível | P0 | Banco identifica ator e organização nas ações `extension.*`; `/admin/audit` filtra pelos controles canônicos e mostra `extension.configured` |
 
 Limite declarado: esta jornada prova o perfil declarativo e o catálogo local de ensaio. Não prova
-marketplace público, autoria criptográfica, atualização/remoção de versão nem execução de código de
-pacote. A escrita SQL direta sob RLS pertence à suíte de invariantes de banco desta integração.
+marketplace público, autoria criptográfica nem execução de código de pacote. Atualizar, desfazer,
+remover e reinstalar são o J25, abaixo. A escrita SQL direta sob RLS pertence à suíte de
+invariantes de banco desta integração.
 
 
 ## Comunidade 360 — aceite integrado de 2026-09-06

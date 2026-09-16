@@ -135,8 +135,9 @@ latência que ela existe para matar.
 
 ## 2-bis. Destino da mudança — núcleo, extensão ou ambos
 
-Para uma mudança de comportamento, registre o destino e a razão antes da reconciliação. O
-critério aprovado está no [PROG-017, seção 2](../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-017%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20arquitetura%20e%20contratos.md).
+Para uma mudança de comportamento, registre o destino e a razão antes da reconciliação. A lei
+é a [doutrina de extensões](../docs/doctrine/extensoes.md) (item 18 do DoD); o critério foi
+aprovado no [PROG-017, seção 2](../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-017%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20arquitetura%20e%20contratos.md).
 O núcleo precisa continuar útil com zero extensões; nichos podem acrescentar capacidades sem
 determinar a operação de todas as instalações.
 
