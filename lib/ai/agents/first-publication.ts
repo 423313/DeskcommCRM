@@ -19,7 +19,19 @@ export type PublishOutcome =
    * da organização, nem chave da instalação no ambiente. Publicar assim entrega
    * um funcionário que morre em toda mensagem.
    */
-  | { published: false; reason: "sem_chave"; provider: string }
+  | {
+      published: false;
+      reason: "sem_chave";
+      provider: string;
+      /**
+       * A chave que a pessoa colou ainda não foi confirmada pelo provedor
+       * (`validated_at` nulo). Sem isto a tela só sabia dizer "não achei chave
+       * de X" — e para quem acabou de colar uma chave esse diagnóstico é falso:
+       * a chave existe, está gravada, e o que falta é o provedor confirmar. A
+       * #1007 é exatamente esse conselho errado, com o provedor errado.
+       */
+      chaveEmVerificacao?: string;
+    }
   | {
       published: false;
       reason: "no_model";
@@ -109,7 +121,92 @@ export async function publishFirstVersion(
     .maybeSingle();
   if (orgErr) return { published: false, reason: "failed", message: orgErr.message };
 
-  const provider = selection?.provider ?? provedorDaInstalacao(org?.settings);
+  let provider = selection?.provider ?? provedorDaInstalacao(org?.settings);
+
+  /*
+   * ⚠️ QUAL CHAVE ESTA VERSÃO USA — e por que o provedor pode MUDAR aqui.
+   *
+   * As duas origens de chave continuam valendo: credencial validada da
+   * organização vence; na falta dela, `credential_id: null` significa "a chave
+   * da instalação", que é o caso mais comum do kit.
+   *
+   * O terceiro caso é o da #1007, e ele caía entre os dois: a chave que a
+   * pessoa colou no passo "Configurar IA" quando ela é de OUTRO provedor que
+   * não o da instalação. O wizard grava a credencial com o provedor da chave
+   * colada (é o mesmo provedor que `loadCredential` usa no turno), mas a
+   * publicação partia do provedor da instalação — a busca por credencial nunca
+   * achava a chave que estava ali, e o onboarding terminava com o agente em
+   * rascunho e um pedido de chave de outro provedor.
+   *
+   * A chave colada é a decisão mais recente e mais explícita da pessoa sobre
+   * qual cérebro este agente usa; ela vence o padrão da instalação QUANDO o
+   * provedor da instalação não tem chave nenhuma — nem credencial da
+   * organização, nem chave de plataforma. Quando tem, nada muda: o caminho que
+   * já funcionava continua vencendo, e a adoção só olha para credencial
+   * VALIDADA (chave não confirmada não é utilizável pelo turno).
+   *
+   * A chave sai daqui ANTES da escolha do modelo de propósito: modelo e
+   * provedor são um par indivisível, e depois da adoção o catálogo consultado
+   * tem de ser o do provedor adotado. Emprestar o id do modelo de outro
+   * provedor manda um nome que o endpoint não conhece.
+   */
+  let credentialId: string | null = selection ? selection.credentialId : null;
+  /** Provedor cuja credencial colada ainda não foi confirmada pelo provedor. */
+  let chaveEmVerificacao: string | undefined;
+
+  if (!selection) {
+    const { data: credencialDoProvedor } = await admin
+      .from("ai_provider_credentials")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("provider", provider)
+      .eq("is_active", true)
+      // `validated_at` não nulo é exigência de `loadCredential`, não capricho:
+      // uma credencial que o provedor ainda não confirmou não é utilizável no
+      // turno — publicar com ela entrega um agente que erra em toda mensagem.
+      .not("validated_at", "is", null)
+      .limit(1)
+      .maybeSingle();
+
+    credentialId = (credencialDoProvedor?.id as string | undefined) ?? null;
+
+    if (!credentialId && !chaveDePlataforma(provider)) {
+      // Ninguém tem chave utilizável para o provedor da instalação. Antes de
+      // desistir, a chave colada no wizard: a mais recente entre as validadas
+      // que já existem para esta organização.
+      const { data: validadas } = await admin
+        .from("ai_provider_credentials")
+        .select("id, provider")
+        .eq("organization_id", orgId)
+        .eq("is_active", true)
+        .not("validated_at", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      const colhida = (validadas ?? []).find(
+        (linha) => linha.provider && linha.provider !== provider,
+      );
+      if (colhida?.id) {
+        provider = colhida.provider as string;
+        credentialId = colhida.id as string;
+      } else {
+        // Nada utilizável — mas pode haver uma chave colada esperando o
+        // provedor confirmar. Nomear isso é o que separa "cole a chave" de
+        // "espere um instante": são causas e conselhos diferentes.
+        const { data: pendente } = await admin
+          .from("ai_provider_credentials")
+          .select("provider")
+          .eq("organization_id", orgId)
+          .eq("is_active", true)
+          .is("validated_at", null)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (pendente?.provider) chaveEmVerificacao = pendente.provider as string;
+      }
+    }
+  }
+
 
   // O modelo daquele provedor. Não existe fallback literal: um id de outro
   // provedor (ou inventado) produz o pior desfecho do produto — o agente
@@ -154,31 +251,22 @@ export async function publishFirstVersion(
     .maybeSingle();
   const pipelineIds = !selection && funil?.id ? [funil.id as string] : [];
 
-  // QUAL CHAVE ESTA VERSÃO USA — e as duas origens são legítimas.
+  // Sem chave NENHUMA (nem da organização, nem da instalação) não se publica:
+  // o agente responderia erro em toda mensagem e o dono só descobriria com o
+  // primeiro cliente. A chave já foi resolvida lá em cima, junto com a adoção
+  // do provedor da chave colada; aqui só resta o veredito.
   //
-  // Credencial validada da organização vence (quem colou a chave no wizard, ou
-  // cadastrou pela tela); na falta dela, `credential_id: null` significa "a chave
-  // da instalação", que é o caso mais comum do kit. Sem NENHUMA das duas, não se
-  // publica: o agente responderia erro em toda mensagem e o dono só descobriria
-  // com o primeiro cliente.
-  //
-  // `validated_at` não nulo é exigência de `loadCredential`, não capricho: uma
-  // credencial que o provedor ainda não confirmou não é utilizável pelo turno.
-  const { data: credencial } = await admin
-    .from("ai_provider_credentials")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("provider", provider)
-    .eq("is_active", true)
-    .not("validated_at", "is", null)
-    .limit(1)
-    .maybeSingle();
-
-  const credentialId = selection
-    ? selection.credentialId
-    : ((credencial?.id as string | undefined) ?? null);
+  // E ele continua DEPOIS da escolha do modelo de propósito: catálogo sem
+  // nenhum modelo utilizável é defeito de instalação que se resolve antes da
+  // chave, e inverter isso mudaria a causa que a tela recebe para quem tem os
+  // dois problemas — sem necessidade nenhuma para a #1007.
   if (!credentialId && !chaveDePlataforma(provider)) {
-    return { published: false, reason: "sem_chave", provider };
+    return {
+      published: false,
+      reason: "sem_chave",
+      provider,
+      ...(chaveEmVerificacao ? { chaveEmVerificacao } : {}),
+    };
   }
 
   const { data: version, error: versionErr } = await admin

@@ -4977,6 +4977,12 @@ export const DICIONARIO: Traducoes = {
     es: "ni registrada aquí, ni proveniente de la instalación. Pega la clave en el campo de arriba («su cerebro») y crea el agente de nuevo — o regístrala en",
   },
   "IA › Credenciais": { es: "IA › Credenciales" },
+  "A chave que você colou ainda não foi confirmada pelo provedor.": {
+    es: "La clave que pegaste todavía no fue confirmada por el proveedor.",
+  },
+  "Assim que ela for confirmada, publique de novo — não precisa colar outra.": {
+    es: "Cuando esté confirmada, publica de nuevo — no hace falta pegar otra.",
+  },
   "Continuar sem publicar": { es: "Continuar sin publicar" },
   "— e rascunho não responde mensagem.": { es: "— y un borrador no responde mensajes." },
   "Os modelos": { es: "Los modelos" },
