@@ -20,11 +20,17 @@ const conversation = {
   contacts: { id: CONTACT, display_name: "Fulana", name: null, phone_number: "5511999", tags: [] },
 } as unknown as React.ComponentProps<typeof CRMSidePanel>["conversation"];
 
-function leadRow(id: string, funil: string, etapa: string, status: string) {
+function leadRow(
+  id: string,
+  funil: string,
+  etapa: string,
+  status: string,
+  vocabulario: Record<string, string> | null = null,
+) {
   return {
     id, title: "Felipe", status, value_cents: null, currency: null,
     updated_at: "2026-09-15T12:00:00Z", pipeline_id: `p-${id}`, custom_fields: {}, field_defs: [],
-    funil_nome: funil, etapa_nome: etapa,
+    funil_nome: funil, etapa_nome: etapa, vocabulario,
   };
 }
 
@@ -75,6 +81,34 @@ describe("painel do inbox — leads recentes dizem funil, etapa e status traduzi
     expect(dois.textContent).toContain("Padrão · Qualificação");
     expect(dois.textContent).toContain("Ganho");
     expect(`${um.textContent}${dois.textContent}`).not.toMatch(/\b(open|won)\b/);
+  });
+
+  /**
+   * Quem nomeia os dois desfechos é o FUNIL (`crm_pipelines.vocabulary`), e o
+   * DEFAULT do baseline é o de e-commerce — "Pago"/"Cancelado". Uma tela que
+   * cravasse "Ganho" nasceria divergindo da fonte declarada: o prompt do
+   * agente já lê `{{vocabulary.won}}`, e a IA chamaria de "Pago" o negócio que
+   * este painel chamaria de "Ganho", na mesma conversa.
+   */
+  it("o desfecho usa a palavra DO FUNIL — e-commerce lê 'Pago', não 'Ganho'", async () => {
+    get.mockResolvedValue(resposta([
+      leadRow("l-1", "Loja", "Checkout", "won", { won: "Pago", lost: "Cancelado" }),
+      leadRow("l-2", "Loja", "Checkout", "lost", { won: "Pago", lost: "Cancelado" }),
+    ]));
+    renderPainel();
+
+    const um = await screen.findByTestId("inbox-lead-l-1");
+    const dois = screen.getByTestId("inbox-lead-l-2");
+    expect(um.textContent).toContain("Pago");
+    expect(dois.textContent).toContain("Cancelado");
+    expect(`${um.textContent}${dois.textContent}`).not.toMatch(/Ganho|Perdido/);
+  });
+
+  it("funil sem vocabulário próprio cai no padrão do produto", async () => {
+    get.mockResolvedValue(resposta([leadRow("l-1", "Padrão", "Novo", "won", null)]));
+    renderPainel();
+
+    expect((await screen.findByTestId("inbox-lead-unico")).textContent).toContain("Ganho");
   });
 
   it("com um lead só, a linha também diz funil, etapa e status traduzido", async () => {

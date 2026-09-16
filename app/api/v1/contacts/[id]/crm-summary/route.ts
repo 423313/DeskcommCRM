@@ -31,6 +31,7 @@ import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { camposDoFunil, settingsDoEmbed } from "@/lib/leads/campos-do-funil";
+import type { PipelineVocabulary } from "@/lib/kanban/types";
 import { createClient } from "@/lib/supabase/server";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
@@ -41,9 +42,17 @@ export const dynamic = "force-dynamic";
  * Nome do funil e da etapa entram porque dois leads de mesmo título em funis
  * diferentes ficavam idênticos na lista (#943). `!inner` para filtrar funil
  * arquivado no banco, antes do `limit(3)` — `pipeline_id` é NOT NULL.
+ *
+ * `vocabulary` entra porque quem nomeia "ganho"/"perdido" é o FUNIL, não a
+ * tela: `crm_pipelines.vocabulary` é `jsonb NOT NULL` e o DEFAULT do baseline
+ * é o de e-commerce (`won: Pago`, `lost: Cancelado`). Ninguém escreve essa
+ * coluna na criação do funil, então numa instalação fresca é o DEFAULT que
+ * vale — e o prompt do agente já lê dele (`{{vocabulary.won}}` em
+ * `lib/ai/render-system-prompt.ts`). Sem isto o painel diria "Ganho" para o
+ * mesmo negócio que a IA acabou de chamar de "Pago", na mesma conversa.
  */
 const LEAD_COLS =
-  "id, title, status, value_cents, currency, updated_at, pipeline_id, custom_fields, crm_pipelines!inner(name, settings, is_archived), crm_stages(name)";
+  "id, title, status, value_cents, currency, updated_at, pipeline_id, custom_fields, crm_pipelines!inner(name, settings, is_archived, vocabulary), crm_stages(name)";
 const ORDER_COLS = "id, external_id, status, total_cents, currency, created_at";
 /** Acompanha o que a timeline mostra — `reason` e `actor_kind` inclusive. */
 /**
@@ -171,6 +180,7 @@ function comCamposDoFunil(row: Record<string, unknown>) {
     field_defs: camposDoFunil(settingsDoEmbed(crm_pipelines)),
     funil_nome: nomeDoEmbed(crm_pipelines),
     etapa_nome: nomeDoEmbed(crm_stages),
+    vocabulario: vocabularioDoEmbed(crm_pipelines),
   };
 }
 
@@ -178,4 +188,11 @@ function nomeDoEmbed(embed: unknown): string | null {
   const alvo = Array.isArray(embed) ? embed[0] : embed;
   const nome = (alvo as { name?: unknown } | null)?.name;
   return typeof nome === "string" ? nome : null;
+}
+
+/** Cru: quem aplica o padrão é `resolveVocabulary`, no lado que renderiza. */
+function vocabularioDoEmbed(embed: unknown): PipelineVocabulary | null {
+  const alvo = Array.isArray(embed) ? embed[0] : embed;
+  const v = (alvo as { vocabulary?: unknown } | null)?.vocabulary;
+  return v && typeof v === "object" ? (v as PipelineVocabulary) : null;
 }

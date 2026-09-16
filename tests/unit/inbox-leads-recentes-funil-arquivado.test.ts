@@ -60,12 +60,17 @@ function bancoFalso(tabelas: Record<string, Linha[]>) {
   };
 }
 
-function lead(id: string, funil: { name: string; is_archived: boolean }, etapa: string): Linha {
+function lead(
+  id: string,
+  funil: { name: string; is_archived: boolean },
+  etapa: string,
+  vocabulary: Record<string, string> = { won: "Pago", lost: "Cancelado" },
+): Linha {
   return {
     id, organization_id: ORG, contact_id: CONTATO, title: "Felipe", status: "open",
     value_cents: null, currency: null, updated_at: "2026-09-15T12:00:00.000Z",
     pipeline_id: `p-${id}`, custom_fields: {},
-    crm_pipelines: { ...funil, settings: {} },
+    crm_pipelines: { ...funil, settings: {}, vocabulary },
     crm_stages: { name: etapa },
   };
 }
@@ -93,5 +98,28 @@ describe("crm-summary: leads recentes", () => {
     ]);
     // Sem `!inner` o PostgREST real não derruba o lead: anula o embed.
     expect(banco.selects.join("|")).toContain("crm_pipelines!inner");
+  });
+
+  /**
+   * Quem nomeia "ganho"/"perdido" é o funil, e o DEFAULT do baseline é o de
+   * e-commerce ("Pago"/"Cancelado"). Sem o `vocabulary` no embed a tela não
+   * tem como saber, e cravaria a palavra — divergindo do prompt do agente, que
+   * já lê `{{vocabulary.won}}`.
+   */
+  it("devolve o vocabulário do funil junto com o lead", async () => {
+    const banco = bancoFalso({
+      contacts: [{ id: CONTATO, organization_id: ORG }],
+      crm_leads: [lead("lead-ativo", { name: "Loja", is_archived: false }, "Checkout")],
+    });
+    vi.mocked(createClient).mockResolvedValue(banco as never);
+
+    const { GET } = await import("@/app/api/v1/contacts/[id]/crm-summary/route");
+    const res = await GET(new NextRequest(`http://x/api/v1/contacts/${CONTATO}/crm-summary`), {
+      params: Promise.resolve({ id: CONTATO }),
+    });
+    const body = (await res.json()) as { data: { leads: Linha[] } };
+
+    expect(banco.selects.join("|")).toContain("vocabulary");
+    expect(body.data.leads[0]?.vocabulario).toEqual({ won: "Pago", lost: "Cancelado" });
   });
 });

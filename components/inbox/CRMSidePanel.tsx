@@ -21,6 +21,8 @@ import { activityLabel, actorLabel, actorShape } from "@/lib/leads/activity-voca
 import { ConversationTagsEditor } from "./ConversationTagsEditor";
 import { ContactTagsEditor } from "./ContactTagsEditor";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
+import { resolveVocabulary } from "@/lib/kanban/vocabulary";
+import type { PipelineVocabulary } from "@/lib/kanban/types";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { useEditLead } from "@/hooks/kanban/useUpdateLead";
@@ -44,6 +46,8 @@ interface LeadRow {
   field_defs: CustomFieldDef[];
   funil_nome: string | null;
   etapa_nome: string | null;
+  /** Cru, como está no funil — `resolveVocabulary` aplica o padrão. */
+  vocabulario: PipelineVocabulary | null;
 }
 
 interface OrderRow {
@@ -293,8 +297,26 @@ function SemLista({
  * Título, valor e tags já têm casa no dossiê. Quem atende descobre o dado
  * customizado (CPF, plano, endereço) aqui — e tinha de ir no Kanban gravar.
  */
-/** O banco guarda `open`/`won`/`lost`; a tela mostrava a palavra crua (#943). */
-const STATUS_DO_LEAD: Record<string, string> = { open: "Aberto", won: "Ganho", lost: "Perdido" };
+/**
+ * O banco guarda `open`/`won`/`lost`; a tela mostrava a palavra crua (#943).
+ *
+ * "Ganho"/"Perdido" NÃO entram aqui: quem nomeia os dois desfechos é o funil
+ * (`crm_pipelines.vocabulary`), e o DEFAULT do baseline é o de e-commerce —
+ * "Pago"/"Cancelado". Cravar a palavra nesta tela criaria, no dia do
+ * nascimento, a divergência que o `vocabulary` existe para não ter: o prompt
+ * do agente já lê `{{vocabulary.won}}`, e o painel diria "Ganho" sobre o
+ * mesmo negócio que a IA chamou de "Pago". Só `open` fica: ele não é desfecho
+ * e o vocabulário não o nomeia.
+ */
+const ABERTO = "Aberto";
+
+function rotuloDoStatus(l: LeadRow, t: (s: string) => string): string {
+  if (l.status === "open") return t(ABERTO);
+  const vocab = resolveVocabulary(l.vocabulario);
+  if (l.status === "won") return vocab.won;
+  if (l.status === "lost") return vocab.lost;
+  return l.status;
+}
 
 /** "Funil · Etapa" — sem isto dois leads de mesmo título ficam idênticos (#943). */
 function ondeEstaOLead(l: LeadRow): string {
@@ -314,7 +336,7 @@ function InboxLeadEditor({
 }) {
   const t = useT();
   const ativo = leads.find((l) => l.id === selecionadoId) ?? leads[0]!;
-  const status = (l: LeadRow) => t(STATUS_DO_LEAD[l.status] ?? l.status);
+  const status = (l: LeadRow) => rotuloDoStatus(l, t);
 
   return (
     <div className="mt-2 space-y-2">
