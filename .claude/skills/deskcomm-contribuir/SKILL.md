@@ -28,14 +28,20 @@ fork: zero. O que trava é retrabalho — e retrabalho se evita medindo.
 
 ## Passo 0 — quem está contribuindo
 
-Este passo vem **antes** de trazer a `main` (Passo 1), então chame o script pela pasta **deste
-guia** — a do `SKILL.md` que você está lendo, que o assistente recebe junto com o guia —, e não por
-`.agents/skills/` do clone: um fork anterior a 2026-09-10 ainda não tem o script ali, e o guia pode
-ter vindo da instalação global, fora de qualquer clone. Com o terminal na raiz do clone:
+Este passo vem **antes** de trazer a `main` (Passo 1), então não conte com o script estar no clone:
+um fork anterior a 2026-09-10 ainda não o tem, e o guia pode ter vindo da instalação global. O
+comando abaixo procura o script no clone e, se não achar, nas três pastas globais em que o
+`instalar-guias.sh` põe os guias. Cole como está, de onde você estiver:
 
 ```bash
-bash <pasta deste guia>/scripts/quem-sou.sh   # num clone em dia, a pasta é .agents/skills/deskcomm-contribuir
+for g in .agents/skills ~/.claude/skills ~/.agents/skills ~/.gemini/config/skills; do
+  s="$g/deskcomm-contribuir/scripts/quem-sou.sh"; [ -f "$s" ] && { bash "$s"; break; }
+done
 ```
+
+A resposta vem da pasta **onde você rodou**, não de onde o script mora: fora de um clone ela é
+`contribuidor — fora de um clone git`, e se afina sozinha assim que o terminal estiver dentro do
+clone.
 
 Se a resposta começar com `mantenedor`, este guia fica quieto — o mantenedor tem o próprio ritual
 (triagem, gov-loop) e hooks próprios em `loop/hooks`. Só siga se a pessoa pedir por nome. Se

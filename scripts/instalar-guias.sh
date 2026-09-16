@@ -22,7 +22,8 @@
 #      ~/.gemini/config/skills  Antigravity
 #    Por link simbólico: rodar de novo atualiza a cópia e as três pastas enxergam a versão nova
 #    sem recopiar. Onde o sistema não cria link (Windows sem modo desenvolvedor), copia e marca
-#    a pasta com `.deskcomm-guia`. Nos dois modos, nada se atualiza sem rodar o script de novo.
+#    a pasta com `.deskcomm-guia`. Nada se atualiza sem rodar o script de novo — a exceção é
+#    `--fonte` com link, que segue a árvore viva do clone (é para isso que ele serve).
 #    Guia que saiu da fonte (renomeado ou removido) sai também das três pastas.
 #
 # Nunca sobrescreve uma skill sua com o mesmo nome: se a pasta existe e não foi este script
@@ -55,7 +56,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --remover) acao="remover" ;;
     --fonte) shift; fonte="${1:-}"; [ -n "$fonte" ] || { echo "--fonte precisa de uma pasta" >&2; exit 2; } ;;
-    -h|--help) sed -n '2,42p' "$0" 2>/dev/null || true; exit 0 ;;
+    -h|--help) awk 'NR == 1 { next } !/^#/ { exit } { print }' "$0" 2>/dev/null || true; exit 0 ;;
     *) echo "opção desconhecida: $1 (use --fonte DIR, --remover ou --help)" >&2; exit 2 ;;
   esac
   shift
@@ -63,10 +64,21 @@ done
 
 # Um guia instalado por este script: link que aponta para uma pasta `.agents/skills/deskcomm-*`,
 # ou cópia marcada. Tudo o mais é da pessoa e não se toca.
-eh_nosso() {
-  local alvo="$1"
+#
+# Com <fonte>, só conta o link que aponta para ESSA fonte. A varredura de obsoletos apaga pelo
+# NOME, e sem esse aperto ela apagava também o link que a pessoa fez à mão para o `deskcomm-*`
+# de outro repositório — nome que nunca vai estar na fonte. Quem instala segue no teste largo:
+# religar um guia de mesmo nome é justamente o que `--fonte` (e voltar dele) faz.
+eh_nosso() {  # eh_nosso <alvo> [fonte]
+  local alvo="$1" fonte_esperada="${2:-}" destino
   if [ -L "$alvo" ]; then
-    case "$(readlink "$alvo")" in */.agents/skills/deskcomm-*) return 0 ;; esac
+    destino="$(readlink "$alvo")"
+    if [ -n "$fonte_esperada" ]; then
+      # Padrão entre aspas: comparação LITERAL, não glob — um caminho com `[` ou `*` não vira regra.
+      case "$destino" in "$fonte_esperada/$(basename "$alvo")") return 0 ;; esac
+      return 1
+    fi
+    case "$destino" in */.agents/skills/deskcomm-*) return 0 ;; esac
     return 1
   fi
   [ -f "$alvo/$MARCA" ]
@@ -77,6 +89,20 @@ eh_nosso() {
 # não commitado de quem o apontou.
 eh_a_copia() {
   [ -d "$CACHE/.git" ] && [ "$(git -C "$CACHE" config --get deskcomm.guias || true)" = true ]
+}
+
+# Cópia feita por uma versão ANTERIOR deste script: ela não tem a marca, então `eh_a_copia` a
+# nega e a recusa abaixo a bloquearia em toda execução — os guias de quem já instalou ficariam
+# congelados na versão do dia até um `rm -rf` à mão. Adotamos quando os três sinais do clone
+# que este script faz batem: o remoto é o repositório do produto, o clone é raso (`--depth 1`)
+# e nada foi alterado nem acrescentado à mão. Um clone de trabalho — completo, de outro
+# repositório, ou com qualquer pendência — segue recusado intacto, que é o que protege o
+# trabalho não commitado de quem apontou DESKCOMM_GUIAS_HOME para ele.
+eh_copia_de_versao_anterior() {
+  [ -d "$CACHE/.git" ] || return 1
+  [ "$(git -C "$CACHE" remote get-url origin 2>/dev/null || true)" = "$REPO_URL" ] || return 1
+  [ "$(git -C "$CACHE" rev-parse --is-shallow-repository 2>/dev/null || true)" = true ] || return 1
+  [ -z "$(git -C "$CACHE" status --porcelain 2>/dev/null)" ]
 }
 
 # Desfaz um clone que não terminou, apagando só o que ESTA execução criou: a pasta inteira se
@@ -106,6 +132,7 @@ if [ -n "$fonte" ]; then
   echo "fonte: $origem (seu clone)"
 else
   command -v git >/dev/null 2>&1 || { echo "precisa do git instalado" >&2; exit 1; }
+  if ! eh_a_copia && eh_copia_de_versao_anterior; then git -C "$CACHE" config deskcomm.guias true; fi
   if eh_a_copia; then
     # A cópia é do script, e as pastas globais apontam para DENTRO dela: uma edição feita por
     # ~/.claude/skills/deskcomm-*/ travava toda atualização seguinte com o erro cru do git
@@ -167,7 +194,7 @@ for dest in "${DESTINOS[@]}"; do
   # lado da nova.
   for alvo in "$dest"/deskcomm-*; do
     [ -e "$alvo" ] || [ -L "$alvo" ] || continue
-    eh_nosso "$alvo" || continue
+    eh_nosso "$alvo" "$origem" || continue
     case " ${guias[*]} " in
       *" $(basename "$alvo") "*) ;;
       *) rm -rf "$alvo"; obsoletos=$((obsoletos + 1)) ;;

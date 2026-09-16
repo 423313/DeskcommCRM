@@ -21,6 +21,9 @@
 #  11. "nenhum guia" diz como sair dali.
 #  12. Edição à mão pela pasta global não trava a atualização.
 #  13. DESKCOMM_GUIAS_HOME: pasta alheia é recusada intacta; caminho relativo vira absoluto.
+#  14. --help imprime o cabeçalho INTEIRO, e ele não promete o que --fonte não cumpre.
+#  15. --fonte com link segue a árvore viva do clone (é a exceção que o cabeçalho declara).
+#  16. Cópia feita por uma versão anterior (sem a marca) é adotada, não recusada.
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -75,7 +78,7 @@ for dest in .claude/skills .agents/skills .gemini/config/skills; do
   checa "[ -L \"\$HOME/$dest/deskcomm-prompt\" ]" "deskcomm-prompt ligado em ~/$dest"
   checa "[ ! -e \"\$HOME/$dest/sistema-vivo\" ]" "sistema-vivo (não é guia deskcomm-*) fica de fora de ~/$dest"
 done
-checa "grep -q 'deskcomm-instalar' <<<\"\$saida\"" "a saída lista os guias"
+checa "grep -qE '^  deskcomm-instalar\$' <<<\"\$saida\" && ! grep -qE '^ +/deskcomm-' <<<\"\$saida\"" "a saída lista os guias pelo NOME, sem a barra que o Codex e o OpenCode não entendem"
 checa "grep -q 'sessão NOVA' <<<\"\$saida\"" "a saída avisa para abrir sessão nova"
 checa "[ -d \"\$HOME/.deskcomm/guias/.agents/skills\" ] && [ ! -e \"\$HOME/.deskcomm/guias/app\" ]" "a cópia é esparsa: traz .agents/skills e não traz app/"
 checa "grep -q 'NÃO se atualizam sozinhos' <<<\"\$saida\"" "a saída diz que os guias não se atualizam sozinhos"
@@ -115,12 +118,18 @@ echo "7. guia renomeado na fonte"
 cenario renomeado
 bash "$SCRIPT" >/dev/null 2>&1
 mkdir -p "$HOME/.claude/skills/deskcomm-meu"; echo "meu" > "$HOME/.claude/skills/deskcomm-meu/SKILL.md"
+# A variante que importa é o LINK: a pasta da pessoa não tem a marca e nunca passou por "nosso",
+# mas um link para o `deskcomm-*` de OUTRO repositório passava — e a varredura o apagava.
+outro="$TMP/renomeado/outro-repo/.agents/skills/deskcomm-meu-fork"
+mkdir -p "$outro"; echo "fork" > "$outro/SKILL.md"
+ln -s "$outro" "$HOME/.claude/skills/deskcomm-meu-fork"
 git -C "$repo" mv .agents/skills/deskcomm-prompt .agents/skills/deskcomm-prompt-agente && git -C "$repo" commit -qm renomeia
 bash "$SCRIPT" >/dev/null 2>&1
 for dest in .claude/skills .agents/skills .gemini/config/skills; do
   checa "[ ! -e \"\$HOME/$dest/deskcomm-prompt\" ] && [ ! -L \"\$HOME/$dest/deskcomm-prompt\" ] && [ -f \"\$HOME/$dest/deskcomm-prompt-agente/SKILL.md\" ]" "em ~/$dest, o nome antigo sai e o novo entra"
 done
 checa "[ -f \"\$HOME/.claude/skills/deskcomm-meu/SKILL.md\" ]" "a varredura não toca skill deskcomm-* da pessoa"
+checa "[ -L \"\$HOME/.claude/skills/deskcomm-meu-fork\" ] && [ -f \"\$outro/SKILL.md\" ]" "a varredura não toca LINK que a pessoa fez para o deskcomm-* de outro repositório"
 
 echo "8. sem link simbólico: cópia marcada"
 cenario copia
@@ -188,6 +197,40 @@ cenario relativo
 mkdir -p "$TMP/relativo/cwd"
 (cd "$TMP/relativo/cwd" && DESKCOMM_GUIAS_HOME=cache-rel bash "$SCRIPT" >/dev/null 2>&1)
 checa "[ -f \"\$HOME/.claude/skills/deskcomm-instalar/SKILL.md\" ]" "caminho relativo: o link resolve (vira absoluto)"
+
+echo "14. --help"
+saida="$(bash "$SCRIPT" --help 2>&1)"; code=$?
+checa "[ $code = 0 ]" "sai com 0"
+checa "grep -qF 'instalar-guias.sh — deixa os guias' <<<\"\$saida\"" "imprime a primeira linha do cabeçalho"
+# O recorte por número de linha já comeu o fim do cabeçalho uma vez: o aviso do Claude Code é a
+# ÚLTIMA linha, e é ele que diz a quem edita um guia para usar --fonte.
+checa "grep -qF 'deve rodar com \`--fonte .\` naquele clone' <<<\"\$saida\"" "imprime a ÚLTIMA linha do cabeçalho (o aviso do Claude Code)"
+checa "! grep -qF 'set -euo pipefail' <<<\"\$saida\"" "para no fim do cabeçalho, não despeja o código"
+checa "grep -qF 'a exceção é' <<<\"\$saida\"" "o cabeçalho declara a exceção de --fonte em vez de prometer que nada se atualiza"
+
+echo "15. --fonte com link segue a árvore viva do clone"
+cenario fonte-viva
+clone_vivo="$TMP/fonte-viva/clone"; git clone -q "$repo" "$clone_vivo"
+bash "$SCRIPT" --fonte "$clone_vivo" >/dev/null 2>&1
+sed -i.bak 's/versão 1/versão editada sem rodar de novo/' "$clone_vivo/.agents/skills/deskcomm-instalar/SKILL.md"
+rm -f "$clone_vivo/.agents/skills/deskcomm-instalar/SKILL.md.bak"
+checa "grep -q 'versão editada sem rodar de novo' \"\$HOME/.claude/skills/deskcomm-instalar/SKILL.md\"" "a edição no clone chega pela pasta global SEM rodar o script de novo"
+
+echo "16. cópia de uma versão anterior do script"
+cenario copia-sem-marca
+bash "$SCRIPT" >/dev/null 2>&1
+# O que a versão anterior deixava: o mesmo clone raso e esparso, só que sem a marca — ela ainda
+# não a gravava. Tirar a marca reproduz esse estado sem prender o teste a um SHA.
+git -C "$HOME/.deskcomm/guias" config --unset deskcomm.guias
+antes="$(git -C "$HOME/.deskcomm/guias" rev-parse HEAD)"
+sed -i.bak 's/versão 1/versão 2/' "$repo/.agents/skills/deskcomm-instalar/SKILL.md"
+rm -f "$repo/.agents/skills/deskcomm-instalar/SKILL.md.bak"; git -C "$repo" commit -qam v2
+saida="$(bash "$SCRIPT" 2>&1)"; code=$?
+checa "[ $code = 0 ] && ! grep -q 'não mexo nela' <<<\"\$saida\"" "a cópia sem a marca é adotada, não recusada"
+checa "grep -q 'versão 2' \"\$HOME/.claude/skills/deskcomm-instalar/SKILL.md\" && [ \"\$(git -C \"\$HOME/.deskcomm/guias\" rev-parse HEAD)\" != \"\$antes\" ]" "e a versão nova chega (os guias não congelam no dia da instalação)"
+checa "[ \"\$(git -C \"\$HOME/.deskcomm/guias\" config --get deskcomm.guias)\" = true ]" "a marca fica gravada, e a execução seguinte não reprecisa adotar"
+# O aperto: um clone de trabalho não vira cópia por descuido. O do caso 13 é completo (não raso)
+# e tem alteração pendente — os dois sinais que a adoção exige.
 
 echo
 if [ "$falhas" = 0 ]; then echo "instalar-guias: $casos casos, todos verdes"; exit 0
