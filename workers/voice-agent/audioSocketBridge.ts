@@ -77,11 +77,21 @@ export interface AudioSocketCallContext {
   onTranscriptTurn: (turn: { speaker: "agent" | "customer"; text: string }) => void;
   onCallEnded: () => void;
   /**
-   * Busca na base de conhecimento da org (mesmo acervo do agente de texto).
-   * `undefined` quando o agente não tem material publicado — a tool nem é
-   * oferecida ao modelo nesse caso (ver setupRealtime).
+   * Resolvida em PARALELO com a abertura deste WebSocket (index.ts dispara
+   * os dois ao mesmo tempo, não aguarda uma coisa antes da outra) — o
+   * session.update só é enviado depois que isto resolve, pra saber se
+   * oferece a tool de RAG ao modelo. Antes disto rodava em série (aguardado
+   * em index.ts antes até de abrir o WS), e a soma dos dois round-trips era
+   * demora real sentida antes da primeira interação.
    */
-  searchKnowledge?: (pergunta: string) => Promise<{
+  knowledgeSourceIdsPromise: Promise<string[]>;
+  /**
+   * Busca na base de conhecimento da org (mesmo acervo do agente de texto).
+   * Sempre fornecida — quem decide OFERECER a tool ao modelo ou não é o
+   * tools[] montado em setupRealtime a partir de knowledgeSourceIdsPromise,
+   * não a presença desta função.
+   */
+  searchKnowledge: (pergunta: string) => Promise<{
     trechos: Array<{ content: string; source_name?: string | null }>;
   }>;
 }
@@ -109,6 +119,19 @@ export class AudioSocketCallBridge {
    *  (onde o nome chega) e consumido em response.function_call_arguments.done
    *  (onde os argumentos chegam completos, mas sem o nome de novo). */
   private pendingFunctionCalls = new Map<string, string>();
+
+  /**
+   * false até o session.update ser enviado com sucesso (ver setupRealtime,
+   * evento "open"). Áudio do cliente que chega ANTES disso (handshake TLS +
+   * round-trip de knowledgeSourceIdsPromise) ia direto pro método antigo, que
+   * só mandava pra OpenAI se `readyState === OPEN` — e descartava em
+   * silêncio o resto. Reportado ao vivo como "demora na primeira interação":
+   * quem falava assim que a ligação atendia tinha a fala inicial jogada
+   * fora. Agora esse áudio fica em `preOpenAudioBuffer` e é drenado assim
+   * que a sessão fica pronta.
+   */
+  private realtimeReady = false;
+  private preOpenAudioBuffer: Buffer[] = [];
 
   // Fila de PCM16 pendente pra mandar pro Asterisk + um pacer que dreia um
   // frame de 320 bytes a cada 20ms — SEM isto, "response.output_audio.delta"
@@ -207,7 +230,12 @@ export class AudioSocketCallBridge {
   }
 
   private setupRealtime() {
-    this.realtimeWs.on("open", () => {
+    this.realtimeWs.on("open", async () => {
+      // Roda em paralelo com o handshake deste WS (index.ts dispara os dois
+      // ao mesmo tempo) — só espera aqui, no momento em que já precisamos
+      // saber se oferece a tool de RAG ou não.
+      const knowledgeSourceIds = await this.ctx.knowledgeSourceIdsPromise;
+
       console.info(`[realtime] call=${this.ctx.callId} websocket aberto, enviando session.update`);
       this.realtimeWs.send(
         JSON.stringify({
@@ -251,7 +279,7 @@ export class AudioSocketCallBridge {
                   "Encerra a ligação. Use depois de dizer a despedida final ao cliente, quando a conversa chegou a uma conclusão natural.",
                 parameters: { type: "object", properties: {}, required: [] },
               },
-              ...(this.ctx.searchKnowledge
+              ...(knowledgeSourceIds.length > 0
                 ? [
                     {
                       type: "function" as const,
@@ -276,6 +304,15 @@ export class AudioSocketCallBridge {
           },
         }),
       );
+
+      // Sessão configurada — agora sim dá pra mandar áudio pra API. Drena o
+      // que ficou acumulado em preOpenAudioBuffer enquanto o WS ainda abria
+      // (ver comentário do campo).
+      this.realtimeReady = true;
+      for (const chunk of this.preOpenAudioBuffer) {
+        this.realtimeWs.send(JSON.stringify({ type: "input_audio_buffer.append", audio: chunk.toString("base64") }));
+      }
+      this.preOpenAudioBuffer = [];
     });
 
     this.realtimeWs.on("message", (raw) => {
@@ -345,6 +382,10 @@ export class AudioSocketCallBridge {
   }
 
   private sendAudioToRealtime(ulawChunk: Buffer) {
+    if (!this.realtimeReady) {
+      this.preOpenAudioBuffer.push(ulawChunk);
+      return;
+    }
     if (this.realtimeWs.readyState !== WebSocket.OPEN) return;
     this.realtimeWs.send(
       JSON.stringify({ type: "input_audio_buffer.append", audio: ulawChunk.toString("base64") }),
@@ -367,10 +408,7 @@ export class AudioSocketCallBridge {
 
     let output: string;
     try {
-      const resultado =
-        pergunta.trim() === "" || !this.ctx.searchKnowledge
-          ? { trechos: [] }
-          : await this.ctx.searchKnowledge(pergunta);
+      const resultado = pergunta.trim() === "" ? { trechos: [] } : await this.ctx.searchKnowledge(pergunta);
       output =
         resultado.trechos.length > 0
           ? resultado.trechos.map((t) => `[${t.source_name ?? "material"}] ${t.content}`).join("\n\n")

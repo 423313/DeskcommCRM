@@ -249,10 +249,12 @@ async function handleAudioSocketConnection(socket: net.Socket, uuid: string, lef
 
   // Mesmo acervo que o agente de texto (WhatsApp) já usa — reaproveita
   // resolverAcervoDoAgente/buscarConhecimento em vez de reimplementar RAG
-  // pro canal de voz. Sem materiais publicados, a tool nem é oferecida ao
-  // modelo (ver audioSocketBridge.ts) — não custa nada e evita ele "chamar
-  // no escuro".
-  const knowledgeSourceIds = await resolverAcervoDoAgente(
+  // pro canal de voz. NÃO aguardado aqui: dispara em paralelo com a abertura
+  // do WebSocket da OpenAI dentro do bridge (linha abaixo) -- antes disto
+  // rodava em série (aguardado ANTES de sequer abrir o WS), e a soma dos
+  // dois round-trips era exatamente a demora sentida antes da IA "notar" que
+  // o cliente já estava falando (ver AudioSocketCallContext.knowledgeSourceIdsPromise).
+  const knowledgeSourceIdsPromise = resolverAcervoDoAgente(
     supabaseAdmin,
     callRow.organization_id,
     agent.id,
@@ -271,19 +273,19 @@ async function handleAudioSocketConnection(socket: net.Socket, uuid: string, lef
     apiKey: agent.apiKey,
     onTranscriptTurn: (turn) => appendAudioSocketTranscriptTurn(uuid, turn),
     onCallEnded: () => finalizeAudioSocketCall(uuid),
-    searchKnowledge:
-      knowledgeSourceIds.length > 0
-        ? async (pergunta: string) => {
-            const resultado = await buscarConhecimento(supabaseAdmin, {
-              organizationId: callRow.organization_id,
-              knowledgeSourceIds,
-              pergunta,
-              topK: agent.ragTopK,
-              limiar: agent.ragSimilarityThreshold,
-            });
-            return { trechos: resultado.trechos };
-          }
-        : undefined,
+    knowledgeSourceIdsPromise,
+    searchKnowledge: async (pergunta: string) => {
+      const knowledgeSourceIds = await knowledgeSourceIdsPromise;
+      if (knowledgeSourceIds.length === 0) return { trechos: [] };
+      const resultado = await buscarConhecimento(supabaseAdmin, {
+        organizationId: callRow.organization_id,
+        knowledgeSourceIds,
+        pergunta,
+        topK: agent.ragTopK,
+        limiar: agent.ragSimilarityThreshold,
+      });
+      return { trechos: resultado.trechos };
+    },
   });
 
   const answeredAt = new Date().toISOString();
