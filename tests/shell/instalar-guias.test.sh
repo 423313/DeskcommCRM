@@ -24,6 +24,9 @@
 #  14. --help imprime o cabeçalho INTEIRO, e ele não promete o que --fonte não cumpre.
 #  15. --fonte com link segue a árvore viva do clone (é a exceção que o cabeçalho declara).
 #  16. Cópia feita por uma versão anterior (sem a marca) é adotada, não recusada.
+#  17. A adoção não passa por um clone de trabalho — um caso por sinal que a segura.
+#  18. --remover apaga o que este script ligou e poupa o link que a pessoa fez à mão.
+#  19. O comando de desfazer que o README e a nota da versão ensinam roda de verdade.
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -229,8 +232,72 @@ saida="$(bash "$SCRIPT" 2>&1)"; code=$?
 checa "[ $code = 0 ] && ! grep -q 'não mexo nela' <<<\"\$saida\"" "a cópia sem a marca é adotada, não recusada"
 checa "grep -q 'versão 2' \"\$HOME/.claude/skills/deskcomm-instalar/SKILL.md\" && [ \"\$(git -C \"\$HOME/.deskcomm/guias\" rev-parse HEAD)\" != \"\$antes\" ]" "e a versão nova chega (os guias não congelam no dia da instalação)"
 checa "[ \"\$(git -C \"\$HOME/.deskcomm/guias\" config --get deskcomm.guias)\" = true ]" "a marca fica gravada, e a execução seguinte não reprecisa adotar"
-# O aperto: um clone de trabalho não vira cópia por descuido. O do caso 13 é completo (não raso)
-# e tem alteração pendente — os dois sinais que a adoção exige.
+
+# Os quatro sinais que seguram a adoção, um caso para cada um. O clone do caso 13 falha em DOIS
+# ao mesmo tempo (é completo E sujo), então ele não distingue qual deles reprovou: medido em
+# 2026-09-16, dava para apagar a checagem de raso, a de limpo ou a de remoto, uma de cada vez,
+# e os 56 casos de então seguiam verdes nas três. Cada clone abaixo falha em UM sinal só, e é
+# assim que a sabotagem de um sinal aponta para o caso dele.
+echo "17. a adoção não passa por um clone de trabalho"
+cenario adocao-apontada
+# O sinal da d9: pasta apontada à mão nunca é adotada. Este clone tem a cara da cópia do script
+# — raso, do mesmo repositório e limpo NESTE instante — e mesmo assim é de quem o apontou.
+trabalho="$TMP/adocao-apontada/meu-clone"; git clone -q --depth 1 "file://$repo" "$trabalho"
+git -C "$trabalho" checkout -qb minha-feature
+saida="$(DESKCOMM_GUIAS_HOME="$trabalho" bash "$SCRIPT" 2>&1)"; code=$?
+checa "[ $code != 0 ] && [ \"\$(git -C \"\$trabalho\" symbolic-ref --short -q HEAD)\" = minha-feature ] && [ -z \"\$(git -C \"\$trabalho\" config --get deskcomm.guias || true)\" ]" "clone raso e limpo apontado à mão: recusado, na branch dele e sem a marca"
+
+cenario adocao-outro-remoto
+outro_repo="$TMP/adocao-outro-remoto/outro"; montar_repo "$outro_repo"
+mkdir -p "$HOME/.deskcomm"; git clone -q --depth 1 "file://$outro_repo" "$HOME/.deskcomm/guias"
+saida="$(bash "$SCRIPT" 2>&1)"; code=$?
+checa "[ $code != 0 ] && grep -q 'não mexo nela' <<<\"\$saida\" && [ -z \"\$(git -C \"\$HOME/.deskcomm/guias\" config --get deskcomm.guias || true)\" ]" "clone raso e limpo de OUTRO repositório: recusado e sem a marca"
+
+cenario adocao-completo
+mkdir -p "$HOME/.deskcomm"; git clone -q "file://$repo" "$HOME/.deskcomm/guias"
+saida="$(bash "$SCRIPT" 2>&1)"; code=$?
+checa "[ $code != 0 ] && grep -q 'não mexo nela' <<<\"\$saida\" && [ -z \"\$(git -C \"\$HOME/.deskcomm/guias\" config --get deskcomm.guias || true)\" ]" "clone COMPLETO e limpo do mesmo repositório: recusado e sem a marca"
+
+cenario adocao-sujo
+mkdir -p "$HOME/.deskcomm"; git clone -q --depth 1 "file://$repo" "$HOME/.deskcomm/guias"
+echo "trabalho" >> "$HOME/.deskcomm/guias/.agents/skills/deskcomm-instalar/SKILL.md"
+saida="$(bash "$SCRIPT" 2>&1)"; code=$?
+checa "[ $code != 0 ] && grep -q 'trabalho' \"\$HOME/.deskcomm/guias/.agents/skills/deskcomm-instalar/SKILL.md\"" "clone raso do mesmo repositório com pendência: recusado e o trabalho fica"
+
+echo "18. --remover poupa o link que a pessoa fez à mão"
+cenario remover-alheio
+alheio_fork="$TMP/remover-alheio/outro-repo/.agents/skills/deskcomm-meu-fork"
+mkdir -p "$alheio_fork" "$HOME/.claude/skills"; echo "fork" > "$alheio_fork/SKILL.md"
+ln -s "$alheio_fork" "$HOME/.claude/skills/deskcomm-meu-fork"
+saida="$(bash "$SCRIPT" --remover 2>&1)"
+checa "grep -q 'ok: 0 ligação' <<<\"\$saida\" && [ -L \"\$HOME/.claude/skills/deskcomm-meu-fork\" ]" "sem instalação nenhuma, --remover não tem o que desfazer e não toca o link da pessoa"
+bash "$SCRIPT" >/dev/null 2>&1
+saida="$(bash "$SCRIPT" --remover 2>&1)"
+checa "grep -q 'ok: 6 ligação' <<<\"\$saida\" && [ -L \"\$HOME/.claude/skills/deskcomm-meu-fork\" ] && [ ! -e \"\$HOME/.agents/skills/deskcomm-instalar\" ]" "com instalação, --remover tira as 6 ligações e o link da pessoa fica"
+
+echo "19. o comando de desfazer que a documentação ensina"
+cenario documentacao
+# Não é grep de frase: o comando é EXTRAÍDO do documento e EXECUTADO, trocando só o curl pelo
+# script deste repo. `| bash --remover` — o que os dois documentos diziam — faz o próprio bash
+# recusar a opção, e nada do que está instalado sai.
+# O fragmento some quando a release é cortada, e o mesmo texto passa a viver no CHANGELOG (o
+# corte copia o corpo). Por isso a varredura é por documento QUE MENCIONA o comando, com piso
+# de dois — senão, no dia do corte, o gate viraria verde por não ter mais o que ler.
+documentos=0
+for doc in "$RAIZ/README.md" "$RAIZ/CHANGELOG.md" "$RAIZ"/.changes/*.md; do
+  [ -f "$doc" ] || continue
+  # No CHANGELOG a entrada mais nova é a de cima: o primeiro casamento é o que se ensina hoje.
+  desfaz="$(grep -o 'bash[^`]*--remover' "$doc" | head -1)"
+  [ -n "$desfaz" ] || continue
+  documentos=$((documentos + 1))
+  bash "$SCRIPT" >/dev/null 2>&1
+  saida="$(cat "$SCRIPT" | eval "$desfaz" 2>&1)"; code=$?
+  checa "[ $code = 0 ] && [ ! -e \"\$HOME/.agents/skills/deskcomm-instalar\" ]" "o comando de $(basename "$doc") desfaz de verdade (é: $desfaz)"
+done
+checa "[ $documentos -ge 2 ]" "o comando foi lido de pelo menos dois documentos (guarda de vacuidade)"
+# A outra metade que só vive em prosa: a forma de chamar em cada CLI e a defasagem da cópia.
+checa "grep -qF '\$deskcomm-instalar' \"\$RAIZ/README.md\" && ! grep -qE 'digite .?/deskcomm-' \"\$RAIZ/README.md\"" "o README ensina a forma do Codex e não manda digitar / em todos"
+checa "grep -q 'se atualizam sozinhos' \"\$RAIZ/README.md\" && grep -q 'vale mais que o do clone' \"\$RAIZ/README.md\"" "o README diz que a cópia não se atualiza sozinha e que no Claude Code ela vence o clone"
 
 echo
 if [ "$falhas" = 0 ]; then echo "instalar-guias: $casos casos, todos verdes"; exit 0

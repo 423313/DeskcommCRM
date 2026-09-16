@@ -27,7 +27,9 @@
 #    Guia que saiu da fonte (renomeado ou removido) sai também das três pastas.
 #
 # Nunca sobrescreve uma skill sua com o mesmo nome: se a pasta existe e não foi este script
-# que a criou, avisa e pula. `--remover` só apaga o que este script criou.
+# que a criou, avisa e pula. `--remover` só apaga o que este script criou: ele anota em cada
+# pasta global, num `.deskcomm-fonte`, de onde saíram as ligações daquela pasta, e por isso não
+# toca no link que você mesmo fez para o `deskcomm-*` de outro clone.
 #
 # ── Uso ───────────────────────────────────────────────────────────────────────
 #
@@ -44,12 +46,14 @@
 set -euo pipefail
 
 REPO_URL="${DESKCOMM_REPO_URL:-https://github.com/melgarafael/DeskcommCRM.git}"
-CACHE="${DESKCOMM_GUIAS_HOME:-$HOME/.deskcomm/guias}"
+CACHE_PADRAO="$HOME/.deskcomm/guias"
+CACHE="${DESKCOMM_GUIAS_HOME:-$CACHE_PADRAO}"
 # Absoluto, como o --fonte: o link guarda o caminho LITERAL, e um relativo
 # (`DESKCOMM_GUIAS_HOME=cache`) nascia quebrado e ainda era contado como "ligado".
 case "$CACHE" in /*) ;; *) CACHE="$PWD/$CACHE" ;; esac
 DESTINOS=("$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.gemini/config/skills")
 MARCA=".deskcomm-guia"
+REGISTRO=".deskcomm-fonte"
 
 acao="instalar"; fonte=""
 while [ $# -gt 0 ]; do
@@ -65,10 +69,12 @@ done
 # Um guia instalado por este script: link que aponta para uma pasta `.agents/skills/deskcomm-*`,
 # ou cópia marcada. Tudo o mais é da pessoa e não se toca.
 #
-# Com <fonte>, só conta o link que aponta para ESSA fonte. A varredura de obsoletos apaga pelo
-# NOME, e sem esse aperto ela apagava também o link que a pessoa fez à mão para o `deskcomm-*`
-# de outro repositório — nome que nunca vai estar na fonte. Quem instala segue no teste largo:
-# religar um guia de mesmo nome é justamente o que `--fonte` (e voltar dele) faz.
+# Com <fonte>, só conta o link que aponta para ESSA fonte, e quem APAGA sempre passa uma: a
+# varredura de obsoletos e o `--remover`. Sem esse aperto os dois apagavam também o link que a
+# pessoa fez à mão para o `deskcomm-*` de outro repositório, porque no teste largo qualquer link
+# para um guia responde "sou seu". Só o laço que INSTALA segue no largo — religar um guia de
+# mesmo nome é justamente o que `--fonte` (e voltar dele) faz, e ali o alvo é substituído pela
+# ligação nova, não perdido.
 eh_nosso() {  # eh_nosso <alvo> [fonte]
   local alvo="$1" fonte_esperada="${2:-}" destino
   if [ -L "$alvo" ]; then
@@ -93,12 +99,18 @@ eh_a_copia() {
 
 # Cópia feita por uma versão ANTERIOR deste script: ela não tem a marca, então `eh_a_copia` a
 # nega e a recusa abaixo a bloquearia em toda execução — os guias de quem já instalou ficariam
-# congelados na versão do dia até um `rm -rf` à mão. Adotamos quando os três sinais do clone
-# que este script faz batem: o remoto é o repositório do produto, o clone é raso (`--depth 1`)
-# e nada foi alterado nem acrescentado à mão. Um clone de trabalho — completo, de outro
-# repositório, ou com qualquer pendência — segue recusado intacto, que é o que protege o
-# trabalho não commitado de quem apontou DESKCOMM_GUIAS_HOME para ele.
+# congelados na versão do dia até um `rm -rf` à mão.
+#
+# Adotar não é um detalhe de contabilidade: é passar a fazer `checkout --force` dentro daquela
+# pasta. Por isso só entra na conversa a pasta que ESTE script escolhe sozinho — o padrão. Uma
+# pasta apontada à mão por DESKCOMM_GUIAS_HOME é de quem a apontou, e um clone de trabalho raso
+# e limpo NAQUELE instante tem exatamente a cara da cópia: era adotado, saía da branch da pessoa,
+# ficava marcado para sempre e descartava o não commitado dela na execução seguinte.
+#
+# Mesmo no padrão, exige os três sinais do clone que este script faz: o remoto é o repositório
+# do produto, o clone é raso (`--depth 1`) e nada foi alterado nem acrescentado à mão.
 eh_copia_de_versao_anterior() {
+  [ "$CACHE" = "$CACHE_PADRAO" ] || return 1
   [ -d "$CACHE/.git" ] || return 1
   [ "$(git -C "$CACHE" remote get-url origin 2>/dev/null || true)" = "$REPO_URL" ] || return 1
   [ "$(git -C "$CACHE" rev-parse --is-shallow-repository 2>/dev/null || true)" = true ] || return 1
@@ -116,10 +128,18 @@ if [ "$acao" = "remover" ]; then
   removidos=0
   for dest in "${DESTINOS[@]}"; do
     [ -d "$dest" ] || continue
+    # De onde a última instalação ligou, que é o que o `--remover` desfaz. Sem esse registro o
+    # teste era o largo — "o alvo parece um guia?" —, e a ligação que a PESSOA fez à mão para o
+    # `deskcomm-*` de outro clone responde que sim: ela era apagada, o contrário do que o
+    # cabeçalho promete. Quando o registro não existe (instalação feita por uma versão anterior
+    # a ele), a única fonte que este script pode ter usado sem ninguém lhe dizer é a cópia.
+    fonte_instalada="$CACHE/.agents/skills"
+    if [ -f "$dest/$REGISTRO" ]; then fonte_instalada="$(cat "$dest/$REGISTRO")"; fi
     for alvo in "$dest"/deskcomm-*; do
       [ -e "$alvo" ] || [ -L "$alvo" ] || continue
-      if eh_nosso "$alvo"; then rm -rf "$alvo"; removidos=$((removidos + 1)); fi
+      if eh_nosso "$alvo" "$fonte_instalada"; then rm -rf "$alvo"; removidos=$((removidos + 1)); fi
     done
+    rm -f "$dest/$REGISTRO"
   done
   echo "ok: $removidos ligação(ões) removida(s). A cópia em $CACHE ficou (apague à mão se quiser)."
   exit 0
@@ -212,6 +232,9 @@ for dest in "${DESTINOS[@]}"; do
       rm -rf "$alvo"; cp -R "$origem/$g" "$alvo"; : > "$alvo/$MARCA"; copiados=$((copiados + 1))
     fi
   done
+  # De onde estas ligações saíram. Um link não carrega marca por dentro como a cópia carrega,
+  # e é este registro que permite ao `--remover` apagar SÓ o que este script ligou.
+  printf '%s\n' "$origem" > "$dest/$REGISTRO"
 done
 
 echo "ok: ${#guias[@]} guias em ${#DESTINOS[@]} pastas — $ligados ligados, $copiados copiados, $pulados pulados"
