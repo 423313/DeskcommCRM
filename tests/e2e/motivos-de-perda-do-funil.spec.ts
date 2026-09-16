@@ -192,11 +192,14 @@ test.describe("Janela de perder — os motivos são os do funil", () => {
     ).toBeVisible();
 
     const confirmar = page.getByRole("button", { name: "Confirmar" });
-    await expect(confirmar, "detalhe vazio não pode passar com funil configurado").toBeDisabled();
+    // ⚠️ DETALHE VAZIO PASSA, e é de propósito: `other` é canônico, então o
+    // trigger o aceita em qualquer funil. Exigir o detalhe aqui deixava sem saída
+    // o `agent` que tem uma perda fora da lista e não pode cadastrar motivo.
+    await expect(confirmar, "'Outro' sem detalhe é o escape que o servidor aceita").toBeEnabled();
 
-    await page.getByLabel(/Detalhe \(obrigatório\)/).fill("Cliente mudou de ideia");
+    await page.getByLabel(/Detalhe \(opcional\)/).fill("Cliente mudou de ideia");
     await expect(page.getByRole("alert")).toHaveText(
-      "Escolha um dos motivos cadastrados no funil.",
+      "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.",
     );
     await expect(confirmar, "texto fora da lista é o que o trigger recusa").toBeDisabled();
     await captura(page, "02-outro-recusado");

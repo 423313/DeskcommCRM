@@ -56,22 +56,29 @@ export function LoseLeadDialog({
   const funilConfigurado = cadastrados.length > 0;
 
   const textoOutro = otherText.trim();
-  // Sem funil configurado, "Outro" vazio continua valendo `other` — o escape de
-  // sempre. Com funil configurado, o servidor só aceita canônico ∪ cadastrado,
-  // então o que ele negaria é recusado antes do clique.
+  // "OUTRO" VAZIO VALE `other` NOS DOIS CASOS — com funil configurado ou sem.
   //
-  // Não há guarda separada para "detalhe vazio": com funil configurado e texto
-  // vazio, `finalReason` JÁ é string vazia pela linha do `finalReason` abaixo, e
-  // `finalReason.length === 0` desabilita o botão sozinho. Um `outroFaltando ||`
-  // ali seria ramo redundante — e ramo redundante engana a sabotagem: quem o
-  // apagasse veria a suíte verde e concluiria que o caso não está coberto.
+  // ⚠️ `other` É CANÔNICO. `fn_validate_lost_reason_required` aceita
+  // `v_canonical ∪ settings.lost_reasons`, e `v_canonical` traz `'other'`
+  // (supabase/baseline.sql, `fn_validate_lost_reason_required`) — o servidor
+  // aceita este valor em QUALQUER funil, configurado ou não. Exigir o detalhe
+  // aqui quando o funil tem motivos cadastrados fazia de "Outro" um beco sem
+  // saída: os únicos textos que passavam eram os que já são rádio na tela ao
+  // lado, ou um código canônico em inglês que ninguém digita. E cadastrar um
+  // motivo novo é admin-only (`app/actions/settings/updatePipelineConfig.ts`),
+  // então um `agent` com uma perda fora da lista não tinha ação correta
+  // nenhuma: ou gravava um motivo errado, ou não fechava o negócio.
+  //
+  // O que CONTINUA recusado antes do clique é o texto digitado fora de
+  // canônico ∪ cadastrado (`outroRecusado` abaixo) — esse o trigger nega mesmo,
+  // com 22023, e é ele que a issue #918 pede para barrar na tela.
   const outroRecusado =
     reasonCode === OUTRO &&
     funilConfigurado &&
     textoOutro.length > 0 &&
     !motivoDePerdaAceito(textoOutro, cadastrados);
 
-  const finalReason = reasonCode === OUTRO ? textoOutro || (funilConfigurado ? "" : OUTRO) : reasonCode;
+  const finalReason = reasonCode === OUTRO ? textoOutro || OUTRO : reasonCode;
   const disabled =
     !reasonCode ||
     finalReason.length === 0 ||
@@ -123,7 +130,7 @@ export function LoseLeadDialog({
           {reasonCode === OUTRO && (
             <div className="grid gap-1.5">
               <Label htmlFor="lost-reason-other">
-                {funilConfigurado ? t("Detalhe (obrigatório)") : t("Detalhe (opcional)")}
+                {t("Detalhe (opcional)")}
               </Label>
               <Textarea
                 id="lost-reason-other"
@@ -138,15 +145,24 @@ export function LoseLeadDialog({
               </div>
               {outroRecusado && (
                 <p role="alert" className="text-xs text-destructive">
-                  {t("Escolha um dos motivos cadastrados no funil.")}
+                  {/*
+                    A MESMA frase do servidor, e não uma irmã: `lib/leads/motivo-da-perda.ts`
+                    (#935) já devolve este texto quando o motivo chega fora da lista pela
+                    API. Duas frases quase idênticas para a MESMA recusa fazem o operador
+                    achar que são dois problemas.
+                  */}
+                  {t(
+                    "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.",
+                  )}
                 </p>
               )}
               {/*
-                SEM condição de erro, e só com funil configurado: aí "Outro" só
-                aceita um motivo já cadastrado, e sem esta linha a opção é beco
-                sem saída — a tela oferece, recusa todo texto novo e não diz onde
-                se cadastra um. Sem funil configurado não aparece, porque lá
-                "Outro" aceita texto livre e a frase seria ruído.
+                SEM condição de erro, e só com funil configurado: é lá que o
+                texto livre é recusado, e quem quiser o motivo COM AS PRÓPRIAS
+                PALAVRAS precisa cadastrá-lo. Deixar o detalhe em branco continua
+                valendo — grava "Outro" —, e é por isso que esta frase é uma
+                dica e não um aviso de erro. Sem funil configurado não aparece,
+                porque lá o texto livre já passa e a frase seria ruído.
               */}
               {funilConfigurado && (
                 <p className="text-xs text-muted-foreground">

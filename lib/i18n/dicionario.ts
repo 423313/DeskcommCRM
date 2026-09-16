@@ -6092,8 +6092,6 @@ export const DICIONARIO: Traducoes = {
     es: "Indica el motivo. Esta información ayuda a mejorar el embudo.",
   },
   "Detalhe (opcional)": { es: "Detalle (opcional)" },
-  "Detalhe (obrigatório)": { es: "Detalle (obligatorio)" },
-  "Escolha um dos motivos cadastrados no funil.": { es: "Elige uno de los motivos configurados en el embudo." },
   // Sem esta linha, "Outro" com funil configurado é beco sem saída: a tela
   // oferece a opção, recusa todo texto que não seja um motivo já cadastrado, e
   // não diz ONDE se cadastra um motivo novo.

@@ -120,21 +120,39 @@ describe("motivos de perda configurados no funil", () => {
     });
   });
 
-  it("com funil configurado, 'Outro' exige o detalhe e recusa o que o servidor negaria", () => {
+  it("⭐ com funil configurado, 'Outro' SEM detalhe grava `other` — o escape que o servidor aceita", async () => {
+    // `other` é CANÔNICO (`v_canonical` em `fn_validate_lost_reason_required`),
+    // então o trigger o aceita em qualquer funil. Exigir o detalhe aqui fazia da
+    // opção um beco sem saída: os únicos textos aceitos eram os rádios ao lado, e
+    // cadastrar um motivo novo é admin-only — um `agent` com uma perda fora da
+    // lista não tinha ação correta nenhuma.
     abrir(comFunil({ lost_reasons: ["Sem orçamento"] }));
 
     fireEvent.click(radio("other"));
-    expect(confirmar().disabled).toBe(true); // detalhe vazio não passa
-    expect(apiPost).not.toHaveBeenCalled();
+    expect(confirmar().disabled).toBe(false);
 
-    const detalhe = screen.getByLabelText(/Detalhe \(obrigatório\)/);
+    fireEvent.click(confirmar());
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
+    expect(apiPost).toHaveBeenCalledWith(`/api/v1/leads/${LEAD}/lose`, { lost_reason: "other" });
+  });
+
+  it("com funil configurado, 'Outro' recusa ANTES DO CLIQUE o texto que o servidor negaria", () => {
+    abrir(comFunil({ lost_reasons: ["Sem orçamento"] }));
+
+    fireEvent.click(radio("other"));
+    // O rótulo é "opcional" nos dois casos: deixar em branco é uma saída válida.
+    const detalhe = screen.getByLabelText(/Detalhe \(opcional\)/);
     fireEvent.change(detalhe, { target: { value: "Sem orçamento" } });
     expect(confirmar().disabled).toBe(false); // valor que o funil aceita
 
     fireEvent.change(detalhe, { target: { value: "Cliente mudou de ideia" } });
     expect(confirmar().disabled).toBe(true); // fora da lista: o trigger recusaria
+    expect(apiPost).not.toHaveBeenCalled();
+    // A MESMA frase que `lib/leads/motivo-da-perda.ts` (#935) devolve para esta
+    // recusa pela API. Duas frases quase idênticas para o mesmo "não" fariam o
+    // operador achar que tropeçou em dois problemas diferentes.
     expect(screen.getByRole("alert").textContent).toBe(
-      "Escolha um dos motivos cadastrados no funil.",
+      "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.",
     );
   });
 
