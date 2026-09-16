@@ -57,16 +57,23 @@ const ctx: McpContext = {
 
 const CONTATO = "11111111-1111-4111-8111-111111111111";
 
-// Fuso da REGRA em UTC de propósito: é o fuso em que os slots foram calculados, e é o
-// que a própria consulta publica. Com ele, `2026-09-01T14:00:00Z` é o rótulo "14:00" do
-// dia civil 2026-09-01 — a régua que a ferramenta tem de usar para casar o pedido.
+// ⚠️ O fuso da REGRA é `America/Sao_Paulo`, e os instantes estão DESLOCADOS do rótulo
+// de propósito: 17:00Z é o rótulo "14:00" local, 18:00Z é "15:00".
+//
+// Com `UTC` — como este fixture nascia — o instante do slot e a construção ingênua
+// `${dia}T${horario}:00.000Z` dão o MESMO valor, e a asserção de `starts_at` deixa de
+// distinguir "marcou o que a agenda confirmou" de "marcou a hora que o modelo digitou",
+// que é a promessa nº 1 desta ferramenta e a regressão mais cara que ela pode ter.
+// Medido: com o fixture em UTC, trocar `achado.inicio.toISOString()` pela construção
+// ingênua deixava ZERO caso vermelho; com o fixture deslocado, deixa este arquivo
+// vermelho no primeiro caso.
 const SUCESSO: ResultadoDaConsulta = {
   ok: true,
   slots: [
-    { inicio: new Date("2026-09-01T14:00:00Z"), fim: new Date("2026-09-01T14:30:00Z") },
-    { inicio: new Date("2026-09-01T15:00:00Z"), fim: new Date("2026-09-01T15:30:00Z") },
+    { inicio: new Date("2026-09-01T17:00:00Z"), fim: new Date("2026-09-01T17:30:00Z") },
+    { inicio: new Date("2026-09-01T18:00:00Z"), fim: new Date("2026-09-01T18:30:00Z") },
   ],
-  fusoDaRegra: "UTC",
+  fusoDaRegra: "America/Sao_Paulo",
   publicouHorarios: true,
   fusoSuposto: false,
   fontesDefasadas: [],
@@ -98,11 +105,11 @@ describe("crm_find_and_book_appointment", () => {
     // organização) e com o instante que veio do slot.
     const [, meta, corpo] = vi.mocked(handlers.marcarAgendamentoHandler).mock.calls[0]!;
     expect((meta as { organization_id: string }).organization_id).toBe("org-1");
-    expect((corpo as { starts_at: string }).starts_at).toBe("2026-09-01T14:00:00.000Z");
+    expect((corpo as { starts_at: string }).starts_at).toBe("2026-09-01T17:00:00.000Z");
     expect((corpo as { contact_id: string }).contact_id).toBe(CONTATO);
 
     // E o retorno diz QUAL horário esta chamada usou — o modelo não precisa deduzir.
-    expect(r.inicio).toBe("2026-09-01T14:00:00.000Z");
+    expect(r.inicio).toBe("2026-09-01T17:00:00.000Z");
     expect(String(r.quando)).toMatch(HORA_14);
   });
 
@@ -172,6 +179,12 @@ describe("crm_find_and_book_appointment", () => {
     const horarios = r.horarios as Array<{ inicio: string; quando: string }>;
     expect(horarios.length).toBeGreaterThan(0);
     expect(horarios.some((h) => HORA_14.test(h.quando))).toBe(true);
+
+    // E a instrução NÃO manda consultar de novo: a lista do dia já veio nesta
+    // resposta. O texto herdado da marcação avulsa mandava chamar
+    // `crm_find_free_slots` outra vez — o laço que esta ferramenta veio desfazer.
+    expect(String(r.mensagem)).not.toContain("crm_find_free_slots");
+    expect(String(r.mensagem)).toContain("desta mesma resposta");
   });
 });
 

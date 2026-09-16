@@ -288,14 +288,18 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     // A faixa larga contém o dia civil em QUALQUER fuso. Depois de a coleta
     // revelar o fuso da regra, filtramos pelo mesmo dia local. Assim a IA não
     // converte "13/09" em meia-noite UTC e não perde a noite de Manaus.
-    const inicioDoDiaUtc =
-      input.dia === undefined ? null : new Date(`${input.dia}T00:00:00.000Z`);
-    const de =
-      inicioDoDiaUtc === null ? agora : new Date(inicioDoDiaUtc.getTime() - 14 * 60 * 60 * 1000);
+    //
+    // A aritmética é a de `faixaAmplaDoDia`, e é ELA que roda aqui: o helper
+    // nasceu declarando que existe porque "as DUAS ferramentas que OLHAM a
+    // agenda precisam perguntar a mesma coisa" e ficou com um chamador só,
+    // enquanto esta cópia seguia inline — duas fontes para a mesma janela, que
+    // divergem no primeiro ajuste.
+    const janela = input.dia === undefined ? null : faixaAmplaDoDia(input.dia);
+    const de = janela === null ? agora : janela.de;
     const ate =
-      inicioDoDiaUtc === null
+      janela === null
         ? new Date(de.getTime() + (input.dias_a_frente ?? DIAS_PADRAO) * 86_400_000)
-        : new Date(inicioDoDiaUtc.getTime() + 38 * 60 * 60 * 1000);
+        : janela.ate;
 
     const consulta = await horariosLivresDaOrg(ctx.supabase, ctx.organizationId, {
       eventTypeSlug: input.event_type_slug,
@@ -729,9 +733,19 @@ export const crmFindAndBookAppointment: McpToolDefinition<typeof consultarEMarca
       // interna, conflito de última hora, erro de negócio). O turno continua, e
       // a resposta junta a recusa ao que estava livre no dia: é o material que o
       // modelo precisa para não encerrar a conversa com o cliente na mão.
+      //
+      // ⚠️ E o ensino é REESCRITO, depois do spread. O texto que vem de
+      // `ENSINO_POR_CODIGO` é o da marcação avulsa e manda "chame
+      // `crm_find_free_slots` de novo" — correto lá, e um laço aqui: a lista do
+      // dia JÁ está nesta mesma resposta. Numa ferramenta que existe para matar
+      // o `crm_find_free_slots` repetido da #831, mandar consultar de novo é
+      // ensinar exatamente o laço que ela veio desfazer.
       return {
         ...payloadDeHorarios(consulta, slotsDoDia, HORARIOS_PADRAO),
         ...(resultado as Record<string, unknown>),
+        mensagem:
+          "esse horário acabou de ficar indisponível e NADA foi marcado. Ofereça ao cliente uma " +
+          "das opções de `horarios` desta mesma resposta — não chame a consulta de novo.",
       };
     }
 
