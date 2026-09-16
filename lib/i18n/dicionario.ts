@@ -8077,6 +8077,10 @@ export const DICIONARIO: Traducoes = {
   },
   "Perdido —": { es: "Perdido —" },
   "(negócio removido)": { es: "(negocio eliminado)" },
+  // Troca de funil (POST /api/v1/leads/[id]/clone): o rótulo da linha do negócio
+  // novo e as duas razões que não dependem do nome do funil.
+  "Veio de outro funil": { es: "Vino de otro embudo" },
+  "Levado para outro funil": { es: "Llevado a otro embudo" },
 
   // ─── Fase B: vocabulario de dominio persistido (reason de crm_lead_activities) ───
   //

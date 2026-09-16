@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireRole } from "@/lib/auth/require-role";
+import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -237,6 +238,39 @@ describe("POST /api/v1/leads/[id]/clone", () => {
       stage_id: S2_A,
     });
     expect((origem.source_metadata as Row).canal).toBe("whatsapp");
+  });
+
+  it("cada lado conta a troca na LINHA DO TEMPO — e a origem não diz 'Perdido — other'", async () => {
+    // `source_metadata` guarda os ponteiros, mas nenhuma tela o lê: a linha do
+    // tempo do dossiê vem de `crm_lead_activities`. Sem estas duas linhas, o
+    // negócio novo aparecia no funil de destino sem história nenhuma, e a origem
+    // dizia "Demanda encerrada — Perdido — other" para um negócio que não se
+    // perdeu: quem abrisse o card leria uma perda que não aconteceu.
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+    expect(response.status).toBe(201);
+    const cloneId = (body.data.lead as Row).id;
+
+    const linhas = vi.mocked(emitLeadActivity).mock.calls.map(([, entrada]) => entrada);
+    expect(linhas).toContainEqual(
+      expect.objectContaining({
+        leadId: cloneId,
+        type: "moved_from_pipeline",
+        reason: "Veio do funil Comercial",
+        payload: { from_pipeline_id: P1, from_lead_id: LEAD_ID },
+      }),
+    );
+    expect(linhas).toContainEqual(
+      expect.objectContaining({
+        leadId: LEAD_ID,
+        type: "demand_closed",
+        reason: "Levado para o funil Suporte",
+        payload: expect.objectContaining({ to_pipeline_id: P2, to_lead_id: cloneId }),
+      }),
+    );
+    expect(linhas.map((l) => l.reason)).not.toContain("Perdido — other");
   });
 
   it("aceita a etapa destino informada pelo cliente", async () => {

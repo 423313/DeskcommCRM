@@ -16,8 +16,9 @@ criado no funil de destino (na primeira etapa aberta, ou na etapa que você
 escolher) com os mesmos dados — título, contato, valor, dono, previsão, tags e
 campos personalizados (os que o funil de destino não tiver continuam guardados no
 negócio, mas só aparecem na tela quando você criá-los lá) — e a origem é encerrada
-como perdida. Cada lado guarda o ponteiro para o outro: o novo negócio registra
-de onde veio, o antigo registra para onde foi.
+como perdida. Os dois lados contam a troca na linha do tempo: o novo negócio mostra
+de qual funil veio, e o antigo mostra para qual funil foi levado, em vez de
+aparecer como uma perda comum.
 
 Duas coisas que a troca NÃO faz, de propósito: negócio já encerrado não é clonado
 (reescrever um ganho como perda apagaria o desfecho que alguém registrou) e trocar

@@ -36,6 +36,8 @@ import {
   type EtapaDoFunil,
   type OrigemParaClonar,
 } from "@/lib/leads/clonar-para-funil";
+import { emitLeadActivity } from "@/lib/leads/activity-emitter";
+import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { encerraDemanda } from "@/lib/leads/encerramento";
 import {
   motivoDaPerdaDaOrigem,
@@ -91,7 +93,7 @@ export async function POST(
 
     const { data: pipelineDestino, error: pipeErr } = await supabase
       .from("crm_pipelines")
-      .select("id")
+      .select("id, name")
       .eq("id", input.pipeline_id)
       .eq("organization_id", handlerCtx.organization_id)
       .maybeSingle();
@@ -121,7 +123,7 @@ export async function POST(
     // e o trigger lê `new.pipeline_id` (supabase/baseline.sql).
     const { data: pipelineOrigem, error: origemPipeErr } = await supabase
       .from("crm_pipelines")
-      .select("settings")
+      .select("settings, name")
       .eq("id", (origem as OrigemParaClonar).pipeline_id)
       .eq("organization_id", handlerCtx.organization_id)
       .maybeSingle();
@@ -199,24 +201,64 @@ export async function POST(
       montaPayloadDoClone(origem as OrigemParaClonar, destino.etapa),
     );
 
+    const destination = registroDoDestino(clone);
+    const nomeDoFunilDeOrigem = (pipelineOrigem as { name?: string | null } | null)?.name ?? null;
+    const nomeDoFunilDeDestino = (pipelineDestino as { name?: string | null }).name ?? null;
+
+    // ── A TROCA NA LINHA DO TEMPO, DOS DOIS LADOS ──────────────────────────────
+    //
+    // `source_metadata` guarda os ponteiros, mas nenhuma tela o lê — a linha do
+    // tempo do dossiê vem de `crm_lead_activities` (hooks/leads/useLeadTimeline.ts).
+    // Sem estas linhas o negócio novo aparecia no destino sem história nenhuma, e
+    // a origem dizia "Perdido — other" para um negócio que não se perdeu.
+    // Os nomes dos funis entram na frase como entram os das etapas em
+    // `stageChangeReason`: é o que quem lê reconhece.
+    const atividadeDoClone = await emitLeadActivity(supabase, {
+      organizationId: handlerCtx.organization_id,
+      leadId: String(destination.lead_id),
+      contactId: (origem as OrigemParaClonar).contact_id ?? null,
+      type: "moved_from_pipeline",
+      sourceModule: "crm",
+      sourceId: leadId,
+      actor: handlerCtx.actor,
+      reason: nomeDoFunilDeOrigem ? `Veio do funil ${nomeDoFunilDeOrigem}` : "Veio de outro funil",
+      payload: {
+        from_pipeline_id: (origem as OrigemParaClonar).pipeline_id,
+        from_lead_id: leadId,
+      },
+    });
+    if (!atividadeDoClone.ok) {
+      // Falha BAIXO, como em `encerraDemanda`: o clone já existe, e prender a
+      // troca à timeline deixaria a operação refém do registro. Contada, nunca
+      // engolida.
+      await registraFalhaDeAtividade(supabase, {
+        organizationId: handlerCtx.organization_id,
+        leadId: String(destination.lead_id),
+        tipo: "moved_from_pipeline",
+        origem: "app/api/v1/leads/[id]/clone",
+        erro: atividadeDoClone.error,
+        requestId,
+      });
+    }
+
     const motivo = motivoDaPerdaDaOrigem(input.lost_reason);
     const { lead: origemEncerrada } = await encerraDemanda(supabase, handlerCtx, {
       leadId,
       desfecho: "lost",
       motivo,
+      razaoNaTimeline: nomeDoFunilDeDestino
+        ? `Levado para o funil ${nomeDoFunilDeDestino}`
+        : "Levado para outro funil",
+      payloadNaTimeline: {
+        to_pipeline_id: input.pipeline_id,
+        to_lead_id: destination.lead_id,
+      },
     });
 
     // Onde a origem foi parar. Fica na ORIGEM porque o clone já carrega
-    // `clonado_de`: cada lado guarda o ponteiro para o outro.
-    //
-    // ⚠️ NÃO É TIMELINE, e a distinção importa para quem for ler isto depois:
-    // `source_metadata` é jsonb que NENHUMA tela lê — a linha do tempo do dossiê
-    // vem de `crm_lead_activities` (hooks/leads/useLeadTimeline.ts). A origem
-    // ganha a linha de `encerraDemanda` ("Perdido — <motivo>"), que não diz para
-    // onde o negócio foi, e o clone nasce com a timeline vazia. Escrever as duas
-    // linhas é fatia própria; até lá, o ponteiro serve a quem integra pela API e
-    // a quem depura, não ao operador na tela.
-    const destination = registroDoDestino(clone);
+    // `clonado_de`: cada lado guarda o ponteiro para o outro. É o dado para quem
+    // integra pela API; para o operador na tela, a história são as duas linhas
+    // de timeline gravadas acima.
     const sourceMetadata = {
       ...(((origem as OrigemParaClonar).source_metadata ?? {}) as Record<string, unknown>),
       movido_para: destination,
