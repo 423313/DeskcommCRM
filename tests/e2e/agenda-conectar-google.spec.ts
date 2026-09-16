@@ -36,8 +36,9 @@
  *    lança. O que falta é a tela consumir esse `null`.
  *
  * 2. COM CHAVE: clicar "Conectar Google" leva ao consentimento (o destino é
- *    `accounts.google.com`, com `access_type=offline` e `prompt=consent` — os
- *    dois parâmetros sem os quais a reconexão volta sem `refresh_token` e a
+ *    `accounts.google.com`, com `access_type=offline` e um `prompt` que contém
+ *    `consent` (refresh_token) e `select_account` (seletor de contas) — sem
+ *    `offline` + `consent` a reconexão volta sem `refresh_token` e a
  *    integração morre em uma hora); voltar do consentimento grava a conexão; e
  *    a faixa da Agenda passa a dizer que a agenda está conectada, com o e-mail
  *    da conta.
@@ -50,8 +51,11 @@
  * Enquanto não houver botão, não há clique para dirigir.
  *
  * E falta, para o caso 2 rodar em CI de verdade, uma conta Google de teste com
- * consentimento pré-aprovado — que é o motivo de esta spec entrar em
- * `FORA_DO_CI` no `e2e.yml`, e não de ela ficar sem existir.
+ * consentimento pré-aprovado — que é o motivo de ele ser `test.skip`, e não de
+ * a spec ficar sem existir. A SPEC roda no CI: ela está em `SPECS_PARTE` no
+ * `e2e.yml`, é o caso 1 que a sustenta lá, e a única spec em `FORA_DO_CI` é
+ * `vps-fresh-onboarding`. Para conferir em vez de acreditar nesta linha:
+ * `grep -n 'agenda-conectar-google' .github/workflows/e2e.yml`.
  */
 import { expect, test, type Page } from "@playwright/test";
 
