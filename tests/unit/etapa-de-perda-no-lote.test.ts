@@ -104,6 +104,13 @@ function clienteStub(estado: Estado) {
       return b;
     },
     rpc(nome: string, args: Record<string, unknown>) {
+      // SÓ a função do lote entra no registro. A rota também chama `emit_event`
+      // por card DEPOIS do movimento, e gravar todo RPC aqui fazia `rpcArgs`
+      // terminar com os argumentos do último — quem perguntasse pelo
+      // `p_lost_reason` recebia o do evento, que não tem nenhum.
+      if (nome !== "fn_mover_leads_em_lote") {
+        return Promise.resolve({ data: null, error: null });
+      }
       estado.rpcChamado = true;
       estado.rpcArgs = { nome, ...args };
       // A função do banco roda numa transação só: sem motivo, a CHECK recusa o
@@ -176,8 +183,15 @@ describe("mover o lote para uma etapa de perda (#917)", () => {
     const res = await POST(pedido({ stage_id: PERDIDO_ID }));
 
     expect(res.status).toBe(422);
-    const corpo = (await res.json()) as { error?: { code?: string; message?: string } };
+    const corpo = (await res.json()) as {
+      error?: { code?: string; message?: string; details?: unknown };
+    };
     expect(corpo.error?.code).toBe("lost_reason_required");
+    // A recusa NOMEIA os cards — é o que distingue "um card do lote não pode" de
+    // "o lote inteiro caiu". Vive no `details` do envelope de erro (contrato de
+    // fio), e é por ele que um cliente de API sabe quais reenviar.
+    const detalhe = corpo.error?.details as { lead_ids?: string[] } | undefined;
+    expect(detalhe?.lead_ids).toEqual([CARD_A, CARD_B]);
     // O ponto do fix: a transação única nunca começa, então nenhum card do lote
     // é movido "pela metade" nem o lote inteiro cai por causa de um.
     expect(estado.rpcChamado).toBe(false);
@@ -190,6 +204,29 @@ describe("mover o lote para uma etapa de perda (#917)", () => {
 
     expect(estado.rpcChamado).toBe(true);
     expect(res.status).toBe(200);
+    // E o lote NÃO reescreve o motivo que o card já tem: `p_lost_reason` nulo é
+    // o que faz a migration 0263 deixar a coluna fora da lista do `update` — se
+    // ela entrasse, o trigger revalidaria um motivo que saiu da configuração
+    // depois de usado e o lote cairia com 22023 `lost_reason_invalid`, enquanto
+    // o arrasto do MESMO card continuaria passando.
+    expect(estado.rpcArgs?.p_lost_reason).toBeNull();
+  });
+
+  it("com motivo no lote: o motivo vai para a função do banco, na MESMA escrita", async () => {
+    // A razão de existir da migration 0263. Sem esta asserção o `rpcArgs` era
+    // estado morto: o duplo capturava os argumentos e ninguém os olhava, então
+    // trocar o nome do parâmetro (ou deixar de passá-lo) não deixava nada
+    // vermelho — e a única prova do parâmetro seria o baseline APLICAR a função,
+    // que não é o mesmo que CHAMÁ-LA.
+    sessao(estado);
+    const res = await POST(pedido({ stage_id: PERDIDO_ID, lost_reason: "price" }));
+
+    expect(res.status).toBe(200);
+    expect(estado.rpcArgs).toMatchObject({
+      nome: "fn_mover_leads_em_lote",
+      p_stage_id: PERDIDO_ID,
+      p_lost_reason: "price",
+    });
   });
 
   it("a etapa comum (is_lost falso) não pede motivo nenhum", async () => {
