@@ -12,6 +12,15 @@ import { createClient } from "@/lib/supabase/server";
  * (`crm_pipelines.is_archived`): um dublê que os ignorasse passaria com ou sem
  * o conserto. E o filtro precisa estar NO BANCO, antes do `limit(3)`: filtrar
  * depois esvaziaria a lista de quem tem leads antigos em funil arquivado.
+ *
+ * ⚠️ O dublê resolve `crm_pipelines.is_archived` por CAMINHO dentro da linha,
+ * com ou sem `!inner` — e o `!inner` é a metade load-bearing do conserto. No
+ * PostgREST real, filtro em recurso EMBUTIDO sem `!inner` não derruba a linha-
+ * pai: ele anula o embed. Sem a asserção sobre a string do `select`, apagar o
+ * `!inner` devolveria o lead de funil arquivado à lista — agora com
+ * `funil_nome: null`, pior que o estado de antes — e este arquivo ficaria
+ * verde. Por isso o `select` é espionado. Mesmo padrão de
+ * `app/api/v1/ai/evolution/route.test.ts`, que assere sobre os pares de `.eq`.
  */
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
@@ -27,11 +36,12 @@ function valor(linha: Linha, caminho: string): unknown {
 }
 
 function bancoFalso(tabelas: Record<string, Linha[]>) {
+  const selects: string[] = [];
   const from = (tabela: string) => {
     let linhas = [...(tabelas[tabela] ?? [])];
     let limite = Infinity;
     const chain = {
-      select: () => chain,
+      select: (cols: string) => (selects.push(cols), chain),
       eq: (col: string, val: unknown) => ((linhas = linhas.filter((l) => valor(l, col) === val)), chain),
       is: (col: string, val: unknown) => ((linhas = linhas.filter((l) => (valor(l, col) ?? null) === val)), chain),
       not: (col: string, _op: string, val: unknown) => ((linhas = linhas.filter((l) => (valor(l, col) ?? null) !== val)), chain),
@@ -46,6 +56,7 @@ function bancoFalso(tabelas: Record<string, Linha[]>) {
   return {
     auth: { getUser: async () => ({ data: { user: { id: "u-1" } }, error: null }) },
     from,
+    selects,
   };
 }
 
@@ -61,13 +72,14 @@ function lead(id: string, funil: { name: string; is_archived: boolean }, etapa: 
 
 describe("crm-summary: leads recentes", () => {
   it("não devolve lead de funil arquivado e diz funil e etapa dos outros", async () => {
-    vi.mocked(createClient).mockResolvedValue(bancoFalso({
+    const banco = bancoFalso({
       contacts: [{ id: CONTATO, organization_id: ORG }],
       crm_leads: [
         lead("lead-arquivado", { name: "Funil antigo", is_archived: true }, "Novo"),
         lead("lead-ativo", { name: "GMN Advogados", is_archived: false }, "Novo"),
       ],
-    }) as never);
+    });
+    vi.mocked(createClient).mockResolvedValue(banco as never);
 
     const { GET } = await import("@/app/api/v1/contacts/[id]/crm-summary/route");
     const res = await GET(new NextRequest(`http://x/api/v1/contacts/${CONTATO}/crm-summary`), {
@@ -79,5 +91,7 @@ describe("crm-summary: leads recentes", () => {
     expect(body.data.leads.map((l) => [l.id, l.funil_nome, l.etapa_nome])).toEqual([
       ["lead-ativo", "GMN Advogados", "Novo"],
     ]);
+    // Sem `!inner` o PostgREST real não derruba o lead: anula o embed.
+    expect(banco.selects.join("|")).toContain("crm_pipelines!inner");
   });
 });
