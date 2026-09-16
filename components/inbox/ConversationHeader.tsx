@@ -9,7 +9,11 @@ import { Phone, ArrowRight } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
-import { useCloseConversation, useReopenConversation } from "@/hooks/inbox/useCloseConversation";
+import {
+  useArchiveConversation,
+  useCloseConversation,
+  useReopenConversation,
+} from "@/hooks/inbox/useCloseConversation";
 import { useResumeAiAttendance } from "@/hooks/inbox/useResumeAiAttendance";
 import { usePauseAiAttendance } from "@/hooks/inbox/usePauseAiAttendance";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
@@ -58,6 +62,7 @@ export function ConversationHeader({ conversation }: Props) {
   const release = useReleaseConversation();
   const close = useCloseConversation();
   const reopen = useReopenConversation();
+  const arquivar = useArchiveConversation();
   const retomar = useResumeAiAttendance();
   const pausar = usePauseAiAttendance();
   // "Existe automático nesta org?" — sem isto o selo afirmava que o robô estava
@@ -308,6 +313,31 @@ export function ConversationHeader({ conversation }: Props) {
           onClick={() => reopen.mutate({ conversation_id: conversation.id, expected_revision: conversation.service_revision })}>
           {t("Reabrir")}
         </Button>}
+        {/* ARQUIVAR (#923): tira da frente sem destruir.
+            A conversa já arquivada não mostra o botão — arquivar duas vezes não
+            é um gesto que exista, e o botão só reapareceria como um clique que
+            não muda nada. Fechada E resolvida mostram: são exatamente as que se
+            quer mandar para o arquivo depois de encerradas, e é o caminho que
+            faz a aba "Arquivadas" deixar de ser uma pasta morta.
+            A permissão é a mesma de fechar (a rota `/conversations/[id]` é
+            `requireSupportWrite`): quem pode encerrar, pode arquivar. */}
+        {status !== "archived" && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={arquivar.isPending}
+            onClick={() => {
+              if (confirm(t("Arquivar esta conversa?"))) {
+                arquivar.mutate({
+                  conversation_id: conversation.id,
+                  expected_revision: conversation.service_revision,
+                });
+              }
+            }}
+          >
+            {arquivar.isPending ? t("Arquivando...") : t("Arquivar")}
+          </Button>
+        )}
         {/* `xl:hidden` porque a partir de 1280px o painel lateral de CRM entra
             na tela — e ele já tem um "Ver contato", para o MESMO contato, a um
             palmo de distância. Duas portas idênticas na mesma tela não são
