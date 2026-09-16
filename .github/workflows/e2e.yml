@@ -429,7 +429,11 @@ jobs:
       # Cada item aqui tem o motivo MEDIDO, não presumido — e o gate cobra que a
       # lista exista e some com as outras duas.
       #
-      # `vps-fresh-onboarding` fica fora por DUAS razões, e só a primeira estava
+      # ⚠️ HISTÓRICO: `vps-fresh-onboarding` NÃO está mais fora — desde o PR da
+      # issue #179 ela roda na PARTE_4 (ver o bloco `SPECS_PARTE_4` abaixo). O
+      # registro fica pelas lições, e o fecho dele foi atualizado.
+      #
+      # `vps-fresh-onboarding` ficava fora por DUAS razões, e só a primeira estava
       # escrita — com o número errado, contradito 8 linhas abaixo neste mesmo
       # arquivo, que já usava 17 como controle positivo:
       #
@@ -458,11 +462,14 @@ jobs:
       #
       #       A instância está corrigida (a org sai do dono do bootstrap) e a
       #       classe inteira virou gate: `tests/unit/e2e-nao-escolhe-a-primeira-linha`.
-      #       O que continua valendo aqui é a razão (1): esta suíte não roda no CI
-      #       por dependência externa, não por causa do rig de organização.
+      #       A razão (1) — dependência externa — era a que ainda a segurava, e
+      #       foi a que a PARTE_4 resolveu: WAHA e o par Redis sobem como
+      #       `services:` do job, e Resend/Nuvemshop falam com um dublê HTTP real.
       #
-      # Continua sendo a P0 da doutrina de QA Visual: `e2e` verde NÃO prova a
-      # jornada de instalação fresca, que é o produto que se vende.
+      # Ela é a P0 da doutrina de QA Visual, e é por isso que o limite da prova
+      # fica escrito onde ela roda: o WAHA do CI é o CORE, não o Plus (ver o
+      # serviço `waha` abaixo) — a jornada de onboarding é exercitada; o que só
+      # o Plus tem, não.
       #
 # As CINCO specs da missão "Follow-up Vivo" (`followup-linguagem`,
       # `followup-ramos`, `followup-dossie`, `followup-tempo-adaptativo`,
