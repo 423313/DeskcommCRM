@@ -24,8 +24,9 @@ import type { McpContext } from "@/lib/mcp/types";
  *  2. o dia é respeitado (slot de outro dia não serve para a hora pedida);
  *  3. recusa (da consulta ou da marcação) volta como RESPOSTA, nunca como exceção;
  *  4. quem "consegue gravar agenda" é decidido por UMA regra (`temFerramentaDeMarcacao`),
- *     que precisa reconhecer a ferramenta conjunta — senão o bloco residente da Agenda e o
- *     gate `podeMarcar` voltam a discordar entre si.
+ *     que precisa reconhecer a ferramenta conjunta — senão o agente ganha a ferramenta e
+ *     recebe o bloco residente de quem só consulta;
+ *  5. o bloco residente da Agenda nunca nomeia ferramenta que o agente não tem.
  */
 vi.mock("@/app/api/v1/agenda/agendamentos/_handler", () => ({
   marcarAgendamentoHandler: vi.fn(),
@@ -252,9 +253,9 @@ describe("crm_find_and_book_appointment", () => {
 
 describe("temFerramentaDeMarcacao (#831)", () => {
   it("reconhece a ferramenta CONJUNTA como 'consegue gravar agenda'", () => {
-    // Livro único da regra: o bloco residente da Agenda e o gate `podeMarcar` leem a
-    // MESMA função. Se a ferramenta conjunta não estiver aqui, o agente ganha a
-    // ferramenta mas o bloco residente não é montado — e ela fica inalcançável.
+    // Livro único da regra: é ela que escolhe o bloco residente da Agenda. Se a
+    // ferramenta conjunta não estiver aqui, o agente ganha a ferramenta mas o bloco
+    // de quem marca não é montado — e ela fica sem ensino.
     expect(temFerramentaDeMarcacao(["crm_find_and_book_appointment"])).toBe(true);
     expect(temFerramentaDeMarcacao(["crm_book_appointment"])).toBe(true);
     // Consultar NÃO é marcar.
@@ -264,8 +265,8 @@ describe("temFerramentaDeMarcacao (#831)", () => {
   it("REMARCAR sozinho não é marcar — o portão não alarga além do que a #831 pede", () => {
     // `crm_reschedule_appointment` grava na agenda, mas só MOVE um compromisso
     // que já existe. Com ela dentro, o agente que tem SÓ a remarcação (e que
-    // antes recebia o bloco de só-consulta) passava a receber o
-    // AGENDA_SYSTEM_BLOCK, que nomeia ferramentas de marcar que ele não tem —
+    // antes recebia o bloco de só-consulta) passava a receber o bloco de quem
+    // marca, que nomeia ferramentas de marcar que ele não tem —
     // e o docstring do bloco irmão diz, com todas as letras, que ensinar uma
     // ferramenta ausente faz o modelo tentar chamá-la.
     expect(temFerramentaDeMarcacao(["crm_reschedule_appointment"])).toBe(false);
@@ -288,20 +289,59 @@ describe("temFerramentaDeMarcacao (#831)", () => {
     expect(soRemarca).not.toBeNull();
     // O bloco de consulta é o que NÃO manda marcar — é o que lhe cabe.
     expect(soRemarca!).toContain("quem confirma");
-    expect(soRemarca!).not.toContain("sua ferramenta de marcar");
+    expect(soRemarca!).not.toContain("nunca confirme sem checar");
+    expect(soRemarca!).not.toContain("crm_book_appointment");
   });
 
-  it("o bloco de quem MARCA não nomeia uma ferramenta de marcar fixa", async () => {
-    // Quem tem SÓ `crm_find_and_book_appointment` — o "caminho preferido" que o
-    // próprio bloco descreve — recebia um texto que mandava chamar
-    // `crm_book_appointment` em três frases: ensinar uma ferramenta ausente faz
-    // o modelo tentar chamá-la.
+  it("quem tem a conjunta e a consulta NÃO ouve o nome da marcação avulsa", async () => {
+    // Um dono aparando capacidades para caber no teto de 25 produz este agente. O
+    // bloco mandava chamar `crm_book_appointment` em três frases — e, depois, "a
+    // que estiver na sua lista" entre as duas, o que ainda ENSINA o nome de uma
+    // ferramenta ausente: o modelo tenta chamá-la.
     const { blocoResidenteDaAgenda } = await import("@/lib/agent-engine/agent/inbound-turn");
 
-    const bloco = blocoResidenteDaAgenda(["crm_find_and_book_appointment"]);
+    const bloco = blocoResidenteDaAgenda(["crm_find_free_slots", "crm_find_and_book_appointment"]);
     expect(bloco).not.toBeNull();
-    expect(bloco!).toContain("sua ferramenta de marcar");
+    expect(bloco!).toContain("nunca confirme sem checar");
     expect(bloco!).toContain("crm_find_and_book_appointment");
+    expect(bloco!).not.toContain("crm_book_appointment");
+    expect(bloco!).not.toContain("crm_reschedule_appointment");
+  });
+
+  it("em TODA combinação de ferramentas de agenda, o bloco só nomeia as que o agente tem", async () => {
+    // A regra inteira, e não um caso: são 4 ferramentas e 16 combinações, e cada
+    // uma é alcançável pela tela (uma caixa por capacidade no ToolPicker). Um texto
+    // novo escrito à mão com um nome fixo fica vermelho aqui na combinação que não
+    // o tem.
+    const { blocoResidenteDaAgenda, temFerramentaDeMarcacao } = await import(
+      "@/lib/agent-engine/agent/inbound-turn"
+    );
+    const AGENDA = [
+      "crm_find_free_slots",
+      "crm_book_appointment",
+      "crm_reschedule_appointment",
+      "crm_find_and_book_appointment",
+    ];
+
+    let blocosMedidos = 0;
+    for (let mascara = 0; mascara < 1 << AGENDA.length; mascara++) {
+      const tem = AGENDA.filter((_, i) => (mascara & (1 << i)) !== 0);
+      const bloco = blocoResidenteDaAgenda(["crm_update_lead_state", ...tem]);
+      if (bloco === null) continue;
+      blocosMedidos++;
+      for (const ausente of AGENDA.filter((nome) => !tem.includes(nome))) {
+        expect(bloco, `[${tem.join(", ")}] não tem ${ausente}`).not.toContain(ausente);
+      }
+      // E quem marca ouve o nome de CADA ferramenta de marcar que tem.
+      if (temFerramentaDeMarcacao(tem)) {
+        for (const marca of ["crm_book_appointment", "crm_find_and_book_appointment"]) {
+          if (tem.includes(marca)) expect(bloco, `[${tem.join(", ")}]`).toContain(marca);
+        }
+      }
+    }
+    // Controle: sem isto, um `blocoResidenteDaAgenda` que devolvesse sempre null
+    // deixaria o laço sem nenhuma asserção e o caso verde.
+    expect(blocosMedidos).toBe(14);
   });
 
   it("agente sem ferramenta de agenda nenhuma não recebe bloco", async () => {

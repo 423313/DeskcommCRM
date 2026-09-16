@@ -149,7 +149,7 @@ import {
 } from './skills';
 import { readSkillReference, skillHasReferences } from './skill-references';
 import { READ_ONLY_TOOLS, wrapToolsWithBreaker, type ToolBreakerThresholds } from './tool-breaker';
-import { loadChannelProvider, runBeforeSend } from '../guardrails/before-send';
+import { loadChannelProvider, nomesDasFerramentas, runBeforeSend } from '../guardrails/before-send';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
@@ -801,50 +801,76 @@ const TRANSPARENCIA_SYSTEM_BLOCK =
  * pra essas outras decisões (aprovar desconto, exceção de política etc.),
  * porque este parágrafo só fala de checar/marcar horário.
  */
-const AGENDA_SYSTEM_BLOCK =
-  '## Agenda — nunca confirme sem checar\n' +
-  'Você só pode dizer a um lead que um horário/consulta/visita está confirmado DEPOIS de chamar ' +
-  // ⚠️ A ferramenta de MARCAR é nomeada como conjunto, e não como um nome fixo:
-  // desde a #831 há agente que recebe SÓ `crm_find_and_book_appointment` (o
-  // caminho preferido do parágrafo abaixo), e este bloco dizia a ele para
-  // chamar `crm_book_appointment` em três frases — ensinar uma ferramenta que
-  // o agente não tem é o modo de falha que o bloco irmão existe para evitar.
-  'sua ferramenta de marcar (`crm_book_appointment` ou `crm_find_and_book_appointment`, a que estiver ' +
-  'na sua lista; `crm_reschedule_appointment` para remarcação) e ver o retorno confirmando o ' +
-  'sucesso. Isso vale mesmo quando o lead já aceitou um horário que você ofereceu — aceite verbal não é ' +
-  'reserva. NUNCA diga "confirmado", "está marcado" ou equivalente baseado só no histórico da conversa. ' +
-  // ⚠️ A ressalva é obrigatória: sem ela este parágrafo ENSINA o erro. Num tipo
-  // que exige aprovação, marcar devolve `aguarda_confirmacao: true` e o
-  // compromisso nasce `pending` — dizer "confirmado" ali é afirmar o que
-  // ninguém aprovou, e o cliente aparece num horário que pode ser recusado.
-  '⚠️ EXCEÇÃO: se o retorno trouxer `aguarda_confirmacao: true`, o horário foi apenas RESERVADO e ' +
-  'ainda depende de alguém da equipe aprovar. Nesse caso NÃO diga que está confirmado: diga que ' +
-  'separou o horário e que a equipe confirma. ' +
-  'Se ainda não chamou a ferramenta neste turno, chame antes de responder; se a chamada falhar ou você não ' +
-  'tiver certeza do resultado, diga que vai verificar e NÃO afirme que está confirmado.\n' +
-  'Isso NÃO é desculpa para procrastinar: se o lead mencionou (agora ou em qualquer mensagem anterior da ' +
-  'conversa) um dia/horário específico que ainda não foi checado, chame crm_find_free_slots NESTE turno ' +
-  'antes de responder — não repita "vou verificar/confirmar e te aviso" sem ter chamado a ferramenta. Um ' +
-  '"vou verificar" só é aceitável na MESMA resposta em que você já chamou a ferramenta e ela falhou ou não ' +
-  'trouxe resultado; nunca como substituto de chamar.\n' +
-  'Se o lead escolheu um horário que VOCÊ já ofereceu nesta conversa com `crm_find_free_slots`, ele já ' +
-  'foi checado: preserve o `inicio` que a ferramenta devolveu e chame sua ferramenta de marcar ' +
-  'diretamente. ' +
-  'NÃO consulte de novo montando datas/horas em UTC; só consulte outra vez se a reserva recusar o horário.\n' +
-  // Issue #831: consultar e encerrar o turno é o meio-caminho que deixa o lead sem
-  // agendamento. Quando a ferramenta conjunta existe, ela é o caminho PREFERIDO —
-  // confirmar o horário e gravar deixa de ser decisão de duas etapas do modelo.
-  'Se você tem `crm_find_and_book_appointment` e o lead já disse DIA e HORA, use essa ferramenta: ela ' +
-  'confere a disponibilidade e grava o compromisso na MESMA chamada. Ela é o caminho preferido nesse caso ' +
-  '— não chame só `crm_find_free_slots` e pare por aí, deixando o lead sem horário marcado. Se o horário ' +
-  'pedido não estiver livre, ela devolve os horários do dia; ofereça um deles ao lead.\n' +
-  'Checar e marcar horário com as ferramentas de agenda está SEMPRE dentro da sua ' +
-  'autonomia quando essas ferramentas estão disponíveis para você — mesmo que as instruções da empresa ' +
-  'peçam para encaminhar decisões fora da sua autonomia a um gerente/responsável nomeado (ex.: "fale com o ' +
-  'Fernando"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
-  'cobre) — nunca para simplesmente consultar ou marcar um horário que a ferramenta resolve sozinha. NÃO ' +
-  'diga "vou confirmar/verificar com [nome de pessoa/equipe]" para justificar não ter chamado a ferramenta: ' +
-  'chame primeiro, e só fale de encaminhar a alguém se a ferramenta genuinamente não resolver.';
+function agendaSystemBlock(toolIds: readonly string[]): string {
+  // ⚠️ Os nomes de ferramenta deste bloco saem TODOS da lista do PRÓPRIO agente —
+  // nenhum vem escrito à mão. Desde a #831 as combinações são muitas (quem tem só a
+  // conjunta, quem tem só a avulsa, quem tem as duas, com ou sem a consulta e a
+  // remarcação), e um dono aparando capacidades para caber no teto de 25 produz
+  // qualquer uma delas. Nomear ferramenta ausente é o modo de falha que o bloco
+  // irmão (`AGENDA_CONSULTA_SYSTEM_BLOCK`) existe para evitar: o modelo tenta
+  // chamá-la. Uma versão anterior nomeava "`crm_book_appointment` ou
+  // `crm_find_and_book_appointment`, a que estiver na sua lista" — e isso ainda
+  // ensina o nome de uma ferramenta que o agente não tem.
+  const tem = (nome: string): boolean => toolIds.includes(nome);
+  const marcar = nomesDasFerramentas(
+    ['crm_book_appointment', 'crm_find_and_book_appointment'].filter(tem),
+  );
+  const remarcacao = tem('crm_reschedule_appointment')
+    ? ' (ou `crm_reschedule_appointment`, para remarcação)'
+    : '';
+
+  return (
+    '## Agenda — nunca confirme sem checar\n' +
+    'Você só pode dizer a um lead que um horário/consulta/visita está confirmado DEPOIS de chamar ' +
+    `${marcar}${remarcacao} e ver o retorno confirmando o ` +
+    'sucesso. Isso vale mesmo quando o lead já aceitou um horário que você ofereceu — aceite verbal não é ' +
+    'reserva. NUNCA diga "confirmado", "está marcado" ou equivalente baseado só no histórico da conversa. ' +
+    // ⚠️ A ressalva é obrigatória: sem ela este parágrafo ENSINA o erro. Num tipo
+    // que exige aprovação, marcar devolve `aguarda_confirmacao: true` e o
+    // compromisso nasce `pending` — dizer "confirmado" ali é afirmar o que
+    // ninguém aprovou, e o cliente aparece num horário que pode ser recusado.
+    '⚠️ EXCEÇÃO: se o retorno trouxer `aguarda_confirmacao: true`, o horário foi apenas RESERVADO e ' +
+    'ainda depende de alguém da equipe aprovar. Nesse caso NÃO diga que está confirmado: diga que ' +
+    'separou o horário e que a equipe confirma. ' +
+    'Se ainda não chamou a ferramenta neste turno, chame antes de responder; se a chamada falhar ou você não ' +
+    'tiver certeza do resultado, diga que vai verificar e NÃO afirme que está confirmado.\n' +
+    // Sem a ferramenta que só CONSULTA, este parágrafo não tem o que mandar
+    // chamar: mandar chamar uma que MARCA seria mandar reservar um horário que o
+    // lead só mencionou. Quem tem a conjunta recebe o parágrafo dela, abaixo, e o
+    // gate de agenda continua armado para os dois.
+    (tem('crm_find_free_slots')
+      ? 'Isso NÃO é desculpa para procrastinar: se o lead mencionou (agora ou em qualquer mensagem anterior da ' +
+        'conversa) um dia/horário específico que ainda não foi checado, chame `crm_find_free_slots` ' +
+        'NESTE turno antes de responder — não repita "vou verificar/confirmar e te aviso" sem ter chamado a ' +
+        'ferramenta. Um "vou verificar" só é aceitável na MESMA resposta em que você já chamou a ferramenta e ' +
+        'ela falhou ou não trouxe resultado; nunca como substituto de chamar.\n'
+      : '') +
+    // Preservar o `inicio` é o contrato de `crm_book_appointment` (`starts_at`). A
+    // conjunta recebe dia e hora, não o instante — o parágrafo não se aplica a ela.
+    (tem('crm_find_free_slots') && tem('crm_book_appointment')
+      ? 'Se o lead escolheu um horário que VOCÊ já ofereceu nesta conversa com `crm_find_free_slots`, ele já ' +
+        'foi checado: preserve o `inicio` que a ferramenta devolveu e chame `crm_book_appointment` ' +
+        'diretamente. ' +
+        'NÃO consulte de novo montando datas/horas em UTC; só consulte outra vez se a reserva recusar o horário.\n'
+      : '') +
+    // Issue #831: consultar e encerrar o turno é o meio-caminho que deixa o lead sem
+    // agendamento. Quando a ferramenta conjunta existe, ela é o caminho PREFERIDO —
+    // confirmar o horário e gravar deixa de ser decisão de duas etapas do modelo.
+    (tem('crm_find_and_book_appointment')
+      ? 'Se o lead já disse DIA e HORA, use `crm_find_and_book_appointment`: ela ' +
+        'confere a disponibilidade e grava o compromisso na MESMA chamada. Ela é o caminho preferido nesse caso ' +
+        '— não consulte e pare por aí, deixando o lead sem horário marcado. Se o horário ' +
+        'pedido não estiver livre, ela devolve os horários do dia; ofereça um deles ao lead.\n'
+      : '') +
+    'Checar e marcar horário com as ferramentas de agenda está SEMPRE dentro da sua ' +
+    'autonomia quando essas ferramentas estão disponíveis para você — mesmo que as instruções da empresa ' +
+    'peçam para encaminhar decisões fora da sua autonomia a um gerente/responsável nomeado (ex.: "fale com o ' +
+    'Fernando"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
+    'cobre) — nunca para simplesmente consultar ou marcar um horário que a ferramenta resolve sozinha. NÃO ' +
+    'diga "vou confirmar/verificar com [nome de pessoa/equipe]" para justificar não ter chamado a ferramenta: ' +
+    'chame primeiro, e só fale de encaminhar a alguém se a ferramenta genuinamente não resolver.'
+  );
+}
 
 /**
  * O mesmo ensino para quem CONSULTA a agenda e não marca.
@@ -901,15 +927,19 @@ const AGENDA_TOOL_NAMES = new Set([
  *
  * Duas ferramentas MARCAM um horário novo: `crm_book_appointment` e, desde a issue
  * #831, a que consulta e marca numa chamada só (`crm_find_and_book_appointment`).
- * A regra mora aqui, e não em cada ponto de uso, porque as duas condições — o
- * bloco residente de ensino e o `podeMarcar` do gate — precisam ser a MESMA:
- * divergindo, o bloco diria "você NÃO tem ferramenta para marcar" a um agente que
- * tem, ou o gate cobraria marcação de quem só pode consultar.
+ * Ela decide QUAL bloco residente o agente recebe (`blocoResidenteDaAgenda`): o de
+ * quem marca ou o de quem só consulta — divergindo, o bloco diria "você NÃO tem
+ * ferramenta para marcar" a um agente que tem.
+ *
+ * O veto do gate NÃO lê esta função, e já leu: ele recebia um booleano
+ * `podeMarcar` e escrevia uma lista fixa de ferramentas para todo agente que
+ * marca — inclusive as que o agente não tem. Hoje ele recebe a lista exata
+ * (`ferramentasDeAgendaDoAgente`).
  *
  * ⚠️ `crm_reschedule_appointment` está FORA, de propósito. Ela grava na agenda,
  * mas só MOVE um compromisso que já existe — não cria um. Incluí-la alargava o
  * portão além do que a #831 pede: o agente que tem só a remarcação (e que antes
- * caía no bloco de só-consulta) passava a receber o AGENDA_SYSTEM_BLOCK, que
+ * caía no bloco de só-consulta) passava a receber o `agendaSystemBlock`, que
  * nomeia ferramentas de marcar que ele não tem — exatamente o modo de falha que
  * o bloco irmão existe para evitar, e que um dono aparando capacidades para caber
  * no teto de 25 tende a produzir.
@@ -934,6 +964,20 @@ export function temFerramentaDeAgenda(toolIds: readonly string[]): boolean {
 }
 
 /**
+ * As ferramentas de agenda que ESTE agente tem — a lista que o veto do
+ * `agendaStallGate` nomeia.
+ *
+ * ⚠️ É a lista, e não um booleano, porque o texto do veto é ENSINO: ele diz ao
+ * modelo o que chamar. Com `podeMarcar: boolean` o gate só sabia que o agente
+ * marca, e nomeava a família inteira — `crm_book_appointment` para quem tem só a
+ * conjunta, `crm_reschedule_appointment` para quem não remarca. Nomear ferramenta
+ * ausente faz o modelo tentar chamá-la, e a correção vira um segundo defeito.
+ */
+export function ferramentasDeAgendaDoAgente(toolIds: readonly string[]): string[] {
+  return [...AGENDA_TOOL_NAMES].filter((t) => toolIds.includes(t));
+}
+
+/**
  * QUAL bloco residente de Agenda este agente recebe — ou nenhum.
  *
  * A escolha vivia inline dentro de `executarTurnoDoAgente`, inalcançável sem o
@@ -944,7 +988,7 @@ export function temFerramentaDeAgenda(toolIds: readonly string[]): boolean {
  * exatamente onde o texto ensina, ou não, uma ferramenta que o agente não tem.
  */
 export function blocoResidenteDaAgenda(toolIds: readonly string[]): string | null {
-  if (temFerramentaDeMarcacao(toolIds)) return AGENDA_SYSTEM_BLOCK;
+  if (temFerramentaDeMarcacao(toolIds)) return agendaSystemBlock(toolIds);
   // Só consulta: o bloco de cima nomeia ferramentas de marcar que ele não tem.
   if (toolIds.includes('crm_find_free_slots')) return AGENDA_CONSULTA_SYSTEM_BLOCK;
   return null;
@@ -2008,7 +2052,7 @@ async function executarTurnoDoAgente(
   // Spec 15 §5.2: bloco das tools de caso SEMPRE residente (não invalida o prefixo
   // cacheável — mesmo espírito do índice de skills) quando a tela habilita. O bloco da
   // Agenda segue o mesmo padrão, condicionado a `crm_book_appointment` estar entre as
-  // tools publicadas — ver comentário de `AGENDA_SYSTEM_BLOCK`. `TRANSPARENCIA_SYSTEM_BLOCK`
+  // tools publicadas — ver comentário de `agendaSystemBlock`. `TRANSPARENCIA_SYSTEM_BLOCK`
   // não depende de nenhuma feature — todo agente publicado o recebe.
   const blocosResidentes = [systemWithMemory, TRANSPARENCIA_SYSTEM_BLOCK];
   if (agentConfig !== null && agentConfig.casesEnabled) blocosResidentes.push(CASES_SYSTEM_BLOCK);
@@ -2760,7 +2804,7 @@ async function executarTurnoDoAgente(
             // ferramenta de agenda nenhuma segue desarmado — vetá-lo não teria cura.
             agenda: {
               active: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
-              podeMarcar: agentConfig !== null && temFerramentaDeMarcacao(agentConfig.toolIds),
+              ferramentas: agentConfig === null ? [] : ferramentasDeAgendaDoAgente(agentConfig.toolIds),
               toolCalledThisTurn: agendaToolCalledThisTurn,
             },
             ...(deps.knobs.disclosureMode !== undefined
@@ -3507,7 +3551,7 @@ async function executarTurnoDoAgente(
             () => ({
               agenda: {
                 active: previewContext.agenda?.active ?? false,
-                podeMarcar: previewContext.agenda?.podeMarcar ?? false,
+                ferramentas: previewContext.agenda?.ferramentas ?? [],
                 toolCalledThisTurn: agendaToolCalledThisTurn,
               },
             }),
