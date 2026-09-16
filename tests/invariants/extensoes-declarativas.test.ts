@@ -750,59 +750,75 @@ describe("extensões: atualizar, desfazer a última troca e remover", () => {
   });
 });
 
-// As duas corridas usam um vínculo que JÁ EXISTE e está desativado. Criar um vínculo novo trava a
-// instalação de qualquer jeito, pela checagem da chave estrangeira (FOR KEY SHARE contra o FOR
-// UPDATE da remoção), e passava verde com o FOR SHARE do configure removido — medido na sabotagem
-// de 16/set. Reativar um vínculo existente não passa pela chave estrangeira: é o caminho em que só
-// o FOR SHARE impede um vínculo ativo numa instalação removida.
+// Corrida entre ativar numa organização e remover da instalação. Duas armadilhas de prova, as duas
+// medidas por sabotagem em 16/set:
+//  1. Criar um vínculo NOVO trava a instalação pela checagem da chave estrangeira. As provas partem
+//     de um vínculo que já existe, desativado.
+//  2. O recibo do configure também referencia a instalação, então a ativação espera a remoção de
+//     qualquer jeito. Com `lock_timeout` ela desiste nessa espera e a prova fica verde sem o FOR
+//     SHARE. O defeito é o que acontece DEPOIS da espera: sem o FOR SHARE, a ativação já leu a
+//     instalação como não removida e grava o vínculo ativo quando a remoção confirma. Por isso a
+//     primeira prova deixa a ativação esperar (confirmado em pg_stat_activity) e exige o desfecho.
 describe("extensões: corrida entre ativar numa organização e remover da instalação", () => {
-  async function duasConexoes<T>(corpo: (a: PoolClient, b: PoolClient) => Promise<T>) {
+  async function esperarBloqueio(pid: number) {
+    for (let tentativa = 0; tentativa < 200; tentativa += 1) {
+      const r = await query("select wait_event_type from pg_stat_activity where pid=$1", [pid]);
+      if (r.rows[0]?.wait_event_type === "Lock") return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error("a segunda transação não chegou a esperar a primeira");
+  }
+  async function duasConexoes<T>(corpo: (a: PoolClient, b: PoolClient, pidB: number) => Promise<T>) {
     const a = await pool.connect();
     const b = await pool.connect();
-    try { return await corpo(a, b); } finally {
+    try {
+      const pidB = (await b.query("select pg_backend_pid() pid")).rows[0].pid as number;
+      return await corpo(a, b, pidB);
+    } finally {
       await a.query("rollback").catch(() => undefined);
       await b.query("rollback").catch(() => undefined);
       a.release();
       b.release();
     }
   }
+  const desfecho = (pendente: Promise<unknown>) =>
+    pendente.then(
+      () => "concluiu",
+      (error: Error) => error.message,
+    );
 
-  it("remoção aberta segura a ativação; depois do commit a ativação recebe extension_removed", async () => {
+  it("ativação que esperou uma remoção recebe extension_removed quando a remoção confirma", async () => {
     const id = await install();
     await configure(id, 0, true, null, randomUUID(), orgB, adminB);
     await configure(id);
     await configure(id, 1, false);
-    await duasConexoes(async (a, b) => {
+    await duasConexoes(async (a, b, pidB) => {
       await a.query("begin");
       await a.query("select public.fn_extensions_remove_installation($1,$2,$3,$4)", [actor, randomUUID(), id, 1]);
-      await b.query("begin");
-      await b.query("set local lock_timeout = '700ms'");
-      await expect(b.query("select public.fn_extensions_configure($1,$2,$3,$4,$5,$6,$7)", [adminA, orgA, id, randomUUID(), 2, true, null]))
-        .rejects.toMatchObject({ code: "55P03" });
-      await b.query("rollback");
+      const ativacao = desfecho(
+        b.query("select public.fn_extensions_configure($1,$2,$3,$4,$5,$6,$7)", [adminA, orgA, id, randomUUID(), 2, true, null]),
+      );
+      await esperarBloqueio(pidB);
       await a.query("commit");
+      expect(await ativacao).toBe("extension_removed");
     });
-    await expect(configure(id, 2, true)).rejects.toThrow("extension_removed");
     expect(await vinculo(orgA, id)).toMatchObject({ enabled: false, revision: 2, deactivated_by_removal_at: null });
     expect(await ativosEmRemovidas()).toBe(0);
   });
 
-  it("ativação aberta segura a remoção; depois do commit a remoção desliga o vínculo recém-gravado", async () => {
+  it("remoção que esperou uma ativação desliga o vínculo que ela acabou de gravar", async () => {
     const id = await install();
     await configure(id);
     await configure(id, 1, false);
-    await duasConexoes(async (a, b) => {
+    await duasConexoes(async (a, b, pidB) => {
       await a.query("begin");
       await a.query("select public.fn_extensions_configure($1,$2,$3,$4,$5,$6,$7)", [adminA, orgA, id, randomUUID(), 2, true, null]);
-      await b.query("begin");
-      await b.query("set local lock_timeout = '700ms'");
-      await expect(b.query("select public.fn_extensions_remove_installation($1,$2,$3,$4)", [actor, randomUUID(), id, 1]))
-        .rejects.toMatchObject({ code: "55P03" });
-      await b.query("rollback");
+      const remocao = b.query("select public.fn_extensions_remove_installation($1,$2,$3,$4) result", [actor, randomUUID(), id, 1]);
+      const resultado = remocao.then((r) => r.rows[0].result, (error: Error) => error.message);
+      await esperarBloqueio(pidB);
       await a.query("commit");
+      expect(await resultado).toMatchObject({ result: { organizations_disabled: [orgA] } });
     });
-    const removido = await remover(id, 1);
-    expect(removido.result.organizations_disabled).toEqual([orgA]);
     expect(await vinculo(orgA, id)).toMatchObject({ enabled: false, revision: 4 });
     expect(await ativosEmRemovidas()).toBe(0);
   });
