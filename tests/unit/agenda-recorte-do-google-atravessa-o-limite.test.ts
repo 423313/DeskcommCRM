@@ -305,4 +305,23 @@ describe("a tela mostra — e o motor já recusava — o compromisso que atraves
 
     expect(leitura.blocos).toEqual([]);
   });
+
+  it("a tela e a rota leem a ocupação DESTE módulo, não de uma consulta própria", async () => {
+    // A promessa central do conserto é "a tela e a rota concordam POR
+    // CONSTRUÇÃO". Os três casos acima medem a função; nenhum deles abre os dois
+    // arquivos que a usam — devolver qualquer um dos dois à consulta inline da
+    // `main` deixaria a suíte inteira verde, com a divergência de volta.
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    // `process.cwd()` é a raiz do repo sob o vitest — o mesmo caminho que
+    // `tests/unit/tags-vocabulario.test.ts` usa para ler fonte.
+    for (const arquivo of [
+      "app/app/agenda/page.tsx",
+      "app/api/v1/agenda/agendamentos/route.ts",
+    ]) {
+      const fonte = readFileSync(join(process.cwd(), arquivo), "utf8");
+      expect(fonte, arquivo).toContain("lerOcupacaoExterna(");
+      expect(fonte, arquivo).not.toMatch(/from\(\s*"calendar_selected_external_events"/);
+    }
+  });
 });

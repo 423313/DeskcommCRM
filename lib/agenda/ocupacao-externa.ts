@@ -130,8 +130,14 @@ export async function lerOcupacaoExterna(
         // depois dele. `GradeDaAgenda` atribui cada bloco à coluna do dia pelo
         // INÍCIO — com o instante cru, o compromisso que vem de ontem cairia
         // fora de toda coluna desenhada e sumiria da tela de novo.
-        iniciaEm: maisTarde(linha.starts_at, recorte.de),
-        terminaEm: maisCedo(linha.ends_at, recorte.ate),
+        //
+        // `toISOString()` porque o limite do recorte é texto de QUEM CHAMOU: a
+        // rota aceita `2026-09-16T00:00:00-03:00` (o Zod exige `offset: true`),
+        // e devolver esse literal faria a mesma resposta misturar dois formatos
+        // de data — bloco recortado com offset, bloco inteiro no formato do
+        // PostgREST. Quem lê a lista de fora não tem como saber qual é qual.
+        iniciaEm: new Date(maisTarde(linha.starts_at, recorte.de)).toISOString(),
+        terminaEm: new Date(maisCedo(linha.ends_at, recorte.ate)).toISOString(),
       };
     }),
     erro: null,
