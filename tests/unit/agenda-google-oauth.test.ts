@@ -45,11 +45,18 @@ describe("montarUrlDeConsentimento", () => {
   it("pede acesso offline COM consentimento forçado — é o que garante refresh_token", () => {
     // Sem `offline` não vem refresh_token nenhum; sem `consent` ele some na
     // segunda conexão, e a integração morre uma hora depois.
-    const url = new URL(montarUrlDeConsentimento(APP, { state: "abc" }));
+    const bruto = montarUrlDeConsentimento(APP, { state: "abc" });
+    const url = new URL(bruto);
     expect(url.searchParams.get("access_type")).toBe("offline");
     // `prompt` é um CONJUNTO para o Google, não um valor: pinar a lista inteira
     // impede que tirar um dos dois passe despercebido (ver o cabeçalho).
     expect(url.searchParams.get("prompt")?.split(" ").sort()).toEqual(["consent", "select_account"]);
+    // Os asserts acima leem por `searchParams.get()`, que DECODIFICA antes de
+    // comparar — um espaço mal codificado no fio chegaria aqui já consertado, e
+    // nenhum gate veria. Este prende a forma que SAI: `URLSearchParams` serializa
+    // o espaço como `+`, e o endpoint de autorização do Google lê a query como
+    // form-urlencoded, onde `+` é espaço.
+    expect(bruto).toMatch(/[?&]prompt=consent(\+|%20)select_account(&|$)/);
   });
 
   it("deixa escolher OUTRA conta — a agenda pode estar num e-mail diferente do login do CRM", () => {
@@ -60,7 +67,8 @@ describe("montarUrlDeConsentimento", () => {
     const pedidos = url.searchParams.get("prompt")?.split(" ") ?? [];
 
     expect(pedidos).toContain("select_account");
-    // E a sugestão continua de pé: o seletor abre na conta certa para quem só tem uma.
+    // E a sugestão continua de pé — o que provamos é que ela SAI no pedido; como o
+    // Google a desenha dentro do seletor é dele, e ninguém daqui observou.
     expect(url.searchParams.get("login_hint")).toBe("ana@clinica.com.br");
   });
 
