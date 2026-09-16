@@ -115,6 +115,19 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "Sem `tag`, um dispatch numa branch moveria o canal. Sem o `v`, uma tag de teste o move.",
   },
 
+  // As imagens de FUNDO (#604): `deskcomm-worker` e `deskcomm-scheduler`
+  // construíam, publicavam e recebiam tag sem que job nenhum as executasse. Na
+  // #648 o resultado foi dez dias de `event_log` parado com o `/healthz` verde.
+  // Desligá-lo devolve exatamente esse buraco: a imagem publica, o canal anda,
+  // e nada prova que o laço do event_log chegou a carregar.
+  "publish-image.yml::imagens-de-fundo-sobem": {
+    condicao: null,
+    efeito:
+      "Este job prova que o worker BOOTA com o laço do event_log carregado e que o " +
+      "scheduler tem o evento no crontab. Desligá-lo (`skipped`) faz a tag existir com " +
+      "imagens de fundo que ninguém executou — o defeito da #648, de volta e em silêncio.",
+  },
+
   "publish-image.yml::imagens-ok": {
     condicao: "always()",
     efeito:
