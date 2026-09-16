@@ -556,6 +556,12 @@ export const AUDIT_ACTIONS = [
   // "Cliente pela agenda" ligada ou desligada (migration 0262). Ligar reescreve
   // etiquetas de toda a organização; metadata leva as contagens.
   "crm.cliente_pela_agenda_alterado",
+  // A etiqueta da ORGANIZAÇÃO renomeada, juntada ou excluída na tela de Tags
+  // (issue #852, fatia S4). É um código só porque a linha já carrega
+  // `metadata.acao` (renomear/juntar/excluir) e o alcance da operação (contatos,
+  // leads, conversas, regras). Três códigos para a mesma decisão deixariam o
+  // filtro do painel com três opções onde houve UMA escolha do operador.
+  "tag_vocabulary.changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
