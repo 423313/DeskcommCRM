@@ -181,7 +181,12 @@ e aí o instalador precisa perguntar por ela.
   separa medição de relato.
 - **Identidade**: `git log --format='%an <%ae>' origin/main..HEAD | sort -u` — se aparecer
   `root@…` ou um e-mail que não é da sua conta, o trabalho não aparece no seu perfil. Conserte antes
-  do push (`git config user.email`, `git commit --amend --reset-author` nos seus commits).
+  do push (`git config user.email`, `git commit --amend --reset-author` nos seus commits). É também
+  a identidade que a triagem põe como autor quando porta o seu trabalho do lado de cá.
+- **Edição por mantenedores**: com "Allow edits by maintainers" ligado (confira com
+  `gh pr view <n> --json maintainerCanModify --jq .maintainerCanModify`), a triagem pode empurrar
+  na sua branch um conserto ou o merge da `main`, avisando no PR antes. Antes de empurrar de novo,
+  `git pull --no-rebase` — nunca `--force`.
 
 O que vai parecer erro depois de abrir — e não é — e como acompanhar o CI de verdade:
 `references/depois-do-pr.md`. Os erros mais frequentes de quem contribui, com o número do PR onde

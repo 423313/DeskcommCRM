@@ -137,6 +137,14 @@ entram em silêncio para todas as instalações. Foi medido (PR #465): sete arqu
 cliente, seis deles mergeando sem um único conflito. O caminho é `git checkout -b fix/o-que-voce-conserta`
 a partir da `main` **deste** repositório, com só o seu conserto dentro.
 
+**Com "Allow edits by maintainers" ligado no seu PR, o projeto pode empurrar um conserto direto na
+branch do PR** — um ajuste mecânico, ou a `main` trazida para dentro quando há conflito. Sempre como
+commit novo: nunca `--force`, nunca rebase, e os seus commits ficam como estão. Avisamos no PR antes
+de empurrar. Quando isso acontecer, traga a branch antes de continuar (`git pull --no-rebase`) e só
+então empurre de novo; um `--force` do seu lado apagaria o que foi empurrado do lado de cá. Com a
+opção desligada, o conserto vai numa branch nossa. Nos dois caminhos, o trabalho que é seu entra com
+você como autor.
+
 **A marca da sua instalação não se troca editando código.** Não altere `DEFAULT_APP_NAME` em
 `lib/branding.ts`, nem os títulos em `app/`. O banco manda (`platform_branding`,
 `organizations.settings.branding`), `APP_NAME` no `.env` é a semente que o `install.sh` pergunta, e
