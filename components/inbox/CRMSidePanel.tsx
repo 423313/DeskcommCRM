@@ -323,6 +323,27 @@ function ondeEstaOLead(l: LeadRow): string {
   return [l.funil_nome, l.etapa_nome].filter(Boolean).join(" · ");
 }
 
+/**
+ * `line-clamp-2`, não `truncate` — e a diferença não depende de medir pixel.
+ *
+ * `truncate` corta numa linha só, e corte de texto some pela DIREITA: a metade
+ * perdida é sempre a ETAPA, que é justamente a que diz onde o negócio está.
+ * "Funil de Vendas Consultivas B2B · Proposta enviada" nesta coluna de 296px
+ * viraria "Funil de Vendas Consul…" — o operador lê o funil, que ele já sabia,
+ * e perde a etapa, que é o dado novo. A medida por ferramenta diria a partir de
+ * QUE largura isso acontece; não muda QUAL metade morre, que é o defeito.
+ *
+ * Duas linhas dobram o orçamento sem mexer no texto (mesmo uso que
+ * `Composer.tsx:259` e `MessageBubble.tsx:193` já fazem), e o `title` devolve a
+ * frase inteira no hover para o resto — com o nome do funil cortado não há
+ * outro lugar na tela onde lê-lo.
+ *
+ * ⚠️ NÃO medido: a largura em que a segunda linha também estoura, e o
+ * comportamento em tela de celular (onde não há hover). Fica para quem rodar a
+ * spec de tela com `getBoundingClientRect`.
+ */
+const CLASSES_DE_ONDE_ESTA = "line-clamp-2 text-muted-foreground";
+
 function InboxLeadEditor({
   leads,
   selecionadoId,
@@ -357,7 +378,9 @@ function InboxLeadEditor({
                   )}
                 >
                   <div className="truncate font-medium">{l.title}</div>
-                  <div className="truncate text-muted-foreground">{ondeEstaOLead(l)}</div>
+                  <div className={CLASSES_DE_ONDE_ESTA} title={ondeEstaOLead(l)}>
+                    {ondeEstaOLead(l)}
+                  </div>
                   <div className="text-muted-foreground">
                     {status(l)} · {formatMoney(l.value_cents, l.currency)}
                   </div>
@@ -370,7 +393,9 @@ function InboxLeadEditor({
       {leads.length === 1 && (
         <div data-testid="inbox-lead-unico" className="text-xs text-muted-foreground">
           <p>{ativo.title} · {status(ativo)}</p>
-          <p className="truncate">{ondeEstaOLead(ativo)}</p>
+          <p className={CLASSES_DE_ONDE_ESTA} title={ondeEstaOLead(ativo)}>
+            {ondeEstaOLead(ativo)}
+          </p>
         </div>
       )}
       <CamposDoFunil

@@ -111,6 +111,28 @@ describe("painel do inbox — leads recentes dizem funil, etapa e status traduzi
     expect((await screen.findByTestId("inbox-lead-unico")).textContent).toContain("Ganho");
   });
 
+  /**
+   * `truncate` corta numa linha e o corte some pela DIREITA — a metade perdida
+   * é sempre a ETAPA, que é o dado novo. Isto guarda o MECANISMO (a classe e o
+   * `title`), não o pixel: jsdom não faz layout, então a largura em que a
+   * segunda linha estoura continua por medir numa spec de tela.
+   */
+  it("nome longo de funil não engole a etapa: duas linhas e o inteiro no title", async () => {
+    const longo = "Funil de Vendas Consultivas B2B";
+    get.mockResolvedValue(resposta([
+      leadRow("l-1", longo, "Proposta enviada", "open"),
+      leadRow("l-2", longo, "Novo", "open"),
+    ]));
+    renderPainel();
+
+    const linha = (await screen.findByTestId("inbox-lead-l-1")).querySelector<HTMLElement>(
+      "[title]",
+    );
+    expect(linha?.title).toBe(`${longo} · Proposta enviada`);
+    expect(linha?.className).toContain("line-clamp-2");
+    expect(linha?.className).not.toContain("truncate");
+  });
+
   it("com um lead só, a linha também diz funil, etapa e status traduzido", async () => {
     get.mockResolvedValue(resposta([leadRow("l-1", "GMN Advogados", "Novo", "lost")]));
     renderPainel();
