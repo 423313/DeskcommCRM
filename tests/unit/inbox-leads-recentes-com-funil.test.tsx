@@ -77,6 +77,55 @@ describe("painel do inbox — leads recentes dizem funil, etapa e status traduzi
     expect(`${um.textContent}${dois.textContent}`).not.toMatch(/\b(open|won)\b/);
   });
 
+  /**
+   * `truncate` corta numa linha e o corte some pela DIREITA — a metade perdida
+   * é sempre a ETAPA, que é o dado novo. Isto guarda o MECANISMO (a classe e o
+   * `title`), não o pixel: jsdom não faz layout, então a largura em que a
+   * segunda linha estoura continua por medir numa spec de tela.
+   */
+  it("nome longo de funil não engole a etapa: duas linhas e o inteiro no title", async () => {
+    const longo = "Funil de Vendas Consultivas B2B";
+    get.mockResolvedValue(resposta([
+      leadRow("l-1", longo, "Proposta enviada", "open"),
+      leadRow("l-2", longo, "Novo", "open"),
+    ]));
+    renderPainel();
+
+    const linha = (await screen.findByTestId("inbox-lead-l-1")).querySelector<HTMLElement>(
+      "[title]",
+    );
+    expect(linha?.title).toBe(`${longo} · Proposta enviada`);
+    expect(linha?.className).toContain("line-clamp-2");
+    expect(linha?.className).not.toContain("truncate");
+  });
+
+  /**
+   * O desfecho NÃO sai de `crm_pipelines.vocabulary` — e a razão é o que essa
+   * coluna guarda numa instalação de verdade, não gosto. O DEFAULT dela é o de
+   * e-commerce (`won: Pago`, `lost: Cancelado`, supabase/baseline.sql), e nada
+   * no caminho normal a reescreve: o onboarding troca as ETAPAS pelo quadro do
+   * ramo (`fn_aplicar_quadro_do_onboarding` só atualiza nome e slug do funil), e
+   * `POST /api/v1/pipelines` não a preenche. Uma clínica recém-instalada tem
+   * "Consulta marcada" como etapa de ganho e "Pago" na coluna.
+   *
+   * A fixture traz o vocabulário EXATAMENTE como o banco o entregaria a essa
+   * clínica. Ler dele faria o painel dizer "Pago" sobre uma consulta.
+   */
+  it("clínica com o vocabulário que a coluna herda do e-commerce lê 'Ganho', não 'Pago'", async () => {
+    const herdado = { lead: "Cliente", deal: "Pedido", won: "Pago", lost: "Cancelado" };
+    get.mockResolvedValue(resposta([
+      { ...leadRow("l-1", "Clínica", "Consulta marcada", "won"), vocabulario: herdado, vocabulary: herdado },
+      { ...leadRow("l-2", "Clínica", "Não compareceu", "lost"), vocabulario: herdado, vocabulary: herdado },
+    ]));
+    renderPainel();
+
+    const um = await screen.findByTestId("inbox-lead-l-1");
+    const dois = screen.getByTestId("inbox-lead-l-2");
+    expect(um.textContent).toContain("Ganho");
+    expect(dois.textContent).toContain("Perdido");
+    expect(`${um.textContent}${dois.textContent}`).not.toMatch(/Pago|Cancelado/);
+  });
+
   it("com um lead só, a linha também diz funil, etapa e status traduzido", async () => {
     get.mockResolvedValue(resposta([leadRow("l-1", "GMN Advogados", "Novo", "lost")]));
     renderPainel();

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { X, Plus } from "@/lib/ui/icons";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
+import { normalizarTag, TAMANHO_MAXIMO_DA_TAG } from "@/lib/contacts/tag-normalizada";
 
 interface Props {
   contactId: string;
@@ -27,8 +28,8 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
   }
 
   function add(raw: string) {
-    const tag = raw.trim().toLowerCase().slice(0, 40);
-    if (!tag || tags.includes(tag) || tags.length >= 20) return;
+    const tag = normalizarTag(raw);
+    if (!tag || tags.some((v) => normalizarTag(v) === tag) || tags.length >= 20) return;
     apply([...tags, tag]);
     setDraft("");
   }
@@ -38,7 +39,16 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
   }
 
   // Sem sugestão cada operador digitava a sua variação da mesma tag (#852).
-  const suggestions = (vocabulary ?? []).filter((v) => !tags.includes(v)).slice(0, 8);
+  // A comparação é entre formas NORMALIZADAS: um contato que já tem "VIP"
+  // (gravado antes, pelo diálogo de contato, que não normaliza) recebia o chip
+  // "+ vip" e ficava com as duas — a duplicação que a sugestão veio impedir.
+  // E o chip MOSTRA a forma normalizada, não a que a fonte mandou: o rótulo
+  // precisa ser o que o clique grava mesmo que a lista chegue crua (a rota a
+  // normaliza hoje, mas a fonte está marcada para trocar).
+  const jaTem = new Set(tags.map(normalizarTag));
+  const suggestions = [...new Set((vocabulary ?? []).map(normalizarTag))]
+    .filter((v) => v && !jaTem.has(v))
+    .slice(0, 8);
 
   return (
     <div className="mt-2 space-y-2 rounded-md border border-border p-2">
@@ -74,7 +84,7 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
             }
           }}
           placeholder={t("Nova tag…")}
-          maxLength={40}
+          maxLength={TAMANHO_MAXIMO_DA_TAG}
           disabled={mutation.isPending || tags.length >= 20}
           className="h-7 text-xs"
           aria-label={t("Adicionar tag ao contato")}

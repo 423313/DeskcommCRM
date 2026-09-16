@@ -293,13 +293,46 @@ function SemLista({
  * Título, valor e tags já têm casa no dossiê. Quem atende descobre o dado
  * customizado (CPF, plano, endereço) aqui — e tinha de ir no Kanban gravar.
  */
-/** O banco guarda `open`/`won`/`lost`; a tela mostrava a palavra crua (#943). */
+/**
+ * O banco guarda `open`/`won`/`lost`; a tela mostrava a palavra crua (#943).
+ *
+ * ⚠️ NÃO troque "Ganho"/"Perdido" por `crm_pipelines.vocabulary` sem antes
+ * mudar o que essa coluna guarda. O DEFAULT dela é o de e-commerce (`won:
+ * Pago`, `lost: Cancelado`, supabase/baseline.sql) e nenhum caminho normal a
+ * reescreve: o onboarding troca só as ETAPAS pelo quadro do ramo
+ * (`fn_aplicar_quadro_do_onboarding` atualiza nome e slug do funil), e
+ * `POST /api/v1/pipelines` não a preenche — quem escreve é só a tela Etapas do
+ * funil, à mão. Lida daqui, ela faria uma clínica recém-instalada ver "Pago"
+ * ao lado de "Consulta marcada". Guardado em
+ * tests/unit/inbox-leads-recentes-com-funil.test.tsx.
+ */
 const STATUS_DO_LEAD: Record<string, string> = { open: "Aberto", won: "Ganho", lost: "Perdido" };
 
 /** "Funil · Etapa" — sem isto dois leads de mesmo título ficam idênticos (#943). */
 function ondeEstaOLead(l: LeadRow): string {
   return [l.funil_nome, l.etapa_nome].filter(Boolean).join(" · ");
 }
+
+/**
+ * `line-clamp-2`, não `truncate` — e a diferença não depende de medir pixel.
+ *
+ * `truncate` corta numa linha só, e corte de texto some pela DIREITA: a metade
+ * perdida é sempre a ETAPA, que é justamente a que diz onde o negócio está.
+ * "Funil de Vendas Consultivas B2B · Proposta enviada" nesta coluna de 296px
+ * viraria "Funil de Vendas Consul…" — o operador lê o funil, que ele já sabia,
+ * e perde a etapa, que é o dado novo. A medida por ferramenta diria a partir de
+ * QUE largura isso acontece; não muda QUAL metade morre, que é o defeito.
+ *
+ * Duas linhas dobram o orçamento sem mexer no texto (mesmo uso que
+ * `Composer.tsx:259` e `MessageBubble.tsx:193` já fazem), e o `title` devolve a
+ * frase inteira no hover para o resto — com o nome do funil cortado não há
+ * outro lugar na tela onde lê-lo.
+ *
+ * ⚠️ NÃO medido: a largura em que a segunda linha também estoura, e o
+ * comportamento em tela de celular (onde não há hover). Fica para quem rodar a
+ * spec de tela com `getBoundingClientRect`.
+ */
+const CLASSES_DE_ONDE_ESTA = "line-clamp-2 text-muted-foreground";
 
 function InboxLeadEditor({
   leads,
@@ -335,7 +368,9 @@ function InboxLeadEditor({
                   )}
                 >
                   <div className="truncate font-medium">{l.title}</div>
-                  <div className="truncate text-muted-foreground">{ondeEstaOLead(l)}</div>
+                  <div className={CLASSES_DE_ONDE_ESTA} title={ondeEstaOLead(l)}>
+                    {ondeEstaOLead(l)}
+                  </div>
                   <div className="text-muted-foreground">
                     {status(l)} · {formatMoney(l.value_cents, l.currency)}
                   </div>
@@ -348,7 +383,9 @@ function InboxLeadEditor({
       {leads.length === 1 && (
         <div data-testid="inbox-lead-unico" className="text-xs text-muted-foreground">
           <p>{ativo.title} · {status(ativo)}</p>
-          <p className="truncate">{ondeEstaOLead(ativo)}</p>
+          <p className={CLASSES_DE_ONDE_ESTA} title={ondeEstaOLead(ativo)}>
+            {ondeEstaOLead(ativo)}
+          </p>
         </div>
       )}
       <CamposDoFunil
@@ -599,7 +636,7 @@ export function CRMSidePanel({ conversation }: Props) {
               onClick={() => setLeadDialogOpen(true)}
             >
               <Users size={12} className="mr-1" weight="regular" aria-hidden />
-              {leadDialogOpen && defaultPipeline.isLoading ? t("Carregando…") : t("Novo lead")}
+              {leadDialogOpen && defaultPipeline.isLoading ? t("Carregando…") : t("Novo Lead")}
             </Button>
             {contactId && (
               <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
