@@ -804,6 +804,12 @@ type CategoriaDeHost =
 type EntradaDeHost = { categoria: CategoriaDeHost; motivo: string };
 
 const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
+  // ── identificador de fio: NÃO é destino de chamada nem texto de tela ──────
+  "s.whatsapp.net": {
+    categoria: "PROTOCOLO",
+    motivo:
+      "sufixo do JID do WhatsApp. Aparece em `lib/waha/resolve-contact-whatsapp-id.ts` desde antes desta régua existir, num `endsWith` que distingue `@lid`, `@c.us` e `@s.whatsapp.net` — é o protocolo do WhatsApp falando, não endereço que o produto chama nem palavra de interface. Trocar pela marca do revendedor faz o CRM deixar de reconhecer o identificador que o próprio WhatsApp manda.",
+  },
   // ── destino de chamada: o código fala com eles, sempre foi assim ──────────
   "api.openai.com": {
     categoria: "FORNECEDOR",
@@ -1062,6 +1068,13 @@ describe("catraca de host de terceiro no código que embarca", () => {
       "mi-gateway.ejemplo.com",
       "partners.tiendanube.com",
       "platform.openai.com",
+      // Decisão escrita, que é o que esta lista cobra: `s.whatsapp.net` é o
+      // sufixo do JID do WhatsApp, lido em `lib/waha/resolve-contact-whatsapp-id.ts`
+      // desde antes desta régua. Não é destino de chamada (o código fala com o
+      // WAHA, não com esse host) nem texto de tela — é o identificador que o
+      // protocolo manda. Entrou aqui porque a régua nova do #914 passou a
+      // enxergá-lo, e não porque o produto ganhou host novo.
+      "s.whatsapp.net",
       "tusitio.com",
     ]);
   });
