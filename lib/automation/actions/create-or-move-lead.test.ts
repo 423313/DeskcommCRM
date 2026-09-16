@@ -146,6 +146,21 @@ describe("create_or_move_lead — pontuação/classificação nunca bloqueia a C
  *   2. a ação seguinte da mesma regra (`assign_owner`) continuava sem lead e
  *      devolvia `skipped: missing_input`.
  */
+let ctxPublicado: ActionCtx | null = null;
+/** Mesmo contexto de gatilho de contato, guardado para inspeção depois da execução. */
+function ctxDoContatoPublicado(db: ReturnType<typeof makeDb>): ActionCtx {
+  ctxPublicado = {
+    admin: db.client as unknown as ActionCtx["admin"],
+    organizationId: ORG_ID,
+    ruleId: "rule-1",
+    ruleName: "Google Meu Negócio",
+    event: {} as ActionCtx["event"],
+    requestId: "req-1",
+    context: { contact: { id: "contato-1", name: "Fulano" } },
+  };
+  return ctxPublicado;
+}
+
 describe("create_or_move_lead — gatilho de contato (#958)", () => {
   function ctxDoContato(db: ReturnType<typeof makeDb>): ActionCtx {
     return {
@@ -207,6 +222,63 @@ describe("create_or_move_lead — gatilho de contato (#958)", () => {
     const noContexto = ctx.context.lead as { id: string; pipeline_id: string } | undefined;
     expect(noContexto?.id).toBe(db.tabelas.crm_leads[0]?.id);
     expect(noContexto?.pipeline_id).toBe(PIPE);
+  });
+});
+
+/**
+ * O que o contexto publicado PRECISA carregar — e por que não pode ser um
+ * objeto de três campos.
+ *
+ * A ação seguinte da mesma regra lê `ctx.context.lead` como "o negócio do
+ * banco": `add_tag` faz `const prev = row.tags ?? []` e grava
+ * `[...prev, ...added]`, e `call_webhook` projeta o objeto sobre
+ * LEAD_PUBLIC_FIELDS. Publicar `{ id, pipeline_id, contact_id }` faz o merge de
+ * tags virar SOBRESCRITA — o negócio perde as tags que tinha, inclusive a de
+ * anúncio (`lib/leads/nascimento-do-lead.ts`) — e faz o corpo entregue ao
+ * endpoint do cliente encolher, os dois em silêncio.
+ *
+ * Sabotagem prevista e medida: voltar `publicaNoContexto` ao objeto parcial →
+ * 2 vermelhos, os dois casos abaixo.
+ */
+describe("create_or_move_lead — o contexto publicado é a linha inteira", () => {
+  it("move: as tags do negócio sobrevivem no contexto para a ação seguinte", async () => {
+    const db = makeDb({
+      pipelines: [funilRow({ id: PIPE, name: "Funil" })],
+      stages: [ETAPA_ORIGEM, ETAPA_DESTINO],
+      leads: [
+        negocio("lead-1", "novo", { contact_id: "contato-1", status: "open", tags: ["Meta_ads"], title: "Fulano" } as Partial<
+          Parameters<typeof negocio>[2]
+        >),
+      ],
+    });
+
+    await getAction("create_or_move_lead")!.execute(ctxDoContatoPublicado(db), {
+      pipeline_id: PIPE,
+      stage_id: "triagem",
+    });
+
+    const publicado = (ctxPublicado?.context.lead ?? {}) as Record<string, unknown>;
+    expect(publicado.id).toBe("lead-1");
+    expect(publicado.tags).toEqual(["Meta_ads"]);
+    expect(publicado.title).toBe("Fulano");
+  });
+
+  it("criação: o contexto traz a linha criada, não só o id", async () => {
+    const db = makeDb({
+      pipelines: [funilRow({ id: PIPE, name: "Funil" })],
+      stages: [ETAPA_ORIGEM, ETAPA_DESTINO],
+      leads: [],
+    });
+
+    await getAction("create_or_move_lead")!.execute(ctxDoContatoPublicado(db), {
+      pipeline_id: PIPE,
+      stage_id: "novo",
+    });
+
+    const publicado = (ctxPublicado?.context.lead ?? {}) as Record<string, unknown>;
+    expect(publicado.id).toBe(db.tabelas.crm_leads[0]?.id);
+    expect(publicado.stage_id).toBe("novo");
+    expect(publicado.contact_id).toBe("contato-1");
   });
 });
 

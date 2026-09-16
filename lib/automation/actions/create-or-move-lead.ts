@@ -41,8 +41,8 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
       if (lead.pipeline_id !== pipelineId) {
         return { type: "create_or_move_lead", status: "failed", error: "cross_pipeline_move_not_allowed" };
       }
-      await moveLeadHandler(ctx.admin, handlerCtx, lead.id, { to_stage_id: stageId });
-      publicaNoContexto(ctx, lead.id, pipelineId, contactId);
+      const movido = await moveLeadHandler(ctx.admin, handlerCtx, lead.id, { to_stage_id: stageId });
+      publicaNoContexto(ctx, movido, contactId);
       return { type: "create_or_move_lead", status: "success", detail: { moved: lead.id } };
     }
     if (contact) {
@@ -53,8 +53,8 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
       // fora, pela mesma regra que recusa mover entre funis.
       const existente = await negocioAbertoDoContato(ctx, contact.id, pipelineId);
       if (existente) {
-        await moveLeadHandler(ctx.admin, handlerCtx, existente, { to_stage_id: stageId });
-        publicaNoContexto(ctx, existente, pipelineId, contact.id);
+        const movido = await moveLeadHandler(ctx.admin, handlerCtx, existente, { to_stage_id: stageId });
+        publicaNoContexto(ctx, movido, contact.id);
         return { type: "create_or_move_lead", status: "success", detail: { moved: existente } };
       }
       const created = await createLeadHandler(ctx.admin, handlerCtx, {
@@ -64,7 +64,7 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
         contact_id: contact.id,
         source: "automation",
       } as Parameters<typeof createLeadHandler>[2]);
-      publicaNoContexto(ctx, String(created.id), pipelineId, contact.id);
+      publicaNoContexto(ctx, created, contact.id);
       return { type: "create_or_move_lead", status: "success", detail: { created: String(created.id) } };
     }
     return { type: "create_or_move_lead", status: "skipped", detail: { reason: "no_lead_or_contact" } };
@@ -111,8 +111,20 @@ async function negocioAbertoDoContato(
  * condições da regra já foram avaliadas quando isto roda (`engine.ts` filtra
  * `applicable` antes do laço), então escrever aqui não muda o que casou.
  */
-function publicaNoContexto(ctx: ActionCtx, leadId: string, pipelineId: string, contactId?: string): void {
-  ctx.context.lead = { id: leadId, pipeline_id: pipelineId, contact_id: contactId ?? null };
+function publicaNoContexto(ctx: ActionCtx, row: Record<string, unknown>, contactId?: string): void {
+  // A LINHA INTEIRA, mesclada com o que já havia no contexto — nunca um objeto
+  // com três campos. `add_tag` lê `ctx.context.lead.tags` como "as tags do
+  // banco" e grava `[...prev, ...added]`: com um objeto parcial, `prev` é `[]`
+  // e o UPDATE APAGA as tags existentes do negócio, inclusive a de anúncio que
+  // `lib/leads/nascimento-do-lead.ts` grava. `call_webhook` projeta o mesmo
+  // objeto sobre LEAD_PUBLIC_FIELDS, então o corpo entregue ao endpoint do
+  // cliente encolheria em silêncio pelo mesmo motivo.
+  const anterior = (ctx.context.lead ?? {}) as Record<string, unknown>;
+  ctx.context.lead = {
+    ...anterior,
+    ...row,
+    contact_id: row.contact_id ?? contactId ?? anterior.contact_id ?? null,
+  };
 }
 
 registerAction({ type: "create_or_move_lead", execute });
