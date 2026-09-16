@@ -661,18 +661,29 @@ jobs:
         env:
           WHATSAPP_HOOK_URL: http://127.0.0.1:3001/api/whatsapp/webhook
           # A chave do WAHA tem UMA fonte: `.env.e2e`, gerado por
-          # `scripts/gerar-env-e2e.sh` e publicado no ambiente do job. Sem
-          # `WAHA_API_KEY` configurada aqui o contêiner não autentica, então o
-          # valor que o app manda (o do `.env.e2e`) é o que vale — e não há
-          # segunda fonte para divergir. Escrever a chave aqui foi reprovado pelo
-          # guard `tests/unit/e2e-workflow-honra-o-env.test.ts`: eram DOIS valores
-          # diferentes (o desta linha e o do `.env.e2e`), e o app levaria 401.
-        # Probe TCP puro — a MESMA escolha do `docker-compose.prod.yml`, cujo
-        # healthcheck do app já diz "NÃO usar /api/v1/health". Um check HTTP
-        # amarra a saúde do contêiner ao contrato de AUTENTICAÇÃO de uma versão
-        # do upstream: o `/api/health` do `:latest` (2026.8.2) responde 401 e o
-        # contêiner nunca fica healthy. Quem espera o WAHA RESPONDER é o passo
-        # "Ligar a VPS fresca", com curl e o histórico no log.
+          # `scripts/gerar-env-e2e.sh` e publicado no ambiente do job. Escrever a
+          # chave aqui foi reprovado pelo guard
+          # `tests/unit/e2e-workflow-honra-o-env.test.ts` (eram DOIS valores
+          # diferentes, e o app levava 401) — e um contêiner de SERVIÇO sobe ANTES
+          # do passo que publica o arquivo, então ele não tem como receber o valor
+          # da fonte única.
+          #
+          # Daí o `WAHA_NO_API_KEY`: sem ele o WAHA NÃO roda sem chave — ele
+          # SORTEIA uma no boot. Está no pin, em `core/auth/config.js`:
+          # `FromEnv('WAHA_API_KEY', parseBool(process.env.WAHA_NO_API_KEY), rand(), keys)`,
+          # e o `ApiKeyAuthFactory` só cai em `NoAuth` quando a chave resolve
+          # vazia. Medido no run 35100039158: com a chave sorteada, todo
+          # `X-Api-Key` que o CRM manda — o do `.env.e2e` — toma 401, e o
+          # serviço fica de pé e inútil. Com `True` a API é pública (o próprio
+          # contêiner avisa no log: "No API key detected"), e o que este job
+          # exercita é a jornada de onboarding, não o contrato de autenticação do
+          # WAHA — esse tem fonte e teste no produto.
+          WAHA_NO_API_KEY: "True"
+        # Probe TCP puro, para a saúde do CONTÊINER (liveness). Amarrar essa saúde
+        # a um endpoint amarra também ao contrato de AUTENTICAÇÃO de uma versão do
+        # upstream — o `/api/health` do `:latest` (2026.8.2) responde 401/404 e o
+        # contêiner nunca fica healthy. Quem espera o WAHA RESPONDER — com as
+        # rotas reais, e o histórico no log — é o passo "Ligar a VPS fresca".
         options: >-
           --health-cmd "node -e \"require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""
           --health-interval 10s --health-timeout 5s --health-retries 12
@@ -919,15 +930,30 @@ jobs:
           # 4. Alguns scripts leem o disco em vez do ambiente.
           cp .env.e2e .env.local
 
-          # 5. Espera o WAHA responder antes de entregar o turno para o Playwright.
+          # 5. Espera o WAHA responder DE VERDADE antes de entregar o turno para o
+          #    Playwright, e sonda a rota que o CRM usa (`/api/sessions`, com a
+          #    MESMA chave do `.env.e2e`). O passo antigo esperava
+          #    `curl -sf http://127.0.0.1:3000/api/health`: rota que NÃO EXISTE
+          #    neste pin — o health é `/health` (e exige chave); `/ping` é o único
+          #    endpoint público. Eram 404 a cada volta, 120s de espera e o job
+          #    vermelho em "WAHA não respondeu" (run 35100039158). `/ping` sozinho
+          #    diria apenas que o processo subiu, não que o CRM consegue falar com
+          #    ele.
           for _ in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:3000/api/health >/dev/null; then
-              echo "WAHA pronto"
+            ping=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ping || true)
+            sessoes=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Api-Key: $WAHA_API_KEY" \
+              "http://127.0.0.1:3000/api/sessions?all=true" || true)
+            if [ "$ping" = "200" ] && [ "$sessoes" = "200" ]; then
+              echo "WAHA pronto (/ping 200 · /api/sessions 200)"
               exit 0
             fi
             sleep 2
           done
-          echo "WAHA não respondeu em 120s"; tail -40 /tmp/duble-saas.log; exit 1
+          echo "WAHA não respondeu em 120s: /ping=$ping · /api/sessions=$sessoes"
+          echo "--- o que o contêiner do WAHA diz ---"
+          docker ps -a --filter name=waha --format '{{.Names}} {{.Status}} {{.Ports}}' || true
+          docker logs --tail 40 "$(docker ps -aq --filter name=waha | head -1)" 2>&1 || true
+          exit 1
 
       - if: matrix.parte != 4
         name: Semear credenciais de teste

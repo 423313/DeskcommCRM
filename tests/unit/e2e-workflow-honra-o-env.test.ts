@@ -153,4 +153,25 @@ describe("o workflow do e2e honra o contrato de ambiente que a suíte exige", ()
     ).toBe(false);
     expect(packageJson.scripts["e2e:build"]).toBeTruthy();
   });
+
+  it("o WAHA do CI sobe sem exigir chave — ele nasce antes de o .env.e2e existir", () => {
+    // Terceira ponta do MESMO contrato, e a que só o CI revelou: os serviços do
+    // job sobem ANTES do primeiro passo, e a chave mora no `.env.e2e`, que um
+    // passo publica — não há caminho dela até o contêiner, e a guarda acima
+    // proíbe redigitá-la no workflow. O que o run 35100039158 mostrou é que "sem
+    // `WAHA_API_KEY`" NÃO quer dizer "sem autenticação": o WAHA sorteia uma chave
+    // no boot (`core/auth/config.js` do pin: `rand()`), e aí todo `X-Api-Key` que
+    // o CRM manda — o do `.env.e2e` — toma 401. O serviço fica de pé, o passo que
+    // espera por ele passa, e o vermelho aparece longe daqui, em spec. `True` em
+    // `WAHA_NO_API_KEY` é o que faz a chave resolver vazia e o
+    // `ApiKeyAuthFactory` cair em `NoAuth`.
+    const servico = workflow.slice(
+      workflow.indexOf("      waha:"),
+      workflow.indexOf("      redis:"),
+    );
+    expect(
+      servico,
+      "sem WAHA_NO_API_KEY o contêiner do CI sorteia uma chave no boot e o CRM toma 401",
+    ).toMatch(/WAHA_NO_API_KEY\s*:\s*["']?(true|True|1)/);
+  });
 });
