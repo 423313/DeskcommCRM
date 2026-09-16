@@ -646,7 +646,13 @@ describe("applyReactivityEvent — inbound wake (waiting_reply, sem cancel_on_re
     expect(after.outcome).toBe("replied");
   });
 
-  it("cancel_on_reply=true também cancela uma espera fixa active", async () => {
+  // O nome anterior deste caso dizia "espera fixa", e o caminho testado não lê
+  // tipo de nó nenhum: `esperaAtiva` filtra por `status === 'active'`. O rótulo
+  // prometia menos do que o código faz, e quem lesse o teste procuraria uma
+  // condição de nó que não existe. A amplitude é deliberada — a chave na tela
+  // diz "cancelar se o lead responder", sem ressalva de nó —, e o caso irmão
+  // abaixo a prende de propósito.
+  it("cancel_on_reply cancela também a inscrição active, não só a waiting_reply", async () => {
     const org = nextOrgId();
     await seedOrg(org);
     const contactId = await seedContact(org);
