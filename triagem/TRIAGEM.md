@@ -299,7 +299,7 @@ o custo de errar é mandar um contribuidor consertar o que não quebrou.
 |---|---|---|---|
 | **Saturação da SUA máquina** | falhas com `Test timed out in 15000ms` / `Hook timed out in 10000ms`; nunca uma asserção | rode **os mesmos arquivos isolados**. Se ficam verdes, era carga | ignorar — e não escrever "N failed" no veredito sem esta nota |
 | **Infra do runner** | `address already in use`, `failed to bind host port`, job de 2-3 min | leia o log do PASSO, não do job. Um job que morre em 2m38s não rodou teste nenhum | `gh run rerun <id> --failed` |
-| **Run anterior ao conserto** | vermelho num PR cuja causa você acabou de consertar na `main` | compare o `head_sha` do run com o head do PR | `git merge origin/main` na branch e deixe o CI remedir |
+| **Run anterior ao conserto** | vermelho num PR cuja causa você acabou de consertar na `main` | compare o `head_sha` do run com o head do PR | `git merge origin/main` na branch do PR e deixe o CI remedir — só se ele permite edição por mantenedores, avisando no PR antes e sem `--force` (passe 8); se não permite, close+reopen (modo 18) |
 
 O erro que isto evita tem nome: **eu rodei a suíte com build, Playwright, Supabase e seis agentes
 na mesma máquina, vi 3 vermelhos, e quase os reportei como defeito de um contribuidor.** Rodados
@@ -1293,7 +1293,7 @@ df -h /System/Volumes/Data | tail -1     # confira, não presuma
 | você faz sozinho | é a palavra do mantenedor |
 |---|---|
 | liberar CI, rotular, acolher, comentar veredito | **mergear na `main`** |
-| criar worktree, rodar gate, escrever teste, sabotar | **fechar um PR** (o que entrou só em parte fecha apenas se o resto foi descartado — 12-ter) |
+| criar worktree, rodar gate, escrever teste, sabotar | **fechar um PR** (o que entrou só em parte fica aberto só se o que sobrou tem destino escrito no próprio PR; se foi descartado, fecha — 12-ter) |
 | abrir issue e PR de follow-up | **mergear o PR de release** (é ele que cria a tag) |
 | consertar CONTRIBUTING/README/docs | |
 | escrever o fragmento que falta, e conferi-lo | |
@@ -1443,8 +1443,11 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
     velha —, `gh run rerun` **não resolve**: ele reusa o payload do evento original, e o checkout
     faz `fetch` do **SHA fixo** daquele merge (`+61e359c…:refs/remotes/pull/<n>/merge`), não do ref.
     Medido no #422 em 2026-09-03. Se o workflow não tiver `workflow_dispatch` — e o `e2e.yml` não
-    tem —, o único caminho é um evento `pull_request` novo: close+reopen do PR. **Avise o
-    contribuidor antes de fazer**, porque ele recebe um e-mail de "fechado" e isso lê como rejeição.
+    tem —, o único caminho é um evento `pull_request` novo. Se o PR permite edição por mantenedores,
+    empurre `git merge origin/main` na branch dele (passe 8: aviso no PR antes, sem `--force`) — o
+    push é o evento, e ninguém recebe e-mail de "fechado". Se não permite, close+reopen do PR.
+    **Avise o contribuidor antes do close+reopen**, porque ele recebe um e-mail de "fechado" e isso
+    lê como rejeição.
 
     ⚠️ **E o close+reopen NÃO basta sozinho: o run novo nasce TRAVADO.** Medido logo em seguida, no
     mesmo #422 — reabri o PR, os quatro workflows foram criados, e os quatro nasceram em
@@ -1453,8 +1456,8 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
     **do run velho**, então a tela dizia "reprovou de novo" quando na verdade **nada tinha rodado**.
     Eu quase reabri o diagnóstico e desmenti publicamente uma explicação que estava certa.
 
-    **Depois de todo close+reopen, refaça o passe 1** — libere os runs novos e confirme pelo
-    `head_sha`, nunca pelo `gh pr checks`:
+    **Depois de todo evento novo — o push na branch ou o close+reopen —, refaça o passe 1** —
+    libere os runs novos e confirme pelo `head_sha`, nunca pelo `gh pr checks`:
 
     ```bash
     SHA=$(gh pr view <n> --json headRefOid --jq .headRefOid)
