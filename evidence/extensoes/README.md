@@ -2,7 +2,7 @@
 
 Capturas de 14/set/2026, somente dados sintéticos. Extraídas da rodada final de cinco jornadas Playwright em Chromium e inspecionadas pelo agente principal. São provas da interface experimental; não mostram um marketplace ou a jornada de extensões integrada ao CRM.
 
-O navegador iniciou as três provas reais, comparou o resultado exibido com o backend e o arquivo persistido, recarregou a tela e percorreu ambiente ausente, perda de conexão e resposta perdida depois do aceite. A revisão adicional conferiu os controles do processo e a reconciliação da solicitação. Resultados, limites e próximos passos no [PROG-020](../../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-020%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20resultados%20da%20bancada.md).
+O navegador iniciou as três provas reais, comparou o resultado exibido com o backend e o arquivo persistido, recarregou a tela e percorreu ambiente ausente, perda de conexão e resposta perdida depois do aceite. A revisão adicional conferiu os controles do processo e a reconciliação da solicitação. Resultados, limites e próximos passos no PROG-020 *(documento interno de decisão)*.
 
 ## Três resultados reais na tela
 

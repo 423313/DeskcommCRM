@@ -4,7 +4,7 @@
 
 Escopo: marco 2; pesquisa documental, sem implementação, serviços, testes ou SQL executados.
 
-Autoridade: [PROG-017](<../../../Decisão Implementações/PROG-017 — Extensões — arquitetura e contratos.md>) §§5–6, 9–11 e [PROG-018](<../../../Decisão Implementações/PROG-018 — Extensões — provas e sequência de entrega.md>) marco 2/P0-03, 04, 07, 12, 13/P1-22. AGENTS/CLAUDE lidos; números experimentais anteriores não são prova desta integração.
+Autoridade: PROG-017 *(documento interno de decisão)* §§5–6, 9–11 e PROG-018 *(documento interno de decisão)* marco 2/P0-03, 04, 07, 12, 13/P1-22. AGENTS/CLAUDE lidos; números experimentais anteriores não são prova desta integração.
 
 ## O que já existe e o que sua evidência permite afirmar
 

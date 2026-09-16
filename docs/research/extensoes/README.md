@@ -8,10 +8,10 @@ Referência de código: `25edc35b05c8d522e2bfe313863e6003f47b8f56`, obtida de `o
 
 | Documento | Conteúdo |
 |---|---|
-| [PROG-016 — Plano e andamento](../../../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-016%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20plano%20e%20andamento.md) | Contexto, achados, estado da entrega e próximos passos |
-| [PROG-017 — Arquitetura e contratos](../../../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-017%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20arquitetura%20e%20contratos.md) | Síntese das alternativas e desenho recomendado |
-| [PROG-018 — Provas e sequência de entrega](../../../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-018%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20provas%20e%20sequ%C3%AAncia%20de%20entrega.md) | Experimentos de viabilidade e jornadas planejadas em tela |
-| [DEC-004 — Publicação, incidentes e métricas](../../../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/DEC-004%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20publica%C3%A7%C3%A3o%2C%20incidentes%20e%20m%C3%A9tricas.md) | Escolhas de produto com alternativas, recomendação e espaço de resposta |
+| PROG-016 — Plano e andamento *(documento interno de decisão)* | Contexto, achados, estado da entrega e próximos passos |
+| PROG-017 — Arquitetura e contratos *(documento interno de decisão)* | Síntese das alternativas e desenho recomendado |
+| PROG-018 — Provas e sequência de entrega *(documento interno de decisão)* | Experimentos de viabilidade e jornadas planejadas em tela |
+| DEC-004 — Publicação, incidentes e métricas *(documento interno de decisão)* | Escolhas de produto com alternativas, recomendação e espaço de resposta |
 
 ## Três investigações distintas e paralelas
 
@@ -38,11 +38,11 @@ O diagrama da proposta descreve responsabilidades futuras. Ele não foi publicad
 | [06 — Estado e dados](06-bancada-estado-e-dados.md) | Compatibilidade real de tarefa antiga, RLS da fixture, desativação e anonimização |
 | [07 — Perfil de contêiner](07-perfil-comparacao-executor.md) | Imagem fixa, rodada Docker real, limites exercitados e comparação delimitada |
 
-O [runbook da bancada](../../../experiments/extensoes/README.md) permite repetir os experimentos em ambiente próprio. O [PROG-020](../../../Decis%C3%A3o%20Implementa%C3%A7%C3%B5es/PROG-020%20%E2%80%94%20Extens%C3%B5es%20%E2%80%94%20resultados%20da%20bancada.md) é a síntese para acompanhar a execução sem ler o código.
+O [runbook da bancada](../../../experiments/extensoes/README.md) permite repetir os experimentos em ambiente próprio. O PROG-020 *(documento interno de decisão)* é a síntese para acompanhar a execução sem ler o código.
 
 ## Primeira integração ao CRM
 
-A branch `feat/extensoes-declarativas-20260914` preserva a bancada e incorpora `origin/main` em `60079eb5`. O [PROG-021](<../../../Decisão Implementações/PROG-021 — Extensões — primeira integração.md>) acompanha implementação e provas do marco 2. O [contrato v1](../../specs/extensoes-declarativas-v1.md) define o pacote declarativo, admissão e jornada.
+A branch `feat/extensoes-declarativas-20260914` preserva a bancada e incorpora `origin/main` em `60079eb5`. O PROG-021 *(documento interno de decisão)* acompanha implementação e provas do marco 2. O [contrato v1](../../specs/extensoes-declarativas-v1.md) define o pacote declarativo, admissão e jornada.
 
 | Investigação | Foco desta integração |
 |---|---|

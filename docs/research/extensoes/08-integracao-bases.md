@@ -6,9 +6,9 @@
 
 ## Contratos aprovados que delimitam o reaproveitamento
 
-O [PROG-017](../../../Decisão%20Implementações/PROG-017%20—%20Extensões%20—%20arquitetura%20e%20contratos.md), §§4–6 e 12, separa catálogo central, artefato local admitido, ativação/configuração da organização e ação autorizada do ator. Catálogo tem aplicação/banco próprios; não recebe contatos/conversas nem executa na VPS. Pacote tem identidade incluindo origem/publicador, versão/digest exatos e contrato do host. Metadado obrigatório desconhecido impede ativação.
+O PROG-017 *(documento interno de decisão)*, §§4–6 e 12, separa catálogo central, artefato local admitido, ativação/configuração da organização e ação autorizada do ator. Catálogo tem aplicação/banco próprios; não recebe contatos/conversas nem executa na VPS. Pacote tem identidade incluindo origem/publicador, versão/digest exatos e contrato do host. Metadado obrigatório desconhecido impede ativação.
 
-O [PROG-018](../../../Decisão%20Implementações/PROG-018%20—%20Extensões%20—%20provas%20e%20sequência%20de%20entrega.md), marco 2, exige serviço separado, pacote realmente baixado, instalação/configuração pela tela, uso em A sem efeito em B e desativação/recuperação. O primeiro host pode exigir uma release para introduzir esses contratos; o pacote de prova deve ser publicado depois dessa imagem e instalado sem recompilá-la.
+O PROG-018 *(documento interno de decisão)*, marco 2, exige serviço separado, pacote realmente baixado, instalação/configuração pela tela, uso em A sem efeito em B e desativação/recuperação. O primeiro host pode exigir uma release para introduzir esses contratos; o pacote de prova deve ser publicado depois dessa imagem e instalado sem recompilá-la.
 
 ## Mapa de reutilização
 
