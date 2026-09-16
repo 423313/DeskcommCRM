@@ -146,10 +146,10 @@ export function NewLeadDialog({
   }
 
   const stageId = form.watch("stage_id");
-  // Pelo funil, negócio sem pessoa não tem para quem o WhatsApp falar nem com
-  // quem a automação casar — foi assim que o quadro encheu de lead órfão.
-  // Obrigatório só AQUI: a importação e as automações seguem criando sem
-  // contato, de propósito, e `createLeadSchema` continua aceitando nulo.
+  // Negócio sem pessoa não tem para quem o WhatsApp falar nem com quem a
+  // automação casar. Dizer isso na hora vale mais que travar: quem abre o card
+  // no meio da ligação e completa depois continua conseguindo, e a importação e
+  // as automações seguem criando sem contato de propósito.
   const faltaContato = !contactId && !contato;
 
   function escolherContato(escolhido: Contact | null) {
@@ -169,7 +169,16 @@ export function NewLeadDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          {!contactId && <SeletorDeContato escolhido={contato} onEscolher={escolherContato} />}
+          {!contactId && (
+            <>
+              <SeletorDeContato escolhido={contato} onEscolher={escolherContato} />
+              {faltaContato && (
+                <p className="text-xs text-muted-foreground">
+                  {t("Sem contato, este lead não recebe WhatsApp nem entra nas automações.")}
+                </p>
+              )}
+            </>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="title">{t("Título")}</Label>
@@ -255,7 +264,7 @@ export function NewLeadDialog({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={create.isPending || !stageId || faltaContato}>
+            <Button type="submit" disabled={create.isPending || !stageId}>
               {create.isPending ? "Criando…" : "Criar lead"}
             </Button>
           </DialogFooter>

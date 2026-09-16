@@ -20,10 +20,13 @@
  * Consequência prática, já medida no mesmo quadro: lead sem contato não tem
  * para quem o WhatsApp falar, e a automação não tem contato para casar.
  *
- * O contato é obrigatório NA TELA DO FUNIL, e só ali: `createLeadSchema`
- * continua aceitando `contact_id` nulo porque a importação grava o negócio sem
- * contato quando o contato falha (comentário explícito em
- * `app/api/v1/leads/import/route.ts`) e a automação de anúncio também nasce sem.
+ * O contato fica OPCIONAL, com aviso. O defeito relatado é a ausência do campo,
+ * não a permissão de criar sem ele: com o campo na tela e o título nascendo com
+ * o nome da pessoa, o caminho fácil já é o certo. Obrigar custaria um major
+ * (`exige_acao` em `lib/release/fragmento.ts:44`) e quebraria o hábito de abrir
+ * o card no meio da ligação — decisão do dono da instalação em 16/09, depois de
+ * medir os dois custos. Se o quadro continuar juntando card órfão, a trava se
+ * decide com dado.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -95,7 +98,7 @@ describe("Novo Lead pelo funil — o lead nasce com contato", () => {
     expect(criarLead.mock.calls[0]?.[0]).toMatchObject({ contact_id: MICHELLE.id });
   });
 
-  it("sem contato escolhido, o funil não deixa criar o lead", async () => {
+  it("sem contato o lead ainda nasce, mas a tela diz o que ele perde", async () => {
     const user = userEvent.setup();
     render(
       <NewLeadDialog
@@ -106,12 +109,13 @@ describe("Novo Lead pelo funil — o lead nasce com contato", () => {
       />,
     );
 
-    await user.type(await screen.findByLabelText("Título"), "Consulta trabalhista");
-    const criar = screen.getByRole("button", { name: "Criar lead" });
-    expect(criar.hasAttribute("disabled")).toBe(true);
+    expect(await screen.findByText(/não recebe WhatsApp/i)).toBeTruthy();
 
-    await user.click(criar);
-    expect(criarLead).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("Título"), "Consulta trabalhista");
+    await user.click(screen.getByRole("button", { name: "Criar lead" }));
+
+    await waitFor(() => expect(criarLead).toHaveBeenCalledTimes(1));
+    expect(criarLead.mock.calls[0]?.[0]).not.toHaveProperty("contact_id");
   });
 
   it("aberto pelo Inbox, que já sabe o contato, o seletor não aparece", async () => {
@@ -128,7 +132,7 @@ describe("Novo Lead pelo funil — o lead nasce com contato", () => {
 
     await user.type(await screen.findByLabelText("Título"), "Consulta trabalhista");
     expect(screen.queryByLabelText("Contato")).toBeNull();
-    // O contato veio na prop: exigir escolha na tela travaria o Inbox.
-    expect(screen.getByRole("button", { name: "Criar lead" }).hasAttribute("disabled")).toBe(false);
+    // O contato veio na prop; avisar que falta contato seria mentira.
+    expect(screen.queryByText(/não recebe WhatsApp/i)).toBeNull();
   });
 });

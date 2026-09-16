@@ -5596,6 +5596,9 @@ export const DICIONARIO: Traducoes = {
   "CPF (opcional)": { es: "CPF (opcional)" },
   "Criar contato": { es: "Crear contacto" },
   "Trocar contato": { es: "Cambiar contacto" },
+  "Sem contato, este lead não recebe WhatsApp nem entra nas automações.": {
+    es: "Sin contacto, este lead no recibe WhatsApp ni entra en las automatizaciones.",
+  },
   "Procure pelo nome ou telefone": { es: "Busque por nombre o teléfono" },
   "Nenhum contato com esse nome ou telefone.": {
     es: "Ningún contacto con ese nombre o teléfono.",
