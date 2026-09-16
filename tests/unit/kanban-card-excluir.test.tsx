@@ -67,7 +67,14 @@ function renderMenu() {
 beforeEach(() => {
   estado.podeMover = true;
   permissao.mockReset();
-  permissao.mockImplementation(() => estado.podeMover);
+  // A chave ENTRA na conta do dublê, e não só numa asserção. Medido na triagem:
+  // com `mockImplementation(() => estado.podeMover)` — que ignora o argumento —
+  // trocar a chave do componente por uma inexistente deixava 6 dos 7 casos
+  // VERDES; o único vermelho era o `toHaveBeenCalledWith` abaixo. Uma asserção
+  // só, num caso só, é catraca estreita para um gate que decide se uma ação
+  // DESTRUTIVA aparece. Assim, a chave errada apaga o item e todo caso que
+  // depende dele vermelha.
+  permissao.mockImplementation((chave) => chave === "pipeline.move_card" && estado.podeMover);
   abrirDossie.mockReset();
   post.mockReset();
   post.mockResolvedValue({ data: { updated_count: 1 } });
