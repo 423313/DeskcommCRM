@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# O cabeçalho é o texto do --help, logo abaixo, e não um comentário: pelo caminho que o README
-# ensina (`curl ... | bash -s -- --help`) o script chega pela entrada padrão, `$0` vale `bash` e
-# não há arquivo de onde reler um comentário — o --help saía vazio, com exit 0.
+# O cabeçalho é o texto do --help, logo abaixo, e não um comentário: pelo pipe que o README ensina
+# (`curl ... | bash`; a ajuda é `curl ... | bash -s -- --help`) o script chega pela entrada padrão,
+# `$0` vale `bash` e não há arquivo de onde reler um comentário — o --help saía vazio, com exit 0.
 ajuda() {
   cat <<'AJUDA'
 instalar-guias.sh — deixa os guias do assistente (deskcomm-instalar, deskcomm-cliente-novo,

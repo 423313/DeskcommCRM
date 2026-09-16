@@ -211,7 +211,9 @@ echo "14. --help"
 # arquivo saía vazio, com exit 0, justamente no caminho que o README ensina.
 for modo in arquivo pipe; do
   if [ "$modo" = arquivo ]; then saida="$(bash "$SCRIPT" --help 2>&1)"; code=$?
-  else saida="$(cat "$SCRIPT" | bash -s -- --help 2>&1)"; code=$?; fi
+  # Pela entrada padrão, sem `cat |`: com pipefail, o `cat` leva SIGPIPE quando o bash sai do --help
+  # antes de ler tudo, e o 141 dele mascarava o exit do script (medido num contêiner com pipe de 8 KB).
+  else saida="$(bash -s -- --help < "$SCRIPT" 2>&1)"; code=$?; fi
   checa "[ $code = 0 ]" "($modo) sai com 0"
   checa "grep -qF 'instalar-guias.sh — deixa os guias' <<<\"\$saida\"" "($modo) imprime a primeira linha do cabeçalho"
   # O recorte por número de linha já comeu o fim do cabeçalho uma vez: o aviso do Claude Code é a
