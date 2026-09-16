@@ -941,7 +941,33 @@ jobs:
             echo "NUVEMSHOP_API_BASE=http://127.0.0.1:3997"
             echo "NUVEMSHOP_CLIENT_ID=e2e-app-id"
             echo "NUVEMSHOP_CLIENT_SECRET=e2e-placeholder-nao-e-segredo"
-          } >> "$GITHUB_ENV"
+          } > /tmp/vps-fresca.env
+
+          #    ⚠️ Estes valores vão para DENTRO do `.env.e2e`, não só para o
+          #    `$GITHUB_ENV` — senão o SERVIDOR nunca os vê.
+          #
+          #    O `playwright.config.ts` injeta o `.env.e2e` em `webServer.env`, e
+          #    ali a regra medida (escrita no próprio config) é: chave nos dois
+          #    lados, vence a do `.env.e2e`. O gerador escreve
+          #    `WAHA_API_BASE_URL=…:3999` e `UPSTASH_REDIS_REST_URL=…:3998`
+          #    (portas onde nada escuta), então só anexar ao `$GITHUB_ENV` dava
+          #    3000/8079 ao processo de TESTE e 3999/3998 ao app. Medido no run
+          #    35124188017 (parte 4): o contêiner do WAHA registrou DUAS
+          #    requisições no job inteiro — a sonda deste passo e o `beforeAll`
+          #    da spec, que leem o ambiente do processo —, e nenhuma do app. No
+          #    trace, o POST de sessão do onboarding voltou 502 sem `details`
+          #    (nenhuma resposta HTTP do WAHA) e os 19 GETs de status, 502. As 6
+          #    linhas `redis incr failed … fetch failed` do app são a mesma
+          #    causa, do lado do Redis.
+          #
+          #    Trocar as linhas NO arquivo mantém a fonte única: servidor, testes,
+          #    `.env.local` (copiado logo abaixo) e `$GITHUB_ENV` leem o mesmo.
+          chaves=$(cut -d= -f1 /tmp/vps-fresca.env | paste -sd'|' -)
+          grep -vE "^(${chaves})=" .env.e2e > /tmp/env-e2e-sem-parte-4
+          cat /tmp/env-e2e-sem-parte-4 /tmp/vps-fresca.env > .env.e2e
+          cat /tmp/vps-fresca.env >> "$GITHUB_ENV"
+          echo "--- o que o app da parte 4 recebe do .env.e2e ---"
+          grep -E "^(${chaves})=" .env.e2e
 
           # 3. A cadeia de Redis, provada pelo protocolo que o produto usa: um
           #    comando Upstash REST de verdade, que só responde PONG se o
