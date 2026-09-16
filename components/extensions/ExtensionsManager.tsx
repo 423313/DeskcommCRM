@@ -331,6 +331,8 @@ export function ExtensionsManager({
 
       const liberar = marcarEmVoo(targetKey);
 
+      // `request` não lança: `requestExtensionApi` converte queda de rede e corpo ilegível em
+      // resultado. É o que permite liberar o alvo aqui, e não num `finally` sem prova.
       const result = await request(receipt.id);
       liberar();
       if (!result.ok && result.uncertain) {

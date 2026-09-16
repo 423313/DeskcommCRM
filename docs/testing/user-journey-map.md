@@ -2149,6 +2149,53 @@ remover e reinstalar são o J25, abaixo. A escrita SQL direta sob RLS pertence �
 invariantes de banco desta integração.
 
 
+## J25 — Atualizar, desfazer a última troca, remover e reinstalar uma extensão `[P0]`
+
+Spec: `tests/e2e/extensoes-versao.spec.ts`. Fixture: `criarCatalogoDeVersoes` em
+`tests/e2e/fixtures/catalogo-extensoes.ts`, que publica a MESMA identidade em 1.0.0 e 1.1.0 depois
+de encontrar `.next/BUILD_ID`, serve pelo processo HTTP real em `127.0.0.1:56331` e sabe desligar e
+religar o catálogo no meio da jornada. Evidência: `evidence/extensoes/versao/` (oito capturas e o
+catálogo daquela rodada).
+
+Estado: **passou inteira em 16/09/2026**, em 39,8 s, sobre o build `FL9GZvWqPoj8aE9XSY2E_` (do
+commit `540a76082`), na mesma rodada em que a spec de recuperação do J24 passou em 39,2 s. Foram
+seis rodadas até lá, e os defeitos da própria prova estão listados abaixo. A repetição sobre o
+build seguinte não chegou a clicar em nada: as três specs de extensões falharam na fixture com
+`Processing this request timed out` do serviço de autenticação do Supabase sintético, com a máquina
+em load 53 e 64 MB livres por causa de outras sessões — é ambiente, e a repetição segue pendente
+
+| Caso | Prioridade | Prova |
+|---|---|---|
+| Admitir o catálogo com as duas versões e instalar a 1.0.0 | P0 | O catálogo oferece "Instalar versão revisada" para a 1.0.0 e "Atualizar para 1.1.0" para a mesma identidade, nunca uma segunda instalação; banco com revisão 1 e sem anterior |
+| Ativar em A; B sem nada | P0 | Vínculo de A ativo, revisão 1; B sem vínculo; o bloco "Em todas as organizações" diz "1 organização está com esta extensão ativa." |
+| Atualizar para 1.1.0 | P0 | O diálogo diz "1 organização tem esta extensão ativa e continua com ela ativa"; banco em 1.1.0, revisão 2, com anterior; o vínculo de A segue ativo e com a mesma revisão; o guia de A mostra o card novo da 1.1.0 e o card estável |
+| Desfazer com o catálogo desligado | P0 | O processo do catálogo é encerrado antes; o diálogo nomeia a versão de destino e a contagem; banco volta à 1.0.0, revisão 3, sem nenhum download |
+| Aba antiga recusada | P0 | Outra sessão aberta antes do desfazer ainda mostra "volta para 1.0.0"; ao confirmar, recebe "A extensão mudou em outra sessão" e recarrega para "volta para 1.1.0"; o banco continua na revisão 3 |
+| Remover | P0 | O diálogo diz "1 organização com ela ativa deixa de ver os guias agora"; banco com `removed_at`, vínculo de A desligado com a marca da remoção; o guia aberto de A diz "removeu esta extensão de todas as organizações", sem "desativada nesta organização" e sem "Tentar novamente"; a gestão de A mostra "Removida"; a auditoria de A tem exatamente uma `extension.deactivated_by_removal` com `reason = installation_removed`, visível em `/app/audit` |
+| Religar o catálogo, reinstalar e reativar em A | P0 | O catálogo oferece "Reinstalar versão 1.0.0"; o diálogo diz "1 organização a usava e não volta a vê-la sozinha"; banco sem remoção e sem anterior, revisão 5, na MESMA instalação; o card de A diz "Estava ativa até ser removida… Ative de novo"; ativar apaga a marca |
+| Atualização que falha no download | P0 | Com o catálogo desligado, o recibo desta identidade fica "Atualização · Falhou" com o motivo; banco com `extension_download_failed` e a instalação intacta; um `dispatched` do atualizador do core é aceito em seguida e encerrado na hora |
+
+Defeitos da própria prova, medidos antes de mexer:
+
+- página em segundo plano não anima no Chromium sem janela: depois de abrir o guia em outra página
+  do mesmo contexto, o clique na gestão esperava "estável" para sempre;
+- gravar o trace de uma jornada longa acontecia depois do corpo e estourava os 30 s globais: o
+  contexto da aba antiga passou a fechar no próprio passo, e o arquivo tem prazo próprio;
+- com a máquina em carga 100, o aviso de 4 s saía antes de o Playwright olhar: os avisos são
+  registrados ao entrar na página e conferidos pelo texto;
+- a Atividade recente lista recibos de rodadas anteriores, e um "Atualização · Falhou" antigo
+  satisfazia o filtro antes de a falha desta rodada existir: os filtros exigem a identidade;
+- com o Supabase sintético sobrecarregado (autenticação em 504, papel em 500), a gestão caía no
+  estado "Tentar novamente" e a prova esperava uma aba que só volta com esse clique: ela agora
+  clica como uma pessoa faria, registra cada nova tentativa como anotação e desiste depois de três.
+
+Limite declarado: prova o perfil declarativo e o catálogo local de ensaio, com um só responsável
+pela instalação. Não prova duas pessoas administrando a instalação ao mesmo tempo (pedido de outro
+responsável, cancelamento cruzado); isso está nos testes de unidade da gestão e no invariante de
+banco `tests/invariants/extensoes-declarativas.test.ts`.
+
+
+
 ## Comunidade 360 — aceite integrado de 2026-09-06
 
 Produto `7f1d0f3e`, integrado à main `ca895850`: as dez specs de organizações, suporte, interface por vínculo, encerramento, Central, presença/recuperação, Calendar, Meet, autonomia assistida e roteamento passaram juntas: **22 casos em 3,7 minutos**. A execução usa build de produção `F0cVqvOg8JuwVlWss4ijk`, banco QA local e receivers HTTP controlados; não comprova OAuth externo, WhatsApp pareado ou qualidade de modelo externo.
