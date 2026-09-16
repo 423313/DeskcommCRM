@@ -66,7 +66,6 @@ export function ExtensionsManager({
   const [loading, setLoading] = useState(true);
   const [snapshotFresh, setSnapshotFresh] = useState(false);
   const [storageStatus, setStorageStatus] = useState<"checking" | "ready" | "failed">("checking");
-  const [busyTarget, setBusyTarget] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingReceipt[]>([]);
   // O aviso de "conexão caiu" é sobre UM recibo, não sobre o carregamento da tela.
   // Guardado junto do erro de carregamento, ele só sumia com uma recarga bem-sucedida
@@ -74,6 +73,24 @@ export function ExtensionsManager({
   // reconciliado. Aqui ele é derivado: aparece enquanto o recibo existe e some junto.
   const [uncertainReceiptId, setUncertainReceiptId] = useState<string | null>(null);
   const [configFeedback, setConfigFeedback] = useState<Record<string, string>>({});
+  /** Revisão da instalação que cada card mostrava na leitura anterior (ver `esquecerMensagens`). */
+  const revisoesVistas = useRef<Record<string, number>>({});
+  /**
+   * Alvos desta aba com pedido em voo. Era um indicador de alvo ÚNICO, e toda ação seguinte o
+   * sobrescrevia: cancelar um pedido apagava o "Preparando…" de outro ainda em curso e reabria
+   * o botão que o banco recusa. Uma lista comporta os pedidos simultâneos que a tela permite.
+   */
+  const [emVoo, setEmVoo] = useState<string[]>([]);
+  const ocupado = (alvo: string): boolean => emVoo.includes(alvo);
+  /** Marca o alvo e devolve quem o libera — uma ocorrência por pedido, mesmo com alvos repetidos. */
+  const marcarEmVoo = useCallback((alvo: string): (() => void) => {
+    setEmVoo((atual) => [...atual, alvo]);
+    return () =>
+      setEmVoo((atual) => {
+        const indice = atual.indexOf(alvo);
+        return indice < 0 ? atual : [...atual.slice(0, indice), ...atual.slice(indice + 1)];
+      });
+  }, []);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [catalogFile, setCatalogFile] = useState<File | null>(null);
@@ -105,6 +122,21 @@ export function ExtensionsManager({
     },
     [actorId, organizationId, syncPendingFromStorage],
   );
+
+  const esquecerMensagens = useCallback((installations: InstalledExtensionView[]) => {
+    const anteriores = revisoesVistas.current;
+    const mudaram = installations
+      .filter((item) => anteriores[item.id] !== undefined && anteriores[item.id] !== item.installation_revision)
+      .map((item) => item.id);
+    revisoesVistas.current = Object.fromEntries(
+      installations.map((item) => [item.id, item.installation_revision]),
+    );
+    if (mudaram.length > 0) {
+      setConfigFeedback((atual) =>
+        Object.fromEntries(Object.entries(atual).filter(([id]) => !mudaram.includes(id))),
+      );
+    }
+  }, []);
 
   const invalidateContext = useCallback(
     (message: string) => {
@@ -170,6 +202,10 @@ export function ExtensionsManager({
       );
       const validatedData = { ...result.data, operations: validatedOperations };
 
+      // A mensagem do card é do salvamento, não da revisão: ela sobrevive à recarga que o próprio
+      // salvamento dispara (inclusive quando outra sessão desfez uma troca no meio) e é esquecida
+      // quando a instalação muda de revisão entre duas leituras, o que é remover e reinstalar.
+      esquecerMensagens(validatedData.installations);
       setData(validatedData);
       setLoadError(null);
       setLoading(false);
@@ -188,7 +224,7 @@ export function ExtensionsManager({
       }
       return true;
     },
-    [actorId, invalidateContext, organizationId, syncPendingFromStorage, t],
+    [actorId, esquecerMensagens, invalidateContext, organizationId, syncPendingFromStorage, t],
   );
 
   useEffect(() => {
@@ -293,10 +329,10 @@ export function ExtensionsManager({
         };
       }
 
-      setBusyTarget(targetKey);
+      const liberar = marcarEmVoo(targetKey);
 
       const result = await request(receipt.id);
-      setBusyTarget(null);
+      liberar();
       if (!result.ok && result.uncertain) {
         setUncertainReceiptId(receipt.id);
         return result;
@@ -337,6 +373,7 @@ export function ExtensionsManager({
       actorId,
       carregar,
       invalidateContext,
+      marcarEmVoo,
       organizationId,
       removeStoredReceipt,
       snapshotFresh,
@@ -608,7 +645,7 @@ export function ExtensionsManager({
 
   const verifyOperation = useCallback(
     async (operation: ExtensionOperationView) => {
-      setBusyTarget(`operation:${operation.id}`);
+      const liberar = marcarEmVoo(`operation:${operation.id}`);
       let result = await requestExtensionApi<unknown>(
         `/api/v1/extensions/operations/${encodeURIComponent(operation.id)}`,
         { headers: { [EXPECTED_ORGANIZATION_HEADER]: organizationId } },
@@ -621,7 +658,7 @@ export function ExtensionsManager({
           })
         : null;
       if (result.ok && !readReceipt) {
-        setBusyTarget(null);
+        liberar();
         invalidateContext(
           "O servidor devolveu um recibo sem o contexto esperado. Recarregue a página antes de continuar.",
         );
@@ -651,7 +688,7 @@ export function ExtensionsManager({
           }),
         });
       }
-      setBusyTarget(null);
+      liberar();
       if (!result.ok) {
         if (result.error.code === "extension_context_changed") {
           invalidateContext(result.error.message);
@@ -683,17 +720,17 @@ export function ExtensionsManager({
       }
       await carregar(true);
     },
-    [carregar, invalidateContext, organizationId, t],
+    [carregar, invalidateContext, marcarEmVoo, organizationId, t],
   );
 
   const verifyLocalReceipt = useCallback(
     async (receipt: PendingReceipt) => {
-      setBusyTarget(`receipt:${receipt.id}`);
+      const liberar = marcarEmVoo(`receipt:${receipt.id}`);
       const result = await requestExtensionApi<unknown>(
         `/api/v1/extensions/operations/${encodeURIComponent(receipt.id)}`,
         { headers: { [EXPECTED_ORGANIZATION_HEADER]: organizationId } },
       );
-      setBusyTarget(null);
+      liberar();
       if (!result.ok) {
         if (result.error.code === "extension_context_changed") {
           invalidateContext(result.error.message);
@@ -722,13 +759,12 @@ export function ExtensionsManager({
       removeStoredReceipt(receipt.id);
       await carregar(true);
     },
-    [carregar, invalidateContext, organizationId, removeStoredReceipt, t],
+    [carregar, invalidateContext, marcarEmVoo, organizationId, removeStoredReceipt, t],
   );
 
   const cancelOperation = useCallback(
     async (operation: ExtensionOperationView) => {
-      const target = `cancel:${operation.id}`;
-      setBusyTarget(target);
+      const liberar = marcarEmVoo(`cancel:${operation.id}`);
       const result = await requestExtensionApi<unknown>(
         `/api/v1/extensions/operations/${encodeURIComponent(operation.id)}/cancel`,
         {
@@ -739,7 +775,7 @@ export function ExtensionsManager({
           },
         },
       );
-      setBusyTarget(null);
+      liberar();
       if (!result.ok) {
         if (result.error.code === "extension_context_changed") {
           invalidateContext(result.error.message);
@@ -787,16 +823,17 @@ export function ExtensionsManager({
       }
       await carregar(true);
     },
-    [carregar, invalidateContext, organizationId, t],
+    [carregar, invalidateContext, marcarEmVoo, organizationId, t],
   );
 
   /**
-   * Há preparação desta identidade: um recibo `preparing` na lista OU o pedido desta aba ainda em
-   * curso (o download leva até 15 s, e nesse intervalo a lista ainda não traz o recibo). O banco
-   * recusa desfazer, remover e outra preparação da mesma identidade, então a tela não oferece.
+   * Há preparação desta identidade: um recibo `preparing` na lista OU um pedido desta aba ainda em
+   * voo (o download leva até 15 s, e nesse intervalo a lista ainda não traz o recibo). A conta é
+   * pelos pedidos em voo, e não pelo indicador de ocupado, que guarda um alvo só: uma segunda ação
+   * na mesma aba apagava o indicador e reabria as ações que o banco recusa.
    */
   const preparando = (catalogId: string, publisher: string, name: string): boolean =>
-    Boolean(busyTarget?.startsWith(`install:${catalogId}:${publisher}:${name}:`)) ||
+    emVoo.some((alvo) => alvo.startsWith(`install:${catalogId}:${publisher}:${name}:`)) ||
     (data?.operations ?? []).some(
       (operation) =>
         operation.status === "preparing" &&
@@ -934,10 +971,10 @@ export function ExtensionsManager({
                       variant="outline"
                       size="sm"
                       data-testid={`extension-local-receipt-verify-${receipt.id}`}
-                      disabled={busyTarget === `receipt:${receipt.id}`}
+                      disabled={ocupado(`receipt:${receipt.id}`)}
                       onClick={() => void verifyLocalReceipt(receipt)}
                     >
-                      {busyTarget === `receipt:${receipt.id}` ? (
+                      {ocupado(`receipt:${receipt.id}`) ? (
                         <CircleNotch className="animate-spin" aria-hidden />
                       ) : (
                         <ArrowsClockwise aria-hidden />
@@ -961,7 +998,7 @@ export function ExtensionsManager({
               file={catalogFile}
               onFile={selectCatalogFile}
               onSubmit={() => void admitCatalog()}
-              busy={busyTarget?.startsWith("catalog:") ?? false}
+              busy={emVoo.some((alvo) => alvo.startsWith("catalog:"))}
               disabled={!mutationsReady}
               error={catalogError}
               blockedReason={mutationBlockedReason}
@@ -992,21 +1029,20 @@ export function ExtensionsManager({
                       actionsDisabled={!mutationsReady}
                       manageBlockedReason={data.can_manage ? mutationBlockedReason : undefined}
                       supportMode={supportMode}
-                      busy={busyTarget?.startsWith(`configure:${extension.id}:`) ?? false}
+                      busy={emVoo.some((alvo) => alvo.startsWith(`configure:${extension.id}:`))}
                       // A mensagem é da revisão da instalação em que foi dada: remover e reinstalar
                       // mantêm o id e sobem a revisão, e a frase antiga não volta sobre o card novo.
-                      feedback={configFeedback[`${extension.id}:${extension.installation_revision}`] ?? null}
+                      feedback={configFeedback[extension.id] ?? null}
                       onConfigure={async (alvo, enabled, configuration) => {
-                        const chave = `${alvo.id}:${alvo.installation_revision}`;
-                        setConfigFeedback(({ [chave]: _, ...resto }) => resto);
+                        setConfigFeedback(({ [alvo.id]: _, ...resto }) => resto);
                         const { message } = await configure(alvo, enabled, configuration);
-                        setConfigFeedback((atual) => ({ ...atual, [chave]: message }));
+                        setConfigFeedback((atual) => ({ ...atual, [alvo.id]: message }));
                       }}
                       canInstall={data.can_install}
                       platformBusyAction={
-                        busyTarget === `revert:${extension.id}:${extension.installation_revision}`
+                        ocupado(`revert:${extension.id}:${extension.installation_revision}`)
                           ? "revert"
-                          : busyTarget === `removal:${extension.id}:${extension.installation_revision}`
+                          : ocupado(`removal:${extension.id}:${extension.installation_revision}`)
                             ? "remove"
                             : null
                       }
@@ -1059,9 +1095,9 @@ export function ExtensionsManager({
                         actionsDisabled={!mutationsReady}
                         blockedReason={data.can_install ? mutationBlockedReason : undefined}
                         identity={identity}
-                        busy={busyTarget === target}
+                        busy={ocupado(target)}
                         preparationInProgress={
-                          busyTarget !== target && preparando(catalog.id, entry.publisher, entry.name)
+                          !emVoo.includes(target) && preparando(catalog.id, entry.publisher, entry.name)
                         }
                         onInstall={(expectedRevision) =>
                           void install(catalog.id, entry, expectedRevision)
@@ -1096,13 +1132,15 @@ export function ExtensionsManager({
                   operation.catalog_id &&
                     operation.publisher &&
                     operation.name &&
-                    busyTarget?.startsWith(
-                      `install:${operation.catalog_id}:${operation.publisher}:${operation.name}:`,
+                    emVoo.some((alvo) =>
+                      alvo.startsWith(
+                        `install:${operation.catalog_id}:${operation.publisher}:${operation.name}:`,
+                      ),
                     ),
                 )
               }
               operations={data.operations}
-              busyTarget={busyTarget}
+              ocupado={ocupado}
               actionsDisabled={!mutationsReady}
               onVerify={verifyOperation}
               onCancel={cancelOperation}

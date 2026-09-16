@@ -450,6 +450,9 @@ export function CatalogExtensionCard({
             <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
             <AlertDialogAction
               data-testid={`extension-install-confirm-${identidade}`}
+              // Um diálogo aberto antes de a preparação aparecer não pode confirmar o que o banco
+              // recusa: a recarga de 3 s traz o recibo e o botão fecha a porta.
+              disabled={busy || actionsDisabled || preparationInProgress}
               onClick={() => onInstall(expectedRevision)}
             >
               {installed ? (upgrade ? t("Atualizar") : t("Trocar")) : t("Reinstalar")}

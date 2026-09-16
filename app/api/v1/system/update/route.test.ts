@@ -47,6 +47,19 @@ it("explica a preparação de extensão que bloqueia a atualização sem despach
   expect(mocks.audit).not.toHaveBeenCalled();
 });
 
+it("a recusa nomeia as duas saídas da preparação: quem pediu retoma, qualquer responsável cancela", async () => {
+  // O mesmo par de saídas que a gestão de extensões oferece (`SQL_ERRORS`): uma recusa que só
+  // dissesse "há uma extensão em preparação" deixaria quem opera a VPS sem o que fazer.
+  mocks.insertError = { code: "P0001", message: "extension_preparation_in_progress" };
+  const response = await POST(
+    new NextRequest("http://localhost/api/v1/system/update", { method: "POST" }),
+  );
+  const { error } = await response.json();
+  expect(error.message).toContain("Atividade recente");
+  expect(error.message).toContain("quem pediu pode retomar o pedido");
+  expect(error.message).toContain("qualquer responsável pela instalação pode cancelá-lo");
+});
+
 it("não disfarça falha de infraestrutura como conflito de extensão", async () => {
   mocks.insertError = { code: "08006", message: "connection failed" };
   const response = await POST(

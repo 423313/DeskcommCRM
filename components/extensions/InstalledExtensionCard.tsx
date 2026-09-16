@@ -475,6 +475,7 @@ function PlatformBlock({
             <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
             <AlertDialogAction
               data-testid={`extension-revert-confirm-${extension.id}`}
+              disabled={blocked}
               onClick={() => void onRevert(extension)}
             >
               {t("Desfazer a troca")}
@@ -505,6 +506,7 @@ function PlatformBlock({
             <AlertDialogAction
               data-testid={`extension-remove-confirm-${extension.id}`}
               className={buttonVariants({ variant: "destructive" })}
+              disabled={blocked}
               onClick={() => void onRemove(extension)}
             >
               {t("Remover de todas")}

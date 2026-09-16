@@ -57,7 +57,7 @@ export function ExtensionOperations({
   actorId,
   installBusy,
   operations,
-  busyTarget,
+  ocupado,
   actionsDisabled,
   onVerify,
   onCancel,
@@ -67,7 +67,8 @@ export function ExtensionOperations({
   /** O pedido desta aba para a mesma identidade ainda está em curso: retomar dispararia um segundo download. */
   installBusy: (operation: ExtensionOperationView) => boolean;
   operations: ExtensionOperationView[];
-  busyTarget: string | null;
+  /** Este alvo tem pedido desta aba em voo (ver `emVoo` na gestão). */
+  ocupado: (alvo: string) => boolean;
   actionsDisabled: boolean;
   onVerify: (operation: ExtensionOperationView) => Promise<void>;
   onCancel: (operation: ExtensionOperationView) => Promise<void>;
@@ -140,7 +141,7 @@ export function ExtensionOperations({
                       size="sm"
                       disabled={
                         actionsDisabled ||
-                        busyTarget === `operation:${operation.id}` ||
+                        ocupado(`operation:${operation.id}`) ||
                         installBusy(operation)
                       }
                       onClick={() => void onVerify(operation)}
@@ -157,7 +158,7 @@ export function ExtensionOperations({
                       data-testid={`extension-operation-cancel-${operation.id}`}
                       variant="ghost"
                       size="sm"
-                      disabled={actionsDisabled || busyTarget === `cancel:${operation.id}`}
+                      disabled={actionsDisabled || ocupado(`cancel:${operation.id}`)}
                       onClick={() => void onCancel(operation)}
                     >
                       <X aria-hidden />

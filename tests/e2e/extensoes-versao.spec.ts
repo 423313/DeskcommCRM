@@ -79,9 +79,32 @@ async function trocarOrganizacao(page: Page, organizationId: string): Promise<vo
   await novoDocumento;
 }
 
+/**
+ * Espera a gestão carregar a lista. Com o Supabase sintético sobrecarregado (autenticação em 504,
+ * checagem de papel em 500), a leitura falha e a tela mostra "Tentar novamente"; a prova ficava
+ * esperando uma aba que só volta com esse clique (medido: 7 min parada). Ela clica como uma pessoa
+ * faria, registra cada nova tentativa como anotação no relatório, e desiste depois de três.
+ */
+async function esperarGestao(page: Page): Promise<void> {
+  const abas = page.getByRole("tablist", { name: "Seções de extensões" });
+  const indisponivel = page.getByTestId("extensions-unavailable");
+  for (let tentativa = 0; tentativa <= 3; tentativa += 1) {
+    await expect(abas.or(indisponivel)).toBeVisible({ timeout: 60_000 });
+    if (await abas.isVisible()) return;
+    if (tentativa === 3) break;
+    test.info().annotations.push({
+      type: "recarga-pela-tela",
+      description: `a gestão não carregou (tentativa ${tentativa + 1}): ${await indisponivel.innerText()}`,
+    });
+    await indisponivel.getByRole("button", { name: "Tentar novamente" }).click();
+  }
+  throw new Error("A gestão de extensões não carregou depois de três tentativas pela tela.");
+}
+
 async function gestao(page: Page, aba: "Instaladas" | "Catálogo"): Promise<void> {
   await page.goto("/app/extensions");
   await expect(page.getByTestId("extensions-manager")).toBeVisible({ timeout: 30_000 });
+  await esperarGestao(page);
   await page.getByRole("tab", { name: aba }).click();
 }
 
@@ -145,6 +168,7 @@ test("atualiza, desfaz com o catálogo fora do ar, remove e reinstala sem decidi
     await page.goto("/app/extensions");
     await trocarOrganizacao(page, atores!.organizacaoA);
     await page.goto("/app/extensions");
+    await esperarGestao(page);
     await expect(page.getByTestId("extension-catalog-admission")).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("extension-catalog-file").setInputFiles(catalogo!.catalogo);
     await page.getByTestId("extension-catalog-submit").click();
