@@ -477,12 +477,15 @@ export function ExtensionsManager({
         return;
       }
       if (result.data.status === "cancelled") {
-        // Outro responsável cancelou durante o download: a rota responde 200 com o recibo
-        // cancelado, e isso não é sucesso.
+        // Cancelado durante o download, por outro responsável ou por uma revisão nova do catálogo:
+        // a rota responde 200 com o recibo cancelado, e isso não é sucesso. O motivo, quando existe
+        // (catálogo readmitido), diz o próximo passo.
         toast.info(
-          result.data.kind === "update"
-            ? t("O pedido foi cancelado antes de concluir. A versão instalada continua a mesma.")
-            : t("O pedido foi cancelado antes de concluir. Nada foi instalado."),
+          result.data.error_message
+            ? t(result.data.error_message)
+            : result.data.kind === "update"
+              ? t("O pedido foi cancelado antes de concluir. A versão instalada continua a mesma.")
+              : t("O pedido foi cancelado antes de concluir. Nada foi instalado."),
         );
         return;
       }
@@ -787,6 +790,20 @@ export function ExtensionsManager({
     [carregar, invalidateContext, organizationId, t],
   );
 
+  /**
+   * Há preparação desta identidade: um recibo `preparing` na lista OU o pedido desta aba ainda em
+   * curso (o download leva até 15 s, e nesse intervalo a lista ainda não traz o recibo). O banco
+   * recusa desfazer, remover e outra preparação da mesma identidade, então a tela não oferece.
+   */
+  const preparando = (catalogId: string, publisher: string, name: string): boolean =>
+    Boolean(busyTarget?.startsWith(`install:${catalogId}:${publisher}:${name}:`)) ||
+    (data?.operations ?? []).some(
+      (operation) =>
+        operation.status === "preparing" &&
+        operation.catalog_id === catalogId &&
+        operation.publisher === publisher &&
+        operation.name === name,
+    );
   const installed = data?.installations ?? [];
   const catalogEntries = useMemo(
     () =>
@@ -976,11 +993,14 @@ export function ExtensionsManager({
                       manageBlockedReason={data.can_manage ? mutationBlockedReason : undefined}
                       supportMode={supportMode}
                       busy={busyTarget?.startsWith(`configure:${extension.id}:`) ?? false}
-                      feedback={configFeedback[extension.id] ?? null}
+                      // A mensagem é da revisão da instalação em que foi dada: remover e reinstalar
+                      // mantêm o id e sobem a revisão, e a frase antiga não volta sobre o card novo.
+                      feedback={configFeedback[`${extension.id}:${extension.installation_revision}`] ?? null}
                       onConfigure={async (alvo, enabled, configuration) => {
-                        setConfigFeedback(({ [alvo.id]: _, ...resto }) => resto);
+                        const chave = `${alvo.id}:${alvo.installation_revision}`;
+                        setConfigFeedback(({ [chave]: _, ...resto }) => resto);
                         const { message } = await configure(alvo, enabled, configuration);
-                        setConfigFeedback((atual) => ({ ...atual, [alvo.id]: message }));
+                        setConfigFeedback((atual) => ({ ...atual, [chave]: message }));
                       }}
                       canInstall={data.can_install}
                       platformBusyAction={
@@ -990,12 +1010,10 @@ export function ExtensionsManager({
                             ? "remove"
                             : null
                       }
-                      preparationInProgress={data.operations.some(
-                        (operation) =>
-                          operation.status === "preparing" &&
-                          operation.catalog_id === extension.catalog_id &&
-                          operation.publisher === extension.publisher &&
-                          operation.name === extension.name,
+                      preparationInProgress={preparando(
+                        extension.catalog_id,
+                        extension.publisher,
+                        extension.name,
                       )}
                       platformBlockedReason={data.can_install ? mutationBlockedReason : undefined}
                       onRevert={(alvo) => changeInstallation(alvo, "revert")}
@@ -1042,6 +1060,9 @@ export function ExtensionsManager({
                         blockedReason={data.can_install ? mutationBlockedReason : undefined}
                         identity={identity}
                         busy={busyTarget === target}
+                        preparationInProgress={
+                          busyTarget !== target && preparando(catalog.id, entry.publisher, entry.name)
+                        }
                         onInstall={(expectedRevision) =>
                           void install(catalog.id, entry, expectedRevision)
                         }
@@ -1070,6 +1091,16 @@ export function ExtensionsManager({
           {data.operations.length > 0 ? (
             <ExtensionOperations
               actorId={actorId}
+              installBusy={(operation) =>
+                Boolean(
+                  operation.catalog_id &&
+                    operation.publisher &&
+                    operation.name &&
+                    busyTarget?.startsWith(
+                      `install:${operation.catalog_id}:${operation.publisher}:${operation.name}:`,
+                    ),
+                )
+              }
               operations={data.operations}
               busyTarget={busyTarget}
               actionsDisabled={!mutationsReady}

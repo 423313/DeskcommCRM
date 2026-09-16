@@ -55,6 +55,7 @@ function operationSubject(operation: ExtensionOperationView, t: (texto: string) 
 
 export function ExtensionOperations({
   actorId,
+  installBusy,
   operations,
   busyTarget,
   actionsDisabled,
@@ -63,6 +64,8 @@ export function ExtensionOperations({
 }: {
   /** Quem está vendo. Só o autor do pedido retoma uma preparação; qualquer responsável cancela. */
   actorId: string;
+  /** O pedido desta aba para a mesma identidade ainda está em curso: retomar dispararia um segundo download. */
+  installBusy: (operation: ExtensionOperationView) => boolean;
   operations: ExtensionOperationView[];
   busyTarget: string | null;
   actionsDisabled: boolean;
@@ -135,7 +138,11 @@ export function ExtensionOperations({
                       data-testid={`extension-operation-verify-${operation.id}`}
                       variant="outline"
                       size="sm"
-                      disabled={actionsDisabled || busyTarget === `operation:${operation.id}`}
+                      disabled={
+                        actionsDisabled ||
+                        busyTarget === `operation:${operation.id}` ||
+                        installBusy(operation)
+                      }
                       onClick={() => void onVerify(operation)}
                     >
                       <ArrowsClockwise aria-hidden />

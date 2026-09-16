@@ -18,14 +18,18 @@ function fakeClient(tables: Record<string, Row[]>, rpcs: Record<string, (args: R
       let rows = [...(tables[table] ?? [])];
       const builder = {
         select: () => builder,
-        // Só a forma que o serviço usa: `coluna.eq.valor,coluna.is.null`.
+        // Só as formas que o serviço usa: `coluna.eq.valor,coluna.is.null` e
+        // `and(a.eq.x,b.eq.y),and(...)`.
         or: (filter: string) => {
-          const clauses = filter.split(",").map((clause) => clause.split("."));
-          rows = rows.filter((row) =>
-            clauses.some(([column, op, value]) =>
-              op === "is" ? (row[column!] ?? null) === null : row[column!] === value,
-            ),
-          );
+          const casa = (row: Row, clause: string) => {
+            const [column, op, ...rest] = clause.split(".");
+            const value = rest.join(".");
+            return op === "is" ? (row[column!] ?? null) === null : row[column!] === value;
+          };
+          const grupos = filter.startsWith("and(")
+            ? filter.slice(4, -1).split("),and(").map((grupo) => grupo.split(","))
+            : filter.split(",").map((clause) => [clause]);
+          rows = rows.filter((row) => grupos.some((grupo) => grupo.every((clause) => casa(row, clause))));
           return builder;
         },
         order: () => builder,
@@ -101,6 +105,7 @@ import {
   listExtensions,
   readExtensionOperation,
   removeExtension,
+  revertExtension,
 } from "./service";
 
 const ORG_A = randomUUID();
@@ -356,6 +361,41 @@ describe("listExtensions: removidas e conferência da plataforma", () => {
     expect(view.installations.filter((item) => item.removed_at === null)).toHaveLength(10);
   });
 
+  it("duas versões da mesma identidade em lotes diferentes não duplicam a removida", async () => {
+    // 20 identidades com duas versões cada: 40 entradas, todas as 1.0.0 antes das 1.1.0. A
+    // identidade removida tem a 1.0.0 na posição 7 e a 1.1.0 na 27: se o lote fosse por entrada
+    // (16), as duas versões cairiam em lotes diferentes e a removida sairia duas vezes.
+    const entradas = ["1.0.0", "1.1.0"].flatMap((version) =>
+      Array.from({ length: 20 }, (_, index) => index).map((index) => {
+        const item = artifact(`dupla-${index}`, version);
+        const manifesto = item.manifest as Record<string, unknown>;
+        return {
+          publisher: manifesto.publisher,
+          name: manifesto.name,
+          version,
+          license: manifesto.license,
+          host_api: manifesto.host_api,
+          display: manifesto.display,
+          permissions: manifesto.permissions,
+          sha256: item.sha256,
+          byte_length: item.byte_length,
+        };
+      }),
+    );
+    const removida = installationRow(artifact("dupla-7"), { revision: 3, removed_at: "2026-09-10T10:00:00.000Z" });
+    const admin = fakeClient({
+      extension_catalogs: [{ ...catalogRow, snapshot: { ...catalogRow.snapshot, entries: entradas } }],
+      extension_artifacts: [],
+      extension_installations: [removida],
+      extension_operations: [],
+    });
+    mocks.admin = admin;
+
+    const view = await listExtensions(USER, ORG);
+
+    expect(view.removed_installations.map((item) => item.id)).toEqual([removida.id]);
+  });
+
   it("falha ao conferir a plataforma é erro, e não a gestão de um membro comum", async () => {
     mocks.admin = fakeClient({ extension_catalogs: [catalogRow] });
     mocks.platform.mockResolvedValue({ ok: false, response: new Response(null, { status: 503 }) });
@@ -417,6 +457,34 @@ describe("auditoria só quando a chamada fez a transição", () => {
     await removeExtension(ACTOR, randomUUID(), installation, { expected_installation_revision: 3 });
     expect(mocks.audit).not.toHaveBeenCalled();
     expect(mocks.auditForOrganizations).not.toHaveBeenCalled();
+  });
+
+  it("desfazer projeta a contagem de organizações ativas no recibo e na auditoria, inclusive zero", async () => {
+    const installation = randomUUID();
+    for (const ativas of [3, 0]) {
+      mocks.audit.mockReset();
+      mocks.admin = fakeClient({}, {
+        fn_extensions_revert_install: () => ({
+          data: {
+            ...operationRow({
+              kind: "revert",
+              installation_id: installation,
+              result: { from_revision: 2, from_version: "1.1.0", to_version: "1.0.0", organizations_active: ativas },
+            }),
+            applied_now: true,
+          },
+          error: null,
+        }),
+      });
+      const recibo = await revertExtension(ACTOR, randomUUID(), installation, { expected_installation_revision: 2 });
+      expect(recibo).toMatchObject({ kind: "revert", organizations_affected: ativas, to_version: "1.0.0" });
+      expect(mocks.audit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "extension.reverted",
+          metadata: expect.objectContaining({ organizations_active: ativas }),
+        }),
+      );
+    }
   });
 
   it("configurar repetido com a mesma chave não grava uma segunda linha", async () => {

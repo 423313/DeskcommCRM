@@ -146,7 +146,7 @@ determinar a operação de todas as instalações.
 | Núcleo | Operação comum ou garantia compartilhada: identidade, autorização, isolamento, auditoria, contratos e cadeia de envio. Correções de comportamento já entregue continuam no componente responsável. |
 | Extensão | Jornada adicional, aparência, integração ou especialização com configuração, dados e manutenção próprios, cuja ausência não compromete a operação comum. |
 | Ambos | Um ponto genérico necessário no núcleo e uma extensão que o consome. Declare o consumidor real, o contrato e a prova dos dois lados. |
-| Infraestrutura/documentação | Mudança que não altera o que uma organização faz com o produto: build, CI, ferramenta interna, documentação. Correção de comportamento fica no destino do componente que corrige. Indique a superfície que ela mantém. |
+| Infraestrutura/documentação | Mudança em build, CI, kit de instalação, ferramenta interna ou documentação, inclusive a correção de um comportamento desses componentes (um `update.sh` que falhava é infraestrutura). Correção de comportamento do produto fica no destino do componente que corrige: núcleo ou extensão. Indique a superfície que ela mantém. |
 
 Ser útil a vários setores não obriga um recurso a ficar ligado para todos. Também não basta
 chamar uma pasta de plugin: um candidato precisa de caminho previsto de instalação, permissões,

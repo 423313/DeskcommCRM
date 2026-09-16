@@ -259,6 +259,7 @@ export function CatalogExtensionCard({
   identity,
   blockedReason,
   busy,
+  preparationInProgress = false,
   onInstall,
 }: {
   entry: CatalogEntry;
@@ -268,6 +269,8 @@ export function CatalogExtensionCard({
   identity: CatalogIdentityState;
   blockedReason?: string;
   busy: boolean;
+  /** Há preparação desta identidade em curso (de outra pessoa, ou um pedido anterior desta aba). */
+  preparationInProgress?: boolean;
   /** Recebe a revisão da instalação que esta tela exibiu (`null` quando não havia linha). */
   onInstall: (expectedInstallationRevision: number | null) => void;
 }) {
@@ -361,7 +364,7 @@ export function CatalogExtensionCard({
             <Button
               data-testid={`extension-install-${identidade}`}
               className="w-full sm:w-auto"
-              disabled={busy || actionsDisabled}
+              disabled={busy || actionsDisabled || preparationInProgress}
               onClick={() => (confirmable ? setConfirming(true) : onInstall(expectedRevision))}
             >
               {busy ? (
@@ -371,6 +374,16 @@ export function CatalogExtensionCard({
               )}
               {busy ? t("Preparando…") : actionLabel}
             </Button>
+            {preparationInProgress ? (
+              <p
+                className="mt-2 text-xs text-muted-foreground"
+                data-testid={`extension-catalog-preparing-${identidade}`}
+              >
+                {t(
+                  "Há uma preparação desta extensão em andamento. Acompanhe ou cancele o pedido em Atividade recente.",
+                )}
+              </p>
+            ) : null}
             {blockedReason ? (
               <p className="mt-2 text-xs text-muted-foreground">{blockedReason}</p>
             ) : null}

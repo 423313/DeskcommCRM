@@ -780,7 +780,43 @@ describe("ExtensionsManager", () => {
     // Recarregou: a gestão continua de pé com a lista nova, e não virou "estado indisponível".
     expect(await screen.findByText("Nenhuma extensão instalada")).toBeVisible();
     expect(screen.queryByTestId("extensions-unavailable")).toBeNull();
+    expect(screen.queryByTestId("extensions-stale")).toBeNull();
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("a mensagem de um salvamento não reaparece depois que a mesma instalação é removida e reinstalada", async () => {
+    const ativa = list(ORG_A, { installations: [installation({ enabled: true, revision: 2, installation_revision: 1 })] });
+    const reinstalada = list(ORG_A, {
+      installations: [
+        installation({
+          enabled: false,
+          revision: 3,
+          installation_revision: 3,
+          deactivated_by_removal_at: "2026-09-16T12:00:00.000Z",
+        }),
+      ],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: list() }))
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+        const id = new Headers(init?.headers).get("Idempotency-Key")!;
+        return Promise.resolve(json({ data: operation({ id, kind: "configure" }) }));
+      })
+      .mockResolvedValueOnce(json({ data: ativa }))
+      .mockResolvedValue(json({ data: reinstalada }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByRole("switch", { name: "Ativa no CRM" }));
+    await user.click(screen.getByTestId(`extension-save-${INSTALLATION}`));
+    expect(await screen.findByText("Configuração salva.")).toBeVisible();
+
+    // Outra sessão removeu e reinstalou: mesmo id, revisão da instalação nova.
+    fireEvent(window, new Event("focus"));
+    expect(await screen.findByTestId(`extension-reactivate-${INSTALLATION}`)).toBeVisible();
+    expect(screen.queryByText("Configuração salva.")).toBeNull();
   });
 
   it("desfazer ou configurar o que outra sessão removeu avisa fora do card e recarrega", async () => {
@@ -908,6 +944,99 @@ describe("ExtensionsManager", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
+  it("instalação cancelada por catálogo readmitido mostra o motivo e o próximo passo", async () => {
+    const entrada: CatalogEntry = {
+      publisher: "equipe-exemplo",
+      name: "guia-novo",
+      version: "1.0.0",
+      license: "MIT",
+      host_api: { min: 1, max: 1 },
+      display: { ...DISPLAY },
+      permissions: ["navigation.tasks"],
+      sha256: "b".repeat(64),
+      byte_length: 100,
+    };
+    const dados = list(ORG_A, {
+      catalogs: [
+        {
+          id: CATALOG,
+          origin: "https://extensions.example/catalog.json",
+          revision: 1,
+          admitted_at: "2026-09-15T00:00:00.000Z",
+          entries: [entrada],
+        },
+      ],
+    });
+    const motivo = "O catálogo mudou durante a preparação. Recarregue a lista antes de instalar.";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: dados }))
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+        const id = new Headers(init?.headers).get("Idempotency-Key")!;
+        return Promise.resolve(
+          json({
+            data: operation({
+              id,
+              kind: "install",
+              status: "cancelled",
+              extra: { name: "guia-novo", error_code: "extension_catalog_stale", error_message: motivo },
+            }),
+          }),
+        );
+      })
+      .mockResolvedValue(json({ data: dados }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByRole("tab", { name: "Catálogo" }));
+    await user.click(await screen.findByTestId("extension-install-equipe-exemplo-guia-novo-1.0.0"));
+
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith(motivo));
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("o catálogo bloqueia a atualização, com o motivo, enquanto há preparação da mesma identidade", async () => {
+    const entrada: CatalogEntry = {
+      publisher: "equipe-exemplo",
+      name: "rotina-comercial",
+      version: "1.1.0",
+      license: "MIT",
+      host_api: { min: 1, max: 1 },
+      display: { ...DISPLAY },
+      permissions: ["navigation.tasks"],
+      sha256: "a".repeat(64),
+      byte_length: 100,
+    };
+    const preparando = operation({
+      kind: "update",
+      status: "preparing",
+      extra: { catalog_id: CATALOG, version: "1.1.0", from_revision: 1, from_version: "1.0.0", actor_id: "00000000-0000-4000-8000-000000000099" },
+    });
+    const dados = list(ORG_A, {
+      catalogs: [
+        {
+          id: CATALOG,
+          origin: "https://extensions.example/catalog.json",
+          revision: 1,
+          admitted_at: "2026-09-15T00:00:00.000Z",
+          entries: [entrada],
+        },
+      ],
+      operations: [preparando],
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ data: dados })));
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByRole("tab", { name: "Catálogo" }));
+    const identidade = "equipe-exemplo-rotina-comercial-1.1.0";
+    expect(await screen.findByTestId(`extension-install-${identidade}`)).toBeDisabled();
+    expect(screen.getByTestId(`extension-catalog-preparing-${identidade}`)).toHaveTextContent(
+      "Há uma preparação desta extensão em andamento.",
+    );
+  });
+
   it("com uma preparação da mesma extensão em curso, desfazer e remover ficam bloqueados com o motivo", async () => {
     const preparando = operation({
       kind: "update",
@@ -1009,6 +1138,66 @@ describe("ExtensionsManager", () => {
     );
   });
 
+  it.each([
+    ["cancelada, para versão maior", "cancelled", "1.1.0", "Atualização cancelada. A versão instalada continua a mesma."],
+    ["já concluída, para versão maior", "completed", "1.1.0", "A atualização já havia sido concluída; o recibo foi atualizado."],
+    ["já concluída, para versão menor", "completed", "0.9.0", "A troca de versão já havia sido concluída; o recibo foi atualizado."],
+  ] as const)("cancelar um update %s diz a coisa certa", async (_caso, status, destino, texto) => {
+    const preparando = operation({
+      kind: "update",
+      status: "preparing",
+      extra: { catalog_id: CATALOG, version: destino, from_revision: 2, from_version: "1.0.0" },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: list(ORG_A, { operations: [preparando] }) }))
+      .mockResolvedValueOnce(json({ data: { ...preparando, status } }))
+      .mockResolvedValue(json({ data: list() }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByTestId(`extension-operation-cancel-${preparando.id}`));
+
+    const chamado = status === "cancelled" ? toast.success : toast.info;
+    await waitFor(() => expect(chamado).toHaveBeenCalledWith(texto));
+  });
+
+  it("para quem não administra a organização, a versão reinstalada incompatível também não pede reativar", async () => {
+    const dados = list(ORG_A, {
+      can_manage: false,
+      can_install: false,
+      installations: [
+        installation({
+          deactivated_by_removal_at: "2026-09-15T12:00:00.000Z",
+          compatible: false,
+          compatibility_reason: "Esta extensão não é compatível com a API disponível nesta instalação.",
+          active_organizations: null,
+        }),
+      ],
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ data: dados })));
+    renderManager();
+
+    const aviso = await screen.findByTestId(`extension-reactivate-${INSTALLATION}`);
+    expect(aviso).toHaveTextContent("A versão reinstalada não pode ser ativada");
+    expect(aviso).not.toHaveTextContent("para ativar de novo");
+  });
+
+  it("um desfazer com nenhuma organização ativa ainda mostra a contagem", async () => {
+    const recibo = operation({
+      id: "00000000-0000-4000-8000-000000000055",
+      kind: "revert",
+      extra: { from_version: "1.1.0", to_version: "1.0.0", from_revision: 3, organizations_affected: 0 },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ data: list(ORG_A, { operations: [recibo] }) })));
+    renderManager();
+
+    expect(
+      await screen.findByText("equipe-exemplo/rotina-comercial 1.1.0 → 1.0.0 · nenhuma organização com ela ativa"),
+    ).toBeVisible();
+  });
+
   it("reinstalada numa versão incompatível não manda ativar de novo", async () => {
     const dados = list(ORG_A, {
       can_install: false,
@@ -1052,10 +1241,14 @@ describe("ExtensionsManager", () => {
     ];
     const antes = list(ORG_A, { catalogs: catalogos, installations: [installation({ installation_revision: 4 })] });
     const depois = list(ORG_A, { catalogs: catalogos, installations: [installation({ installation_revision: 5 })] });
+    // A recarga de controle traz um recibo novo: é a marca visível de que ela foi aplicada à tela
+    // antes de afirmar que o diálogo continua aberto.
+    const marca = operation({ id: "00000000-0000-4000-8000-000000000077", kind: "catalog_admission" });
+    const antesComMarca = { ...antes, operations: [marca] };
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json({ data: antes }))
-      .mockResolvedValueOnce(json({ data: antes }))
+      .mockResolvedValueOnce(json({ data: antesComMarca }))
       .mockResolvedValue(json({ data: depois }));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
@@ -1069,7 +1262,8 @@ describe("ExtensionsManager", () => {
     // Controle: uma recarga SEM mudança na instalação mantém o diálogo aberto. Sem isto, uma chave
     // que mudasse a cada recarga também "passaria", e ninguém conseguiria confirmar nada.
     fireEvent(window, new Event("focus"));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId(`extension-operation-${marca.id}`)).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.getByTestId(`extension-install-dialog-${identidade}`)).toBeVisible();
 
     fireEvent(window, new Event("focus"));

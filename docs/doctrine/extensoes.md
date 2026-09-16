@@ -36,7 +36,7 @@ extensões**, e é isso que mantém o produto genérico enquanto os nichos ganha
 | **Núcleo** | Operação comum ou garantia compartilhada: contatos, conversas, funis, identidade, autorização, trilha de ações, infraestrutura de IA, cadeia de envio. Correção de comportamento já entregue continua no componente responsável. |
 | **Extensão** | Jornada adicional, aparência, integração ou especialização de nicho, com configuração, dados e manutenção próprios, cuja ausência não compromete a operação comum. Exemplos: comanda, comissão, fidelidade, financeiro, temas. |
 | **Ambos** | Um ponto genérico no núcleo e uma extensão que o consome. O ponto só entra com **consumidor real, contrato e prova dos dois lados**; não existe inventário de ganchos hipotéticos. |
-| **Infraestrutura/documentação** | Mudança que não altera o que uma organização faz com o produto: build, CI, ferramenta interna, documentação. Correção de comportamento não entra aqui; ela fica no destino do componente que corrige. Declare a superfície que ela mantém. |
+| **Infraestrutura/documentação** | Mudança em build, CI, kit de instalação, ferramenta interna ou documentação, inclusive a correção de um comportamento desses componentes (um `update.sh` que falhava é infraestrutura). Correção de comportamento do produto fica no destino do componente que corrige: núcleo ou extensão. Declare a superfície que ela mantém. |
 
 Todo PR que muda comportamento declara o destino e a razão (DoD 18; a triagem aplica a mesma régua
 na seção 2-bis). Enquanto a plataforma está em
@@ -119,10 +119,13 @@ preserve o trabalho do contribuidor e registre a dependência.
       que o administrador autorizou antes, e só reage a comunicado autenticado da origem em que ele
       confia. Um comunicado do catálogo nunca é comando no host, e catálogo fora do ar, sozinho, não
       desliga nada.
-    - **Métricas começam por downloads e avaliações.** Qualquer relato de uso enviado pela VPS,
-      com ou sem identificador, pede decisão própria antes, com consentimento específico, campos e
-      retenção publicados e desligamento pela tela. Identificador persistente é pseudônimo, não
-      anonimato.
+    - **Métricas começam por downloads e avaliações.** Qualquer telemetria de uso, venha da VPS ou
+      de outro ponto, com ou sem identificador, pede decisão própria antes. As condições mínimas são
+      as do PROG-017 §12 e do capítulo 7 do sistema vivo: consentimento específico, campos e
+      retenção publicados, desligamento pela tela, agregação pública e minimização, e revisão
+      explícita da tensão com a doutrina. Identificador persistente é pseudônimo, não anonimato, e
+      não entra por padrão. O painel diz que downloads não são usuários ativos, e toda métrica
+      publica método e limitações.
 
 ---
 
@@ -135,7 +138,7 @@ preserve o trabalho do contribuidor e registre a dependência.
 | Instalar, atualizar, trocar, desfazer a última troca, remover e reinstalar | Histórico de mais de um passo | Recusado por escrito na spec; volta pelo catálogo |
 | Uma versão por instalação, ativação por organização | Versão por organização | Recusada sem necessidade comprovada (PROG-017 §5) |
 | Nenhum dado de domínio de extensão | Schema próprio de extensão | Módulo nativo oficial: migration + baseline + MANIFEST; schema realmente independente: ADR antes (PROG-017 §8) |
-| Recibos, auditoria por organização na remoção, Atividade recente | Dependências entre extensões; downloads e avaliações | Prova (PROG-017 §5 e §12; DEC-004 §3) |
+| Recibos, auditoria por organização na remoção (menos quando a resposta se perde e a repetição não reaplica), Atividade recente | Dependências entre extensões; downloads e avaliações | Prova (PROG-017 §5 e §12; DEC-004 §3) |
 | Nenhuma telemetria de extensões | Relato de uso enviado pela VPS | Decisão própria antes (DEC-004 §3; PROG-017 §12) |
 
 Quem propõe um item da coluna do meio segue a coluna da direita e não amplia o perfil declarativo

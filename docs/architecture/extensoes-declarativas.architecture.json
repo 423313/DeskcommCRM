@@ -330,12 +330,22 @@
     {
       "from": "audit",
       "to": "org_audit_view",
-      "label": "organização vê a própria desativação pela remoção"
+      "label": "organização vê a própria desativação pela remoção (salvo resposta perdida)"
     },
     {
       "from": "manager",
       "to": "org_audit_view",
       "label": "gerente da organização confere por que o guia saiu"
+    },
+    {
+      "from": "org_audit_view",
+      "to": "manager",
+      "label": "organização volta à gestão para reativar depois da reinstalação"
+    },
+    {
+      "from": "audit_view",
+      "to": "manager",
+      "label": "responsável volta à gestão para desfazer, remover ou reinstalar"
     }
   ],
   "contracts": {

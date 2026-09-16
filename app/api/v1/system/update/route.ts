@@ -105,7 +105,7 @@ export async function POST(_req: NextRequest): Promise<Response> {
     if (error.code === "P0001" && error.message === "extension_preparation_in_progress") {
       return fail(
         "state_conflict",
-        "Há uma extensão em preparação. Abra Extensões para concluir ou cancelar o pedido antes de atualizar o sistema.",
+        "Há uma extensão em preparação. Abra Extensões: em Atividade recente, quem pediu pode retomar o pedido, e qualquer responsável pela instalação pode cancelá-lo antes de atualizar o sistema.",
         409,
       );
     }

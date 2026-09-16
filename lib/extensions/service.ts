@@ -212,8 +212,11 @@ const BINDING_COLS =
  * 9 KB e esbarram no limite de linha de requisição de proxies comuns.
  */
 const IN_BATCH = 64;
-/** `max_rows` do PostgREST neste projeto (supabase/config.toml): acima disso a resposta vem cortada. */
-const POSTGREST_MAX_ROWS = 1000;
+/**
+ * Pares publicador/nome por consulta de removidas. Com slugs de até 64 caracteres, 16 pares cabem
+ * em menos de 3 KB de URL.
+ */
+const IDENTITY_BATCH = 16;
 type DbRead = { data: unknown; error: { code?: string; message?: string } | null };
 async function readInBatches(
   ids: readonly string[],
@@ -406,37 +409,52 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
   const catalogEntries = new Map(catalogs.map((row) => [row.id, entradasLegiveis(row)]));
   // Removidas das identidades que os catálogos admitidos listam, e não "as 128 mais recentes":
   // uma removida fora desse corte aparecia como nunca instalada, a tela pedia a instalação com
-  // revisão nula, e o banco respondia "mudou em outra sessão" para sempre. Consulta por catálogo,
-  // em lotes de identidades, com publicador E nome no filtro: sem o publicador, um lote trazia toda
-  // publicação com os mesmos nomes e podia passar do corte de linhas do PostgREST.
-  const removed: z.infer<typeof installationRowSchema>[] = [];
-  if (canInstall) {
-    for (const [catalogId, entries] of catalogEntries) {
-      for (let index = 0; index < entries.length; index += IN_BATCH) {
-        const batch = entries.slice(index, index + IN_BATCH);
-        const result = await admin
-          .from("extension_installations")
-          .select(INSTALL_COLS)
-          .eq("catalog_id", catalogId)
-          .in("publisher", [...new Set(batch.map((entry) => entry.publisher))])
-          .in("name", [...new Set(batch.map((entry) => entry.name))])
-          .not("removed_at", "is", null);
-        dbFailure(result.error);
-        const found = z.array(installationRowSchema).parse(result.data ?? []);
-        if (found.length >= POSTGREST_MAX_ROWS) {
-          logger.warn("[extensions] leitura de removidas pode ter sido cortada", {
-            catalog_id: catalogId,
-            rows: found.length,
-          });
+  // revisão nula, e o banco respondia "mudou em outra sessão" para sempre. A consulta é por PARES
+  // exatos (publicador e nome juntos), sem repetir a identidade de cada versão do catálogo: cada
+  // lote traz no máximo uma linha por par, longe do corte de linhas do PostgREST, e nenhuma
+  // removida sai duas vezes.
+  const identityBatches = canInstall
+    ? [...catalogEntries].flatMap(([catalogId, entries]) => {
+        const pairs = [
+          ...new Map(entries.map((entry) => [`${entry.publisher}/${entry.name}`, entry])).values(),
+        ];
+        const batches: Array<{ catalogId: string; pairs: CatalogEntry[] }> = [];
+        for (let index = 0; index < pairs.length; index += IDENTITY_BATCH) {
+          batches.push({ catalogId, pairs: pairs.slice(index, index + IDENTITY_BATCH) });
         }
-        removed.push(
-          ...found.filter((item) =>
-            batch.some((entry) => entry.publisher === item.publisher && entry.name === item.name),
-          ),
-        );
-      }
-    }
+        return batches;
+      })
+    : [];
+  // No máximo quatro consultas por vez: o caso comum é uma ou duas, e o pior (8 catálogos cheios)
+  // não pode disparar dezenas de requisições simultâneas numa VPS pequena.
+  const removedResults: DbRead[] = [];
+  for (let index = 0; index < identityBatches.length; index += 4) {
+    removedResults.push(
+      ...(await Promise.all(
+        identityBatches.slice(index, index + 4).map(({ catalogId, pairs }) =>
+          admin
+            .from("extension_installations")
+            .select(INSTALL_COLS)
+            .eq("catalog_id", catalogId)
+            .not("removed_at", "is", null)
+            // Publicador e nome são slugs ([a-z0-9-]): não precisam de escape no filtro.
+            .or(
+              pairs.map((pair) => `and(publisher.eq.${pair.publisher},name.eq.${pair.name})`).join(","),
+            ),
+        ),
+      )),
+    );
   }
+  const removed = [
+    ...new Map(
+      removedResults
+        .flatMap((result) => {
+          dbFailure(result.error);
+          return z.array(installationRowSchema).parse(result.data ?? []);
+        })
+        .map((item) => [item.id, item]),
+    ).values(),
+  ];
 
   const views: InstalledExtensionView[] = rows.map((item) => {
     const view = montarInstalada({
