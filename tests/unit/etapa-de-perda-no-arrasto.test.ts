@@ -23,6 +23,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_RANK, type AuthUser, type Role } from "@/lib/auth/types";
+import { fail } from "@/lib/api/wrappers";
 
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -113,7 +114,7 @@ function sessao(estado: Estado, papel: Role = "agent") {
     if (ROLE_RANK[papel] >= ROLE_RANK[min]) {
       return { ok: true, user, org: { orgId: ORG_ID, name: "Org", role: papel } };
     }
-    return { ok: false, response: Response.json({ error: "forbidden_role" }, { status: 403 }) };
+    return { ok: false, response: fail("forbidden_role", `Requer role >= ${min}.`, 403, {}) };
   });
   vi.mocked(createClient).mockResolvedValue(stub(estado) as never);
 }
