@@ -781,10 +781,35 @@ publicar; ao contribuidor vai marcada como pergunta, com essas palavras.
 
 ## 8. Reconciliação
 
-O que é mecânico, você conserta — branch própria, commit próprio, creditando o autor original no
-corpo. O que muda uma decisão de projeto do contribuidor **volta como pergunta**, nunca como patch
-por cima. A diferença entre as duas é: você consegue enunciar a intenção dele e mostrar que ela
-sobrevive à sua mudança?
+O que é mecânico, você conserta, com commit próprio. O que muda uma decisão de projeto do
+contribuidor **volta como pergunta**, nunca como patch por cima. A diferença entre as duas é: você
+consegue enunciar a intenção dele e mostrar que ela sobrevive à sua mudança?
+
+**Onde o conserto entra.** Empurrar para a branch do PR do contribuidor é permitido (decisão do
+dono em 16/09/2026; a proibição anterior foi sobreposta por engano). A condição é o PR permitir
+edição por mantenedores:
+
+```bash
+gh pr view <n> --json maintainerCanModify --jq .maintainerCanModify   # true
+```
+
+Sempre commit novo ou merge da `main` para dentro; nunca `--force`, nunca rebase, nunca reescrever
+os commits do autor. Antes de empurrar, avise no PR, para o autor trazer a branch antes de
+continuar. Quando o PR não permite edição, ou quando o trabalho precisa separar escopo (recorte,
+reimplementação, extração), o caminho é uma branch nossa. Para conserto mecânico num PR que permite
+edição, a branch do próprio PR é o caminho mais curto: o CI roda nele, e ele fecha como incorporado
+no merge.
+
+**Com a autoria de quem.** Trabalho do contribuidor entra com a autoria dele (decisão do dono em
+16/09/2026: *"não quero créditos, quero só a evolução do sistema"*). Commit que leva trabalho dele —
+portado, recortado ou reimplementado a partir do PR dele — sai com
+`git commit --author="Nome <email>"`, usando o nome e o e-mail que ele usa nos próprios commits
+(`git log --format='%an <%ae>' origin/main..<head-do-PR> | sort -u`); o git registra quem comitou
+separadamente. Prefira commits separados entre o trabalho dele e o nosso; quando um commit misturar
+os dois, o autor é ele. O acréscimo que é só nosso, em commit separado, fica com a nossa autoria,
+para o histórico não pôr no nome dele o que ele não escreveu. `Co-authored-by` deixa de ser a forma
+principal de crédito: fica para o segundo autor quando um commit junta o trabalho de duas pessoas de
+fora.
 
 ---
 
@@ -822,12 +847,22 @@ git check-ignore -v <arquivo que deve ser ignorado>   # exit 0, e a linha do .gi
 git check-ignore -v <um .ts comum>                    # exit 1 — sem este, "pega" é "pega tudo"
 ```
 
+**E o PR original fecha**, por quem tem a autoridade de fechar naquela rodada: o que sobrou dele é o
+arquivo que não pode entrar, e isso foi descartado — não há destino que o mantenha aberto (decisão
+do dono em 16/09/2026, passe 12-ter). O fechamento diz o que entrou, com o link, e por que o arquivo
+não entra; o crédito do que entrou fica no `--author` do commit acima. **Não** use aqui o merge de
+proveniência do 12-ter: `-s ours` não traz a árvore, mas torna os commits dele ancestrais da
+`main`, e o blob que não podia entrar iria junto para todo clone.
+
 ---
 
 ## 8-bis. Reconciliação de PR de fork: o merge que credita em vez de descartar
 
-Quando o PR de um contribuidor conflita, a saída **não** é fechá-lo pedindo rebase. É montar uma
-branch sua com `git merge <head-do-PR>`, resolver o conflito do **nosso** lado, e mergear a sua.
+Quando o PR de um contribuidor conflita, a saída **não** é fechá-lo pedindo rebase. Se ele permite
+edição por mantenedores (passe 8), traga a `main` para dentro da branch dele
+(`git merge origin/main`), resolva o conflito ali e empurre, avisando no PR antes e sem `--force` —
+o CI roda no próprio PR, e ele fecha como `MERGED` no merge. Se não permite, é montar uma branch sua
+com `git merge <head-do-PR>`, resolver o conflito do **nosso** lado, e mergear a sua.
 
 O detalhe que decide o desfecho para a pessoa: se o head do PR dele virar **ancestral** da `main`,
 o GitHub fecha o PR dele como **`MERGED`**, não como `CLOSED`. A diferença é o que aparece no
@@ -961,8 +996,12 @@ echo "trazidos=$tot vivos_na_main=$viv"
 ```
 
 No épico da voz (PR #628, 11/09/2026) deu `trazidos=52 vivos_na_main=49`. **Com esse número, `-s
-ours` registra um fato; sem ele, é carimbo.** Se a sobrevivência for baixa, não é este o caso — o
-desfecho volta a ser fechar o PR com a explicação.
+ours` registra um fato; sem ele, é carimbo.** Se a sobrevivência for baixa, não é este o caso: o PR
+entrou só em parte, e o desfecho depende do que sobrou (decisão do dono em 16/09/2026). Se o que não
+entrou tem destino — decisão pendente, acompanhamento planejado, espera por resposta do autor,
+destino de extensão —, o PR fica aberto com esse destino escrito nele (12-ter). Se foi descartado, o
+PR fecha dizendo o que entrou, com o link, e por que o resto não entra; o crédito do que entrou fica
+nos commits com a autoria dele (passe 8).
 
 Três regras duras:
 
@@ -1092,9 +1131,11 @@ Todo PR que muda comportamento traz um arquivo em `.changes/` declarando **o efe
 **não aparece na tela de atualização**: o dono ganha a mudança e não fica sabendo.
 
 Contribuidor externo não conhece essa regra, e o passe 10 proíbe cobrar como descuido um gate não
-documentado. Então: **se o PR muda comportamento e não traz fragmento, escreva você**, em branch
-própria, creditando o autor — é reconciliação mecânica (passe 8), não decisão de projeto. Só volta
-como pergunta se você não souber dizer o que muda para quem opera.
+documentado. Então: **se o PR muda comportamento e não traz fragmento, escreva você**, creditando o
+autor no texto do fragmento: na branch do próprio PR, quando ele permite edição por mantenedores, ou
+numa branch nossa, sempre num commit separado que fica com a nossa autoria. É reconciliação mecânica
+(passe 8), não decisão de projeto. Só volta como pergunta se você não souber dizer o que muda para
+quem opera.
 
 > **⚠️ NÃO QUEBRE LINHA DENTRO DE PARÁGRAFO DE FRAGMENTO.** Escreva cada parágrafo do `.changes/`
 > numa linha só, por mais longa que fique — o Markdown renderiza igual.
@@ -1175,12 +1216,15 @@ gh release list --limit 1                                # a release é a Latest
 
 Reconciliação (passe 8) produz uma branch **nossa** que não contém o head do contribuinte: o
 conteúdo foi reimplementado a partir do que ele achou, porque a versão original conflitava com o
-estado de hoje ou carregava um defeito que a reconciliação consertou.
+estado de hoje ou carregava um defeito que a reconciliação consertou. O commit que traz esse
+conteúdo sai com a autoria dele — `--author` com o nome e o e-mail que ele usa nos próprios commits
+(passe 8). O merge de proveniência abaixo registra a origem no grafo; um não substitui o outro.
 
 O desfecho automático disso é o PR dele fechar como **`CLOSED`**. E isso é o registro mentindo: o
 trabalho entrou.
 
-O conserto é um **merge de proveniência** — `git merge -s ours` do head dele na sua branch:
+Quando o conteúdo do PR entrou inteiro por esse caminho, o conserto é um **merge de proveniência** —
+`git merge -s ours` do head dele na sua branch:
 
 ```bash
 antes=$(git rev-parse HEAD^{tree})
@@ -1199,6 +1243,14 @@ meses, parece alguém tendo descartado o trabalho de outra pessoa.
 Medido em 14/09: seis PRs (#745, #739, #782, #784, #789, #794) fechariam `CLOSED` com o conteúdo
 deles dentro da `main`. `git merge-base --is-ancestor refs/tri/<n> <sua-branch>` responde isso
 antes, e é barato conferir os seus todos de uma vez.
+
+**Quando entrou só parte, o merge de proveniência não é o desfecho** (decisão do dono em
+16/09/2026). O PR parcialmente incorporado fica aberto só se o que sobrou tem destino — decisão
+pendente, acompanhamento planejado, espera por resposta do autor, ou destino de extensão —, escrito
+no próprio PR; e aí não se faz o `-s ours`, porque com o head ancestral o GitHub o fecharia. Se o
+que sobrou foi descartado, o PR fecha, dizendo o que entrou, com o link, e por que o resto não
+entra; o crédito do que entrou fica nos commits com a autoria dele. Quem fecha é quem tem a
+autoridade de fechar naquela rodada.
 
 ---
 
@@ -1241,10 +1293,11 @@ df -h /System/Volumes/Data | tail -1     # confira, não presuma
 | você faz sozinho | é a palavra do mantenedor |
 |---|---|
 | liberar CI, rotular, acolher, comentar veredito | **mergear na `main`** |
-| criar worktree, rodar gate, escrever teste, sabotar | **fechar um PR** |
-| abrir issue e PR de follow-up | empurrar para a branch do fork alheio |
-| consertar CONTRIBUTING/README/docs | **mergear o PR de release** (é ele que cria a tag) |
+| criar worktree, rodar gate, escrever teste, sabotar | **fechar um PR** (o que entrou só em parte fecha apenas se o resto foi descartado — 12-ter) |
+| abrir issue e PR de follow-up | **mergear o PR de release** (é ele que cria a tag) |
+| consertar CONTRIBUTING/README/docs | |
 | escrever o fragmento que falta, e conferi-lo | |
+| empurrar commit novo ou merge da `main` na branch do PR que permite edição por mantenedores — nunca `--force` nem rebase, avisando no PR antes (passe 8) | |
 | disparar `Run workflow` do `release` depois do merge | |
 
 Sem perguntas de sim/não a cada passo: faça tudo, pare no merge, reporte em lote.
@@ -1961,7 +2014,8 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
     legítimo e completo — só que o *seu* trabalho estava noutra árvore, que ninguém pediu para
     ninguém.
 
-    A regra: **trabalho seu nasce numa branch a partir de `origin/main`, nunca na prévia.** Se você
+    A regra: **trabalho seu nasce numa branch de verdade — a partir de `origin/main`, ou a própria
+    branch do PR quando ele permite edição por mantenedores (passe 8) —, nunca na prévia.** Se você
     já escreveu na prévia, `cherry-pick` para uma branch de verdade **antes** de mergear o PR que a
     originou — depois do merge, a prévia vira uma árvore órfã que só você sabe que existe, e o
     worktree pode ser varrido por qualquer limpeza.
@@ -2271,9 +2325,14 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
     desfecho único. Segurar tudo até a decisão vir deixa um P0 de instalação na fila atrás de uma
     questão de gosto; mergear tudo decide a cara do produto sem o dono.
 
-    O desfecho é **dois**: o conserto sai num PR próprio, creditado, hoje; o PR original fica aberto
-    com um documento de decisão, e o contribuidor recebe a explicação de por que o trabalho dele foi
-    partido — incluindo a frase que importa: *"não estou recusando; quem decide isto não sou eu"*.
+    O desfecho é **dois**: o conserto sai num PR próprio, hoje, com o commit na autoria dele
+    (passe 8); o PR original fica aberto com um documento de decisão, e o contribuidor recebe a
+    explicação de por que o trabalho dele foi partido — incluindo a frase que importa: *"não estou
+    recusando; quem decide isto não sou eu"*.
+
+    Aberto porque a decisão pendente é o destino do que sobrou (decisão do dono em 16/09/2026,
+    passe 12-ter). Quando o dono decidir e o que sobrou for descartado, o PR fecha, dizendo o que
+    entrou, com o link, e por que o resto não entra.
 
 47. **O CI é recurso compartilhado e saturável, e quem satura é você.** Abrir seis PRs de
     reconciliação em vinte minutos pôs **41 execuções na fila** da conta em 11/09/2026, com 8 em

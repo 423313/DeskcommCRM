@@ -32,7 +32,10 @@ Atenção: `conclusion` vem **vazio** (não `null`) enquanto o run não termina 
 3. Não é seu? `Test timed out` em dezenas de arquivos = saturação; `address already in use` /
    `failed to start containers` = runner. Diga isso no PR com o trecho do log; não "conserte" o
    que não quebrou.
-4. Empurre o conserto na mesma branch — o PR atualiza sozinho. Não abra outro.
+4. Traga a branch antes (`git pull --no-rebase`): com "Allow edits by maintainers" ligado, a triagem
+   pode ter empurrado nela um conserto ou o merge da `main`. Depois empurre o conserto na mesma
+   branch — o PR atualiza sozinho. Não abra outro, e nunca use `--force`: ele apagaria o que foi
+   empurrado do lado de cá.
 
 ## O que acontece do lado de cá
 
@@ -43,5 +46,14 @@ faltar, resolve conflito preservando os seus commits, e responde com um veredito
 que **não** mediu. O merge e o corte da versão são do mantenedor; a versão só chega em quem instalou
 quando a tag sai — merge na `main` não é entrega.
 
+Onde o conserto do lado de cá entra: se o PR permite edição por mantenedores, na **sua** branch —
+sempre commit novo ou merge da `main`, nunca `--force` nem rebase, com aviso no PR antes; se não
+permite, numa branch nossa.
+
 Crédito: os seus commits ficam com o seu nome. Se o PR foi reconstruído do lado de cá (acontece
-quando o conflito é grande), o commit final cita você como coautor.
+quando o conflito é grande), o commit que leva o seu trabalho sai com **você como autor** —
+`--author` com o nome e o e-mail que você usa nos seus próprios commits.
+
+Se só parte do PR entrou, ele fica aberto enquanto o que sobrou tiver destino, escrito no próprio
+PR (uma decisão pendente, um acompanhamento, uma resposta sua). Se o resto foi descartado, o PR
+fecha dizendo o que entrou, com o link, e por que o resto não entra.

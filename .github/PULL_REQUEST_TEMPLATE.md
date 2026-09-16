@@ -25,7 +25,7 @@
 |---|---|
 | **Fragmento em `.changes/`** | É o aviso que aparece na tela de quem opera uma VPS. Se faltar, **nós escrevemos**, com o seu nome. Não é cobrança. |
 | **Numeração de migration** | Se colidir com um PR aberto que você não tinha como ver, **quem renumera somos nós**. |
-| **Conflito com a `main`** | Resolvemos do nosso lado, preservando os seus commits. Você não refaz nada. |
+| **Conflito com a `main`** | Resolvemos nós, preservando os seus commits. Com "Allow edits by maintainers" ligado, o merge da `main` pode chegar na sua própria branch — avisamos no PR, e você só dá `git pull --no-rebase` antes do seu próximo push. Você não refaz nada. |
 | **Prova pela tela (`test:e2e`)** | Exige Docker, banco semeado e WAHA local. Fica com o mantenedor — exigir prova sem entregar a ferramenta de produzi-la seria pedágio, não rigor. |
 
 </details>

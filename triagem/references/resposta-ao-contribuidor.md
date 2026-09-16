@@ -105,6 +105,39 @@ me diz que eu meço o seu.
 
 ---
 
+## Quando só parte do PR entrou
+
+O PR parcialmente incorporado fica aberto só se o que sobrou tem destino (decisão do dono em
+16/09/2026; passe 12-ter). O comentário começa igual nos dois casos — **o que entrou**, com o link, e
+**o que não entrou**, com o motivo de cada parte — e muda no fim:
+
+- **O resto tem destino** (decisão pendente, acompanhamento planejado, espera por resposta dele,
+  destino de extensão): diga qual, e que é por isso que o PR continua aberto. PR aberto sem destino
+  escrito lê como esquecido.
+- **O resto foi descartado:** o PR fecha no mesmo comentário. O motivo é sobre a parte, não sobre
+  ele — por exemplo, *"serve à sua instalação e não a todas"*, ou *"a `main` já resolve isto de outro
+  jeito, aqui"*.
+
+O crédito não depende do desfecho: o que entrou está nos commits com ele como autor. Diga isso, com
+o link — é o que ele vai procurar no próprio perfil.
+
+```markdown
+<!-- triagem-de-pr:v1:pass=12-ter -->
+Parte deste PR entrou na `main`, nos commits com você como autor: <o que entrou> — <link>.
+
+**O que não entrou, e por quê:** <a parte> — <o motivo, com a medição quando houver>.
+
+<!-- se o resto tem destino -->
+Por isso o PR continua aberto: <o destino — a decisão que falta e de quem ela é, o acompanhamento
+planejado, ou o que eu preciso de você>.
+
+<!-- se o resto foi descartado -->
+Por isso estou fechando o PR. Fechar aqui só registra que o resto não entra; o que entrou está
+dentro, com o seu nome.
+```
+
+---
+
 ## Proibido
 
 | não escreva | por quê |
