@@ -74,7 +74,22 @@ export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) 
   };
 
   return (
-    <>
+    /*
+      A BARREIRA DE CLIQUE DO CARD — `display: contents`, não uma caixa.
+      O card inteiro tem `onClick={handleClick}`
+      (`components/kanban/KanbanCard.tsx`), e `decidirClique` NÃO inspeciona o
+      alvo: qualquer clique que suba até lá abre o dossiê do lead. Os três
+      diálogos daqui e o menu são renderizados em PORTAL, e portal do React
+      propaga evento pela ÁRVORE REACT — ou seja, pelo card. Medido em jsdom
+      antes desta linha: clicar no overlay da confirmação de excluir — o gesto
+      padrão de desistir — abria o dossiê ATRÁS de uma janela que nem fecha (o
+      `AlertDialog` não fecha por clique fora, de propósito).
+      `display: contents` não cria caixa: o layout do card não muda, e a árvore
+      React passa a interceptar os cliques de todo overlay portado daqui.
+      Vigiado por `tests/unit/kanban-card-excluir.test.tsx`, com o controle
+      positivo de que clicar no CARD continua abrindo o dossiê.
+    */
+    <span className="contents" onClick={(e) => e.stopPropagation()}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -232,6 +247,6 @@ export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) 
         lead={lead}
         pipelineId={pipelineId}
       />
-    </>
+    </span>
   );
 }

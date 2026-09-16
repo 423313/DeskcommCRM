@@ -44,11 +44,20 @@ const LEAD = {
   owner_agent_id: null,
 } as unknown as Lead;
 
+/**
+ * O `onClick` que o CARD tem. `components/kanban/KanbanCard.tsx` põe
+ * `onClick={handleClick}` na `<div>` que envolve as ações, e `decidirClique` não
+ * inspeciona o alvo: qualquer clique que suba até ali abre o dossiê do lead.
+ * O dublê reproduz exatamente essa relação — ancestral com `onClick`, ações
+ * dentro —, que é o que decide se um clique no overlay portado vira dossiê.
+ */
+const abrirDossie = vi.hoisted(() => vi.fn());
+
 function renderMenu() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <div className="group">
+      <div className="group" onClick={() => abrirDossie()}>
         <KanbanCardActions lead={LEAD} pipelineId="p-1" />
       </div>
     </QueryClientProvider>,
@@ -59,6 +68,7 @@ beforeEach(() => {
   estado.podeMover = true;
   permissao.mockReset();
   permissao.mockImplementation(() => estado.podeMover);
+  abrirDossie.mockReset();
   post.mockReset();
   post.mockResolvedValue({ data: { updated_count: 1 } });
 });
@@ -116,6 +126,39 @@ describe("menu do card — Excluir", () => {
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("⭐ clicar FORA da confirmação não abre o dossiê do lead por trás dela", async () => {
+    // O gesto padrão de desistir é clicar fora. O overlay do Radix é renderizado
+    // DENTRO do portal deste componente, e portal do React propaga evento pela
+    // ÁRVORE REACT — ou seja, pelo card, cujo `onClick` não inspeciona o alvo
+    // (`components/kanban/KanbanCard.tsx`, `decidirClique`). Sem a barreira, o
+    // clique de cancelar abria o dossiê atrás de uma janela que nem fecha (o
+    // `AlertDialog` não fecha por clique fora, de propósito).
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "Ações do lead" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Excluir" }));
+    await screen.findByText('Excluir "Proposta da ACME"?');
+    abrirDossie.mockReset();
+
+    // O overlay: o irmão do conteúdo dentro do portal, o que cobre a tela.
+    const overlay = document.querySelector("[data-slot=alert-dialog-overlay], [role=alertdialog]")!
+      .parentElement!.querySelector("div.fixed.inset-0")!;
+    await user.click(overlay as HTMLElement);
+
+    expect(abrirDossie).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("CONTROLE: clicar no CARD, fora de qualquer janela, ABRE o dossiê", async () => {
+    // Sem este controle, "não abriu o dossiê" passaria também com um card que
+    // não abre dossiê nenhum — e a barreira acima estaria medindo o nada.
+    const user = userEvent.setup();
+    const { container } = renderMenu();
+    await user.click(container.querySelector("div.group")!);
+    expect(abrirDossie).toHaveBeenCalledTimes(1);
   });
 
   it("sem permissão de mexer no funil, Excluir não é oferecido", async () => {
