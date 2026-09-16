@@ -83,6 +83,14 @@ case " $* " in
   # devolver algo: com PREV_IMAGE vazio o rollback nem seria tentado, e o teste
   # do agente passaria mesmo com o defeito de volta.
   *" images "*) printf 'sha256:deadbeef\n' ;;
+  # Aplicação do baseline. Só com BASELINE_ROTEIRO no ambiente (caso 4c): cada
+  # chamada imprime a próxima passada do roteiro. Fora dele, sai limpa como antes.
+  *" -f /b.sql "*)
+    if [ -n "${BASELINE_ROTEIRO:-}" ]; then
+      n=$(( $(cat "$BASELINE_ROTEIRO/n" 2>/dev/null || echo 0) + 1 ))
+      printf '%s' "$n" > "$BASELINE_ROTEIRO/n"
+      [ -f "$BASELINE_ROTEIRO/passada.$n" ] && cat "$BASELINE_ROTEIRO/passada.$n"
+    fi ;;
 esac
 exit 0
 STUB
@@ -245,6 +253,34 @@ check "o scheduler herda a política da tag imutável" \
   grep -q '^SCHEDULER_PULL_POLICY=missing$' .env
 check "nenhuma das chaves novas duplicou" \
   test "$(grep -cE '^(WORKER|SCHEDULER)_(IMAGE|PULL_POLICY)=' .env)" -eq 4
+
+echo "── 4c. Deadlock com o app no ar: o banco é aplicado de novo antes do ✓"
+# Medido numa VPS real na v1.27.3: com o app atendendo, o `create policy` logo
+# depois de um `drop policy` perdeu um deadlock, o script avisou e seguiu, e a
+# tabela ficou sem a policy de leitura. A função tem a própria suíte
+# (baseline-reaplica-apos-disputa.test.sh); este caso prova que o update.sh
+# passa por ela e que a tela diz a verdade nos dois desfechos.
+ROTEIRO_UG="$WORK/roteiro-baseline"
+DEADLOCK_UG='psql:/b.sql:16766: ERROR:  deadlock detected'
+mkdir -p "$ROTEIRO_UG"
+printf '%s\n' "$DEADLOCK_UG" > "$ROTEIRO_UG/passada.1"
+: > "$DOCKER_LOG"
+BASELINE_ROTEIRO="$ROTEIRO_UG" BASELINE_ESPERA_S=0 run_update --to v1.1.0 --force
+check "a atualização termina com sucesso" test "$RC" -eq 0
+check "o update.sh aplicou o baseline duas vezes" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 2
+check "e diz ✓ banco atualizado" grep -q "✓ banco atualizado" "$OUTFILE"
+check "  sem o aviso de banco" test -z "$(grep 'NÃO são os esperados' "$OUTFILE" || true)"
+
+rm -rf "$ROTEIRO_UG"; mkdir -p "$ROTEIRO_UG"
+for n in 1 2 3; do printf '%s\n' "$DEADLOCK_UG" > "$ROTEIRO_UG/passada.$n"; done
+: > "$DOCKER_LOG"
+BASELINE_ROTEIRO="$ROTEIRO_UG" BASELINE_ESPERA_S=0 run_update --to v1.1.0 --force
+check "deadlock que não passa aplica 3 vezes e desiste" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 3
+check "  NÃO vira ✓ banco atualizado" test -z "$(grep '✓ banco atualizado' "$OUTFILE" || true)"
+check "  a tela mostra o deadlock" grep -q "deadlock detected" "$OUTFILE"
+# Sem --force, repetir o update.sh responderia "já está na versão mais recente"
+# e não tocaria no banco.
+check "  e ensina a repetir de um jeito que re-aplica" grep -qF "update.sh --to v1.1.0 --force" "$OUTFILE"
 
 # ── Clone RASO: a topologia que o install.sh realmente entrega ───────────────
 # `install.sh` instala com `git clone --depth 1`. Num repositório raso o

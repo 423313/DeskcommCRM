@@ -439,6 +439,59 @@ url_do_schema() {
 # alcance de uma role de app com grants só em `public`.
 psql_run() { docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" -v ON_ERROR_STOP=1 "$@"; }
 
+# ── Re-aplicar o baseline num banco que JÁ existe ────────────────────────────
+# Chamado pelo `update.sh` e pelo `install.sh` re-executado. Sem `ON_ERROR_STOP`,
+# de propósito: com a flag, o primeiro "já existe" de um clone antigo pararia o
+# arquivo, e o apêndice com as migrations novas nunca chegaria.
+#
+# O preço é que o psql segue depois de QUALQUER erro, inclusive dos que não vêm
+# do arquivo. Medido numa VPS real, na v1.27.3: com o app atendendo, dois
+# comandos perderam um `deadlock detected`, e um deles era o `create policy` logo
+# depois do `drop policy` da mesma policy — `ai_knowledge_sources` ficou sem a
+# policy de leitura até alguém refazer o bloco à mão. O aviso saiu na tela, no
+# meio das três linhas de ruído que toda atualização daquela VPS mostrava.
+#
+# O arquivo é idempotente (o job `invariants` o re-aplica com ON_ERROR_STOP=1),
+# então a cura de uma disputa é aplicá-lo de novo, inteiro. O veredito é o da
+# ÚLTIMA passada: o comando que perdeu na primeira rodou outra vez na seguinte,
+# e é o estado dela que fica no banco. Só re-aplica por erro de disputa ou de
+# conexão — erro de permissão ou de dado se repetiria igual, só mais tarde.
+#
+#   reaplicar_baseline <baseline.sql> [log]
+#     0 → a última passada não teve erro fora dos benignos
+#     1 → teve; as linhas ficam em BASELINE_INESPERADO
+#   O log, quando dado, recebe a saída de TODAS as passadas, cada uma com cabeçalho.
+#   BASELINE_TENTATIVAS (padrão 3) e BASELINE_ESPERA_S (padrão 10, vezes o número
+#   da passada) existem para a suíte de shell não esperar de verdade.
+BASELINE_ERROS_BENIGNOS='already exists|multiple primary keys|multiple default values|is already a member|already a partition'
+BASELINE_ERROS_DE_DISPUTA='deadlock detected|could not serialize access|lock timeout|could not obtain lock|terminating connection|server closed the connection|connection to server was lost|remaining connection slots|too many clients|Max client connections'
+reaplicar_baseline() {
+  local arquivo="$1" log="${2:-}" tentativas="${BASELINE_TENTATIVAS:-3}" espera="${BASELINE_ESPERA_S:-10}"
+  local passada=1 raw rc
+  [ -z "$log" ] || : > "$log"
+  while :; do
+    rc=0
+    raw="$(docker run --rm -i -v "$arquivo:/b.sql:ro" postgres:17-alpine \
+          psql "$(url_do_schema)" -q -f /b.sql 2>&1)" || rc=$?
+    [ -z "$log" ] || printf '── passada %s de %s (saída %s) ──\n%s\n' "$passada" "$tentativas" "$rc" "$raw" >> "$log"
+    BASELINE_INESPERADO="$(printf '%s\n' "$raw" | grep -iE 'ERROR|FATAL' | grep -viE "$BASELINE_ERROS_BENIGNOS" || true)"
+    # Sem ON_ERROR_STOP o psql sai 0 mesmo com erro de SQL: saída diferente de
+    # zero é o psql (ou o docker) que NÃO chegou ao fim do arquivo. Sem isto, uma
+    # conexão que cai no meio sem imprimir a palavra ERROR terminaria em
+    # "✓ banco atualizado" com metade do arquivo aplicada.
+    if [ "$rc" -ne 0 ]; then
+      BASELINE_INESPERADO="$(printf '%s\n' "$BASELINE_INESPERADO" \
+        "a aplicação parou antes do fim do arquivo (saída $rc): $(printf '%s\n' "$raw" | tail -1)" | sed '/^$/d')"
+    fi
+    [ -n "$BASELINE_INESPERADO" ] || return 0
+    [ "$passada" -lt "$tentativas" ] || return 1
+    printf '%s\n' "$BASELINE_INESPERADO" | grep -qiE "$BASELINE_ERROS_DE_DISPUTA" || return 1
+    c_ylw "• parte do banco não aplicou (disputa com o app no ar ou conexão instável) — aplicando de novo, é seguro (passada $((passada + 1)) de $tentativas)"
+    sleep "$((espera * passada))"
+    passada=$((passada + 1))
+  done
+}
+
 # ── As três imagens que NÓS publicamos ───────────────────────────────────────
 # O namespace é constante e literal de propósito: ele está gravado no .env de
 # toda instalação viva, e derivá-lo de variável faria o kit antigo (que já está
