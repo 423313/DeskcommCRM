@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/hooks/i18n/useT";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import { randomId } from "@/lib/random-id";
-import { compararVersoes } from "@/lib/extensions/versao";
+import { ehTrocaParaVersaoMenor } from "@/lib/extensions/versao";
 import type { CatalogEntry, ExtensionConfiguration } from "@/lib/extensions/manifest";
 import type {
   ExtensionListView,
@@ -413,7 +413,9 @@ export function ExtensionsManager({
         toast.warning(
           t("A extensão mudou em outra sessão. Recarregamos o estado atual; revise antes de repetir."),
         );
-      } else if (error.code === "extension_removed") {
+      } else if (error.code === "extension_removed" || error.code === "extension_preparation_in_progress") {
+        // A preparação em curso veio de outra sessão: recarregar traz o recibo para a Atividade
+        // recente, liga o acompanhamento e acende o bloqueio com o motivo.
         toast.warning(t(error.message));
       } else {
         return false;
@@ -471,6 +473,16 @@ export function ExtensionsManager({
           result.data.error_message
             ? t(result.data.error_message)
             : t("A instalação falhou. Veja o motivo no recibo e tente de novo."),
+        );
+        return;
+      }
+      if (result.data.status === "cancelled") {
+        // Outro responsável cancelou durante o download: a rota responde 200 com o recibo
+        // cancelado, e isso não é sucesso.
+        toast.info(
+          result.data.kind === "update"
+            ? t("O pedido foi cancelado antes de concluir. A versão instalada continua a mesma.")
+            : t("O pedido foi cancelado antes de concluir. Nada foi instalado."),
         );
         return;
       }
@@ -565,10 +577,13 @@ export function ExtensionsManager({
         if (result.error.code === "extension_context_changed") {
           return { ok: false, message: t(result.error.message) };
         }
-        // Removida em outra sessão: o formulário não pode seguir editável sobre ela.
+        // Removida em outra sessão: o formulário não pode seguir editável sobre ela. O aviso vai
+        // para fora do card, porque a recarga pode tirá-lo da lista, e a mensagem do card fica
+        // vazia para não reaparecer se a mesma instalação for reinstalada.
         if (result.error.code === "extension_removed") {
+          toast.warning(t(result.error.message));
           await carregar(true);
-          return { ok: false, message: t(result.error.message) };
+          return { ok: false, message: "" };
         }
         // Só a revisão divergente é "outra pessoa alterou". Os outros 409 (o limite de
         // extensões ativas, por exemplo) têm motivo próprio, e o servidor já o escreve.
@@ -750,15 +765,19 @@ export function ExtensionsManager({
       }
       if (confirmed.status === "cancelled") {
         toast.success(
-          confirmed.kind === "update"
-            ? t("Atualização cancelada. A versão instalada continua a mesma.")
-            : t("Preparação cancelada. Este pedido não instalará a extensão."),
+          confirmed.kind !== "update"
+            ? t("Preparação cancelada. Este pedido não instalará a extensão.")
+            : ehTrocaParaVersaoMenor(confirmed)
+              ? t("Troca de versão cancelada. A versão instalada continua a mesma.")
+              : t("Atualização cancelada. A versão instalada continua a mesma."),
         );
       } else if (confirmed.status === "completed") {
         toast.info(
-          confirmed.kind === "update"
-            ? t("A troca de versão já havia sido concluída; o recibo foi atualizado.")
-            : t("A instalação já havia sido concluída; o recibo foi atualizado."),
+          confirmed.kind !== "update"
+            ? t("A instalação já havia sido concluída; o recibo foi atualizado.")
+            : ehTrocaParaVersaoMenor(confirmed)
+              ? t("A troca de versão já havia sido concluída; o recibo foi atualizado.")
+              : t("A atualização já havia sido concluída; o recibo foi atualizado."),
         );
       } else if (confirmed.status === "failed") {
         toast.info(t("A preparação já havia falhado; o recibo foi atualizado."));
@@ -1099,14 +1118,6 @@ function catalogIdentity(
     : { kind: "absent" };
 }
 
-/** Uma atualização para versão menor é troca de versão, e o texto diz isso. */
-function ehTrocaParaVersaoMenor(operation: ExtensionOperationView): boolean {
-  const destino = operation.to_version ?? operation.version;
-  return Boolean(
-    destino && operation.from_version && compararVersoes(destino, operation.from_version) < 0,
-  );
-}
-
 /** O tipo do pedido pendente: o rótulo sozinho é igual para atualizar, desfazer e remover. */
 function tituloDoPedido(kind: PendingReceipt["kind"], t: (texto: string) => string): string {
   switch (kind) {
@@ -1115,7 +1126,8 @@ function tituloDoPedido(kind: PendingReceipt["kind"], t: (texto: string) => stri
     case "install":
       return t("Instalação");
     case "update":
-      return t("Troca de versão");
+      // O pedido guardado não sabe a versão de origem; o recibo do servidor diz qual dos dois foi.
+      return t("Atualização ou troca de versão");
     case "revert":
       return t("Desfazer a última troca");
     case "removal":

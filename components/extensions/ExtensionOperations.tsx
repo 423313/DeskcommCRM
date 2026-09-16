@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import type { ExtensionOperationView } from "@/lib/extensions/view";
-import { compararVersoes } from "@/lib/extensions/versao";
+import { ehTrocaParaVersaoMenor } from "@/lib/extensions/versao";
 import { ArrowsClockwise, X } from "@/lib/ui/icons";
 
 import { organizacoesComElaAtiva, organizacoesDesativadas } from "./frases-de-versao";
@@ -21,17 +21,6 @@ const OPERATION_STATUS: Record<
   cancelled: { label: "Cancelada", variant: "neutral" },
 };
 
-/**
- * O destino de um recibo de atualização é `to_version` depois de concluído e `version` enquanto
- * prepara ou quando falhou: sem isso, uma troca para versão menor que falhou saía "Atualização".
- */
-function paraVersaoMenor(operation: ExtensionOperationView): boolean {
-  const destino = operation.to_version ?? operation.version;
-  return Boolean(
-    destino && operation.from_version && compararVersoes(destino, operation.from_version) < 0,
-  );
-}
-
 /** Título do recibo. `update` para uma versão menor não é "Atualização": é troca de versão. */
 function operationTitle(operation: ExtensionOperationView, t: (texto: string) => string): string {
   switch (operation.kind) {
@@ -40,7 +29,7 @@ function operationTitle(operation: ExtensionOperationView, t: (texto: string) =>
     case "install":
       return t("Instalação");
     case "update":
-      return paraVersaoMenor(operation) ? t("Troca de versão") : t("Atualização");
+      return ehTrocaParaVersaoMenor(operation) ? t("Troca de versão") : t("Atualização");
     case "revert":
       return t("Troca desfeita");
     case "removal":
@@ -96,7 +85,7 @@ export function ExtensionOperations({
         {operations.map((operation) => {
           const status = OPERATION_STATUS[operation.status];
           const isUpdate = operation.kind === "update";
-          const isDowngrade = isUpdate && paraVersaoMenor(operation);
+          const isDowngrade = isUpdate && ehTrocaParaVersaoMenor(operation);
           return (
             <Card
               key={operation.id}

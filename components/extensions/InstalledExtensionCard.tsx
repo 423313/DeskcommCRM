@@ -436,7 +436,7 @@ function PlatformBlock({
       {preparationInProgress ? (
         <p className="text-xs text-muted-foreground" data-testid={`extension-platform-preparing-${extension.id}`}>
           {t(
-            "Há uma preparação desta extensão em andamento. Verifique ou cancele o pedido em Atividade recente antes de desfazer ou remover.",
+            "Há uma preparação desta extensão em andamento. Acompanhe ou cancele o pedido em Atividade recente antes de desfazer ou remover.",
           )}
         </p>
       ) : null}

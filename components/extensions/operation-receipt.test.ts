@@ -42,6 +42,10 @@ describe("recibo de operação recebido pela UI", () => {
     const { from_revision: __, ...semRevisao } = receipt("update");
     expect(parseExtensionOperationView(semRevisao)).toBeNull();
     expect(parseExtensionOperationView({ ...receipt("removal"), organizations_affected: -1 })).toBeNull();
+    expect(parseExtensionOperationView({ ...receipt("update"), actor_id: "não-é-uuid" })).toBeNull();
+    const { actor_id: ___, ...semAutor } = receipt("update");
+    expect(parseExtensionOperationView(semAutor)).toBeNull();
+    expect(parseExtensionOperationView({ ...receipt("update"), actor_id: null })).not.toBeNull();
     expect(
       parseExtensionOperationView({
         ...receipt("update"),

@@ -36,7 +36,7 @@ extensões**, e é isso que mantém o produto genérico enquanto os nichos ganha
 | **Núcleo** | Operação comum ou garantia compartilhada: contatos, conversas, funis, identidade, autorização, trilha de ações, infraestrutura de IA, cadeia de envio. Correção de comportamento já entregue continua no componente responsável. |
 | **Extensão** | Jornada adicional, aparência, integração ou especialização de nicho, com configuração, dados e manutenção próprios, cuja ausência não compromete a operação comum. Exemplos: comanda, comissão, fidelidade, financeiro, temas. |
 | **Ambos** | Um ponto genérico no núcleo e uma extensão que o consome. O ponto só entra com **consumidor real, contrato e prova dos dois lados**; não existe inventário de ganchos hipotéticos. |
-| **Infraestrutura/documentação** | Mudança sem capacidade nova para o usuário; declare a superfície que ela mantém. |
+| **Infraestrutura/documentação** | Mudança que não altera o que uma organização faz com o produto: build, CI, ferramenta interna, documentação. Correção de comportamento não entra aqui; ela fica no destino do componente que corrige. Declare a superfície que ela mantém. |
 
 Todo PR que muda comportamento declara o destino e a razão (DoD 18; a triagem aplica a mesma régua
 na seção 2-bis). Enquanto a plataforma está em
@@ -62,17 +62,20 @@ preserve o trabalho do contribuidor e registre a dependência.
    movimentar dinheiro, mudar permissão ou alcançar outra organização. Toda escrita do framework
    é RPC `service_role` que revalida no banco o ator, a organização e o papel **atuais**; nenhum
    deles vem do corpo HTTP. A única leitura que atravessa organizações, a contagem de organizações
-   ativas por instalação, também confere o ator no banco e devolve só números.
+   ativas por instalação, também confere o ator no banco e devolve só números. A leitura de um
+   recibo pela plataforma se limita aos recibos da plataforma e aos da organização ativa.
 
 4. **A instância decide o pacote; a organização decide o uso.** Admitir catálogo, instalar,
-   atualizar, desfazer e remover são do administrador da instalação (plataforma, escopo `full`,
-   MFA quando exigido, fora de acompanhamento de suporte). Ativar e configurar são do administrador
+   atualizar, desfazer e remover são do administrador da instalação (plataforma, escopo `full`, fora
+   de acompanhamento de suporte, e com verificação em duas etapas quando a política da plataforma a
+   exige ou quando a pessoa já tem um fator cadastrado). Ativar e configurar são do administrador
    da organização. A plataforma **não reativa** uma decisão que é da organização: depois de uma
    reinstalação, cada organização ativa de novo.
 
 5. **Toda operação é um recibo durável com saída pela tela.** Pedido com chave idempotente;
    repetição idêntica devolve o mesmo recibo, e a mesma chave com outro pedido é conflito. Toda
-   preparação tem falha, cancelamento, invalidação e retomada alcançáveis pela tela. A RPC diz se
+   preparação tem saída pela tela: falha, invalidação por catálogo novo, retomada por quem pediu e
+   cancelamento por qualquer administrador da instalação. A RPC diz se
    a chamada fez a transição (`applied_now`), e a auditoria grava só nesse caso.
 
 6. **Toda troca de ponteiro exige a precondição do que a tela viu.** Atualizar, trocar, desfazer,
@@ -113,28 +116,30 @@ preserve o trabalho do contribuidor e registre a dependência.
       não recebe o selo oficial.
     - **Aviso sobre versão já instalada deixa a decisão local.** Nenhuma origem desliga, pausa ou
       altera em silêncio uma extensão numa VPS. Suspensão automática só existe como política local
-      que o administrador autorizou antes, e um comunicado do catálogo nunca é comando no host.
-    - **Métricas começam por downloads e avaliações.** Nenhum identificador persistente de
-      adoção, nem relato de uso ligado entre instâncias, sem decisão própria com consentimento,
-      campos e retenção publicados.
+      que o administrador autorizou antes, e só reage a comunicado autenticado da origem em que ele
+      confia. Um comunicado do catálogo nunca é comando no host, e catálogo fora do ar, sozinho, não
+      desliga nada.
+    - **Métricas começam por downloads e avaliações.** Qualquer relato de uso enviado pela VPS,
+      com ou sem identificador, pede decisão própria antes, com consentimento específico, campos e
+      retenção publicados e desligamento pela tela. Identificador persistente é pseudônimo, não
+      anonimato.
 
 ---
 
 ## O que existe hoje e o que ainda não existe
 
-| Existe (perfil declarativo v1) | Ainda não existe |
-|---|---|
-| Catálogo admitido manualmente, download preso à origem com guarda de SSRF | Distribuição pública verificada (TUF) e catálogo compartilhado |
-| Pacote JSON estrito com cards de orientação e a capacidade `tasks.open` | Execução de código de terceiros, isolada |
-| Instalar, atualizar, trocar, desfazer a última troca, remover e reinstalar | Histórico de mais de um passo; versão por organização |
-| Ativação e configuração por organização, com teto de 8 ativas | Dados de domínio próprios da extensão e suas migrations |
-| Recibos, auditoria por organização na remoção, Atividade recente | Dependências entre extensões, avaliações e downloads no catálogo compartilhado |
+| Existe (perfil declarativo v1) | Ainda não existe | O que pede antes |
+|---|---|---|
+| Catálogo admitido manualmente, download preso à origem com guarda de SSRF | Distribuição pública verificada (TUF) e catálogo compartilhado revisado | Prova (PROG-017 §11; DEC-004 §1) |
+| Pacote JSON estrito com cards de orientação e a capacidade `tasks.open` | Execução de código de terceiros em executor isolado | Prova: a escolha do executor é por evidência (PROG-017 §7 e §14) |
+| Instalar, atualizar, trocar, desfazer a última troca, remover e reinstalar | Histórico de mais de um passo | Recusado por escrito na spec; volta pelo catálogo |
+| Uma versão por instalação, ativação por organização | Versão por organização | Recusada sem necessidade comprovada (PROG-017 §5) |
+| Nenhum dado de domínio de extensão | Schema próprio de extensão | Módulo nativo oficial: migration + baseline + MANIFEST; schema realmente independente: ADR antes (PROG-017 §8) |
+| Recibos, auditoria por organização na remoção, Atividade recente | Dependências entre extensões; downloads e avaliações | Prova (PROG-017 §5 e §12; DEC-004 §3) |
+| Nenhuma telemetria de extensões | Relato de uso enviado pela VPS | Decisão própria antes (DEC-004 §3; PROG-017 §12) |
 
-A coluna da direita se divide em dois. O que já foi decidido no PROG-017 e no DEC-004 (catálogo
-compartilhado revisado, downloads e avaliações) pede **prova**, não decisão nova. O que nenhum dos
-dois decidiu pede **decisão antes**: execução de código de terceiros, schema próprio de extensão,
-versão por organização e qualquer relato de uso ligado entre instâncias. Nos dois casos, a
-proposta não amplia o perfil declarativo por dentro.
+Quem propõe um item da coluna do meio segue a coluna da direita e não amplia o perfil declarativo
+por dentro.
 
 ## Verificação
 

@@ -18,14 +18,30 @@ function fakeClient(tables: Record<string, Row[]>, rpcs: Record<string, (args: R
       let rows = [...(tables[table] ?? [])];
       const builder = {
         select: () => builder,
-        or: () => builder,
+        // Só a forma que o serviço usa: `coluna.eq.valor,coluna.is.null`.
+        or: (filter: string) => {
+          const clauses = filter.split(",").map((clause) => clause.split("."));
+          rows = rows.filter((row) =>
+            clauses.some(([column, op, value]) =>
+              op === "is" ? (row[column!] ?? null) === null : row[column!] === value,
+            ),
+          );
+          return builder;
+        },
         order: () => builder,
         eq: (column: string, value: unknown) => ((rows = rows.filter((row) => row[column] === value)), builder),
         neq: (column: string, value: unknown) => ((rows = rows.filter((row) => row[column] !== value)), builder),
         is: (column: string, value: unknown) =>
           ((rows = rows.filter((row) => (row[column] ?? null) === value)), builder),
-        not: (column: string, _operator: string, value: unknown) =>
-          ((rows = rows.filter((row) => (row[column] ?? null) !== value)), builder),
+        not: (column: string, operator: string, value: unknown) => {
+          if (operator === "in") {
+            const excluded = String(value).replace(/^\(|\)$/g, "").split(",");
+            rows = rows.filter((row) => !excluded.includes(String(row[column])));
+          } else {
+            rows = rows.filter((row) => (row[column] ?? null) !== value);
+          }
+          return builder;
+        },
         in: (column: string, values: unknown[]) => {
           inCalls.push({ table, size: values.length });
           rows = rows.filter((row) => values.includes(row[column]));
@@ -39,8 +55,11 @@ function fakeClient(tables: Record<string, Row[]>, rpcs: Record<string, (args: R
       };
       return builder;
     },
-    rpc: (name: string, args: Row) =>
-      Promise.resolve(rpcs[name]?.(args) ?? { data: [], error: null }),
+    rpcCalls: [] as Array<{ name: string; args: Row }>,
+    rpc(name: string, args: Row) {
+      this.rpcCalls.push({ name, args });
+      return Promise.resolve(rpcs[name]?.(args) ?? { data: [], error: null });
+    },
   };
 }
 
@@ -69,7 +88,7 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 vi.mock("./http", async (importOriginal) => ({
   ...(await importOriginal<typeof HttpModule>()),
-  requireExtensionPlatform: () => mocks.platform(),
+  requireExtensionPlatformFor: () => mocks.platform(),
 }));
 
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
@@ -210,6 +229,11 @@ describe("listExtensions", () => {
     expect(view.installations).toHaveLength(70);
     expect(view.installations.filter((item) => !item.compatible)).toEqual([]);
     expect(view.installations.some((item) => item.compatibility_reason === MOTIVO_PACOTE_ILEGIVEL)).toBe(false);
+    // A contagem entre organizações leva o ator, que o banco confere.
+    expect(admin.rpcCalls).toContainEqual({
+      name: "fn_extensions_installation_counts",
+      args: { p_actor: ACTOR },
+    });
     expect(view.installations[0]).toMatchObject({
       installation_revision: 2,
       previous: { version: "1.0.0", compatible: true, in_catalog: false },
@@ -235,6 +259,20 @@ describe("listExtensions", () => {
     expect(view.operations.map((item) => item.id)).toEqual([conhecido.id]);
     expect(mocks.warn).toHaveBeenCalledWith("[extensions] recibo de versão mais nova", {
       operation_id: futuro.id,
+    });
+  });
+
+  it("quem administra a instalação lê recibos da plataforma e da organização ativa, nunca os de outra", async () => {
+    const daPlataforma = operationRow({ kind: "removal" });
+    const daAtiva = operationRow({ kind: "configure", organization_id: ORG_A });
+    const deOutra = operationRow({ kind: "configure", organization_id: ORG_B });
+    mocks.admin = fakeClient({ extension_operations: [daPlataforma, daAtiva, deOutra] });
+
+    expect((await readExtensionOperation(daPlataforma.id as string, ORG_A, true)).id).toBe(daPlataforma.id);
+    expect((await readExtensionOperation(daAtiva.id as string, ORG_A, true)).id).toBe(daAtiva.id);
+    await expect(readExtensionOperation(deOutra.id as string, ORG_A, true)).rejects.toMatchObject({
+      code: "extension_operation_not_found",
+      status: 404,
     });
   });
 
@@ -287,6 +325,35 @@ describe("listExtensions: removidas e conferência da plataforma", () => {
     expect(view.removed_installations).toEqual([
       expect.objectContaining({ id: removidas[149]!.id, name: "removida-149", revision: 3 }),
     ]);
+  });
+
+  it("as reinstaladas não ocupam o corte dos cards Removida da organização", async () => {
+    // 130 vínculos marcados pela remoção: 10 de instalações já reinstaladas (ativas) primeiro, e
+    // 120 de removidas. Filtradas DEPOIS do corte, as reinstaladas escondiam duas removidas.
+    const ativas = Array.from({ length: 10 }, (_, index) => installationRow(artifact(`ativa-${index}`)));
+    const removidas = Array.from({ length: 120 }, (_, index) =>
+      installationRow(artifact(`fora-${index}`), { revision: 2, removed_at: "2026-09-10T10:00:00.000Z" }),
+    );
+    const marca = (installation: Row) => ({
+      organization_id: ORG_A,
+      installation_id: installation.id,
+      enabled: false,
+      configuration: { density: "comfortable", show_description: true },
+      revision: 2,
+      deactivated_by_removal_at: "2026-09-10T10:00:00.000Z",
+    });
+    mocks.admin = fakeClient({
+      extension_catalogs: [catalogRow],
+      extension_artifacts: [],
+      extension_installations: [...ativas, ...removidas],
+      extension_operations: [],
+    });
+    mocks.session = fakeClient({ organization_extensions: [...ativas, ...removidas].map(marca) });
+
+    const view = await listExtensions(USER, ORG);
+
+    expect(view.installations.filter((item) => item.removed_at !== null)).toHaveLength(120);
+    expect(view.installations.filter((item) => item.removed_at === null)).toHaveLength(10);
   });
 
   it("falha ao conferir a plataforma é erro, e não a gestão de um membro comum", async () => {

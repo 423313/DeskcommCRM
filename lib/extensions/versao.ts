@@ -17,3 +17,16 @@ export function compararVersoes(a: string, b: string): number {
   }
   return 0;
 }
+
+/**
+ * Um pedido de atualização para versão menor é troca de versão, e todo texto diz isso. O destino é
+ * `to_version` depois de concluído e `version` enquanto prepara, quando falha ou é cancelado.
+ */
+export function ehTrocaParaVersaoMenor(recibo: {
+  from_version: string | null;
+  to_version: string | null;
+  version: string | null;
+}): boolean {
+  const destino = recibo.to_version ?? recibo.version;
+  return Boolean(destino && recibo.from_version && compararVersoes(destino, recibo.from_version) < 0);
+}

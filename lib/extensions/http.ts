@@ -31,6 +31,14 @@ export async function requireExtensionPlatform(): Promise<PlatformCheck> {
   if (!user) {
     return { ok: false, response: fail("unauthenticated", "Faça login para continuar.", 401) };
   }
+  return requireExtensionPlatformFor(user);
+}
+
+/**
+ * A mesma conferência, para quem já carregou o usuário. Recarregar faria um segundo getUser() pela
+ * rede, e uma falha passageira nele virava 401, lido como "não administra a instalação".
+ */
+export async function requireExtensionPlatformFor(user: AuthUser): Promise<PlatformCheck> {
   const t = (text: string) => traduzir(text, user.idioma);
   if (!user.is_platform_admin || user.support) {
     return {

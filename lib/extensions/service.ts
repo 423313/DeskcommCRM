@@ -25,7 +25,7 @@ import {
   ehEstadoDeOperacao,
   ehTipoDeOperacao,
 } from "./vocabulario";
-import { ExtensionServiceError, requireExtensionPlatform } from "./http";
+import { ExtensionServiceError, requireExtensionPlatformFor } from "./http";
 import {
   checkCompatibility,
   configurationSchema,
@@ -212,6 +212,8 @@ const BINDING_COLS =
  * 9 KB e esbarram no limite de linha de requisição de proxies comuns.
  */
 const IN_BATCH = 64;
+/** `max_rows` do PostgREST neste projeto (supabase/config.toml): acima disso a resposta vem cortada. */
+const POSTGREST_MAX_ROWS = 1000;
 type DbRead = { data: unknown; error: { code?: string; message?: string } | null };
 async function readInBatches(
   ids: readonly string[],
@@ -264,7 +266,7 @@ function entradasLegiveis(row: z.infer<typeof catalogRowSchema>): CatalogEntry[]
  */
 export async function canManageInstallation(user: AuthUser): Promise<boolean> {
   if (!user.is_platform_admin || user.support) return false;
-  const check = await requireExtensionPlatform();
+  const check = await requireExtensionPlatformFor(user);
   if (check.ok) return true;
   if (check.response.status >= 500) {
     throw new ExtensionServiceError(
@@ -289,7 +291,6 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
   const [
     catalogResult,
     installationResult,
-    markedResult,
     operationResult,
     preparingResult,
     countResult,
@@ -306,15 +307,6 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
       .select(INSTALL_COLS)
       .is("removed_at", null)
       .order("installed_at")
-      .limit(128),
-    // Vínculos desta organização que a remoção desligou: dão o card "Removida" e o
-    // "Estava ativa até…" depois de uma reinstalação.
-    session
-      .from("organization_extensions")
-      .select("installation_id")
-      .eq("organization_id", org.orgId)
-      .not("deactivated_by_removal_at", "is", null)
-      .order("deactivated_by_removal_at", { ascending: false })
       .limit(128),
     scoped.neq("status", "preparing").order("created_at", { ascending: false }).limit(50),
     canInstall
@@ -335,7 +327,6 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
   for (const result of [
     catalogResult,
     installationResult,
-    markedResult,
     operationResult,
     preparingResult,
     countResult,
@@ -344,12 +335,27 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
   }
   const catalogs = z.array(catalogRowSchema).parse(catalogResult.data ?? []);
   const installations = z.array(installationRowSchema).parse(installationResult.data ?? []);
-  const activeIds = new Set(installations.map((item) => item.id));
+  // Vínculos desta organização que a remoção desligou e cuja instalação continua removida: dão o
+  // card "Removida". As ativas saem NO BANCO, antes do limite: filtradas depois, as reinstaladas
+  // ocupavam o corte e escondiam removidas mais antigas. O limite de 128 cards fica declarado na
+  // spec. (Até 128 ids ativos cabem na URL do PostgREST.)
+  // O PostgREST não aceita `in` com lista vazia; o UUID nulo não é id de nenhuma instalação.
+  const activeIds = installations.length
+    ? installations.map((item) => item.id)
+    : ["00000000-0000-0000-0000-000000000000"];
+  const markedResult = await session
+    .from("organization_extensions")
+    .select("installation_id")
+    .eq("organization_id", org.orgId)
+    .not("deactivated_by_removal_at", "is", null)
+    .not("installation_id", "in", `(${activeIds.join(",")})`)
+    .order("deactivated_by_removal_at", { ascending: false })
+    .limit(128);
+  dbFailure(markedResult.error);
   const markedIds = z
     .array(z.object({ installation_id: uuid }))
     .parse(markedResult.data ?? [])
-    .map((item) => item.installation_id)
-    .filter((id) => !activeIds.has(id));
+    .map((item) => item.installation_id);
   const removedForOrganization = z.array(installationRowSchema).parse(
     await readInBatches(markedIds, (batch) =>
       admin
@@ -400,29 +406,37 @@ export async function listExtensions(user: AuthUser, org: ActiveOrg): Promise<Ex
   const catalogEntries = new Map(catalogs.map((row) => [row.id, entradasLegiveis(row)]));
   // Removidas das identidades que os catálogos admitidos listam, e não "as 128 mais recentes":
   // uma removida fora desse corte aparecia como nunca instalada, a tela pedia a instalação com
-  // revisão nula, e o banco respondia "mudou em outra sessão" para sempre.
-  const listedNames = [
-    ...new Set([...catalogEntries.values()].flatMap((entries) => entries.map((entry) => entry.name))),
-  ];
-  const removed = canInstall
-    ? z
-        .array(installationRowSchema)
-        .parse(
-          await readInBatches(listedNames, (batch) =>
-            admin
-              .from("extension_installations")
-              .select(INSTALL_COLS)
-              .in("catalog_id", catalogs.map((row) => row.id))
-              .in("name", batch)
-              .not("removed_at", "is", null),
+  // revisão nula, e o banco respondia "mudou em outra sessão" para sempre. Consulta por catálogo,
+  // em lotes de identidades, com publicador E nome no filtro: sem o publicador, um lote trazia toda
+  // publicação com os mesmos nomes e podia passar do corte de linhas do PostgREST.
+  const removed: z.infer<typeof installationRowSchema>[] = [];
+  if (canInstall) {
+    for (const [catalogId, entries] of catalogEntries) {
+      for (let index = 0; index < entries.length; index += IN_BATCH) {
+        const batch = entries.slice(index, index + IN_BATCH);
+        const result = await admin
+          .from("extension_installations")
+          .select(INSTALL_COLS)
+          .eq("catalog_id", catalogId)
+          .in("publisher", [...new Set(batch.map((entry) => entry.publisher))])
+          .in("name", [...new Set(batch.map((entry) => entry.name))])
+          .not("removed_at", "is", null);
+        dbFailure(result.error);
+        const found = z.array(installationRowSchema).parse(result.data ?? []);
+        if (found.length >= POSTGREST_MAX_ROWS) {
+          logger.warn("[extensions] leitura de removidas pode ter sido cortada", {
+            catalog_id: catalogId,
+            rows: found.length,
+          });
+        }
+        removed.push(
+          ...found.filter((item) =>
+            batch.some((entry) => entry.publisher === item.publisher && entry.name === item.name),
           ),
-        )
-        .filter((item) =>
-          (catalogEntries.get(item.catalog_id) ?? []).some(
-            (entry) => entry.publisher === item.publisher && entry.name === item.name,
-          ),
-        )
-    : [];
+        );
+      }
+    }
+  }
 
   const views: InstalledExtensionView[] = rows.map((item) => {
     const view = montarInstalada({
@@ -569,7 +583,13 @@ export async function readExtensionOperation(
 ): Promise<ExtensionOperationView> {
   const admin = createAdminClient();
   let query = admin.from("extension_operations").select(OP_COLS).eq("id", operationId);
-  if (!platform) {
+  if (platform) {
+    // Quem administra a instalação lê recibos da plataforma e os da organização ativa, como na
+    // lista; nunca o de outra organização, que nenhuma tela desta sessão tem como consumir.
+    query = organizationId
+      ? query.or(`organization_id.eq.${organizationId},organization_id.is.null`)
+      : query.is("organization_id", null);
+  } else {
     if (!organizationId)
       throw new ExtensionServiceError(
         "extension_operation_not_found",

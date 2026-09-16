@@ -591,7 +591,7 @@ begin
   return to_jsonb(v_op) || jsonb_build_object('applied_now', true);
 end $$;
 
--- Remover da instalação: nenhuma linha é apagada. A instalação some de gestão, hub e guia; todo
+-- Remover da instalação: nenhuma linha é apagada. A instalação sai do hub e do guia; todo
 -- vínculo ATIVO, em todas as organizações, é desligado com a marca da remoção e a configuração
 -- preservada. Tirar não espera a atualização do core: só reduz o que está ativo.
 create or replace function public.fn_extensions_remove_installation(p_actor uuid, p_operation uuid, p_installation uuid,

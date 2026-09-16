@@ -91,7 +91,7 @@ export const SQL_ERRORS: Readonly<Record<string, { message: string; status: numb
   },
   extension_preparation_in_progress: {
     message:
-      "Já existe uma preparação em andamento. Consulte o histórico para verificar ou cancelar o pedido.",
+      "Já existe uma preparação em andamento. Em Atividade recente, quem pediu pode retomá-la, e qualquer responsável pela instalação pode cancelá-la.",
     status: 409,
   },
 };

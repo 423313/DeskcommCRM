@@ -331,6 +331,11 @@
       "from": "audit",
       "to": "org_audit_view",
       "label": "organização vê a própria desativação pela remoção"
+    },
+    {
+      "from": "manager",
+      "to": "org_audit_view",
+      "label": "gerente da organização confere por que o guia saiu"
     }
   ],
   "contracts": {
