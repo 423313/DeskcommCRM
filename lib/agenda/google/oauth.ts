@@ -3,7 +3,9 @@
  *
  * Sem rede, sem `process.env` e sem relógio próprio: quem chama injeta a
  * configuração do app e o instante. É o que permite provar, em teste de
- * as quatro armadilhas que matam esta integração em produção.
+ * unidade, as quatro armadilhas desta integração em produção: três matam a
+ * conexão em silêncio, e a quarta tranca quem tem a agenda num e-mail
+ * diferente do login do CRM.
  *
  * ─── Armadilha 1: sem `prompt=consent` não vem `refresh_token` ────────────
  *
