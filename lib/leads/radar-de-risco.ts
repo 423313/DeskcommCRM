@@ -32,6 +32,10 @@ import {
 // query paginada com índice (organization_id, status, last_activity_at).
 const SCAN_CAP = 500;
 
+// Quantos ids cabem numa consulta `in (...)` sem a lista estourar a linha de
+// request do PostgREST. Ver o laço em `demandasVisiveis` para o porquê do teto.
+const IDS_POR_CONSULTA = 100;
+
 export const RADAR_MIN_HOURS_PADRAO = RISK_COLD_HOURS;
 
 export interface AtRiskLead {
@@ -305,17 +309,28 @@ export async function carregaRadarDeRisco(
   // acima diz que tem de ficar. Por isso NÃO vira `.not("lead_id", "in", ...)`.
   if (funisArquivados.length > 0) {
     const idsDeLead = [...new Set(demandasVisiveis.flatMap((d) => (d.lead_id ? [d.lead_id as string] : [])))];
-    if (idsDeLead.length > 0) {
+    const fora = new Set<string>();
+    // EM LOTES DE `IDS_POR_CONSULTA`, e não numa consulta só: esta lista vai na
+    // QUERYSTRING do PostgREST. Um uuid custa ~37 bytes na URL e o teto da
+    // leitura acima é `SCAN_CAP` (500), então a linha de request passaria de
+    // ~18 KB numa organização carregada. O limite dos proxies que ficam na
+    // frente é uma ordem de grandeza menor (8 KB é o default de buffer de
+    // cabeçalho do nginx), e estourá-lo NÃO devolve um resultado menor: devolve
+    // 414/400, e o radar inteiro vira 500 justamente para quem tem mais
+    // demandas abertas — quem mais precisa dele. Não medido contra o proxy
+    // deste produto; o lote existe para a pergunta não precisar ser feita.
+    for (let i = 0; i < idsDeLead.length; i += IDS_POR_CONSULTA) {
+      const fatia = idsDeLead.slice(i, i + IDS_POR_CONSULTA);
       const { data: deArquivado, error: deArquivadoErr } = await admin
         .from("crm_leads")
         .select("id")
         .eq("organization_id", organizationId)
-        .in("id", idsDeLead)
+        .in("id", fatia)
         .in("pipeline_id", funisArquivados);
       if (deArquivadoErr) throw new Error(`radar_demandas_funil_failed: ${deArquivadoErr.message}`);
-      const fora = new Set((deArquivado ?? []).map((l) => l.id as string));
-      demandasVisiveis = demandasVisiveis.filter((d) => !d.lead_id || !fora.has(d.lead_id as string));
+      for (const l of deArquivado ?? []) fora.add(l.id as string);
     }
+    demandasVisiveis = demandasVisiveis.filter((d) => !d.lead_id || !fora.has(d.lead_id as string));
   }
   if (opts.humanRole === "agent" && demandasVisiveis.length) {
     // Demandas são org-flat. A visibilidade dos candidatos vem das relações sob
