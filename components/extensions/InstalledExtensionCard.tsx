@@ -389,6 +389,15 @@ function PlatformBlock({
   const active = extension.active_organizations ?? 0;
   const busy = busyAction !== null;
   const blocked = busy || actionsDisabled || preparationInProgress;
+  // Um botão de confirmar desabilitado dentro de um diálogo modal fica mudo: o motivo que existe
+  // fora dele some atrás do overlay, e quem opera só descobre desistindo. O diálogo carrega o seu.
+  const motivoDoBloqueio = preparationInProgress
+    ? t(
+        "Há uma preparação desta extensão em andamento. Acompanhe ou cancele o pedido em Atividade recente antes de desfazer ou remover.",
+      )
+    : actionsDisabled
+      ? (blockedReason ?? t("Atualize o estado das extensões antes de enviar um novo pedido."))
+      : null;
   return (
     <section
       className="mt-4 space-y-3 rounded-md border border-border bg-surface-elevated/40 p-3"
@@ -471,6 +480,14 @@ function PlatformBlock({
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {motivoDoBloqueio ? (
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid={`extension-revert-blocked-${extension.id}`}
+            >
+              {motivoDoBloqueio}
+            </p>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
             <AlertDialogAction
@@ -501,6 +518,14 @@ function PlatformBlock({
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {motivoDoBloqueio ? (
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid={`extension-remove-blocked-${extension.id}`}
+            >
+              {motivoDoBloqueio}
+            </p>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
             <AlertDialogAction

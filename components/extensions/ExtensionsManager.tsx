@@ -123,23 +123,31 @@ export function ExtensionsManager({
     [actorId, organizationId, syncPendingFromStorage],
   );
 
+  /**
+   * A mensagem do card vale enquanto o card for O MESMO: continua na lista e na mesma revisão da
+   * instalação. Sair da lista conta como mudança — a organização cujo vínculo já estava desligado
+   * NÃO vê a instalação removida (a remoção só marca vínculo ativo), então entre a remoção e a
+   * reinstalação o card some, e uma regra que só comparasse revisões de quem está na lista deixaria
+   * a frase antiga voltar sobre o card reinstalado.
+   */
   const esquecerMensagens = useCallback((installations: InstalledExtensionView[]) => {
     const anteriores = revisoesVistas.current;
-    const mudaram = installations
-      .filter((item) => anteriores[item.id] !== undefined && anteriores[item.id] !== item.installation_revision)
-      .map((item) => item.id);
-    revisoesVistas.current = Object.fromEntries(
-      installations.map((item) => [item.id, item.installation_revision]),
+    const agora = Object.fromEntries(
+      installations.map((item) => [item.id, item.installation_revision] as const),
     );
-    if (mudaram.length > 0) {
-      setConfigFeedback((atual) =>
-        Object.fromEntries(Object.entries(atual).filter(([id]) => !mudaram.includes(id))),
-      );
-    }
+    revisoesVistas.current = agora;
+    setConfigFeedback((atual) => {
+      const mantidas = Object.entries(atual).filter(([id]) => agora[id] === anteriores[id]);
+      return mantidas.length === Object.keys(atual).length ? atual : Object.fromEntries(mantidas);
+    });
   }, []);
 
   const invalidateContext = useCallback(
     (message: string) => {
+      // O snapshot morreu (outra organização, recibo sem contexto): as mensagens dos cards eram
+      // daquele mundo. Sem isto, a frase de um salvamento feito em A reaparecia sobre o card de B.
+      setConfigFeedback({});
+      revisoesVistas.current = {};
       setData(null);
       setSnapshotFresh(false);
       setLoading(false);

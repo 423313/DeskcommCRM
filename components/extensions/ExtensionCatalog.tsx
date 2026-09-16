@@ -446,6 +446,20 @@ export function CatalogExtensionCard({
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {preparationInProgress || actionsDisabled ? (
+            // O motivo tem de estar DENTRO do diálogo: o que está na tela atrás dele não é lido.
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid={`extension-install-blocked-${identidade}`}
+            >
+              {preparationInProgress
+                ? t(
+                    "Há uma preparação desta extensão em andamento. Acompanhe ou cancele o pedido em Atividade recente.",
+                  )
+                : (blockedReason ??
+                  t("Atualize o estado das extensões antes de enviar um novo pedido."))}
+            </p>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
             <AlertDialogAction

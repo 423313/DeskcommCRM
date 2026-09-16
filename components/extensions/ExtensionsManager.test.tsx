@@ -865,6 +865,76 @@ describe("ExtensionsManager", () => {
     },
   );
 
+  it("a mensagem não volta quando a instalação some da lista entre a remoção e a reinstalação", async () => {
+    // A organização que tinha a extensão DESLIGADA não vê a removida: a remoção só marca vínculo
+    // ativo. Entre a remoção e a reinstalação o card some da lista, e é aí que uma regra que só
+    // compara revisões de quem está na lista perde o rastro e deixa a frase antiga voltar.
+    const salva = list(ORG_A, {
+      installations: [installation({ enabled: false, revision: 2, installation_revision: 4 })],
+    });
+    const semNada = list(ORG_A, { installations: [] });
+    const reinstalada = list(ORG_A, {
+      installations: [installation({ enabled: false, revision: 3, installation_revision: 6 })],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: salva }))
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+        const id = new Headers(init?.headers).get("Idempotency-Key")!;
+        return Promise.resolve(json({ data: operation({ id, kind: "configure" }) }));
+      })
+      .mockResolvedValueOnce(json({ data: salva }))
+      .mockResolvedValueOnce(json({ data: semNada }))
+      .mockResolvedValue(json({ data: reinstalada }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    // Mexe na descrição, e não na chave "Ativa no CRM": esta organização tem a extensão
+    // DESLIGADA, que é a pré-condição do defeito — a remoção só marca vínculo ativo.
+    await user.click(await screen.findByTestId(`extension-description-${INSTALLATION}`));
+    await user.click(screen.getByTestId(`extension-save-${INSTALLATION}`));
+    expect(await screen.findByText("Configuração salva.")).toBeVisible();
+
+    // Removida por quem administra a instalação: esta organização nem vê o card.
+    fireEvent(window, new Event("focus"));
+    await waitFor(() => expect(screen.queryByTestId(`extension-installed-${INSTALLATION}`)).toBeNull());
+
+    // Reinstalada: mesmo id, revisão nova, card novo — sem a frase da vida anterior.
+    fireEvent(window, new Event("focus"));
+    expect(await screen.findByTestId(`extension-installed-${INSTALLATION}`)).toBeVisible();
+    expect(screen.queryByText("Configuração salva.")).toBeNull();
+  });
+
+  it("a mensagem de um salvamento não atravessa a troca de organização", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ data: list() }))
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+        const id = new Headers(init?.headers).get("Idempotency-Key")!;
+        return Promise.resolve(json({ data: operation({ id, kind: "configure" }) }));
+      })
+      .mockResolvedValueOnce(json({ data: list() }))
+      // A sessão passou a valer para outra organização: o snapshot morre com ela.
+      .mockResolvedValueOnce(json({ data: list(ORG_B) }))
+      .mockResolvedValue(json({ data: list() }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderManager();
+
+    await user.click(await screen.findByRole("switch", { name: "Ativa no CRM" }));
+    await user.click(screen.getByTestId(`extension-save-${INSTALLATION}`));
+    expect(await screen.findByText("Configuração salva.")).toBeVisible();
+
+    fireEvent(window, new Event("focus"));
+    expect(await screen.findByTestId("extensions-unavailable")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
+
+    expect(await screen.findByTestId(`extension-installed-${INSTALLATION}`)).toBeVisible();
+    expect(screen.queryByText("Configuração salva.")).toBeNull();
+  });
+
   it("desfazer ou configurar o que outra sessão removeu avisa fora do card e recarrega", async () => {
     const removida = {
       error: {
@@ -1109,11 +1179,21 @@ describe("ExtensionsManager", () => {
   });
 
   it.each([
-    ["desfazer", `extension-revert-${INSTALLATION}`, `extension-revert-confirm-${INSTALLATION}`],
-    ["remover", `extension-remove-${INSTALLATION}`, `extension-remove-confirm-${INSTALLATION}`],
+    [
+      "desfazer",
+      `extension-revert-${INSTALLATION}`,
+      `extension-revert-confirm-${INSTALLATION}`,
+      `extension-revert-blocked-${INSTALLATION}`,
+    ],
+    [
+      "remover",
+      `extension-remove-${INSTALLATION}`,
+      `extension-remove-confirm-${INSTALLATION}`,
+      `extension-remove-blocked-${INSTALLATION}`,
+    ],
   ])(
-    "o diálogo de %s aberto antes da preparação aparecer não confirma o que o banco recusa",
-    async (_caso, abrir, confirmar) => {
+    "o diálogo de %s aberto antes da preparação aparecer não confirma o que o banco recusa, e diz por quê",
+    async (_caso, abrir, confirmar, motivo) => {
       const comAnterior = list(ORG_A, {
         installations: [
           installation({
@@ -1141,7 +1221,18 @@ describe("ExtensionsManager", () => {
       // Outra sessão pediu a atualização enquanto este diálogo estava aberto.
       fireEvent(window, new Event("focus"));
 
-      await waitFor(() => expect(screen.getByTestId(confirmar)).toBeDisabled());
+      // Espera a recarga TERMINAR antes de medir: enquanto ela corre, a tela não está "fresca" e
+      // o botão ficaria desabilitado por OUTRO motivo — a primeira versão deste teste passava
+      // assim, e ficava verde mesmo sem a guarda da preparação. O marcador só existe com a lista
+      // nova no estado, e a ausência do aviso de atualizar prova que as mutações estão liberadas.
+      expect(await screen.findByTestId(`extension-platform-preparing-${INSTALLATION}`)).toBeVisible();
+      expect(
+        screen.queryByText("Atualize o estado das extensões antes de enviar um novo pedido."),
+      ).toBeNull();
+      expect(screen.getByTestId(confirmar)).toBeDisabled();
+      expect(screen.getByTestId(motivo)).toHaveTextContent(
+        "Há uma preparação desta extensão em andamento.",
+      );
       expect(fetchMock).toHaveBeenCalledTimes(2);
     },
   );
@@ -1195,7 +1286,15 @@ describe("ExtensionsManager", () => {
 
     fireEvent(window, new Event("focus"));
 
-    await waitFor(() => expect(screen.getByTestId(confirmar)).toBeDisabled());
+    const identidade = "equipe-exemplo-rotina-comercial-1.1.0";
+    expect(await screen.findByTestId(`extension-catalog-preparing-${identidade}`)).toBeVisible();
+    expect(
+      screen.queryByText("Atualize o estado das extensões antes de enviar um novo pedido."),
+    ).toBeNull();
+    expect(screen.getByTestId(confirmar)).toBeDisabled();
+    expect(screen.getByTestId(`extension-install-blocked-${identidade}`)).toHaveTextContent(
+      "Há uma preparação desta extensão em andamento.",
+    );
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
