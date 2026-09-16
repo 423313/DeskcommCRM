@@ -23,6 +23,7 @@ interface Props {
 }
 
 const TIMEZONES = [
+  "Africa/Luanda",
   "America/Sao_Paulo",
   "America/Manaus",
   "America/Belem",

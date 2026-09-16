@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { parseReaisToCents, formatCentsBRL, formatCents } from "./money";
+import { parseReaisToCents, formatCentsBRL, formatCents, MOEDAS_SERVIDAS } from "./money";
 
 describe("parseReaisToCents", () => {
   it("lê ponto como decimal quando o grupo final não é de milhar", () => {
@@ -68,6 +68,23 @@ describe("formatCents", () => {
     expect(semNbsp(formatCents(24990, "BRL"))).toBe("R$ 249,90");
     expect(semNbsp(formatCents(24990, "MXN"))).toBe("$249.90");
     expect(semNbsp(formatCents(24990, "USD"))).toBe("$249.90");
+    // Kwanza: símbolo DEPOIS do número e vírgula decimal, que é a convenção de
+    // Angola — `formatadorDa` maximiza `und-AO` para `pt-AO` e é o ICU que
+    // decide, não uma tabela nossa.
+    expect(semNbsp(formatCents(24990, "AOA"))).toBe("249,90 Kz");
+  });
+
+  /**
+   * Servir uma moeda são TRÊS coisas juntas (ver o bloco de `MOEDAS_SERVIDAS`):
+   * o seletor oferece, o schema aceita e `formatCents` sabe escrevê-la. As duas
+   * primeiras já têm guarda em `tests/unit/moeda-da-organizacao-se-escolhe-na-tela.test.ts`;
+   * a terceira é esta. Sem ela, uma moeda podia entrar na lista e cair no ramo
+   * de degradação (`"AOA 249.90"`) sem nada ficar vermelho.
+   */
+  it("toda moeda servida sai formatada, nenhuma cai no ramo de degradação", () => {
+    for (const moeda of MOEDAS_SERVIDAS) {
+      expect(semNbsp(formatCents(24990, moeda))).not.toBe(`${moeda} 249.90`);
+    }
   });
 
   /**
