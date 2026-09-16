@@ -494,49 +494,98 @@ jobs:
             -e SENTRY_DSN=off \
             deskcomm-worker:pr
 
-          vivo=nao
-          for _ in $(seq 1 20); do
-            if docker ps --filter name=worker-boot --filter status=running -q | grep -q .; then
-              vivo=sim
+          # ESPERA UM SINAL, e não o `docker ps`: o contêiner fica `running` 0,2s
+          # depois do `run -d` — antes de o `tsx` importar a primeira linha. O loop
+          # antigo saía na PRIMEIRA volta, lia logs vazios e um `/healthz` que
+          # ninguém ainda escutava, e reprovava um worker SADIO (medido: run
+          # 35099604595, o passo morreu 0,2s depois do `docker run`). Esperar o
+          # sinal é o que separa "não bootou" de "ainda não bootou".
+          estado=nao_bootou
+          corpo=""
+          for _ in $(seq 1 30); do          # até 90s: tsx + pool + a query do harness
+            sleep 3
+            if ! docker ps --filter name=worker-boot --filter status=running -q | grep -q .; then
+              estado=saiu
               break
             fi
-            sleep 3
+            logs_ate_agora=$(docker logs worker-boot 2>&1 || true)
+            if printf '%s' "$logs_ate_agora" | grep -qE 'agent-engine pronto'; then
+              estado=pronto
+              break
+            fi
+            # Defeito FATAL já escrito no log: não há por que esperar os 90s — a
+            # classificação abaixo reprova por estes mesmos marcadores, então o
+            # veredito não muda; só não fica 90s parado para dizê-lo.
+            if printf '%s' "$logs_ate_agora" | grep -qE 'event-log drain OFF|Cannot find module|ERR_MODULE_NOT_FOUND|Cannot use import statement'; then
+              estado=fatal_no_log
+              break
+            fi
+            corpo=$(curl -s -m 2 "http://127.0.0.1:3971/healthz" || true)
+            if [ -n "$corpo" ]; then
+              estado=servindo
+              break
+            fi
           done
 
           docker logs worker-boot > boot.log 2>&1 || true
           echo "--- logs do boot (tail) ---"
           tail -30 boot.log
+          echo "estado: $estado"
 
+          # A volta pode ter parado no LOG de prontidão antes de o `curl`
+          # acontecer; esta última tentativa garante que o caso 4 (worker de pé)
+          # não dependa do caminho por onde o loop saiu.
+          if [ -z "$corpo" ]; then
+            corpo=$(curl -s -m 5 "http://127.0.0.1:3971/healthz" || true)
+          fi
+
+          # 1) A #648 na cara: o laço desligou no boot.
           if grep -q 'event-log drain OFF' boot.log; then
             echo "::error::o laço do event_log NÃO carregou no boot da imagem — este é o defeito da #648, e a sonda do passo anterior também reprovou."
             exit 1
           fi
 
-          if [ "$vivo" = "nao" ]; then
-            if grep -qE 'Cannot find module|ERR_MODULE_NOT_FOUND|Cannot use import statement|SyntaxError|is not a function|Failed to resolve' boot.log; then
-              echo "::error::o worker morreu com a CADEIA DE BOOT quebrada (import/módulo) — a classe da #648."
-              exit 1
-            fi
-            if grep -qE 'ECONNREFUSED|ENOTFOUND|getaddrinfo|schema do harness ausente|password authentication|Connection terminated|timeout expired|ECONNRESET' boot.log; then
-              echo "::notice::o worker parou na camada de banco (este runner não tem Postgres). O laço carregado foi medido pela sonda, dentro da imagem; o /healthz respondendo 200 é medido em produção e no e2e — não aqui."
-              exit 0
-            fi
-            echo "::error::o worker morreu no boot por um motivo que este gate não reconhece."
-            echo "::error::Se for esperado, o classificador acima precisa de mais um caso escrito — não de um passe livre."
+          # 2) Cadeia de boot quebrada (import/módulo) — a classe da #648. Vale nos
+          #    DOIS estados: o contêiner pode ter morrido, ou ter ficado de pé com a
+          #    exceção engolida em outro laço do boot.
+          if grep -qE 'Cannot find module|ERR_MODULE_NOT_FOUND|Cannot use import statement|SyntaxError|is not a function|Failed to resolve' boot.log; then
+            echo "::error::o worker morreu com a CADEIA DE BOOT quebrada (import/módulo) — a classe da #648."
             exit 1
           fi
 
-          corpo=$(curl -s -m 5 "http://127.0.0.1:3971/healthz" || true)
-          echo "healthz: $corpo"
-          printf '%s' "$corpo" | grep -q '"event_log_drain"' || {
-            echo "::error::o worker está de pé mas o /healthz não publica event_log_drain (#604)."
-            exit 1
-          }
-          printf '%s' "$corpo" | grep -q '"event_log_drain":{"carregado":true' || {
-            echo "::error::o /healthz publica event_log_drain com carregado:false — o laço não carregou."
-            exit 1
-          }
-          docker logs worker-boot 2>&1 | tail -20
+          # 3) Banco ausente: é o desfecho DECLARADO deste runner (não tem Postgres).
+          #    `assertHarnessSchema(pool)` roda uma query ANTES de escutar, então o
+          #    boot para aqui de propósito. O que este passo NÃO mede, por causa
+          #    disso, é o `/healthz` respondendo 200 — isso é medido em produção e
+          #    pelo e2e, que têm banco.
+          if grep -qE 'ECONNREFUSED|ENOTFOUND|getaddrinfo|schema do harness ausente|password authentication|Connection terminated|timeout expired|ECONNRESET' boot.log; then
+            echo "::notice::o worker parou na camada de banco (este runner não tem Postgres). O laço carregado foi medido pela sonda, dentro da imagem; o /healthz respondendo 200 é medido em produção e no e2e — não aqui."
+            exit 0
+          fi
+
+          # 4) De pé e servindo: aí o campo TEM de estar lá — é o sinal que o gate de
+          #    publicação lê antes de deixar a imagem ir para o canal.
+          if [ -n "$corpo" ]; then
+            echo "healthz: $corpo"
+            printf '%s' "$corpo" | grep -q '"event_log_drain"' || {
+              echo "::error::o worker está de pé mas o /healthz não publica event_log_drain (#604)."
+              exit 1
+            }
+            printf '%s' "$corpo" | grep -q '"event_log_drain":{"carregado":true' || {
+              echo "::error::o /healthz publica event_log_drain com carregado:false — o laço não carregou."
+              exit 1
+            }
+            docker logs worker-boot 2>&1 | tail -20
+            exit 0
+          fi
+
+          # 5) Não bootou, não morreu por banco, não serviu: morte silenciosa ou boot
+          #    que não chega — exatamente o que este gate existe para não deixar
+          #    passar. Se for de outro tipo, o classificador precisa de mais um caso
+          #    escrito, não de um passe livre.
+          echo "::error::o worker não bootou por um motivo que este gate não reconhece (estado: $estado)."
+          echo "::error::Se for esperado, o classificador acima precisa de mais um caso escrito — não de um passe livre."
+          exit 1
       - name: O scheduler sobe E tem o evento do event_log no crontab?
         run: |
           set -euo pipefail
