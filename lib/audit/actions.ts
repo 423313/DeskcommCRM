@@ -559,6 +559,9 @@ export const AUDIT_ACTIONS = [
   "extension.configured",
   "extension.deactivated",
   "extension.preparation_cancelled",
+  // "Cliente pela agenda" ligada ou desligada (migration 0262). Ligar reescreve
+  // etiquetas de toda a organização; metadata leva as contagens.
+  "crm.cliente_pela_agenda_alterado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
