@@ -2272,3 +2272,39 @@ healthcheck, levando junto o `psql` do baseline — o log do CLI é que diz
 `container is not ready: unhealthy`; e um Realtime unhealthy varrendo o WAL levou o
 Postgres a `57014 statement timeout` e o GoTrue a `504`. **O Realtime não foi
 exercitado nesta rodada.**
+
+## Lote 12 · G2 — Inbox: painel do contato e leads recentes (PRs #909, #944, #946)
+
+**PENDENTE POR EXECUÇÃO — nenhuma linha desta seção foi provada em tela.** Ela
+existe porque a lacuna é de FERRAMENTA, não de descuido: os consertos do grupo
+estão medidos em jsdom e em dublê de banco, e um deles jsdom e dublê são
+estruturalmente incapazes de alcançar.
+
+| Caso | Prioridade | Estado |
+|---|---|---|
+| L12.G2.1 `GET /api/v1/contact-tags` responde **200** (e não um 400 de parse do PostgREST) numa organização com pelo menos um contato SEM tag e um COM tag. Abrir o painel do Inbox › "Tag" e conferir a resposta pelo DevTools; anexar em `evidence/` | `[P1]` | **NÃO MEDIDO** |
+| L12.G2.2 O rótulo "Novo Lead" cabe na fileira de botões do painel (`flex flex-wrap gap-2`, `components/inbox/CRMSidePanel.tsx`) sem quebrar a fileira nem sumir, em 400 px e no tema escuro | `[P2]` | **PARCIAL** — a PRESENÇA do botão está inscrita em `tests/e2e/encerramento-atendimento.spec.ts` (`SPECS_PARTE_3`), que o CI roda a cada PR; o ENCAIXE em 400 px continua sem medida |
+| L12.G2.3 A linha "Funil · Etapa" com nome longo de funil: medir `getBoundingClientRect().width` contra `scrollWidth` do `div.line-clamp-2`, e o mesmo em celular, onde não há hover para o `title` | `[P2]` | **NÃO MEDIDO** |
+
+**Por que L12.G2.1 não tem substituto unitário.** `app/api/v1/contact-tags/route.ts`
+filtra com `.neq("tags", "{}")` sobre uma coluna `text[]`, e quem decide se essa
+sintaxe é aceita é o PostgREST — não o Postgres, e muito menos o dublê de
+`tests/unit/tags-do-contato-rota.test.ts`, que trata `"{}"` como caso especial
+escrito à mão. Um dublê não pode reprovar uma sintaxe que ele mesmo define. É a
+ÚNICA `.neq()` sobre coluna de array no repositório; para conferir em vez de
+acreditar nesta linha (o número envelhece, o comando não):
+
+```bash
+grep -rn '\.neq(' app lib workers --include='*.ts' --include='*.tsx' \
+  | grep -v '\.test\.' | grep -v ': *//' | sed 's/.*\.neq(/.neq(/'
+```
+
+O repositório já pagou o preço de um dublê de `.neq()` que no-opava: está
+escrito, com o desfecho em produção, no comentário de `upsertConversation`, em `lib/channels/zernio/ingest.ts`.
+
+A favor de a sintaxe estar certa, e é o que sustenta `[P1]` em vez de `[P0]`: o
+schema não deixa NULL na coluna (`supabase/baseline.sql:1343`, tabela
+`contacts` — `"tags" "text"[] DEFAULT '{}'::"text"[] NOT NULL`), então não há o
+terceiro valor que fez o `<>` do zernio devolver desconhecido. E o desfecho de
+falha é contido: a rota alimenta SUGESTÃO de tag, e o editor segue gravando o
+que se digita.
