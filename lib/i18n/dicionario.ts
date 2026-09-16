@@ -8083,6 +8083,9 @@ export const DICIONARIO: Traducoes = {
   "Esta sugestão já foi": { es: "Esta sugerencia ya fue" },
   "decidida": { es: "decidida" },
   "Informe o motivo da perda.": { es: "Indica el motivo de la pérdida." },
+  "Informe o motivo da perda: use “Marcar como perdido” no menu do card, que pede o motivo.": {
+    es: "Indica el motivo de la pérdida: usa “Marcar como perdido” en el menú del card, que pide el motivo.",
+  },
   "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.": {
     es: "Ese motivo de pérdida no está en la lista de este embudo — elige uno de los motivos configurados.",
   },

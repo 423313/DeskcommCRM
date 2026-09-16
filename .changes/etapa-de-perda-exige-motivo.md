@@ -15,9 +15,8 @@ errado era a tela, que deixava a pergunta chegar ao banco e devolvia a recusa co
 falha de servidor.
 
 Agora a resposta é a recusa de negócio, com o que fazer: no arrasto, o card volta
-para a coluna de origem e a tela avisa "Informe o motivo da perda." — para
-registrar a perda, use "Marcar como perdido" no menu do próprio card, que já pede o
-motivo; no lote, a recusa avisa antes de tentar, em vez de derrubar o lote inteiro
+para a coluna de origem e a tela avisa "Informe o motivo da perda: use “Marcar
+como perdido” no menu do card, que pede o motivo."; no lote, a recusa avisa antes de tentar, em vez de derrubar o lote inteiro
 por causa de um card; e o assistente de IA não leva o card para a etapa de perda:
 ele avisa na Central que o negócio deveria ser marcado como perdido e que o motivo
 é uma decisão de quem está no negócio. O aviso não se repete a cada mensagem do

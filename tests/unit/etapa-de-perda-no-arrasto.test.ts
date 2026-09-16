@@ -24,6 +24,8 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_RANK, type AuthUser, type Role } from "@/lib/auth/types";
 import { fail } from "@/lib/api/wrappers";
+import { readFileSync } from "node:fs";
+import { MOTIVO_DA_PERDA_OBRIGATORIO } from "@/lib/leads/motivo-da-perda";
 
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -162,7 +164,10 @@ describe("arrastar o card para a etapa de perda sem motivo (#917)", () => {
     const corpo = (await res.json()) as { error?: { code?: string; message?: string } };
     expect(corpo.error?.code).toBe("lost_reason_required");
     // A mensagem diz o QUE FAZER — era o que faltava no 500 que o board mostrava.
-    expect(corpo.error?.message ?? "").toContain("motivo");
+    // "motivo" sozinho passava com a recusa sem saída nenhuma (medido no QA do
+    // lote 12: a tela dizia só "Informe o motivo da perda."). A saída é o item de
+    // menu que abre a janela do motivo, e é ele que a frase tem de nomear.
+    expect(corpo.error?.message ?? "").toContain("“Marcar como perdido”");
   });
 
   it("a recusa acontece ANTES da escrita: o card não é tocado", async () => {
@@ -192,5 +197,14 @@ describe("arrastar o card para a etapa de perda sem motivo (#917)", () => {
     expect(estado.updates).toHaveLength(1);
     expect(estado.updates[0]).toMatchObject({ stage_id: PERDIDO_ID, lost_reason: "Cliente desistiu" });
     expect(res.status).toBe(200);
+  });
+
+  it("a saída que a recusa nomeia existe de verdade no menu do card", () => {
+    // A frase aponta para um item de menu. Se o item for renomeado, a recusa passa a
+    // mandar a pessoa procurar algo que a tela não tem — e nada reprovaria.
+    const nomeado = /“([^”]+)”/.exec(MOTIVO_DA_PERDA_OBRIGATORIO)?.[1];
+    expect(nomeado, "a recusa precisa nomear o item de menu entre aspas").toBeDefined();
+    const menu = readFileSync("components/kanban/KanbanCardActions.tsx", "utf8");
+    expect(menu).toContain(`t("${nomeado}")`);
   });
 });

@@ -72,7 +72,15 @@ export function motivoDaPerdaDaOrigem(informado?: string | null): string {
 }
 
 /** O texto base da recusa — o dicionário (`traduzir`) traduz a partir daqui. */
-export const MOTIVO_DA_PERDA_OBRIGATORIO = "Informe o motivo da perda.";
+/**
+ * A recusa diz a SAÍDA, não só a falta: quem arrastou o card para a etapa de perda
+ * não tem onde digitar o motivo no arrasto, e a janela que pede o motivo mora no
+ * menu do card. O nome citado aqui é o rótulo do item de menu — um teste prende os
+ * dois, para renomear o menu quebrar o teste em vez de deixar a recusa apontando
+ * para um lugar que não existe.
+ */
+export const MOTIVO_DA_PERDA_OBRIGATORIO =
+  "Informe o motivo da perda: use “Marcar como perdido” no menu do card, que pede o motivo.";
 
 /** O texto base da recusa por vocabulário — o mesmo que a rede de segurança usa. */
 export const MOTIVO_DA_PERDA_FORA_DO_VOCABULARIO =

@@ -229,7 +229,8 @@ test.describe("Lote 12 — quadro do funil", () => {
     expect(r.status()).toBe(422);
     expect(await r.text()).toContain("lost_reason_required");
 
-    await expect(page.getByText("Informe o motivo da perda.")).toBeVisible({ timeout: 10_000 });
+    // A recusa diz a SAÍDA — o L12.QA.4 falhou exatamente por a tela mostrar só a falta.
+    await expect(page.getByText("use “Marcar como perdido” no menu do card")).toBeVisible({ timeout: 10_000 });
     await captura(page, "935-05-arrasto-recusado-com-aviso");
 
     const { data } = await admin
@@ -272,7 +273,7 @@ test.describe("Lote 12 — quadro do funil", () => {
     // A recusa NOMEIA os cards ofensores, e não só o lote.
     expect(corpo).toContain(leads["lote-a"]);
     expect(corpo).toContain(leads["lote-b"]);
-    await expect(page.getByText("Informe o motivo da perda.")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("use “Marcar como perdido” no menu do card")).toBeVisible({ timeout: 10_000 });
     await captura(page, "935-07-lote-recusado");
 
     const { data } = await admin
