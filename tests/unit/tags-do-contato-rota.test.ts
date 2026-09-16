@@ -19,7 +19,11 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 
 const ORG = "org-1";
 type Linha = Record<string, unknown>;
-/** Aplica `eq`, `neq` (com `{}` = lista vazia) e `limit`: um dublê que os ignorasse vazaria a outra organização. */
+/**
+ * Aplica `eq`, `neq` (com `{}` = lista vazia), `order` e `limit`: um dublê que
+ * os ignorasse vazaria a outra organização — e, no caso de `order`/`limit`,
+ * deixaria passar uma rota que lê a tabela INTEIRA de contatos.
+ */
 function bancoFalso(linhas: Linha[], erro: { message: string } | null = null) {
   const from = () => {
     let rows = [...linhas];
@@ -31,7 +35,12 @@ function bancoFalso(linhas: Linha[], erro: { message: string } | null = null) {
         rows = rows.filter((l) => (val === "{}" ? (l[col] as unknown[]).length > 0 : l[col] !== val));
         return chain;
       },
-      order: () => chain,
+      order: (col: string, o: { ascending: boolean }) => {
+        rows = [...rows].sort(
+          (x, y) => String(x[col]).localeCompare(String(y[col])) * (o.ascending ? 1 : -1),
+        );
+        return chain;
+      },
       limit: (n: number) => ((limite = n), chain),
       then: (res: (v: unknown) => unknown) =>
         Promise.resolve({ data: erro ? null : rows.slice(0, limite), error: erro }).then(res),
@@ -84,6 +93,52 @@ describe("GET /api/v1/contact-tags", () => {
 
     expect(status).toBe(200);
     expect(body.data).toEqual(["vip"]);
+  });
+
+  /**
+   * `.order("updated_at", { ascending: false })` e `.limit(1000)` são UMA
+   * decisão só — "os mil contatos com tag mais recentes" — e nenhuma das duas
+   * metades era medida: o dublê no-opava a ordenação e a fixture tinha 4 linhas
+   * contra um teto de 1000, então o corte nunca era exercitado.
+   *
+   * Apagar o `.limit` faz a rota ler a tabela inteira de contatos de uma
+   * organização grande para montar oito chips. Apagar o `.order` troca "as mais
+   * recentes" por "as mil que o Postgres devolver primeiro", que numa tabela com
+   * churn é justamente o lixo antigo. As duas ficavam verdes.
+   *
+   * A fixture tem 1001 linhas, e o contato ANTIGO é o PRIMEIRO da lista: sem
+   * ordenação ele entra no corte; sem corte ele entra por não haver corte.
+   */
+  it("lê os contatos mais recentes e para no teto: a tag antiga não entra", async () => {
+    const antigo = { organization_id: ORG, tags: ["antiga"], updated_at: "2020-01-01T00:00:00.000Z" };
+    const recentes = Array.from({ length: 1000 }, () => ({
+      organization_id: ORG, tags: ["recente"], updated_at: "2026-09-15T12:00:00.000Z",
+    }));
+    vi.mocked(createClient).mockResolvedValue(bancoFalso([antigo, ...recentes]));
+
+    const { status, body } = await chamaRota();
+
+    expect(status).toBe(200);
+    expect(body.data).toEqual(["recente"]);
+  });
+
+  /**
+   * O teto de 200 tags no corpo. A fixture de 4 linhas nunca o alcançava, e o
+   * editor ainda corta em 8 na tela — mas quem responde pelo tamanho da resposta
+   * é a rota, e sem este caso o `.slice(TETO_DE_TAGS)` podia sumir sem doer.
+   */
+  it("devolve no máximo 200 tags, as primeiras em ordem", async () => {
+    const muitas = Array.from({ length: 250 }, (_, i) => `tag-${String(i).padStart(3, "0")}`);
+    vi.mocked(createClient).mockResolvedValue(bancoFalso([
+      { organization_id: ORG, tags: muitas, updated_at: "2026-09-15T12:00:00.000Z" },
+    ]));
+
+    const { status, body } = await chamaRota();
+
+    expect(status).toBe(200);
+    expect(body.data).toHaveLength(200);
+    expect(body.data?.[199]).toBe("tag-199");
+    expect(body.data).not.toContain("tag-200");
   });
 
   it("falha na leitura vira erro, não lista vazia", async () => {
