@@ -58,9 +58,11 @@
  * spec seguinte medindo a sobra. Ela mora num `test.afterAll` — o porquê, medido,
  * está no comentário do hook lá embaixo.
  *
- * São DOIS níveis de limpeza, e os dois importam: cada caso remove, no fim dele,
- * as camadas que ELE subiu (`limparCamada`), e o `test.afterAll` roda depois como
- * rede de segurança — um estouro no meio pula a limpeza do caso, e não a dele.
+ * A limpeza é UMA só — o `test.afterAll` lá embaixo — e já não há limpeza por
+ * caso: a subida de cada caso somada à limpeza do anterior batia no teto de
+ * trocas de logo que o PRÓPRIO PRODUTO cobra (10 por usuário a cada 5 min, POST e
+ * DELETE contando igual), e a suíte reprovava com 429 num defeito que não existia.
+ * A NOTA DO TETO DE TROCAS, no caso (1), traz a conta e a medição.
  */
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -516,11 +518,6 @@ async function subirLogoDaCamada(page: Page, escopo: Escopo): Promise<void> {
   await aindaNaTelaDeMarca(page, camada.rota, escopo);
 }
 
-/** Desfaz o que o caso subiu nesta camada. Tolerante a "não há o que remover". */
-async function limparCamada(page: Page, escopo: Escopo): Promise<void> {
-  await removerLogoSeHouver(page, CAMADAS[escopo].tela, escopo);
-}
-
 /**
  * A barra lateral PASSOU a mostrar o logo desta camada — esperando o VALOR.
  *
@@ -711,11 +708,27 @@ test.describe("o logo subido pela tela chega à tela", () => {
     baixou(barra!, "barra lateral do dono");
     await page.screenshot({ path: evidencia("2-sidebar-do-dono.png") });
 
-    // Desfaz o que ESTE caso subiu. Os casos seguintes montam a própria
-    // precondição, então nada depende da sobra dele — e a limpeza aqui é o que
-    // mantém isso verdade também para as specs seguintes do mesmo banco
-    // (issue #306).
-    await limparCamada(page, "instalacao");
+    // ── A NOTA DO TETO DE TROCAS (issue #306) ────────────────────────────────
+    // Este caso NÃO limpa o que subiu, e nenhum outro limpa: a limpeza é a do
+    // `afterAll` no fim do arquivo.
+    //
+    // O motivo é MEDIDO, não estilo: o produto cobra 10 trocas de logo por usuário
+    // a cada 5 min (`app/api/v1/marca/logo/route.ts` — o teto do POST e o do
+    // DELETE são o mesmo, então REMOVER conta tanto quanto subir). Com subida +
+    // limpeza por caso, a conta do `dono` (casos 1, 2, 3, 5 e 6) fechava a PRIMEIRA
+    // tentativa em DEZ operações — o teto inteiro. A retentativa do caso (6) é a
+    // 11ª, e é ela que voltou 429 ("Muitas trocas de logo seguidas"): o toast de
+    // erro tomou o lugar do de sucesso, e o caso morreu esperando 15s por um toast
+    // que o produto tinha razão em não dar. MEDIDO no trace do run 35095930532,
+    // caso (6): `POST /api/v1/marca/logo → 429`.
+    //
+    // Sem a limpeza por caso as contas ficam em 7 (`dono`) e 5 (`admin`) — 8 e 6 no
+    // pior caso, com o `afterAll` ainda tendo o que limpar. Isso deixa margem para
+    // uma retentativa, e o teto CONTINUA valendo: quem somar operações aqui precisa
+    // caber nele.
+    //
+    // Nada depende da sobra: cada caso monta a própria precondição, e o `afterAll`
+    // limpa as duas camadas para as specs seguintes do mesmo banco.
   });
 
   test("(2) quem NÃO entrou vê o logo do dono na tela de acesso — a P0", async ({
@@ -743,8 +756,8 @@ test.describe("o logo subido pela tela chega à tela", () => {
     await pagina.screenshot({ path: evidencia("3-login-deslogado.png"), fullPage: true });
     await contexto.close();
 
-    // Desfaz o que ESTE caso subiu — a camada da instalação volta a ficar sem logo.
-    await limparCamada(page, "instalacao");
+    // Sem `limparCamada` aqui: o teto de trocas por usuário do produto — ver a
+    // NOTA DO TETO no caso (1).
   });
 
   test("(3) o logo da EMPRESA troca a barra dela e NÃO vaza para a tela de acesso", async ({
@@ -789,10 +802,8 @@ test.describe("o logo subido pela tela chega à tela", () => {
       expect(noLogin!.src).toContain(`${PREFIXO_PUBLICO}platform/`);
       expect(noLogin!.src).not.toContain(`${PREFIXO_PUBLICO}${creds.org_id}/`);
 
-      // Desfaz as DUAS camadas que este caso subiu — cada uma pela sessão que a
-      // subiu (o `admin` não alcança `/admin/marca`, e é essa a separação).
-      await limparCamada(page, "organizacao");
-      await limparCamada(paginaInstalacao, "instalacao");
+      // Sem `limparCamada` aqui: o teto de trocas por usuário do produto — ver a
+      // NOTA DO TETO no caso (1).
     } finally {
       await ctxInstalacao.close();
     }
@@ -863,9 +874,8 @@ test.describe("o logo subido pela tela chega à tela", () => {
     ).not.toBeNull();
     expect(depois!.src, "a recusa trocou o logo por outro").toBe(antes.src);
 
-    // Desfaz o que ESTE caso subiu: a camada da empresa volta a ficar sem logo. A
-    // recusa em si não escreveu nada — é o que o `depois === antes` acima prova.
-    await limparCamada(page, "organizacao");
+    // Sem `limparCamada` aqui: o teto de trocas por usuário do produto — ver a
+    // NOTA DO TETO no caso (1).
   });
 
   test("(5) remover devolve o logo da camada de baixo", async ({ page, browser }) => {
@@ -916,9 +926,9 @@ test.describe("o logo subido pela tela chega à tela", () => {
       );
       await page.screenshot({ path: evidencia("6-volta-ao-da-instalacao.png") });
 
-      // Desfaz o que sobrou deste caso: a camada de baixo. A de cima ele mesmo
-      // removeu — é o que ele mede.
-      await limparCamada(paginaInstalacao, "instalacao");
+      // Sem `limparCamada` aqui: o teto de trocas por usuário do produto — ver a
+      // NOTA DO TETO no caso (1). (A camada de CIMA este caso removeu como AÇÃO
+      // dele, não como limpeza — é o que ele mede.)
     } finally {
       await ctxInstalacao.close();
     }
@@ -934,9 +944,15 @@ test.describe("o logo subido pela tela chega à tela", () => {
     // `APP_LOGO_URL` do `.env`, se houver). Antes, o que ele pressupunha era o
     // logo que o caso (1) tinha subido — e um estouro no (1) derrubava ESTE caso,
     // num PR que não toca marca.
-    const fachadaAntes = await logoDoLogin(browser);
-
+    //
+    // E o "agora" tem de ser medido com a instalação SEM logo PRÓPRIO: os casos
+    // acima terminam com o logo DELES no ar (não limpam mais — ver a NOTA DO TETO
+    // no caso (1)), e um `fachadaAntes` que já fosse o arquivo desta spec faria a
+    // asserção final comparar o padrão do sistema com ele mesmo. Uma requisição
+    // quando há logo para tirar; nenhuma quando não há.
     await entrarNaCamada(page, "instalacao");
+    await removerLogoSeHouver(page, "/admin/marca", "instalacao");
+    const fachadaAntes = await logoDoLogin(browser);
     await subirLogoDaCamada(page, "instalacao");
 
     // A subida chegou à fachada: sem esta medição, "voltou ao que era" ficaria
@@ -999,6 +1015,11 @@ test.describe("o logo subido pela tela chega à tela", () => {
    *
    * Limpa as DUAS camadas, e não só a da instalação: um estouro no meio deixa para
    * trás o logo da EMPRESA com a mesma facilidade.
+   *
+   * É a ÚNICA limpeza do arquivo desde a NOTA DO TETO DE TROCAS (caso 1): a
+   * limpeza por caso somava com a subida do caso seguinte e batia no teto de 10
+   * trocas/5min por usuário do próprio produto (medido: 429 no trace do run
+   * 35095930532).
    *
    * Um login só, e do `dono`, porque ele é platform admin E `admin` da mesma
    * organização (`scripts/seed-e2e-credentials.ts:79-84`) — alcança `/admin/marca`
