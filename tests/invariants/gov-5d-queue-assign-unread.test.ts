@@ -77,7 +77,7 @@ beforeAll(() => {
   `);
 });
 
-describe("G5-03 — coerência ordem↔posição (acceptance 1)", () => {
+describe("G5-03 — ordem de EXIBIÇÃO do inbox, todas as abas (#639) — e a fila de ESPERA, que é outra", () => {
   it("o Postgres devolve a ordem que o handler PEDE: last_message_at DESC nulls last, id DESC (espelho — quem guarda o pedido é tests/unit/fila-ordena-por-ultima-mensagem.test.ts)", () => {
     // Espelha o ORDER BY do handler (app/api/v1/conversations/_handler.ts).
     // ⚠️ este arquivo NÃO chama o handler: reverter o ORDER BY do handler não o
@@ -98,6 +98,38 @@ describe("G5-03 — coerência ordem↔posição (acceptance 1)", () => {
           and id in ('${CONV_OLD}', '${CONV_MID}', '${CONV_NEW}', '${CONV_STALE}');`,
     );
     expect(ordered).toBe(`${CONV_MID},${CONV_OLD},${CONV_NEW},${CONV_STALE}`);
+  });
+
+  it("a fila de ESPERA é OUTRA ordem, e isso é deliberado: last_inbound_at ASC ⇒ quem espera há mais tempo é o 1º", () => {
+    // Por que este caso existe: o describe acima se chamava "coerência
+    // ordem↔posição" e provava só a ordem de EXIBIÇÃO. A propriedade que ele
+    // dizia guardar — índice da tela = posição da fila — deixou de existir com o
+    // #639, e por um lote inteiro ninguém REGISTROU que ela deixou de existir: a
+    // divergência virou comentário, e comentário nenhum gate lê.
+    //
+    // O número que a tela desenha hoje é `queue_position`
+    // (`lib/inbox/posicao-na-fila.ts` → `getQueuePositions`), que é ESTA ordem —
+    // a mesma que o cliente ouve pelo WhatsApp por `getQueuePosition`. As duas
+    // réguas convivem de propósito: "onde a conversa está na lista" e "qual a
+    // minha vez" são perguntas diferentes.
+    const espera = sql(
+      `select string_agg(id::text, ',' order by last_inbound_at asc nulls last, id asc)
+         from public.conversations
+        where organization_id = '${GOV_ORG}'
+          and id in ('${CONV_OLD}', '${CONV_MID}', '${CONV_NEW}', '${CONV_STALE}');`,
+    );
+    expect(espera).toBe(`${CONV_OLD},${CONV_MID},${CONV_NEW},${CONV_STALE}`);
+
+    const exibida = sql(
+      `select string_agg(id::text, ',' order by last_message_at desc nulls last, id desc)
+         from public.conversations
+        where organization_id = '${GOV_ORG}'
+          and id in ('${CONV_OLD}', '${CONV_MID}', '${CONV_NEW}', '${CONV_STALE}');`,
+    );
+    // A asserção que fecha o buraco: as duas réguas produzem ordens DIFERENTES
+    // sobre a MESMA fixture. Se um dia coincidirem, é porque uma das duas mudou
+    // em silêncio — e aí vale reler qual delas o selo está desenhando.
+    expect(espera).not.toBe(exibida);
   });
 });
 
