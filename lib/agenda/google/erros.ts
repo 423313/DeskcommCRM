@@ -189,6 +189,25 @@ function extrairMotivos(erro: unknown): string[] {
     }
   }
 
+  // O corpo CRU da recusa quando quem lançou foi o TRANSPORTE da agenda: o
+  // `GoogleHttpError` guarda o corpo do Google ao lado do status, em `corpo`, e
+  // ele não tem `response` — sem este unwrap a recusa de uma ESCRITA chegava
+  // aqui com status e sem motivo nenhum, e a frase persistida ficava só
+  // "Google HTTP 400" para um erro que o Google tinha explicado.
+  //
+  // Os `reason` entram ANTES do `status` simbólico de propósito: é o primeiro
+  // motivo que vira a frase persistida, e `invalid` diz o que consertar
+  // enquanto `INVALID_ARGUMENT` só repete a categoria. (O bloco do corpo cru
+  // logo acima mantém a ordem antiga — trocá-la não é o escopo da #950.)
+  const corpoDaRecusa = comoObjeto(e.corpo);
+  if (corpoDaRecusa) {
+    empilhar(corpoDaRecusa.error);
+    const erroDaRecusa = comoObjeto(corpoDaRecusa.error);
+    if (erroDaRecusa) listaDeReasons(erroDaRecusa.errors);
+    listaDeReasons(corpoDaRecusa.errors);
+    if (erroDaRecusa) empilhar(erroDaRecusa.status);
+  }
+
   // A mensagem entra por último e só serve para os motivos que o Google manda
   // em texto puro na renovação de token — `googleapis` copia `invalid_grant`
   // para `message` e não preenche `errors[]`.
