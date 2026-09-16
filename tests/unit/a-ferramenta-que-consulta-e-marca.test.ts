@@ -176,16 +176,59 @@ describe("crm_find_and_book_appointment", () => {
     expect(r.marcado).toBe(false);
     expect(r.motivo).toBe("agenda_horario_indisponivel");
     // O turno continua e o modelo recebe também o que estava livre: é o material para
-    // não encerrar a conversa com o cliente na mão.
+    // não encerrar a conversa com o cliente na mão. E SEM o 14:00 que acabou de ser
+    // recusado — oferecê-lo de volta é o começo de um laço.
     const horarios = r.horarios as Array<{ inicio: string; quando: string }>;
     expect(horarios.length).toBeGreaterThan(0);
-    expect(horarios.some((h) => HORA_14.test(h.quando))).toBe(true);
+    expect(horarios.some((h) => HORA_14.test(h.quando))).toBe(false);
+    expect(horarios.some((h) => /15[:h]00/.test(h.quando))).toBe(true);
 
     // E a instrução NÃO manda consultar de novo: a lista do dia já veio nesta
     // resposta. O texto herdado da marcação avulsa mandava chamar
     // `crm_find_free_slots` outra vez — o laço que esta ferramenta veio desfazer.
     expect(String(r.mensagem)).not.toContain("crm_find_free_slots");
     expect(String(r.mensagem)).toContain("desta mesma resposta");
+  });
+
+  it("recusa de OUTRA natureza mantém o ensino dela — não vira 'ofereça um horário da lista'", async () => {
+    // O ensino de cada código diz o que FAZER. Tipo de atendimento desativado pede
+    // outra pergunta ao cliente; reescrever por "esse horário ficou indisponível,
+    // ofereça outro" mandaria oferecer horário de um atendimento que não se marca.
+    vi.mocked(handlers.marcarAgendamentoHandler).mockRejectedValue(
+      new ApiError(422, "agenda_tipo_desativado", undefined, "req-1", "tipo desativado"),
+    );
+
+    const r = (await crmFindAndBookAppointment.handler(
+      { event_type_slug: "consulta", dia: "2026-09-01", horario: "14:00", contact_id: CONTATO },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(r.marcado).toBe(false);
+    expect(r.motivo).toBe("agenda_tipo_desativado");
+    expect(String(r.mensagem)).toContain("Pergunte que outro atendimento serve");
+    expect(String(r.mensagem)).not.toContain("acabou de ficar indisponível");
+  });
+
+  it("o horário recusado era o ÚNICO do dia: o ensino manda consultar outro dia", async () => {
+    // Sem opção nesta resposta, "ofereça uma das opções desta mesma resposta" aponta
+    // para uma lista vazia — e o modelo encerraria o turno sem ter o que oferecer.
+    vi.mocked(horariosLivresDaOrg).mockResolvedValue({
+      ...SUCESSO,
+      slots: [{ inicio: new Date("2026-09-01T17:00:00Z"), fim: new Date("2026-09-01T17:30:00Z") }],
+    });
+    vi.mocked(handlers.marcarAgendamentoHandler).mockRejectedValue(
+      new ApiError(409, "agenda_horario_indisponivel", undefined, "req-1", "slot tomado"),
+    );
+
+    const r = (await crmFindAndBookAppointment.handler(
+      { event_type_slug: "consulta", dia: "2026-09-01", horario: "14:00", contact_id: CONTATO },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(r.marcado).toBe(false);
+    expect(r.horarios).toEqual([]);
+    expect(String(r.mensagem)).toContain("crm_find_free_slots");
+    expect(String(r.mensagem)).not.toContain("desta mesma resposta");
   });
   it("agenda externa NUNCA sincronizada: o sinal chega ao modelo, e a marcação sai com ressalva", async () => {
     // O campo existe em `ResultadoDaConsulta` desde sempre e chegava SÓ à rota

@@ -757,18 +757,36 @@ export const crmFindAndBookAppointment: McpToolDefinition<typeof consultarEMarca
       // a resposta junta a recusa ao que estava livre no dia: é o material que o
       // modelo precisa para não encerrar a conversa com o cliente na mão.
       //
-      // ⚠️ E o ensino é REESCRITO, depois do spread. O texto que vem de
-      // `ENSINO_POR_CODIGO` é o da marcação avulsa e manda "chame
-      // `crm_find_free_slots` de novo" — correto lá, e um laço aqui: a lista do
-      // dia JÁ está nesta mesma resposta. Numa ferramenta que existe para matar
-      // o `crm_find_free_slots` repetido da #831, mandar consultar de novo é
-      // ensinar exatamente o laço que ela veio desfazer.
+      // ⚠️ A lista vai SEM o horário recusado: ele acabou de ser recusado, e
+      // oferecê-lo de volta ao cliente é o começo de um laço.
+      const payload = payloadDeHorarios(
+        consulta,
+        slotsDoDia.filter((s) => s !== achado),
+        HORARIOS_PADRAO,
+      );
+      // ⚠️ E o ensino só é REESCRITO quando a recusa é o horário que ficou
+      // indisponível e SOBROU opção no dia. O texto de `ENSINO_POR_CODIGO` para
+      // esse código é o da marcação avulsa — "chame `crm_find_free_slots` de
+      // novo" —, que aqui é um laço: a lista do dia já está nesta resposta.
+      //
+      // Reescrever SEMPRE, como uma versão anterior fazia, apagava o ensino
+      // certo das outras recusas: `agenda_disponibilidade_invalida` diz "não
+      // ofereça horários", `agenda_tipo_desativado` diz "pergunte que outro
+      // atendimento serve" — e as duas passavam a mandar oferecer um horário da
+      // lista. E sem opção no dia, consultar outro dia é mesmo o próximo passo.
+      const motivoDaRecusa = (resultado as { motivo?: unknown }).motivo;
+      const ofereceDaLista =
+        motivoDaRecusa === "agenda_horario_indisponivel" && payload.horarios.length > 0;
       return {
-        ...payloadDeHorarios(consulta, slotsDoDia, HORARIOS_PADRAO),
+        ...payload,
         ...(resultado as Record<string, unknown>),
-        mensagem:
-          "esse horário acabou de ficar indisponível e NADA foi marcado. Ofereça ao cliente uma " +
-          "das opções de `horarios` desta mesma resposta — não chame a consulta de novo.",
+        ...(ofereceDaLista
+          ? {
+              mensagem:
+                "esse horário acabou de ficar indisponível e NADA foi marcado. Ofereça ao cliente uma " +
+                "das opções de `horarios` desta mesma resposta — não chame a consulta de novo.",
+            }
+          : {}),
       };
     }
 
