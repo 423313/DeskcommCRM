@@ -88,6 +88,9 @@ export {
   MonitorPlay,
   // conversation
   ChatCircle,
+  WhatsappLogo,
+  InstagramLogo,
+  MessengerLogo,
   Phone,
   PhoneIncoming,
   PhoneOutgoing,
