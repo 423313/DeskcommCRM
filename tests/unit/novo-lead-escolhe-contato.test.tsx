@@ -98,6 +98,48 @@ describe("Novo Lead pelo funil — o lead nasce com contato", () => {
     expect(criarLead.mock.calls[0]?.[0]).toMatchObject({ contact_id: MICHELLE.id });
   });
 
+  it("fechar o diálogo esquece o contato escolhido — o próximo lead não nasce ligado a ele", async () => {
+    // O componente NÃO desmonta ao fechar: o funil o mantém montado enquanto há
+    // dados (`app/app/pipelines/[id]/_client.tsx`). Sem limpar no fechamento, o
+    // contato escolhido e abandonado volta selecionado, e o negócio seguinte
+    // nasce vinculado a quem o operador desistiu de usar — sem nada na tela.
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <NewLeadDialog
+        open
+        onOpenChange={() => {}}
+        pipelineId="33333333-3333-4333-8333-333333333333"
+        stages={ETAPAS}
+      />,
+    );
+
+    await user.type(await screen.findByLabelText("Contato"), "Michelle");
+    await user.click(await screen.findByRole("button", { name: /Michelle/ }));
+
+    rerender(
+      <NewLeadDialog
+        open={false}
+        onOpenChange={() => {}}
+        pipelineId="33333333-3333-4333-8333-333333333333"
+        stages={ETAPAS}
+      />,
+    );
+    rerender(
+      <NewLeadDialog
+        open
+        onOpenChange={() => {}}
+        pipelineId="33333333-3333-4333-8333-333333333333"
+        stages={ETAPAS}
+      />,
+    );
+
+    await user.type(await screen.findByLabelText("Título"), "Outro assunto");
+    await user.click(screen.getByRole("button", { name: "Criar lead" }));
+
+    await waitFor(() => expect(criarLead).toHaveBeenCalledTimes(1));
+    expect(criarLead.mock.calls[0]?.[0]).not.toHaveProperty("contact_id");
+  });
+
   it("sem contato o lead ainda nasce, mas a tela diz o que ele perde", async () => {
     const user = userEvent.setup();
     render(

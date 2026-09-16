@@ -70,6 +70,21 @@ export function NewLeadDialog({
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
   // Quem abre o diálogo já sabendo o contato (Inbox) não escolhe de novo.
   const [contato, setContato] = useState<Contact | null>(null);
+  // O contato é o único campo deste diálogo que cria VÍNCULO, e o componente
+  // NÃO desmonta ao fechar: o funil o mantém montado enquanto há dados
+  // (`app/app/pipelines/[id]/_client.tsx`). Sem esquecê-lo, quem escolheu um
+  // contato, desistiu e fechou reabre com ele ainda selecionado — e o próximo
+  // negócio nasce ligado a quem o operador desistiu de usar, sem nada na tela
+  // dizendo. A limpeza é feita no RENDER, comparando com o valor anterior, e
+  // não em `onOpenChange`: o botão "Cancelar" chama o `onOpenChange` do PAI
+  // direto, então um wrapper aqui não cobriria esse caminho. É o padrão que o
+  // React documenta para ajustar estado quando uma prop muda — sem efeito, e
+  // portanto sem o aviso de `react-hooks/set-state-in-effect`.
+  const [estavaAberto, setEstavaAberto] = useState(open);
+  if (open !== estavaAberto) {
+    setEstavaAberto(open);
+    if (!open) setContato(null);
+  }
 
   const form = useForm<FormShape>({
     defaultValues: {
