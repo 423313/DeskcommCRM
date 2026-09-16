@@ -52,6 +52,17 @@ jobs:
       - name: Role rank audit
         run: pnpm lint:role-rank
 
+      # O merge LIMPO não chama hook nenhum: dois PRs com migrations de nomes
+      # diferentes não conflitam textualmente, o commit nasce sem `pre-commit` e o
+      # número duplicado entra calado (o #804 entrou assim com o `0241`; o `0161` foi
+      # disputado por cinco PRs — issue #285). A régua por número era só hook local:
+      # `core.hooksPath` é configuração local, NÃO versionada, que fork nenhum executa.
+      # Step próprio, como os dois acima, porque é o CI que gateia PR — `gov:verify`
+      # não é invocado por workflow nenhum. Mesma régua do hook do contribuidor,
+      # contra o REMOTO (e o script busca a base: o checkout daqui não traz origin/main).
+      - name: Colisão de número de migration
+        run: pnpm checar:colisao-de-migration
+
       - name: Unit tests
         run: pnpm test:unit
 
