@@ -14,6 +14,7 @@
  * banco fora / escrita falha são incidente — os dois últimos abrem item no caller.
  */
 import { sincronizaEstagioDoAgente } from '@/lib/leads/agent-stage-sync';
+import type { InboxDedupe } from '../../db/repository';
 import type { Queryable } from '../../queue/queue';
 import type { CrmEdgeConfig } from './mcp-client';
 import type { LeadStage } from '../../agent/lead-state';
@@ -61,7 +62,27 @@ export const MIRROR_WARN_ONLY: ReadonlySet<MirrorReason> = new Set<MirrorReason>
 export interface AvisoDoEspelho {
   title: string;
   body: string;
+  /**
+   * Como NÃO abrir outro igual enquanto o primeiro está aberto.
+   *
+   * Mora na DECISÃO e não no ponto de uso porque é a mesma classe de coisa que o
+   * texto: o assistente reconclui o mesmo passo a cada turno, e sem dedupe nasce
+   * uma linha por mensagem do cliente — N cópias enterram o item que pedia
+   * decisão. Escolher isto no `if` do chamador é escolher onde ninguém consegue
+   * afirmar sobre a escolha.
+   */
+  dedupe: InboxDedupe;
 }
+
+/**
+ * O dedupe dos dois avisos do espelho: (kind, ref, título).
+ *
+ * ⚠️ `kind_e_ref` NÃO serve, e a razão está nos dois returns abaixo: os dois
+ * avisos saem com o mesmo `kind` genérico (`other`) e a mesma `ref` (o lead),
+ * distinguidos só pelo TÍTULO. Por `kind_e_ref` o segundo sumiria atrás do
+ * primeiro; por `kind_e_titulo` o aviso de um lead calaria o do lead seguinte.
+ */
+const DEDUPE_DO_ESPELHO: InboxDedupe = 'kind_ref_e_titulo';
 
 /**
  * QUAL aviso o não-movimento produz — a decisão, separada de quem a grava.
@@ -99,6 +120,7 @@ export function avisoDoEspelhoRecusado(input: {
         `mas ele não cuida do funil onde o negócio está (${detalhe}). ` +
         `Ninguém mexeu no card. Se ele deveria cuidar desse funil, marque isso na ` +
         `configuração do assistente; se não, não há nada a fazer.`,
+      dedupe: DEDUPE_DO_ESPELHO,
     };
   }
 
@@ -124,6 +146,7 @@ export function avisoDoEspelhoRecusado(input: {
         `uma. Ninguém mexeu no card: ele continua onde estava. Se o negócio realmente se ` +
         `perdeu, mova o card para "${etapaDeDestino}" no board e informe o motivo; ` +
         `se não, não há nada a fazer.`,
+      dedupe: DEDUPE_DO_ESPELHO,
     };
   }
 
@@ -132,6 +155,10 @@ export function avisoDoEspelhoRecusado(input: {
   return {
     title: 'Espelho de stage no CRM falhou — funil possivelmente inconsistente',
     body: `lead_state avançou para "${etapaDeDestino}" no harness, mas crm_move_lead_stage falhou (${motivo}: ${detalhe}). Reconcilie o stage no CRM manualmente.`,
+    // Incidente TAMBÉM deduplica: o funil quebrado se repete a cada turno, e mil
+    // cópias do mesmo incidente escondem o resto da Central tão bem quanto mil
+    // cópias de um aviso rotineiro.
+    dedupe: DEDUPE_DO_ESPELHO,
   };
 }
 

@@ -3037,13 +3037,11 @@ async function executarTurnoDoAgente(
                 etapaDeDestino: update.transition.to,
               });
               if (aviso) {
-                // DEDUPE por (kind, ref, título): o assistente reconclui o mesmo
-                // passo a cada turno, e sem isto nasce uma linha idêntica por
-                // turno — que é a queixa da #917 com outra roupa (N cópias
-                // enterram o item que pedia decisão). Por `kind_e_ref` só, o
-                // aviso de escopo e o de perda sem motivo do MESMO lead se
-                // engoliriam: mesmo `kind` genérico, mesma `ref`, textos
-                // opostos.
+                // O `dedupe` vem da DECISÃO, junto do texto: escolher aqui seria
+                // escolher onde ninguém consegue afirmar sobre a escolha — e o
+                // defeito que ele conserta (uma linha idêntica por turno) só
+                // aparece depois de muitos turnos, quando já enterrou o item que
+                // pedia decisão.
                 await insertInboxItem(
                   pool,
                   tenantId,
@@ -3054,7 +3052,7 @@ async function executarTurnoDoAgente(
                     refKind: 'lead',
                     refId: leadId,
                   },
-                  'kind_ref_e_titulo',
+                  aviso.dedupe,
                 );
               }
             }

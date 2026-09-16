@@ -27,6 +27,10 @@ import { avisoDoEspelhoRecusado } from "@/lib/agent-engine/edge/crm/move-lead-st
  *   1. trocar `'kind_ref_e_titulo'` por `undefined` (o estado do PR) — o caso 1
  *      passa a ver 3 linhas em vez de 1;
  *   2. trocar por `'kind_e_ref'` — o caso 2 passa a ver 1 linha em vez de 2.
+ *
+ * As duas sabotagens são em `DEDUPE_DO_ESPELHO`
+ * (lib/agent-engine/edge/crm/move-lead-stage.ts), que é de onde o ponto de uso
+ * tira o valor.
  */
 
 const container = process.env.TEST_DB_CONTAINER;
@@ -61,7 +65,9 @@ async function gravar(motivo: "perda_sem_motivo" | "fora_do_escopo", leadId: str
     pool,
     ORG,
     { kind: "other", title: a.title, body: a.body, refKind: "lead", refId: leadId },
-    "kind_ref_e_titulo",
+    // O dedupe vem da DECISÃO, como no ponto de uso — não um literal repetido
+    // aqui, que ficaria verde com a decisão sabotada.
+    a.dedupe,
   );
 }
 

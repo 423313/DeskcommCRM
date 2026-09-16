@@ -49,6 +49,38 @@ describe("a etapa de perda sem motivo vira AÇÃO para o humano, não incidente"
     expect(aviso!.body).toContain("informe o motivo");
   });
 
+  it("o aviso NÃO se repete a cada turno — e não engole o irmão do mesmo negócio", () => {
+    // O assistente reconclui o mesmo passo em todo turno, e sem dedupe nasce uma
+    // linha por mensagem do cliente: a queixa da #917 com outra roupa. O modo
+    // importa e não é intercambiável — os DOIS avisos do espelho saem com o mesmo
+    // `kind` genérico e a mesma `ref`, então `kind_e_ref` faria o segundo sumir
+    // atrás do primeiro, e `kind_e_titulo` faria o aviso de um lead calar o do
+    // lead seguinte. O efeito desse modo no SQL é medido contra Postgres em
+    // tests/invariants/aviso-de-perda-nao-repete-nem-engole-o-irmao.test.ts.
+    const perda = avisoDoEspelhoRecusado({
+      motivo: "perda_sem_motivo",
+      detalhe: "d",
+      etapaDeDestino: ETAPA,
+    });
+    const escopo = avisoDoEspelhoRecusado({
+      motivo: "fora_do_escopo",
+      detalhe: "d",
+      etapaDeDestino: ETAPA,
+    });
+    const incidente = avisoDoEspelhoRecusado({
+      motivo: "crm_unavailable",
+      detalhe: "d",
+      etapaDeDestino: ETAPA,
+    });
+
+    expect(perda!.dedupe).toBe("kind_ref_e_titulo");
+    expect(escopo!.dedupe).toBe("kind_ref_e_titulo");
+    expect(incidente!.dedupe).toBe("kind_ref_e_titulo");
+    // E os títulos são MESMO diferentes — se fossem iguais, o dedupe por título
+    // engoliria um dos dois e este teste estaria medindo o nada.
+    expect(perda!.title).not.toBe(escopo!.title);
+  });
+
   it("e NÃO é o aviso de incidente — nada quebrou, não há o que reconciliar", () => {
     const aviso = avisoDoEspelhoRecusado({
       motivo: "perda_sem_motivo",
