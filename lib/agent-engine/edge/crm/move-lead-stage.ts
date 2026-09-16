@@ -57,6 +57,84 @@ export const MIRROR_WARN_ONLY: ReadonlySet<MirrorReason> = new Set<MirrorReason>
   'human_conflict',
 ]);
 
+/** O aviso que vai para a Central quando o espelho recusa — `null` = warn-only. */
+export interface AvisoDoEspelho {
+  title: string;
+  body: string;
+}
+
+/**
+ * QUAL aviso o não-movimento produz — a decisão, separada de quem a grava.
+ *
+ * ⚠️ Ela mora AQUI, e não no `inbound-turn`, por um motivo medido: enquanto o
+ * encadeado de `if` ficou no ponto de uso, apagar o ramo de `perda_sem_motivo`
+ * inteiro deixava ZERO teste vermelho — a execução caía no ramo genérico, que
+ * também grava um item, e a sabotagem passava despercebida. Só que o item
+ * genérico diz "Espelho de stage no CRM falhou — funil possivelmente
+ * inconsistente / Reconcilie o stage no CRM manualmente", que é exatamente a
+ * mensagem de incidente que a issue #917 existe para eliminar: nada quebrou, e
+ * quem lê isso vai procurar um defeito que não existe.
+ *
+ * Dois ramos que gravam um item cada, com textos opostos, não se distinguem por
+ * "houve item?". Distinguem-se pelo TEXTO — e texto só vira asserção quando a
+ * decisão é uma função que se pode chamar.
+ */
+export function avisoDoEspelhoRecusado(input: {
+  motivo: MirrorReason;
+  detalhe: string;
+  /** A etapa para onde o assistente quis levar o negócio. */
+  etapaDeDestino: string;
+}): AvisoDoEspelho | null {
+  const { motivo, detalhe, etapaDeDestino } = input;
+
+  if (motivo === 'fora_do_escopo') {
+    // Aviso PRÓPRIO, e não o de falha: nada quebrou — a regra funcionou. Dizer
+    // "falhou" aqui mandaria o dono procurar um defeito que não existe, e
+    // "reconcilie manualmente" seria instrução errada: ele não deve mover o
+    // card, deve decidir se libera o funil para este assistente.
+    return {
+      title: 'O assistente quis organizar um negócio de um funil que não é dele',
+      body:
+        `O assistente concluiu que este negócio deveria ir para "${etapaDeDestino}", ` +
+        `mas ele não cuida do funil onde o negócio está (${detalhe}). ` +
+        `Ninguém mexeu no card. Se ele deveria cuidar desse funil, marque isso na ` +
+        `configuração do assistente; se não, não há nada a fazer.`,
+    };
+  }
+
+  if (motivo === 'perda_sem_motivo') {
+    // ── A ETAPA DE PERDA EXIGE MOTIVO (issue #917) ──────────────────────────
+    // O assistente avançou o funil dele para uma etapa que, no funil do
+    // cliente, fecha o negócio como PERDIDO — e perder exige um motivo, que é a
+    // causa que quem está no negócio reconhece.
+    //
+    // ⚠️ O motivo NÃO é escrito pela IA, e não é falha de coragem: o banco
+    // recusa motivo fora do vocabulário do funil (22023), então um motivo
+    // escolhido aqui seria recusado — ou, pior, passaria colado num dos
+    // canônicos e gravaria no funil do cliente uma causa que ninguém afirmou. O
+    // card NÃO se move, nada quebrou, e o que falta é uma AÇÃO DO HUMANO — nem
+    // warn silencioso (o card ficaria parado sem ninguém saber por quê) nem o
+    // aviso de falha (mandaria o dono procurar um defeito que não existe).
+    return {
+      title: 'O assistente quis marcar um negócio como perdido — e isso exige um motivo',
+      body:
+        `O assistente concluiu que este negócio deveria ir para "${etapaDeDestino}", ` +
+        `que no seu funil é uma etapa de perda. Perder um negócio exige um motivo, e o ` +
+        `motivo é a razão que quem está no negócio reconhece — o assistente não inventa ` +
+        `uma. Ninguém mexeu no card: ele continua onde estava. Se o negócio realmente se ` +
+        `perdeu, mova o card para "${etapaDeDestino}" no board e informe o motivo; ` +
+        `se não, não há nada a fazer.`,
+    };
+  }
+
+  if (MIRROR_WARN_ONLY.has(motivo)) return null;
+
+  return {
+    title: 'Espelho de stage no CRM falhou — funil possivelmente inconsistente',
+    body: `lead_state avançou para "${etapaDeDestino}" no harness, mas crm_move_lead_stage falhou (${motivo}: ${detalhe}). Reconcilie o stage no CRM manualmente.`,
+  };
+}
+
 /** Injetável só para teste — em produção é sempre a implementação real. */
 interface Deps {
   sync?: typeof sincronizaEstagioDoAgente;

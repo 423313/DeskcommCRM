@@ -63,7 +63,7 @@ import {
 } from '../edge/llm/run-model-call';
 import type { ProviderRegistry } from '../edge/llm/providers';
 import { HANDOFF_REASON_ORCAMENTO } from '../edge/llm/orcamento';
-import { MIRROR_WARN_ONLY, mirrorLeadStageToCrm } from '../edge/crm/move-lead-stage';
+import { avisoDoEspelhoRecusado, mirrorLeadStageToCrm } from '../edge/crm/move-lead-stage';
 import { insertInboxItem } from '../db/repository';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { moverLeadParaEtapaDeHandoff } from '@/lib/leads/handoff-stage-move';
@@ -3001,55 +3001,20 @@ async function executarTurnoDoAgente(
                 to_stage: update.transition.to,
                 reason: mirror.reason,
               });
-              if (mirror.reason === 'fora_do_escopo') {
-                // Aviso PRÓPRIO, e não o de falha: nada quebrou — a regra
-                // funcionou. Dizer "falhou" aqui mandaria o dono procurar um
-                // defeito que não existe, e "reconcilie manualmente" seria
-                // instrução errada: ele não deve mover o card, deve decidir se
-                // libera o funil para este assistente.
+              // QUAL aviso cada recusa produz é decisão de `move-lead-stage`
+              // (`avisoDoEspelhoRecusado`), junto do vocabulário de motivos —
+              // aqui só se grava o que ela decidiu. `null` é warn-only: estado
+              // legítimo do produto não vira item na Central.
+              const aviso = avisoDoEspelhoRecusado({
+                motivo: mirror.reason,
+                detalhe: mirror.detail,
+                etapaDeDestino: update.transition.to,
+              });
+              if (aviso) {
                 await insertInboxItem(pool, tenantId, {
                   kind: 'other',
-                  title: 'O assistente quis organizar um negócio de um funil que não é dele',
-                  body:
-                    `O assistente concluiu que este negócio deveria ir para "${update.transition.to}", ` +
-                    `mas ele não cuida do funil onde o negócio está (${mirror.detail}). ` +
-                    `Ninguém mexeu no card. Se ele deveria cuidar desse funil, marque isso na ` +
-                    `configuração do assistente; se não, não há nada a fazer.`,
-                  refKind: 'lead',
-                  refId: leadId,
-                });
-              } else if (mirror.reason === 'perda_sem_motivo') {
-                // ── A ETAPA DE PERDA EXIGE MOTIVO (issue #917) ──────────────────
-                // O assistente avançou o funil dele para uma etapa que, no funil
-                // do cliente, fecha o negócio como PERDIDO — e perder exige um
-                // motivo, que é a causa que quem está no negócio reconhece.
-                //
-                // ⚠️ O motivo NÃO é escrito pela IA, e não é falha de coragem: o
-                // banco recusa motivo fora do vocabulário do funil (22023), então
-                // um motivo escolhido aqui seria recusado — ou, pior, passaria
-                // colado num dos canônicos e gravaria no funil do cliente uma
-                // causa que ninguém afirmou. O card NÃO se move, nada quebrou, e o
-                // que falta é uma AÇÃO DO HUMANO — nem warn silencioso (o card
-                // ficaria parado sem ninguém saber por quê) nem o aviso de falha
-                // (mandaria o dono procurar um defeito que não existe).
-                await insertInboxItem(pool, tenantId, {
-                  kind: 'other',
-                  title: 'O assistente quis marcar um negócio como perdido — e isso exige um motivo',
-                  body:
-                    `O assistente concluiu que este negócio deveria ir para "${update.transition.to}", ` +
-                    `que no seu funil é uma etapa de perda. Perder um negócio exige um motivo, e o ` +
-                    `motivo é a razão que quem está no negócio reconhece — o assistente não inventa ` +
-                    `uma. Ninguém mexeu no card: ele continua onde estava. Se o negócio realmente se ` +
-                    `perdeu, mova o card para "${update.transition.to}" no board e informe o motivo; ` +
-                    `se não, não há nada a fazer.`,
-                  refKind: 'lead',
-                  refId: leadId,
-                });
-              } else if (!MIRROR_WARN_ONLY.has(mirror.reason)) {
-                await insertInboxItem(pool, tenantId, {
-                  kind: 'other',
-                  title: 'Espelho de stage no CRM falhou — funil possivelmente inconsistente',
-                  body: `lead_state avançou para "${update.transition.to}" no harness, mas crm_move_lead_stage falhou (${mirror.reason}: ${mirror.detail}). Reconcilie o stage no CRM manualmente.`,
+                  title: aviso.title,
+                  body: aviso.body,
                   refKind: 'lead',
                   refId: leadId,
                 });
