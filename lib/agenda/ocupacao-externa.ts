@@ -38,6 +38,28 @@
  * não aconteceu. Trazer os dois como bloco diria que o horário está tomado
  * quando a própria pessoa marcou que não está — o mesmo filtro que a coleta do
  * motor aplica.
+ *
+ * ─── ⚠️ ALCANCE DECLARADO: fecha a FRONTEIRA, não o PAPEL ───────────────────
+ *
+ * Esta leitura é pela SESSÃO de quem abriu a tela, com o embed
+ * `calendar_connections!inner`. A RLS de `calendar_connections`
+ * (`calendar_connections_dono_ou_manager_read`, em `supabase/baseline.sql`) só
+ * libera `user_id = auth.uid()` ou `fn_role_at_least(organization_id,
+ * 'manager')` — então, para `viewer` e `agent`, a conexão do colega fica
+ * escondida e a grade segue SEM a ocupação do Google desse colega.
+ *
+ * O motor, não: `fn_agenda_ocupacao_google_do_dono` (migration 0260) é
+ * `security definer` e entrega a ocupação a todo membro da organização. Logo,
+ * para esses dois papéis a tela continua desenhando livre TODO compromisso do
+ * colega — não só o que atravessa a borda do recorte — enquanto o motor recusa
+ * marcar. É a MESMA discordância tela↔motor da issue #525, pela metade que este
+ * módulo não fecha: a da fronteira ficou fechada, a do PAPEL de quem olha
+ * continua aberta (resíduo da issue #879).
+ *
+ * Fechar isso é decisão de produto sobre QUEM enxerga a ocupação de quem — não
+ * é conserto de consulta. Quando for tomada, o lugar de aplicá-la é este
+ * arquivo (trocar o caminho de leitura), e o registro da pendência está em
+ * `docs/testing/user-journey-map.md`, J13.13.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -130,8 +152,14 @@ export async function lerOcupacaoExterna(
         // depois dele. `GradeDaAgenda` atribui cada bloco à coluna do dia pelo
         // INÍCIO — com o instante cru, o compromisso que vem de ontem cairia
         // fora de toda coluna desenhada e sumiria da tela de novo.
-        iniciaEm: maisTarde(linha.starts_at, recorte.de),
-        terminaEm: maisCedo(linha.ends_at, recorte.ate),
+        //
+        // `toISOString()` porque o limite do recorte é texto de QUEM CHAMOU: a
+        // rota aceita `2026-09-16T00:00:00-03:00` (o Zod exige `offset: true`),
+        // e devolver esse literal faria a mesma resposta misturar dois formatos
+        // de data — bloco recortado com offset, bloco inteiro no formato do
+        // PostgREST. Quem lê a lista de fora não tem como saber qual é qual.
+        iniciaEm: new Date(maisTarde(linha.starts_at, recorte.de)).toISOString(),
+        terminaEm: new Date(maisCedo(linha.ends_at, recorte.ate)).toISOString(),
       };
     }),
     erro: null,

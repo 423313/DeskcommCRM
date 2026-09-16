@@ -11,5 +11,7 @@ com erro na cara quando não aceitava.
 
 Agora a janela lê os motivos do funil do próprio card. Se você cadastrou "Sem orçamento" e
 "Fora do perfil", são esses dois que aparecem, com as suas palavras; sem nada cadastrado, a
-lista padrão continua valendo. "Outro" passou a exigir o detalhe e a recusar texto que o funil
-não aceita, antes do clique em vez de depois dele.
+lista padrão continua valendo. Nos funis com motivos cadastrados, "Outro" passa a recusar ali na
+tela o texto que aquele funil não aceita — antes do clique, em vez de depois dele — e a dizer onde
+se cadastra um motivo novo. Deixar o detalhe em branco continua valendo em qualquer funil: grava
+"Outro", como sempre.

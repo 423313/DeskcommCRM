@@ -42,7 +42,18 @@ export default async function TagsPage() {
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
-  if (!(user.is_platform_admin && !user.support) && ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
+  // ⚠️ SEM ATALHO DE PLATFORM ADMIN, e de propósito. Quem grava é
+  // `fn_vocabulario_de_tags_operar`, cujo portão é
+  // `fn_role_at_least(p_org, 'manager')` — e `fn_role_at_least` resolve SÓ por
+  // `fn_user_role_in_org`, sem ramo de platform admin. Com o atalho aqui, um
+  // platform admin que não é manager+ nesta organização via a tela e os três
+  // botões, e TODA ação dele voltava 403: controle decorativo, que é pior que
+  // controle ausente, porque o 403 na cara lê como "o sistema falhou".
+  //
+  // A tela e o banco passam a dizer a MESMA coisa. Se um dia o platform admin
+  // DEVER operar aqui, o lugar de mudar é o portão da função (e um invariante
+  // que prove), nunca só esta linha.
+  if (ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
     redirect("/403");
   }
 

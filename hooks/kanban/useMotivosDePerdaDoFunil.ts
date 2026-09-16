@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { chaveDoQuadro } from "@/hooks/kanban/useBoard";
 import type { BoardData } from "@/lib/kanban/types";
 import { motivosDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
 
@@ -28,6 +29,8 @@ import { motivosDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
  */
 export function useMotivosDePerdaDoFunil(pipelineId: string): string[] {
   const qc = useQueryClient();
-  const settings = qc.getQueryData<BoardData>(["board", pipelineId])?.pipeline?.settings ?? null;
+  // A MESMA chave de `useBoard`, não uma literal igual: literal igual é igual só
+  // até alguém mudar um dos lados, e aí este hook devolve `[]` sem erro nenhum.
+  const settings = qc.getQueryData<BoardData>(chaveDoQuadro(pipelineId))?.pipeline?.settings ?? null;
   return useMemo(() => motivosDoFunil(settings), [settings]);
 }

@@ -32,6 +32,23 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import type { AcaoDeVocabulario, LinhaDeVocabulario } from "@/lib/schemas/tags";
 
+/**
+ * O TETO DA LISTA, e por que ele é declarado aqui.
+ *
+ * `fn_vocabulario_de_tags` termina em `limit 500` (migration 0264). A rota
+ * devolve `meta.total = tags.length`, que é o tamanho da PÁGINA e não o total —
+ * então nem o `meta` denuncia o corte. Sem esta linha, numa organização com mais
+ * de 500 etiquetas distintas a que o operador veio arrumar podia simplesmente
+ * não estar na tela, nem na lista de destinos do "juntar", sem nada dizendo que
+ * faltava alguma. Lista truncada em silêncio lê como lista completa.
+ *
+ * O número vive nos DOIS arquivos e é vigiado por
+ * `tests/unit/tags-vocabulario.test.ts` ("o teto da tela é o mesmo `limit` do
+ * SQL"), que lê o `limit` da migration e esta constante: mudar um sem o outro
+ * reprova.
+ */
+const TETO_DA_LISTA = 500;
+
 /** Cada recusa do servidor vira uma frase que diz O QUE FAZER. */
 const ERRO_EM_PORTUGUES: Record<string, string> = {
   validation_failed: "Confira a etiqueta e o novo nome.",
@@ -80,15 +97,25 @@ export function PainelDeTags({ tags, idioma }: { tags: LinhaDeVocabulario[]; idi
       const dados = corpo?.data ?? {};
       const alterados =
         Number(dados.contatos ?? 0) + Number(dados.leads ?? 0) + Number(dados.conversas ?? 0);
+      // ⚠️ O DADO ENTRA FORA DO `t()`. `traduzir()` casa a string EXATA, então
+      // uma frase montada em runtime nunca casa chave nenhuma —
+      // a frase sai em português para quem escolheu espanhol, e o guarda de i18n
+      // não acusa (ele só registra literal sem substituição).
       toast.success(
-        t(
-          acao === "excluir"
-            ? `Etiqueta removida de ${alterados} registro(s).`
-            : `Etiqueta atualizada em ${alterados} registro(s) e em ${Number(dados.regras ?? 0)} regra(s) de agente.`,
-        ),
+        acao === "excluir"
+          ? `${t("Etiqueta removida de")} ${alterados} ${t("registro(s).")}`
+          : `${t("Etiqueta atualizada em")} ${alterados} ${t("registro(s) e em")} ${Number(dados.regras ?? 0)} ${t("regra(s) de agente.")}`,
       );
       setAlvo(null);
       router.refresh();
+    } catch {
+      // Sem este ramo, uma falha de REDE (app reiniciando, conexão caída) não
+      // dizia nada: o botão voltava de "Aplicando..." para "Confirmar", que lê
+      // como "nada aconteceu" — enquanto a operação pode ter sido aplicada no
+      // servidor. O caminho de erro do SERVIDOR já era tratado acima.
+      toast.error(
+        t("Não foi possível falar com o servidor. Recarregue a página e confira antes de tentar de novo."),
+      );
     } finally {
       setOcupado(false);
     }
@@ -157,24 +184,45 @@ export function PainelDeTags({ tags, idioma }: { tags: LinhaDeVocabulario[]; idi
             ))}
           </tbody>
         </table>
+        {tags.length >= TETO_DA_LISTA && (
+          <p className="border-t border-border/60 p-3 text-sm text-muted-foreground">
+            {t(
+              "Mostrando as 500 primeiras etiquetas em ordem alfabética. Se a que você procura não está aqui, arrume primeiro as que aparecem.",
+            )}
+          </p>
+        )}
       </Card>
 
       {alvo && (
         <Card className="flex flex-col gap-4 p-4">
           <p className="text-sm">
-            {acao === "renomear" && t(`Renomear "${alvo.tag}" para:`)}
-            {acao === "juntar" && t(`Juntar "${alvo.tag}" em outra etiqueta existente:`)}
-            {acao === "excluir" &&
-              t(
-                `Excluir "${alvo.tag}" de ${alvo.uso_em_contatos} contato(s), ${alvo.uso_em_leads} lead(s) e ${alvo.uso_em_conversas} conversa(s).`,
-              )}
+            {/* Mesma regra do toast: o texto estático passa por `t()`, a
+                etiqueta entra fora dele. */}
+            {acao === "renomear" && (
+              <>
+                {t("Renomear")} <strong>{alvo.tag}</strong> {t("para:")}
+              </>
+            )}
+            {acao === "juntar" && (
+              <>
+                {t("Juntar")} <strong>{alvo.tag}</strong> {t("em outra etiqueta existente:")}
+              </>
+            )}
+            {acao === "excluir" && (
+              <>
+                {t("Excluir")} <strong>{alvo.tag}</strong> {t("de")} {alvo.uso_em_contatos}{" "}
+                {t("contato(s),")} {alvo.uso_em_leads} {t("lead(s) e")} {alvo.uso_em_conversas}{" "}
+                {t("conversa(s).")}
+              </>
+            )}
           </p>
 
           {acao === "excluir" ? (
             alvo.em_regras > 0 && (
               <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                {t("Atenção:")} {alvo.em_regras}{" "}
                 {t(
-                  `Atenção: ${alvo.em_regras} regra(s) de agente continuam escrevendo esta etiqueta. Excluir aqui não apaga a regra — o agente vai recriar a etiqueta no próximo atendimento.`,
+                  "regra(s) de agente continuam escrevendo esta etiqueta. Excluir aqui não apaga a regra — o agente vai recriar a etiqueta no próximo atendimento.",
                 )}
               </p>
             )
