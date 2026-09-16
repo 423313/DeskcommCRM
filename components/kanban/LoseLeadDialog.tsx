@@ -58,8 +58,13 @@ export function LoseLeadDialog({
   const textoOutro = otherText.trim();
   // Sem funil configurado, "Outro" vazio continua valendo `other` — o escape de
   // sempre. Com funil configurado, o servidor só aceita canônico ∪ cadastrado,
-  // então aqui o detalhe é exigido e o que ele negaria é recusado antes do clique.
-  const outroFaltando = reasonCode === OUTRO && funilConfigurado && textoOutro.length === 0;
+  // então o que ele negaria é recusado antes do clique.
+  //
+  // Não há guarda separada para "detalhe vazio": com funil configurado e texto
+  // vazio, `finalReason` JÁ é string vazia pela linha do `finalReason` abaixo, e
+  // `finalReason.length === 0` desabilita o botão sozinho. Um `outroFaltando ||`
+  // ali seria ramo redundante — e ramo redundante engana a sabotagem: quem o
+  // apagasse veria a suíte verde e concluiria que o caso não está coberto.
   const outroRecusado =
     reasonCode === OUTRO &&
     funilConfigurado &&
@@ -71,7 +76,6 @@ export function LoseLeadDialog({
     !reasonCode ||
     finalReason.length === 0 ||
     finalReason.length > MAX_LEN ||
-    outroFaltando ||
     outroRecusado ||
     mutation.isPending;
 
@@ -135,6 +139,18 @@ export function LoseLeadDialog({
               {outroRecusado && (
                 <p role="alert" className="text-xs text-destructive">
                   {t("Escolha um dos motivos cadastrados no funil.")}
+                </p>
+              )}
+              {/*
+                SEM condição de erro, e só com funil configurado: aí "Outro" só
+                aceita um motivo já cadastrado, e sem esta linha a opção é beco
+                sem saída — a tela oferece, recusa todo texto novo e não diz onde
+                se cadastra um. Sem funil configurado não aparece, porque lá
+                "Outro" aceita texto livre e a frase seria ruído.
+              */}
+              {funilConfigurado && (
+                <p className="text-xs text-muted-foreground">
+                  {t("Para usar um motivo que não está aqui, cadastre em Configurações › Funis.")}
                 </p>
               )}
             </div>

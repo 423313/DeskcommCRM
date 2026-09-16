@@ -6094,6 +6094,12 @@ export const DICIONARIO: Traducoes = {
   "Detalhe (opcional)": { es: "Detalle (opcional)" },
   "Detalhe (obrigatório)": { es: "Detalle (obligatorio)" },
   "Escolha um dos motivos cadastrados no funil.": { es: "Elige uno de los motivos configurados en el embudo." },
+  // Sem esta linha, "Outro" com funil configurado é beco sem saída: a tela
+  // oferece a opção, recusa todo texto que não seja um motivo já cadastrado, e
+  // não diz ONDE se cadastra um motivo novo.
+  "Para usar um motivo que não está aqui, cadastre em Configurações › Funis.": {
+    es: "Para usar un motivo que no está aquí, configúralo en Configuración › Embudos.",
+  },
   "Ex: Cliente desistiu por X motivo": { es: "Ej: El cliente desistió por X motivo" },
   "Confirmar": { es: "Confirmar" },
   "Lead criado": { es: "Lead creado" },

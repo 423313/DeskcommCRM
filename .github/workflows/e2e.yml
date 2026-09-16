@@ -298,6 +298,7 @@ jobs:
         navegacao.spec.ts
         juntar-contatos-duplicados.spec.ts
         lote-no-quadro-do-funil.spec.ts
+        motivos-de-perda-do-funil.spec.ts
         importar-leads-planilha.spec.ts
         relatorio-de-atividades.spec.ts
       # ⚠️ A ORDEM DESTA LISTA NÃO DECIDE A ORDEM DE EXECUÇÃO. O Playwright

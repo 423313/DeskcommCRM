@@ -53,7 +53,14 @@ export function motivosDoFunil(settings: unknown): string[] {
     if (vistos.has(texto)) continue;
     if (!regra.safeParse([texto]).success) continue;
     vistos.add(texto);
-    limpos.push(texto);
+    // O texto COMO ESTÁ NO BANCO, não o aparado. O trigger compara por
+    // IGUALDADE EXATA (`new.lost_reason = any(jsonb_array_elements_text(...))`),
+    // então oferecer a versão aparada de um `lost_reasons` com espaço nas pontas
+    // — gravado por script, seed ou API, nunca pela tela de Funis, que apara —
+    // faria a janela mostrar um rótulo que o banco recusa com 22023 no clique.
+    // É a classe de defeito que este arquivo existe para fechar. O HTML colapsa
+    // espaço nas pontas, então o rótulo na tela continua o mesmo.
+    limpos.push(item);
   }
 
   return limpos.slice(0, MAX_MOTIVOS);

@@ -28,6 +28,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LoseLeadDialog } from "@/components/kanban/LoseLeadDialog";
+import { chaveDoQuadro } from "@/hooks/kanban/useBoard";
 import { CANONICAL_LOST_REASONS } from "@/lib/schemas/leads";
 import { motivosDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
 import type { BoardData } from "@/lib/kanban/types";
@@ -71,7 +72,10 @@ afterEach(() => {
 /** Um cliente novo por caso: cache compartilhada entre casos esconderia o defeito. */
 function comFunil(settings: Record<string, unknown>) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  qc.setQueryData(["board", PIL], { pipeline: { settings } } as unknown as BoardData);
+  // A MESMA chave que `useBoard` usa. Escrevendo a literal aqui, mudar a chave do
+  // quadro deixaria o hook devolvendo `[]` — a janela voltaria ao padrão do
+  // produto, o defeito da #918 — com estes casos verdes.
+  qc.setQueryData(chaveDoQuadro(PIL), { pipeline: { settings } } as unknown as BoardData);
   return qc;
 }
 
@@ -131,6 +135,20 @@ describe("motivos de perda configurados no funil", () => {
     );
   });
 
+  it("com funil configurado, 'Outro' diz ONDE se cadastra um motivo novo", () => {
+    // Beco sem saída: a tela oferece "Outro", recusa todo texto que não seja um
+    // motivo já cadastrado, e sem esta frase não diz onde se cadastra um novo.
+    abrir(comFunil({ lost_reasons: ["Sem orçamento"] }));
+    fireEvent.click(radio("other"));
+    expect(screen.getByText(/cadastre em Configurações/)).toBeTruthy();
+  });
+
+  it("sem funil configurado a frase NÃO aparece — ali 'Outro' aceita texto livre", () => {
+    abrir(comFunil({}));
+    fireEvent.click(radio("other"));
+    expect(screen.queryByText(/cadastre em Configurações/)).toBeNull();
+  });
+
   it("sem funil configurado, o padrão do produto e o 'other' vazio continuam valendo", async () => {
     abrir(comFunil({}));
     expect(valuesDosMotivos()).toEqual([...CANONICAL_LOST_REASONS]);
@@ -150,10 +168,14 @@ describe("motivos de perda configurados no funil", () => {
 });
 
 describe("motivosDoFunil (a régua da leitura)", () => {
-  it("limpa espaços, joga fora vazio e deduplica", () => {
+  it("mantém o texto como está no banco e deduplica ignorando espaços", () => {
+    // O valor OFERECIDO é o que vai para `lost_reason`, e o trigger o compara por
+    // igualdade EXATA com o que está no jsonb. Aparar aqui faria a janela mostrar
+    // um rótulo que o banco recusa com 22023 — a classe de defeito que este
+    // arquivo fecha. O dedupe segue ignorando espaço nas pontas.
     expect(
       motivosDoFunil({ lost_reasons: ["  Sem orçamento  ", "Sem orçamento", "", "Fora do perfil"] }),
-    ).toEqual(["Sem orçamento", "Fora do perfil"]);
+    ).toEqual(["  Sem orçamento  ", "Fora do perfil"]);
   });
 
   it("lixo no settings vira lista vazia, não motivo na tela", () => {
