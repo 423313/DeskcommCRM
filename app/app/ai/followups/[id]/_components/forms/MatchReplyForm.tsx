@@ -152,7 +152,7 @@ export function MatchReplyForm({
             commit({ branches, graceMin: v, saveTo, ifExists });
           }}
         />
-        <p className="text-xs text-text-muted">{ESPERA_PELA_RESPOSTA.ajuda}</p>
+        <p className="text-xs text-text-muted">{ESPERA_PELA_RESPOSTA.ajuda(t)}</p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="match-reply-save">{t("Gravar a resposta em")}</Label>
