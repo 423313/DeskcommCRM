@@ -41,10 +41,12 @@
  *
  * `login_hint` SUGERE a conta, não obriga. Com uma sessão do Google já aberta
  * no navegador e `prompt=consent` sozinho, o Google autoriza aquela conta e
- * pula o seletor: quem tem a agenda da clínica num e-mail diferente do login do
- * CRM chega na tela, autoriza, e a agenda que volta para o CRM é a do login —
- * sem caminho nenhum para trocar. `select_account` devolve o seletor, já com a
- * conta sugerida pré-selecionada, que é o que o `login_hint` queria dizer.
+ * pula o seletor: quem tem a agenda de trabalho num e-mail diferente do login
+ * do CRM chega na tela, autoriza, e a agenda que volta para o CRM é a do login
+ * — sem caminho nenhum para trocar. `select_account` PEDE o seletor de volta, e
+ * o `login_hint` continua junto como sugestão. O que a tela do Google faz com
+ * essa sugestão — destacar a conta, pré-selecionar, ignorar — é decisão dele, e
+ * ninguém deste lado observou: daqui só se prova o que SAI (ver o topo).
  */
 
 /**
@@ -118,9 +120,11 @@ export function montarUrlDeConsentimento(
   // comum do fluxo: autorizar com a conta pessoal que já estava logada no
   // navegador e ver a agenda errada aparecer no CRM.
   //
-  // Sugerir NÃO é decidir: quem tem a agenda da clínica num e-mail diferente do
+  // Sugerir NÃO é decidir: quem tem a agenda de trabalho num e-mail diferente do
   // login do CRM precisa conseguir escolher o dele na tela do Google — é o
-  // `select_account` acima que mantém o seletor de pé, com esta conta em cima.
+  // `select_account` acima que mantém o seletor de pé. Como o Google desenha a
+  // sugestão DENTRO do seletor é com ele; o que garantimos é que o seletor é
+  // pedido.
   const conta = opcoes.contaSugerida?.trim();
   if (conta) parametros.set("login_hint", conta);
 

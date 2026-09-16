@@ -655,7 +655,7 @@ mais humilhante é que **a conexão sempre funcionou**: ninguém conseguia ver.
 vai a 1566px contra 700 de janela. É anterior a este PR e misturá-la esconderia
 as duas.
 
-**Duas dívidas do lote 12 (grupo G4, PRs #931/#933), declaradas e não pagas:**
+**Três dívidas do lote 12 (grupo G4, PRs #931/#933), declaradas e não pagas:**
 
 1. **Ninguém abriu a tela do Google com duas contas logadas.** J16.6 mede o que o
    CRM ENVIA, que é o que nos cabe; que o Google DESENHE o seletor com as duas
