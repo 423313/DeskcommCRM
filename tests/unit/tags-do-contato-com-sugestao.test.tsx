@@ -61,7 +61,12 @@ describe("ContactTagsEditor", () => {
    * botão não fazia nada.
    */
   it("tag do vocabulário em caixa mista não vira chip para quem já a tem", async () => {
-    get.mockResolvedValue({ data: ["VIP"] });
+    // A segunda tag existe como TESTEMUNHA: esperar pelo campo de texto, que
+    // está na tela desde o primeiro render, fazia a asserção negativa passar
+    // ANTES de a consulta resolver — verde vácuo. Medido: com o filtro
+    // sabotado o caso continuava verde. Esperar por "+ google" prova que o
+    // vocabulário chegou, e só então a ausência de "+ VIP" quer dizer algo.
+    get.mockResolvedValue({ data: ["VIP", "google"] });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -69,7 +74,7 @@ describe("ContactTagsEditor", () => {
       </QueryClientProvider>,
     );
 
-    await screen.findByLabelText("Adicionar tag ao contato");
+    await screen.findByRole("button", { name: "+ google" }, { timeout: 5000 });
     expect(screen.queryByRole("button", { name: /\+ ?VIP/i })).toBeNull();
   });
 
@@ -94,7 +99,7 @@ describe("ContactTagsEditor", () => {
   });
 
   it("contato com a tag em caixa mista não recebe o chip da versão minúscula", async () => {
-    get.mockResolvedValue({ data: ["vip"] });
+    get.mockResolvedValue({ data: ["vip", "google"] });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -102,7 +107,7 @@ describe("ContactTagsEditor", () => {
       </QueryClientProvider>,
     );
 
-    await screen.findByLabelText("Adicionar tag ao contato");
+    await screen.findByRole("button", { name: "+ google" }, { timeout: 5000 });
     expect(screen.queryByRole("button", { name: /\+ ?vip/i })).toBeNull();
   });
 });
