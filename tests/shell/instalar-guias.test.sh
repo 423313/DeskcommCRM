@@ -21,12 +21,16 @@
 #  11. "nenhum guia" diz como sair dali.
 #  12. Edição à mão pela pasta global não trava a atualização.
 #  13. DESKCOMM_GUIAS_HOME: pasta alheia é recusada intacta; caminho relativo vira absoluto.
-#  14. --help imprime o cabeçalho INTEIRO, e ele não promete o que --fonte não cumpre.
+#  14. --help imprime o cabeçalho INTEIRO — também pelo pipe que o README ensina —, e ele não
+#      promete o que --fonte não cumpre.
 #  15. --fonte com link segue a árvore viva do clone (é a exceção que o cabeçalho declara).
 #  16. Cópia feita por uma versão anterior (sem a marca) é adotada, não recusada.
 #  17. A adoção não passa por um clone de trabalho — um caso por sinal que a segura.
 #  18. --remover apaga o que este script ligou e poupa o link que a pessoa fez à mão.
 #  19. O comando de desfazer que o README e a nota da versão ensinam roda de verdade.
+#  20. Trocar de fonte (cópia → --fonte, e o inverso) não deixa guia da fonte anterior ligado,
+#      nem para a varredura nem para o --remover — e o link feito à mão segue intacto.
+#  21. Uma troca de fonte interrompida no meio não tira do --remover o que ela já ligou.
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -40,6 +44,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 export HOME="$TMP/home"; mkdir -p "$HOME"
 REAL_GIT="$(command -v git)"; export REAL_GIT
+REAL_LN="$(command -v ln)"; export REAL_LN
 
 # ── um "DeskcommCRM" mínimo: dois guias e uma skill que não é guia ────────────
 montar_repo() {  # montar_repo <pasta>
@@ -202,14 +207,19 @@ mkdir -p "$TMP/relativo/cwd"
 checa "[ -f \"\$HOME/.claude/skills/deskcomm-instalar/SKILL.md\" ]" "caminho relativo: o link resolve (vira absoluto)"
 
 echo "14. --help"
-saida="$(bash "$SCRIPT" --help 2>&1)"; code=$?
-checa "[ $code = 0 ]" "sai com 0"
-checa "grep -qF 'instalar-guias.sh — deixa os guias' <<<\"\$saida\"" "imprime a primeira linha do cabeçalho"
-# O recorte por número de linha já comeu o fim do cabeçalho uma vez: o aviso do Claude Code é a
-# ÚLTIMA linha, e é ele que diz a quem edita um guia para usar --fonte.
-checa "grep -qF 'deve rodar com \`--fonte .\` naquele clone' <<<\"\$saida\"" "imprime a ÚLTIMA linha do cabeçalho (o aviso do Claude Code)"
-checa "! grep -qF 'set -euo pipefail' <<<\"\$saida\"" "para no fim do cabeçalho, não despeja o código"
-checa "grep -qF 'a exceção é' <<<\"\$saida\"" "o cabeçalho declara a exceção de --fonte em vez de prometer que nada se atualiza"
+# Pelo pipe o script chega pela entrada padrão e `$0` vale `bash`: um --help que relê o próprio
+# arquivo saía vazio, com exit 0, justamente no caminho que o README ensina.
+for modo in arquivo pipe; do
+  if [ "$modo" = arquivo ]; then saida="$(bash "$SCRIPT" --help 2>&1)"; code=$?
+  else saida="$(cat "$SCRIPT" | bash -s -- --help 2>&1)"; code=$?; fi
+  checa "[ $code = 0 ]" "($modo) sai com 0"
+  checa "grep -qF 'instalar-guias.sh — deixa os guias' <<<\"\$saida\"" "($modo) imprime a primeira linha do cabeçalho"
+  # O recorte por número de linha já comeu o fim do cabeçalho uma vez: o aviso do Claude Code é a
+  # ÚLTIMA linha, e é ele que diz a quem edita um guia para usar --fonte.
+  checa "grep -qF 'deve rodar com \`--fonte .\` naquele clone' <<<\"\$saida\"" "($modo) imprime a ÚLTIMA linha do cabeçalho (o aviso do Claude Code)"
+  checa "! grep -qF 'set -euo pipefail' <<<\"\$saida\"" "($modo) para no fim do cabeçalho, não despeja o código"
+  checa "grep -qF 'a exceção é' <<<\"\$saida\"" "($modo) o cabeçalho declara a exceção de --fonte em vez de prometer que nada se atualiza"
+done
 
 echo "15. --fonte com link segue a árvore viva do clone"
 cenario fonte-viva
@@ -298,6 +308,58 @@ checa "[ $documentos -ge 2 ]" "o comando foi lido de pelo menos dois documentos 
 # A outra metade que só vive em prosa: a forma de chamar em cada CLI e a defasagem da cópia.
 checa "grep -qF '\$deskcomm-instalar' \"\$RAIZ/README.md\" && ! grep -qE 'digite .?/deskcomm-' \"\$RAIZ/README.md\"" "o README ensina a forma do Codex e não manda digitar / em todos"
 checa "grep -q 'se atualizam sozinhos' \"\$RAIZ/README.md\" && grep -q 'vale mais que o do clone' \"\$RAIZ/README.md\"" "o README diz que a cópia não se atualiza sozinha e que no Claude Code ela vence o clone"
+
+# Os deskcomm-* que sobraram nas três pastas, fora o link que a pessoa fez à mão.
+# shellcheck disable=SC2329  # chamada de dentro das condições que o `checa` avalia
+guias_que_sobraram() {
+  local d a
+  for d in .claude/skills .agents/skills .gemini/config/skills; do
+    for a in "$HOME/$d"/deskcomm-*; do
+      { [ -e "$a" ] || [ -L "$a" ]; } || continue
+      [ "$(basename "$a")" = deskcomm-meu-fork ] || echo "$d/$(basename "$a")"
+    done
+  done
+}
+guia_extra() {  # guia_extra <clone> — um guia que só esse clone tem
+  mkdir -p "$1/.agents/skills/deskcomm-extra"
+  printf -- "---\nname: deskcomm-extra\ndescription: 'guia extra'\n---\n" > "$1/.agents/skills/deskcomm-extra/SKILL.md"
+}
+
+echo "20. trocar de fonte não deixa guia da fonte anterior ligado"
+cenario troca-de-fonte
+fork_troca="$TMP/troca-de-fonte/outro-repo/.agents/skills/deskcomm-meu-fork"
+mkdir -p "$fork_troca" "$HOME/.agents/skills"; echo fork > "$fork_troca/SKILL.md"
+ln -s "$fork_troca" "$HOME/.agents/skills/deskcomm-meu-fork"
+bash "$SCRIPT" >/dev/null 2>&1   # a cópia: deskcomm-instalar e deskcomm-prompt
+menor="$TMP/troca-de-fonte/clone-menor"; git clone -q "$repo" "$menor"
+git -C "$menor" rm -rq .agents/skills/deskcomm-prompt
+bash "$SCRIPT" --fonte "$menor" >/dev/null 2>&1
+for dest in .claude/skills .agents/skills .gemini/config/skills; do
+  checa "[ ! -e \"\$HOME/$dest/deskcomm-prompt\" ] && [ ! -L \"\$HOME/$dest/deskcomm-prompt\" ]" "cópia → --fonte sem o deskcomm-prompt: ele sai de ~/$dest na hora da troca"
+done
+bash "$SCRIPT" --remover >/dev/null 2>&1; code=$?
+checa "[ $code = 0 ] && [ -z \"\$(guias_que_sobraram)\" ]" "e o --remover seguinte não deixa guia nenhum nas três pastas"
+maior="$TMP/troca-de-fonte/clone-maior"; git clone -q "$repo" "$maior"; guia_extra "$maior"
+bash "$SCRIPT" --fonte "$maior" >/dev/null 2>&1
+bash "$SCRIPT" >/dev/null 2>&1   # de volta à cópia, que não tem o deskcomm-extra
+for dest in .claude/skills .agents/skills .gemini/config/skills; do
+  checa "[ ! -e \"\$HOME/$dest/deskcomm-extra\" ] && [ ! -L \"\$HOME/$dest/deskcomm-extra\" ]" "--fonte com o deskcomm-extra → cópia: ele sai de ~/$dest na hora da troca"
+done
+bash "$SCRIPT" --remover >/dev/null 2>&1; code=$?
+checa "[ $code = 0 ] && [ -z \"\$(guias_que_sobraram)\" ]" "e o --remover seguinte não deixa guia nenhum nas três pastas"
+checa "[ -L \"\$HOME/.agents/skills/deskcomm-meu-fork\" ] && [ -f \"\$fork_troca/SKILL.md\" ]" "o link feito à mão para outro repositório atravessa as duas trocas e os dois --remover"
+
+echo "21. troca de fonte interrompida no meio"
+cenario troca-interrompida
+bash "$SCRIPT" >/dev/null 2>&1
+interrompido="$TMP/troca-interrompida/clone"; git clone -q "$repo" "$interrompido"; guia_extra "$interrompido"
+mkdir -p "$TMP/ln-mata"
+# shellcheck disable=SC2016  # o "$@", o $REAL_LN e o $PPID são do ln falso: o script que o chamou
+printf '#!/usr/bin/env bash\n"$REAL_LN" "$@"\nkill -KILL "$PPID"; exit 130\n' > "$TMP/ln-mata/ln"; chmod +x "$TMP/ln-mata/ln"
+{ PATH="$TMP/ln-mata:$PATH" bash "$SCRIPT" --fonte "$interrompido" >/dev/null 2>&1; } 2>/dev/null; code=$?
+checa "[ $code != 0 ] && ls -l \"\$HOME/.claude/skills\" | grep -qF \"\$interrompido/\"" "(pré-condição) a execução morre depois de ligar um guia ao clone"
+bash "$SCRIPT" --remover >/dev/null 2>&1; code=$?
+checa "[ $code = 0 ] && [ -z \"\$(guias_que_sobraram)\" ]" "o --remover seguinte tira também o que a execução interrompida ligou"
 
 echo
 if [ "$falhas" = 0 ]; then echo "instalar-guias: $casos casos, todos verdes"; exit 0

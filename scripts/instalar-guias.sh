@@ -1,48 +1,57 @@
 #!/usr/bin/env bash
-# instalar-guias.sh — deixa os guias do assistente (deskcomm-instalar, deskcomm-cliente-novo,
-# deskcomm-metricas, deskcomm-prompt, deskcomm-contribuir, deskcomm-doutrina) disponíveis
-# em QUALQUER pasta, não só dentro de um clone do DeskcommCRM.
-#
-# ── Por que existe ────────────────────────────────────────────────────────────
-#
-# Os guias vivem em `.agents/skills/` (espelho em `.claude/skills/`) e todo CLI de IA os
-# carrega — mas só com a sessão aberta DENTRO de um clone atualizado. Três pessoas ficavam de
-# fora: quem ainda não clonou (justamente o leigo que quer instalar), quem trabalha num
-# clone/branch antigo, e quem opera vários clientes a partir de outra pasta. Medido em
-# 2026-09-15: numa cópia da main o Claude Code lista os sete guias; numa branch atrasada, zero.
-#
-# ── O que faz ─────────────────────────────────────────────────────────────────
-#
-# 1. Mantém uma cópia rasa só de `.agents/skills` em ~/.deskcomm/guias (clone esparso da main,
-#    atualizado a cada execução — e SÓ nela). Com --fonte DIR, usa o `.agents/skills` de um
-#    clone seu.
-# 2. Liga cada guia `deskcomm-*` nas pastas GLOBAIS que os CLIs leem — medidas, não supostas:
-#      ~/.claude/skills       Claude Code (e Cursor e OpenCode, por compatibilidade)
-#      ~/.agents/skills       Codex, Cursor e OpenCode (padrão aberto Agent Skills)
-#      ~/.gemini/config/skills  Antigravity
-#    Por link simbólico: rodar de novo atualiza a cópia e as três pastas enxergam a versão nova
-#    sem recopiar. Onde o sistema não cria link (Windows sem modo desenvolvedor), copia e marca
-#    a pasta com `.deskcomm-guia`. Nada se atualiza sem rodar o script de novo — a exceção é
-#    `--fonte` com link, que segue a árvore viva do clone (é para isso que ele serve).
-#    Guia que saiu da fonte (renomeado ou removido) sai também das três pastas.
-#
-# Nunca sobrescreve uma skill sua com o mesmo nome: se a pasta existe e não foi este script
-# que a criou, avisa e pula. `--remover` só apaga o que este script criou: ele anota em cada
-# pasta global, num `.deskcomm-fonte`, de onde saíram as ligações daquela pasta, e por isso não
-# toca no link que você mesmo fez para o `deskcomm-*` de outro clone.
-#
-# ── Uso ───────────────────────────────────────────────────────────────────────
-#
-#   curl -fsSL https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/scripts/instalar-guias.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/scripts/instalar-guias.sh | bash -s -- --remover
-#   bash scripts/instalar-guias.sh                 # instala ou atualiza (cópia da main)
-#   bash scripts/instalar-guias.sh --fonte .       # aponta para ESTE clone (quem edita os guias)
-#   bash scripts/instalar-guias.sh --remover       # desfaz
-#
-# Depois de instalar, abra uma sessão NOVA do seu CLI: skills são lidas quando a sessão começa.
-#
-# ⚠️ Claude Code: uma skill global com o mesmo nome VENCE a do projeto. Quem edita um guia numa
-# branch e quer testá-lo deve rodar com `--fonte .` naquele clone (ou `--remover`).
+# O cabeçalho é o texto do --help, logo abaixo, e não um comentário: pelo caminho que o README
+# ensina (`curl ... | bash -s -- --help`) o script chega pela entrada padrão, `$0` vale `bash` e
+# não há arquivo de onde reler um comentário — o --help saía vazio, com exit 0.
+ajuda() {
+  cat <<'AJUDA'
+instalar-guias.sh — deixa os guias do assistente (deskcomm-instalar, deskcomm-cliente-novo,
+deskcomm-metricas, deskcomm-prompt, deskcomm-contribuir, deskcomm-doutrina) disponíveis
+em QUALQUER pasta, não só dentro de um clone do DeskcommCRM.
+
+── Por que existe ────────────────────────────────────────────────────────────
+
+Os guias vivem em `.agents/skills/` (espelho em `.claude/skills/`) e todo CLI de IA os
+carrega — mas só com a sessão aberta DENTRO de um clone atualizado. Três pessoas ficavam de
+fora: quem ainda não clonou (justamente o leigo que quer instalar), quem trabalha num
+clone/branch antigo, e quem opera vários clientes a partir de outra pasta. Medido em
+2026-09-15: numa cópia da main o Claude Code lista os sete guias; numa branch atrasada, zero.
+
+── O que faz ─────────────────────────────────────────────────────────────────
+
+1. Mantém uma cópia rasa só de `.agents/skills` em ~/.deskcomm/guias (clone esparso da main,
+   atualizado a cada execução — e SÓ nela). Com --fonte DIR, usa o `.agents/skills` de um
+   clone seu.
+2. Liga cada guia `deskcomm-*` nas pastas GLOBAIS que os CLIs leem — medidas, não supostas:
+     ~/.claude/skills       Claude Code (e Cursor e OpenCode, por compatibilidade)
+     ~/.agents/skills       Codex, Cursor e OpenCode (padrão aberto Agent Skills)
+     ~/.gemini/config/skills  Antigravity
+   Por link simbólico: rodar de novo atualiza a cópia e as três pastas enxergam a versão nova
+   sem recopiar. Onde o sistema não cria link (Windows sem modo desenvolvedor), copia e marca
+   a pasta com `.deskcomm-guia`. Nada se atualiza sem rodar o script de novo — a exceção é
+   `--fonte` com link, que segue a árvore viva do clone (é para isso que ele serve).
+   Guia que saiu da fonte (renomeado ou removido) sai também das três pastas — e, ao trocar
+   de fonte (da cópia para `--fonte` ou o inverso), sai também o que só a fonte anterior tinha.
+
+Nunca sobrescreve uma skill sua com o mesmo nome: se a pasta existe e não foi este script
+que a criou, avisa e pula. `--remover` só apaga o que este script criou: ele anota em cada
+pasta global, num `.deskcomm-fonte`, de onde saíram as ligações daquela pasta, e por isso não
+toca no link que você mesmo fez para o `deskcomm-*` de outro clone.
+
+── Uso ───────────────────────────────────────────────────────────────────────
+
+  curl -fsSL https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/scripts/instalar-guias.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/melgarafael/DeskcommCRM/main/scripts/instalar-guias.sh | bash -s -- --remover
+  bash scripts/instalar-guias.sh                 # instala ou atualiza (cópia da main)
+  bash scripts/instalar-guias.sh --fonte .       # aponta para ESTE clone (quem edita os guias)
+  bash scripts/instalar-guias.sh --remover       # desfaz
+
+Depois de instalar, abra uma sessão NOVA do seu CLI: skills são lidas quando a sessão começa.
+
+⚠️ Claude Code: uma skill global com o mesmo nome VENCE a do projeto. Quem edita um guia numa
+branch e quer testá-lo deve rodar com `--fonte .` naquele clone (ou `--remover`).
+AJUDA
+}
+
 set -euo pipefail
 
 REPO_URL="${DESKCOMM_REPO_URL:-https://github.com/melgarafael/DeskcommCRM.git}"
@@ -60,7 +69,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --remover) acao="remover" ;;
     --fonte) shift; fonte="${1:-}"; [ -n "$fonte" ] || { echo "--fonte precisa de uma pasta" >&2; exit 2; } ;;
-    -h|--help) awk 'NR == 1 { next } !/^#/ { exit } { print }' "$0" 2>/dev/null || true; exit 0 ;;
+    -h|--help) ajuda; exit 0 ;;
     *) echo "opção desconhecida: $1 (use --fonte DIR, --remover ou --help)" >&2; exit 2 ;;
   esac
   shift
@@ -69,25 +78,41 @@ done
 # Um guia instalado por este script: link que aponta para uma pasta `.agents/skills/deskcomm-*`,
 # ou cópia marcada. Tudo o mais é da pessoa e não se toca.
 #
-# Com <fonte>, só conta o link que aponta para ESSA fonte, e quem APAGA sempre passa uma: a
-# varredura de obsoletos e o `--remover`. Sem esse aperto os dois apagavam também o link que a
-# pessoa fez à mão para o `deskcomm-*` de outro repositório, porque no teste largo qualquer link
-# para um guia responde "sou seu". Só o laço que INSTALA segue no largo — religar um guia de
-# mesmo nome é justamente o que `--fonte` (e voltar dele) faz, e ali o alvo é substituído pela
-# ligação nova, não perdido.
-eh_nosso() {  # eh_nosso <alvo> [fonte]
-  local alvo="$1" fonte_esperada="${2:-}" destino
+# Com fontes, só conta o link que aponta para UMA delas, e quem APAGA sempre passa as fontes do
+# registro: a varredura de obsoletos e o `--remover`. Sem esse aperto os dois apagavam também o
+# link que a pessoa fez à mão para o `deskcomm-*` de outro repositório, porque no teste largo
+# qualquer link para um guia responde "sou seu". Só o laço que INSTALA segue no largo — religar
+# um guia de mesmo nome é justamente o que `--fonte` (e voltar dele) faz, e ali o alvo é
+# substituído pela ligação nova, não perdido.
+eh_nosso() {  # eh_nosso <alvo> [fonte...]
+  local alvo="$1" destino f; shift
   if [ -L "$alvo" ]; then
     destino="$(readlink "$alvo")"
-    if [ -n "$fonte_esperada" ]; then
+    if [ $# -gt 0 ]; then
       # Padrão entre aspas: comparação LITERAL, não glob — um caminho com `[` ou `*` não vira regra.
-      case "$destino" in "$fonte_esperada/$(basename "$alvo")") return 0 ;; esac
+      for f in "$@"; do case "$destino" in "$f/$(basename "$alvo")") return 0 ;; esac; done
       return 1
     fi
     case "$destino" in */.agents/skills/deskcomm-*) return 0 ;; esac
     return 1
   fi
   [ -f "$alvo/$MARCA" ]
+}
+
+# As fontes de onde este script ligou guias em <dest>, uma por linha no `.deskcomm-fonte`, vão
+# para `fontes_registradas`. É lista, e não uma linha só, porque uma instalação registra a fonte
+# nova ao lado das anteriores ANTES de ligar (ver o laço de ligar). Sem registro (instalação de
+# uma versão anterior a ele), a única fonte que este script pode ter usado sem ninguém lhe dizer
+# é a cópia.
+ler_fontes() {  # ler_fontes <dest>
+  local linha
+  fontes_registradas=()
+  if [ -f "$1/$REGISTRO" ]; then
+    while IFS= read -r linha || [ -n "$linha" ]; do
+      [ -z "$linha" ] || fontes_registradas+=("$linha")
+    done < "$1/$REGISTRO"
+  fi
+  [ ${#fontes_registradas[@]} -gt 0 ] || fontes_registradas=("$CACHE/.agents/skills")
 }
 
 # A cópia é deste script quando ele a marcou ao clonar. Sem a marca, um clone qualquer apontado
@@ -128,16 +153,14 @@ if [ "$acao" = "remover" ]; then
   removidos=0
   for dest in "${DESTINOS[@]}"; do
     [ -d "$dest" ] || continue
-    # De onde a última instalação ligou, que é o que o `--remover` desfaz. Sem esse registro o
-    # teste era o largo — "o alvo parece um guia?" —, e a ligação que a PESSOA fez à mão para o
+    # De onde este script ligou, que é o que o `--remover` desfaz. Sem esse registro o teste era
+    # o largo — "o alvo parece um guia?" —, e a ligação que a PESSOA fez à mão para o
     # `deskcomm-*` de outro clone responde que sim: ela era apagada, o contrário do que o
-    # cabeçalho promete. Quando o registro não existe (instalação feita por uma versão anterior
-    # a ele), a única fonte que este script pode ter usado sem ninguém lhe dizer é a cópia.
-    fonte_instalada="$CACHE/.agents/skills"
-    if [ -f "$dest/$REGISTRO" ]; then fonte_instalada="$(cat "$dest/$REGISTRO")"; fi
+    # cabeçalho promete.
+    ler_fontes "$dest"
     for alvo in "$dest"/deskcomm-*; do
       [ -e "$alvo" ] || [ -L "$alvo" ] || continue
-      if eh_nosso "$alvo" "$fonte_instalada"; then rm -rf "$alvo"; removidos=$((removidos + 1)); fi
+      if eh_nosso "$alvo" "${fontes_registradas[@]}"; then rm -rf "$alvo"; removidos=$((removidos + 1)); fi
     done
     rm -f "$dest/$REGISTRO"
   done
@@ -209,12 +232,19 @@ fi
 ligados=0; pulados=0; copiados=0; obsoletos=0
 for dest in "${DESTINOS[@]}"; do
   mkdir -p "$dest"
+  ler_fontes "$dest"
+  # A fonte nova entra no registro ANTES da primeira ligação: uma execução interrompida no meio
+  # deixa ligações para ela, e um registro que ainda só nomeasse a fonte anterior as tiraria do
+  # alcance do `--remover` e da varredura seguinte.
+  printf '%s\n' "${fontes_registradas[@]}" "$origem" > "$dest/$REGISTRO"
   # Guia que este script instalou e que saiu da fonte (renomeado ou removido na main) sai
   # também — senão fica link quebrado, ou, no modo cópia, a versão abandonada carregando ao
-  # lado da nova.
+  # lado da nova. "Da fonte" é de QUALQUER fonte registrada, não só da de agora: ao trocar da
+  # cópia para `--fonte` (ou o inverso), o guia que só a fonte anterior tinha seguia ligado a
+  # ela, e o registro reescrito no fim desta volta o tirava também do alcance do `--remover`.
   for alvo in "$dest"/deskcomm-*; do
     [ -e "$alvo" ] || [ -L "$alvo" ] || continue
-    eh_nosso "$alvo" "$origem" || continue
+    eh_nosso "$alvo" "${fontes_registradas[@]}" "$origem" || continue
     case " ${guias[*]} " in
       *" $(basename "$alvo") "*) ;;
       *) rm -rf "$alvo"; obsoletos=$((obsoletos + 1)) ;;
@@ -233,7 +263,8 @@ for dest in "${DESTINOS[@]}"; do
     fi
   done
   # De onde estas ligações saíram. Um link não carrega marca por dentro como a cópia carrega,
-  # e é este registro que permite ao `--remover` apagar SÓ o que este script ligou.
+  # e é este registro que permite ao `--remover` apagar SÓ o que este script ligou. As fontes
+  # anteriores já podem sair dele: o que era delas foi religado a esta fonte ou varrido acima.
   printf '%s\n' "$origem" > "$dest/$REGISTRO"
 done
 
