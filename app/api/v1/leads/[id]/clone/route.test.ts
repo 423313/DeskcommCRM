@@ -391,9 +391,13 @@ describe("POST /api/v1/leads/[id]/clone", () => {
     expect((db.tables.crm_leads ?? [])[0]?.status).toBe("open");
   });
 
-  it("o clone só leva os campos personalizados que o funil de destino declara", async () => {
-    // Campos personalizados são declarados POR FUNIL. Copiar o jsonb inteiro
-    // faria o clone nascer com chaves que nenhuma tela do destino mostra.
+  it("o clone leva os campos personalizados INTEIROS, inclusive os que o destino não declara", async () => {
+    // `custom_fields` não é só o que a tela do funil mostra: a automação entrega
+    // o jsonb cru à IA (lib/automation/dados-do-formulario.ts) e ao webhook de
+    // saída (lib/automation/actions/call-webhook.ts). O formulário que caiu num
+    // campo nunca declarado é o caso COMUM — e o funil de destino sem campo
+    // declarado nenhum é o caso comum também. Filtrar pelo destino apagava do
+    // negócio novo tudo o que o assistente sabia do cliente.
     const base = seed();
     const origem = (base.crm_leads ?? [])[0];
     if (!origem) throw new Error("o teste espera um crm_leads semeado neste ponto");
@@ -413,7 +417,10 @@ describe("POST /api/v1/leads/[id]/clone", () => {
     const body = await response.json();
 
     expect(response.status).toBe(201);
-    expect((body.data.lead as Row).custom_fields).toEqual({ metragem: "120m2" });
+    expect((body.data.lead as Row).custom_fields).toEqual({
+      metragem: "120m2",
+      numero_da_os: "OS-99",
+    });
   });
 });
 

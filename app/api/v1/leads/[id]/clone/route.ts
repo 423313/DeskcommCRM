@@ -36,7 +36,6 @@ import {
   type EtapaDoFunil,
   type OrigemParaClonar,
 } from "@/lib/leads/clonar-para-funil";
-import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 import { encerraDemanda } from "@/lib/leads/encerramento";
 import {
   motivoDaPerdaDaOrigem,
@@ -92,7 +91,7 @@ export async function POST(
 
     const { data: pipelineDestino, error: pipeErr } = await supabase
       .from("crm_pipelines")
-      .select("id, settings")
+      .select("id")
       .eq("id", input.pipeline_id)
       .eq("organization_id", handlerCtx.organization_id)
       .maybeSingle();
@@ -197,13 +196,7 @@ export async function POST(
     const clone = await createLeadHandler(
       supabase,
       handlerCtx,
-      montaPayloadDoClone(
-        origem as OrigemParaClonar,
-        destino.etapa,
-        camposDoFunil(
-          (pipelineDestino as { settings?: Record<string, unknown> | null }).settings ?? null,
-        ).map((campo) => campo.key),
-      ),
+      montaPayloadDoClone(origem as OrigemParaClonar, destino.etapa),
     );
 
     const motivo = motivoDaPerdaDaOrigem(input.lost_reason);

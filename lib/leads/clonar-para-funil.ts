@@ -175,18 +175,20 @@ export function escolheEtapaDeDestino(
  * - `position_in_stage` — quem posiciona é o handler de criação (MAX + 1000), que
  *   é quem conhece o fim da fila da etapa escolhida.
  *
- * ⚠️ `custom_fields` é filtrado pelo que o funil de DESTINO declara
- * (`pipelines.settings.fields`), e não copiado inteiro. Os campos personalizados
- * são declarados POR FUNIL: copiar tudo faria o clone nascer com chaves que
- * nenhuma tela do destino mostra e que nenhum Zod valida — dado invisível que
- * ninguém apaga porque ninguém sabe que está lá. `camposDeclaradosNoDestino`
- * ausente (ou vazio) copia tudo, que é o comportamento de quem ainda não declarou
- * campo nenhum; passar a lista é o caso normal, e é o que a rota faz.
+ * ⚠️ `custom_fields` vem INTEIRO, inclusive chaves que o funil de destino não
+ * declara em `settings.fields` — e já foi filtrado, por uma rodada que tratou a
+ * declaração do funil como o único leitor do campo. Não é: a automação entrega o
+ * jsonb cru à IA (`lib/automation/dados-do-formulario.ts`) e ao webhook de saída
+ * (`lib/automation/actions/call-webhook.ts`), e resposta de formulário gravada em
+ * chave nunca declarada é o caso comum. Filtrar apagava do negócio novo o que o
+ * assistente sabia do cliente — e, com o destino sem campo declarado nenhum (o
+ * outro caso comum), apagava TUDO. A chave que o destino não declara fica na
+ * linha e só não aparece na tela do funil até alguém declará-la lá; é o mesmo
+ * estado de quando um funil deixa de declarar um campo que já tinha valor.
  */
 export function montaPayloadDoClone(
   origem: OrigemParaClonar,
   etapa: EtapaDoFunil,
-  camposDeclaradosNoDestino?: readonly string[],
 ): CreateLeadInput & {
   custom_fields: Record<string, unknown>;
   source_metadata: Record<string, unknown>;
@@ -207,7 +209,7 @@ export function montaPayloadDoClone(
     expected_close_date: origem.expected_close_date ?? null,
     tags: origem.tags ?? [],
     source: origem.source ?? "manual",
-    custom_fields: filtraCamposDoDestino(origem.custom_fields, camposDeclaradosNoDestino),
+    custom_fields: origem.custom_fields ?? {},
     source_metadata: {
       ...(origem.source_metadata ?? {}),
       clonado_de: {
@@ -216,24 +218,6 @@ export function montaPayloadDoClone(
       },
     },
   };
-}
-
-/**
- * Os campos personalizados que sobrevivem à troca: os que o funil de destino
- * declara. Lista ausente = nada a filtrar (o funil não declarou campo nenhum).
- */
-function filtraCamposDoDestino(
-  origem: Record<string, unknown> | null | undefined,
-  declarados?: readonly string[],
-): Record<string, unknown> {
-  const todos = origem ?? {};
-  if (declarados === undefined) return todos;
-  const permitidas = new Set(declarados);
-  const out: Record<string, unknown> = {};
-  for (const [chave, valor] of Object.entries(todos)) {
-    if (permitidas.has(chave)) out[chave] = valor;
-  }
-  return out;
 }
 
 /** O registro que fica na origem: para onde o negócio foi. */

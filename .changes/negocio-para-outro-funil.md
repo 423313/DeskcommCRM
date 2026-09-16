@@ -13,8 +13,9 @@ nenhum do produto. A instrução apontava para o vazio.
 Agora existe a troca de funil, por enquanto pela API (`POST
 /api/v1/leads/[id]/clone`); o botão no quadro vem na fatia seguinte. O negócio é
 criado no funil de destino (na primeira etapa aberta, ou na etapa que você
-escolher) com os mesmos dados — título, contato, valor, dono, previsão, tags e os
-campos personalizados que o funil de destino declara — e a origem é encerrada
+escolher) com os mesmos dados — título, contato, valor, dono, previsão, tags e
+campos personalizados (os que o funil de destino não tiver continuam guardados no
+negócio, mas só aparecem na tela quando você criá-los lá) — e a origem é encerrada
 como perdida. Cada lado guarda o ponteiro para o outro: o novo negócio registra
 de onde veio, o antigo registra para onde foi.
 
