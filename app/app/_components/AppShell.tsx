@@ -6,6 +6,7 @@ import { BarraDeProgressoNavegacao } from "@/components/shell/BarraDeProgressoNa
 import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessageAlerts";
 import { useCrmAlerts } from "@/hooks/notifications/useCrmAlerts";
 import { useNotifyOpenFromServiceWorker } from "@/lib/notifications/notify_open";
+import { FloatingInbox } from "@/components/inbox/FloatingInbox";
 
 interface AppShellProps {
   sidebarCollapsed: boolean;
@@ -45,6 +46,7 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
         <TopBar />
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
+      <FloatingInbox />
     </div>
   );
 }

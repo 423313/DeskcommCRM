@@ -37,6 +37,16 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Mensagens rápidas": { es: "Mensajes rápidos" },
+  "Voltar às conversas": { es: "Volver a las conversaciones" },
+  "Minimizar mensagens": { es: "Minimizar mensajes" },
+  "conversas não lidas": { es: "conversaciones no leídas" },
+  "Não foi possível atualizar as mensagens.": { es: "No se pudieron actualizar los mensajes." },
+  "Não foi possível carregar as conversas.": { es: "No se pudieron cargar las conversaciones." },
+  "Escolher contato para conversar": { es: "Elegir contacto para conversar" },
+  "Acompanhamento somente leitura": { es: "Seguimiento de solo lectura" },
+  "A janela de atendimento fechou. Abra o Inbox para ver as opções deste canal.": { es: "La ventana de atención se cerró. Abre el Inbox para ver las opciones de este canal." },
+
   "Assistente de voz": { es: "Asistente de voz" },
   "Não foi possível concluir. Confira sua conexão e tente novamente.": { es: "No se pudo completar la operación. Revisa tu conexión e inténtalo de nuevo." },
   "Não foi possível confirmar o encerramento. Feche esta aba para interromper o microfone.": { es: "No se pudo confirmar la finalización. Cierra esta pestaña para detener el micrófono." },
