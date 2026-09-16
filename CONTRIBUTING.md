@@ -6,6 +6,9 @@
    Antigravity): o guia `deskcomm-contribuir` (`.agents/skills/deskcomm-contribuir/SKILL.md`) mede
    antes do PR o que a triagem mede depois — branch atrasada, tripla de migration, marca do fork no
    diff, fragmento de release — e arma os hooks de git com `bash .agents/skills/deskcomm-contribuir/scripts/armar-hooks.sh`.
+   Para ter os guias em qualquer pasta: `bash scripts/instalar-guias.sh`. Vai **editar** um guia?
+   Rode `bash scripts/instalar-guias.sh --fonte .` no seu clone — no Claude Code a skill global
+   vence a do projeto, e sem isso você testaria a versão da `main`, não a sua.
 1. Leia [`CLAUDE.md`](CLAUDE.md) — convenções não-negociáveis.
 2. Leia [`ARCHITECTURE.md`](ARCHITECTURE.md) — visão de 1 página.
 3. Identifique o epic de origem em [`docs/stories/epics/MASTER.md`](docs/stories/epics/MASTER.md).
@@ -145,6 +148,22 @@ E sobre o `pnpm test:e2e` do DoD: rodar a suíte completa exige Docker, banco se
 local. **Não travamos PR externo nisso** — mande o que conseguiu provar (unit + descrição do
 que testou na mão), que a prova de tela fica com o mantenedor. Exigir prova sem entregar a
 ferramenta de produzi-la seria pedágio, não rigor.
+
+### `tests/invariants/` é congelado — e isso vale para o COMPORTAMENTO, não só para o arquivo
+
+Os arquivos de `tests/invariants/` guardam leis do produto, e mexer neles pede justificativa
+escrita. Duas coisas que não estão óbvias e já custaram tempo a quem contribui:
+
+1. **O guarda é um hook local do mantenedor** (`core.hooksPath=loop/hooks`), não um check do CI.
+   Você não vai vê-lo reprovar no seu fork — o que você vê é a integração travar depois.
+2. **Um PR pode reprovar um invariante sem tocar no arquivo dele.** Se o seu conserto muda o
+   comportamento que a lei afirma, o vermelho aparece lá. Isso **não é um descuido seu** — é o
+   sinal de que existem duas regras concorrentes, a que está escrita e a que você propõe.
+
+Quando acontecer, **não apague nem afrouxe a asserção**: diga no PR qual é a sua razão e deixe a
+escolha explícita. Quem tria escreve a mudança do invariante com a justificativa exigida, ou ajusta
+o conserto para preservar a lei antiga — e a decisão fica registrada no PR, que é onde ela serve
+para a próxima pessoa.
 
 ### Texto de tela: toda frase nova precisa do espanhol
 
