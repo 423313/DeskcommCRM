@@ -500,7 +500,15 @@ async function entrarNaCamada(page: Page, escopo: Escopo): Promise<void> {
 async function subirLogoDaCamada(page: Page, escopo: Escopo): Promise<void> {
   const camada = CAMADAS[escopo];
   await page.goto(camada.tela);
-  await expect(page.locator(`#logo-${escopo}`)).toBeVisible();
+  // O sinal de prontidão é a HIDRATAÇÃO, não a visibilidade do input de arquivo:
+  // o próprio `CampoDeLogo.tsx` diz que "visível" é propriedade do SSR e o input
+  // existe no HTML antes de o React atar o `onChange`. O vermelho do run
+  // 35091061135 nasceu aqui — `#logo-instalacao` ainda não estava no DOM aos 5s do
+  // `expect` padrão, e o caso (6) morreu na PRECONDIÇÃO com "element(s) not found".
+  await expect(
+    page.locator(`[data-campo-de-logo='${escopo}'][data-hidratado]`),
+    `o campo de logo da camada "${escopo}" não apareceu em ${camada.tela}`,
+  ).toBeVisible({ timeout: 15_000 });
   await subir(page, escopo, camada.arquivo);
   await expect(page.getByText(/logo atualizado/i)).toBeVisible({ timeout: 15_000 });
   // A âncora da issue #274 fecha a subida: o toast mora no layout raiz e sobrevive
