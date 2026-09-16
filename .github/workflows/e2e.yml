@@ -625,8 +625,12 @@ jobs:
       # elas escolheram), e a fresca precisa do oposto — a instalação sem dono,
       # sem tenant, sem fixtures. Por isso os dois passos de semeadura
       # (`Semear credenciais de teste` e `Semear as fixtures`) recebem
-      # `if: matrix.parte != 4`, e o dono é criado pela própria spec, que é o
-      # que ela existe para afirmar.
+      # `if: matrix.parte != 4`, e o único dado que existe antes dela é o dono
+      # do bootstrap — criado pelo passo `Criar o dono da instalação`, com o
+      # mesmo `scripts/bootstrap-owner.ts` que o `install.sh` roda na VPS. A
+      # spec EXIGE esse dono como precondição (está no cabeçalho dela, junto de
+      # WAHA e Redis); o que ela afirma é a jornada a partir dali, não a
+      # existência do usuário.
       SPECS_PARTE_4: >-
         vps-fresh-onboarding.spec.ts
 
@@ -954,6 +958,29 @@ jobs:
           docker ps -a --filter name=waha --format '{{.Names}} {{.Status}} {{.Ports}}' || true
           docker logs --tail 40 "$(docker ps -aq --filter name=waha | head -1)" 2>&1 || true
           exit 1
+
+      # ─── O dono da instalação fresca: o `install.sh` cria, e o CI também ───
+      #
+      # PRECONDIÇÃO da spec, declarada por ela no cabeçalho: "primeiro usuário
+      # criado via scripts/bootstrap-owner.ts (como o install.sh)". Sem este
+      # passo o `beforeAll` dela morre antes do primeiro teste, com
+      # "esta suite APAGA dados da organizacao que resolver aqui, e nao achou o
+      # dono (dono@qa.local)" — a spec é destrutiva e se recusa a escolher a
+      # organização no escuro (a versão antiga escolhia "a primeira" e zerou o
+      # onboarding e a sessão de WhatsApp de uma instalação de trabalho).
+      #
+      # O que este passo NÃO faz: não semeia fixture, não pula wizard, não
+      # inventa tenant. Ele cria exatamente o que o `install.sh` cria numa VPS
+      # recém-instalada — dono (auth, e-mail confirmado), organização, vínculo
+      # como `admin` e a linha em `platform_admins` — e entrega a jornada
+      # (wizard, WhatsApp, convites) para a spec percorrer.
+      #
+      # As credenciais do dono não estão escritas aqui: vêm do `.env.e2e`, que
+      # é a fonte única do ambiente da suíte e já foi publicada no job no passo
+      # "Publicar o .env.e2e no ambiente do job". O script lê o ambiente.
+      - if: matrix.parte == 4
+        name: Criar o dono da instalação (como o install.sh)
+        run: pnpm exec tsx scripts/bootstrap-owner.ts
 
       - if: matrix.parte != 4
         name: Semear credenciais de teste

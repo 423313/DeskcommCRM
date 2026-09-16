@@ -123,6 +123,28 @@ WAHA_API_KEY=e2e-placeholder-nao-e-segredo
 WAHA_WEBHOOK_BASE_URL=http://127.0.0.1:3001
 UPSTASH_REDIS_REST_URL=http://127.0.0.1:3998
 UPSTASH_REDIS_REST_TOKEN=e2e-placeholder-nao-e-segredo
+
+# ── O DONO DA INSTALAÇÃO — o primeiro usuário, como o \`install.sh\` cria ────
+# A \`vps-fresh-onboarding\` (parte 4 do CI) roda numa instalação onde NINGUÉM
+# existe ainda: o \`install.sh\` de uma VPS recém-instalada cria o primeiro dono
+# com \`scripts/bootstrap-owner.ts\`, e a spec exige isso como PRECONDIÇÃO
+# (cabeçalho dela) — sem esses valores o \`beforeAll\` para em "nao achou o dono
+# (dono@qa.local)", porque a spec é destrutiva e se recusa a escolher a
+# organização no escuro.
+#
+# Ficam AQUI, e não redigitados no workflow, porque este arquivo é a fonte
+# única do ambiente da suíte: o passo "Publicar o .env.e2e no ambiente do job"
+# o leva inteiro para o job, então o CI e quem roda local leem o MESMO dono.
+# Mesmos valores de \`docs/testing/HANDOFF-vps-qa.md\` (a receita local da
+# jornada) e do cabeçalho da spec.
+#
+# Backtick escapado neste heredoc não é estilo: ele é \`<<EOF\` sem aspas, então
+# crase crua vira SUBSTITUIÇÃO DE COMANDO — o comentário chega no arquivo
+# mutilado e o shell imprime "command not found" no log do CI.
+OWNER_EMAIL=dono@qa.local
+OWNER_PASSWORD=QaVps!2026#Dono
+OWNER_ORG_NAME=Loja QA VPS
+
 NEXT_TELEMETRY_DISABLED=1
 # Telemetria DESLIGADA na suíte, e não é preferência: sem isto o SDK do browser
 # assume o DSN da comunidade (\`lib/sentry/dsn.ts\` → DEFAULT_SENTRY_DSN) e a suíte
