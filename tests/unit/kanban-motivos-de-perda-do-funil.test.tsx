@@ -23,6 +23,9 @@
  * cadastrado, o padrão do produto e o `other` vazio continuam como sempre
  * foram — a correção não pode ter consertado um caso quebrando o outro.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { fireEvent, render, screen, cleanup, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -176,6 +179,29 @@ describe("motivosDoFunil (a régua da leitura)", () => {
     expect(
       motivosDoFunil({ lost_reasons: ["  Sem orçamento  ", "Sem orçamento", "", "Fora do perfil"] }),
     ).toEqual(["  Sem orçamento  ", "Fora do perfil"]);
+  });
+
+  it("a chave do quadro não pode voltar a ser literal em lugar nenhum", () => {
+    // MEDIDO, e contra a minha previsão: trocar o corpo de `chaveDoQuadro` NÃO
+    // deixa este arquivo vermelho — 9 verdes —, porque o hook e o teste passaram
+    // a ler pela MESMA função e mudam juntos. É o desfecho certo: a divergência
+    // deixou de ser possível, em vez de passar a ser detectada.
+    //
+    // O que continua possível é alguém RE-ESCREVER a literal num dos lados, e aí
+    // o hook volta a devolver `[]` em silêncio — a janela cai no padrão do
+    // produto, que é o defeito da #918. É essa regressão que este caso pega.
+    const raiz = process.cwd();
+    for (const arquivo of [
+      "hooks/kanban/useMotivosDePerdaDoFunil.ts",
+      "tests/unit/kanban-motivos-de-perda-do-funil.test.tsx",
+    ]) {
+      expect(readFileSync(join(raiz, arquivo), "utf8"), arquivo).toContain("chaveDoQuadro(");
+    }
+    // A literal só é cobrada no HOOK: este arquivo cita `chaveDoQuadro` e nomeia
+    // a literal antiga no próprio texto do caso, e cobrá-la aqui seria o teste
+    // reprovando a si mesmo.
+    const hook = readFileSync(join(raiz, "hooks/kanban/useMotivosDePerdaDoFunil.ts"), "utf8");
+    expect(hook.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")).not.toContain("\"board\"");
   });
 
   it("lixo no settings vira lista vazia, não motivo na tela", () => {
