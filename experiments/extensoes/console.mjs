@@ -3,7 +3,7 @@ import { lstat, mkdir, readFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readContext, readJsonPlain, writeJsonAtomic } from './common.mjs';
+import { caminhoDentro, readContext, readJsonPlain, writeJsonAtomic } from './common.mjs';
 
 import { cancelProbe, prepareProbe, probeReservation, ProbeBusyError } from './probe-supervisor.mjs';
 
@@ -27,7 +27,7 @@ let closing = false;
 
 for (const id of ids) {
   try {
-    const saved = await readJsonPlain(path.join(resultsDir, `${id}.json`));
+    const saved = await readJsonPlain(caminhoDentro(resultsDir, `${id}.json`));
     if (saved.status === 'running') {
       saved.status = 'interrupted';
       saved.message = 'O console foi interrompido. O resultado não foi confirmado; uma reserva ativa impede nova execução até o encerramento do trabalho.';
@@ -47,7 +47,7 @@ function reply(res, status, value) {
 
 async function save(id, state) {
   await ensureResultsDirectory();
-  await writeJsonAtomic(path.join(resultsDir, `${id}.json`), state);
+  await writeJsonAtomic(caminhoDentro(resultsDir, `${id}.json`), state);
   jobs.set(id, state);
 }
 
@@ -61,7 +61,7 @@ async function begin(id, requestId) {
     active.child = child;
     if (closing) throw new Error('Console em encerramento.');
     await save(id, state);
-    await writeJsonAtomic(path.join(resultsDir, `request-${requestId}.json`), state);
+    await writeJsonAtomic(caminhoDentro(resultsDir, `request-${requestId}.json`), state);
   } catch (error) {
     if (child) { child.stdin.end(); await child.closed; }
     active = null;
@@ -93,9 +93,9 @@ async function begin(id, requestId) {
     }
     try {
       await ensureResultsDirectory();
-      await writeJsonAtomic(path.join(resultsDir, `${state.run_id}.json`), { ...finished, diagnostic: stderr });
+      await writeJsonAtomic(caminhoDentro(resultsDir, `${state.run_id}.json`), { ...finished, diagnostic: stderr });
       await save(id, finished);
-      await writeJsonAtomic(path.join(resultsDir, `request-${requestId}.json`), finished);
+      await writeJsonAtomic(caminhoDentro(resultsDir, `request-${requestId}.json`), finished);
     } catch {
       jobs.set(id, { ...state, status: 'failed', message: 'Não foi possível salvar a evidência. Verifique o espaço local.' });
     } finally { active = null; }
@@ -123,7 +123,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url.startsWith('/api/request/')) {
       const requestId = req.url.slice('/api/request/'.length);
       if (!validRequestId(requestId)) return reply(res, 400, { error: 'Identificador de solicitação inválido.' });
-      try { return reply(res, 200, await readJsonPlain(path.join(resultsDir, `request-${requestId}.json`))); }
+      try { return reply(res, 200, await readJsonPlain(caminhoDentro(resultsDir, `request-${requestId}.json`))); }
       catch (error) { if (error.code !== 'ENOENT') throw error; return reply(res, 200, { status: 'unconfirmed' }); }
     }
     if (req.method === 'POST' && req.url.startsWith('/api/run/')) {
@@ -138,7 +138,7 @@ const server = http.createServer(async (req, res) => {
       const requestId = req.headers['x-request-id'];
       if (!validRequestId(requestId)) return reply(res, 400, { error: 'Identificador de solicitação inválido.' });
       try {
-        const previous = await readJsonPlain(path.join(resultsDir, `request-${requestId}.json`));
+        const previous = await readJsonPlain(caminhoDentro(resultsDir, `request-${requestId}.json`));
         if (previous.id !== id) return reply(res, 409, { error: 'Solicitação já usada em outra prova.' });
         return reply(res, 200, previous);
       } catch (error) { if (error.code !== 'ENOENT') throw error; }

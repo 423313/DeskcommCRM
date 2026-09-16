@@ -57,6 +57,19 @@ export async function ensureOwnedWorkspace(repoRoot) {
   return directory;
 }
 
+/**
+ * Resolve `nome` dentro de `raiz` e recusa o que escaparia dela. O console monta nomes de resultado
+ * com o cabeçalho `x-request-id`, que vem do navegador; `validRequestId` já o restringe a UUID, e a
+ * contenção mora aqui, no ponto em que o nome vira caminho, para que nenhum chamador dependa de ter
+ * lembrado da validação.
+ */
+export function caminhoDentro(raiz, nome) {
+  const base = path.resolve(raiz);
+  const alvo = path.resolve(base, nome);
+  if (!alvo.startsWith(base + path.sep)) throw new Error('Caminho fora da pasta da bancada recusado.');
+  return alvo;
+}
+
 /** Arquivo único, sem seguir links; fsync antes da troca e do diretório depois. */
 export async function writeJsonAtomic(file, value) {
   try {

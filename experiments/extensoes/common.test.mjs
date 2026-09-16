@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { assertLocalDatabaseUrl, ensureOwnedWorkspace } from './common.mjs';
+import { assertLocalDatabaseUrl, caminhoDentro, ensureOwnedWorkspace } from './common.mjs';
 
 test('recusa destino remoto e parâmetros que redirecionariam a conexão', () => {
   for (const url of [
@@ -16,6 +16,16 @@ test('recusa destino remoto e parâmetros que redirecionariam a conexão', () =>
   assert.doesNotThrow(() => assertLocalDatabaseUrl(
     'postgresql://extensions_bench_owner@127.0.0.1:54383/extensions_bench',
   ));
+});
+
+test('o nome de resultado que vem do navegador não sai da pasta da bancada', () => {
+  const raiz = path.join(os.tmpdir(), 'bancada', 'console-results');
+  const uuid = '0b7c4a1e-2f3d-4c5b-9a8e-7d6c5b4a3f21';
+  assert.equal(caminhoDentro(raiz, `request-${uuid}.json`), path.join(raiz, `request-${uuid}.json`));
+  // Os três jeitos de escapar: subir diretório, caminho absoluto, e subir por dentro de um nome.
+  for (const nome of ['../owner.json', '/etc/passwd', 'request-x/../../database.json', '..', '']) {
+    assert.throws(() => caminhoDentro(raiz, nome), /fora da pasta/, nome);
+  }
 });
 
 test('recusa ocupar uma pasta que já contém trabalho sem marcador', async () => {
