@@ -8087,6 +8087,9 @@ export const DICIONARIO: Traducoes = {
   },
   "Não sei ler esse tipo de arquivo. Envie PDF, Markdown (.md), CSV (.csv) ou texto (.txt).": { es: "No sé leer ese tipo de archivo. Envía PDF, Markdown (.md), CSV (.csv) o texto (.txt)." },
   "Não leio Excel diretamente — no Excel use \"Salvar como\" → \"CSV UTF-8 (delimitado por vírgulas)\" e envie o CSV.": { es: "No leo Excel directamente — en Excel usa \"Guardar como\" → \"CSV UTF-8 (delimitado por comas)\" y envía el CSV." },
+  "Extração de PDF indisponível nesta instalação: falta o binário nativo @napi-rs/canvas, que o leitor de PDF usa. Não é o seu arquivo — não há nada a corrigir nele. Atualize a instalação (`bash update.sh`); se o erro continuar, avise quem instalou o sistema, porque o binário ficou de fora da imagem. Enquanto isso, o mesmo conteúdo em texto (.txt), Markdown (.md) ou CSV (.csv) é lido normalmente.": {
+    es: "Extracción de PDF no disponible en esta instalación: falta el binario nativo @napi-rs/canvas, que el lector de PDF usa. No es tu archivo — no hay nada que corregir en él. Actualiza la instalación (`bash update.sh`); si el error sigue, avisa a quien instaló el sistema, porque el binario quedó fuera de la imagen. Mientras tanto, el mismo contenido en texto (.txt), Markdown (.md) o CSV (.csv) se lee normalmente.",
+  },
   "não consegui extrair texto deste PDF. Se ele for só imagens escaneadas, não há letra nenhuma para ler — envie uma versão com texto selecionável.": {
     es: "no conseguí extraer texto de este PDF. Si son solo imágenes escaneadas, no hay ninguna letra para leer — envía una versión con texto seleccionable.",
   },

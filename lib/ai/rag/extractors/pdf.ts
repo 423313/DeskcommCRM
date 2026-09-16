@@ -87,11 +87,30 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
     // Sem esta mensagem, quem instalou vê "DOMMatrix is not defined" e não tem como
     // ligar isso a uma dependência que ele nem sabe que existe. O diagnóstico custa
     // 4 linhas; a caçada custa uma tarde.
+    //
+    // ⚠️ A INSTRUÇÃO É PARA QUEM VAI LÊ-LA, e desde que esta frase passou a chegar
+    // INTACTA à tela do acervo (`extrairTextoDoArquivo` repassa `err.message`),
+    // quem a lê é o dono da VPS — não quem desenvolve. A versão anterior mandava
+    // "reinstale as dependências (`pnpm install`, não `--no-optional`)": num
+    // self-host não há `node_modules` para reinstalar, a imagem Docker é
+    // pré-buildada no CI e o kit não expõe passo nenhum de instalação de pacote
+    // (doutrina de packaging: nada constrói na máquina do cliente). Era uma
+    // instrução impossível de seguir, e instrução impossível lê como "está
+    // quebrado e não há o que fazer".
+    //
+    // O que ele PODE fazer está escrito, e sem prometer: atualizar a instalação
+    // resolve QUANDO a imagem publicada já traz o binário — não resolve se a poda
+    // aconteceu no build —, e o caminho que sempre existe é avisar quem instalou.
+    // A causa não é suavizada: o nome do pacote fica, porque é ele que quem
+    // instalou vai procurar.
     if (err instanceof Error && /DOMMatrix|@napi-rs\/canvas/.test(err.message)) {
       throw new PdfExtractError(
-        "Extração de PDF indisponível: o binário nativo @napi-rs/canvas não foi instalado " +
-          "nesta plataforma. Reinstale as dependências SEM podar as opcionais " +
-          "(`pnpm install`, não `--no-optional`). Até lá, PDFs não são lidos.",
+        "Extração de PDF indisponível nesta instalação: falta o binário nativo " +
+          "@napi-rs/canvas, que o leitor de PDF usa. Não é o seu arquivo — não há nada " +
+          "a corrigir nele. Atualize a instalação (`bash update.sh`); se o erro " +
+          "continuar, avise quem instalou o sistema, porque o binário ficou de fora da " +
+          "imagem. Enquanto isso, o mesmo conteúdo em texto (.txt), Markdown (.md) ou " +
+          "CSV (.csv) é lido normalmente.",
         err,
       );
     }

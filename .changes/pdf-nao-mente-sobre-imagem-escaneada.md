@@ -12,4 +12,9 @@ mensagem específica que `extractPdfText` já produzia para cada causa
 era descartada e trocada por essa frase única em
 `lib/ai/rag/ingest/documento.ts`, então quem enviava um PDF perfeitamente
 legível recebia uma explicação que apontava para o próprio arquivo como
-culpado. Agora a causa relatada é a causa real. Crédito: @cabindaferreira.
+culpado. Agora a causa relatada é a causa real — e, no caso que motivou o
+conserto (uma peça nativa do leitor de PDF que ficou de fora da imagem), a
+mensagem diz o que quem opera a VPS pode de fato fazer: atualizar a
+instalação e, se não resolver, avisar quem instalou. Antes ela mandava
+reinstalar pacotes, que num servidor com a imagem pronta não é um passo que
+exista. Crédito: @cabindaferreira.
