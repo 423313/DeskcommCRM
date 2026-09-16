@@ -1,6 +1,7 @@
-test(e2e): a spec do inbox em tempo real passa a discriminar o conserto do realtime
+---
+impacto: nada_mudou
+secao: corrigido
+titulo: A spec do inbox em tempo real volta a medir o que conserta o canal, e não só a tela
+---
 
-Ela media só a saída (o texto na tela, que tem dois caminhos por causa do
-`refetchOnWindowFocus`) e ficava verde com o canal mudo. Agora assere o que trafega
-no socket — `phx_join` com token do usuário e o frame `postgres_changes` com o corpo
-da mensagem — e por isso reprova quando o conserto do #327 não está no bundle.
+Nada muda na sua VPS: nenhuma migration, nenhuma variável, nenhuma imagem. O que muda é o que o teste mede. A spec do inbox em tempo real olhava só a saída — o texto na tela, que chega por dois caminhos por causa do `refetchOnWindowFocus` — e por isso ficava verde com o canal de tempo real mudo. Agora ela assere o que trafega no socket (`phx_join` autenticado e o `postgres_changes` com o corpo da mensagem) e reprova quando o conserto do #327 não está no bundle. Crédito: @webtecnica.
