@@ -34,7 +34,10 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { avisoDoEspelhoRecusado } from "@/lib/agent-engine/edge/crm/move-lead-stage";
+import {
+  abreAvisoDoEspelhoRecusado,
+  avisoDoEspelhoRecusado,
+} from "@/lib/agent-engine/edge/crm/move-lead-stage";
 
 const ETAPA = "Perdido";
 
@@ -164,5 +167,82 @@ describe("as outras recusas continuam com o aviso delas", () => {
         `esperava warn-only para ${motivo}`,
       ).toBeNull();
     }
+  });
+});
+
+/**
+ * O PONTO DE USO — quem GRAVA o aviso, e não só quem o decide.
+ *
+ * Enquanto o `inbound-turn` chamava `insertInboxItem` à mão com `aviso.dedupe`
+ * no quarto argumento, apagar esse argumento deixava a suíte inteira verde: o
+ * invariante de Postgres chama `insertInboxItem` direto, com o dedupe que ELE lê
+ * da decisão. `abreAvisoDoEspelhoRecusado` junta decisão e gravação, e aqui se
+ * afirma sobre o que chega ao banco — o SQL com a guarda e os parâmetros dela.
+ */
+describe("abrir o aviso na Central", () => {
+  function bancoQueRegistra() {
+    const chamadas: Array<{ sql: string; params: unknown[] }> = [];
+    const db = {
+      query: async (sql: string, params: unknown[]) => {
+        chamadas.push({ sql, params });
+        return { rows: [] };
+      },
+    };
+    return { db: db as never, chamadas };
+  }
+
+  it("a perda sem motivo grava UM aviso, com a guarda por kind + ref + título ligada", async () => {
+    const { db, chamadas } = bancoQueRegistra();
+
+    await abreAvisoDoEspelhoRecusado(db, "org-1", {
+      leadId: "lead-1",
+      motivo: "perda_sem_motivo",
+      detalhe: "d",
+      etapaDeDestino: ETAPA,
+    });
+
+    expect(chamadas).toHaveLength(1);
+    const { sql, params } = chamadas[0]!;
+    expect(sql).toContain("where not exists");
+    const titulo = avisoDoEspelhoRecusado({
+      motivo: "perda_sem_motivo",
+      detalhe: "d",
+      etapaDeDestino: ETAPA,
+    })!.title;
+    // Ordem dos parâmetros de `insertInboxItem`: org, kind, severity, title, body,
+    // ref_kind, ref_id, "casa a ref?", "casa o título?".
+    expect(params.slice(0, 2)).toEqual(["org-1", "other"]);
+    expect(params[3]).toBe(titulo);
+    expect(params.slice(5)).toEqual(["lead", "lead-1", true, true]);
+  });
+
+  it("warn-only não chega ao banco", async () => {
+    const { db, chamadas } = bancoQueRegistra();
+
+    await abreAvisoDoEspelhoRecusado(db, "org-1", {
+      leadId: "lead-1",
+      motivo: "human_conflict",
+      detalhe: "d",
+      etapaDeDestino: ETAPA,
+    });
+
+    expect(chamadas).toEqual([]);
+  });
+
+  it("o turno do agente abre o aviso por ESTA função, e não com um insert escrito à mão", () => {
+    // O corpo do `update_lead_state` é inalcançável sem o runtime inteiro (LLM,
+    // fila, pool). O que se prende aqui é a fiação: a chamada existe no ramo de
+    // espelho recusado, e o insert manual — o que perdia o `dedupe` — não voltou.
+    const fonte = readFileSync(
+      join(process.cwd(), "lib/agent-engine/agent/inbound-turn.ts"),
+      "utf8",
+    );
+    const i = fonte.indexOf("update_lead_state: tool({");
+    const j = fonte.indexOf("// F3-11:", i);
+    expect(i).toBeGreaterThan(-1);
+    expect(j).toBeGreaterThan(i);
+    const ramo = fonte.slice(i, j);
+    expect(ramo).toMatch(/if \(!mirror\.ok\) \{[\s\S]*await abreAvisoDoEspelhoRecusado\(pool, tenantId, \{/);
+    expect(ramo).not.toMatch(/insertInboxItem\(/);
   });
 });

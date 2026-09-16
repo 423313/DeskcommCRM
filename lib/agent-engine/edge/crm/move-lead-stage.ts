@@ -14,7 +14,7 @@
  * banco fora / escrita falha são incidente — os dois últimos abrem item no caller.
  */
 import { sincronizaEstagioDoAgente } from '@/lib/leads/agent-stage-sync';
-import type { InboxDedupe } from '../../db/repository';
+import { insertInboxItem, type InboxDedupe } from '../../db/repository';
 import type { Queryable } from '../../queue/queue';
 import type { CrmEdgeConfig } from './mcp-client';
 import type { LeadStage } from '../../agent/lead-state';
@@ -39,7 +39,7 @@ export type MirrorReason =
    * negócio que o agente quis fechar como perdido CONTINUA aberto, e o dono
    * precisa saber que a IA parou ali e por quê. Warn silencioso deixaria o card
    * parado num funil que parece só atrasado. O item de inbox é o ensinamento:
-   * mova o card e informe o motivo (o banco recusa motivo que o agente invente).
+   * marque como perdido e informe o motivo (o banco recusa motivo que o agente invente).
    */
   | 'perda_sem_motivo'
   | 'crm_error'
@@ -165,6 +165,39 @@ export function avisoDoEspelhoRecusado(input: {
     // cópias de um aviso rotineiro.
     dedupe: DEDUPE_DO_ESPELHO,
   };
+}
+
+/**
+ * Abre na Central o aviso do espelho recusado — a decisão E a gravação, juntas.
+ *
+ * ⚠️ Existe porque separar as duas deixava o ponto de uso sem guarda. Com
+ * `avisoDoEspelhoRecusado` testável e o `insertInboxItem` escrito à mão no
+ * `inbound-turn`, apagar o quarto argumento da chamada (o `dedupe`) voltava a
+ * abrir uma linha por turno — e nenhum teste via: o invariante chama
+ * `insertInboxItem` direto, com o `dedupe` que ELE lê da decisão, nunca com o
+ * que o `inbound-turn` passa. Aqui não há o que esquecer no chamador: ele passa
+ * o motivo e o lead, e o resto (kind, ref, texto, dedupe) sai de um lugar só.
+ */
+export async function abreAvisoDoEspelhoRecusado(
+  db: Parameters<typeof insertInboxItem>[0],
+  tenantId: string,
+  input: {
+    leadId: string;
+    motivo: MirrorReason;
+    detalhe: string;
+    /** A etapa para onde o assistente quis levar o negócio. */
+    etapaDeDestino: string;
+  },
+): Promise<void> {
+  const aviso = avisoDoEspelhoRecusado(input);
+  // `null` é warn-only: estado legítimo do produto não vira item na Central.
+  if (aviso === null) return;
+  await insertInboxItem(
+    db,
+    tenantId,
+    { kind: 'other', title: aviso.title, body: aviso.body, refKind: 'lead', refId: input.leadId },
+    aviso.dedupe,
+  );
 }
 
 /** Injetável só para teste — em produção é sempre a implementação real. */

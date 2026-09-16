@@ -63,7 +63,7 @@ import {
 } from '../edge/llm/run-model-call';
 import type { ProviderRegistry } from '../edge/llm/providers';
 import { HANDOFF_REASON_ORCAMENTO } from '../edge/llm/orcamento';
-import { avisoDoEspelhoRecusado, mirrorLeadStageToCrm } from '../edge/crm/move-lead-stage';
+import { abreAvisoDoEspelhoRecusado, mirrorLeadStageToCrm } from '../edge/crm/move-lead-stage';
 import { insertInboxItem } from '../db/repository';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { moverLeadParaEtapaDeHandoff } from '@/lib/leads/handoff-stage-move';
@@ -3027,34 +3027,17 @@ async function executarTurnoDoAgente(
                 to_stage: update.transition.to,
                 reason: mirror.reason,
               });
-              // QUAL aviso cada recusa produz é decisão de `move-lead-stage`
-              // (`avisoDoEspelhoRecusado`), junto do vocabulário de motivos —
-              // aqui só se grava o que ela decidiu. `null` é warn-only: estado
-              // legítimo do produto não vira item na Central.
-              const aviso = avisoDoEspelhoRecusado({
+              // QUAL aviso cada recusa produz, e como ele deixa de se repetir, é
+              // decisão de `move-lead-stage` — aqui só se passa o motivo e o
+              // lead. Ver `abreAvisoDoEspelhoRecusado`: escrever o
+              // `insertInboxItem` à mão neste ponto é o que deixava o `dedupe`
+              // sem guarda.
+              await abreAvisoDoEspelhoRecusado(pool, tenantId, {
+                leadId,
                 motivo: mirror.reason,
                 detalhe: mirror.detail,
                 etapaDeDestino: update.transition.to,
               });
-              if (aviso) {
-                // O `dedupe` vem da DECISÃO, junto do texto: escolher aqui seria
-                // escolher onde ninguém consegue afirmar sobre a escolha — e o
-                // defeito que ele conserta (uma linha idêntica por turno) só
-                // aparece depois de muitos turnos, quando já enterrou o item que
-                // pedia decisão.
-                await insertInboxItem(
-                  pool,
-                  tenantId,
-                  {
-                    kind: 'other',
-                    title: aviso.title,
-                    body: aviso.body,
-                    refKind: 'lead',
-                    refId: leadId,
-                  },
-                  aviso.dedupe,
-                );
-              }
             }
           }
           // F3-11: o estágio que o modelo confirmou (a máquina F2-10 gravou) — base da
