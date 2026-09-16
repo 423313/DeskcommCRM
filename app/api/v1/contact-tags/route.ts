@@ -6,9 +6,22 @@
  * sessão é HttpOnly. A organização vem de `requireRole`, nunca do pedido, e o
  * client é o da SESSÃO — a RLS de `contacts` isola sozinha.
  *
- * Sem função no banco de propósito: o vocabulário de tags (com uso por contato,
- * lead e conversa) é a S4 da #852. Quando ele entrar, esta rota passa a ler de
- * lá e o editor não muda.
+ * Sem função no banco de propósito — e a S4 da #852, que traz essa função,
+ * ENTROU NA MESMA RELEASE que esta rota: `GET /api/v1/tags/vocabulario`, sobre
+ * `fn_vocabulario_de_tags`. A frase que estava aqui ("quando ele entrar, esta
+ * rota passa a ler de lá") venceu no dia em que foi escrita; fica no lugar dela
+ * o que ainda é verdade, que é a instrução.
+ *
+ * A troca NÃO é apagar esta rota. A da S4 exige `requireRole("manager")` mais
+ * `mfaEmDivida()`, porque ela também ESCREVE o vocabulário de toda a
+ * organização — e o editor do Inbox é usado por `agent` e por `viewer`, que a
+ * S4 responde com 403. Consolidar é trocar o corpo da consulta abaixo por
+ * `supabase.rpc("fn_vocabulario_de_tags", { p_org: authz.org.orgId })`, lendo o
+ * campo `tag` de cada linha, MANTENDO o `requireRole("viewer")` daqui e
+ * apagando `CONTATOS_LIDOS`, `TETO_DE_TAGS` e o `ponytail:` logo abaixo — a
+ * função no banco não tem teto de leitura, que é exatamente a dívida que essas
+ * duas constantes registram. Fora do escopo deste conserto porque mexe no
+ * contrato de uma rota que a tela de Etiquetas acabou de estrear.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
