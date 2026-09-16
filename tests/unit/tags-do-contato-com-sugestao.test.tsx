@@ -41,7 +41,11 @@ describe("ContactTagsEditor", () => {
       </QueryClientProvider>,
     );
 
-    const sugestao = await screen.findByRole("button", { name: "+ google" });
+    // 5s e não o 1s padrão: medido vermelho UMA vez com este arquivo rodando ao
+    // lado de outro — 1637ms contra 436ms sozinho. O que estoura é o custo frio
+    // do primeiro render do arquivo sob concorrência, não a consulta, que já
+    // está resolvida no mock.
+    const sugestao = await screen.findByRole("button", { name: "+ google" }, { timeout: 5000 });
     expect(screen.queryByRole("button", { name: "+ vip" })).toBeNull();
 
     await userEvent.click(sugestao);
@@ -67,6 +71,26 @@ describe("ContactTagsEditor", () => {
 
     await screen.findByLabelText("Adicionar tag ao contato");
     expect(screen.queryByRole("button", { name: /\+ ?VIP/i })).toBeNull();
+  });
+
+  /**
+   * Alcançável DIGITANDO, sem chip nenhum: o contato tem "VIP" gravado de
+   * antes, alguém digita "vip", e sem comparar formas normalizadas o contato
+   * fica com as duas — a duplicação, pelo caminho mais comum de todos.
+   */
+  it("digitar a variante de uma tag que o contato já tem não grava a segunda", async () => {
+    get.mockResolvedValue({ data: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ContactTagsEditor contactId="c-1" orgId={ORG} tags={["VIP"]} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText("Adicionar tag ao contato"), "vip");
+    await userEvent.click(screen.getByRole("button", { name: "Adicionar tag" }));
+
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("contato com a tag em caixa mista não recebe o chip da versão minúscula", async () => {
