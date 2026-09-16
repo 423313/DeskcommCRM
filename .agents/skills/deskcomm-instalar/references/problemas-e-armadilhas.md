@@ -67,8 +67,7 @@ seu pooler; o instalador testa a conexão de verdade, então o erro aparece na h
 erro de verdade.
 
 **"deadlock detected" ou "connection to server was lost" ao atualizar.** O banco perdeu uma disputa
-com o CRM no ar, ou a conexão caiu. Quem atualiza a partir de uma versão que já tem a nova passada
-(posterior à v1.28.0) vê o `update.sh` aplicar de novo sozinho, até 3 passadas; só sobra aviso se não
+com o CRM no ar, ou a conexão caiu. Quem atualiza a partir de uma versão que já tem a nova passada (a v1.28.0 ainda não tem) vê o `update.sh` aplicar de novo sozinho, até 3 passadas; só sobra aviso se não
 curar, e aí o fim da saída diz "banco NÃO terminou limpo" e mostra
 `bash hostgator-setup-kit/update.sh --to <tag> --force` — repetir num horário calmo completa o banco
 (refaz a atualização inteira, com backup). Não restaure o backup por causa disso. Pelo botão da tela

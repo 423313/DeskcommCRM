@@ -9008,7 +9008,8 @@ create trigger trg_ai_router_members_updated_at
   before update on ai_router_members
   for each row execute function fn_set_updated_at();
 
--- RLS (mesmo shape do loop tenant_isolation_* do baseline).
+-- RLS ligada e `anon` revogado nas três tabelas; as policies vêm logo abaixo
+-- (ai_router_decisions) e na 0150 (ai_routers, ai_router_members).
 do $$
 declare t text;
 begin

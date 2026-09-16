@@ -84,27 +84,66 @@ function linhaDe(sql: string, pos: number): number {
 }
 
 /** O bloco `do $tag$ … $tag$` que contém a posição, se houver. Fecha no próximo `$tag$`. */
-function blocoDoEm(sql: string, pos: number): { tag: string; corpo: string } | null {
-  let achado: { tag: string; corpo: string } | null = null;
+function blocoDoEm(sql: string, pos: number): { tag: string; corpo: string; inicio: number } | null {
+  let achado: { tag: string; corpo: string; inicio: number } | null = null;
   for (const m of sql.matchAll(/^\s*do\s+(\$[a-z_]*\$)/gim)) {
     const inicio = m.index! + m[0].length;
     if (inicio > pos) break;
     const tag = m[1]!;
     const fim = sql.indexOf(tag, inicio);
     if (fim !== -1 && fim < pos) continue;
-    achado = { tag: tag.toLowerCase(), corpo: sql.slice(inicio, fim === -1 ? sql.length : fim) };
+    achado = { tag: tag.toLowerCase(), corpo: sql.slice(inicio, fim === -1 ? sql.length : fim), inicio };
   }
   return achado;
+}
+
+/**
+ * As faixas `if … then … end if` do corpo, com a condição de cada uma. Só a faixa
+ * que CONTÉM a criação decide: um `if` sobre outra coisa, em qualquer outro ponto
+ * do mesmo bloco, não isenta nada. (Medido: sem isto, acrescentar um `if` neutro
+ * ao bloco do laço da 0085 devolvia o defeito das policies com a régua verde.)
+ * `elsif` não abre faixa — `\bif\b` não casa dentro dele.
+ */
+function faixasDeIf(corpo: string): Array<{ condicao: string; inicio: number; fim: number }> {
+  const marcas = [...corpo.matchAll(/\bend\s+if\b|(?<!\bend\s{1,10})\bif\b/gi)];
+  const pilha: number[] = [];
+  const faixas: Array<{ condicao: string; inicio: number; fim: number }> = [];
+  for (const m of marcas) {
+    // `create index if not exists …` também tem um `if`, e ele não abre bloco: o
+    // que abre é o `if … then` do plpgsql. A diferença é o `then` vir antes do
+    // `;` do comando.
+    if (!/^end/i.test(m[0])) {
+      const resto = corpo.slice(m.index! + m[0].length);
+      const ate = resto.search(/;/);
+      const then = resto.search(/\bthen\b/i);
+      if (then === -1 || (ate !== -1 && ate < then)) continue;
+    }
+    if (/^end/i.test(m[0])) {
+      const inicio = pilha.pop();
+      if (inicio !== undefined) {
+        const depoisDoThen = corpo.slice(inicio).match(/\bthen\b/i);
+        faixas.push({
+          condicao: depoisDoThen ? corpo.slice(inicio, inicio + depoisDoThen.index!).toLowerCase() : "",
+          inicio,
+          fim: m.index! + m[0].length,
+        });
+      }
+    } else {
+      pilha.push(m.index!);
+    }
+  }
+  return faixas;
 }
 
 function guardaEm(sql: string, pos: number, nomeProprio: string): Guarda {
   const bloco = blocoDoEm(sql, pos);
   if (!bloco) return "nenhuma";
-  const condicoes = [...bloco.corpo.matchAll(/(?<!\bend\s+)\bif\b([\s\S]*?)\bthen\b/gi)].map((m) => m[1]!.toLowerCase());
-  if (condicoes.length === 0) {
+  const posNoCorpo = pos - bloco.inicio;
+  const cercando = faixasDeIf(bloco.corpo).filter((f) => f.inicio < posNoCorpo && posNoCorpo < f.fim);
+  if (cercando.length === 0) {
     return /exception\s+when\s+duplicate_object/i.test(bloco.corpo) ? "existencia" : "nenhuma";
   }
-  return condicoes.every((c) => c.includes(nomeProprio.toLowerCase())) ? "existencia" : "condicao";
+  return cercando.every((f) => f.condicao.includes(nomeProprio.toLowerCase())) ? "existencia" : "condicao";
 }
 
 function ocorrencias(sql: string, rx: RegExp, chave: (m: RegExpMatchArray) => [string, string]): Ocorrencia[] {
@@ -160,7 +199,11 @@ function paresDeConstraint(sql: string): Par[] {
   return pares(sql, drops, criacoes, recriacoes);
 }
 
-const ALVO_DE_POLICY = String.raw`"?([a-z0-9_]+)"?\s+on\s+(?:"?public"?\.)?"?([a-z0-9_]+)"?`;
+// O `(?![\w".])` no fim é o que impede `on public.%I` (dentro de um `execute
+// format`) de ser lido como uma policy na tabela chamada "public": sem ele o
+// regex voltava atrás e capturava o schema como tabela — 11 chaves fantasma no
+// arquivo real, contra o escopo escrito aqui em cima.
+const ALVO_DE_POLICY = String.raw`"?([a-z0-9_]+)"?\s+on\s+(?:"?[a-z0-9_]+"?\s*\.\s*)?"?([a-z0-9_]+)"?(?![\w".])`;
 
 /** `foreach t in array[...] loop … format('… policy x_%s_y on public.%I …')`, expandido por tabela. */
 function policiesEmLaco(sql: string, verbo: "create" | "drop"): Ocorrencia[] {
@@ -199,10 +242,21 @@ function paresDePolicy(sql: string): Par[] {
   return pares(sql, drops, criacoes, criacoes);
 }
 
-/** O comando `create policy … ;` a partir da posição, normalizado para comparar definições. */
+/**
+ * O comando `create policy … ;` a partir da posição, normalizado para comparar
+ * definições. Os comentários `--` saem ANTES do corte: no arquivo real, 4 desses
+ * comandos têm um `;` dentro de um comentário, e cortar ali comparava um prefixo
+ * (o `cae_select` final terminava em "de outro;", com parênteses desbalanceados).
+ */
 function textoDaPolicy(sql: string, pos: number): string {
-  const fim = sql.indexOf(";", pos);
-  return sql.slice(pos, fim === -1 ? sql.length : fim).replace(/"/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const semComentario = sql.slice(pos).replace(/--[^\n]*/g, "");
+  const fim = semComentario.indexOf(";");
+  return semComentario
+    .slice(0, fim === -1 ? semComentario.length : fim)
+    .replace(/"/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 /**
@@ -279,6 +333,14 @@ create policy "depois_de_end_colado" on public.t using (true);
 
 do $$ begin create policy pol_sem_if on public.t using (true); end $$;
 
+do $$
+begin
+  if to_regclass('public.outra') is not null then
+    perform 1;
+  end if;
+  create policy pol_fora_do_if on public.t using (true);
+end $$;
+
 do $$ begin
   create policy pol_duplicate_object on public.t using (true);
 exception when duplicate_object then null;
@@ -313,6 +375,7 @@ drop policy if exists velha_pol on public.t;
 drop policy if exists "mesmo_nome" on public.t;
 drop policy if exists depois_de_end_colado on public.t;
 drop policy if exists pol_sem_if on public.t;
+drop policy if exists pol_fora_do_if on public.t;
 drop policy if exists pol_duplicate_object on public.t;
 drop policy if exists tenant_isolation_tab_a_all on public.tab_a;
 drop policy if exists "sel_larga" on public.t;
@@ -358,6 +421,10 @@ describe("o instrumento, contra formas conhecidas", () => {
     expect(paresDePolicy(SINTETICO).find((p) => p.nome === "pol_sem_if on t")?.guarda).toBe("nenhuma");
   });
 
+  it("só o if que CONTÉM a criação isenta — um if ao lado, no mesmo do, não", () => {
+    expect(paresDePolicy(SINTETICO).find((p) => p.nome === "pol_fora_do_if on t")?.guarda).toBe("nenhuma");
+  });
+
   it("laço foreach … format('… %s … public.%I') é expandido por tabela", () => {
     const achados = nomesProibidos(paresDePolicy(SINTETICO));
     expect(achados).toContain("tenant_isolation_tab_a_all on tab_a");
@@ -370,9 +437,16 @@ describe("o instrumento, contra formas conhecidas", () => {
 });
 
 describe("baseline.sql não reconstrói o que ele mesmo derruba ou substitui", () => {
-  it("o instrumento está vivo no arquivo real: acha pares e redefinições", () => {
+  it("o instrumento está vivo no arquivo real: acha pares, laços e redefinições", () => {
     expect(paresDeIndice(SQL).length, "nenhum par cria→derruba encontrado — o parser mudou?").toBeGreaterThan(0);
     expect(policiesEmLaco(SQL, "create").length, "nenhum laço de policy encontrado — o parser mudou?").toBeGreaterThan(10);
+    // A LIGAÇÃO, e não só a função: sem ela o caso das policies do arquivo real
+    // passa por omissão (foi o que a sabotagem que desligou a expansão mostrou —
+    // `policiesEmLaco` sozinha continuava verde).
+    expect(
+      criacoesDePolicy(SQL).map((c) => c.chave),
+      "a expansão do laço não chega ao localizador de pares",
+    ).toContain("tenant_isolation_lead_state_all on lead_state");
   });
 
   it("nenhuma criação de índice antes do próprio drop, fora de condição de verdade", () => {

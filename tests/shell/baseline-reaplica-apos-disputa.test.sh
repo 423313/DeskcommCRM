@@ -239,6 +239,9 @@ rodar
 check "host que não existe não é refeito (1 passada)" e_igual "$(passadas)" 1
 check "  e devolve falha" e_igual "$(rc)" 1
 
+# Quem isola o termo novo da regra é o caso de cima (host inexistente): a frase do
+# psql traz "could not translate host name" nas DUAS falhas, então o caso abaixo
+# sozinho ficaria verde com qualquer um dos dois termos na regra. Os dois formam o par.
 novo_caso dns-temporario
 roteiro 1 'psql: error: could not translate host name "db.exemplo" to address: Temporary failure in name resolution' 2
 roteiro 2 ""

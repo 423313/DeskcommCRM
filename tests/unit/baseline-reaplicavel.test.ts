@@ -135,6 +135,12 @@ describe("baseline.sql é re-aplicável", () => {
 
   it("toda CREATE POLICY está guardada — e cada zona com a forma que lhe cabe", () => {
     const problemas: string[] = [];
+    const linhaDoPrimeiroDrop = new Map<string, number>();
+    for (let i = 0; i < LINHAS.length; i++) {
+      const d = (LINHAS[i] ?? "").match(/drop policy if exists "?([^"\s]+)"?\s/i);
+      const alvo = d?.[1]?.toLowerCase();
+      if (alvo && !linhaDoPrimeiroDrop.has(alvo)) linhaDoPrimeiroDrop.set(alvo, i);
+    }
     let guardadasNoCorpo = 0;
     let guardadasNoApendice = 0;
 
@@ -169,10 +175,11 @@ describe("baseline.sql é re-aplicável", () => {
         // A régua correta é: o nome aparece num `drop policy if exists` em QUALQUER
         // ponto anterior, com ou sem aspas. Um gate que acusa o inocente é pior que
         // gate nenhum — ele ensina a ignorá-lo.
-        const escapado = nome.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const dropAntes = LINHAS.slice(0, i).some((l) =>
-          new RegExp(`drop policy if exists "?${escapado}"?\\s`, "i").test(l),
-        );
+        // `linhaDoPrimeiroDrop` é pré-calculado: a versão anterior varria
+        // LINHAS.slice(0, i) para CADA policy — quadrático sobre 25 mil linhas,
+        // 5 s no normal e 16 s sob carga, contra o limite de 15 s do vitest. Um
+        // gate que vermelha por carga da máquina ensina a ignorar vermelho.
+        const dropAntes = (linhaDoPrimeiroDrop.get(nome.toLowerCase()) ?? Infinity) < i;
         if (dropAntes) guardadasNoApendice++;
         else problemas.push(`apêndice ${i + 1}: "${nome}" sem drop-if-exists — mudança de corpo não chega`);
       }

@@ -294,7 +294,10 @@ check "  a tela mostra o deadlock" grep -q "deadlock detected" "$OUTFILE"
 check "  e ensina a repetir de um jeito que re-aplica" grep -qF "update.sh --to v1.1.0 --force" "$OUTFILE"
 # Na v1.27.3 de uma VPS real o aviso do passo 4 ficou soterrado pelo docker pull,
 # e a última frase da tela era "Atualização concluída".
-check "  o FIM da tela repete que o banco NÃO terminou limpo" grep -q "banco NÃO terminou limpo" "$OUTFILE"
+# O cabeçalho do bloco FINAL, e não a frase do passo 6: as duas diziam "banco NÃO
+# terminou limpo", e o check passava com o bloco final apagado (medido em sabotagem).
+check "  o FIM da tela repete que o banco NÃO terminou limpo" \
+  grep -q "Atenção: o banco NÃO terminou limpo nesta atualização" "$OUTFILE"
 check "  e não diz Atualização concluída" test -z "$(grep 'Atualização concluída' "$OUTFILE" || true)"
 check "  a dica aparece no passo do banco E no fim" test "$(grep -cF 'update.sh --to v1.1.0 --force' "$OUTFILE")" -eq 2
 # Restaurar o backup desfaz também o que o CRM gravou desde ele: é o último recurso.
@@ -313,10 +316,12 @@ cp "$ROTEIRO_UG/passada.1" "$ROTEIRO_UG/passada.2"; cp "$ROTEIRO_UG/passada.1" "
 BASELINE_ROTEIRO="$ROTEIRO_UG" BASELINE_ESPERA_S=0 run_update --to v1.1.0 --force
 check "lista de erros maior que o buffer do pipe não mata o update.sh" test "$RC" -eq 0
 check "  a disputa no topo foi reconhecida (3 passadas)" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 3
-check "  o aviso de PERMISSÃO chegou à tela" grep -q "Os erros são de PERMISSÃO" "$OUTFILE"
+check "  o aviso de PERMISSÃO chegou à tela" grep -q "erros de PERMISSÃO" "$OUTFILE"
 check "  e o fim diz que o banco NÃO terminou limpo" grep -q "banco NÃO terminou limpo" "$OUTFILE"
-# Com permissão no meio, repetir não cura: a orientação é a da conexão do dono.
-check "  com erros de permissão junto, não manda só repetir" test -z "$(grep 'seguiu ocupado' "$OUTFILE" || true)"
+# Lista misturada: repetir cura a parte da disputa e NÃO cura a de permissão. As
+# duas metades são ditas — escolher uma escondia a ação possível da outra.
+check "  a metade que repetir cura é dita" grep -q "Parte não aplicou porque o banco seguiu ocupado" "$OUTFILE"
+check "  e a metade que repetir NÃO cura também" grep -q "esses repetir não cura" "$OUTFILE"
 check "  e o fim orienta a conexão do dono" test -n "$(tail -n 8 "$OUTFILE" | grep -F 'SUPABASE_DB_ADMIN_URL' || true)"
 
 # Só permissão, sem disputa nenhuma: uma passada, e o fim diz o que fazer.
@@ -325,7 +330,7 @@ for i in $(seq 1 200); do printf 'psql:/b.sql:%s: ERROR:  must be owner of table
 : > "$DOCKER_LOG"
 BASELINE_ROTEIRO="$ROTEIRO_UG" BASELINE_ESPERA_S=0 run_update --to v1.1.0 --force
 check "só permissão: uma passada (repetir não cura)" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 1
-check "  sem a frase de banco ocupado" test -z "$(grep 'seguiu ocupado' "$OUTFILE" || true)"
+check "  sem a metade de banco ocupado (não houve disputa)" test -z "$(grep 'Parte não aplicou' "$OUTFILE" || true)"
 check "  e o FIM orienta a conexão do dono" test -n "$(tail -n 8 "$OUTFILE" | grep -F 'SUPABASE_DB_ADMIN_URL' || true)"
 
 # ── Clone RASO: a topologia que o install.sh realmente entrega ───────────────

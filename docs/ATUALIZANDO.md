@@ -34,7 +34,8 @@ recente**, é porque não havia nada novo pra baixar; está tudo certo.
   esse ruído e, se estiver tudo certo, mostra **`✓ banco atualizado`**.
 - Se o banco estiver ocupado com o CRM atendendo, o comando **aplica de novo sozinho** (até
   3 passadas) e mostra na tela o que precisou refazer. Isso é normal, e vale a partir da
-  atualização seguinte à v1.28.0.
+  atualização seguinte à que instalar esta correção (quem executa a atualização é o
+  instalador que já está no servidor).
 - Se aparecer **`⚠ Apareceram avisos no banco que NÃO são os esperados`**, aí sim vale prestar
   atenção: o app provavelmente ainda funciona, mas guarde a mensagem. Quando o banco **NÃO
   termina limpo**, o **fim** da saída diz o que fazer, e a resposta depende da causa:

@@ -166,21 +166,24 @@ BANCO_RESTANTE=""
 # --force responderia "já está na versão mais recente" e não tocaria no banco.
 # O restore vem por ÚLTIMO: ele desfaz também o que o CRM gravou desde o backup.
 orientar_banco_incompleto() {
-  if [ -z "$BANCO_RESTANTE" ]; then
-    c_ylw "  O banco seguiu ocupado ou fora de alcance nas $BASELINE_PASSADAS passadas, e parte dele pode ter"
-    c_ylw "  ficado para trás. Confira se o banco está no ar e repita a atualização, de preferência num"
-    c_ylw "  horário de pouco movimento (reaplica o banco; o site pode piscar por alguns segundos):"
+  # As duas metades SOMAM: uma lista pode ter disputa (que repetir cura) e erro de
+  # permissão ou de dado (que não). Escolher uma só escondia a ação possível.
+  if [ "$BANCO_RESTANTE" != "$BANCO_INCOMPLETO" ]; then
+    c_ylw "  Parte não aplicou porque o banco seguiu ocupado ou fora de alcance nas $BASELINE_PASSADAS passadas."
+    c_ylw "  Confira se o banco está no ar e repita a atualização, de preferência num horário de pouco"
+    c_ylw "  movimento (reaplica o banco; o site pode piscar por alguns segundos):"
     c_ylw "    bash hostgator-setup-kit/update.sh --to $TARGET_TAG --force"
-  else
-    case "$BANCO_RESTANTE" in
-      *permission\ denied*|*must\ be\ owner*|*permissão\ negada*)
-        c_ylw "  Os erros são de PERMISSÃO: a conexão do .env não é o dono do banco. Num Supabase próprio,"
-        c_ylw "  declare SUPABASE_DB_ADMIN_URL no .env — é ela que roda o schema — e repita a atualização:"
-        c_ylw "    bash hostgator-setup-kit/update.sh --to $TARGET_TAG --force" ;;
-      *)
-        c_ylw "  Repetir a atualização não resolve esses erros: guarde a mensagem acima e peça ajuda." ;;
-    esac
   fi
+  case "$BANCO_RESTANTE" in
+    "") ;;
+    *permission\ denied*|*must\ be\ owner*|*permissão\ negada*)
+      c_ylw "  Há erros de PERMISSÃO, e esses repetir não cura: a conexão do .env não é o dono do banco."
+      c_ylw "  Num Supabase próprio, declare SUPABASE_DB_ADMIN_URL no .env — é ela que roda o schema — e"
+      c_ylw "  repita a atualização:"
+      c_ylw "    bash hostgator-setup-kit/update.sh --to $TARGET_TAG --force" ;;
+    *)
+      c_ylw "  O resto dos erros acima repetir não cura: guarde a mensagem e peça ajuda." ;;
+  esac
   c_ylw "  Só em último caso, volte ao backup feito antes desta atualização (restore.sh)."
 }
 if [ -f supabase/baseline.sql ]; then

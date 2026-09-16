@@ -180,7 +180,7 @@ pra isso existe `--force`, de propósito.
 parte do banco — **é esperado e inofensivo**, são coisas que já existiam. O script filtra esse
 ruído e mostra `✓ banco atualizado`. Se o banco estiver ocupado com o CRM atendendo, ele aplica de
 novo sozinho (até 3 passadas) e conta isso na tela — isso vale a partir da atualização seguinte à
-v1.28.0. Se aparecer `⚠ Apareceram avisos no banco que NÃO são os esperados`, aí sim guarde a
+que instalar esta correção. Se aparecer `⚠ Apareceram avisos no banco que NÃO são os esperados`, aí sim guarde a
 mensagem: o **fim** da saída diz o que fazer em cada caso (repetir com `--force` quando foi o banco
 ocupado, declarar `SUPABASE_DB_ADMIN_URL` quando foi permissão). Restaurar o backup é o último recurso.
 

@@ -490,9 +490,12 @@ BASELINE_ERROS_DE_DISPUTA='deadlock detected|could not serialize access|lock tim
 listar_erros_do_banco() {
   local linhas="$1" maximo="$2" recuo="${3:-}" total
   total="$(printf '%s\n' "$linhas" | grep -c . || true)"
+  # `awk` com -v, e não `sed "s/^/$recuo/"`: assim o recuo e o máximo entram como
+  # DADO. Uma barra no recuo quebraria o programa do sed, e `maximo=0` viraria o
+  # endereço inválido `1,0` — os dois derrubariam o script sob set -e.
   { printf '%s\n' "$linhas" | grep -iE "$BASELINE_ERROS_DE_DISPUTA" || true
     printf '%s\n' "$linhas" | grep -viE "$BASELINE_ERROS_DE_DISPUTA" || true
-  } | sed -n "1,${maximo}s/^/${recuo}/p"
+  } | awk -v r="$recuo" -v n="$maximo" 'NF && ++i <= n { print r $0 }'
   [ "${total:-0}" -le "$maximo" ] || printf '%s(e mais %s linhas)\n' "$recuo" "$((total - maximo))"
 }
 
