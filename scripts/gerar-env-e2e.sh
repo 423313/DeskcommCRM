@@ -141,9 +141,22 @@ UPSTASH_REDIS_REST_TOKEN=e2e-placeholder-nao-e-segredo
 # Backtick escapado neste heredoc não é estilo: ele é \`<<EOF\` sem aspas, então
 # crase crua vira SUBSTITUIÇÃO DE COMANDO — o comentário chega no arquivo
 # mutilado e o shell imprime "command not found" no log do CI.
+#
+# ⚠️ E nenhum valor daqui pode ter ESPAÇO — são dois consumidores que não
+# combinam entre si:
+#   1. o \`e2e-build.sh\` carrega o arquivo com \`set -a; . ./.env.e2e\`. Valor com
+#      espaço faz o shell ler o resto como COMANDO: \`OWNER_ORG_NAME=Loja QA VPS\`
+#      imprime \`QA: command not found\` e o build morre — medido em 2026-09-16,
+#      com as QUATRO partes do e2e vermelhas por causa desta linha;
+#   2. o passo "Publicar o .env.e2e no ambiente do job" copia as linhas LITERAIS
+#      para o \`\$GITHUB_ENV\`, que NÃO é shell. Então aspas não resolvem: elas
+#      entrariam no valor e a organização nasceria chamada \"Loja QA VPS\", com
+#      aspas no nome.
+# Nome de organização aqui é um token só. A guarda que cobra isso está em
+# \`tests/unit/e2e-cria-o-dono-que-a-spec-exige.test.ts\` (carrega o arquivo).
 OWNER_EMAIL=dono@qa.local
 OWNER_PASSWORD=QaVps!2026#Dono
-OWNER_ORG_NAME=Loja QA VPS
+OWNER_ORG_NAME=Loja-QA-VPS
 
 NEXT_TELEMETRY_DISABLED=1
 # Telemetria DESLIGADA na suíte, e não é preferência: sem isto o SDK do browser

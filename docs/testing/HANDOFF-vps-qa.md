@@ -16,7 +16,9 @@ os bugs achados na causa raiz.
 - **Banco:** Supabase local **pg17** (`config.toml major_version = 17`) do
   `baseline.sql`; extensões `vector/pg_trgm/citext/uuid-ossp/pgcrypto` antes.
 - **Primeiro usuário:** `scripts/bootstrap-owner.ts` (como o `install.sh`):
-  `dono@qa.local` / `QaVps!2026#Dono`, org "Loja QA VPS".
+  `dono@qa.local` / `QaVps!2026#Dono`, org `Loja-QA-VPS` — nome de organização
+  **sem espaço**, porque o `.env.e2e` é carregado por `source` (espaço vira
+  comando) e publicado literal no `$GITHUB_ENV` (aspa viraria parte do nome).
 - **Deps:** WAHA Core local (`deskcomm-waha`, :3030), Redis + serverless-redis-http
   (`qa-redis`/`qa-srh`, :8079), cron drain via endpoint.
 - **App:** `next build` + `next start` na :3001, `NODE_ENV=production`.
