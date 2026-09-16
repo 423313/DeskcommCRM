@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -21,6 +23,10 @@ import { describe, expect, it } from "vitest";
  * só no repositório oficial, e reprovar em vez de avisar — e o contrato que a LP
  * lê: o formato do cabeçalho de cada seção do CHANGELOG.
  *
+ * A exceção é o diagnóstico do ramo de erro, que é EXECUTADO com um curl falso:
+ * o que ele promete — dizer se cada página que faltou respondeu 404 ou 200 — é
+ * uma saída, e forma nenhuma do YAML a prova.
+ *
  * O contrato mora nos dois lados de propósito. O leitor da LP
  * (`deskcomm-site/lib/changelog.ts`) usa esta mesma expressão; se alguém mudar o
  * cabeçalho do CHANGELOG aqui, este teste reprova ANTES de a LP perder a versão
@@ -41,6 +47,89 @@ function passo(nome: string): string {
   const resto = release.slice(i + nome.length);
   const fim = resto.search(/\n {6}- (name|uses):/);
   return nome + (fim === -1 ? resto : resto.slice(0, fim));
+}
+
+/**
+ * Executa o `run:` do passo da LP contra respostas escolhidas, sem rede e sem espera.
+ *
+ * O bash é o do arquivo que o CI usa, como em `guarda-da-release-reconhece-o-corte.test.ts`. À frente
+ * dele vão `curl` e `sleep` como FUNÇÕES, que o bash procura antes do PATH — e não como executáveis
+ * falsos: um cenário que reprova chama o curl 105 vezes (35 tentativas × 3 páginas). Medido no macOS,
+ * sozinho, o caso levou de 3,4 a 6,3 s com um processo por chamada e ~0,2 s com funções, contra um
+ * `testTimeout` de 15 s que vale para a suíte inteira rodando em paralelo.
+ *
+ * Cada resposta é o status e o HTML de um caminho; caminho sem resposta responde 404, e o status
+ * `000` imita o site fora do ar (o curl sai com 7). O `LP` é uma porta local fechada: se uma mudança
+ * no passo contornar a função, o curl de verdade é recusado na hora em vez de sair para a rede.
+ */
+function rodarPassoLp(respostas: Record<string, { status: string; html?: string }>) {
+  const bloco = passo(PASSO_LP);
+  const iRun = bloco.indexOf("run: |");
+  expect(iRun, "o passo da LP não tem bloco run").toBeGreaterThan(-1);
+  const corpo: string[] = [];
+  for (const l of bloco.slice(iRun + "run: |".length).split("\n").slice(1)) {
+    if (l.trim() !== "" && !l.startsWith("          ")) break;
+    corpo.push(l.slice(10));
+  }
+  const falsos = [
+    "curl() {",
+    '  local url="" corpo="-" formato="" falha_http="" status=404 html=""',
+    "  while [ $# -gt 0 ]; do",
+    '    case "$1" in',
+    '      -o) corpo="$2"; shift ;;',
+    '      -w) formato="$2"; shift ;;',
+    "      --max-time) shift ;;",
+    "      -*f*) falha_http=1 ;;",
+    "      -*) ;;",
+    '      *) url="$1" ;;',
+    "    esac",
+    "    shift",
+    "  done",
+    '  local pasta="$CENARIO${url#"$LP"}"',
+    '  if [ -f "$pasta/status" ]; then read -r status < "$pasta/status"; fi',
+    '  if [ "$status" = 000 ]; then if [ -n "$formato" ]; then printf 000; fi; return 7; fi',
+    '  if [ -n "$falha_http" ] && [ "$status" -ge 400 ]; then return 22; fi',
+    '  if [ "$corpo" = "-" ] && [ -f "$pasta/html" ]; then IFS= read -r html < "$pasta/html"; printf "%s\\n" "$html"; fi',
+    '  if [ -n "$formato" ]; then printf "%s" "$status"; fi',
+    "}",
+    "sleep() { :; }",
+  ].join("\n");
+
+  const cenario = mkdtempSync(join(tmpdir(), "passo-lp-"));
+  try {
+    // O cenário espelha a URL em diretórios: `/en/changelog` → `<cenario>/en/changelog/{status,html}`.
+    for (const [caminho, r] of Object.entries(respostas)) {
+      const pasta = join(cenario, caminho);
+      mkdirSync(pasta, { recursive: true });
+      writeFileSync(join(pasta, "status"), `${r.status}\n`);
+      if (r.html !== undefined) writeFileSync(join(pasta, "html"), `${r.html}\n`);
+    }
+    const env = { ...process.env, LP, VERSAO, CENARIO: cenario };
+    try {
+      const saida = execFileSync("bash", ["-c", `${falsos}\n${corpo.join("\n")}`], {
+        encoding: "utf8",
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      return { exit: 0, saida };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { exit: e.status ?? -1, saida: `${e.stdout ?? ""}${e.stderr ?? ""}` };
+    }
+  } finally {
+    rmSync(cenario, { recursive: true, force: true });
+  }
+}
+
+const LP = "http://127.0.0.1:9";
+const VERSAO = "1.2.3";
+const lista = (p: string, versao: string) => `<ul><li><a href="${p}/${versao}">v${versao}</a></li></ul>`;
+
+/** A linha de erro que nomeia `url` (a página, não a da versão) junto com `codigo`. */
+function nomeia(saida: string, url: string, codigo: string): boolean {
+  return saida
+    .split("\n")
+    .some((l) => l.startsWith("::error::") && new RegExp(`${url.replaceAll(".", "\\.")}(\\s|$)`).test(l) && new RegExp(`\\b${codigo}\\b`).test(l));
 }
 
 describe("a release chega à página de changelog da LP", () => {
@@ -117,6 +206,49 @@ describe("a release chega à página de changelog da LP", () => {
       .filter((l) => !l.trim().startsWith("#"))
       .join("\n");
     expect(codigo, "a sonda voltou a passar o HTML por pipeline").not.toMatch(/(^|[^|])\|\s*grep\b/m);
+  });
+
+  it("quando a LP não lista a versão, o erro nomeia o status de cada página que faltou", () => {
+    // O `|| true` da sonda faz um 404 virar HTML vazio, e HTML vazio reprova igual a uma página no
+    // ar que não lista a versão. São desfechos opostos — 404 é a vitrine fora do ar, e nenhuma
+    // espera conserta; 200 é a versão que não chegou ao CHANGELOG que a LP lê — e só o status os
+    // separa. Por isso o passo é EXECUTADO: uma regex sobre o YAML aceitaria um laço que imprime
+    // o status da página errada.
+
+    // Controle: com a versão nas três páginas o passo sai 0. Sem isto, um curl falso quebrado
+    // reprovaria os casos abaixo pelo motivo errado.
+    const presente = rodarPassoLp({
+      "/changelog": { status: "200", html: lista("/changelog", VERSAO) },
+      "/en/changelog": { status: "200", html: lista("/en/changelog", VERSAO) },
+      "/es/changelog": { status: "200", html: lista("/es/changelog", VERSAO) },
+      [`/changelog/${VERSAO}`]: { status: "200" },
+      [`/en/changelog/${VERSAO}`]: { status: "200" },
+      [`/es/changelog/${VERSAO}`]: { status: "200" },
+    });
+    expect(presente.exit, `com a versão listada o passo devia sair 0:\n${presente.saida}`).toBe(0);
+
+    // pt-BR lista; en não existe; es existe e ainda não lista.
+    const misto = rodarPassoLp({
+      "/changelog": { status: "200", html: lista("/changelog", VERSAO) },
+      "/es/changelog": { status: "200", html: lista("/es/changelog", "1.2.2") },
+    });
+    expect(misto.exit, misto.saida).toBe(1);
+    expect(nomeia(misto.saida, `${LP}/en/changelog`, "404"), `o erro não nomeia o 404 de /en/changelog:\n${misto.saida}`).toBe(true);
+    expect(nomeia(misto.saida, `${LP}/es/changelog`, "200"), `o erro não nomeia o 200 de /es/changelog:\n${misto.saida}`).toBe(true);
+    // A página que listou não faltou, e não entra no diagnóstico.
+    expect(nomeia(misto.saida, `${LP}/changelog`, "200"), `o erro nomeia uma página que não faltou:\n${misto.saida}`).toBe(false);
+
+    // Site fora do ar: o curl do diagnóstico sai com 7, e mesmo assim cada página é nomeada e o
+    // passo reprova com 1 — não morre no `set -e` antes de dizer por quê.
+    const foraDoAr = rodarPassoLp({
+      "/changelog": { status: "000" },
+      "/en/changelog": { status: "000" },
+      "/es/changelog": { status: "000" },
+    });
+    expect(foraDoAr.exit, foraDoAr.saida).toBe(1);
+    for (const p of ["/changelog", "/en/changelog", "/es/changelog"]) {
+      expect(nomeia(foraDoAr.saida, `${LP}${p}`, "000"), `o erro não nomeia o 000 de ${p}:\n${foraDoAr.saida}`).toBe(true);
+    }
   });
 
   it("a doutrina de versionamento declara a vitrine", () => {
