@@ -306,22 +306,63 @@ describe("a tela mostra — e o motor já recusava — o compromisso que atraves
     expect(leitura.blocos).toEqual([]);
   });
 
-  it("a tela e a rota leem a ocupação DESTE módulo, não de uma consulta própria", async () => {
-    // A promessa central do conserto é "a tela e a rota concordam POR
-    // CONSTRUÇÃO". Os três casos acima medem a função; nenhum deles abre os dois
-    // arquivos que a usam — devolver qualquer um dos dois à consulta inline da
-    // `main` deixaria a suíte inteira verde, com a divergência de volta.
-    const { readFileSync } = await import("node:fs");
-    const { join } = await import("node:path");
-    // `process.cwd()` é a raiz do repo sob o vitest — o mesmo caminho que
-    // `tests/unit/tags-vocabulario.test.ts` usa para ler fonte.
-    for (const arquivo of [
-      "app/app/agenda/page.tsx",
-      "app/api/v1/agenda/agendamentos/route.ts",
-    ]) {
-      const fonte = readFileSync(join(process.cwd(), arquivo), "utf8");
-      expect(fonte, arquivo).toContain("lerOcupacaoExterna(");
-      expect(fonte, arquivo).not.toMatch(/from\(\s*"calendar_selected_external_events"/);
-    }
+  it("CONTROLE: o compromisso que começa DEPOIS do recorte continua fora", async () => {
+    // Por que este caso existe: a catraca do conserto era de UM caso só. O caso
+    // do limite estrito acima devolve `[]` também com o filtro ingênuo de volta
+    // (`starts_at >= de`) — ali os três eventos saem por outro motivo —, e o do
+    // motor nem passa por `lerOcupacaoExterna`. Este mede EXCLUSÃO pelo lado
+    // oposto: o filtro ingênuo devolveria este evento (ele COMEÇA dentro da
+    // janela ingênua? não — começa depois do fim), e a interseção também o
+    // exclui. É o controle que impede "recusa tudo" de passar por acerto.
+    const leitura = await lerOcupacaoExterna(
+      clienteFalso(
+        tabelas([
+          {
+            id: "ev-depois",
+            starts_at: "2026-09-17T04:00:00.000Z",
+            ends_at: "2026-09-17T05:00:00.000Z",
+          },
+        ]),
+      ),
+      { organizationId: ORG, de: RECORTE.de, ate: RECORTE.ate },
+    );
+
+    expect(leitura.erro).toBeNull();
+    expect(leitura.blocos).toEqual([]);
   });
+
+  it("CONTROLE: o compromisso INTEIRAMENTE dentro do recorte sai com os instantes CRUS", async () => {
+    // A fatia é do LIMITE, não de todo bloco. Sem este caso, `iniciaEm: de` e
+    // `terminaEm: ate` fixos — que achatariam TODO compromisso no recorte
+    // inteiro — passariam nos outros casos, porque neles a fatia COINCIDE com a
+    // borda. Aqui ela não coincide, e é isso que distingue as duas contas.
+    const leitura = await lerOcupacaoExterna(
+      clienteFalso(
+        tabelas([
+          {
+            id: "ev-dentro",
+            starts_at: "2026-09-16T15:00:00.000Z",
+            ends_at: "2026-09-16T16:00:00.000Z",
+          },
+        ]),
+      ),
+      { organizationId: ORG, de: RECORTE.de, ate: RECORTE.ate },
+    );
+
+    expect(leitura.erro).toBeNull();
+    expect(leitura.blocos).toEqual([
+      {
+        id: "ev-dentro",
+        donoId: DONO,
+        iniciaEm: "2026-09-16T15:00:00.000Z",
+        terminaEm: "2026-09-16T16:00:00.000Z",
+      },
+    ]);
+  });
+
+  // ⚠️ O PONTO DE USO não é medido aqui: quem prova que a tela e a rota leem
+  // DESTE módulo — e que nenhum outro arquivo de `app/` ou `lib/agenda/` abre a
+  // view por conta própria — é
+  // `tests/unit/ocupacao-do-google-vem-de-um-lugar-so.test.ts`, que varre a
+  // classe inteira em vez das duas instâncias conhecidas.
 });
