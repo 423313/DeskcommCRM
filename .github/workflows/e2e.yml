@@ -648,7 +648,15 @@ jobs:
     services:
       waha:
         # Sobe no runner; é a dificuldade "baixa" que a issue descreve.
-        image: devlikeapro/waha:latest
+        #
+        # Tag PINADA, e a MESMA do `docker-compose.prod.yml`
+        # (`devlikeapro/waha:latest-2026.7.2`): este job existe para provar o que
+        # o self-hoster recebe, e `:latest` deixou de ser isso em 01/09/2026 — o
+        # digest do `latest` virou `527ff3d6…` (2026.8.2) enquanto o pin segue em
+        # `65e593e3…` (2026.7.2). Medido no run 35095923107 (e já no 35091727922,
+        # antes de qualquer mudança nossa): com `:latest` o contêiner NÃO sobe e
+        # as quatro partes morrem em "Initialize containers".
+        image: devlikeapro/waha:latest-2026.7.2
         ports: ["3000:3000"]
         env:
           WHATSAPP_HOOK_URL: http://127.0.0.1:3001/api/whatsapp/webhook
@@ -659,8 +667,14 @@ jobs:
           # segunda fonte para divergir. Escrever a chave aqui foi reprovado pelo
           # guard `tests/unit/e2e-workflow-honra-o-env.test.ts`: eram DOIS valores
           # diferentes (o desta linha e o do `.env.e2e`), e o app levaria 401.
+        # Probe TCP puro — a MESMA escolha do `docker-compose.prod.yml`, cujo
+        # healthcheck do app já diz "NÃO usar /api/v1/health". Um check HTTP
+        # amarra a saúde do contêiner ao contrato de AUTENTICAÇÃO de uma versão
+        # do upstream: o `/api/health` do `:latest` (2026.8.2) responde 401 e o
+        # contêiner nunca fica healthy. Quem espera o WAHA RESPONDER é o passo
+        # "Ligar a VPS fresca", com curl e o histórico no log.
         options: >-
-          --health-cmd "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))\""
+          --health-cmd "node -e \"require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""
           --health-interval 10s --health-timeout 5s --health-retries 12
       redis:
         image: redis:7-alpine
