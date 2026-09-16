@@ -22,7 +22,7 @@ import { runModelCall } from "@/lib/agent-engine/edge/llm/run-model-call";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 
-function poolQueGrava() {
+function poolQueGrava(paramsDaOrg: Record<string, unknown> = {}) {
   const inserts: Array<{ sql: string; params: unknown[] }> = [];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (sql.includes("settings->'llm'")) {
@@ -32,7 +32,7 @@ function poolQueGrava() {
             llm: {
               provider: "anthropic",
               default_model: "claude-padrao",
-              params: {},
+              params: paramsDaOrg,
               enabled_models: [],
               monthly_budget_cents: null,
             },
@@ -250,4 +250,46 @@ describe("a origem da escolha viaja com o log", () => {
     const { linhaDeErro } = await chamarComErro(new Error("boom"));
     expect(linhaDeErro!.params).toContain("padrao_da_organizacao");
   });
+});
+
+describe("teto de saída de chamadas auxiliares", () => {
+  it.each([
+    [undefined, 2200, 2200],
+    [1000, 2200, 1000],
+    [3200, undefined, 3200],
+  ])(
+    "configuração %s e pedido %s chegam ao provedor como %s",
+    async (configured, requested, expected) => {
+      const { pool } = poolQueGrava(
+        configured === undefined ? {} : { maxOutputTokens: configured },
+      );
+      let received: unknown;
+      const factory = () =>
+        ({
+          specificationVersion: "v3",
+          provider: "anthropic",
+          modelId: "claude-padrao",
+          doGenerate: async (options: { maxOutputTokens?: number }) => {
+            received = options.maxOutputTokens;
+            throw new Error("fim da sonda de limite");
+          },
+        }) as never;
+      await expect(
+        runModelCall(
+          pool,
+          cfg,
+          {
+            tenantId: ORG,
+            purpose: "prospecting_agent_setup_chat",
+            maxOutputTokens: requested,
+            messages: [{ role: "user", content: "Organize minha proposta." }],
+          },
+          {
+            registry: { anthropic: factory, openai: factory, google: factory, openrouter: factory },
+          },
+        ),
+      ).rejects.toThrow("fim da sonda");
+      expect(received).toBe(expected);
+    },
+  );
 });

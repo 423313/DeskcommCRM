@@ -79,6 +79,7 @@ const PONTOS_AUXILIARES = [
   "checkpoint",
   "draft_suggestion",
   "automation_ai_message",
+  "prospecting_agent_setup_chat",
 ] as const;
 
 describe("o ponto auxiliar não cruza provider de um com modelo de outro", () => {
@@ -259,7 +260,10 @@ const HERDAM_DE_OUTRA_FONTE = new Set(["intent_router"]);
 describe("nenhum call site empresta o modelo do agente sem o provider dele", () => {
   const objetosPorPurpose = (() => {
     const mapa = new Map<string, { arquivo: string; objeto: string }[]>();
-    for (const arquivo of arquivosDoMotor(join(process.cwd(), "lib/agent-engine"))) {
+    const arquivos = ["lib/agent-engine", "lib/prospecting"].flatMap((dir) =>
+      arquivosDoMotor(join(process.cwd(), dir)),
+    );
+    for (const arquivo of arquivos) {
       const fonte = readFileSync(arquivo, "utf-8");
       for (const { purpose, objeto } of objetosComPurpose(fonte)) {
         const lista = mapa.get(purpose) ?? [];

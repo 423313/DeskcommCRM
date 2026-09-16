@@ -127,6 +127,8 @@ export interface RunModelCallInput {
    * agente), nunca constante.
    */
   maxSteps?: number;
+  /** Teto por chamada auxiliar; nunca aumenta o limite configurado pela organização. */
+  maxOutputTokens?: number;
   /**
    * Override de provider/credencial vindo da versão PUBLICADA do agente (Fase
    * 2B) — resolvido no seam, nunca no call site. Sem ele, config da org.
@@ -428,7 +430,9 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       temperature,
       topP,
       topK,
-      maxOutputTokens,
+      maxOutputTokens: input.maxOutputTokens === undefined
+        ? maxOutputTokens
+        : Math.min(maxOutputTokens ?? Infinity, input.maxOutputTokens),
     });
   } catch (err) {
     // ─── A LINHA QUE FALTAVA ────────────────────────────────────────────────

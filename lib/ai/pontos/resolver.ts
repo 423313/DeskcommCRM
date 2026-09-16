@@ -149,6 +149,7 @@ export const PONTOS_QUE_HERDAM_DO_AGENTE: ReadonlySet<string> = new Set([
   "checkpoint",
   "draft_suggestion",
   "automation_ai_message",
+  "prospecting_agent_setup_chat",
 ]);
 
 export function decidirBinding(entrada: EntradaDaDecisao): DecisaoDeBinding {

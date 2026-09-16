@@ -21,7 +21,15 @@
       "label": "Banco"
     }
   ],
-  "mainPath": ["operator", "discovery", "candidates", "crm", "queue", "inbox", "qualification"],
+  "mainPath": [
+    "operator",
+    "discovery",
+    "candidates",
+    "crm",
+    "queue",
+    "inbox",
+    "qualification"
+  ],
   "nodes": [
     {
       "id": "operator",
@@ -71,6 +79,13 @@
       "col": 6,
       "type": "component",
       "label": "Etapa real do funil"
+    },
+    {
+      "id": "agent-setup",
+      "lane": "app",
+      "col": 2,
+      "type": "component",
+      "label": "Criação inline: agente, publicação e roteamento existentes"
     }
   ],
   "edges": [
@@ -113,6 +128,26 @@
       "from": "queue",
       "to": "operator",
       "label": "falha pausa a campanha"
+    },
+    {
+      "from": "operator",
+      "to": "agent-setup",
+      "label": "configuração revisada pelo administrador"
+    },
+    {
+      "from": "agent-setup",
+      "to": "queue",
+      "label": "agente selecionado; ativação da campanha separada"
+    },
+    {
+      "from": "agent-setup",
+      "to": "inbox",
+      "label": "publicação e continuidade no canal"
+    },
+    {
+      "from": "agent-setup",
+      "to": "operator",
+      "label": "erros visíveis e retomada sem duplicação"
     }
   ]
 }

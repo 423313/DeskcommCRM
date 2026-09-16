@@ -8,6 +8,34 @@ A busca é paga pelo saldo da conta Apify: limite de até 100 empresas e teto de
 
 Depois da pesquisa, defina agente, conexão, funil, etapa de entrada, etapa de qualificados, oferta, critérios, ritmo e referência real da avaliação de legítimo interesse. O agente precisa estar publicado, automático, com a ferramenta `crm_move_lead_stage` e acesso ao funil. Ele precisa atender o canal selecionado ou ser membro do roteador com continuidade ativa. O roteador pode encaminhar uma mudança de assunto para outro agente.
 
+### Criar um agente sem sair da campanha
+
+O botão **Criar agente para esta campanha**, junto do seletor, abre uma conversa.
+Descreva o objetivo em suas palavras; a IA faz perguntas curtas sobre o que falta,
+aproveita os dados da campanha e propõe nome, abordagem, critério de qualificação,
+conexão e etapas. Você pode continuar conversando para corrigir o resumo.
+Não é necessário escolher ferramentas ou escrever um prompt técnico.
+
+A conversa usa a IA já configurada no CRM, pelo mesmo mecanismo de credenciais,
+orçamento e registro de custo. Ela só propõe: não recebe ferramentas de escrita,
+não cria agentes e não envia mensagens a contatos. IDs de conexão, funil e etapas
+são conferidos contra os recursos reais da organização.
+
+O cartão de revisão mostra a abordagem, os critérios, o canal e o funil. **Criar e usar agente**
+é a confirmação que publica o agente, prepara as capacidades comerciais e de
+transferência humana e o seleciona no formulário, com acesso ao funil escolhido.
+Ele pode receber conversas no canal; a campanha continua aguardando o comando
+separado **Iniciar abordagens com IA**. **Configurações avançadas** abre o editor existente.
+
+Quando o canal usa um roteador, o agente é acrescentado sem substituir os outros.
+Ativar a continuidade do mesmo agente, salvo mudança de assunto ou transferência,
+exige uma escolha explícita no cartão de revisão; a IA não pode autorizar essa alteração.
+Sem roteador, um canal atendido por outro agente exige reutilizar o agente atual
+ou configurar o roteamento, evitando trocar o atendimento existente sem aviso.
+Falhas mantêm a conversa e os dados da campanha. Repetir a mesma confirmação
+recupera a criação anterior sem produzir outro agente. O histórico do chat fica
+na página enquanto ela estiver aberta; ele não é uma conversa de cliente no Inbox.
+
 A ativação cria contatos e negócios usando os handlers existentes. Telefones e identificadores de empresa são únicos por organização; contatos anteriores são preservados. Uma preparação interrompida deve ser retomada com a mesma configuração. A fila começa após um minuto e envia somente a primeira abordagem. Respostas passam pelo atendimento normal; a qualificação exige os critérios definidos pelo operador e só é contada quando a etapa do negócio muda. Encontrar uma empresa não significa qualificá-la.
 
 Há uma campanha ativa por organização, até 50 tentativas em 24 horas no conjunto das campanhas, e intervalo mínimo de cinco minutos. Falhas e envios incertos consomem o limite. A janela do número, modo de teste, versão do agente, fechamento do atendimento, recusa, pausa e intervenção humana continuam ativos. Pausar interrompe novas abordagens; uma transmissão já iniciada pode concluir.
@@ -33,3 +61,7 @@ links e enriquecimento do candidato e o retira da fila. Tokens pseudônimos,
 restritos ao servidor e nunca devolvidos pela API, impedem reimportar a mesma
 origem ou telefone na organização. A exclusão de dados no provedor de busca
 segue o processo próprio desse provedor.
+
+O export de dados do contato inclui a origem, os dados coletados e o estado da
+abordagem dos candidatos vinculados a ele, com o mesmo escopo da anonimização.
+Não inclui tokens de supressão nem autorizações internas de envio.
