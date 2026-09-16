@@ -40,7 +40,11 @@
  */
 import { audit } from "@/lib/audit";
 import { garantirLeadDaConversa } from "@/lib/leads/nascimento-do-lead";
-import { estamparOrigemDaPagina, extrairOrigemDaPagina } from "@/lib/leads/origem-do-site";
+import {
+  ehAPrimeiraMensagemDoContato,
+  estamparOrigemDaPagina,
+  extrairOrigemDaPagina,
+} from "@/lib/leads/origem-do-site";
 import { logger } from "@/lib/logger";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ehPedidoDeOptOut } from "@/lib/opt-out/deteccao";
@@ -325,6 +329,12 @@ async function pedirDespachoDoAgente(admin: Admin, entrada: EntradaDeMensagem): 
  * depois deixaria o card com a origem de sempre e o dado só no contato — que e
  * exatamente onde ninguem olha.
  *
+ * Duas condicoes da decisao da #924 estao aqui, e nenhuma delas e re-medida:
+ * (a) a origem vale SO na PRIMEIRA mensagem do contato — um link encaminhado
+ * adiante nao vira atribuicao de quem o recebeu (o filtro roda no banco, em
+ * `ehAPrimeiraMensagemDoContato`); (b) o PRIMEIRO TOQUE nunca e sobrescrito, e
+ * isso continua sendo da `fn_estampar_atribuicao_de_anuncio`, nao deste arquivo.
+ *
  * Falha aqui e LOG, nunca excecao: a mensagem do cliente JA esta gravada, e
  * devolver erro ao provider faria ele reenviar a mensagem. Trocar um rotulo de
  * origem faltando por uma tempestade de reentregas e um pessimo negocio.
@@ -337,6 +347,17 @@ async function guardarOrigemDaPagina(admin: Admin, entrada: EntradaDeMensagem): 
   const origem = { ...achada, capturadaEm: new Date().toISOString() };
 
   try {
+    // A consulta vem ANTES de qualquer escrita, e DENTRO do try: falha de
+    // leitura nao pode virar estampa. O `estampar` so roda depois de a
+    // primeira mensagem estar confirmada.
+    if (!(await ehAPrimeiraMensagemDoContato(admin, entrada.contactId, entrada.messageId))) {
+      logger.info("pos-entrada: codigo de origem fora da primeira mensagem (ignorado)", {
+        contactId: entrada.contactId,
+        messageId: entrada.messageId,
+      });
+      return;
+    }
+
     const gravou = await estamparOrigemDaPagina(admin, entrada.contactId, origem);
     if (!gravou) {
       logger.warn("pos-entrada: origem da pagina NAO gravada (a mensagem entra assim mesmo)", {

@@ -47,6 +47,13 @@ vi.mock("@/lib/dev/kick-local-pipeline", () => ({
 let sequencia: string[] = [];
 let updateErro: { message: string } | null = null;
 let rpcErro: { message: string } | null = null;
+/**
+ * O histórico de ENTRADA de quem escreveu, do ponto de vista da guarda de
+ * "primeira mensagem". O padrão é o caso honesto e mais comum: a mensagem que
+ * esta ingestão está processando é a primeira do contato.
+ */
+let historicoDoContato: { id: string | null; count: number } = { id: "msg-1", count: 1 };
+let historicoErro: { message: string } | null = null;
 let ultimoUpdate: Record<string, unknown> | null = null;
 let ultimaRpc: Record<string, unknown> | null = null;
 /** TODAS as chamadas de RPC, na ordem, com o NOME da função. */
@@ -76,6 +83,34 @@ const admin = {
       update(payload: Record<string, unknown>) {
         ultimoUpdate = payload;
         return cadeia(`update:${tabela}`);
+      },
+      /**
+       * Só `messages` responde. As outras tabelas continuam devolvendo `null`,
+       * como antes desta guarda existir: o teste mede o passo da origem, e uma
+       * resposta inventada para as vizinhas mudaria o que os outros casos veem.
+       */
+      select(_colunas: string, _opcoes?: unknown) {
+        const consulta = {
+          eq(_coluna: string, _valor: unknown) {
+            return consulta;
+          },
+          order(_coluna: string, _opcoes?: unknown) {
+            return consulta;
+          },
+          limit(_n: number) {
+            return consulta;
+          },
+          async maybeSingle() {
+            if (tabela !== "messages") return { data: null, count: null, error: null };
+            sequencia.push("select:messages");
+            return {
+              data: historicoDoContato.id ? { id: historicoDoContato.id } : null,
+              count: historicoDoContato.count,
+              error: historicoErro,
+            };
+          },
+        };
+        return consulta;
       },
     };
   },
@@ -108,6 +143,8 @@ beforeEach(() => {
   sequencia = [];
   updateErro = null;
   rpcErro = null;
+  historicoDoContato = { id: "msg-1", count: 1 };
+  historicoErro = null;
   ultimoUpdate = null;
   ultimaRpc = null;
   rpcChamadas = [];
@@ -429,6 +466,46 @@ describe("a origem da página que veio no texto", () => {
     rpcErro = { message: "permission denied" };
     await rodar({ texto: `oi ${CODIGO}` });
     expect(nomesDeRpc()).toContain("fn_estampar_atribuicao_de_anuncio");
+    expect(garantirLeadDaConversa).toHaveBeenCalled();
+    expect(vi.mocked(acelerarPipelineDeEventos)).toHaveBeenCalled();
+  });
+
+  it("na SEGUNDA mensagem do contato o código NÃO estampa", async () => {
+    // O link encaminhado adiante não é atribuição de quem o recebeu. O contato
+    // já tinha uma mensagem de entrada antes desta — então esta não é a
+    // primeira, e a origem não entra.
+    historicoDoContato = { id: "msg-0", count: 2 };
+    await rodar({ texto: `oi! vi voces no site ${CODIGO}`, messageId: "msg-1" });
+    expect(nomesDeRpc()).not.toContain("fn_estampar_atribuicao_de_anuncio");
+    expect(garantirLeadDaConversa).toHaveBeenCalled();
+  });
+
+  it("olha o histórico ANTES de escrever no contato", async () => {
+    // A ordem é a garantia: se a leitura do histórico viesse depois, uma falha
+    // nela deixaria a origem gravada e sem primeiro toque confirmado.
+    await rodar({ texto: `oi ${CODIGO}` });
+    const leitura = sequencia.indexOf("select:messages");
+    expect(leitura).toBeGreaterThanOrEqual(0);
+    expect(leitura).toBeLessThan(sequencia.indexOf("rpc:fn_estampar_atribuicao_de_anuncio"));
+  });
+
+  it("reentrega estampa só quando o contato tem UMA mensagem de entrada", async () => {
+    // Sem id de mensagem nova (reentrega) não dá para perguntar "é esta linha?".
+    // Com mais de uma mensagem no histórico, não se grava; com exatamente uma,
+    // não há dúvida de qual linha é.
+    historicoDoContato = { id: "msg-1", count: 3 };
+    await rodar({ texto: `oi ${CODIGO}`, messageId: null });
+    expect(nomesDeRpc()).not.toContain("fn_estampar_atribuicao_de_anuncio");
+
+    historicoDoContato = { id: "msg-1", count: 1 };
+    await rodar({ texto: `oi ${CODIGO}`, messageId: null });
+    expect(nomesDeRpc()).toContain("fn_estampar_atribuicao_de_anuncio");
+  });
+
+  it("falha ao ler o histórico NÃO grava origem e não derruba a ingestão", async () => {
+    historicoErro = { message: "banco fora do ar" };
+    await expect(rodar({ texto: `oi ${CODIGO}` })).resolves.toBeUndefined();
+    expect(nomesDeRpc()).not.toContain("fn_estampar_atribuicao_de_anuncio");
     expect(garantirLeadDaConversa).toHaveBeenCalled();
     expect(vi.mocked(acelerarPipelineDeEventos)).toHaveBeenCalled();
   });

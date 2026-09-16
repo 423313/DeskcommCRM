@@ -26,11 +26,17 @@
  * encaminhar, editar ou repetir o marcador de outra pessoa. Então:
  *
  *   1. nada disso AUTORIZA coisa alguma — é rótulo de origem, não permissão;
- *   2. o valor é limitado (lista fechada de chaves, tamanho máximo) e normalizado;
- *   3. NÃO sobrescreve o primeiro toque: quem decide isso é a
+ *   2. o valor é limitado (lista fechada de chaves, teto do código inteiro em
+ *      `TAMANHO_MAXIMO_DO_CODIGO`, teto por valor) e normalizado. O que não for
+ *      chave de campanha não atravessa: nome, telefone, e-mail e documento
+ *      ficam de fora por construção, não por filtro de última hora;
+ *   3. VALE SÓ NA PRIMEIRA MENSAGEM do contato — a pergunta é feita no banco,
+ *      em `ehAPrimeiraMensagemDoContato`, e não no texto que chegou;
+ *   4. NÃO sobrescreve o primeiro toque: quem decide isso é a
  *      `fn_estampar_atribuicao_de_anuncio`, no banco, com a mesma guarda que já
- *      vale para anúncio pago. Aqui não há regra de atribuição paralela.
- *   4. marcador ilegível é ignorado em silêncio, e a ingestão segue. A mensagem
+ *      vale para anúncio pago — inclusive contra a origem de anúncio. Aqui não
+ *      há regra de atribuição paralela;
+ *   5. marcador ilegível é ignorado em silêncio, e a ingestão segue. A mensagem
  *      do cliente JÁ está gravada quando este código roda.
  */
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -60,6 +66,21 @@ export const CHAVES_DE_UTM = [
 /** Teto por valor. Nada legítimo chega perto disso; colagem aleatória chega. */
 const TAMANHO_MAXIMO_DO_VALOR = 200;
 
+/**
+ * Teto do código INTEIRO — o "tamanho máximo" do contrato, com um número só.
+ *
+ * Os dois lados bebem daqui: o gerador recusa o que passaria do teto e o parser
+ * ignora o que chegou maior. Enquanto foram dois números separados, a página
+ * podia montar um link que a ingestão descartava em silêncio — um defeito que
+ * não dói em teste nem em log, dói na atribuição de quem confiou no link.
+ *
+ * O número: o pior caso plausível são as sete chaves de campanha no teto de
+ * valor (200 caracteres cada), que dão 2007 caracteres de base64url em ASCII e
+ * cabem aqui dentro. O que passar do teto é RECUSADO, nunca truncado — cortar a
+ * UTM no meio gravaria uma campanha que ninguém montou.
+ */
+export const TAMANHO_MAXIMO_DO_CODIGO = 3000;
+
 export interface OrigemDaPagina {
   /** Só chaves de `CHAVES_DE_UTM`, já normalizadas, e nunca vazio. */
   utm: Record<string, string>;
@@ -74,7 +95,9 @@ export interface OrigemDaPagina {
   capturadaEm: string | null;
 }
 
-const RE_DO_CODIGO = /\[dk1:([A-Za-z0-9_-]{1,2000})\]/;
+const RE_DO_CODIGO = new RegExp(
+  `\\[${VERSAO_DO_CODIGO}:([A-Za-z0-9_-]{1,${TAMANHO_MAXIMO_DO_CODIGO}})\\]`,
+);
 
 /** Normaliza `{"  UTM_SOURCE  ": " ig "}` → `{ utm_source: "ig" }`. */
 function normalizar(carga: unknown): Record<string, string> {
@@ -96,7 +119,8 @@ function normalizar(carga: unknown): Record<string, string> {
  *
  * Chaves ordenadas para o mesmo mapa render sempre o mesmo código — duas UTMs
  * iguais em ordem diferente não são duas origens. Devolve `null` quando não
- * sobra nada válido: não faz sentido gerar um marcador que o parser recusa.
+ * sobra nada válido, e também quando o resultado passaria de
+ * `TAMANHO_MAXIMO_DO_CODIGO`: não se gera um marcador que o parser recusa.
  */
 export function montarCodigoDeOrigemDoSite(utm: Record<string, string>): string | null {
   const normalizado = normalizar(utm);
@@ -104,6 +128,9 @@ export function montarCodigoDeOrigemDoSite(utm: Record<string, string>): string 
   const ordenado: Record<string, string> = {};
   for (const chave of [...Object.keys(normalizado)].sort()) ordenado[chave] = normalizado[chave]!;
   const carga = Buffer.from(JSON.stringify(ordenado), "utf8").toString("base64url");
+  // O teto é conferido AQUI também, e não só no parser: sem isto a página monta
+  // um link que a ingestão recusa calada, e quem montou não tem como descobrir.
+  if (carga.length > TAMANHO_MAXIMO_DO_CODIGO) return null;
   return `[dk${VERSAO_DO_CODIGO.slice(2)}:${carga}]`;
 }
 
@@ -166,4 +193,51 @@ export async function estamparOrigemDaPagina(
     },
   });
   return !error;
+}
+
+/**
+ * A origem só vale na PRIMEIRA mensagem do contato.
+ *
+ * ─── Por que isto existe, se o banco já guarda o primeiro toque ──────────────
+ *
+ * São duas regras diferentes, e a segunda não cobre a primeira. O banco impede
+ * SOBRESCREVER uma origem já gravada; ele não impede que a origem de um link
+ * encaminhado meses depois entre num contato que ainda não tinha atribuição
+ * nenhuma. "Só na primeira mensagem" é mais estreito que "só o primeiro toque",
+ * e é a condição que a decisão da issue #924 pede.
+ *
+ * A pergunta é feita no BANCO, não no texto: qual é a mensagem de ENTRADA mais
+ * antiga deste contato? Chegada fora de ordem (histórico sincronizado, lote do
+ * provider) não engana a resposta, porque a resposta é uma consulta — não um
+ * relógio nem a ordem em que a ingestão chamou.
+ *
+ * ─── Reentrega (`messageId` nulo) ───────────────────────────────────────────
+ *
+ * Sem id não dá para perguntar "é esta linha que chegou agora?" — sobra o outro
+ * caminho, mais estreito e por isso seguro: só estampa quando o contato tem UMA
+ * única mensagem de entrada, e aí não há dúvida de qual é.
+ *
+ * ─── Falha de leitura devolve `false` ───────────────────────────────────────
+ *
+ * Na dúvida não se grava origem. O custo de uma origem faltando é um relatório
+ * mais pobre; o de uma origem inventada é um número errado que ninguém vai
+ * auditar depois — e este módulo trata o texto do cliente como não confiável.
+ */
+export async function ehAPrimeiraMensagemDoContato(
+  admin: Admin,
+  contactId: string,
+  messageId: string | null,
+): Promise<boolean> {
+  const { data, count, error } = await admin
+    .from("messages")
+    .select("id", { count: "exact" })
+    .eq("contact_id", contactId)
+    .eq("direction", "inbound")
+    .order("sent_at", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return false;
+  if (messageId) return data.id === messageId;
+  return (count ?? 0) === 1;
 }
