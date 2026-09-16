@@ -8,6 +8,77 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.28.0] — 2026-09-16
+
+### Adicionado
+
+- **O CRM pode reconhecer quem já é cliente pela agenda** Nova regra em Configurações › Tipos de agendamento, desligada em toda organização: quando um administrador liga “Clientes pela agenda”, todo contato com horário marcado ganha a etiqueta “cliente” e a data de “Cliente desde” na ficha — a data do primeiro horário que conta — o dia em que se combinou, ou o dia do atendimento quando ele for mais antigo —, nunca uma data futura —, e quem já tinha horário marcado ganha na hora de ligar. Horário cancelado, falta e horário apagado não contam: se não sobrar nenhum, sai a etiqueta que o sistema pôs, e a que a equipe pôs à mão fica. Se alguém da equipe tirar a etiqueta, ela não volta — e a etiqueta que a equipe puser à mão o sistema nunca tira. As automações “Quando um contato ganhar uma tag” disparam uma vez por contato, na primeira vez que o sistema acrescenta a etiqueta: não disparam para quem já era cliente ao ligar, para quem já tinha a etiqueta posta à mão, nem de novo para quem cancela e marca outra vez, nem ao juntar contatos duplicados. Com a regra ligada, a tela de Funis permite marcar um “funil de clientes”, onde abre o negócio de quem já é cliente e volta a escrever. Atualizar não muda nada em organização nenhuma até alguém ligar a regra. Contribuição de @423313 (PR #867).
+
+### Corrigido
+
+- **O nome do compromisso pessoal da agenda do Google deixa de ficar ao alcance dos colegas** Quem conecta a agenda pessoal do Google ao CRM costuma fazer isso só para os horários ocupados contarem na agenda da equipe. A tela nunca mostrou o nome desses compromissos, mas a permissão do banco deixava qualquer pessoa da organização, inclusive com acesso somente leitura, consultá-lo diretamente com o próprio login.
+
+  Na prática, só havia nome para ler em agendas sincronizadas antes da versão 1.17.0. Desde ela, o serviço que sincroniza com o Google guarda só o horário, sem o nome, e apaga o nome que encontra quando atualiza o evento. O que sobra são compromissos gravados antes disso e que a sincronização não voltou a atualizar: os que já passaram, os cancelados, e os de agendas que ela deixou de ler — desmarcadas, removidas da conta do Google, de quem saiu da equipe ou com a conexão caída. Eles ficam até a limpeza automática removê-los, por padrão 90 dias depois de terminarem.
+
+  Agora nenhum login de usuário lê esse nome — nem os colegas, nem a própria pessoa que conectou a agenda, já que nenhuma tela o exibia. Os horários ocupados continuam contando exatamente como antes. Esta versão não apaga os nomes que sobraram: ela fecha a leitura.
+
+  Continua ao alcance de qualquer pessoa da organização o identificador de cada agenda sincronizada — que, na agenda principal do Google, é o e-mail da conta conectada. Dá para fechar isso sem mudar nenhuma tela — limitando a leitura dessas linhas a quem conectou a agenda e a quem gerencia a equipe, que já vê essa conta —, mas isso muda quem enxerga o quê e não entra nesta correção.
+
+## [1.27.3] — 2026-09-15
+
+### Corrigido
+
+- **O áudio da chamada de voz sai e chega, e o painel some quando a ligação acaba** Quem ligava pelo CRM com o sistema aberto em mais de uma aba, ou em mais de um
+  computador, ficava com a ligação muda dos dois lados: cada aba abria o próprio
+  áudio, o serviço de voz ficava só com a última, e ela podia ser a aba que
+  ninguém estava olhando. Agora o áudio abre só na aba onde você clicou em
+  "Chamar" ou "Atender", já no clique. As outras abas avisam que o áudio está em
+  outra aba e oferecem trazer para ela.
+
+  Consertos que vinham junto:
+
+  - Quando o cliente desligava, o painel da ligação podia continuar na tela, com
+    o botão de encerrar ativo. Agora ele confere com o servidor e some sozinho.
+  - O aviso de áudio passou a separar "o áudio não abriu" de "o áudio caiu", cada
+    um com um botão para tentar de novo.
+  - Clicar duas vezes em encerrar deixou de registrar dois encerramentos, e
+    encerrar uma ligação que já tinha acabado não registra mais nada.
+  - O canal que atualiza a tela em tempo real voltava de uma queda e, pouco
+    depois, caía de novo sozinho. Isso afetava também a caixa de entrada.
+
+## [1.27.2] — 2026-09-15
+
+### Corrigido
+
+- **A chamada de voz pelo WhatsApp liga de verdade depois de parear** Quem pareava o número de chamada de voz e clicava em "Chamar" recebia "Não foi
+  possível completar a chamada. Tente novamente em instantes." e continuava
+  recebendo, mesmo com o número pareado, até alguém reiniciar o serviço de voz. O
+  pareamento pedia ao serviço para "re-parear" logo depois de criar a sessão, e
+  isso deixava a ligação presa a uma conexão já descartada. Agora o pareamento
+  cria a sessão uma vez só, e o código QR chega do mesmo jeito.
+
+  Consertos que vinham no mesmo caminho:
+
+  - Celulares brasileiros que o WhatsApp registrou sem o nono dígito eram
+    discados com ele, e o telefone do outro lado nunca tocava: a tela ficava em
+    "Chamando…" até desistir. O CRM agora pergunta ao WhatsApp qual é o número
+    registrado antes de ligar.
+  - A ligação feita pelo CRM era registrada como recebida. A que o cliente não
+    atendia virava um aviso de "chamada perdida" na Central, pedindo para ligar
+    de volta a quem você acabou de ligar. Agora ela aparece na linha do tempo
+    como "Chamada de voz sem resposta", sem aviso.
+  - Ao começar a ligação, a tela às vezes mostrava um erro enquanto o telefone
+    do outro lado já tocava, e o painel da ligação podia sumir.
+  - Desvincular o aparelho pelo celular deixava a tela dizendo "pareado" para
+    sempre. Agora ela volta a "não pareado" e dá para parear de novo.
+  - Clicar em "Parear" de novo, com o aparelho recém-vinculado e a tela ainda
+    desatualizada, podia desconectar o aparelho. Agora o CRM confere com o
+    serviço de voz antes de apagar qualquer coisa.
+  - Desconectar o número quando o serviço de voz já tinha perdido a sessão dava
+    erro sem fim. Agora desconecta.
+  - O código QR que vencia continuava na tela sem funcionar. Agora a tela avisa
+    que venceu e libera o botão para gerar outro.
+
 ## [1.27.1] — 2026-09-15
 
 ### Corrigido
@@ -4698,7 +4769,10 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.28.0...HEAD
+[1.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.3...v1.28.0
+[1.27.3]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.2...v1.27.3
+[1.27.2]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.1...v1.27.2
 [1.27.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.25.1...v1.26.0
