@@ -483,6 +483,10 @@ export const DICIONARIO: Traducoes = {
   Minhas: { es: "Mías" },
   Todas: { es: "Todas" },
   Fechadas: { es: "Cerradas" },
+  // O estado `archived` é terminal como `closed`, mas conta outra coisa: é a
+  // pasta do histórico. Sem entrada própria, a aba "Arquivadas" apareceria
+  // traduzida como "Cerradas" para um operador hispanofalante.
+  Arquivadas: { es: "Archivadas" },
   IA: { es: "IA" },
   "Sem mensagens": { es: "Sin mensajes" },
   "Nenhuma conversa": { es: "Ninguna conversación" },
@@ -4646,6 +4650,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Pausando...": { es: "Pausando..." },
   "Fechar esta conversa?": { es: "¿Cerrar esta conversación?" },
+  "Arquivar esta conversa?": { es: "¿Archivar esta conversación?" },
+  "Arquivando...": { es: "Archivando..." },
   Automático: { es: "Automático" },
   Alguém: { es: "Alguien" },
   "Nota interna · só o time vê": { es: "Nota interna · solo la ve el equipo" },
