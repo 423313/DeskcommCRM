@@ -5609,6 +5609,8 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma atividade registrada ainda.": { es: "Ninguna actividad registrada todavía." },
   "Todas as origens": { es: "Todos los orígenes" },
   "Importado (CSV)": { es: "Importado (CSV)" },
+  "Anúncio da Meta": { es: "Anuncio de Meta" },
+  "Anúncio do Google": { es: "Anuncio de Google" },
 
   // ─── Settings: painel de atualização — histórico multi-versão (merge upstream) ───
   "Da versão": { es: "De la versión" },
