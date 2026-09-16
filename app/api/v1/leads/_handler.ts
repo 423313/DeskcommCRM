@@ -564,6 +564,22 @@ export async function updateLeadHandler(
     }
   }
 
+  // ── A ÚLTIMA LEITURA VEM DEPOIS DA ÚLTIMA ESCRITA (issue #916) ─────────────
+  //
+  // O mesmo defeito do `moveLeadHandler`, no PATCH do dossiê: `updated` é o
+  // retorno do UPDATE, e a atividade `lead_edited` gravada acima está na lista
+  // positiva de `fn_update_last_activity_at` (supabase/baseline.sql) — o gatilho
+  // faz `update crm_leads` numa transação POSTERIOR, e `fn_set_updated_at` troca
+  // o `updated_at` de novo. Devolver `updated` entregava ao quadro um carimbo
+  // que a própria edição já invalidou: `useEditLead` o grava no cache, e o
+  // arrasto seguinte levava 409 mesmo com o conserto do cliente.
+  const { data: fresh } = await supabase
+    .from("crm_leads")
+    .select(LEAD_COLS)
+    .eq("organization_id", ctx.organization_id)
+    .eq("id", leadId)
+    .maybeSingle();
+
   await audit({
     action: "lead.updated",
     actorUserId: a.actorUserId,
@@ -574,7 +590,7 @@ export async function updateLeadHandler(
     metadata: { ...a.metadataActor, fields },
   });
 
-  return updated as Record<string, unknown>;
+  return (fresh ?? updated) as Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------

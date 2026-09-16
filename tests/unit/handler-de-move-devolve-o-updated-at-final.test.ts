@@ -37,10 +37,11 @@ vi.mock("@/lib/leads/activity-write-failure", () => ({
 vi.mock("@/lib/atendimento/origem", () => ({
   observeServiceOrigin: vi.fn(async () => null),
 }));
+const rpcDoAdmin = vi.hoisted(() =>
+  vi.fn((_funcao: string, _args: unknown) => Promise.resolve({ error: null })),
+);
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(() => ({
-    rpc: vi.fn(() => Promise.resolve({ error: null })),
-  })),
+  createAdminClient: vi.fn(() => ({ rpc: rpcDoAdmin })),
 }));
 
 import { moveLeadHandler } from "@/app/api/v1/leads/_handler";
@@ -59,8 +60,8 @@ const DEPOIS_DO_MOVE = "2026-09-15T12:00:01.000Z";
 const DEPOIS_DA_ATIVIDADE = "2026-09-15T12:00:01.500Z";
 
 /** Banco falso com a cascata real: gravar a atividade troca o `updated_at`. */
-function bancoFalso() {
-  const banco = { updatedAt: CARREGADO, stageId: ETAPA_A };
+function bancoFalso(statusDepoisDoUpdate = "open") {
+  const banco = { updatedAt: CARREGADO, stageId: ETAPA_A, status: "open" };
   vi.mocked(emitLeadActivity).mockImplementation(async () => {
     banco.updatedAt = DEPOIS_DA_ATIVIDADE;
     return { ok: true } as never;
@@ -72,7 +73,7 @@ function bancoFalso() {
     pipeline_id: FUNIL,
     stage_id: banco.stageId,
     contact_id: null,
-    status: "open",
+    status: banco.status,
     lost_reason: null,
     updated_at: banco.updatedAt,
   });
@@ -124,6 +125,8 @@ function bancoFalso() {
           escrita.maybeSingle = async () => {
             banco.stageId = valores.stage_id;
             banco.updatedAt = DEPOIS_DO_MOVE;
+            // O que `trg_crm_lead_close_on_stage` (BEFORE) escreve na mesma linha.
+            banco.status = statusDepoisDoUpdate;
             return { data: lead(), error: null };
           };
           return escrita;
@@ -162,10 +165,21 @@ describe("moveLeadHandler", () => {
     // O `status` do emit_event lia a RELEITURA. Com ela no fim, ler dali seria
     // amarrar o evento à ordem da releitura — e o valor já está no retorno do
     // próprio UPDATE, porque `trg_crm_lead_close_on_stage` é BEFORE.
-    const devolvido = (await moveLeadHandler(bancoFalso() as never, ctx, LEAD, {
+    //
+    // O caso anterior deste arquivo afirmava sobre o lead DEVOLVIDO, não sobre o
+    // evento que o título nomeia — e o `status` do lead lido ANTES do UPDATE
+    // ("open") passava igual. Aqui o UPDATE devolve "won" (o gatilho fechou o
+    // negócio), então só o valor do UPDATE satisfaz a asserção.
+    await moveLeadHandler(bancoFalso("won") as never, ctx, LEAD, {
       to_stage_id: ETAPA_B,
-    })) as { status: string };
+    });
 
-    expect(devolvido.status).toBe("open");
+    expect(rpcDoAdmin).toHaveBeenCalledWith(
+      "emit_event",
+      expect.objectContaining({
+        p_event_type: "lead.stage_changed",
+        p_payload: expect.objectContaining({ status: "won" }),
+      }),
+    );
   });
 });
