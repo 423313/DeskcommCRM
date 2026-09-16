@@ -23,7 +23,11 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveDestinoDoAgente, type EstagioCandidato } from "@/lib/leads/agent-stage-sync";
+import {
+  resolveDestinoDoAgente,
+  sincronizaEstagioDoAgente,
+  type EstagioCandidato,
+} from "@/lib/leads/agent-stage-sync";
 import { mirrorLeadStageToCrm, MIRROR_WARN_ONLY } from "@/lib/agent-engine/edge/crm/move-lead-stage";
 
 /** Um pipeline de clínica: avaliação, procedimento e a etapa de PERDA. */
@@ -111,5 +115,77 @@ describe("o espelho do funil traduz o não-movimento em AÇÃO para o humano (#9
     );
     expect(r.ok ? null : r.reason).not.toBe("crm_error");
     expect(r.ok ? null : r.reason).not.toBe("crm_unavailable");
+  });
+});
+
+/**
+ * O NEGÓCIO REABERTO QUE CONSERVA O MOTIVO ANTIGO.
+ *
+ * `fn_crm_lead_close_on_stage` devolve `status = 'open'` quando o card sai da
+ * etapa de perda e NÃO limpa `lost_reason` (supabase/baseline.sql). O agente só
+ * trabalha negócio ABERTO (`resolveActiveLeadForContact`) e só há UMA etapa de
+ * perda por funil (`uniq_crm_stages_pipeline_lost`), então o único negócio com
+ * motivo gravado que ele pode levar à etapa de perda é exatamente este: o que já
+ * foi perdido uma vez, voltou, e agora se perde DE NOVO.
+ *
+ * Mover seria fechar a perda nova com a causa da perda velha — "preço", gravado
+ * meses atrás — sem ninguém ter afirmado nada sobre esta. É o que o aviso da
+ * Central diz que o assistente não faz ("o assistente não inventa uma"), por
+ * outra porta. O caso passa por `sincronizaEstagioDoAgente`, que é quem lê a
+ * linha do banco: prender só o resolvedor deixaria verde quem voltasse a
+ * repassar o `lost_reason` lido.
+ */
+describe("o negócio reaberto que conserva o motivo antigo (#917)", () => {
+  const LEAD_REABERTO = {
+    id: "lead-reaberto",
+    organization_id: "org-1",
+    pipeline_id: "pipe-1",
+    stage_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    status: "open",
+    lost_reason: "price",
+    created_at: "2026-01-01T00:00:00Z",
+    last_activity_at: null,
+  };
+
+  function adminFalso() {
+    const escritas: string[] = [];
+    const admin = {
+      rpc: async () => ({ data: null, error: null }),
+      from(tabela: string) {
+        const b: Record<string, unknown> = {};
+        b.select = () => b;
+        b.eq = () => b;
+        b.maybeSingle = async () => ({ data: { name: "Avaliação" }, error: null });
+        b.update = () => {
+          escritas.push(`update ${tabela}`);
+          return b;
+        };
+        b.insert = () => {
+          escritas.push(`insert ${tabela}`);
+          return b;
+        };
+        b.then = (ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) =>
+          Promise.resolve(
+            tabela === "crm_leads"
+              ? { data: [LEAD_REABERTO], error: null }
+              : { data: funilDaClinica(), error: null },
+          ).then(ok, erro);
+        return b;
+      },
+    };
+    return { admin: admin as never, escritas };
+  }
+
+  it("a IA NÃO move — o motivo gravado é da perda ANTERIOR, e ninguém afirmou o desta", async () => {
+    const { admin, escritas } = adminFalso();
+
+    const r = await sincronizaEstagioDoAgente(admin, {
+      organizationId: "org-1",
+      contactId: "contato-1",
+      passo: "lost",
+    });
+
+    expect(r).toMatchObject({ moveu: false, motivo: "perda_sem_motivo" });
+    expect(escritas).toEqual([]);
   });
 });

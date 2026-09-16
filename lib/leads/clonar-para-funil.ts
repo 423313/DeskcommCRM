@@ -53,6 +53,28 @@ export interface EtapaDoFunil {
   is_archived: boolean;
 }
 
+/**
+ * A recusa de fronteira de funil (P-01), UMA string para os DOIS call sites: a
+ * rota `/move` (o quadro) e o `moveLeadHandler` (IA, lote e automações).
+ *
+ * ⚠️ Constante, e não literal repetido, porque o texto é CHAVE do dicionário: o
+ * PR que a reescreveu mudou os dois lugares e deixou as duas entradas de espanhol
+ * órfãs, então quem usa o produto em espanhol voltou a ler português. O gate de
+ * i18n não pega isso — `tests/unit/i18n-espanhol-cobre-a-tela.test.ts` varre
+ * `app` e `components`, e ignora `api`. Com uma fonte só, mudar a frase e
+ * esquecer a tradução deixa `tests/unit/recusa-de-funil-fala-espanhol.test.ts`
+ * vermelho.
+ */
+export const RECUSA_DE_TROCA_DE_FUNIL =
+  "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.";
+
+/** Recusa da rota quando o funil de destino não existe na organização. */
+export const FUNIL_DE_DESTINO_NAO_ENCONTRADO = "Funil de destino não encontrado.";
+
+/** Recusa da rota quando a origem não tem onde fechar (antes de criar o clone). */
+export const ORIGEM_SEM_ETAPA_DE_PERDA =
+  "O funil de origem não tem etapa de perda para encerrar o negócio.";
+
 export interface Recusa {
   status: number;
   code: string;
@@ -63,21 +85,6 @@ export interface Recusa {
 export type ResultadoDaEtapa =
   | { ok: true; etapa: EtapaDoFunil }
   | { ok: false; status: number; code: string; texto: string };
-
-/**
- * Motivo da perda da origem quando o chamador não informa um.
- *
- * `other` é canônico (`CANONICAL_LOST_REASONS`), então o trigger aceita. Onde a
- * origem foi parar vai em `source_metadata.movido_para` — um motivo inventado
- * como `moved_to_pipeline_X` seria recusado pelo banco e perderia a troca
- * inteira, não só a informação.
- */
-export const MOTIVO_PADRAO_DA_TROCA = "other";
-
-export function motivoDaPerdaDaOrigem(informado?: string | null): string {
-  const limpo = informado?.trim();
-  return limpo && limpo.length > 0 ? limpo : MOTIVO_PADRAO_DA_TROCA;
-}
 
 /**
  * As duas trocas que ESTA rota não faz.
@@ -174,6 +181,17 @@ export function escolheEtapaDeDestino(
  *   trigger da etapa, que aqui é sempre uma etapa aberta);
  * - `position_in_stage` — quem posiciona é o handler de criação (MAX + 1000), que
  *   é quem conhece o fim da fila da etapa escolhida.
+ *
+ * ⚠️ `custom_fields` vem INTEIRO, inclusive chaves que o funil de destino não
+ * declara em `settings.fields` — e já foi filtrado, por uma rodada que tratou a
+ * declaração do funil como o único leitor do campo. Não é: a automação entrega o
+ * jsonb cru à IA (`lib/automation/dados-do-formulario.ts`) e ao webhook de saída
+ * (`lib/automation/actions/call-webhook.ts`), e resposta de formulário gravada em
+ * chave nunca declarada é o caso comum. Filtrar apagava do negócio novo o que o
+ * assistente sabia do cliente — e, com o destino sem campo declarado nenhum (o
+ * outro caso comum), apagava TUDO. A chave que o destino não declara fica na
+ * linha e só não aparece na tela do funil até alguém declará-la lá; é o mesmo
+ * estado de quando um funil deixa de declarar um campo que já tinha valor.
  */
 export function montaPayloadDoClone(
   origem: OrigemParaClonar,

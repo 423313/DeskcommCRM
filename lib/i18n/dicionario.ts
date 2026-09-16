@@ -7990,7 +7990,7 @@ export const DICIONARIO: Traducoes = {
   "Lead foi modificado por outro usuário. Recarregue e tente novamente.": { es: "El lead fue modificado por otro usuario. Recarga e intenta de nuevo." },
   "Liberou a conversa de volta para a fila": { es: "Liberó la conversación de vuelta a la cola" },
   "Material não encontrado.": { es: "Material no encontrado." },
-  "Move cross-pipeline não é permitido. Clone o lead para o pipeline alvo.": { es: "Mover entre pipelines no está permitido. Clona el lead hacia el pipeline destino." },
+  "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.": { es: "Mover entre pipelines no está permitido. Usa POST /api/v1/leads/[id]/clone para llevar el negocio a otro embudo." },
   "Nada para alterar.": { es: "Nada para modificar." },
   "Nenhum arquivo foi enviado.": { es: "Ningún archivo fue enviado." },
   "Nenhum lead acessível na operação.": { es: "Ningún lead accesible en la operación." },
@@ -8061,7 +8061,6 @@ export const DICIONARIO: Traducoes = {
   "Stage não pertence ao pipeline informado.": {
     es: "El stage no pertenece al pipeline informado.",
   },
-  "Move cross-pipeline não é permitido.": { es: "Mover entre pipelines no está permitido." },
   "Lead foi modificado concorrentemente.": { es: "El lead fue modificado de forma concurrente." },
   "leads por bulk.": { es: "leads por lote." },
   "Esta sugestão já foi": { es: "Esta sugerencia ya fue" },
@@ -8078,6 +8077,30 @@ export const DICIONARIO: Traducoes = {
   },
   "Perdido —": { es: "Perdido —" },
   "(negócio removido)": { es: "(negocio eliminado)" },
+  // Troca de funil (POST /api/v1/leads/[id]/clone): o rótulo da linha do negócio
+  // novo e as duas razões que não dependem do nome do funil.
+  "Veio de outro funil": { es: "Vino de otro embudo" },
+  "Levado para outro funil": { es: "Llevado a otro embudo" },
+  // As recusas da troca de funil (lib/leads/clonar-para-funil.ts e a rota).
+  "O negócio já está neste funil. Para trocar de etapa use /api/v1/leads/[id]/move.": {
+    es: "El negocio ya está en este embudo. Para cambiar de etapa usa /api/v1/leads/[id]/move.",
+  },
+  "Só um negócio aberto pode ser levado para outro funil.": {
+    es: "Solo un negocio abierto puede llevarse a otro embudo.",
+  },
+  "A etapa não pertence ao funil de destino.": {
+    es: "La etapa no pertenece al embudo de destino.",
+  },
+  "A etapa de destino é de fechamento: escolha uma etapa aberta do funil.": {
+    es: "La etapa de destino es de cierre: elige una etapa abierta del embudo.",
+  },
+  "O funil de destino não tem etapa aberta para receber o negócio.": {
+    es: "El embudo de destino no tiene etapa abierta para recibir el negocio.",
+  },
+  "Funil de destino não encontrado.": { es: "Embudo de destino no encontrado." },
+  "O funil de origem não tem etapa de perda para encerrar o negócio.": {
+    es: "El embudo de origen no tiene etapa de pérdida para cerrar el negocio.",
+  },
 
   // ─── Fase B: vocabulario de dominio persistido (reason de crm_lead_activities) ───
   //

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireRole } from "@/lib/auth/require-role";
+import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -215,7 +216,7 @@ describe("POST /api/v1/leads/[id]/clone", () => {
     const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
     const body = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     const clone = body.data.lead as Row;
     expect(clone.pipeline_id).toBe(P2);
     expect(clone.stage_id).toBe(S2_A);
@@ -239,14 +240,88 @@ describe("POST /api/v1/leads/[id]/clone", () => {
     expect((origem.source_metadata as Row).canal).toBe("whatsapp");
   });
 
+  it("cada lado conta a troca na LINHA DO TEMPO — e a origem não diz 'Perdido — other'", async () => {
+    // `source_metadata` guarda os ponteiros, mas nenhuma tela o lê: a linha do
+    // tempo do dossiê vem de `crm_lead_activities`. Sem estas duas linhas, o
+    // negócio novo aparecia no funil de destino sem história nenhuma, e a origem
+    // dizia "Demanda encerrada — Perdido — other" para um negócio que não se
+    // perdeu: quem abrisse o card leria uma perda que não aconteceu.
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+    expect(response.status).toBe(201);
+    const cloneId = (body.data.lead as Row).id;
+
+    const linhas = vi.mocked(emitLeadActivity).mock.calls.map(([, entrada]) => entrada);
+    expect(linhas).toContainEqual(
+      expect.objectContaining({
+        leadId: cloneId,
+        type: "moved_from_pipeline",
+        reason: "Veio do funil Comercial",
+        payload: { from_pipeline_id: P1, from_lead_id: LEAD_ID },
+      }),
+    );
+    expect(linhas).toContainEqual(
+      expect.objectContaining({
+        leadId: LEAD_ID,
+        type: "demand_closed",
+        reason: "Levado para o funil Suporte",
+        payload: expect.objectContaining({ to_pipeline_id: P2, to_lead_id: cloneId }),
+      }),
+    );
+    expect(linhas.map((l) => l.reason)).not.toContain("Perdido — other");
+  });
+
   it("aceita a etapa destino informada pelo cliente", async () => {
     const { POST } = await import("./route");
 
     const response = await POST(cloneRequest({ pipeline_id: P2, stage_id: S2_B }), params);
     const body = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     expect((body.data.lead as Row).stage_id).toBe(S2_B);
+  });
+
+  it("motivo fora do vocabulário do funil: 422 e NENHUMA escrita", async () => {
+    // A recusa vinha do trigger, no encerramento da ORIGEM — que roda DEPOIS de o
+    // clone já existir. O operador recebia 500 com o negócio duplicado no destino
+    // e a origem ainda aberta; a pergunta agora é feita antes da primeira escrita.
+    const antes = (db.tables.crm_leads ?? []).length;
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      cloneRequest({ pipeline_id: P2, lost_reason: "mudou de funil" }),
+      params,
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("lost_reason_invalid");
+    expect((db.tables.crm_leads ?? []).length).toBe(antes);
+    const origem = (db.tables.crm_leads ?? []).find((row) => row.id === LEAD_ID) as Row;
+    expect(origem.status).toBe("open");
+  });
+
+  it("motivo ESTENDIDO pelo funil de origem passa", async () => {
+    const base = seed();
+    db = fakeDb({
+      ...base,
+      crm_pipelines: (base.crm_pipelines ?? []).map((funil) =>
+        funil.id === P1 ? { ...funil, settings: { lost_reasons: ["mudou de funil"] } } : funil,
+      ),
+    });
+    vi.mocked(createClient).mockResolvedValue(db.client);
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      cloneRequest({ pipeline_id: P2, lost_reason: "mudou de funil" }),
+      params,
+    );
+
+    expect(response.status).toBe(201);
+    const origem = (db.tables.crm_leads ?? []).find((row) => row.id === LEAD_ID) as Row;
+    expect(origem.lost_reason).toBe("mudou de funil");
   });
 
   it("usa o motivo de perda informado quando ele é canônico", async () => {
@@ -302,6 +377,84 @@ describe("POST /api/v1/leads/[id]/clone", () => {
 
     expect(response.status).toBe(404);
     expect(body.error.code).toBe("pipeline_not_found");
+  });
+
+  it("recusa etapa de destino terminal (o clone nasceria fechado)", async () => {
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2, stage_id: S2_LOST }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("stage_destino_terminal");
+  });
+
+  it("recusa funil de destino sem etapa aberta para receber o negócio", async () => {
+    db = fakeDb({
+      ...seed(),
+      crm_stages: (seed().crm_stages ?? []).filter((row) => row.id !== S2_A && row.id !== S2_B),
+    });
+    vi.mocked(createClient).mockResolvedValue(db.client);
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("pipeline_without_initial_stage");
+  });
+
+  it("recusa ANTES de criar o clone quando o funil de origem não tem etapa de perda", async () => {
+    // A recusa de `encerraDemanda` (422 `pipeline_no_lost_stage`) acontecia
+    // DEPOIS da criação: o operador lia "nada mudou" com o negócio já duplicado
+    // no destino. A pergunta passa a ser feita antes, e o que se prova aqui é o
+    // ESTADO — nenhum clone no banco —, não só o código do erro.
+    db = fakeDb({
+      ...seed(),
+      crm_stages: (seed().crm_stages ?? []).filter((row) => row.id !== S1_LOST),
+    });
+    vi.mocked(createClient).mockResolvedValue(db.client);
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("pipeline_no_lost_stage");
+    expect(db.tables.crm_leads).toHaveLength(1);
+    expect((db.tables.crm_leads ?? [])[0]?.status).toBe("open");
+  });
+
+  it("o clone leva os campos personalizados INTEIROS, inclusive os que o destino não declara", async () => {
+    // `custom_fields` não é só o que a tela do funil mostra: a automação entrega
+    // o jsonb cru à IA (lib/automation/dados-do-formulario.ts) e ao webhook de
+    // saída (lib/automation/actions/call-webhook.ts). O formulário que caiu num
+    // campo nunca declarado é o caso COMUM — e o funil de destino sem campo
+    // declarado nenhum é o caso comum também. Filtrar pelo destino apagava do
+    // negócio novo tudo o que o assistente sabia do cliente.
+    const base = seed();
+    const origem = (base.crm_leads ?? [])[0];
+    if (!origem) throw new Error("o teste espera um crm_leads semeado neste ponto");
+    origem.custom_fields = { metragem: "120m2", numero_da_os: "OS-99" };
+    db = fakeDb({
+      ...base,
+      crm_pipelines: (base.crm_pipelines ?? []).map((funil) =>
+        funil.id === P2
+          ? { ...funil, settings: { fields: [{ key: "metragem", label: "Metragem", type: "text" }] } }
+          : funil,
+      ),
+    });
+    vi.mocked(createClient).mockResolvedValue(db.client);
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect((body.data.lead as Row).custom_fields).toEqual({
+      metragem: "120m2",
+      numero_da_os: "OS-99",
+    });
   });
 });
 

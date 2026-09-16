@@ -1,6 +1,6 @@
 import { observeServiceOrigin } from "@/lib/atendimento/origem";
 import type { RiskBucket } from "@/lib/leads/risk-radar";
-import { etapaDePerda, recusaDeMotivoDaPerdaPeloBanco } from "@/lib/leads/motivo-da-perda";
+import { decideMotivoDaPerda, recusaDeMotivoDaPerdaPeloBanco } from "@/lib/leads/motivo-da-perda";
 
 /**
  * O funil do AGENTE movendo o card no funil do TENANT (wave 8, cenários 25/26).
@@ -60,6 +60,19 @@ export type DestinoDoAgente =
    * Por isso o card NÃO se move, e este rótulo NÃO é incidente nem warn-only:
    * falta uma AÇÃO HUMANA. O espelho o traduz em item de inbox acionável
    * (`perda_sem_motivo` em MIRROR_WARN_ONLY? não — ver lib/agent-engine/edge/crm).
+   *
+   * ⚠️ O MOTIVO QUE JÁ ESTÁ NA LINHA NÃO AUTORIZA O AGENTE — e aqui o agente
+   * responde diferente do arrasto e do lote, de propósito. Os dois humanos
+   * passam `motivoAtual` a `decideMotivoDaPerda`; o agente não passa. Medido no
+   * schema, e não suposto: o agente só trabalha negócio ABERTO
+   * (`resolveActiveLeadForContact`) e só existe UMA etapa de perda por funil
+   * (`uniq_crm_stages_pipeline_lost`). Então o único negócio com motivo gravado
+   * que ele pode levar à etapa de perda é o REABERTO — `fn_crm_lead_close_on_stage`
+   * devolve `status = 'open'` e não limpa `lost_reason`. Mover esse card fecharia
+   * a perda NOVA com a causa da perda ANTERIOR: "preço", gravado meses atrás, sem
+   * ninguém ter afirmado nada sobre esta. É a causa inventada do parágrafo de
+   * cima, entrando pela porta do dado velho. Quem arrasta vê o card e decide; o
+   * agente não vê o que mudou desde a primeira perda.
    */
   | { move: false; motivo: "perda_sem_motivo"; passo: string };
 
@@ -84,11 +97,11 @@ export function resolveDestinoDoAgente(
   const alvo = estagios.find((e) => !e.is_archived && e.agent_stage_hint === passo);
   if (!alvo) return { move: false, motivo: "sem_mapeamento", passo };
   if (alvo.id === estagioAtualId) return { move: false, motivo: "ja_esta_la", passo };
-  // A etapa de destino fecha o negócio como PERDA: o card não anda sem motivo, e
-  // o motivo não é do agente (ver `perda_sem_motivo` acima). A pergunta — "esta
-  // escrita deixa o negócio perdido sem motivo?" — é a MESMA dos outros dois
-  // caminhos (arrasto e lote) e mora num só lugar: `etapaDePerda` (issue #917).
-  if (etapaDePerda(alvo)) return { move: false, motivo: "perda_sem_motivo", passo };
+  // A decisão é a MESMA função do arrasto e do lote (issue #917) — sem motivo e
+  // SEM `motivoAtual`: o agente não manda motivo, e o que está na linha é o da
+  // perda anterior de um negócio reaberto (ver `perda_sem_motivo` acima).
+  const veredito = decideMotivoDaPerda({ etapaDeDestino: alvo });
+  if (!veredito.ok) return { move: false, motivo: "perda_sem_motivo", passo };
   return { move: true, stageId: alvo.id, stageName: alvo.name };
 }
 

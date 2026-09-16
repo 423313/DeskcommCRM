@@ -1,5 +1,6 @@
 import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { CANONICAL_LOST_REASONS } from "@/lib/schemas/leads";
 
 /**
  * O MOTIVO DA PERDA — o ponto de decisão único de quem escreve ETAPA (issue #917).
@@ -24,18 +25,58 @@ import { traduzir } from "@/lib/i18n/dicionario";
  * que a CHECK existe para impedir — e um erro entre as duas deixa o motivo
  * gravado na linha de um negócio que NÃO foi perdido.
  *
- * ⚠️ O motivo que o negócio JÁ tem vale. Trocar um card perdido de "Perdido" para
- * "Desistiu" não é uma perda nova: a CHECK é satisfeita pelo motivo que já está na
- * linha, e exigir um segundo motivo transformaria uma operação legítima que hoje
- * funciona numa recusa nova. Quem manda um motivo novo continua podendo corrigir.
+ * ⚠️ O motivo que o negócio JÁ tem vale — para quem ARRASTA. Reordenar um card
+ * dentro da coluna de perda não é uma perda nova: a CHECK é satisfeita pelo motivo
+ * que já está na linha, e exigir um segundo motivo transformaria uma operação
+ * legítima que hoje funciona numa recusa nova. Quem manda um motivo novo continua
+ * podendo corrigir. (Trocar "Perdido" por "Desistiu" NÃO é caso real, embora este
+ * parágrafo já o tenha dito: `uniq_crm_stages_pipeline_lost` admite UMA etapa de
+ * perda não arquivada por funil.)
+ *
+ * ⚠️ O AGENTE não usa essa licença: `resolveDestinoDoAgente`
+ * (lib/leads/agent-stage-sync.ts) chama esta decisão SEM `motivoAtual`. O único
+ * negócio com motivo gravado que ele alcança é o reaberto, e ali o motivo é o da
+ * perda anterior — o porquê completo está no tipo `perda_sem_motivo` de lá.
  *
  * ⚠️ O QUE NÃO ESTÁ AQUI: o ganho (`is_won`). Nenhuma CHECK e nenhum trigger
  * exigem campo nenhum para fechar como ganho — inventar uma exigência só para o
  * desenho ficar simétrico quebraria escritas que hoje passam.
  */
 
+/**
+ * ⚠️ A ÚNICA ESCRITA QUE FECHA COMO PERDA SEM PERGUNTAR O MOTIVO: a troca de
+ * funil (`POST /api/v1/leads/[id]/clone`). Ela mora AQUI, e não no módulo do
+ * clone, porque duas decisões sobre o motivo da perda em dois arquivos é
+ * exatamente o defeito que a #917 veio eliminar — e a divergência entraria
+ * calada, já que os dois lados nunca tocam a mesma linha.
+ *
+ * Por que a exceção é legítima: no clone o negócio NÃO se perdeu. Ele foi
+ * levado para outro funil, e a origem é encerrada como perda porque é o único
+ * desfecho que o schema oferece para "saiu daqui". Perguntar um motivo ao
+ * operador o obrigaria a inventar uma causa comercial para um movimento
+ * administrativo. `other` é canônico (`CANONICAL_LOST_REASONS`), então o trigger
+ * aceita; para onde o negócio foi fica em `source_metadata.movido_para`, que é
+ * onde a informação sobrevive. A instrução original da P-01 —
+ * `lost_reason='moved_to_pipeline_X'` — seria recusada com 22023
+ * `lost_reason_invalid` e perderia a troca inteira, não só a informação.
+ *
+ * ⚠️ Exigir motivo também na troca de funil é decisão do dono do produto, não
+ * um ajuste de consistência: hoje a troca funciona sem perguntar.
+ */
+export const MOTIVO_PADRAO_DA_TROCA = "other";
+
+/** O motivo com que a troca de funil encerra a ORIGEM. */
+export function motivoDaPerdaDaOrigem(informado?: string | null): string {
+  const limpo = informado?.trim();
+  return limpo && limpo.length > 0 ? limpo : MOTIVO_PADRAO_DA_TROCA;
+}
+
 /** O texto base da recusa — o dicionário (`traduzir`) traduz a partir daqui. */
 export const MOTIVO_DA_PERDA_OBRIGATORIO = "Informe o motivo da perda.";
+
+/** O texto base da recusa por vocabulário — o mesmo que a rede de segurança usa. */
+export const MOTIVO_DA_PERDA_FORA_DO_VOCABULARIO =
+  "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.";
 
 /**
  * A etapa de destino, com o mínimo que a decisão precisa saber dela. Aceita `null`
@@ -77,7 +118,7 @@ export function decideMotivoDaPerda(input: {
   etapaDeDestino: EtapaDeDestino | null | undefined;
   /** O motivo que ESTA operação mandou — o que o usuário digitou agora. */
   motivo?: string | null;
-  /** O motivo que o negócio já tem gravado (troca entre etapas de perda). */
+  /** O motivo que o negócio já tem gravado (card que já está na etapa de perda). */
   motivoAtual?: string | null;
   idioma?: Idioma | null;
 }): VereditoDoMotivoDaPerda {
@@ -142,11 +183,50 @@ export function recusaDeMotivoDaPerdaPeloBanco(
   if (codigo === "22023" && texto.includes("lost_reason_invalid")) {
     return {
       codigo: "lost_reason_invalid",
-      mensagem: traduzir(
-        "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.",
-        idioma ?? IDIOMA_PADRAO,
-      ),
+      mensagem: traduzir(MOTIVO_DA_PERDA_FORA_DO_VOCABULARIO, idioma ?? IDIOMA_PADRAO),
     };
   }
   return null;
+}
+
+/**
+ * O motivo está no vocabulário do funil? — a MESMA pergunta que
+ * `fn_validate_lost_reason_required` faz (supabase/baseline.sql), antes de a
+ * escrita acontecer.
+ *
+ * ⚠️ POR QUE PERGUNTAR ANTES, se o banco já recusa: porque há um caminho em que a
+ * recusa do banco chega TARDE DEMAIS. A troca de funil
+ * (`POST /api/v1/leads/[id]/clone`) são duas escritas sem transação entre elas —
+ * cria o clone, depois encerra a origem. Um `lost_reason` fora do vocabulário só
+ * era recusado na SEGUNDA, e o operador recebia 500 com o negócio já duplicado no
+ * destino e a origem ainda aberta. Barrar aqui custa uma leitura e não deixa
+ * meia-execução nenhuma.
+ *
+ * `settingsDoFunil` é o `crm_pipelines.settings` cru: a lista do tenant vive em
+ * `settings.lost_reasons`, e `settings` sem ela significa "só os canônicos" — que
+ * é o que o `coalesce(..., '{}')` do trigger faz.
+ *
+ * Devolve `null` quando não há o que recusar (sem motivo informado, ou motivo
+ * aceito): quem decide se motivo AUSENTE é recusa é `decideMotivoDaPerda`.
+ */
+export function recusaDeMotivoForaDoVocabulario(input: {
+  motivo?: string | null;
+  settingsDoFunil: unknown;
+  idioma?: Idioma | null;
+}): { codigo: "lost_reason_invalid"; mensagem: string } | null {
+  const motivo = (input.motivo ?? "").trim();
+  if (motivo.length === 0) return null;
+
+  const extras = (input.settingsDoFunil as { lost_reasons?: unknown } | null | undefined)
+    ?.lost_reasons;
+  const aceitos = new Set<string>([
+    ...CANONICAL_LOST_REASONS,
+    ...(Array.isArray(extras) ? extras.filter((v): v is string => typeof v === "string") : []),
+  ]);
+  if (aceitos.has(motivo)) return null;
+
+  return {
+    codigo: "lost_reason_invalid",
+    mensagem: traduzir(MOTIVO_DA_PERDA_FORA_DO_VOCABULARIO, input.idioma ?? IDIOMA_PADRAO),
+  };
 }

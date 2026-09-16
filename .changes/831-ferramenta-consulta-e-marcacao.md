@@ -18,5 +18,8 @@ tem naquele dia, para oferecer uma alternativa na mesma conversa em vez de pedir
 escuro. O horário marcado é sempre o que a agenda confirmou como livre, nunca o texto que veio
 na mensagem.
 
-Não muda nada no que a equipe precisa fazer: é a mesma agenda, com uma marcação a menos
-interrompida no meio.
+Em quem já usa o assistente, a capacidade nasce desligada: o que cada assistente pode fazer
+fica gravado na versão publicada dele, e capacidade nova não entra sozinha. Abra o assistente,
+vá em "O que o agente pode fazer", ligue "Ver se o horário está livre e já marcar" — o pacote
+"Vender e mover o funil" vai aparecer como parcial até você ligar — e publique. Em instalação
+nova o assistente já nasce com ela.

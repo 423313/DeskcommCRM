@@ -248,7 +248,30 @@ function payloadDeHorarios(
     fuso_suposto: consulta.fusoSuposto,
     /** Agendas externas que não estão saudáveis: o horário pode estar defasado. */
     fontes_defasadas: consulta.fontesDefasadas,
+    /**
+     * NENHUMA conexão viva jamais sincronizou — a lista de ocupados pode estar
+     * vazia porque ninguém perguntou, não porque a agenda está livre.
+     *
+     * O campo existia em `ResultadoDaConsulta` desde sempre e chegava SÓ à rota
+     * REST (`app/api/v1/agenda/horarios-livres`): as duas tools MCP publicavam
+     * `fontes_defasadas` e engoliam este, que é o mais grave dos dois. O próprio
+     * comentário que o declara (lib/agenda/consulta.ts) diz que quem mais precisa
+     * dele é a IA — "um agente que o oferece MARCA por cima da cirurgia e confirma
+     * ao cliente" —, e com a ferramenta conjunta da #831 isso deixou de ser uma
+     * segunda decisão do modelo: virou escrita na mesma chamada.
+     */
+    agenda_externa_nunca_lida: consulta.agendaExternaNuncaLida,
   };
+}
+
+/** A ressalva de agenda nunca sincronizada, ACRESCENTADA à mensagem da marcação. */
+function comRessalvaDeAgendaNuncaLida(resultado: unknown): string {
+  const original = String((resultado as { mensagem?: unknown } | null)?.mensagem ?? "").trim();
+  const ressalva =
+    "A agenda externa deste atendente nunca foi sincronizada, então pode haver compromisso " +
+    "que não aparece aqui. Diga que separou o horário e que a equipe confirma — não afirme " +
+    "que está confirmado.";
+  return original.length > 0 ? `${original} ${ressalva}` : ressalva;
 }
 
 export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
@@ -288,14 +311,18 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     // A faixa larga contém o dia civil em QUALQUER fuso. Depois de a coleta
     // revelar o fuso da regra, filtramos pelo mesmo dia local. Assim a IA não
     // converte "13/09" em meia-noite UTC e não perde a noite de Manaus.
-    const inicioDoDiaUtc =
-      input.dia === undefined ? null : new Date(`${input.dia}T00:00:00.000Z`);
-    const de =
-      inicioDoDiaUtc === null ? agora : new Date(inicioDoDiaUtc.getTime() - 14 * 60 * 60 * 1000);
+    //
+    // A aritmética é a de `faixaAmplaDoDia`, e é ELA que roda aqui: o helper
+    // nasceu declarando que existe porque "as DUAS ferramentas que OLHAM a
+    // agenda precisam perguntar a mesma coisa" e ficou com um chamador só,
+    // enquanto esta cópia seguia inline — duas fontes para a mesma janela, que
+    // divergem no primeiro ajuste.
+    const janela = input.dia === undefined ? null : faixaAmplaDoDia(input.dia);
+    const de = janela === null ? agora : janela.de;
     const ate =
-      inicioDoDiaUtc === null
+      janela === null
         ? new Date(de.getTime() + (input.dias_a_frente ?? DIAS_PADRAO) * 86_400_000)
-        : new Date(inicioDoDiaUtc.getTime() + 38 * 60 * 60 * 1000);
+        : janela.ate;
 
     const consulta = await horariosLivresDaOrg(ctx.supabase, ctx.organizationId, {
       eventTypeSlug: input.event_type_slug,
@@ -729,9 +756,37 @@ export const crmFindAndBookAppointment: McpToolDefinition<typeof consultarEMarca
       // interna, conflito de última hora, erro de negócio). O turno continua, e
       // a resposta junta a recusa ao que estava livre no dia: é o material que o
       // modelo precisa para não encerrar a conversa com o cliente na mão.
+      //
+      // ⚠️ A lista vai SEM o horário recusado: ele acabou de ser recusado, e
+      // oferecê-lo de volta ao cliente é o começo de um laço.
+      const payload = payloadDeHorarios(
+        consulta,
+        slotsDoDia.filter((s) => s !== achado),
+        HORARIOS_PADRAO,
+      );
+      // ⚠️ E o ensino só é REESCRITO quando a recusa é o horário que ficou
+      // indisponível e SOBROU opção no dia. O texto de `ENSINO_POR_CODIGO` para
+      // esse código é o da marcação avulsa — "chame `crm_find_free_slots` de
+      // novo" —, que aqui é um laço: a lista do dia já está nesta resposta.
+      //
+      // Reescrever SEMPRE, como uma versão anterior fazia, apagava o ensino
+      // certo das outras recusas: `agenda_disponibilidade_invalida` diz "não
+      // ofereça horários", `agenda_tipo_desativado` diz "pergunte que outro
+      // atendimento serve" — e as duas passavam a mandar oferecer um horário da
+      // lista. E sem opção no dia, consultar outro dia é mesmo o próximo passo.
+      const motivoDaRecusa = (resultado as { motivo?: unknown }).motivo;
+      const ofereceDaLista =
+        motivoDaRecusa === "agenda_horario_indisponivel" && payload.horarios.length > 0;
       return {
-        ...payloadDeHorarios(consulta, slotsDoDia, HORARIOS_PADRAO),
+        ...payload,
         ...(resultado as Record<string, unknown>),
+        ...(ofereceDaLista
+          ? {
+              mensagem:
+                "esse horário acabou de ficar indisponível e NADA foi marcado. Ofereça ao cliente uma " +
+                "das opções de `horarios` desta mesma resposta — não chame a consulta de novo.",
+            }
+          : {}),
       };
     }
 
@@ -741,6 +796,15 @@ export const crmFindAndBookAppointment: McpToolDefinition<typeof consultarEMarca
       // de dentro de `compromisso` o que ele mesmo pediu.
       inicio: achado.inicio.toISOString(),
       quando: rotuloLocal(achado.inicio, consulta.fusoDaRegra),
+      agenda_externa_nunca_lida: consulta.agendaExternaNuncaLida,
+      // ⚠️ A ressalva vai JUNTO da confirmação, e concatenada — não por cima. O
+      // texto que `resultado` traz é o da marcação ("marquei tal dia"), e é ele
+      // que o modelo repete ao cliente; sobrescrever perderia o que foi marcado.
+      // Recusar a marcação nesse estado é decisão do dono do produto, não um
+      // ajuste de consistência: hoje a ferramenta marca.
+      ...(consulta.agendaExternaNuncaLida
+        ? { mensagem: comRessalvaDeAgendaNuncaLida(resultado) }
+        : {}),
     };
   },
 };
