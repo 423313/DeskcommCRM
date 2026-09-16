@@ -19,7 +19,10 @@
 #      daria o mesmo erro, mais tarde;
 #   4. o psql que não chega ao fim do arquivo NUNCA é lido como sucesso, mesmo
 #      quando a mensagem de conexão perdida não traz a palavra ERROR;
-#   5. o ruído benigno de sempre não dispara passada nenhuma.
+#   5. o ruído benigno de sempre não dispara passada nenhuma;
+#   6. uma lista de erros maior que o buffer do pipe não cega a função (pipefail);
+#   7. conexão que nem chega a abrir também é refeita, e o veredito cita a causa,
+#      não a linha de dica do psql.
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -83,6 +86,7 @@ rodar() {
     if reaplicar_baseline "$1/baseline.sql" "$1/apply.log"; then rc=0; else rc=1; fi
     printf "%s" "$rc" > "$1/rc"
     printf "%s" "${BASELINE_INESPERADO-<nunca definido>}" > "$1/inesperado"
+    printf "%s" "${BASELINE_PASSADAS-<nunca definido>}" > "$1/passadas-declaradas"
   ' _ "$WORK" "$ROTEIRO" "$RAIZ" > "$WORK/tela" 2>&1
 }
 
@@ -90,8 +94,11 @@ rc()          { cat "$WORK/rc"; }
 passadas()    { grep -c -- '-f /b.sql' "$WORK/docker.log"; }
 inesperado()  { cat "$WORK/inesperado"; }
 e_igual()     { [ "$1" = "$2" ]; }
-contem()      { printf '%s' "$1" | grep -qiE -- "$2"; }
-nao_contem()  { ! printf '%s' "$1" | grep -qiE -- "$2"; }
+declaradas()  { cat "$WORK/passadas-declaradas"; }
+# Here-string, não `printf | grep -q`: o caso 6 passa listas maiores que o buffer
+# do pipe, e sob pipefail o próprio instrumento cegaria.
+contem()      { grep -qiE -- "$2" <<<"$1"; }
+nao_contem()  { ! grep -qiE -- "$2" <<<"$1"; }
 
 echo "── 0. O dublê é o que a prova pensa que é"
 # Controle positivo: sem ele, uma função que nunca chama o docker daria
@@ -113,6 +120,9 @@ check "devolve sucesso" e_igual "$(rc)" 0
 check "aplicou o arquivo duas vezes" e_igual "$(passadas)" 2
 check "o veredito não carrega o deadlock da 1ª passada" e_igual "$(inesperado)" ""
 check "a tela diz que está aplicando de novo, e que é seguro" grep -q "aplicando de novo, é seguro (passada 2 de 3)" "$WORK/tela"
+check "  e mostra O QUE não aplicou — o ✓ depois de uma disputa não é mudo" grep -q "psql:/b.sql:16766: ERROR:  deadlock detected" "$WORK/tela"
+check "  sem repetir na tela o ruído benigno" nao_contem "$(cat "$WORK/tela")" "multiple primary keys"
+check "BASELINE_PASSADAS diz 2, para quem chama contar ao dono" e_igual "$(declaradas)" 2
 check "o log guarda as DUAS passadas, com cabeçalho" e_igual "$(grep -c '^── passada ' "$WORK/apply.log")" 2
 check "  e o deadlock da 1ª continua lá para quem investigar" grep -q "deadlock detected" "$WORK/apply.log"
 
@@ -123,6 +133,7 @@ rodar
 check "devolve falha" e_igual "$(rc)" 1
 check "parou no teto de 3 passadas (não tentou a 4ª)" e_igual "$(passadas)" 3
 check "o veredito traz o deadlock" contem "$(inesperado)" "deadlock detected"
+check "BASELINE_PASSADAS diz 3" e_igual "$(declaradas)" 3
 
 echo "── 3. Erro que não é de disputa: uma passada só"
 novo_caso permissao
@@ -145,13 +156,24 @@ rodar
 check "conexão que cai no meio vira nova passada" e_igual "$(passadas)" 2
 check "  e, limpa a 2ª, devolve sucesso" e_igual "$(rc)" 0
 
+novo_caso conexao-cai-sempre
+# O par que faltava: sem ele, o "devolve sucesso" acima ficava verde também numa
+# função que nem lê o código de saída (ela devolveria 0 já na 1ª passada).
+for n in 1 2 3; do
+  roteiro "$n" 'psql:/b.sql:9000: server closed the connection unexpectedly
+psql:/b.sql:9000: connection to server was lost' 2
+done
+rodar
+check "conexão que cai em todas as passadas devolve falha" e_igual "$(rc)" 1
+check "  depois das 3 passadas" e_igual "$(passadas)" 3
+
 novo_caso docker-falha
 roteiro 1 'Unable to find image postgres:17-alpine locally' 125
 roteiro 2 ""
 rodar
 check "saída 125 sem mensagem reconhecível devolve falha" e_igual "$(rc)" 1
 check "  sem nova passada (não é disputa)" e_igual "$(passadas)" 1
-check "  e o veredito diz que parou antes do fim, com o código" contem "$(inesperado)" "parou antes do fim do arquivo \(saída 125\)"
+check "  e o veredito diz que não chegou ao fim, com o código" contem "$(inesperado)" "não chegou ao fim do arquivo \(o psql saiu com código 125\)"
 
 echo "── 5. Ruído benigno não é aviso nem motivo para aplicar de novo"
 novo_caso benigno
@@ -162,6 +184,39 @@ check "devolve sucesso" e_igual "$(rc)" 0
 check "uma passada só" e_igual "$(passadas)" 1
 check "veredito vazio" e_igual "$(inesperado)" ""
 check "a tela não fala em aplicar de novo" nao_contem "$(cat "$WORK/tela")" "aplicando de novo"
+
+echo "── 6. Lista de erros maior que o buffer do pipe (pipefail) não cega a função"
+# Uma role sem dono gera milhares de "must be owner". Com `printf | grep -q`, o
+# grep achava o deadlock na 1ª linha e saía; o printf levava SIGPIPE e, sob
+# pipefail, o pipeline virava falha — a disputa deixava de ser reconhecida.
+novo_caso lista-grande
+GRANDE="$(printf '%s\n' "$DEADLOCK"; for i in $(seq 1 4000); do printf 'psql:/b.sql:%s: ERROR:  must be owner of table tabela_%s\n' "$i" "$i"; done)"
+roteiro 1 "$GRANDE"
+roteiro 2 ""
+check "o roteiro é mesmo maior que o buffer de um pipe (64 KB)" test "$(wc -c < "$ROTEIRO/passada.1" | tr -d ' ')" -gt 65536
+rodar
+check "a disputa no topo de uma lista grande ainda é reconhecida (aplicou de novo)" e_igual "$(passadas)" 2
+check "  e a 2ª passada limpa devolve sucesso" e_igual "$(rc)" 0
+
+echo "── 7. Conexão que nem abre: nova passada, e o veredito cita a causa"
+novo_caso conexao-recusada
+# Saída real do psql 17 com o servidor parado (medida em 2026-09-16).
+RECUSADA='psql: error: connection to server at "db.exemplo" (192.168.65.254), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "db.exemplo" (fdc4:f303:9324::254), port 5432 failed: Network unreachable
+	Is the server running on that host and accepting TCP/IP connections?'
+roteiro 1 "$RECUSADA" 2
+roteiro 2 ""
+rodar
+check "servidor que recusa a conexão vira nova passada" e_igual "$(passadas)" 2
+check "  e, no ar na 2ª, devolve sucesso" e_igual "$(rc)" 0
+
+novo_caso conexao-recusada-sempre
+for n in 1 2 3; do roteiro "$n" "$RECUSADA" 2; done
+rodar
+check "recusada nas 3 passadas devolve falha" e_igual "$(rc)" 1
+check "  o veredito cita a causa (Network unreachable)" contem "$(inesperado)" "não chegou ao fim do arquivo \(o psql saiu com código 2\): connection to server .*Network unreachable"
+check "  e não a linha de dica do psql" nao_contem "$(inesperado)" "Is the server running"
 
 if [ "$FAILS" -gt 0 ]; then printf '\n%d falha(s)\n' "$FAILS"; exit 1; fi
 printf '\ntudo verde\n'

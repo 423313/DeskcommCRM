@@ -269,7 +269,13 @@ BASELINE_ROTEIRO="$ROTEIRO_UG" BASELINE_ESPERA_S=0 run_update --to v1.1.0 --forc
 check "a atualização termina com sucesso" test "$RC" -eq 0
 check "o update.sh aplicou o baseline duas vezes" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 2
 check "e diz ✓ banco atualizado" grep -q "✓ banco atualizado" "$OUTFILE"
+check "  contando que foi na 2ª passada (o ✓ depois de disputa não é mudo)" grep -q "✓ banco atualizado na passada 2" "$OUTFILE"
 check "  sem o aviso de banco" test -z "$(grep 'NÃO são os esperados' "$OUTFILE" || true)"
+check "  e o fim diz Atualização concluída" grep -q "✓ Atualização concluída" "$OUTFILE"
+# Com --force na mesma tag ninguém conferiu a imagem: a frase antiga ("o app está
+# rodando uma imagem antiga") mentia justo para quem seguiu a dica de repetir.
+check "--force na mesma tag diz que está refazendo, sem inventar imagem antiga" grep -q "Refazendo a versão v1.1.0" "$OUTFILE"
+check "  (a frase da imagem antiga não aparece)" test -z "$(grep 'imagem antiga' "$OUTFILE" || true)"
 
 rm -rf "$ROTEIRO_UG"; mkdir -p "$ROTEIRO_UG"
 for n in 1 2 3; do printf '%s\n' "$DEADLOCK_UG" > "$ROTEIRO_UG/passada.$n"; done
@@ -281,6 +287,24 @@ check "  a tela mostra o deadlock" grep -q "deadlock detected" "$OUTFILE"
 # Sem --force, repetir o update.sh responderia "já está na versão mais recente"
 # e não tocaria no banco.
 check "  e ensina a repetir de um jeito que re-aplica" grep -qF "update.sh --to v1.1.0 --force" "$OUTFILE"
+# Na v1.27.3 de uma VPS real o aviso do passo 4 ficou soterrado pelo docker pull,
+# e a última frase da tela era "Atualização concluída".
+check "  o FIM da tela repete que o banco NÃO terminou limpo" grep -q "banco NÃO terminou limpo" "$OUTFILE"
+check "  e não diz Atualização concluída" test -z "$(grep 'Atualização concluída' "$OUTFILE" || true)"
+check "  a dica aparece no passo do banco E no fim" test "$(grep -cF 'update.sh --to v1.1.0 --force' "$OUTFILE")" -eq 2
+
+# Lista grande (role sem dono: milhares de "must be owner") com a disputa no topo.
+# `printf | head -20` sob pipefail levava SIGPIPE e o set -e matava o update.sh
+# com 141 — antes do aviso de PERMISSÃO, que existe para este caso, e antes do pull.
+rm -rf "$ROTEIRO_UG"; mkdir -p "$ROTEIRO_UG"
+{ printf '%s\n' "$DEADLOCK_UG"; for i in $(seq 1 4000); do printf 'psql:/b.sql:%s: ERROR:  must be owner of table tabela_%s\n' "$i" "$i"; done; } > "$ROTEIRO_UG/passada.1"
+cp "$ROTEIRO_UG/passada.1" "$ROTEIRO_UG/passada.2"; cp "$ROTEIRO_UG/passada.1" "$ROTEIRO_UG/passada.3"
+: > "$DOCKER_LOG"
+BASELINE_ROTEIRO="$ROTEIRO_UG" BASELINE_ESPERA_S=0 run_update --to v1.1.0 --force
+check "lista de erros maior que o buffer do pipe não mata o update.sh" test "$RC" -eq 0
+check "  a disputa no topo foi reconhecida (3 passadas)" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 3
+check "  o aviso de PERMISSÃO chegou à tela" grep -q "Os erros são de PERMISSÃO" "$OUTFILE"
+check "  e o fim diz que o banco NÃO terminou limpo" grep -q "banco NÃO terminou limpo" "$OUTFILE"
 
 # ── Clone RASO: a topologia que o install.sh realmente entrega ───────────────
 # `install.sh` instala com `git clone --depth 1`. Num repositório raso o

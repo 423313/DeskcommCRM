@@ -66,6 +66,19 @@ seu pooler; o instalador testa a conexão de verdade, então o erro aparece na h
 `baseline.sql` é re-aplicado inteiro e é idempotente; o `update.sh` filtra esse ruído e só alerta
 erro de verdade.
 
+**"deadlock detected" ou "connection to server was lost" ao atualizar.** O banco perdeu uma disputa
+com o CRM no ar, ou a conexão caiu. Quem atualiza a partir de uma versão que já tem a nova passada
+(posterior à v1.28.0) vê o `update.sh` aplicar de novo sozinho, até 3 passadas; só sobra aviso se não
+curar, e aí o fim da saída diz "banco NÃO terminou limpo" e mostra
+`bash hostgator-setup-kit/update.sh --to <tag> --force` — repetir num horário calmo completa o banco
+(refaz a atualização inteira, com backup). Não restaure o backup por causa disso. Pelo botão da tela
+o aviso não aparece: leia `.update.log` na pasta do projeto.
+
+**Três "could not create unique index" (`ai_kbv_version_unique`, `ai_kbv_one_active_per_agent`,
+`ai_knowledge_sources_unique_per_agent`).** Aviso falso de atualizações até a v1.28.0, quando um
+agente tem mais de um material no acervo: o instalador tentava recriar regras antigas que ele mesmo
+apaga logo depois. Nenhum dado está errado — não apague nada. Some na atualização seguinte.
+
 **Seletor de modelo vazio ao criar agente de IA.** O seed de modelos não entrou (instalação antiga).
 `bash hostgator-setup-kit/update.sh` re-aplica o baseline, que traz o insert.
 

@@ -176,8 +176,11 @@ turn off things you already have); `--force` exists for that, deliberately.
 
 **Normal things you will see:** a pile of `already exists` / `multiple primary keys` during the
 database step — **expected and harmless**, those are things that already existed. The script
-filters that noise and prints `✓ banco atualizado`. If you see `⚠ avisos que não são os
-esperados`, that one is worth keeping.
+filters that noise and prints `✓ banco atualizado`. If the database is busy with the CRM serving
+customers, it applies again on its own (up to 3 passes) and says so. If you see
+`⚠ Apareceram avisos no banco que NÃO são os esperados`, that one is worth keeping — and if the end
+of the output says the database did not finish clean, run the command it shows
+(`update.sh --to <version> --force`) before considering a backup restore.
 
 **Something went wrong?** `bash hostgator-setup-kit/restore.sh` returns to the backup.
 **Just want a diagnosis?** `bash hostgator-setup-kit/healthcheck.sh`.

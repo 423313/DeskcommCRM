@@ -32,9 +32,14 @@ recente**, é porque não havia nada novo pra baixar; está tudo certo.
 - **Um monte de linhas com "already exists" / "multiple primary keys"** durante a parte
   do banco: **é esperado e inofensivo** — são coisas que já existiam. O comando filtra
   esse ruído e, se estiver tudo certo, mostra **`✓ banco atualizado`**.
-- Se aparecer **`⚠ avisos que não são os esperados`**, aí sim vale prestar atenção: o app
-  provavelmente ainda funciona, mas guarde a mensagem. Em último caso, dá pra voltar ao
-  estado anterior com o backup: `bash hostgator-setup-kit/restore.sh`.
+- Se o banco estiver ocupado com o CRM atendendo, o comando **aplica de novo sozinho** (até
+  3 passadas) e mostra na tela o que precisou refazer. Isso é normal.
+- Se aparecer **`⚠ Apareceram avisos no banco que NÃO são os esperados`**, aí sim vale prestar
+  atenção: o app provavelmente ainda funciona, mas guarde a mensagem. Se o fim da saída disser
+  que **o banco NÃO terminou limpo**, rode, num horário de pouco movimento, o comando que ela
+  mostra (`bash hostgator-setup-kit/update.sh --to <versão> --force`) — ele repete a
+  atualização e completa o banco. Só em último caso volte ao estado anterior com o backup:
+  `bash hostgator-setup-kit/restore.sh`.
 
 ## Dicas
 

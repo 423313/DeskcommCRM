@@ -1812,7 +1812,9 @@ if [ -f supabase/baseline.sql ]; then
       c_grn "✓ schema re-aplicado (apêndice de migrations incluído)"
     else
       c_ylw "⚠ Erros no banco que NÃO são os esperados (log completo: $SCHEMA_LOG):"
-      printf '%s\n' "$BASELINE_INESPERADO" | head -20
+      # `sed -n`, e não `| head`: com pipefail, o head que fecha cedo mata o printf
+      # com SIGPIPE numa lista grande, e o set -e derrubava o instalador aqui.
+      sed -n '1,20p' <<<"$BASELINE_INESPERADO"
     fi
   else
     if docker run --rm -i -v "$PROJECT_DIR/supabase/baseline.sql:/baseline.sql:ro" \

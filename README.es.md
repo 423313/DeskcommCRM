@@ -176,8 +176,11 @@ cosas que ya tienes); para eso existe `--force`, a propósito.
 
 **Cosas normales que vas a ver:** un montón de `already exists` / `multiple primary keys` en la
 parte de la base — **es esperado e inofensivo**, son cosas que ya existían. El script filtra ese
-ruido y muestra `✓ banco atualizado`. Si aparece `⚠ avisos que não são os esperados`, ahí sí
-guarda el mensaje.
+ruido y muestra `✓ banco atualizado`. Si la base está ocupada con el CRM atendiendo, la aplica de
+nuevo sola (hasta 3 pasadas) y lo dice en pantalla. Si aparece
+`⚠ Apareceram avisos no banco que NÃO são os esperados`, ahí sí guarda el mensaje — y, si el final
+de la salida dice que la base no terminó limpia, ejecuta el comando que muestra
+(`update.sh --to <versión> --force`) antes de pensar en restaurar el backup.
 
 **¿Salió mal?** `bash hostgator-setup-kit/restore.sh` vuelve al backup.
 **¿Solo quieres diagnosticar?** `bash hostgator-setup-kit/healthcheck.sh`.
