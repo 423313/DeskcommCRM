@@ -1445,6 +1445,7 @@ export const DICIONARIO: Traducoes = {
   "é pelo menos": { es: "es al menos" },
   "é no máximo": { es: "es como máximo" },
   "tem a etiqueta": { es: "tiene la etiqueta" },
+  "tem a tag": { es: "tiene la etiqueta" },
   "não tem a etiqueta": { es: "no tiene la etiqueta" },
   "é exatamente": { es: "es exactamente" },
   "não é": { es: "no es" },

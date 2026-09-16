@@ -36,13 +36,29 @@ describe("evaluateConditions", () => {
     expect(
       evaluateConditions([{ field: "event.added_tags", op: "contains", value: "Google" }], comTags(["google"])),
     ).toBe(true));
-  it("contém em lista: casa a tag que contém o texto", () =>
+  // Os dois casos abaixo eram POSITIVOS na primeira versão do #957 ("pedaço da
+  // tag"). O dono escolheu pertinência: a regra que o operador escreveu para
+  // `Google` não passa a alcançar quem tem `Google Ads`. São o controle que
+  // separa a decisão (B) da (A) — sem eles, "casa a caixa diferente" sozinho é
+  // satisfeito pelas duas.
+  it("contém em lista: NÃO casa pedaço de tag", () =>
     expect(
       evaluateConditions([{ field: "event.added_tags", op: "contains", value: "Google" }], comTags(["Google Ads"])),
-    ).toBe(true));
-  it("contém em lista: casa com o texto no meio da tag", () =>
+    ).toBe(false));
+  it("contém em lista: NÃO casa o texto no meio da tag", () =>
     expect(
       evaluateConditions([{ field: "event.added_tags", op: "contains", value: "google" }], comTags(["tráfego google"])),
+    ).toBe(false));
+  it("contém em lista: NÃO casa prefixo de outra tag", () =>
+    expect(
+      evaluateConditions([{ field: "event.added_tags", op: "contains", value: "vip" }], comTags(["vip ouro"])),
+    ).toBe(false));
+  it("contém em TEXTO continua sendo contém", () =>
+    expect(
+      evaluateConditions(
+        [{ field: "event.event_type_name", op: "contains", value: "manutenção" }],
+        { event: { event_type_name: "Manutenção preventiva" } },
+      ),
     ).toBe(true));
   it("contém em lista: NÃO casa tag sem relação", () =>
     expect(

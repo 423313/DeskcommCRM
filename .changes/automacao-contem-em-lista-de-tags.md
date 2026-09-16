@@ -1,10 +1,6 @@
 ---
-impacto: exige_acao
+impacto: nada_mudou
 secao: corrigido
-titulo: Automação com condição "contém" passa a funcionar nas tags
+titulo: Automação com condição de tag passa a funcionar quando a caixa difere
 ---
-Numa automação, a condição "contém" sobre tags só disparava quando o texto digitado era idêntico à tag, maiúsculas incluídas: a regra "tag adicionada contém Google" não rodava para a tag "google" nem para "Google Ads". Agora "contém" vale por tag e não diferencia maiúsculas, igual ao que o mesmo operador já fazia em campos de texto. Crédito: @rafaelbatistazz.
-
-## Requer atenção
-
-Revise as automações que usam "contém" sobre tags (tag adicionada, tags do contato, tags do lead). Elas passam a disparar em mais casos: uma condição "contém vip" agora também pega a tag "vip ouro", e "contém google" pega "tráfego google". Nos campos de tag o editor de regras só oferece "contém", então quem precisa de correspondência exata deve escrever um texto que não seja prefixo de outra tag, ou renomear as tags parecidas.
+Numa automação, a condição sobre tags só disparava quando o texto digitado era idêntico à tag, maiúsculas incluídas: a regra escrita para "Google" não rodava para a tag "google", que é exatamente como o Inbox grava toda tag de contato. A regra existia, aparecia ativa na tela e nunca acontecia. Agora a condição compara a tag inteira sem diferenciar maiúsculas — "Google" pega "google" e continua não pegando "Google Ads", que é outra tag. Nada que funcionava antes deixa de funcionar, e nenhuma regra passa a alcançar quem não alcançava. Na tela de regras, o operador desses campos passa a se chamar "tem a tag", que é o que ele faz.
