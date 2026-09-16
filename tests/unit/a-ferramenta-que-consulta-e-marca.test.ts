@@ -186,6 +186,68 @@ describe("crm_find_and_book_appointment", () => {
     expect(String(r.mensagem)).not.toContain("crm_find_free_slots");
     expect(String(r.mensagem)).toContain("desta mesma resposta");
   });
+  it("agenda externa NUNCA sincronizada: o sinal chega ao modelo, e a marcação sai com ressalva", async () => {
+    // O campo existe em `ResultadoDaConsulta` desde sempre e chegava SÓ à rota
+    // REST: as duas tools publicavam `fontes_defasadas` e engoliam este, que é o
+    // mais grave. "Nunca sincronizou" significa que a lista de ocupados pode
+    // estar vazia por ninguém ter perguntado — e agora o "livre" vira gravação na
+    // mesma chamada, sem uma segunda decisão do modelo no meio.
+    vi.mocked(horariosLivresDaOrg).mockResolvedValue({ ...SUCESSO, agendaExternaNuncaLida: true });
+    // Compromisso que ainda aguarda aprovação: a marcação JÁ produz mensagem
+    // própria, e é sobre ela que a ressalva precisa ACRESCENTAR — sobrescrever
+    // perderia o aviso de que ninguém confirmou ainda.
+    vi.mocked(handlers.marcarAgendamentoHandler).mockResolvedValue({
+      ...COMPROMISSO,
+      status: "pending",
+    } as never);
+
+    const r = (await crmFindAndBookAppointment.handler(
+      { event_type_slug: "consulta", dia: "2026-09-01", horario: "14:00", contact_id: CONTATO },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(r.marcado).toBe(true);
+    expect(r.agenda_externa_nunca_lida).toBe(true);
+    expect(String(r.mensagem)).toContain("O horário ficou RESERVADO");
+    expect(String(r.mensagem)).toContain("nunca foi sincronizada");
+    expect(String(r.mensagem)).toContain("não afirme que está confirmado");
+  });
+
+  it("agenda externa nunca lida SEM aviso da marcação: a ressalva vira a mensagem inteira", async () => {
+    vi.mocked(horariosLivresDaOrg).mockResolvedValue({ ...SUCESSO, agendaExternaNuncaLida: true });
+
+    const r = (await crmFindAndBookAppointment.handler(
+      { event_type_slug: "consulta", dia: "2026-09-01", horario: "14:00", contact_id: CONTATO },
+      ctx,
+    )) as Record<string, unknown>;
+
+    // Compromisso confirmado não produz `mensagem` nenhuma (ver `crmBookAppointment`):
+    // a ressalva não pode depender de haver texto anterior para se pendurar.
+    expect(String(r.mensagem)).toContain("nunca foi sincronizada");
+    expect(String(r.mensagem).startsWith(" ")).toBe(false);
+  });
+
+  it("agenda saudável: nenhuma ressalva é inventada", async () => {
+    const r = (await crmFindAndBookAppointment.handler(
+      { event_type_slug: "consulta", dia: "2026-09-01", horario: "14:00", contact_id: CONTATO },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(r.agenda_externa_nunca_lida).toBe(false);
+    expect(String(r.mensagem ?? "")).not.toContain("nunca foi sincronizada");
+  });
+
+  it("a recusa também publica o sinal: a lista de horários vem da mesma consulta", async () => {
+    vi.mocked(horariosLivresDaOrg).mockResolvedValue({ ...SUCESSO, agendaExternaNuncaLida: true });
+    const r = (await crmFindAndBookAppointment.handler(
+      { event_type_slug: "consulta", dia: "2026-09-01", horario: "09:00", contact_id: CONTATO },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(r.marcado).toBe(false);
+    expect(r.agenda_externa_nunca_lida).toBe(true);
+  });
+
 });
 
 describe("temFerramentaDeMarcacao (#831)", () => {

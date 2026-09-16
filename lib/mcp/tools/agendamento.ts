@@ -248,7 +248,30 @@ function payloadDeHorarios(
     fuso_suposto: consulta.fusoSuposto,
     /** Agendas externas que não estão saudáveis: o horário pode estar defasado. */
     fontes_defasadas: consulta.fontesDefasadas,
+    /**
+     * NENHUMA conexão viva jamais sincronizou — a lista de ocupados pode estar
+     * vazia porque ninguém perguntou, não porque a agenda está livre.
+     *
+     * O campo existia em `ResultadoDaConsulta` desde sempre e chegava SÓ à rota
+     * REST (`app/api/v1/agenda/horarios-livres`): as duas tools MCP publicavam
+     * `fontes_defasadas` e engoliam este, que é o mais grave dos dois. O próprio
+     * comentário que o declara (lib/agenda/consulta.ts) diz que quem mais precisa
+     * dele é a IA — "um agente que o oferece MARCA por cima da cirurgia e confirma
+     * ao cliente" —, e com a ferramenta conjunta da #831 isso deixou de ser uma
+     * segunda decisão do modelo: virou escrita na mesma chamada.
+     */
+    agenda_externa_nunca_lida: consulta.agendaExternaNuncaLida,
   };
+}
+
+/** A ressalva de agenda nunca sincronizada, ACRESCENTADA à mensagem da marcação. */
+function comRessalvaDeAgendaNuncaLida(resultado: unknown): string {
+  const original = String((resultado as { mensagem?: unknown } | null)?.mensagem ?? "").trim();
+  const ressalva =
+    "A agenda externa deste atendente nunca foi sincronizada, então pode haver compromisso " +
+    "que não aparece aqui. Diga que separou o horário e que a equipe confirma — não afirme " +
+    "que está confirmado.";
+  return original.length > 0 ? `${original} ${ressalva}` : ressalva;
 }
 
 export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
@@ -755,6 +778,15 @@ export const crmFindAndBookAppointment: McpToolDefinition<typeof consultarEMarca
       // de dentro de `compromisso` o que ele mesmo pediu.
       inicio: achado.inicio.toISOString(),
       quando: rotuloLocal(achado.inicio, consulta.fusoDaRegra),
+      agenda_externa_nunca_lida: consulta.agendaExternaNuncaLida,
+      // ⚠️ A ressalva vai JUNTO da confirmação, e concatenada — não por cima. O
+      // texto que `resultado` traz é o da marcação ("marquei tal dia"), e é ele
+      // que o modelo repete ao cliente; sobrescrever perderia o que foi marcado.
+      // Recusar a marcação nesse estado é decisão do dono do produto, não um
+      // ajuste de consistência: hoje a ferramenta marca.
+      ...(consulta.agendaExternaNuncaLida
+        ? { mensagem: comRessalvaDeAgendaNuncaLida(resultado) }
+        : {}),
     };
   },
 };
