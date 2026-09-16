@@ -7,7 +7,7 @@
  *  · #911 — excluir pelo menu do próprio card, no desktop e no TOQUE
  *  · #948 — tag em lote oferecendo as tags que já existem
  */
-import { test, type Page } from "@playwright/test";
+import { test } from "@playwright/test";
 
 import {
   admin,
@@ -27,7 +27,7 @@ const MOTIVOS = ["Sem orçamento", "Fora do perfil"];
 
 let c: Creds;
 let pipelineId = "";
-let etapas: Record<string, string> = {};
+const etapas: Record<string, string> = {};
 const leads: Record<string, string> = {};
 
 async function limpar(): Promise<void> {
