@@ -3037,13 +3037,25 @@ async function executarTurnoDoAgente(
                 etapaDeDestino: update.transition.to,
               });
               if (aviso) {
-                await insertInboxItem(pool, tenantId, {
-                  kind: 'other',
-                  title: aviso.title,
-                  body: aviso.body,
-                  refKind: 'lead',
-                  refId: leadId,
-                });
+                // DEDUPE por (kind, ref, título): o assistente reconclui o mesmo
+                // passo a cada turno, e sem isto nasce uma linha idêntica por
+                // turno — que é a queixa da #917 com outra roupa (N cópias
+                // enterram o item que pedia decisão). Por `kind_e_ref` só, o
+                // aviso de escopo e o de perda sem motivo do MESMO lead se
+                // engoliriam: mesmo `kind` genérico, mesma `ref`, textos
+                // opostos.
+                await insertInboxItem(
+                  pool,
+                  tenantId,
+                  {
+                    kind: 'other',
+                    title: aviso.title,
+                    body: aviso.body,
+                    refKind: 'lead',
+                    refId: leadId,
+                  },
+                  'kind_ref_e_titulo',
+                );
               }
             }
           }

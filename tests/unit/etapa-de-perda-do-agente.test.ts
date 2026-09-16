@@ -46,6 +46,36 @@ describe("o resolvedor do agente e a etapa de perda (#917)", () => {
     expect(destino).toEqual({ move: false, motivo: "perda_sem_motivo", passo: "lost" });
   });
 
+  it("negócio que JÁ tem motivo gravado: o agente MOVE — a pergunta é a mesma do arrasto", () => {
+    // Um negócio perdido e reaberto conserva o `lost_reason`:
+    // `fn_crm_lead_close_on_stage` devolve `status = 'open'` e não limpa a coluna
+    // (supabase/baseline.sql). Nesse estado o humano arrasta o card de volta para
+    // "Perdido" sem que nada pergunte nada — `decideMotivoDaPerda` libera quem já
+    // tem motivo. O agente recusava o MESMO card, e a divergência virava aviso na
+    // Central de um negócio que não tinha problema nenhum.
+    const destino = resolveDestinoDoAgente(
+      funilDaClinica(),
+      "lost",
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "price",
+    );
+    expect(destino).toEqual({
+      move: true,
+      stageId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      stageName: "Perdido",
+    });
+  });
+
+  it("motivo em branco NÃO conta como motivo", () => {
+    const destino = resolveDestinoDoAgente(
+      funilDaClinica(),
+      "lost",
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "   ",
+    );
+    expect(destino).toEqual({ move: false, motivo: "perda_sem_motivo", passo: "lost" });
+  });
+
   it("etapa COMUM continua movendo (a recusa não virou bloqueio geral)", () => {
     const destino = resolveDestinoDoAgente(
       funilDaClinica(),
