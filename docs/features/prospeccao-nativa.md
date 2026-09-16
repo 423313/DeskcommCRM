@@ -25,3 +25,11 @@ Há uma campanha ativa por organização, até 50 tentativas em 24 horas no conj
 Entrada: administrador e pesquisa → `prospecting_campaigns/candidates`. Saída: `createContactHandler`, `createLeadHandler`, `sendMessageHandler` e turno do agente no Inbox. Comandos emitem `prospecting.changed`; cadastro e atendimento conservam as atividades canônicas. Resultados, erros e próximos envios aparecem em `/app/prospecting`, registrado no catálogo de navegação. A falha pausa a fila e exige revisão, e o resultado da conversa altera o estado exibido. A continuidade humana e IA usa o Inbox existente. Não responder não inicia novas insistências automaticamente; o operador revisa o histórico para decidir o próximo passo.
 
 Mapa: `docs/architecture/prospeccao-nativa.architecture.json`.
+
+### Anonimização e nova extração
+
+A anonimização canônica do contato também limpa telefone, endereço, e-mails,
+links e enriquecimento do candidato e o retira da fila. Tokens pseudônimos,
+restritos ao servidor e nunca devolvidos pela API, impedem reimportar a mesma
+origem ou telefone na organização. A exclusão de dados no provedor de busca
+segue o processo próprio desse provedor.

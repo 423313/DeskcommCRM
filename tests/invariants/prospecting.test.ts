@@ -55,3 +55,53 @@ describe("prospecting tenant boundary and durable deduplication", () => {
     ).toThrow();
   });
 });
+
+describe("prospecting contact erasure", () => {
+  it("redacts discovery data, stops outreach, isolates tenants and refuses re-import", () => {
+    const contact = "30000000-0000-4000-8000-000000000011";
+    sql(`insert into contacts(id,organization_id,name,phone_number) values ('${contact}','${a}','Pessoa Teste','+5511988880000');
+      insert into prospecting_candidates(organization_id,campaign_id,place_id,phone,data,status,contact_id,error)
+      values ('${a}','${campaignA}','erase-place','+5511988880000','{"name":"Pessoa Teste","emails":["pessoa@example.test"],"address":"Rua Teste"}','queued','${contact}','Pessoa Teste');
+      select fn_lgpd_cascade_redact_contact('${a}','${contact}',gen_random_uuid());`);
+    const erased = JSON.parse(
+      sql(
+        `select json_build_object('phone',phone,'data',data,'status',status,'error',error,'place_id',place_id,'salt_bytes',octet_length(suppression_salt)) from prospecting_candidates where contact_id='${contact}' and organization_id='${a}'`,
+      ),
+    );
+    expect(erased).toMatchObject({
+      phone: null,
+      status: "skipped",
+      error: null,
+      salt_bytes: 32,
+      data: { emails: [], socials: [], address: null, phone: null },
+    });
+    expect(erased.place_id).toMatch(/^redacted:/);
+    expect(JSON.stringify(erased)).not.toMatch(
+      /Pessoa Teste|pessoa@example|Rua Teste|5511988880000/,
+    );
+    expect(
+      sql(
+        `select fn_lgpd_cascade_redact_contact('${a}','${contact}',gen_random_uuid())->>'already_anonymized'`,
+      ),
+    ).toBe("true");
+    sql(`insert into prospecting_candidates(organization_id,campaign_id,place_id,phone,data) values
+      ('${a}','${campaignA}','erase-place','+5511977770000','{}'),
+      ('${a}','${campaignA}','different-erase-place','+5511988880000','{}'),
+      ('${b}','${campaignB}','erase-place','+5511988880000','{}');`);
+    expect(
+      sql(
+        `select count(*) from prospecting_candidates where organization_id='${a}' and (place_id in ('erase-place','different-erase-place') or phone='+5511988880000')`,
+      ),
+    ).toBe("0");
+    expect(
+      sql(
+        `select count(*) from prospecting_candidates where organization_id='${b}' and place_id='erase-place' and phone='+5511988880000'`,
+      ),
+    ).toBe("1");
+    expect(
+      sql(
+        `select data->>'name' from prospecting_candidates where organization_id='${a}' and contact_id='${contact}'`,
+      ),
+    ).toMatch(/^Cliente Anonimizado/);
+  });
+});
