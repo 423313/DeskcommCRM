@@ -8081,6 +8081,26 @@ export const DICIONARIO: Traducoes = {
   // novo e as duas razões que não dependem do nome do funil.
   "Veio de outro funil": { es: "Vino de otro embudo" },
   "Levado para outro funil": { es: "Llevado a otro embudo" },
+  // As recusas da troca de funil (lib/leads/clonar-para-funil.ts e a rota).
+  "O negócio já está neste funil. Para trocar de etapa use /api/v1/leads/[id]/move.": {
+    es: "El negocio ya está en este embudo. Para cambiar de etapa usa /api/v1/leads/[id]/move.",
+  },
+  "Só um negócio aberto pode ser levado para outro funil.": {
+    es: "Solo un negocio abierto puede llevarse a otro embudo.",
+  },
+  "A etapa não pertence ao funil de destino.": {
+    es: "La etapa no pertenece al embudo de destino.",
+  },
+  "A etapa de destino é de fechamento: escolha uma etapa aberta do funil.": {
+    es: "La etapa de destino es de cierre: elige una etapa abierta del embudo.",
+  },
+  "O funil de destino não tem etapa aberta para receber o negócio.": {
+    es: "El embudo de destino no tiene etapa abierta para recibir el negocio.",
+  },
+  "Funil de destino não encontrado.": { es: "Embudo de destino no encontrado." },
+  "O funil de origem não tem etapa de perda para encerrar o negócio.": {
+    es: "El embudo de origen no tiene etapa de pérdida para cerrar el negocio.",
+  },
 
   // ─── Fase B: vocabulario de dominio persistido (reason de crm_lead_activities) ───
   //

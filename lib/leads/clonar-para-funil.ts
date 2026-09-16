@@ -68,6 +68,13 @@ export interface EtapaDoFunil {
 export const RECUSA_DE_TROCA_DE_FUNIL =
   "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.";
 
+/** Recusa da rota quando o funil de destino não existe na organização. */
+export const FUNIL_DE_DESTINO_NAO_ENCONTRADO = "Funil de destino não encontrado.";
+
+/** Recusa da rota quando a origem não tem onde fechar (antes de criar o clone). */
+export const ORIGEM_SEM_ETAPA_DE_PERDA =
+  "O funil de origem não tem etapa de perda para encerrar o negócio.";
+
 export interface Recusa {
   status: number;
   code: string;

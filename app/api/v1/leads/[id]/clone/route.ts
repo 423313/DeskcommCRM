@@ -29,6 +29,8 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import {
+  FUNIL_DE_DESTINO_NAO_ENCONTRADO,
+  ORIGEM_SEM_ETAPA_DE_PERDA,
   escolheEtapaDeDestino,
   montaPayloadDoClone,
   recusaTrocaDeFunil,
@@ -102,7 +104,7 @@ export async function POST(
       return fail("internal_error", pipeErr.message, 500, { requestId });
     }
     if (!pipelineDestino) {
-      return fail("pipeline_not_found", t("Funil de destino não encontrado."), 404, { requestId });
+      return fail("pipeline_not_found", t(FUNIL_DE_DESTINO_NAO_ENCONTRADO), 404, { requestId });
     }
 
     const recusa = recusaTrocaDeFunil(origem as OrigemParaClonar, input.pipeline_id);
@@ -189,7 +191,7 @@ export async function POST(
     if (!etapaDePerdaDaOrigem) {
       return fail(
         "pipeline_no_lost_stage",
-        t("O funil de origem não tem etapa de perda para encerrar o negócio."),
+        t(ORIGEM_SEM_ETAPA_DE_PERDA),
         422,
         { requestId },
       );
