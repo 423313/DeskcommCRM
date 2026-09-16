@@ -61,14 +61,18 @@ export type DestinoDoAgente =
    * falta uma AÇÃO HUMANA. O espelho o traduz em item de inbox acionável
    * (`perda_sem_motivo` em MIRROR_WARN_ONLY? não — ver lib/agent-engine/edge/crm).
    *
-   * ⚠️ O NEGÓCIO QUE JÁ TEM MOTIVO PASSA, e a simetria é o ponto. A pergunta é
-   * "esta escrita deixa o negócio perdido SEM motivo?", não "o destino é etapa
-   * de perda?" — e quem responde é `decideMotivoDaPerda`, a mesma função do
-   * arrasto e do lote. Enquanto aqui a pergunta era só `etapaDePerda`, um card
-   * reaberto (o gatilho `fn_crm_lead_close_on_stage` devolve `status = 'open'` e
-   * NÃO limpa o `lost_reason`) podia ser arrastado de volta para "Perdido" por um
-   * humano, sem perguntar nada, e era recusado pelo agente — mesmo card, mesmo
-   * destino, duas respostas, e uma delas virando aviso na Central.
+   * ⚠️ O MOTIVO QUE JÁ ESTÁ NA LINHA NÃO AUTORIZA O AGENTE — e aqui o agente
+   * responde diferente do arrasto e do lote, de propósito. Os dois humanos
+   * passam `motivoAtual` a `decideMotivoDaPerda`; o agente não passa. Medido no
+   * schema, e não suposto: o agente só trabalha negócio ABERTO
+   * (`resolveActiveLeadForContact`) e só existe UMA etapa de perda por funil
+   * (`uniq_crm_stages_pipeline_lost`). Então o único negócio com motivo gravado
+   * que ele pode levar à etapa de perda é o REABERTO — `fn_crm_lead_close_on_stage`
+   * devolve `status = 'open'` e não limpa `lost_reason`. Mover esse card fecharia
+   * a perda NOVA com a causa da perda ANTERIOR: "preço", gravado meses atrás, sem
+   * ninguém ter afirmado nada sobre esta. É a causa inventada do parágrafo de
+   * cima, entrando pela porta do dado velho. Quem arrasta vê o card e decide; o
+   * agente não vê o que mudou desde a primeira perda.
    */
   | { move: false; motivo: "perda_sem_motivo"; passo: string };
 
@@ -89,20 +93,14 @@ export function resolveDestinoDoAgente(
   estagios: EstagioCandidato[],
   passo: string,
   estagioAtualId: string,
-  /**
-   * O `lost_reason` que o negócio JÁ tem. Opcional porque ausente e vazio
-   * respondem a mesma coisa; quem lê do banco sempre carrega a coluna.
-   */
-  motivoAtual?: string | null,
 ): DestinoDoAgente {
   const alvo = estagios.find((e) => !e.is_archived && e.agent_stage_hint === passo);
   if (!alvo) return { move: false, motivo: "sem_mapeamento", passo };
   if (alvo.id === estagioAtualId) return { move: false, motivo: "ja_esta_la", passo };
-  // A pergunta — "esta escrita deixa o negócio perdido SEM motivo?" — é a MESMA
-  // dos outros dois caminhos (arrasto e lote) e mora num só lugar (issue #917).
-  // O agente não MANDA motivo (ver `perda_sem_motivo` acima), então só o que já
-  // está na linha pode autorizar a escrita.
-  const veredito = decideMotivoDaPerda({ etapaDeDestino: alvo, motivoAtual });
+  // A decisão é a MESMA função do arrasto e do lote (issue #917) — sem motivo e
+  // SEM `motivoAtual`: o agente não manda motivo, e o que está na linha é o da
+  // perda anterior de um negócio reaberto (ver `perda_sem_motivo` acima).
+  const veredito = decideMotivoDaPerda({ etapaDeDestino: alvo });
   if (!veredito.ok) return { move: false, motivo: "perda_sem_motivo", passo };
   return { move: true, stageId: alvo.id, stageName: alvo.name };
 }
@@ -213,12 +211,7 @@ export async function sincronizaEstagioDoAgente(
   // Supabase indistinguível do estado normal de um contato sem negócio aberto.
   const { data: leadRows, error: erroLeads } = await admin
     .from("crm_leads")
-    // `lost_reason` entra porque a decisão de perda (#917) o consulta: um negócio
-    // reaberto conserva o motivo antigo, e é ele que autoriza o agente a devolvê-lo
-    // à etapa de perda sem inventar causa nenhuma.
-    .select(
-      "id, organization_id, pipeline_id, stage_id, status, lost_reason, created_at, last_activity_at",
-    )
+    .select("id, organization_id, pipeline_id, stage_id, status, created_at, last_activity_at")
     .eq("organization_id", input.organizationId)
     .eq("contact_id", input.contactId);
   if (erroLeads) {
@@ -230,7 +223,6 @@ export async function sincronizaEstagioDoAgente(
     pipeline_id: string;
     stage_id: string;
     status: string;
-    lost_reason: string | null;
     created_at: string;
     last_activity_at: string | null;
   }>;
@@ -288,7 +280,6 @@ export async function sincronizaEstagioDoAgente(
     (stageRows ?? []) as EstagioCandidato[],
     input.passo,
     lead.stage_id,
-    lead.lost_reason,
   );
   if (!destino.move) return { moveu: false, motivo: destino.motivo, leadId: lead.id };
 

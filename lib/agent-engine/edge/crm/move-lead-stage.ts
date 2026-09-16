@@ -144,7 +144,12 @@ export function avisoDoEspelhoRecusado(input: {
         `que no seu funil é uma etapa de perda. Perder um negócio exige um motivo, e o ` +
         `motivo é a razão que quem está no negócio reconhece — o assistente não inventa ` +
         `uma. Ninguém mexeu no card: ele continua onde estava. Se o negócio realmente se ` +
-        `perdeu, mova o card para "${etapaDeDestino}" no board e informe o motivo; ` +
+        // ⚠️ "Marcar como perdido", e não "mova o card": ARRASTAR para a etapa de
+        // perda não pede o motivo — o quadro devolve o card e avisa "Informe o
+        // motivo da perda.". Quem seguisse a instrução antiga batia nessa recusa. A
+        // ação do menu do card é a que pergunta o motivo, e leva à mesma etapa
+        // (só há uma etapa de perda por funil).
+        `perdeu, abra o card no funil, use "Marcar como perdido" e informe o motivo; ` +
         `se não, não há nada a fazer.`,
       dedupe: DEDUPE_DO_ESPELHO,
     };

@@ -29,6 +29,9 @@
  *     senão o conserto viraria um jeito de calar o funil quebrado;
  *  4. warn-only não produz item nenhum.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { avisoDoEspelhoRecusado } from "@/lib/agent-engine/edge/crm/move-lead-stage";
@@ -47,6 +50,28 @@ describe("a etapa de perda sem motivo vira AÇÃO para o humano, não incidente"
     expect(aviso!.title.toLowerCase()).toContain("perdido");
     expect(aviso!.title.toLowerCase()).toContain("motivo");
     expect(aviso!.body).toContain("informe o motivo");
+  });
+
+  it("a instrução leva à ação que PERGUNTA o motivo — não ao arrasto, que devolve o card", () => {
+    // Arrastar para a etapa de perda sem motivo é recusado pelo quadro ("Informe o
+    // motivo da perda.") e o card volta. O aviso mandava "mova o card no board":
+    // quem seguisse a instrução da Central batia exatamente nessa recusa.
+    const aviso = avisoDoEspelhoRecusado({
+      motivo: "perda_sem_motivo",
+      detalhe: "d",
+      etapaDeDestino: ETAPA,
+    });
+    const ACAO = "Marcar como perdido";
+
+    expect(aviso!.body).toContain(`"${ACAO}"`);
+    expect(aviso!.body).not.toMatch(/mova o card/i);
+    // O rótulo citado é CONTRATO com a tela: renomear o item do menu sem mexer
+    // aqui deixaria a Central mandando clicar num botão que não existe.
+    const menu = readFileSync(
+      join(process.cwd(), "components/kanban/KanbanCardActions.tsx"),
+      "utf8",
+    );
+    expect(menu).toContain(`t("${ACAO}")`);
   });
 
   it("o aviso NÃO se repete a cada turno — e não engole o irmão do mesmo negócio", () => {

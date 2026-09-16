@@ -25,10 +25,18 @@ import { CANONICAL_LOST_REASONS } from "@/lib/schemas/leads";
  * que a CHECK existe para impedir — e um erro entre as duas deixa o motivo
  * gravado na linha de um negócio que NÃO foi perdido.
  *
- * ⚠️ O motivo que o negócio JÁ tem vale. Trocar um card perdido de "Perdido" para
- * "Desistiu" não é uma perda nova: a CHECK é satisfeita pelo motivo que já está na
- * linha, e exigir um segundo motivo transformaria uma operação legítima que hoje
- * funciona numa recusa nova. Quem manda um motivo novo continua podendo corrigir.
+ * ⚠️ O motivo que o negócio JÁ tem vale — para quem ARRASTA. Reordenar um card
+ * dentro da coluna de perda não é uma perda nova: a CHECK é satisfeita pelo motivo
+ * que já está na linha, e exigir um segundo motivo transformaria uma operação
+ * legítima que hoje funciona numa recusa nova. Quem manda um motivo novo continua
+ * podendo corrigir. (Trocar "Perdido" por "Desistiu" NÃO é caso real, embora este
+ * parágrafo já o tenha dito: `uniq_crm_stages_pipeline_lost` admite UMA etapa de
+ * perda não arquivada por funil.)
+ *
+ * ⚠️ O AGENTE não usa essa licença: `resolveDestinoDoAgente`
+ * (lib/leads/agent-stage-sync.ts) chama esta decisão SEM `motivoAtual`. O único
+ * negócio com motivo gravado que ele alcança é o reaberto, e ali o motivo é o da
+ * perda anterior — o porquê completo está no tipo `perda_sem_motivo` de lá.
  *
  * ⚠️ O QUE NÃO ESTÁ AQUI: o ganho (`is_won`). Nenhuma CHECK e nenhum trigger
  * exigem campo nenhum para fechar como ganho — inventar uma exigência só para o
@@ -110,7 +118,7 @@ export function decideMotivoDaPerda(input: {
   etapaDeDestino: EtapaDeDestino | null | undefined;
   /** O motivo que ESTA operação mandou — o que o usuário digitou agora. */
   motivo?: string | null;
-  /** O motivo que o negócio já tem gravado (troca entre etapas de perda). */
+  /** O motivo que o negócio já tem gravado (card que já está na etapa de perda). */
   motivoAtual?: string | null;
   idioma?: Idioma | null;
 }): VereditoDoMotivoDaPerda {
