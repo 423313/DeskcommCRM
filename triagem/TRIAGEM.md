@@ -1169,21 +1169,30 @@ gh release list --limit 1                                # a release é a Latest
 
 # A vitrine lista, nos TRÊS idiomas. O href carrega o prefixo da PÁGINA, então o padrão
 # se monta com ele: trocar só a URL e manter `href="/changelog/..."` devolve 0 nas
-# páginas em en e es COM a versão listada. Cada linha tem de dar ≥1.
+# páginas em en e es COM a versão listada. Cada linha tem de dar http=200 e listada≥1.
+# O http= vai junto porque `listada=0` sozinho não distingue "não listou ainda" de
+# "essa página não existe" — num 404 a contagem também é 0.
 V=X.Y.Z
 for p in /changelog /en/changelog /es/changelog; do
-  echo "$p: $(curl -s "https://www.deskcomm.com.br$p" | grep -c "href=\"$p/$V\"")"
+  u="https://www.deskcomm.com.br$p"
+  echo "$p: http=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$u")" \
+       "listada=$(curl -s --max-time 30 "$u" | grep -c "href=\"$p/$V\"")"
 done
 
 # e as três imagens no digest da versão, contra `stable` — receita em
 # docs/runbooks/ativar-packaging.md
 ```
 
-**Deu 0? Repita antes de concluir qualquer coisa.** A página revalida a cada 10 minutos: o
-primeiro acesso depois da janela devolve a lista antiga e agenda a nova — a segunda visita já
-traz a versão. É a mesma razão pela qual o passo do `release.yml` repete a sonda em vez de
-conferir uma vez só. Se persistir, a ordem de investigação está em `docs/doctrine/versionamento.md`
-(seção "A vitrine").
+**Deu 0? Olhe o `http=` ANTES de repetir.** `http=404` não é janela de cache: é a página não
+existir, e nenhuma quantidade de repetição conserta isso. Nesse estado o 0 não fala da versão,
+fala do site — a vitrine sai de um PR do repositório `deskcomm-site`, e sem ele no ar o passo do
+corte reprova toda release. Escale ao mantenedor em vez de investigar o `CHANGELOG.md`.
+
+**`http=200` com `listada=0`? Repita antes de concluir qualquer coisa.** A página revalida a cada
+10 minutos e lê o `CHANGELOG.md` pelo `raw.githubusercontent.com`, que guarda outros 5: a versão
+aparece em até ~15 min, e é o próprio acesso que agenda a regeneração. Por isso o passo do
+`release.yml` repete a sonda 35 vezes com um minuto entre elas — não duas. Se persistir depois
+disso, a ordem de investigação está em `docs/doctrine/versionamento.md` (seção "A vitrine").
 
 O `grep -c` é de propósito: ele conta, e para contar lê a entrada inteira. Um `grep -q` no lugar
 sai no primeiro casamento, o `curl` do outro lado do cano leva EPIPE e desiste — e a versão

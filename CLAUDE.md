@@ -510,7 +510,9 @@ mesma tabela vale para Codex, Cursor, OpenCode e Antigravity; ver `AGENTS.md`):
 
 Os guias têm página pública em [deskcomm.com.br/guias](https://www.deskcomm.com.br/guias), escrita
 à mão em `deskcomm-site/conteudo/guias.ts`: guia criado, renomeado ou com comando novo pede a mesma
-mudança lá — senão a página ensina um guia que não existe.
+mudança lá — senão a página ensina um guia que não existe. Ela e a de changelog saem do mesmo PR do
+`deskcomm-site`; enquanto as duas não responderem 200, vale o `curl` que abre a seção "A vitrine" de
+[`docs/doctrine/versionamento.md`](docs/doctrine/versionamento.md), não a frase acima.
 
 - `superpowers:brainstorming` — antes de implementar feature não-trivial
 - `superpowers:writing-plans` — pra task com mais de 1 etapa de DB/API
@@ -574,6 +576,8 @@ Antes de declarar uma task pronta:
     **Toda versão publicada aparece na página de changelog da LP** (deskcomm.com.br/changelog,
     pt-BR/en/es). Ninguém escreve no site: a LP lê o `CHANGELOG.md` da `main`, e o último passo
     do corte (`release.yml`, job `cortar-tag`) reprova quando a versão não chegou. O texto do
-    fragmento é, portanto, nota pública. Lei: seção "A vitrine" de `versionamento.md`.
+    fragmento é, portanto, nota pública. Enquanto as três páginas não responderem 200 esse passo
+    reprova TODO corte — a vitrine vem de um PR do `deskcomm-site`, e o `curl` que diz em que
+    estado ela está abre a seção. Lei: seção "A vitrine" de `versionamento.md`.
 
 Um staff engineer aprovaria? Se não, itera.

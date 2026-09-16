@@ -400,6 +400,13 @@ jobs:
             sleep 60
           done
           if [ -n "$faltando" ]; then
+            # O `|| true` do curl acima transforma 404 em html vazio, e html vazio é
+            # indistinguível de "a página existe e não lista a versão". O status diz qual
+            # dos dois: 404 é a vitrine fora do ar (nenhuma espera conserta), 200 é a
+            # versão que não chegou ao CHANGELOG que a LP lê.
+            for p in $faltando; do
+              echo "::error::${LP}${p} respondeu $(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "${LP}${p}")"
+            done
             echo "::error::v${VERSAO} saiu (tag, release e imagens conferidas), mas a LP não a lista em:${faltando}"
             echo "::error::Confira se ${LP}/changelog responde e se o CHANGELOG.md da main tem a seção '## [${VERSAO}] — AAAA-MM-DD'."
             echo "::error::Se o formato do cabeçalho mudou, o leitor da LP (lib/changelog.ts em deskcomm-site) precisa mudar junto."

@@ -460,7 +460,9 @@ casar, mesmo que a pessoa não saiba que ele existe:
 
 Os guias têm vitrine pública em [deskcomm.com.br/guias](https://www.deskcomm.com.br/guias) (pt-BR,
 en, es), escrita à mão no repositório `deskcomm-site` (`conteudo/guias.ts`). Guia criado,
-renomeado ou com comando novo → o PR avisa que aquela página precisa acompanhar.
+renomeado ou com comando novo → o PR avisa que aquela página precisa acompanhar. Ela sai do mesmo
+PR do `deskcomm-site` que a página de changelog; quem quiser saber se já está no ar usa o `curl` da
+seção "A vitrine" em [`docs/doctrine/versionamento.md`](docs/doctrine/versionamento.md).
 
 ## Regra final — não invente
 
@@ -479,7 +481,9 @@ ação manual aparece sob "⚠️ Requer atenção".
 Toda versão publicada aparece também em [deskcomm.com.br/changelog](https://www.deskcomm.com.br/changelog)
 (pt-BR, en, es): a LP lê o `CHANGELOG.md` da `main`, ninguém escreve release no site, e o último
 passo do corte reprova se a versão não chegou lá. Mudar o cabeçalho `## [X.Y.Z] — AAAA-MM-DD` quebra
-essa página — ver "A vitrine" em `docs/doctrine/versionamento.md`.
+essa página — ver "A vitrine" em `docs/doctrine/versionamento.md`. Enquanto as três páginas não
+responderem 200 esse passo reprova TODO corte: a vitrine vem de um PR do `deskcomm-site` e entra no
+ar antes da próxima release; o `curl` que mede isso abre aquela seção.
 
 **Regra final — não invente.** Este repositório tem PRDs, specs, regras de negócio e doutrina
 escritos. Nunca invente regra de negócio, número, SLA ou comportamento de produto. Se a regra não

@@ -155,6 +155,9 @@ para quem nunca viu o código.
 ([deskcomm.com.br/guias](https://www.deskcomm.com.br/guias), arquivo `conteudo/guias.ts` do
 repositório `deskcomm-site`) precisa acompanhar — senão ela passa a ensinar um guia que não existe.
 
+As duas páginas saem de um PR do `deskcomm-site`; um `404` nesses dois links quer dizer que ele
+ainda não entrou, não que você errou o caminho.
+
 ## Passo 8 — o PR
 
 - **Título** no imperativo, do ponto de vista de quem usa (`fix(agenda): a consulta remarcada não

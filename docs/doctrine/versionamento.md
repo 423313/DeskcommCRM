@@ -204,6 +204,20 @@ Toda versão publicada aparece na página de changelog da LP, nos três idiomas:
 (`/changelog/X.Y.Z`). É lá que quem ainda não instalou — e quem decide se atualiza — lê o que
 mudou sem abrir o GitHub.
 
+**Enquanto as três páginas não responderem 200, o parágrafo acima descreve o alvo e não o estado.**
+Elas nascem num PR do repositório `deskcomm-site`, e o corte depende delas: com a vitrine fora do
+ar, o passo abaixo reprova **toda** release depois de 35 minutos de espera. Quem for cortar confere
+antes — o comando não envelhece, a frase envelheceria:
+
+```bash
+for p in /changelog /en/changelog /es/changelog /guias; do
+  echo "$p: $(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.deskcomm.com.br$p")"
+done
+```
+
+Quatro `200` e esta seção vale como está escrita. Qualquer `404` e a ordem é a inversa: a vitrine
+entra no ar primeiro, o corte depois.
+
 **Ninguém escreve release no site.** A LP (repositório `deskcomm-site`) lê o `CHANGELOG.md` da
 `main` e revalida a cada 10 minutos. Então a regra de quem corta release não é "lembre de
 atualizar a LP" — regra que não protege quem a escreve —, e sim:
@@ -235,16 +249,22 @@ olhado a LP. A conferência depois do conserto é à mão, com o laço de `curl 
 `triagem/TRIAGEM.md` (seção "Depois do merge, a versão sai"), nos três caminhos: `/changelog`,
 `/en/changelog` e `/es/changelog`.
 
-Duas coisas fazem essa conferência à mão mentir, e as duas mentem no sentido do susto:
+Três coisas fazem essa conferência à mão mentir, e as três mentem no sentido do susto:
 
 - **Não basta trocar a URL.** O `href` procurado carrega o prefixo da própria página —
   `/en/changelog/X.Y.Z` na inglesa, `/es/changelog/X.Y.Z` na espanhola. Procurar o link do pt nas
   outras duas devolve 0 **com a versão listada**. O passo do `release.yml` monta o padrão com
   `${p}` justamente por isso; o laço da receita monta igual.
-- **0 na primeira volta não é veredito.** A página revalida a cada 10 minutos: o primeiro acesso
-  depois da janela devolve a lista antiga e agenda a nova, e a segunda visita já traz a versão.
-  Repita antes de concluir que a vitrine não mostra — é a mesma razão pela qual o passo do
-  `release.yml` repete a sonda em vez de conferir uma vez só.
+- **0 também é o que a página inexistente devolve.** Num 404 o corpo não tem o `href`, e o
+  `grep -c` conta 0 igualzinho a uma página que existe e ainda não listou a versão — dois
+  desfechos opostos com o mesmo número. Por isso a receita imprime o `http=` ao lado da contagem,
+  e o passo do `release.yml` nomeia o status de cada página que faltou antes de reprovar.
+  `http=404` é a vitrine fora do ar, e repetir não conserta.
+- **Com `http=200`, 0 na primeira volta não é veredito.** A página revalida a cada 10 minutos e lê
+  o `CHANGELOG.md` pelo `raw.githubusercontent.com`, que guarda outros 5: a versão aparece em até
+  ~15 min, e é o próprio acesso que agenda a regeneração. Repita antes de concluir que a vitrine
+  não mostra — é a mesma razão pela qual o passo do `release.yml` repete a sonda 35 vezes, e não
+  duas.
 
 ---
 

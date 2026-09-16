@@ -98,14 +98,20 @@ describe("a release chega à página de changelog da LP", () => {
     // do bash e a here-string. Prender uma só faria a outra — que a medição acima mostra igualmente
     // imune — reprovar sem defeito, e vermelho que não aponta defeito ensina a contornar o guarda.
     // O que segue proibido é PIPELINE, e é a asserção logo abaixo que o cobra.
+    //
+    // Por isso a lista é de PADRÃO e não de string literal: o espaço depois do `<<<` é opcional em
+    // bash, as duas grafias são o mesmo redirecionamento, e a que este repositório já usa é a SEM
+    // espaço (`grep -c '<<<"' triagem/scripts/complemento.sh` = 4, com espaço = 0; e
+    // `triagem/TRIAGEM.md`, achado 61, prescreve literalmente `grep ... <<<"$DIFF"`). Cobrar
+    // igualdade de texto reprovava exatamente a grafia da casa.
     const SONDAS_SEM_PIPELINE = [
-      'if [[ "$html" == *"href=\\"${p}/${VERSAO}\\""* ]]; then',
-      'if grep -qF "href=\\"${p}/${VERSAO}\\"" <<< "$html"; then',
+      /^if \[\[ "\$html" == \*"href=\\"\$\{p\}\/\$\{VERSAO\}\\""\* \]\]; then$/,
+      /^if grep -qF "href=\\"\$\{p\}\/\$\{VERSAO\}\\"" <<< ?"\$html"; then$/,
     ];
     expect(
-      SONDAS_SEM_PIPELINE,
+      SONDAS_SEM_PIPELINE.some((forma) => forma.test(sonda[0]?.trim() ?? "")),
       `a sonda virou uma forma que este teste não reconhece como segura:\n  ${sonda[0]?.trim()}`,
-    ).toContain(sonda[0]?.trim());
+    ).toBe(true);
     const codigo = bloco
       .split("\n")
       .filter((l) => !l.trim().startsWith("#"))
