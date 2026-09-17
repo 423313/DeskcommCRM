@@ -113,7 +113,14 @@ describe("a opção existe só onde a prop a liga", () => {
     expect(domingo).toHaveAttribute("data-disponivel", "false");
     fireEvent.click(domingo);
     expect(screen.getByTestId("hora-do-encaixe")).toBeInTheDocument();
-    expect(screen.getByTestId("encaixe")).toHaveTextContent("Nenhum horário publicado neste dia.");
+    // A frase antiga — "Nenhum horário publicado neste dia." — fazia a folga
+    // parecer configuração faltando, e saiu da tela no #896, item (b): quem
+    // publicou jornada e caiu num dia fora dela lê que o dia está fora dela;
+    // "nenhuma jornada publicada" é outra história (e tem texto próprio).
+    expect(screen.getByTestId("encaixe")).toHaveTextContent(
+      "Este dia está fora da jornada publicada (folga ou dia sem expediente).",
+    );
+    expect(screen.queryByText("Nenhum horário publicado neste dia.")).toBeNull();
     // Sem horários, o campo vem ANTES da lista vazia — que estica e o jogaria
     // para o pé da coluna, embaixo de um vão em branco.
     const depois = screen.getByTestId("encaixe").compareDocumentPosition(screen.getByTestId("lista-de-horarios"));

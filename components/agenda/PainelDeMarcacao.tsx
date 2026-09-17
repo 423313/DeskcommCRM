@@ -34,6 +34,40 @@ import type { HorarioLivre, Pessoa } from "./tipos";
  */
 export type TempoDaMarcacao = "escolhendo-dia" | "escolhendo-horario" | "confirmando" | "marcado";
 
+/**
+ * O bloco de "não há jornada publicada" — na pessoa certa.
+ *
+ * A frase antiga ("Você ainda não publicou seus horários de atendimento") era
+ * dita a QUALQUER leitor, e mente quando quem lê não é o dono da jornada: o
+ * Atendente abre a agenda da dona, e "Você" ali é o Atendente (issue #896,
+ * item 1). O rótulo "Você" vem de `lib/agenda/responsavel-do-painel.ts` — a
+ * fonte única —, e a frase volta à segunda pessoa exatamente quando ele
+ * aparece: é o caso do dono abrindo a própria agenda, e é o que o kit visual
+ * (`tests/e2e/agenda-kit-visual.spec.ts`) assere.
+ *
+ * Quando quem lê NÃO é o dono, a tela não deve deduzir quem falhou em
+ * publicar: ela constata que A JORNADA (de quem a agenda é) não foi publicada,
+ * sem apontar o dedo para quem está logado.
+ */
+function AvisoDeJornadaNaoPublicada({ quemLeEhODono }: { quemLeEhODono: boolean }) {
+  const t = useT();
+
+  return (
+    <>
+      <p className="text-sm font-semibold text-text">
+        {quemLeEhODono
+          ? t("Você ainda não publicou seus horários de atendimento")
+          : t("A jornada de atendimento ainda não foi publicada")}
+      </p>
+      <p className="mt-1 text-xs leading-4 text-text-muted">
+        {quemLeEhODono
+          ? t("Sem eles ninguém consegue marcar — nem você, nem o agente.")
+          : t("Sem eles ninguém consegue marcar — nem quem atende, nem o agente.")}
+      </p>
+    </>
+  );
+}
+
 export function PainelDeMarcacao({
   ancora,
   agora,
@@ -616,15 +650,7 @@ export function PainelDeMarcacao({
             data-testid="sem-jornada-publicada"
             className="mb-3 rounded-sm border border-warning/40 bg-warning-bg p-3"
           >
-            <p className="text-sm font-semibold text-text">
-              {/* Sem "Você": quem está logado pode não ser o dono desta jornada
-                  — o atendente abre a agenda da dona. Ver
-                  `lib/agenda/responsavel-do-painel.ts`. */}
-              {t("A jornada de atendimento ainda não foi publicada")}
-            </p>
-            <p className="mt-1 text-xs leading-4 text-text-muted">
-              {t("Sem eles ninguém consegue marcar — nem quem atende, nem o agente.")}
-            </p>
+            <AvisoDeJornadaNaoPublicada quemLeEhODono={responsavel.nome === "Você"} />
             {/*
               O AVISO VIRA PORTA.
 

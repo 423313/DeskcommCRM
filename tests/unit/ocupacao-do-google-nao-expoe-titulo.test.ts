@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+
+import type { Database } from "@/lib/database.types";
 
 /**
  * O TÍTULO DO EVENTO PESSOAL NÃO ATRAVESSA PARA A TELA DO CRM.
@@ -81,6 +83,21 @@ import { describe, expect, it } from "vitest";
  * consumidores cravando `titulo: "Ocupado"`. A decisão não foi desfeita — ela
  * mudou de endereço, e o gate é que a seguiu.
  *
+ * ⚠️ E O ENDEREÇO MUDOU PELA QUARTA VEZ — a mesma cegueira, o mesmo conserto.
+ *
+ * O #896 (42c55839) tirou a consulta direta de `lib/agenda/ocupacao-externa.ts`:
+ * para o Atendente ver a ocupação do Google de quem é dono da agenda, a leitura
+ * passou a ser `fn_agenda_ocupacao_google_do_dono` (migration 0260,
+ * `security definer`), que confere o pertencimento e devolve só ocupação. O
+ * controle de vacuidade reprovou no CI do #1107, como devia — a varredura
+ * inteira achou `[]`.
+ *
+ * A decisão não mudou: mudou de endereço, e este arquivo seguiu. O controle
+ * agora cobra a CHAMADA da função, e a ausência de `title` no caminho novo está
+ * presa no TIPO do retorno dela (o caso "o retorno da função não oferece
+ * `title`"), com o lado do banco em
+ * `tests/invariants/titulo-do-evento-pessoal-fora-do-alcance.test.ts`.
+ *
  * Se um dia a decisão mudar, o caminho é POR ORGANIZAÇÃO e com aviso de quem vê
  * — nunca por default. Quem for fazer isso troca este teste junto, de propósito:
  * é o passo que obriga a decisão a ser tomada por gente.
@@ -142,6 +159,17 @@ function semComentarios(fonte: string): string {
 const RELACOES_DO_ESPELHO = /\.from\("calendar_(?:selected_)?external_events"\)([\s\S]*?);/g;
 
 /**
+ * O endereço da leitura desde o #896 (42c55839): a ocupação chega pela função
+ * `security definer`, que confere o pertencimento do dono e devolve só ocupação.
+ *
+ * É esta chamada que o controle de vacuidade cobra agora. As consultas diretas
+ * às duas relações seguem varridas por `RELACOES_DO_ESPELHO`: se alguém
+ * re-inlinear uma leitura nas telas, o caso "nenhuma delas pede `title`" a
+ * enxerga de novo em vez de medir o vazio.
+ */
+const CHAMADA_DA_FUNCAO_DO_DONO = /\.rpc\(\s*"fn_agenda_ocupacao_google_do_dono"/;
+
+/**
  * As consultas à tabela do espelho e à view de ocupação feitas nos caminhos até
  * a tela da Agenda, com o caminho de origem e as colunas que cada uma pede
  * (vazio quando a cadeia não tem `.select`, como num `.delete()`).
@@ -167,27 +195,48 @@ function consultasDeEventoExterno(): Array<{ caminho: string; onde: string; colu
 }
 
 describe("a ocupação do Google não leva o nome do evento para a tela", () => {
-  it("o DONO da leitura lê os eventos externos com um select (senão o gate mede o vazio)", () => {
+  it("o DONO da leitura busca a ocupação pela função do dono (senão o gate mede o vazio)", () => {
     // Controle do instrumento. Sem isto, mover a consulta, renomear o
     // diretório ou trocar a relação lida deixaria o gate verde por não medir
     // nada — e ele afirmaria o que não mediu, que é o pior desfecho para uma
-    // guarda de privacidade. Uma consulta sem `select` (o `.delete()` da
-    // desconexão) não conta: ela não tem coluna para vigiar.
+    // guarda de privacidade.
     //
-    // A cobrança é sobre o DONO, e não sobre cada caminho: desde o #915 as duas
-    // pastas de tela legitimamente não têm consulta própria — quem reprova
-    // quem puser uma de volta lá é `ocupacao-do-google-vem-de-um-lugar-so`.
-    // Exigir leitura em CADA caminho transformaria a doutrina de leitura única
-    // num vermelho permanente aqui.
-    const leituras = consultasDeEventoExterno().filter((c) => c.colunas !== null);
+    // ⚠️ QUARTA VEZ que o endereço da leitura muda, e a quarta vez que o
+    // controle fez o trabalho dele: medido no CI do #1107, a varredura inteira
+    // achou `[]` e a mensagem foi `nenhuma leitura de
+    // calendar_external_events ... em lib/agenda/ocupacao-externa.ts`. O #896
+    // (42c55839) tirou a consulta direta dali: para o Atendente ver a ocupação
+    // da dona, a leitura passou a ser `fn_agenda_ocupacao_google_do_dono`
+    // (migration 0260, `security definer`), que confere o pertencimento e
+    // devolve só ocupação.
+    //
+    // A decisão de privacidade continua valendo no endereço novo, e por duas
+    // medidas: a função não devolve `title` — o contrato está preso no TIPO, no
+    // caso logo abaixo —, e o lado do banco é vigiado por
+    // `tests/invariants/titulo-do-evento-pessoal-fora-do-alcance.test.ts`.
+    const fonte = semComentarios(fs.readFileSync(DONO_DA_LEITURA, "utf8"));
     const dono = path.relative(RAIZ, DONO_DA_LEITURA);
+
     expect(
-      leituras.filter((l) => l.caminho === dono).length,
-      `nenhuma leitura de \`calendar_external_events\` ou \`calendar_selected_external_events\` ` +
-        `com \`select\` em ${dono} — ou a ocupação deixou de ser buscada, ou ela mudou de ` +
-        `relação ou de lugar e este gate ficou cego. A varredura inteira achou: ` +
-        JSON.stringify(leituras.map((l) => l.onde)),
-    ).toBeGreaterThan(0);
+      CHAMADA_DA_FUNCAO_DO_DONO.test(fonte),
+      `nenhuma chamada a \`fn_agenda_ocupacao_google_do_dono\` em ${dono} — ou a ocupação ` +
+        `deixou de ser buscada, ou ela mudou de endereço de novo e este gate ficou cego.`,
+    ).toBe(true);
+  });
+
+  it("o retorno da função não oferece `title` — o contrato do banco preso no tipo", () => {
+    // A asserção de privacidade que sobrevive à mudança de endereço: a função
+    // devolve cinco colunas — início, fim, transparência, status e o status da
+    // conexão — e nenhuma delas é o nome do compromisso. Roda no
+    // `pnpm typecheck` (`tsconfig.typecheck.json` inclui `tests/**`), o mesmo
+    // passo que prende o tipo da view em `view-de-ocupacao-nao-tipa-o-titulo`.
+    type RetornoDaFuncao =
+      Database["public"]["Functions"]["fn_agenda_ocupacao_google_do_dono"]["Returns"][number];
+
+    expectTypeOf<RetornoDaFuncao>().not.toHaveProperty("title");
+    // Controle: o tipo não virou vazio — a linha acima passaria por acidente.
+    expectTypeOf<RetornoDaFuncao>().toHaveProperty("starts_at").toEqualTypeOf<string>();
+    expectTypeOf<RetornoDaFuncao>().toHaveProperty("transparency").toEqualTypeOf<string>();
   });
 
   it("nenhuma delas pede a coluna `title`", () => {

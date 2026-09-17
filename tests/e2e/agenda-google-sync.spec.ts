@@ -250,7 +250,7 @@ test("fontes e destino entre duas contas, somente leitura e ocupação imediatam
   });
   await page.goto("/app/agenda");
   await irParaASemanaDoCompromisso(page, start);
-  const card = page.getByTestId(`agendamento-${externalId}`);
+  const card = page.locator('[data-origem="google_sync"]');
   await card.scrollIntoViewIfNeeded();
   await expect(card).toBeVisible();
   await expect(block).toBeDisabled();
