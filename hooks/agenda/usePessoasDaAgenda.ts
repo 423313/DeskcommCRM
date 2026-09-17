@@ -2,15 +2,24 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { toast } from "sonner";
+
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import {
+  ROTA_DA_LISTA_DE_PESSOAS,
+  motivoDaFalhaNaLista,
+} from "@/lib/agenda/lista-de-pessoas";
 import { trilhasDaEquipe } from "@/lib/agenda/tipos";
 import { apiClient } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/types";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { idiomaAtual } from "@/lib/i18n/IdiomaProvider";
 
 import type { Pessoa } from "@/components/agenda/tipos";
 
 interface MembroDto {
   user_id: string;
-  email: string | null;
+  role: string;
   full_name: string | null;
   revoked_at?: string | null;
 }
@@ -31,7 +40,7 @@ export function usePessoasDaAgenda() {
     queryKey: ["agenda", "pessoas"],
     queryFn: async (): Promise<Pessoa[]> => {
       try {
-        const r = await apiClient.get<{ data: MembroDto[] }>("/api/v1/team");
+        const r = await apiClient.get<{ data: MembroDto[] }>(ROTA_DA_LISTA_DE_PESSOAS);
         const lista = (r as unknown as { data?: MembroDto[] }).data ?? (r as unknown as MembroDto[]);
         const ativos = (lista ?? []).filter((m) => !m.revoked_at);
         // As trilhas saem da EQUIPE inteira de uma vez, não pessoa a pessoa: é a
@@ -50,7 +59,16 @@ export function usePessoasDaAgenda() {
             trilha: trilhas.get(m.user_id) ?? 1,
           }));
       } catch (err) {
-        showApiError(err);
+        // O 403 desta lista chegava como "Você não tem permissão para esta
+        // ação", sem dizer QUAL permissão nem que a grade continuava lá — era o
+        // defeito do item 1 da issue 896. Agora a agenda diz de que leitura se
+        // trata e o que segue funcionando; os outros erros ficam com o aviso
+        // padrão, que para eles já é informativo.
+        if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
+          toast.warning(traduzir(motivoDaFalhaNaLista(err.status), idiomaAtual()));
+        } else {
+          showApiError(err);
+        }
         throw err;
       }
     },

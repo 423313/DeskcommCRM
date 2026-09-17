@@ -22,11 +22,17 @@
  *     npx vitest run tests/unit/agenda-do-atendente-diz-por-que.test.tsx
  */
 import { cleanup, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import type { Pessoa } from "@/components/agenda/tipos";
+import {
+  CAMPOS_DA_LISTA,
+  PAPEL_MINIMO_DA_LISTA,
+  motivoDaFalhaNaLista,
+} from "@/lib/agenda/lista-de-pessoas";
 import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
 import {
   MENSAGEM_UNICA_QUE_NAO_DISTINGUIA,
@@ -166,3 +172,60 @@ describe("(b) folga e jornada inexistente pedem coisas diferentes", () => {
     );
   });
 });
+
+/**
+ * A lista de pessoas da AGENDA — issue 896, item 1 (a mesma que fazia o rótulo
+ * cair em "Você": sem lista, o painel não sabe de quem é a jornada).
+ *
+ * O Atendente tomava 403 em `GET /api/v1/team`, que é manager+ e devolve e-mail
+ * e último acesso. O conserto NÃO foi baixar o papel dessa rota — seria entregar
+ * PII a quem só precisa de nome — e sim uma lista mínima, com o menor papel que
+ * resolve o trabalho do atendente. Estes testes leem o fonte de propósito: o
+ * defeito volta tanto por afrouxar a rota antiga quanto por a agenda voltar a
+ * pedir a lista a quem não pode lê-la.
+ */
+const RAIZ = process.cwd();
+
+function fonte(rel: string): string {
+  return readFileSync(`${RAIZ}/${rel}`, "utf8");
+}
+
+describe("(c) o Atendente lê a lista de pessoas da agenda", () => {
+  it("o papel mínimo da lista é o do Atendente, não o de quem lê a equipe", () => {
+    expect(PAPEL_MINIMO_DA_LISTA).toBe("agent");
+  });
+
+  it("a lista exposta é a mínima: sem e-mail, sem último acesso", () => {
+    expect([...CAMPOS_DA_LISTA]).toEqual(["user_id", "role", "full_name"]);
+  });
+
+  it("a rota da lista usa o papel mínimo e seleciona só o que a barra usa", () => {
+    const rota = fonte("app/api/v1/agenda/pessoas/route.ts");
+
+    expect(rota).toContain("requireRole(PAPEL_MINIMO_DA_LISTA");
+    expect(rota).toContain('.select("user_id, role")');
+    expect(rota).not.toContain("selectedEmail");
+    expect(rota).not.toContain('select("user_id, role, email');
+  });
+
+  it("a agenda pede a lista mínima, e não a rota da equipe", () => {
+    const hook = fonte("hooks/agenda/usePessoasDaAgenda.ts");
+
+    expect(hook).toContain("ROTA_DA_LISTA_DE_PESSOAS");
+    expect(hook).not.toContain('apiClient.get<{ data: MembroDto[] }>("/api/v1/team")');
+  });
+
+  it("quando a lista não vem, a tela diz de QUE permissão se trata", () => {
+    const aviso = motivoDaFalhaNaLista(403);
+
+    expect(aviso).toContain("lista da equipe");
+    expect(aviso).toContain("atendente");
+    // A frase genérica do aviso de 403 é o que a issue chama de "sem motivo".
+    expect(aviso).not.toBe("Você não tem permissão para esta ação.");
+    expect(aviso).not.toContain("Você não tem permissão para esta ação");
+
+    const hook = fonte("hooks/agenda/usePessoasDaAgenda.ts");
+    expect(hook).toContain("motivoDaFalhaNaLista");
+  });
+});
+
