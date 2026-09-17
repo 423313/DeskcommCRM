@@ -199,6 +199,52 @@ export interface AppointmentNoticeRow {
   resolved_at: string | null;
 }
 
+/**
+ * Um caso aberto pela IA sobre o titular — o que ela entendeu quando travou.
+ *
+ * O vínculo é pela CONVERSA: `agent_cases` não tem FK para `contacts`. `kind`
+ * (migration 0248) fica fora da projeção porque `lib/database.types.ts` ainda
+ * não o conhece, e selecionar coluna que o tipo não tem é erro de compilação.
+ */
+export interface CaseRow {
+  id: string;
+  conversation_id: string;
+  status: string;
+  title: string;
+  summary: string;
+  blocker: string;
+  source: string;
+  opened_at: string;
+  closed_at: string | null;
+  created_at: string;
+}
+
+/** Uma linha do tempo do caso: quem tocou, quando, e o que escreveu. */
+export interface CaseEventRow {
+  id: string;
+  case_id: string;
+  kind: string;
+  actor_kind: string;
+  human_action: string | null;
+  body: string | null;
+  metadata: unknown;
+  created_at: string;
+}
+
+/** Uma demanda do titular — o pedido, seu dono e seu desfecho. */
+export interface DemandaRow {
+  id: string;
+  agent_case_id: string | null;
+  origem: string;
+  assunto: string | null;
+  estado: string;
+  dono_kind: string;
+  proximo_passo: string | null;
+  desfecho: string | null;
+  aberta_em: string;
+  fechada_em: string | null;
+}
+
 /** Uma chamada de voz do titular — o registro, não a gravação (não gravamos). */
 export interface VoiceCallRow {
   id: string;
@@ -251,6 +297,19 @@ export interface ExportPayload {
    * próprio cascade.
    */
   voice_calls: VoiceCallRow[];
+  /**
+   * Casos, linha do tempo do caso e demandas (migration 0280).
+   *
+   * Entram pelo mesmo motivo de `voice_calls`: a 0280 pôs as três na cascata de
+   * redação, e o que se apaga a pedido do titular é o que se entrega a pedido
+   * dele. Sem os três blocos, o relatório mostrava a conversa e as mensagens e
+   * não mencionava que o atendimento tinha parado, o que a IA entendeu do
+   * problema dele, nem quem da equipe respondeu — que é a parte em que uma
+   * pessoa identificável é DESCRITA por máquina.
+   */
+  cases: CaseRow[];
+  case_events: CaseEventRow[];
+  demandas: DemandaRow[];
   reply_drafts?: Array<{
     id: string;
     status: string;
@@ -702,6 +761,104 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       if (!data || data.length < 500) break;
     }
   }
+  // Casos, linha do tempo do caso e demandas — o que a 0280 pôs na cascata.
+  //
+  // O escopo do CASO é a CONVERSA do titular: `agent_cases` não tem FK para
+  // `contacts`. Os ids das conversas são paginados por conta própria em vez de
+  // reaproveitar a projeção `conversations` acima — ela tem teto de 500 e existe
+  // para o relatório. Usá-la como filtro faria o titular com mais de 500
+  // conversas receber um export sem os casos das excedentes, em silêncio.
+  const cases: CaseRow[] = [];
+  const case_events: CaseEventRow[] = [];
+  let demandas: DemandaRow[] = [];
+  if (contactId) {
+    const pageSize = 500;
+    const refBatchSize = 100; // Mantém o filtro IN abaixo dos limites de URL dos proxies.
+    const conversationIds: string[] = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await admin
+        .from("conversations")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("contact_id", contactId)
+        .order("id")
+        .range(offset, offset + pageSize - 1);
+      if (error) {
+        logger.warn("[lgpd-export-worker] case conversation refs load failed", {
+          request_id: requestId,
+          error: error.message,
+        });
+        break;
+      }
+      for (const conversa of data ?? []) conversationIds.push(conversa.id);
+      if (!data || data.length < pageSize) break;
+    }
+    for (let batch = 0; batch < conversationIds.length; batch += refBatchSize) {
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await admin
+          .from("agent_cases")
+          .select(
+            "id, conversation_id, status, title, summary, blocker, source, opened_at, closed_at, created_at",
+          )
+          .eq("organization_id", organizationId)
+          .in("conversation_id", conversationIds.slice(batch, batch + refBatchSize))
+          .order("id")
+          .range(offset, offset + pageSize - 1);
+        if (error) {
+          logger.warn("[lgpd-export-worker] cases load failed", {
+            request_id: requestId,
+            error: error.message,
+          });
+          break;
+        }
+        cases.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+      }
+    }
+    // A linha do tempo pende do caso já coletado: um `case_id` que não esteja em
+    // `cases` seria de outro titular, e é por isso que o escopo sai daqui e não
+    // de uma segunda derivação pela conversa.
+    const caseIds = cases.map((caso) => caso.id);
+    for (let batch = 0; batch < caseIds.length; batch += refBatchSize) {
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await admin
+          .from("agent_case_events")
+          .select("id, case_id, kind, actor_kind, human_action, body, metadata, created_at")
+          .eq("organization_id", organizationId)
+          .in("case_id", caseIds.slice(batch, batch + refBatchSize))
+          .order("id")
+          .range(offset, offset + pageSize - 1);
+        if (error) {
+          logger.warn("[lgpd-export-worker] case events load failed", {
+            request_id: requestId,
+            error: error.message,
+          });
+          break;
+        }
+        case_events.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+      }
+    }
+    // Demanda tem FK direta para o contato (`contact_id` é `not null`).
+    const { data, error } = await admin
+      .from("demandas")
+      .select(
+        "id, agent_case_id, origem, assunto, estado, dono_kind, proximo_passo, desfecho, aberta_em, fechada_em",
+      )
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("aberta_em", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] demandas load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      demandas = data;
+    }
+  }
+
   const meeting_deliveries: MeetingDeliveryRow[] = [];
   const appointment_notices: AppointmentNoticeRow[] = [];
   if (contactId) {
@@ -810,6 +967,9 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     meeting_deliveries,
     appointment_notices,
     voice_calls,
+    cases,
+    case_events,
+    demandas,
   };
 }
 
@@ -841,5 +1001,8 @@ function emptyPayload(
     meeting_deliveries: [],
     appointment_notices: [],
     voice_calls: [],
+    cases: [],
+    case_events: [],
+    demandas: [],
   };
 }

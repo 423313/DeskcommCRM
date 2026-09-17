@@ -45,6 +45,9 @@ function payload(): ExportPayload {
       },
     ],
     voice_calls: [],
+    cases: [],
+    case_events: [],
+    demandas: [],
   appointment_notices: [
       {
         id: "aviso-aberto",
