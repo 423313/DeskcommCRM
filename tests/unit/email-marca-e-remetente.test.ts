@@ -284,3 +284,135 @@ describe("remetente — SMTP", () => {
     expect(sujo).toBe("Acme evil@x.comBcc: vitima@y.com <nao-responda@revenda.com.br>");
   });
 });
+
+/**
+ * O ROTEADOR: SMTP QUANDO HÁ SMTP, RESEND QUANDO NÃO HÁ.
+ *
+ * Este é o caso que segura a decisão do dono do produto sobre o PR #714 — "os
+ * dois caminhos convivem; quem tem Resend não mexe em nada". Sem ele, alguém
+ * simplifica `lib/email/roteador.ts` para chamar só o SMTP, o `typecheck` passa,
+ * o `lint` passa, os dois casos de remetente acima passam (eles testam os
+ * transportes, não a escolha entre eles) — e toda instalação que hoje entrega
+ * pela Resend para de mandar convite, em silêncio, na atualização seguinte.
+ *
+ * O que ele NÃO afirma: que há queda de um transporte para o outro quando o
+ * envio FALHA. Não há, e é de propósito (o porquê está no cabeçalho do
+ * roteador): a escolha é por configuração, para o mesmo convite não sair duas
+ * vezes e para o erro do SMTP do operador não ficar escondido atrás de um
+ * sucesso emprestado.
+ */
+describe("roteador de e-mail", () => {
+  const BASE = {
+    host: "",
+    port: 587,
+    security: "starttls" as const,
+    username: "",
+    password: "",
+    fromEmail: "",
+    fromName: "",
+    source: "none" as const,
+  };
+  const COM_SMTP = {
+    ...BASE,
+    host: "smtp.revenda.com.br",
+    fromEmail: "nao-responda@revenda.com.br",
+    source: "environment" as const,
+  };
+
+  /**
+   * `importActual` no módulo de SMTP de propósito: só o ENVIO é substituído, e
+   * `isSmtpConfigured` continua sendo o do produto. Mockar a regra de
+   * "configurado" faria o teste medir o próprio mock.
+   */
+  async function rotear(config: typeof BASE) {
+    vi.resetModules();
+    const porSmtp = vi.fn(async () => ({ ok: true, id: "id-smtp" }));
+    const pelaResend = vi.fn(async () => ({ ok: true, id: "id-resend" }));
+    vi.doMock("@/lib/email/config", () => ({ getSmtpConfig: async () => config }));
+    vi.doMock("@/lib/email/smtp", async () => ({
+      ...(await vi.importActual<Record<string, unknown>>("@/lib/email/smtp")),
+      sendEmail: porSmtp,
+    }));
+    vi.doMock("@/lib/email/resend", async () => ({
+      ...(await vi.importActual<Record<string, unknown>>("@/lib/email/resend")),
+      sendEmail: pelaResend,
+      isEmailConfigured: () => true,
+    }));
+    const { sendEmail, transporteDeEmail } = await import("@/lib/email/roteador");
+    const resultado = await sendEmail({ to: "a@b.com", subject: "s", html: "<p>x</p>" });
+    const transporte = await transporteDeEmail();
+    vi.doUnmock("@/lib/email/config");
+    vi.doUnmock("@/lib/email/smtp");
+    vi.doUnmock("@/lib/email/resend");
+    vi.resetModules();
+    return { resultado, transporte, porSmtp, pelaResend };
+  }
+
+  it("com SMTP configurado, o envio sai pelo SMTP", async () => {
+    const { resultado, transporte, porSmtp, pelaResend } = await rotear(COM_SMTP);
+
+    expect(transporte).toBe("smtp");
+    expect(porSmtp).toHaveBeenCalledTimes(1);
+    expect(pelaResend).not.toHaveBeenCalled();
+    // O desfecho diz POR ONDE foi: com dois transportes possíveis, "falhou" sem
+    // isto não diz a quem instalou onde olhar.
+    expect(resultado).toMatchObject({ ok: true, id: "id-smtp", via: "smtp" });
+  });
+
+  it("sem SMTP configurado, o envio CAI NA RESEND — quem já tinha e-mail não perde", async () => {
+    const { resultado, transporte, porSmtp, pelaResend } = await rotear(BASE);
+
+    expect(transporte).toBe("resend");
+    expect(pelaResend).toHaveBeenCalledTimes(1);
+    expect(porSmtp).not.toHaveBeenCalled();
+    expect(resultado).toMatchObject({ ok: true, id: "id-resend", via: "resend" });
+  });
+
+  it("host sem remetente não é SMTP configurado — e cai na Resend, não no vazio", async () => {
+    // Meia configuração é o estado real de quem preencheu a tela pela metade.
+    // Tratá-la como "tem SMTP" mandaria o envio para um transporte que devolve
+    // `not_configured` enquanto a Resend do operador estava lá, funcionando.
+    const { transporte, pelaResend } = await rotear({ ...COM_SMTP, fromEmail: "" });
+
+    expect(transporte).toBe("resend");
+    expect(pelaResend).toHaveBeenCalledTimes(1);
+  });
+
+  const ORIGINAIS_DA_RESEND = {
+    key: process.env.RESEND_API_KEY,
+    from: process.env.RESEND_FROM_EMAIL,
+  };
+  afterEach(() => {
+    // Sem isto, o último caso deixaria `RESEND_*` em branco para quem rodar no
+    // mesmo worker depois — teste que suja o ambiente do vizinho vira "falha
+    // que só acontece na suíte inteira".
+    for (const [chave, valor] of [
+      ["RESEND_API_KEY", ORIGINAIS_DA_RESEND.key],
+      ["RESEND_FROM_EMAIL", ORIGINAIS_DA_RESEND.from],
+    ] as const) {
+      if (valor === undefined) delete process.env[chave];
+      else process.env[chave] = valor;
+    }
+    vi.resetModules();
+  });
+
+  it("sem NENHUM dos dois, o desfecho continua sendo not_configured", async () => {
+    // É o contrato de que dependem o `pending_review` do worker de LGPD e o
+    // link de aceite na tela do convite. O roteador não pode transformá-lo em
+    // outra coisa.
+    vi.resetModules();
+    vi.doMock("@/lib/email/config", () => ({ getSmtpConfig: async () => BASE }));
+    process.env.RESEND_API_KEY = "";
+    process.env.RESEND_FROM_EMAIL = "";
+    const { sendEmail, emailConfigurado } = await import("@/lib/email/roteador");
+
+    expect(await emailConfigurado()).toBe(false);
+    expect(await sendEmail({ to: "a@b.com", subject: "s", html: "x" })).toMatchObject({
+      ok: false,
+      error: "not_configured",
+      via: "resend",
+    });
+    vi.doUnmock("@/lib/email/config");
+    vi.resetModules();
+  });
+});

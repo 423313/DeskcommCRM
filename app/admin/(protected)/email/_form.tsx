@@ -27,7 +27,11 @@ interface Props {
   readonly temSenhaSalva: boolean;
   /** De onde vieram os valores acima: o banco, o `.env` do servidor, ou nada. */
   readonly origem: "database" | "environment" | "none";
-  readonly smtpEmVigor: boolean;
+  /**
+   * Quem entrega o e-mail AGORA. `resend` aqui não é defeito: é a instalação
+   * que já mandava e-mail antes desta tela existir, e continua mandando.
+   */
+  readonly transporte: "smtp" | "resend" | "nenhum";
 }
 
 export function FormularioDeSmtp({
@@ -39,7 +43,7 @@ export function FormularioDeSmtp({
   nomeDoRemetente,
   temSenhaSalva,
   origem,
-  smtpEmVigor,
+  transporte,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -211,9 +215,11 @@ export function FormularioDeSmtp({
 
         <div className="flex items-center justify-between gap-3">
           <span data-testid="smtp-estado" className="text-xs text-muted-foreground">
-            {smtpEmVigor
+            {transporte === "smtp"
               ? t("Em uso: o e-mail está saindo por este servidor.")
-              : t("Ainda não está em uso: falta o endereço do servidor ou o remetente.")}
+              : transporte === "resend"
+                ? t("O e-mail desta instalação já sai por um serviço externo. Preencher esta tela passa a entrega para o seu servidor.")
+                : t("Nenhum caminho de e-mail configurado: os convites aparecem como link para copiar, em vez de chegar na caixa de entrada.")}
           </span>
           <div className="flex gap-2">
             <Button
