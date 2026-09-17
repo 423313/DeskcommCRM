@@ -286,7 +286,7 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
   await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
   const panel = page.getByTestId("painel-de-marcacao");
   await expect(panel).toBeVisible();
-  await expect(page.getByLabel("Quem será atendido")).toHaveValue(p.contact);
+  await expect(page.getByLabel("Quem será atendido")).toHaveAttribute("data-contact-id", p.contact);
   await expect(page.getByLabel("Conversa vinculada (opcional)")).toHaveValue(p.conversation);
   // Fecha o painel para navegar a grade; reabre pela mesma entrada contextual.
   await page.keyboard.press("Escape");
@@ -488,7 +488,7 @@ test("ir para a Agenda pelo menu apaga o cliente da conversa — \"Novo agendame
   await page.goto(`/app/inbox/${p.conversation}`);
   await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();
-  await expect(page.getByLabel("Quem será atendido")).toHaveValue(p.contact);
+  await expect(page.getByLabel("Quem será atendido")).toHaveAttribute("data-contact-id", p.contact);
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("painel-de-marcacao")).toBeHidden();
 
