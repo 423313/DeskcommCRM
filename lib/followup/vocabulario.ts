@@ -324,6 +324,20 @@ function valorExibido(campo: CampoDaCondicao, valor: string | number, nomes: Nom
   return temFormaDeId(texto) ? ETAPA_NAO_ENCONTRADA : valor;
 }
 
+/**
+ * A regra que é verdadeira para TODO contato. Não é erro de digitação: o
+ * contador de passos nasce em zero e só soma (`engine.ts`), então "pelo menos 0"
+ * (ou menos) sempre vale. No modo uma-saída-por-regra ela leva todo mundo e as
+ * saídas seguintes — inclusive "Nenhuma delas" — nunca são usadas. Era o padrão
+ * do produto até este conserto, e continua digitável: a tela avisa enquanto se
+ * escreve, que é quando dá para mudar de ideia.
+ */
+export function regraValeSempre(campo: CampoDaCondicao, op: OperadorDaCondicao, valor: string | number): boolean {
+  if (campo !== "steps_taken" || op !== "gte") return false;
+  const n = Number(String(valor).trim());
+  return String(valor).trim() !== "" && Number.isFinite(n) && n <= 0;
+}
+
 export const COMBINADORES: Record<Combinador, string> = {
   and: "Todas as condições",
   or: "Qualquer uma das condições",

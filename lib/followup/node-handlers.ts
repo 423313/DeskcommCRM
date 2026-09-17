@@ -295,7 +295,8 @@ export function resolveWaitPhase(events: EnrollmentEventRef[], nodeId: string, s
 function valorDePassos(value: string | number): string | number {
   if (typeof value === "number") return value;
   const limpo = value.trim();
-  return /^-?\d+$/.test(limpo) ? Number(limpo) : value;
+  const n = Number(limpo);
+  return limpo !== "" && Number.isFinite(n) ? n : value;
 }
 
 function evaluateCheck(

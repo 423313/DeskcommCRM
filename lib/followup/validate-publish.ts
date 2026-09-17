@@ -314,7 +314,10 @@ function conferirRegras(
       errors.push({ ...ancora, code: 'empty_check_value', message: `${regra} sem valor: preencha ou remova a regra.` });
       return;
     }
-    if (check.field === 'steps_taken' && !/^-?\d+$/.test(valor)) {
+    // A pergunta é "o motor consegue comparar isto?", não "é inteiro?": ele
+    // compara passos como número, e um valor que vira número (inclusive escrito
+    // como texto) decide de verdade. Recusar 2.5 seria recusar o que funciona.
+    if (check.field === 'steps_taken' && !Number.isFinite(Number(valor))) {
       errors.push({
         ...ancora,
         code: 'check_value_not_number',
@@ -341,7 +344,9 @@ function conferirRegras(
       errors.push({
         ...ancora,
         code: 'check_stage_archived',
-        message: `${regra}: a etapa «${etapa.nome}» está arquivada e nenhum negócio fica nela — escolha uma etapa ativa.`,
+        // "está arquivada" é o que o banco disse; "nenhum negócio fica nela" era
+        // afirmação que o produto NÃO garante (mover um lead de volta não é barrado).
+        message: `${regra}: a etapa “${etapa.nome}” foi arquivada e não está mais no quadro — escolha uma etapa ativa.`,
       });
     }
   });

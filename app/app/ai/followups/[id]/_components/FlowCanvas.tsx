@@ -267,7 +267,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
         height: n.measured?.height ?? estimateNodeSize(toFlowNode(n)).height,
       });
     }
-    const laid = layoutFlowGraph(liveGraph, sizes);
+    const laid = layoutFlowGraph(liveGraph, sizes, nomes);
     const pos = new Map(laid.nodes.map((n) => [n.id, n.position]));
     setNodes((nds) =>
       nds.map((n) => {

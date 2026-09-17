@@ -17,7 +17,7 @@ import { ConditionForm } from "./ConditionForm";
 import type { ConfigOf } from "./shared";
 
 /** As etapas que o construtor enxerga, trocadas por teste — sem react-query nem rede. */
-let etapasDoFluxo: EtapasDoFluxo = { etapas: [], carregando: false, nomes: {} };
+let etapasDoFluxo: EtapasDoFluxo = { etapas: [], carregando: false, falhou: false, nomes: {} };
 vi.mock("../EtapasDoFluxo", () => ({ useEtapasDoFluxo: () => etapasDoFluxo }));
 
 beforeAll(() => {
@@ -150,6 +150,7 @@ describe("ConditionForm — a regra nasce e muda sem decidir sozinha", () => {
     etapasDoFluxo = {
       etapas: [{ stageId: ID_PAGO, stageName: "Pago", pipelineId: "p1", pipelineName: "Vendas" }],
       carregando: false,
+      falhou: false,
       nomes: { etapa: (id) => (id === ID_PAGO ? "Pago · Vendas" : null) },
     };
   });
@@ -188,15 +189,37 @@ describe("ConditionForm — a regra nasce e muda sem decidir sozinha", () => {
     renderizar({ combinator: "and", checks: [{ field: "lead_stage", op: "neq", value: APAGADA }] });
 
     const aviso = screen.getByTestId("regra-etapa-solta");
-    expect(aviso).toHaveTextContent("A etapa escolhida não existe mais");
+    expect(aviso).toHaveTextContent("não está mais na lista de etapas ativas");
     expect(document.body).not.toHaveTextContent(APAGADA);
   });
 
   it("enquanto as etapas carregam, não acusa etapa solta", () => {
-    etapasDoFluxo = { etapas: [], carregando: true, nomes: { etapa: () => "…" } };
+    etapasDoFluxo = { etapas: [], carregando: true, falhou: false, nomes: { etapa: () => "…" } };
     renderizar({ combinator: "and", checks: [{ field: "lead_stage", op: "eq", value: ID_PAGO }] });
 
     expect(screen.queryByTestId("regra-etapa-solta")).toBeNull();
+  });
+
+  it("leitura que falhou não acusa a regra: diz que não deu para carregar, e preserva o valor", () => {
+    etapasDoFluxo = { etapas: [], carregando: false, falhou: true, nomes: { etapa: () => "…" } };
+    renderizar({ combinator: "and", checks: [{ field: "lead_stage", op: "eq", value: ID_PAGO }] });
+
+    expect(screen.getByTestId("regra-etapas-indisponiveis")).toHaveTextContent("Não consegui carregar as etapas agora");
+    expect(screen.queryByTestId("regra-etapa-solta")).toBeNull();
+  });
+
+  it("a regra que vale para todo contato se avisa enquanto se escreve", () => {
+    // Era o padrão do produto (`passos ≥ 0`) e continua digitável: no modo uma
+    // saída por regra ela leva todo mundo e as outras saídas morrem.
+    renderizar({ combinator: "and", checks: [{ field: "steps_taken", op: "gte", value: 0 }] });
+
+    expect(screen.getByTestId("regra-vale-sempre-0")).toHaveTextContent("vale para todo contato");
+  });
+
+  it("passos com valor de verdade não é acusado de valer sempre", () => {
+    renderizar({ combinator: "and", checks: [{ field: "steps_taken", op: "gte", value: 3 }] });
+
+    expect(screen.queryByTestId("regra-vale-sempre-0")).toBeNull();
   });
 
   it("passos digitado grava NÚMERO — o motor não compara texto com número", async () => {

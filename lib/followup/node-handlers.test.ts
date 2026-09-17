@@ -471,6 +471,12 @@ describe("processNode — condition", () => {
     expect(result).toMatchObject({ kind: "advance", next_node_id: esperado });
   });
 
+  it("passos com fração (escrita por API) compara como número, como sempre comparou", () => {
+    const node = conditionNode({ combinator: "and", checks: [{ field: "steps_taken", op: "lte", value: "2.5" }] });
+    const result = processNode({ node, edges, enrollment: enrollment(), lead: lead({ steps_taken: 2 }), clock });
+    expect(result).toMatchObject({ kind: "advance", next_node_id: "yes" });
+  });
+
   it("steps_taken com texto que não é número continua nunca satisfazendo maior/menor", () => {
     const node = conditionNode({ combinator: "and", checks: [{ field: "steps_taken", op: "gte", value: "três" }] });
     const result = processNode({ node, edges, enrollment: enrollment(), lead: lead({ steps_taken: 9 }), clock });

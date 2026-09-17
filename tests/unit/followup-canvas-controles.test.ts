@@ -56,6 +56,8 @@ describe("controles do canvas de follow-up seguem o tema", () => {
     const corpo = bloco(".react-flow");
     expect(corpo).toMatch(/--xy-edge-stroke:\s*var\(--color-text-muted\)/);
     expect(corpo).toMatch(/--xy-edge-stroke-selected:\s*var\(--color-accent\)/);
+    // A linha que o usuário ARRASTA para criar a ligação lê outra var.
+    expect(corpo).toMatch(/--xy-connectionline-stroke:\s*var\(--color-accent\)/);
     // Sem o sufixo `-default`: com ele, a var da lib venceria e nada mudaria.
     expect(corpo).not.toMatch(/--xy-edge-stroke-default/);
   });

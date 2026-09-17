@@ -22,6 +22,7 @@ import {
   comparadoresDoCampo,
   fraseDaCondicao,
   opcoes,
+  regraValeSempre,
   temFormaDeId,
   type CampoDaCondicao,
   type Combinador,
@@ -81,7 +82,7 @@ export function ConditionForm({
   ramosLigados?: string[];
 }) {
   const t = useT();
-  const { etapas, carregando: etapasCarregando, nomes } = useEtapasDoFluxo();
+  const { etapas, carregando: etapasCarregando, falhou: etapasFalharam, nomes } = useEtapasDoFluxo();
   const funis = etapasPorFunil(etapas);
   const [combinator, setCombinator] = useState(config.combinator);
   const [branching, setBranching] = useState<Branching>(config.branching ?? "combined");
@@ -308,6 +309,7 @@ export function ConditionForm({
                 valor={String(check.value).trim()}
                 funis={funis}
                 carregando={etapasCarregando}
+                falhou={etapasFalharam}
                 onEscolher={(stageId) => trocarValor(idx, stageId)}
               />
             ) : CAMPOS_DA_CONDICAO[check.field].tipoDeValor === "numero" ? (
@@ -339,6 +341,11 @@ export function ConditionForm({
             <p className="text-xs text-text-muted">{fraseDaCondicao(check.field, check.op, check.value, nomes)}</p>
             {comparador(check.field, check.op).aviso && (
               <p className="text-xs text-warning-fg">{t(comparador(check.field, check.op).aviso!)}</p>
+            )}
+            {regraValeSempre(check.field, check.op, check.value) && (
+              <p className="text-xs text-warning-fg" data-testid={`regra-vale-sempre-${idx}`}>
+                {t("Esta regra vale para todo contato. A saída dela leva todo mundo, e as saídas seguintes nunca são usadas.")}
+              </p>
             )}
           </div>
         ))}
@@ -376,21 +383,25 @@ function ValorDeEtapa({
   valor,
   funis,
   carregando,
+  falhou,
   onEscolher,
 }: {
   valor: string;
   funis: ReturnType<typeof etapasPorFunil>;
   carregando: boolean;
+  falhou: boolean;
   onEscolher: (stageId: string) => void;
 }) {
   const t = useT();
   const conhecida = funis.some((f) => f.etapas.some((e) => e.stageId === valor));
-  const semEtapas = !carregando && funis.length === 0;
-  const solta = !carregando && valor !== "" && !conhecida;
+  // Lista vazia por FALHA não é lista vazia por não haver etapa: acusar a regra
+  // aqui seria culpar o fluxo por uma consulta que caiu.
+  const semEtapas = !carregando && !falhou && funis.length === 0;
+  const solta = !carregando && !falhou && valor !== "" && !conhecida;
 
   return (
     <>
-      <Select value={conhecida ? valor : ""} onValueChange={onEscolher} disabled={carregando || semEtapas}>
+      <Select value={conhecida ? valor : ""} onValueChange={onEscolher} disabled={carregando || falhou || semEtapas}>
         <SelectTrigger aria-label={t("Valor")} aria-invalid={solta}>
           <SelectValue placeholder={carregando ? t("Carregando etapas…") : t("Escolha a etapa")} />
         </SelectTrigger>
@@ -407,6 +418,11 @@ function ValorDeEtapa({
           ))}
         </SelectContent>
       </Select>
+      {falhou && (
+        <p className="text-xs text-warning-fg" data-testid="regra-etapas-indisponiveis">
+          {t("Não consegui carregar as etapas agora. O que estava escolhido continua salvo — recarregue a página para escolher outra.")}
+        </p>
+      )}
       {semEtapas && (
         <p className="text-xs text-error-fg">
           {t("Nenhuma etapa ativa encontrada — crie o funil antes de usar esta regra.")}
@@ -415,7 +431,7 @@ function ValorDeEtapa({
       {solta && (
         <p className="text-xs text-warning-fg" data-testid="regra-etapa-solta">
           {temFormaDeId(valor)
-            ? t("A etapa escolhida não existe mais ou foi arquivada. Escolha outra na lista.")
+            ? t("A etapa escolhida não está mais na lista de etapas ativas — foi arquivada ou apagada. Escolha outra.")
             : `“${valor}” ${t("foi digitado à mão e não é uma etapa do funil. Escolha a etapa na lista — do jeito que está, esta regra nunca decide nada.")}`}
         </p>
       )}

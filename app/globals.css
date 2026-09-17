@@ -820,6 +820,9 @@
      (claro 6,63:1, escuro 5,35:1); `text-subtle` cairia para 2,81:1 no escuro. */
   --xy-edge-stroke: var(--color-text-muted);
   --xy-edge-stroke-selected: var(--color-accent);
+  /* A linha que segue o cursor enquanto se arrasta uma ligação lia a mesma var
+     default da lib — o cinza reprovado acima. */
+  --xy-connectionline-stroke: var(--color-accent);
   --xy-handle-background-color: var(--color-accent);
   --xy-handle-border-color: var(--color-surface);
 }

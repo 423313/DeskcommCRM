@@ -149,7 +149,10 @@ export function NodeCard({
                     )}
                   />
                 )}
-                <span className="line-clamp-2 break-words text-xs leading-tight">{rotulo}</span>
+                {/* Três linhas, não duas: a frase da regra interpola dado do
+                    usuário («Etapa · Funil»), e o que estourava era justamente o
+                    fim — o nome do funil, que existe para desambiguar. */}
+                <span className="line-clamp-3 break-words text-xs leading-tight">{rotulo}</span>
                 <Handle
                   type="source"
                   id={branch.id}

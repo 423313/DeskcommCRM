@@ -17,15 +17,17 @@ export interface EtapasDoFluxo {
   /** Etapas ATIVAS da organização, na ordem do funil. */
   etapas: EtapaDeGatilho[];
   carregando: boolean;
+  /** A leitura falhou: a lista está vazia porque não deu para saber, não porque não há etapa. */
+  falhou: boolean;
   nomes: NomesDeValor;
 }
 
-const SEM_ETAPAS: EtapasDoFluxo = { etapas: [], carregando: false, nomes: {} };
+const SEM_ETAPAS: EtapasDoFluxo = { etapas: [], carregando: false, falhou: false, nomes: {} };
 
 const Contexto = createContext<EtapasDoFluxo>(SEM_ETAPAS);
 
 export function EtapasDoFluxoProvider({ children }: { children: ReactNode }) {
-  const { etapas, carregando } = useEtapasDeGatilho();
+  const { etapas, carregando, falhou } = useEtapasDeGatilho();
 
   // O provider fica ACIMA do canvas: arrastar um nó re-renderiza o canvas, não
   // este componente — o valor só muda quando as consultas de etapas mudam.
@@ -34,17 +36,19 @@ export function EtapasDoFluxoProvider({ children }: { children: ReactNode }) {
     return {
       etapas,
       carregando,
+      falhou,
       nomes: {
-        // Enquanto a lista não chegou, reticências: "(não encontrada)" seria uma
-        // mentira de um segundo sobre uma etapa que existe.
+        // `null` significa "não existe" e vira acusação na tela. Enquanto a lista
+        // não chegou — ou quando a leitura FALHOU — a resposta honesta é "não
+        // sei": reticências, sem acusar uma regra que pode estar perfeita.
         etapa: (id) => {
           const etapa = porId.get(id);
           if (etapa) return nomeDaEtapa(etapa);
-          return carregando ? "…" : null;
+          return carregando || falhou ? "…" : null;
         },
       },
     };
-  }, [etapas, carregando]);
+  }, [etapas, carregando, falhou]);
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }

@@ -695,6 +695,8 @@ describe('validateFlowForPublish — a regra precisa poder decidir', () => {
       'check_value_not_number',
     ]);
     expect(validateFlowForPublish(comRegras([{ field: 'steps_taken', op: 'gte', value: '3' }]), { etapas })).toEqual({ ok: true });
+    // O motor compara 2.5 sem problema: recusar seria recusar o que funciona.
+    expect(validateFlowForPublish(comRegras([{ field: 'steps_taken', op: 'lte', value: 2.5 }]), { etapas })).toEqual({ ok: true });
   });
 
   it('etapa digitada pelo nome (fluxo antigo) reprova pedindo para escolher na lista', () => {

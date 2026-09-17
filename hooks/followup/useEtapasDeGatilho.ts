@@ -35,6 +35,13 @@ export interface EtapasDeGatilho {
   etapas: EtapaDeGatilho[];
   /** `true` enquanto QUALQUER funil ainda não respondeu — o seletor não deve mentir "vazio". */
   carregando: boolean;
+  /**
+   * `true` quando alguma leitura FALHOU. Lista vazia por falha e lista vazia por
+   * não haver etapa são estados diferentes, e quem lê precisa distinguir: sem
+   * isto, uma consulta que caiu vira "esta etapa não existe" na tela — acusação
+   * falsa sobre uma regra sadia, no momento em que o produto está pior.
+   */
+  falhou: boolean;
 }
 
 /**
@@ -112,5 +119,6 @@ export function useEtapasDeGatilho(habilitado = true): EtapasDeGatilho {
   return {
     etapas,
     carregando: funis.isLoading || porFunil.some((q) => q.isLoading),
+    falhou: funis.isError || porFunil.some((q) => q.isError),
   };
 }

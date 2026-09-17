@@ -1565,8 +1565,14 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma etapa ativa encontrada — crie o funil antes de usar esta regra.": {
     es: "No se encontró ninguna etapa activa — crea el embudo antes de usar esta regla.",
   },
-  "A etapa escolhida não existe mais ou foi arquivada. Escolha outra na lista.": {
-    es: "La etapa elegida ya no existe o fue archivada. Elige otra en la lista.",
+  "A etapa escolhida não está mais na lista de etapas ativas — foi arquivada ou apagada. Escolha outra.": {
+    es: "La etapa elegida ya no está en la lista de etapas activas — fue archivada o eliminada. Elige otra.",
+  },
+  "Esta regra vale para todo contato. A saída dela leva todo mundo, e as saídas seguintes nunca são usadas.": {
+    es: "Esta regla vale para todo contacto. Su salida se lleva a todos, y las salidas siguientes nunca se usan.",
+  },
+  "Não consegui carregar as etapas agora. O que estava escolhido continua salvo — recarregue a página para escolher outra.": {
+    es: "No pude cargar las etapas ahora. Lo que estaba elegido sigue guardado — recarga la página para elegir otra.",
   },
   "foi digitado à mão e não é uma etapa do funil. Escolha a etapa na lista — do jeito que está, esta regra nunca decide nada.": {
     es: "se escribió a mano y no es una etapa del embudo. Elige la etapa en la lista — tal como está, esta regla nunca decide nada.",

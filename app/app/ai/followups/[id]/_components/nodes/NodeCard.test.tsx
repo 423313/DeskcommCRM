@@ -15,7 +15,7 @@ import type { EtapasDoFluxo } from "../EtapasDoFluxo";
 import { NodeCard } from "./NodeCard";
 import { NODE_VISUALS } from "./nodeVisuals";
 
-let etapasDoFluxo: EtapasDoFluxo = { etapas: [], carregando: false, nomes: {} };
+let etapasDoFluxo: EtapasDoFluxo = { etapas: [], carregando: false, falhou: false, nomes: {} };
 vi.mock("../EtapasDoFluxo", () => ({ useEtapasDoFluxo: () => etapasDoFluxo }));
 vi.mock("@xyflow/react", () => ({
   Handle: () => null,
@@ -48,7 +48,7 @@ describe("NodeCard — o texto não é cortado em uma linha", () => {
     );
 
     const linha = screen.getByTestId("node-branch-c1-regra-1");
-    expect(linha.querySelector("span.line-clamp-2")).not.toBeNull();
+    expect(linha.querySelector("span.line-clamp-3")).not.toBeNull();
     expect(linha.querySelector("span.truncate")).toBeNull();
   });
 });
@@ -76,7 +76,7 @@ describe("NodeCard — regra que não aponta para etapa nenhuma se acusa no card
     );
 
   it("nome digitado à mão: a saída fica marcada e o title diz o que fazer", () => {
-    etapasDoFluxo = { etapas: [], carregando: false, nomes: { etapa: () => null } };
+    etapasDoFluxo = { etapas: [], carregando: false, falhou: false, nomes: { etapa: () => null } };
     cartao("PAGO");
 
     const linha = screen.getByTestId("node-branch-c1-regra-1");
@@ -86,7 +86,7 @@ describe("NodeCard — regra que não aponta para etapa nenhuma se acusa no card
 
   it("etapa existente não acusa nada e aparece pelo nome", () => {
     const ID = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
-    etapasDoFluxo = { etapas: [], carregando: false, nomes: { etapa: (id) => (id === ID ? "Pago · Vendas" : null) } };
+    etapasDoFluxo = { etapas: [], carregando: false, falhou: false, nomes: { etapa: (id) => (id === ID ? "Pago · Vendas" : null) } };
     cartao(ID);
 
     const linha = screen.getByTestId("node-branch-c1-regra-1");
@@ -95,9 +95,19 @@ describe("NodeCard — regra que não aponta para etapa nenhuma se acusa no card
   });
 
   it("enquanto as etapas carregam, o card não acusa uma etapa que existe", () => {
-    etapasDoFluxo = { etapas: [], carregando: true, nomes: { etapa: () => "…" } };
+    etapasDoFluxo = { etapas: [], carregando: true, falhou: false, nomes: { etapa: () => "…" } };
     cartao("6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b");
 
     expect(screen.getByTestId("node-branch-c1-regra-1").dataset.regraSemEtapa).toBeUndefined();
+  });
+
+  it("leitura das etapas que FALHOU não vira acusação — o cartão não sabe, e não inventa", () => {
+    // O provider responde "…" quando a consulta caiu; o cartão só acusa com null.
+    etapasDoFluxo = { etapas: [], carregando: false, falhou: true, nomes: { etapa: () => "…" } };
+    cartao("6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b");
+
+    const linha = screen.getByTestId("node-branch-c1-regra-1");
+    expect(linha.dataset.regraSemEtapa).toBeUndefined();
+    expect(linha).not.toHaveTextContent("(não encontrada)");
   });
 });
