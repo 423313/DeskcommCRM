@@ -7,9 +7,16 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin"
 
-# `uname` é o único sinal que a guarda lê. Os outros três são sentinelas: se a
-# recusa vier tarde demais, qualquer tentativa de consultar/puxar imagem deixa
-# rastro e o teste reprova mesmo que a mensagem final pareça correta.
+# `uname` é o único sinal que a guarda lê. Os outros três são sentinelas: se o
+# `_common.sh` chamar docker, curl ou git antes de a guarda recusar, fica rastro
+# e o teste reprova mesmo que a mensagem final pareça correta.
+#
+# O alcance é o `_common.sh`, não o install.sh/update.sh reais. Os chamadores
+# abaixo são wrappers mínimos que só carregam o `_common.sh` com o NOME do
+# script, que é o que a guarda confere. O install.sh real já chama docker e git
+# (conferência de dependências e, se preciso, o clone) antes de carregar o
+# `_common.sh`, e isso fica fora desta prova; o que ela mede é que a recusa vem
+# antes de qualquer trabalho feito pelo próprio `_common.sh`.
 cat > "$TMP/bin/uname" <<'SH'
 #!/usr/bin/env bash
 if [ "${1:-}" = "-m" ]; then
@@ -70,7 +77,7 @@ for cmd in docker curl git; do
   if [ -e "$TMP/tocou-$cmd" ]; then
     printf '✗ a guarda tocou em %s antes de recusar ARM64\n' "$cmd"; fail=1
   else
-    printf '✓ ARM64 é recusado antes de tocar em %s\n' "$cmd"
+    printf '✓ _common.sh recusa ARM64 antes de tocar em %s\n' "$cmd"
   fi
 done
 
