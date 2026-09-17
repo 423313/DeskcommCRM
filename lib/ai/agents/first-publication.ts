@@ -47,14 +47,16 @@ export type PublishOutcome =
   | { published: false; reason: "failed"; message: string };
 
 /**
- * O provedor de IA que a instalação escolheu.
+ * O provedor de IA que a ORGANIZAÇÃO escolheu.
  *
- * O instalador pergunta "qual inteligência artificial vai atender seus
- * clientes?" e grava a resposta em `organizations.settings.llm.provider`. Este
- * passo publicava `"anthropic"` literal, e como o provider da VERSÃO vence o da
- * organização em `resolveOrgLlmConfig`, quem escolheu outro terminava o wizard
- * com um agente "Publicado" que morre em toda mensagem pedindo uma chave que
- * ele nunca teve.
+ * Duas portas gravam a resposta de "qual inteligência artificial vai atender
+ * seus clientes?" `organizations.settings.llm.provider`: o instalador, no menu
+ * do kit, e o passo da chave do onboarding, quando a pessoa cola a chave de
+ * outro provedor (`app/actions/onboarding/chaveDaIa.ts` →
+ * `lib/ai/pontos/padrao-da-organizacao.ts`). Este passo publicava `"anthropic"`
+ * literal, e como o provider da VERSÃO vence o da organização em
+ * `resolveOrgLlmConfig`, quem escolheu outro terminava o wizard com um agente
+ * "Publicado" que morre em toda mensagem pedindo uma chave que ele nunca teve.
  *
  * `settings` é jsonb livre: leitura defensiva, igual à do agent-engine.
  */
@@ -124,31 +126,31 @@ export async function publishFirstVersion(
   let provider = selection?.provider ?? provedorDaInstalacao(org?.settings);
 
   /*
-   * ⚠️ QUAL CHAVE ESTA VERSÃO USA — e por que o provedor pode MUDAR aqui.
+   * ⚠️ QUAL CHAVE ESTA VERSÃO USA — e por que o provedor NÃO muda mais aqui.
    *
    * As duas origens de chave continuam valendo: credencial validada da
    * organização vence; na falta dela, `credential_id: null` significa "a chave
    * da instalação", que é o caso mais comum do kit.
    *
-   * O terceiro caso é o da #1007, e ele caía entre os dois: a chave que a
-   * pessoa colou no passo "Configurar IA" quando ela é de OUTRO provedor que
-   * não o da instalação. O wizard grava a credencial com o provedor da chave
-   * colada (é o mesmo provedor que `loadCredential` usa no turno), mas a
-   * publicação partia do provedor da instalação — a busca por credencial nunca
-   * achava a chave que estava ali, e o onboarding terminava com o agente em
-   * rascunho e um pedido de chave de outro provedor.
+   * O terceiro caso era o da #1007, e ele caía entre os dois: a chave que a
+   * pessoa colou no passo "Configurar IA" sendo de OUTRO provedor que não o da
+   * empresa. A publicação partia do provedor da empresa, não achava a chave que
+   * estava ali, e o onboarding terminava com o atendente em rascunho pedindo
+   * uma chave de outro provedor.
    *
-   * A chave colada é a decisão mais recente e mais explícita da pessoa sobre
-   * qual cérebro este agente usa; ela vence o padrão da instalação QUANDO o
-   * provedor da instalação não tem chave nenhuma — nem credencial da
-   * organização, nem chave de plataforma. Quando tem, nada muda: o caminho que
-   * já funcionava continua vencendo, e a adoção só olha para credencial
-   * VALIDADA (chave não confirmada não é utilizável pelo turno).
+   * A primeira versão deste PR resolvia isso AQUI, adotando a credencial
+   * validada mais recente da organização, de qualquer provedor. A decisão do
+   * dono do produto mudou o lugar da resposta: quem cola a chave no wizard
+   * escolhe o provedor da EMPRESA, e a escolha se grava em
+   * `organizations.settings.llm` no passo em que a chave é guardada
+   * (`lib/ai/pontos/padrao-da-organizacao.ts`). Publicar por adoção seria uma
+   * segunda semântica, e pior: poria o ATENDENTE num provedor em que a EMPRESA
+   * não está — e é o provedor da versão que vence o da organização em
+   * `resolveOrgLlmConfig`. O ponto de IA mais visível do produto apontaria para
+   * um provedor que ninguém escolheu, que é exatamente o que a decisão proíbe.
    *
-   * A chave sai daqui ANTES da escolha do modelo de propósito: modelo e
-   * provedor são um par indivisível, e depois da adoção o catálogo consultado
-   * tem de ser o do provedor adotado. Emprestar o id do modelo de outro
-   * provedor manda um nome que o endpoint não conhece.
+   * Então aqui só se LÊ o provedor da organização. Provedor e modelo continuam
+   * saindo da mesma origem, e a leitura do catálogo abaixo é a do provedor lido.
    */
   let credentialId: string | null = selection ? selection.credentialId : null;
   /** Provedor cuja credencial colada ainda não foi confirmada pelo provedor. */
@@ -171,39 +173,24 @@ export async function publishFirstVersion(
     credentialId = (credencialDoProvedor?.id as string | undefined) ?? null;
 
     if (!credentialId && !chaveDePlataforma(provider)) {
-      // Ninguém tem chave utilizável para o provedor da instalação. Antes de
-      // desistir, a chave colada no wizard: a mais recente entre as validadas
-      // que já existem para esta organização.
-      const { data: validadas } = await admin
+      // Nada utilizável — mas pode haver uma chave colada esperando o provedor
+      // confirmar. Nomear isso é o que separa "cole a chave" de "espere um
+      // instante": são causas e conselhos diferentes, e sem o nome do provedor
+      // a tela dizia "não achei chave de X" para quem tinha acabado de colar
+      // uma. A busca é do provedor DA ORGANIZAÇÃO porque, depois da decisão, é
+      // esse o provedor da chave colada no wizard: um passo que grava
+      // `settings.llm` antes de publicar.
+      const { data: pendente } = await admin
         .from("ai_provider_credentials")
-        .select("id, provider")
+        .select("provider")
         .eq("organization_id", orgId)
+        .eq("provider", provider)
         .eq("is_active", true)
-        .not("validated_at", "is", null)
+        .is("validated_at", null)
         .order("created_at", { ascending: false })
-        .limit(10);
-
-      const colhida = (validadas ?? []).find(
-        (linha) => linha.provider && linha.provider !== provider,
-      );
-      if (colhida?.id) {
-        provider = colhida.provider as string;
-        credentialId = colhida.id as string;
-      } else {
-        // Nada utilizável — mas pode haver uma chave colada esperando o
-        // provedor confirmar. Nomear isso é o que separa "cole a chave" de
-        // "espere um instante": são causas e conselhos diferentes.
-        const { data: pendente } = await admin
-          .from("ai_provider_credentials")
-          .select("provider")
-          .eq("organization_id", orgId)
-          .eq("is_active", true)
-          .is("validated_at", null)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (pendente?.provider) chaveEmVerificacao = pendente.provider as string;
-      }
+        .limit(1)
+        .maybeSingle();
+      if (pendente?.provider) chaveEmVerificacao = pendente.provider as string;
     }
   }
 
@@ -253,8 +240,9 @@ export async function publishFirstVersion(
 
   // Sem chave NENHUMA (nem da organização, nem da instalação) não se publica:
   // o agente responderia erro em toda mensagem e o dono só descobriria com o
-  // primeiro cliente. A chave já foi resolvida lá em cima, junto com a adoção
-  // do provedor da chave colada; aqui só resta o veredito.
+  // primeiro cliente. A chave já foi resolvida lá em cima, no provedor da
+  // ORGANIZAÇÃO — que é o que a decisão do dono manda ler aqui; aqui só resta o
+  // veredito.
   //
   // E ele continua DEPOIS da escolha do modelo de propósito: catálogo sem
   // nenhum modelo utilizável é defeito de instalação que se resolve antes da
