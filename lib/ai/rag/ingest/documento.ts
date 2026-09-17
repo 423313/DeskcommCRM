@@ -35,12 +35,20 @@ export type ExtensaoAceita = (typeof EXTENSOES_ACEITAS)[number];
 /**
  * Falha de extração com motivo LEGÍVEL — ela vai direto para a linha da fonte e
  * para a Central de avisos, onde quem lê é o dono do negócio.
+ *
+ * `message` é também uma CHAVE DE UI: a rota de upload passa esse texto por
+ * `traduzir()`. Por isso ele precisa ser estável, nunca conter extensão, texto
+ * de exceção ou outro dado de runtime. `detalhe` preserva esse diagnóstico sem
+ * misturá-lo ao texto que a pessoa vê.
  */
 export class ErroDeExtracao extends Error {
   readonly code = "extracao_falhou";
-  constructor(message: string) {
+  readonly detalhe?: string;
+
+  constructor(message: string, detalhe?: string) {
     super(message);
     this.name = "ErroDeExtracao";
+    this.detalhe = detalhe;
   }
 }
 
@@ -70,8 +78,8 @@ export async function extrairTextoDoArquivo(
   const extensao = resolverExtensao(extensaoDeclarada ?? blobPath);
   if (!extensao) {
     throw new ErroDeExtracao(
-      `não sei ler arquivos "${extensaoDeclarada ?? blobPath.split(".").pop() ?? "?"}" — ` +
-        `envie PDF, Markdown ou texto`,
+      "Não sei ler esse tipo de arquivo. Envie PDF, Markdown (.md) ou texto (.txt).",
+      extensaoDeclarada ?? blobPath.split(".").pop() ?? "extensão desconhecida",
     );
   }
 
@@ -80,7 +88,8 @@ export async function extrairTextoDoArquivo(
 
   if (error || !blob) {
     throw new ErroDeExtracao(
-      `o arquivo não está mais guardado (${error?.message ?? "não encontrado"}) — envie de novo`,
+      "Falha ao processar o envio do arquivo.",
+      error?.message ?? "arquivo não encontrado no Storage",
     );
   }
 
@@ -98,7 +107,8 @@ export async function extrairTextoDoArquivo(
         );
       }
       throw new ErroDeExtracao(
-        `falhou ao ler o PDF: ${err instanceof Error ? err.message : String(err)}`,
+        "Falha ao processar o envio do arquivo.",
+        err instanceof Error ? err.message : String(err),
       );
     }
   } else {
