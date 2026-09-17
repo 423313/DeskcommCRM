@@ -569,5 +569,58 @@ R="$( printf "APP_IMAGE=${NS}/deskcommcrm:1.3.0\n" > "$PIN_DIR/.env"
         ". '$KIT_DIR_TESTE/_common.sh'; completar_pin_ausente .env" 2>/dev/null || true )"
 check "imagem sem label de versão → não inventa pin" test -z "$R"
 
+# ── 11. Conserto que vive numa função do kit vale JÁ NA PRIMEIRA passada ─────
+# O `update.sh` carrega `_common.sh` na linha 16, ANTES do `git checkout` da tag
+# nova. Sem reler o arquivo depois do checkout, o resto da atualização roda com
+# as funções da versão ANTIGA — e um conserto que more numa função do kit só
+# chega na atualização SEGUINTE. Medido em produção com o conserto do segredo no
+# crontab (GHSA-vm36-w42w-rr5v): a linha antiga, com o segredo escrito nela,
+# continuava no crontab depois de atualizar para a versão que a conserta.
+#
+# A instalação deste caso parte do kit ANTIGO — que é a situação de quem já
+# instalou — e a tag de destino tem o kit NOVO. Uma passada só.
+echo "── 11. Conserto em função do kit vale já na primeira passada"
+CASO11="$WORK/caso11"
+cp -R "$PROJ" "$CASO11"
+cd "$CASO11" || exit 1
+NOVO_COMMON="$WORK/common-novo.sh"
+cp hostgator-setup-kit/_common.sh "$NOVO_COMMON"
+# Kit ANTIGO: a linha do cron carrega o segredo, como antes do conserto.
+python3 - "$CASO11/hostgator-setup-kit/_common.sh" <<'PATCH'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+nova = 'local cron_line="* * * * * curl -fsS -H @\\"${cabecalho}\\" \\"${url_drain}\\" >/dev/null 2>&1 ${marcador}"'
+velha = 'local cron_line="* * * * * curl -fsS -H \\"Authorization: Bearer ${secret}\\" \\"${url_drain}\\" >/dev/null 2>&1 ${marcador}"'
+assert s.count(nova) == 1, "a linha nova do cron mudou de forma: %d ocorrência(s)" % s.count(nova)
+s = s.replace(nova, velha)
+# O kit de ANTES do conserto não gravava arquivo de cabeçalho nenhum — tirar só a
+# linha do cron deixaria o fixture mais moderno que a realidade, e a sabotagem
+# deste caso nem alcançaria a prova da permissão 600.
+grava = '''  local cabecalho="${PROJECT_DIR:-$PWD}/.env.cron-drain"
+  gravar_cabecalho_do_cron "$cabecalho" "$secret" \\
+    || { c_ylw "⚠ não consegui gravar ${cabecalho} — não ativei o cron das automações."; return 0; }
+'''
+assert s.count(grava) == 1, "o bloco que grava o cabeçalho mudou de forma: %d" % s.count(grava)
+s = s.replace(grava, "")
+open(p, "w", encoding="utf-8").write(s)
+PATCH
+git add -A; git commit --quiet -m "kit antigo (linha do cron com o segredo)"
+# Tag de destino: kit NOVO.
+cp "$NOVO_COMMON" hostgator-setup-kit/_common.sh
+git add -A; git commit --quiet -m "kit novo (linha do cron aponta para o arquivo)"
+git tag v9.9.9
+git checkout --quiet HEAD~1   # a instalação está no kit ANTIGO
+: > "$FAKE_CRONTAB"
+rm -f "$CASO11/.env.cron-drain"
+bash hostgator-setup-kit/update.sh --to v9.9.9 --skip-backup > "$WORK/saida11.txt" 2>&1
+check "a linha do cron aponta para o arquivo de cabeçalho (conserto aplicado nesta passada)" \
+  grep -q -- "-H @" "$FAKE_CRONTAB"
+check "  e o segredo NÃO está escrito na linha do cron" \
+  bash -c '! grep -q "Authorization: Bearer" "$FAKE_CRONTAB"'
+check "  o arquivo de cabeçalho nasceu com permissão 600" \
+  bash -c '[ "$(stat -f %Lp "'"$CASO11"'/.env.cron-drain" 2>/dev/null || stat -c %a "'"$CASO11"'/.env.cron-drain" 2>/dev/null)" = "600" ]'
+cd "$PROJ" || exit 1
+
 if [ "$FAILS" -eq 0 ]; then echo "OK — todas as provas passaram."; else echo "FALHOU — $FAILS prova(s)."; fi
 exit $((FAILS > 0))
