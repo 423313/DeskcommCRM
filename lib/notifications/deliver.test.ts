@@ -55,9 +55,12 @@ describe("entregarAviso", () => {
       href: "/app/inbox?id=conv-1",
     });
 
-    const [, opcoes] = vi.mocked(toast).mock.calls.at(-1)!;
-    expect(opcoes?.action?.label).toBe("Abrir conversa");
-    opcoes?.action?.onClick();
+    const [, opcoes] = vi.mocked(toast).mock.calls.at(-1) as unknown as [
+      string,
+      { action?: { label: string; onClick: () => void } },
+    ];
+    expect(opcoes.action?.label).toBe("Abrir conversa");
+    opcoes.action!.onClick();
     expect(assign).toHaveBeenCalledWith("/app/inbox?id=conv-1");
   });
 
