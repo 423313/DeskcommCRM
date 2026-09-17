@@ -40,6 +40,9 @@ import {
 
 type Eventos = string[];
 
+/** Relógio monotônico: em `Date.now()` os ms empatam e a ordem (o contrato aqui) se perde. */
+const relogio = (): number => performance.now();
+
 /** Pool fake: registra a ORDEM dos eventos do guardrail. */
 function poolFalso(eventos: Eventos) {
   const client = {
@@ -122,8 +125,8 @@ describe('a pausa humana é paga FORA da posse do lock do número (#654)', () =>
     const original = client.query;
     client.query = vi.fn(async (sql: string) => {
       const s = String(sql).toLowerCase().trim();
-      if (s === 'begin') posseInicio = Date.now();
-      if (s === 'commit') posseFim = Date.now();
+      if (s === 'begin') posseInicio = relogio();
+      if (s === 'commit') posseFim = relogio();
       return original(sql);
     }) as unknown as typeof client.query;
     const conectado = cru.connect;
@@ -133,7 +136,7 @@ describe('a pausa humana é paga FORA da posse do lock do número (#654)', () =>
         esperaForaDoLock: async () => {
           // Espera de verdade, curta: é o tempo que ANTES ficava em cima do lock.
           await new Promise((resolve) => setTimeout(resolve, ESPERA_MS));
-          esperaTerminouEm = Date.now();
+          esperaTerminouEm = relogio();
         },
         send: async () => ({ kind: 'sent', idempotencyKey: 'k', messageId: 'm2' }),
       }),
@@ -145,7 +148,9 @@ describe('a pausa humana é paga FORA da posse do lock do número (#654)', () =>
     expect(posseInicio).toBeGreaterThan(0);
     expect(posseFim).toBeGreaterThan(0);
     // Os dois intervalos não se sobrepõem: a espera terminou antes de a transação abrir.
-    expect(esperaTerminouEm).toBeLessThan(posseInicio);
+    // (`<=` porque o relógio monotônico pode empatar no mesmo tick — o que o contrato
+    // proíbe é a espera terminar DEPOIS de a posse começar.)
+    expect(esperaTerminouEm).toBeLessThanOrEqual(posseInicio);
     expect(posseFim - posseInicio).toBeLessThan(ESPERA_MS);
   });
 
