@@ -43,6 +43,7 @@ const DONO = "94900000-1111-4000-8000-000000000001";
 type Semente = {
   org: string;
   sess: string;
+  sessEco: string;
   contato: string;
   conversa: string;
   conversa2: string;
@@ -56,6 +57,7 @@ function semear(org: string, tag: string): Semente {
   const s: Semente = {
     org,
     sess: `94900000-0000-4000-8000-0000000000${tag}`,
+    sessEco: `94900000-bbbb-4000-8000-0000000000${tag}`,
     contato: `94900000-2222-4000-8000-0000000000${tag}`,
     conversa: `94900000-3333-4000-8000-0000000000${tag}`,
     conversa2: `94900000-4444-4000-8000-0000000000${tag}`,
@@ -70,12 +72,19 @@ function semear(org: string, tag: string): Semente {
       values ('${org}', 'zona-${tag}', 'Zona de perigo ${tag}', 'Zona ${tag}')
       on conflict (id) do nothing;
     insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
-      values ('${s.sess}', '${org}', 'zona-${tag}', '\\x00'::bytea) on conflict (id) do nothing;
+      values ('${s.sess}', '${org}', 'zona-${tag}', '\\x00'::bytea),
+             ('${s.sessEco}', '${org}', 'zona-eco-${tag}', '\\x00'::bytea)
+      on conflict (id) do nothing;
     insert into public.contacts (id, organization_id, display_name)
       values ('${s.contato}', '${org}', 'Cliente da zona de perigo') on conflict (id) do nothing;
+    -- As duas conversas são do MESMO contato, então precisam de canais
+    -- diferentes: \`uniq_conversations_1to1_per_contact_session\` é único em
+    -- (organization_id, contact_id, channel_session_id) para \`is_group=false\`,
+    -- e o \`on conflict (id)\` abaixo não cobre colisão nesse índice — o INSERT
+    -- estouraria 23505 aqui no \`beforeAll\` e o arquivo inteiro seria pulado.
     insert into public.conversations (id, organization_id, contact_id, channel_session_id)
       values ('${s.conversa}', '${org}', '${s.contato}', '${s.sess}'),
-             ('${s.conversa2}', '${org}', '${s.contato}', '${s.sess}')
+             ('${s.conversa2}', '${org}', '${s.contato}', '${s.sessEco}')
       on conflict (id) do nothing;
   `);
 
@@ -101,7 +110,7 @@ function semear(org: string, tag: string): Semente {
   sql(`
     insert into public.messages (id, organization_id, conversation_id, channel_session_id, contact_id, type, direction, body)
       values ('${s.msgAlvo}', '${org}', '${s.conversa}', '${s.sess}', '${s.contato}', 'text', 'outbound', 'resposta enviada'),
-             ('${s.msgEco}', '${org}', '${s.conversa2}', '${s.sess}', '${s.contato}', 'text', 'outbound', 'eco do gateway');
+             ('${s.msgEco}', '${org}', '${s.conversa2}', '${s.sessEco}', '${s.contato}', 'text', 'outbound', 'eco do gateway');
     insert into public.ai_reply_drafts
       (id, organization_id, conversation_id, contact_id, agent_id, agent_version_id, channel_session_id,
        service_boundary, context_revision, operation_revision, status, original_body, approved_body, message_id)
@@ -117,7 +126,7 @@ function semear(org: string, tag: string): Semente {
       (id, organization_id, conversation_id, contact_id, agent_id, agent_version_id, channel_session_id,
        service_boundary, context_revision, operation_revision, status, original_body, approved_body, message_id)
       select '94900000-aaaa-4000-8000-0000000000${tag}', '${org}', '${s.conversa2}', '${s.contato}',
-             '${s.agente}', '${s.versao}', '${s.sess}', '${boundary}'::jsonb,
+             '${s.agente}', '${s.versao}', '${s.sessEco}', '${boundary}'::jsonb,
              c.reply_context_revision + 1, a.operation_revision, 'approved', 'texto da IA',
              'resposta revisada do eco', '${s.msgEco}'
         from public.conversations c, public.ai_agents a
