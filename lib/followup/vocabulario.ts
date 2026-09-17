@@ -127,9 +127,19 @@ const AVISO_SO_TEXTO = "“Contém” só funciona com texto. Em número, esta c
  */
 export const VALOR_A_PREENCHER = "(a preencher)";
 
+/**
+ * Etapa cujo id não tem nome: apagada, de outra organização, ou a leitura dos
+ * nomes falhou. O uuid não é nome de nada para quem lê — e entre aspas pareceria.
+ */
+export const ETAPA_NAO_ENCONTRADA = "(não encontrada)";
+
 const semValor = (valor: string | number): boolean => String(valor).trim() === "";
 
-const aspas = (valor: string | number): string => (semValor(valor) ? VALOR_A_PREENCHER : `“${valor}”`);
+/** Texto do SISTEMA no lugar do valor: vai sem aspas, para não se ler como algo que a pessoa escreveu. */
+const aspas = (valor: string | number): string =>
+  semValor(valor) ? VALOR_A_PREENCHER : valor === ETAPA_NAO_ENCONTRADA ? valor : `“${valor}”`;
+
+const FORMA_DE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function passos(valor: string | number): string {
   if (semValor(valor)) return `${VALOR_A_PREENCHER} passos`;
@@ -295,12 +305,18 @@ export function fraseDaCondicao(
   valor: string | number,
   nomes: NomesDeValor = {},
 ): string {
-  // Sem nome resolvido o valor sai como foi salvo: um fluxo antigo que guardou o
-  // NOME digitado ("PAGO") continua legível — e o formulário e o publish avisam
-  // que ele não aponta para etapa nenhuma.
-  const exibido =
-    campo === "lead_stage" && !semValor(valor) ? (nomes.etapa?.(String(valor)) ?? valor) : valor;
-  return comparador(campo, op).frase(exibido);
+  return comparador(campo, op).frase(valorExibido(campo, valor, nomes));
+}
+
+function valorExibido(campo: CampoDaCondicao, valor: string | number, nomes: NomesDeValor): string | number {
+  if (campo !== "lead_stage" || semValor(valor)) return valor;
+  const texto = String(valor).trim();
+  const nome = nomes.etapa?.(texto);
+  if (nome) return nome;
+  // Sem nome resolvido, um fluxo antigo que guardou o NOME digitado ("PAGO")
+  // continua legível — o formulário e o publish avisam que ele não aponta para
+  // etapa nenhuma. Já um id sem nome não tem o que mostrar.
+  return FORMA_DE_ID.test(texto) ? ETAPA_NAO_ENCONTRADA : valor;
 }
 
 export const COMBINADORES: Record<Combinador, string> = {

@@ -256,6 +256,25 @@ describe("rotuloDaAresta — o ramo nomeado do grafo v2", () => {
     expect(rotuloDaAresta(paraRamo("r-passos"), condicao)).toMatch(/^quando /);
   });
 
+  it("regra de etapa aparece pelo NOME da etapa — o id é o que o motor compara, não o que se lê", () => {
+    const ID_DA_ETAPA = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
+    const condicao: FlowNode = {
+      id: "c1",
+      type: "condition",
+      label: "Pagou?",
+      position: { x: 0, y: 0 },
+      config: {
+        branching: "per_check",
+        combinator: "and",
+        checks: [{ id: "regra-1", field: "lead_stage", op: "eq", value: ID_DA_ETAPA }],
+      },
+    };
+    const paraRegra = { id: "e", source: "c1", target: "x", priority: 0, condition: { type: "branch" as const, branch_id: "regra-1" } };
+    const nomes = { etapa: (id: string) => (id === ID_DA_ETAPA ? "Pago · Vendas" : null) };
+
+    expect(rotuloDaAresta(paraRegra, condicao, nomes)).toBe("quando o lead está na etapa “Pago · Vendas”");
+  });
+
   it("os ramos reservados do contrato viram frase sem depender do nó", () => {
     expect(rotuloDaAresta(aresta("no_reply"))).toBe("quando ninguém responde");
     expect(rotuloDaAresta(aresta("true"))).toBe("quando a condição é verdadeira");

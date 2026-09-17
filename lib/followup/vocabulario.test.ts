@@ -470,6 +470,14 @@ describe("a regra mostra o que a pessoa escolheu, nunca o identificador", () => 
     expect(fraseDaCondicao("lead_stage", "eq", "PAGO", nomes)).toBe("O lead está na etapa “PAGO”");
   });
 
+  it("id de etapa sem nome resolvido nunca vai para a tela", () => {
+    // Etapa apagada, de outra org, ou leitura que falhou: o uuid não é nome de
+    // nada para quem lê, e aparecer entre aspas o faria parecer um.
+    const OUTRO_ID = "1b2c3d4e-5f60-4a7b-8c9d-0e1f2a3b4c5d";
+    expect(fraseDaCondicao("lead_stage", "eq", OUTRO_ID, nomes)).toBe("O lead está na etapa (não encontrada)");
+    expect(fraseDaCondicao("lead_stage", "neq", ID_DA_ETAPA)).toBe("O lead não está na etapa (não encontrada)");
+  });
+
   it("o nome da etapa só vale para o campo etapa", () => {
     const tudoViraNome = { etapa: () => "NÃO DEVIA APARECER" };
     expect(fraseDaCondicao("tag", "eq", "vip", tudoViraNome)).toBe("O contato tem a etiqueta “vip”");

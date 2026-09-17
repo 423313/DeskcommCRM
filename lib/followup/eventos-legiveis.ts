@@ -33,6 +33,7 @@ import {
   fraseDaRegraNomeada,
   fraseDaRegraSemNome,
   fraseDoRamo,
+  type NomesDeValor,
 } from "./vocabulario";
 
 // ---------------------------------------------------------------------------
@@ -205,7 +206,7 @@ export function resumoDoNo(node: FlowNode): NoDoDossie {
  * dossiê mostra o RÓTULO DO DESTINO ao lado da frase, e é ele que separa duas
  * opções na hora de escolher por onde pular.
  */
-export function rotuloDaAresta(edge: FlowEdge, origem?: FlowNode): string {
+export function rotuloDaAresta(edge: FlowEdge, origem?: FlowNode, nomes: NomesDeValor = {}): string {
   const c = edge.condition;
   if (c.type === "always") return RAMOS_RESERVADOS_EM_FRASE[FALLBACK_BRANCH_ID];
   if (c.type === "cond_result") {
@@ -221,13 +222,13 @@ export function rotuloDaAresta(edge: FlowEdge, origem?: FlowNode): string {
   // v2: reservado tem frase própria; declarado precisa do NÓ, porque é lá que a
   // identidade do ramo mora — e o molde depende do tipo do nó (classe da IA e
   // regra do negócio não se leem igual).
-  return fraseDoRamo(c.branch_id) ?? fraseDoRamoDeclarado(origem, c.branch_id);
+  return fraseDoRamo(c.branch_id) ?? fraseDoRamoDeclarado(origem, c.branch_id, nomes);
 }
 
 const RAMO_SEM_NOME = "por um caminho sem nome";
 
 /** O molde certo para o ramo que o usuário declarou, escolhido pelo tipo do nó. */
-function fraseDoRamoDeclarado(origem: FlowNode | undefined, branchId: string): string {
+function fraseDoRamoDeclarado(origem: FlowNode | undefined, branchId: string, nomes: NomesDeValor): string {
   if (!origem) return RAMO_SEM_NOME;
 
   if (origem.type === "ai_classify") {
@@ -247,7 +248,7 @@ function fraseDoRamoDeclarado(origem: FlowNode | undefined, branchId: string): s
     // extenso — `regra-2` na tela do operador é o que o vocabulário proíbe.
     return check.label
       ? fraseDaRegraNomeada(check.label)
-      : fraseDaRegraSemNome(check.field, check.op, check.value);
+      : fraseDaRegraSemNome(check.field, check.op, check.value, nomes);
   }
 
   return RAMO_SEM_NOME;
