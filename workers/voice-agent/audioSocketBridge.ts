@@ -331,19 +331,29 @@ export class AudioSocketCallBridge {
           break;
         case "response.output_audio_transcript.done": {
           // Visto ao vivo em 17/09: o modelo às vezes NARRA a function em vez
-          // de chamá-la de verdade -- terminou uma resposta com
-          // "...Até mais! \n\n(functions.encerrar_chamada)" na fala, sem
-          // nenhum response.function_call_arguments.done correspondente. É a
-          // convenção textual antiga de function-calling vazando pra dentro
-          // da voz. Sem este fallback a ligação nunca desliga sozinha nesse
-          // caso -- response.done (abaixo) só vê o output real quando a tool
-          // é chamada pelo mecanismo estruturado, que aqui não aconteceu.
-          const narracaoDeEncerrar = new RegExp(`\\(?\\s*functions?\\.${ENCERRAR_CHAMADA_TOOL_NAME}\\s*\\)?`, "i");
-          if (narracaoDeEncerrar.test(event.transcript)) {
+          // de chamá-la de verdade -- duas variações JÁ vistas na mesma
+          // sessão de testes: "...Até mais! \n\n(functions.encerrar_chamada)"
+          // e "...\n\n{chamar função: encerrar_chamada}" -- sem nenhum
+          // response.function_call_arguments.done correspondente em nenhuma
+          // das duas. Não é um formato fixo (parênteses/chaves, inglês/
+          // português variam), então a detecção é só pelo NOME da tool
+          // aparecer no texto -- um identificador técnico que não ocorre em
+          // fala natural -- em vez de casar uma sintaxe específica. Sem isto
+          // a ligação nunca desliga sozinha nesses casos: response.done
+          // (abaixo) só vê function_call de verdade quando o mecanismo
+          // estruturado da Realtime API é usado, que aqui não aconteceu.
+          const narracaoDeEncerrar = new RegExp(ENCERRAR_CHAMADA_TOOL_NAME, "i").test(event.transcript);
+          if (narracaoDeEncerrar) {
             console.info(`[realtime] call=${this.ctx.callId} modelo narrou a function de encerrar em texto (fallback ativado)`);
             this.endCallRequested = true;
           }
-          const transcriptLimpo = event.transcript.replace(narracaoDeEncerrar, "").trim();
+          // A limpeza tira qualquer trecho entre parênteses/chaves que
+          // mencione a tool, mais a forma solta sem wrapper nenhum -- não dá
+          // pra saber de antemão qual sintaxe o modelo vai improvisar.
+          const transcriptLimpo = event.transcript
+            .replace(new RegExp(`[\\(\\{][^)}]*${ENCERRAR_CHAMADA_TOOL_NAME}[^)}]*[\\)\\}]`, "gi"), "")
+            .replace(new RegExp(`functions?\\.${ENCERRAR_CHAMADA_TOOL_NAME}`, "gi"), "")
+            .trim();
           this.ctx.onTranscriptTurn({ speaker: "agent", text: transcriptLimpo });
           break;
         }
