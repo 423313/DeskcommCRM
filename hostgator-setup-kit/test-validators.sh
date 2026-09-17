@@ -48,6 +48,25 @@ CRONTAB_REAL_DEPOIS="$SUITE_TMP/crontab-real-depois.txt"
 # estado de "usuário sem crontab". A distinção não importa para a comparação;
 # o que importa é ela ser feita com o MESMO comando nas duas pontas.
 crontab -l >"$CRONTAB_REAL_ANTES" 2>/dev/null || : >"$CRONTAB_REAL_ANTES"
+
+# dublar_uname_amd64 <diretório bin do sandbox>
+#
+# O `_common.sh` recusa, logo que é carregado, todo install.sh/update.sh que não
+# roda em amd64 — a imagem publicada é só linux/amd64. Os cenários que executam
+# esses scripts de verdade medem o INSTALADOR, não o processador de quem roda a
+# suíte: sem este dublê, num Mac Apple Silicon (`arm64`) todos eles paravam na
+# guarda (medido: 22 asserções vermelhas, a maioria "inconclusivo"). A recusa de
+# ARM tem prova própria em tests/shell/arquitetura-kit.test.sh. Só `uname -m` é
+# dublado; qualquer outro uso vai ao `uname` real.
+UNAME_REAL="$(command -v uname)"
+dublar_uname_amd64() {
+  cat > "$1/uname" <<STUB
+#!/usr/bin/env bash
+[ "\$*" = "-m" ] && { printf 'x86_64\n'; exit 0; }
+exec "$UNAME_REAL" "\$@"
+STUB
+  chmod +x "$1/uname"
+}
 # ok <descrição> <pass|reject> <validador> <valor> [trecho esperado na mensagem]
 #
 # O trecho esperado não é firula: sem ele o teste passa por acaso. Provado —
@@ -386,6 +405,7 @@ TMP3="$(mktemp -d)"
   cp install.sh _common.sh "$TMP3/"
   : > "$TMP3/proj/docker-compose.prod.yml"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP3/bin/docker"; chmod +x "$TMP3/bin/docker"
+  dublar_uname_amd64 "$TMP3/bin"
   cat > "$TMP3/supabase-provision.sh" <<'PROV'
 #!/usr/bin/env bash
 # O que o provisionamento emite quando SUPABASE_REGION (que vem do ambiente)
@@ -1708,6 +1728,7 @@ esac
 exit 0
 STUB
   chmod +x "$raiz/bin/docker" "$raiz/bin/curl" "$raiz/bin/crontab"
+  dublar_uname_amd64 "$raiz/bin"
 }
 
 # rodar <script> <flags> [linha extra do .env] [respostas do modo interativo]
