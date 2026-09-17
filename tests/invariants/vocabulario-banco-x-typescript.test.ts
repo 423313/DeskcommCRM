@@ -73,6 +73,18 @@ const PARES: Array<{
     simbolo: "ScoreBand",
   },
   {
+    tabela: "messages",
+    coluna: "sent_via",
+    // lib/types/messaging.ts → SentVia (#650). A coluna ficou FORA desta lista
+    // desde o #631: o banco aceitava seis valores e o TypeScript declarava três,
+    // a divergência viveu escondida e quem a achou foi um contribuidor externo,
+    // à mão, escrevendo uma feature. O union foi extraído num símbolo e o par
+    // entrou junto do carimbo `'automation'` (#652), que é o primeiro valor novo
+    // nesta coluna em muito tempo.
+    arquivo: "lib/types/messaging.ts",
+    simbolo: "SentVia",
+  },
+  {
     tabela: "crm_leads",
     coluna: "status",
     // lib/types/leads.ts → LeadStatus.

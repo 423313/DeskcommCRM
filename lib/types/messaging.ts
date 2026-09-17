@@ -3,6 +3,18 @@
  * Espelha o schema do Postgres — atualizar aqui quando a migration mudar.
  */
 
+/**
+ * O vocabulário de `messages.sent_via`, num símbolo só (#650).
+ *
+ * O CHECK do banco é a fonte: `messages_sent_via_check` aceita `crm`,
+ * `external_device`, `automation`, `ai`, `user` e `system`. O par banco ×
+ * TypeScript desta coluna faltava na lista `PARES` do invariante
+ * `tests/invariants/vocabulario-banco-x-typescript.test.ts` — e a divergência
+ * viveu escondida até um contribuidor escrever uma feature e tropeçar nela. Com
+ * o union extraído num símbolo, o par entra na lista e passa a ser vigiado.
+ */
+export type SentVia = "user" | "ai" | "system" | "external_device" | "automation" | "crm";
+
 export interface Conversation {
   id: string;
   organization_id: string;
