@@ -9,12 +9,21 @@ import { extrairTextoDoArquivo } from "@/lib/ai/rag/ingest/documento";
  * A CAUSA DE UMA FALHA DE EXTRAÇÃO CHEGA A QUEM LÊ O CARTÃO E A CENTRAL.
  *
  * `ErroDeExtracao.message` é chave de UI (estável, traduzível na rota de
- * upload) e o diagnóstico — erro do Storage, mensagem do parser de PDF — mora
- * em `detalhe`. Na reindexação, o worker é o ÚNICO lugar que registra a falha:
- * `last_index_error` da fonte e o corpo do aviso da Central. Se ele gravar só a
- * chave, "Falha ao processar o envio do arquivo." vira o registro inteiro, e o
- * `Cannot find package 'pdfjs-dist'` que diria ao operador o que consertar
- * desaparece de todo lugar.
+ * upload) e o diagnóstico mora em `detalhe`. Na reindexação, o worker é o ÚNICO
+ * lugar que registra a falha: `last_index_error` da fonte e o corpo do aviso da
+ * Central. Se ele gravar só a chave, "O arquivo não está mais guardado. Envie
+ * de novo." vira o registro inteiro, e o erro do Storage que diz QUAL arquivo
+ * sumiu e por quê desaparece de todo lugar.
+ *
+ * O caso ensaiado é o do Storage de propósito: hoje ele e a extensão
+ * desconhecida são as ÚNICAS causas que chegam a preencher `detalhe`
+ * (`lib/ai/rag/ingest/documento.ts:78-92`). A mensagem do parser de PDF não
+ * chega: `extractPdfText` embrulha toda falha em `PdfExtractError`
+ * (`lib/ai/rag/extractors/pdf.ts:75-96`, o `await import` está dentro do try),
+ * e o ramo que casa com ela em `documento.ts:103-108` monta a frase do
+ * PDF-só-imagem SEM repassar causa — quem conserta esse ramo é o PR #1061.
+ * Ensaiar aqui um `Cannot find package 'pdfjs-dist'` daria um verde sobre um
+ * caminho que produção não percorre.
  */
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
@@ -106,7 +115,10 @@ beforeEach(async () => {
 
   const { ErroDeExtracao } = await import("@/lib/ai/rag/ingest/documento");
   vi.mocked(extrairTextoDoArquivo).mockRejectedValue(
-    new ErroDeExtracao("Falha ao processar o envio do arquivo.", "Cannot find package 'pdfjs-dist'"),
+    new ErroDeExtracao(
+      "O arquivo não está mais guardado. Envie de novo.",
+      "Object not found: org-1/tabela.pdf",
+    ),
   );
 });
 
@@ -118,10 +130,10 @@ describe("rag-indexer — falha de extração guarda a causa", () => {
 
     const falha = carimbos.find((c) => c["last_index_status"] === "failed");
     expect(falha, "a fonte precisa ser carimbada como failed").toBeDefined();
-    expect(String(falha!["last_index_error"])).toContain("Falha ao processar o envio do arquivo.");
-    expect(String(falha!["last_index_error"])).toContain("pdfjs-dist");
+    expect(String(falha!["last_index_error"])).toContain("O arquivo não está mais guardado.");
+    expect(String(falha!["last_index_error"])).toContain("Object not found: org-1/tabela.pdf");
 
     expect(avisos).toHaveLength(1);
-    expect(String(avisos[0]!["body"])).toContain("pdfjs-dist");
+    expect(String(avisos[0]!["body"])).toContain("Object not found: org-1/tabela.pdf");
   });
 });
