@@ -71,10 +71,16 @@ function dataDoValor(valor: unknown): string | null {
   const texto = valor.trim();
 
   const iso = ISO.exec(texto);
-  if (iso) return dataValida(iso[1], iso[2], iso[3]);
+  if (iso) {
+    const [, ano, mes, dia] = iso;
+    if (ano && mes && dia) return dataValida(ano, mes, dia);
+  }
 
   const brasileira = BRASILEIRA.exec(texto);
-  if (brasileira) return dataValida(brasileira[3], brasileira[2], brasileira[1]);
+  if (brasileira) {
+    const [, dia, mes, ano] = brasileira;
+    if (ano && mes && dia) return dataValida(ano, mes, dia);
+  }
 
   return null;
 }
@@ -104,6 +110,7 @@ export function somarDias(dia: string, dias: number): string {
   if (!alvo || !Number.isInteger(dias)) return "";
 
   const [ano, mes, d] = alvo.split("-").map(Number);
+  if (ano === undefined || mes === undefined || d === undefined) return "";
   const base = Date.UTC(ano, mes - 1, d) + dias * 86_400_000;
   return new Date(base).toISOString().slice(0, 10);
 }
