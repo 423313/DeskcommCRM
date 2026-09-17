@@ -60,8 +60,8 @@ botox", "quero fazer clareamento") → Comercial; fallback = Recepção; grudado
 
 **Follow-ups**: não monte à mão — em *IA › Follow-ups* clique **Começar de um modelo** e instale
 os quatro de clínica (consulta, exame, cirurgia, falta), que já trazem os prazos e os textos
-escritos (consulta: 3 mensagens em 10 dias; exame: 3 em 2 semanas; cirurgia: 4 em ~3 meses;
-falta: 3 em 11 dias, a primeira 2 h depois). Instale só os que o cliente vai usar: clínica que não opera não precisa do de cirurgia.
+escritos. Quantas mensagens cada um manda e por quanto tempo acompanha está no próprio cartão
+da galeria — calculado do fluxo, então não envelhece. Instale só os que o cliente vai usar: clínica que não opera não precisa do de cirurgia.
 Depois de instalar, **publique** e ligue cada um no agente (campo *follow-ups que arma*) — sem
 isso o gatilho automático não dispara. Lembrete de consulta é a agenda, não follow-up.
 
