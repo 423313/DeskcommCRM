@@ -98,7 +98,7 @@ function rotaDoNo(node: FlowNode, facts: LeadFacts, edges: FlowEdge[] = EDGES): 
     repeatTaken: [],
     repeatTotal: [],
     proximo: null,
-  } as Parameters<typeof processNode>[0]);
+  } as unknown as Parameters<typeof processNode>[0]);
   const decision = result as { kind: string; next_node_id?: string };
   return decision.kind === "advance" ? (decision.next_node_id ?? null) : null;
 }
