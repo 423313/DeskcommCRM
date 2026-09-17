@@ -6,6 +6,44 @@ COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
 COMPOSE_NPM="docker-compose.npm.yml"
 
+# ── Arquitetura das imagens publicadas ───────────────────────────────────────
+# O registry publica hoje somente linux/amd64. Sem esta guarda, ARM64 chega até
+# o pull e morre com "no matching manifest"; o update.sh traduzia isso como
+# pacote ainda publicando/privado, um diagnóstico que manda repetir algo que
+# nunca vai funcionar nessa máquina.
+#
+# A decisão fica pura no argumento para os testes simularem a arquitetura sem
+# depender do runner. A leitura de `uname -m` é o único ponto ligado ao host.
+arquitetura_suportada_pelo_kit() {
+  case "${1:-}" in
+    x86_64|amd64) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+verificar_arquitetura_do_kit() {
+  local arch
+  arch="$(uname -m 2>/dev/null || printf 'desconhecida')"
+  arquitetura_suportada_pelo_kit "$arch" && return 0
+
+  printf '%s\n' \
+    "✖ Este servidor usa arquitetura '$arch', mas as imagens publicadas do DeskcommCRM hoje são linux/amd64." \
+    "  Use uma VPS x86_64/amd64. Repetir o download não resolve; ARM64 só será suportado quando houver imagens multi-arquitetura." >&2
+  return 1
+}
+
+# Este arquivo é compartilhado por várias ferramentas. A limitação de imagem só
+# deve bloquear os dois caminhos que realmente instalam/atualizam contêineres.
+# update.sh sourceia aqui antes de qualquer trabalho; install.sh sourceia depois
+# de localizar/clonar o repo, mas ainda antes de consultar ou baixar imagens do
+# DeskcommCRM.
+_deskcomm_chamador="${BASH_SOURCE[1]:-}"
+_deskcomm_chamador="${_deskcomm_chamador##*/}"
+case "$_deskcomm_chamador" in
+  install.sh|update.sh) verificar_arquitetura_do_kit || exit 1 ;;
+esac
+unset _deskcomm_chamador
+
 # Proxy reverso desta instalação. Vem do .env (load_env), com default 'caddy' —
 # ou seja, toda instalação que já existe continua exatamente como está.
 #
@@ -725,7 +763,7 @@ set_env_var() {
 # instalação sem SMTP, que é o estado normal de um self-host, e o mesmo comando
 # que o CLAUDE.md do kit manda usar quando a pessoa se tranca fora.
 #
-# ── Por que o casamento tem de ser EXATO aqui ───────────────────────────────
+# ── Por que o casamento tem de ser EXATO aqui ────────────────────────────────
 # Justamente por ser substring, `ana@empresa.com` casa também
 # `mariana@empresa.com`. Um `head -1` cego devolveria o UUID da outra pessoa
 # numa função cujo único consumidor TROCA SENHA. O padrão abaixo ancora no
