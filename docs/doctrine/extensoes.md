@@ -137,7 +137,7 @@ preserve o trabalho do contribuidor e registre a dependência.
 | Pacote JSON estrito com cards de orientação e a capacidade `tasks.open` | Execução de código de terceiros em executor isolado | Prova: a escolha do executor é por evidência (PROG-017 §7 e §14) |
 | Instalar, atualizar, trocar, desfazer a última troca, remover e reinstalar | Histórico de mais de um passo | Recusado por escrito na spec; volta pelo catálogo |
 | Uma versão por instalação, ativação por organização | Versão por organização | Recusada sem necessidade comprovada (PROG-017 §5) |
-| Nenhum dado de domínio de extensão | Schema próprio de extensão | Módulo nativo oficial: migration + baseline + MANIFEST; schema realmente independente: ADR antes (PROG-017 §8) |
+| Nenhum dado de domínio de extensão | Schema próprio de extensão | Módulo nativo oficial: migration + baseline + MANIFEST; tabelas de módulo opcional num banco só, criadas ao instalar o módulo: [ADR-0002](../adr/0002-tabelas-de-modulo-num-banco-so.md), **proposta, aguarda aceite**; dados de extensão de terceiro: marco 4 (PROG-017 §8) |
 | Recibos, auditoria por organização na remoção (menos quando a resposta se perde e a repetição não reaplica), Atividade recente | Dependências entre extensões; downloads e avaliações | Prova (PROG-017 §5 e §12; DEC-004 §3) |
 | Nenhuma telemetria de extensões | Relato de uso enviado pela VPS | Decisão própria antes (DEC-004 §3; PROG-017 §12) |
 
