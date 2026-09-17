@@ -16051,7 +16051,7 @@ $pub$;
 
 -- ---- ⚠️ RESTAURADA AO FIM (2026-08-27) ----
 --
--- Este bloco diz de si mesmo que é o ÚLTIMO do arquivo, e havia 24 apêndices
+-- Este bloco dizia de si mesmo que era o ÚLTIMO do arquivo, e havia 24 apêndices
 -- depois dele. A cura deixou de alcançar tudo que veio no meio, e o gate
 -- `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts` só reprova quando um
 -- desses blocos CRIA FUNÇÃO — o que levou 24 blocos para acontecer, com
@@ -16066,7 +16066,7 @@ $pub$;
 -- revoke e regrava os dois. Rodar mais tarde só faz alcançar mais funções.
 
 -- ---- FK e fuso da conexão do Google (migration 0193) ----
--- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, que é de propósito o último do arquivo.
+-- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, depois do qual nenhuma função é criada.
 -- Este bloco não cria função, então a varredura não o cura nem precisa curar — mas pôr
 -- apêndice DEPOIS dela recria a erosão que a 0192 acabou de consertar.
 alter table public.calendar_appointments
@@ -18327,30 +18327,12 @@ end $f$;
 revoke all on function public.fn_start_support(uuid,uuid,uuid,uuid,text,integer), public.fn_end_support(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.fn_start_support(uuid,uuid,uuid,uuid,text,integer), public.fn_end_support(uuid,uuid) to service_role;
 
--- Enumera o catálogo aplicado; não pressupõe quantas tabelas o produto terá.
--- Restritiva derrota as permissivas OR plataforma, inclusive membership admin B.
-do $f$
-declare r record; v_col text;
-begin
- for r in select c.oid,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
- where n.nspname='public' and c.relkind='r' and c.relrowsecurity
- and (exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='organization_id' and not a.attisdropped) or c.relname='organizations')
- loop
- v_col:=case when r.relname='organizations' then 'id' else 'organization_id' end;
- if not (has_table_privilege('authenticated',r.oid,'insert') or has_table_privilege('authenticated',r.oid,'update') or has_table_privilege('authenticated',r.oid,'delete')) then
-   execute format('drop policy if exists support_write_insert on public.%I',r.relname);
-   execute format('drop policy if exists support_write_update on public.%I',r.relname);
-   execute format('drop policy if exists support_write_delete on public.%I',r.relname);
-   continue; -- tabela server-only mantém ZERO policies, contrato mais restritivo
- end if;
- execute format('drop policy if exists support_write_insert on public.%I',r.relname);
- execute format('create policy support_write_insert on public.%I as restrictive for insert to authenticated with check (public.fn_support_write_allowed(%I))',r.relname,v_col);
- execute format('drop policy if exists support_write_update on public.%I',r.relname);
- execute format('create policy support_write_update on public.%I as restrictive for update to authenticated using (public.fn_support_write_allowed(%I)) with check (public.fn_support_write_allowed(%I))',r.relname,v_col,v_col);
- execute format('drop policy if exists support_write_delete on public.%I',r.relname);
- execute format('create policy support_write_delete on public.%I as restrictive for delete to authenticated using (public.fn_support_write_allowed(%I))',r.relname,v_col);
- end loop;
-end $f$;
+-- As políticas restritivas `support_write_{insert,update,delete}` das tabelas de
+-- `public` (restritiva derrota as permissivas OR plataforma, inclusive membership
+-- admin B) NÃO são plantadas aqui. Uma enumeração do catálogo só alcança as tabelas
+-- que já existem quando ela roda, e este arquivo cria tabela até o fim. Quem as
+-- planta é `public.fn_aplicar_travas_de_suporte()` (migration 0274): definida antes
+-- da varredura de anon e CHAMADA no último bloco do arquivo, depois de toda tabela.
 
 CREATE OR REPLACE FUNCTION public.emit_event(p_event_type text, p_entity_kind text, p_entity_id uuid, p_payload jsonb DEFAULT '{}'::jsonb, p_metadata jsonb DEFAULT '{}'::jsonb, p_organization_id uuid DEFAULT NULL::uuid)
  RETURNS uuid
@@ -24897,7 +24879,7 @@ notify pgrst, 'reload schema';
 -- is_client_pipeline = true. Nem antes do CHECK de client_tag_by_system: a
 -- coluna nasce junto com ele, toda null.
 --
--- ⚠️ ANTES do bloco da VARREDURA anon, que é de propósito o último do arquivo.
+-- ⚠️ ANTES do bloco da VARREDURA anon, depois do qual nenhuma função é criada.
 --
 -- ────────────────────────────────────────────────────────────────────────────
 -- 1 · o fato, no contato
@@ -26971,12 +26953,53 @@ grant execute on function public.fn_extensions_revert_install(uuid,uuid,uuid,int
 grant execute on function public.fn_extensions_remove_installation(uuid,uuid,uuid,integer) to service_role;
 grant execute on function public.fn_extensions_installation_counts(uuid) to service_role;
 -- END 0271_extensoes_declarativas
+-- ---- travas do modo somente leitura do suporte: a enumeração vira função (migration 0274) ----
+--
+-- Só a DEFINIÇÃO mora aqui, antes da varredura de anon (função nova não entra
+-- depois dela — tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts). A CHAMADA é
+-- o último bloco do arquivo, depois de toda tabela: é isso que faz a instalação
+-- nova chegar ao mesmo conjunto de travas que a atualização.
+--
+-- Regra de seleção (a mesma da 0220): tabela comum de `public`, RLS ligada, com
+-- `organization_id` (ou `organizations`, pela `id`). Gravável por `authenticated`
+-- → as três restritivas; só do servidor → nenhuma `support_write_*`.
+create or replace function public.fn_aplicar_travas_de_suporte()
+returns void
+language plpgsql
+set search_path = public
+as $f$
+declare r record; v_col text;
+begin
+ for r in select c.oid,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
+ where n.nspname='public' and c.relkind='r' and c.relrowsecurity
+ and (exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='organization_id' and not a.attisdropped) or c.relname='organizations')
+ loop
+ v_col:=case when r.relname='organizations' then 'id' else 'organization_id' end;
+ if not (has_table_privilege('authenticated',r.oid,'insert') or has_table_privilege('authenticated',r.oid,'update') or has_table_privilege('authenticated',r.oid,'delete')) then
+   execute format('drop policy if exists support_write_insert on public.%I',r.relname);
+   execute format('drop policy if exists support_write_update on public.%I',r.relname);
+   execute format('drop policy if exists support_write_delete on public.%I',r.relname);
+   continue; -- tabela server-only mantém ZERO policies, contrato mais restritivo
+ end if;
+ execute format('drop policy if exists support_write_insert on public.%I',r.relname);
+ execute format('create policy support_write_insert on public.%I as restrictive for insert to authenticated with check (public.fn_support_write_allowed(%I))',r.relname,v_col);
+ execute format('drop policy if exists support_write_update on public.%I',r.relname);
+ execute format('create policy support_write_update on public.%I as restrictive for update to authenticated using (public.fn_support_write_allowed(%I)) with check (public.fn_support_write_allowed(%I))',r.relname,v_col,v_col);
+ execute format('drop policy if exists support_write_delete on public.%I',r.relname);
+ execute format('create policy support_write_delete on public.%I as restrictive for delete to authenticated using (public.fn_support_write_allowed(%I))',r.relname,v_col);
+ end loop;
+end $f$;
+
+-- Só quem aplica o schema (o dono das tabelas) a chama; não é `security definer`.
+-- EXECUTE sai das duas origens e dos papéis que o default ACL do Supabase alcança.
+revoke execute on function public.fn_aplicar_travas_de_suporte() from public, anon, authenticated, service_role;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
--- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
-
--- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
+-- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
+-- função entra ANTES dele — quem o empurrar para o meio desarma a cura para tudo
+-- que vier depois. (O último bloco do arquivo é a chamada das travas do suporte,
+-- migration 0274, que não cria função.)
 -- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
 --
 -- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
@@ -27138,3 +27161,13 @@ drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_
 create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
+
+-- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
+--
+-- ⚠️ ESTA CHAMADA É O ÚLTIMO BLOCO DO ARQUIVO. Tabela nova, coluna
+-- `organization_id` nova, RLS ligada ou grant a `authenticated` entram ANTES
+-- dela: é o que faz a primeira aplicação do arquivo chegar ao mesmo conjunto de
+-- travas que a segunda. Vigiado, com o baseline aplicado UMA vez, por
+-- tests/invariants/travas-de-suporte-cobrem-toda-tabela-na-instalacao.test.ts.
+-- A definição da função está antes da varredura de anon.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
