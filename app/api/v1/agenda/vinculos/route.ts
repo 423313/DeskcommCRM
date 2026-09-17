@@ -18,8 +18,8 @@ export async function GET(req: Request) {
     .select("id,name,display_name,phone_number")
     .eq("organization_id", auth.org.orgId)
     .eq("is_anonymized", false)
-    .order("display_name", { nullsFirst: false })
-    .order("name")
+    .order("name", { nullsFirst: false })
+    .order("display_name")
     .limit(30);
   if (input.data.contact_id) contacts = contacts.eq("id", input.data.contact_id);
   else if (input.data.q) {

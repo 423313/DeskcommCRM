@@ -121,9 +121,11 @@ describe("contatos da Agenda pelo nome exibido", () => {
       expect((await buscar({ q: "Maria" })).contacts).toEqual([{ id: ID, name: "Maria Antiga" }]);
     },
   );
-  it("prefere display_name quando ambos os nomes estão preenchidos", async () => {
-    linhas = [{ ...contato, name: "Nome legado" }];
-    expect((await buscar()).contacts).toEqual([{ id: ID, name: "Cíntia Nunes" }]);
+  // A régua é a de `rotuloDoContato`: o nome que a pessoa escolheu (`name`)
+  // vence o do perfil do WhatsApp (`display_name`) — issue #906, PR #907.
+  it("prefere o nome do cadastro (name) quando os dois nomes estão preenchidos", async () => {
+    linhas = [{ ...contato, name: "Cíntia Souza Nunes" }];
+    expect((await buscar()).contacts).toEqual([{ id: ID, name: "Cíntia Souza Nunes" }]);
   });
   it("sem nomes usa o fallback compartilhado, nunca uma opção vazia", async () => {
     linhas = [{ ...contato, display_name: null }];
