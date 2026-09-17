@@ -32,6 +32,7 @@ const DEFAULT_WINDOW: FollowupWindowValue = {
  */
 export function FollowupWindowEditor({ value, onChange, disabled }: Props) {
   const t = useT();
+  const invalidRange = value !== null && value.end <= value.start;
 
   function patch(p: Partial<FollowupWindowValue>) {
     if (value === null) return;
@@ -82,7 +83,7 @@ export function FollowupWindowEditor({ value, onChange, disabled }: Props) {
           disabled={disabled}
         />
         <Label htmlFor="followup_window_enabled">
-          {t("Só atender em horário de funcionamento")}
+          {t("Follow-up")} · {t("Só atender em horário de funcionamento")}
         </Label>
       </div>
 
@@ -97,6 +98,7 @@ export function FollowupWindowEditor({ value, onChange, disabled }: Props) {
                 value={value.start}
                 onChange={(event) => patch({ start: event.target.value })}
                 disabled={disabled}
+                aria-invalid={invalidRange}
               />
             </div>
             <div className="space-y-1">
@@ -107,9 +109,13 @@ export function FollowupWindowEditor({ value, onChange, disabled }: Props) {
                 value={value.end}
                 onChange={(event) => patch({ end: event.target.value })}
                 disabled={disabled}
+                aria-invalid={invalidRange}
               />
             </div>
           </div>
+          {invalidRange ? (
+            <p className="text-xs text-destructive">{t("Campo inválido.")}</p>
+          ) : null}
 
           <div>
             <Label className="mb-1 block">{t("Dias")}</Label>
