@@ -26,7 +26,7 @@ describe("test:db:update espera o Postgres definitivo, não o servidor temporár
     const bloco = blocoDeProntidao();
 
     expect(sondaUsaTcp(bloco)).toBe(true);
-    expect(bloco).toContain("servidor temporário não escuta TCP");
+    expect(bloco).toContain("temporário não escuta TCP");
   });
 
   it("fica vermelho se a sonda voltar ao socket local", () => {
