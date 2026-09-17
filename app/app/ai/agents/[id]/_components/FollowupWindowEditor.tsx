@@ -17,15 +17,7 @@ interface Props {
   disabled?: boolean;
 }
 
-const WEEKDAYS = [
-  { id: 0, label: "Dom" },
-  { id: 1, label: "Seg" },
-  { id: 2, label: "Ter" },
-  { id: 3, label: "Qua" },
-  { id: 4, label: "Qui" },
-  { id: 5, label: "Sex" },
-  { id: 6, label: "Sáb" },
-] as const;
+const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 const DEFAULT_WINDOW: FollowupWindowValue = {
   start: "09:00",
@@ -56,6 +48,28 @@ export function FollowupWindowEditor({ value, onChange, disabled }: Props) {
       ? value.weekdays.filter((item) => item !== day)
       : [...value.weekdays, day].sort((a, b) => a - b);
     patch({ weekdays });
+  }
+
+  function weekdayLabel(day: number): string {
+    // Literais de propósito: o gate de espanhol enxerga cada chave usada.
+    switch (day) {
+      case 0:
+        return t("Dom");
+      case 1:
+        return t("Seg");
+      case 2:
+        return t("Ter");
+      case 3:
+        return t("Qua");
+      case 4:
+        return t("Qui");
+      case 5:
+        return t("Sex");
+      case 6:
+        return t("Sáb");
+      default:
+        return "";
+    }
   }
 
   return (
@@ -101,12 +115,12 @@ export function FollowupWindowEditor({ value, onChange, disabled }: Props) {
             <Label className="mb-1 block">{t("Dias")}</Label>
             <div className="flex flex-wrap gap-1">
               {WEEKDAYS.map((day) => {
-                const active = value.weekdays.includes(day.id);
+                const active = value.weekdays.includes(day);
                 return (
                   <button
-                    key={day.id}
+                    key={day}
                     type="button"
-                    onClick={() => toggleWeekday(day.id)}
+                    onClick={() => toggleWeekday(day)}
                     disabled={disabled}
                     className={`rounded-md border px-2 py-1 text-xs ${
                       active
@@ -114,7 +128,7 @@ export function FollowupWindowEditor({ value, onChange, disabled }: Props) {
                         : "border-border/60 text-muted-foreground"
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
-                    {t(day.label)}
+                    {weekdayLabel(day)}
                   </button>
                 );
               })}
