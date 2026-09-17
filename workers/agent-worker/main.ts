@@ -281,6 +281,13 @@ export async function startWorker(
     log.warn("órfãos soltos no boot", bootReap);
   }
 
+  // O comportamento da INSTALAÇÃO entra no processo ANTES dos laços que
+  // consomem turnos: a releitura abaixo só acontece no primeiro tique do reaper
+  // (QUEUE_REAPER_INTERVAL_MS, 60 s por padrão), e até lá o orçamento e os knobs
+  // do turno responderiam com o piso do `.env`, não com a escolha da tela.
+  // Nunca lança: sem leitura boa, vale o piso — o comportamento de antes.
+  await carregarComportamentoPorPool(pool, pisoDoComportamentoDoMotor(env));
+
   const server = createHealthzServer(pool, log, env.METRICS_WINDOW_MS);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
