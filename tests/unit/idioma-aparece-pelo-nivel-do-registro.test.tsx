@@ -5,11 +5,7 @@ import { ProfileForm } from "@/app/app/settings/profile/_form";
 import { TenantForm } from "@/app/app/settings/tenant/_form";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { IDIOMAS, IDIOMA_PADRAO, normalizarIdioma, parseAcceptLanguage } from "@/lib/i18n/idiomas";
-import {
-  nivelApareceParaQuemUsa,
-  REGISTRO_DE_IDIOMAS,
-  type IdiomaRegistrado,
-} from "@/lib/i18n/registro";
+import { REGISTRO_DE_IDIOMAS, type IdiomaRegistrado, type NivelDeIdioma } from "@/lib/i18n/registro";
 
 /**
  * UM IDIOMA SÓ APARECE QUANDO O REGISTRO DIZ QUE PODE.
@@ -36,7 +32,14 @@ vi.mock("@/app/actions/settings/updateTenant", () => ({
   updateTenant: vi.fn(async () => ({ ok: true })),
 }));
 
-const VISIVEIS = REGISTRO_DE_IDIOMAS.filter((idioma) => nivelApareceParaQuemUsa(idioma.nivel));
+/**
+ * O oráculo é escrito AQUI, e não importado do registro: se o teste perguntasse
+ * a `nivelApareceParaQuemUsa` quem aparece, um filtro quebrado dentro dela
+ * deixaria implementação e teste errados juntos — e verdes.
+ */
+const NIVEIS_QUE_APARECEM: ReadonlySet<NivelDeIdioma> = new Set(["telas_principais", "completo"]);
+const aparece = (idioma: IdiomaRegistrado) => NIVEIS_QUE_APARECEM.has(idioma.nivel);
+const VISIVEIS = REGISTRO_DE_IDIOMAS.filter(aparece);
 
 describe("o registro de idiomas", () => {
   it("não repete código, tag nem subtag do navegador", () => {
@@ -85,7 +88,7 @@ describe("em construção não chega a ninguém", () => {
     // `user_metadata.locale` e `organizations.locale` não têm CHECK: um valor
     // pode chegar pelo banco. Servi-lo mostraria uma tradução pela metade.
     for (const idioma of REGISTRO_DE_IDIOMAS) {
-      const esperado = nivelApareceParaQuemUsa(idioma.nivel) ? idioma.codigo : IDIOMA_PADRAO;
+      const esperado = aparece(idioma) ? idioma.codigo : IDIOMA_PADRAO;
       expect(normalizarIdioma(idioma.codigo), idioma.codigo).toBe(esperado);
     }
   });
@@ -95,7 +98,7 @@ describe("em construção não chega a ninguém", () => {
     // sairia misturado, com o que falta em português.
     for (const idioma of REGISTRO_DE_IDIOMAS) {
       for (const subtag of idioma.subtagsDoNavegador) {
-        const esperado = nivelApareceParaQuemUsa(idioma.nivel) ? idioma.codigo : null;
+        const esperado = aparece(idioma) ? idioma.codigo : null;
         expect(parseAcceptLanguage(`${subtag}-XX,${subtag};q=0.9`), subtag).toBe(esperado);
       }
     }
