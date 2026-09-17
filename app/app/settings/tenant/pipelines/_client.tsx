@@ -125,9 +125,16 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
       // preço de NÃO descartá-lo durante a digitação (ver o `onChange` das
       // opções). Ele nunca foi uma opção: `customFieldSchema` exige
       // `label.min(1)`, então filtrá-lo ANTES de validar é o que separa "acabei
-      // de digitar uma vírgula" de "quero gravar uma opção em branco".
+      // de digitar uma vírgula" de "quero gravar uma opção em branco". É aqui
+      // também que o espaço do FIM de cada opção é aparado: o `onChange` só
+      // apara o início, para não apagar o espaço que a pessoa está digitando.
       const limpo = tipoTemOpcoes(f.type)
-        ? { ...f, options: (f.options ?? []).filter((o) => o.label.trim() !== "") }
+        ? {
+            ...f,
+            options: (f.options ?? [])
+              .map((o) => ({ value: o.value.trim(), label: o.label.trim() }))
+              .filter((o) => o.label !== ""),
+          }
         : f;
       const parsed = customFieldSchema.safeParse(limpo);
       if (!parsed.success) {
@@ -252,10 +259,13 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
                   // na palavra anterior ("Dor" + "O" vira "DorO"). Com o item
                   // vazio preservado, o `join(", ")` reescreve "Dor, " e o
                   // cursor continua onde a pessoa parou. O vazio só é descartado
-                  // no `handleSave`, quando deixa de ser útil.
+                  // no `handleSave`, quando deixa de ser útil. Pelo mesmo
+                  // motivo só o INÍCIO é aparado (o espaço que o `join(", ")`
+                  // põe): aparar o fim apagaria o espaço recém-digitado, e
+                  // "Clareamento" + " " + "D" viraria "ClareamentoD".
                   const options = e.target.value
                     .split(",")
-                    .map((s) => s.trim())
+                    .map((s) => s.trimStart())
                     .map((label) => ({ value: label, label }));
                   const next = [...fields];
                   next[i] = { ...f, options };

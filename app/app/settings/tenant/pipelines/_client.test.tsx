@@ -156,6 +156,17 @@ describe("o input de opções de um campo de lista fechada", () => {
     expect(opcoes).toHaveValue("Dor, Orçamento, Prazo");
   });
 
+  it("não apaga o espaço DENTRO de uma opção de duas palavras ao digitar", () => {
+    render(<PipelinesClient pipelines={[FUNIL_SEM_OPCOES]} podeEditarConfig />);
+
+    const opcoes = screen.getByLabelText(/Opções do campo 1/i) as HTMLInputElement;
+    digitar(opcoes, "Clareamento Dental, Implantes");
+
+    // Mesma classe da vírgula: aparar o FIM do item a cada tecla apaga o espaço
+    // recém-digitado, e a palavra seguinte cola ("ClareamentoDental").
+    expect(opcoes).toHaveValue("Clareamento Dental, Implantes");
+  });
+
   it("grava a lista inteira e descarta só o vazio do fim", async () => {
     vi.mocked(updatePipelineConfig).mockClear();
     render(<PipelinesClient pipelines={[FUNIL_SEM_OPCOES]} podeEditarConfig />);
@@ -173,5 +184,24 @@ describe("o input de opções de um campo de lista fechada", () => {
     // opções de verdade ficam. Um filtro no `onChange` faria a segunda opção
     // nunca chegar aqui.
     expect(patch?.fields?.[0]?.options?.map((o) => o.label)).toEqual(["Dor", "Orçamento"]);
+  });
+
+  it("grava cada opção aparada, com o espaço de dentro e sem o do fim", async () => {
+    vi.mocked(updatePipelineConfig).mockClear();
+    render(<PipelinesClient pipelines={[FUNIL_SEM_OPCOES]} podeEditarConfig />);
+
+    const opcoes = screen.getByLabelText(/Opções do campo 1/i) as HTMLInputElement;
+    // O espaço antes da vírgula sobrevive à digitação (a pessoa ainda pode
+    // estar no meio da palavra); é o salvar que o apara.
+    digitar(opcoes, "Clareamento Dental , Implantes ,");
+    fireEvent.click(screen.getByRole("button", { name: /Salvar vocabulário e campos/i }));
+
+    await vi.waitFor(() => expect(updatePipelineConfig).toHaveBeenCalledTimes(1));
+
+    const patch = vi.mocked(updatePipelineConfig).mock.calls[0]?.[1];
+    expect(patch?.fields?.[0]?.options).toEqual([
+      { value: "Clareamento Dental", label: "Clareamento Dental" },
+      { value: "Implantes", label: "Implantes" },
+    ]);
   });
 });
