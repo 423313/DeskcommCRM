@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -66,13 +69,28 @@ describe("janela própria do follow-up", () => {
       },
     };
 
-    await expect(followupPublicadoDoEnrollment(db, "org-1", "enrollment-1")).resolves.toEqual(
-      JANELA,
-    );
+    await expect(
+      followupPublicadoDoEnrollment(db as never, "org-1", "enrollment-1"),
+    ).resolves.toEqual(JANELA);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.sql).toContain("a.published_version_id");
     expect(calls[0]!.sql).toContain("e.agent_id");
     expect(calls[0]!.params).toEqual(["org-1", "enrollment-1"]);
+  });
+
+  it("o handler real consulta a janela antes de entrar no turno que envia", () => {
+    const source = readFileSync(
+      join(process.cwd(), "lib/agent-engine/agent/followup-turn.ts"),
+      "utf8",
+    );
+    const gate = source.indexOf("proximaAberturaDoFollowup(followup, fuso, agora)");
+    const requeue = source.indexOf("follow-up adiado pela janela própria do agente");
+    const run = source.indexOf("await runFlowDrivenTurn(deps, job, pool, ctx, clock, target");
+
+    expect(gate, "a janela própria deixou de ser consultada no handler").toBeGreaterThan(-1);
+    expect(requeue, "fora da janela deixou de reagendar o job").toBeGreaterThan(gate);
+    expect(run, "não encontrei o turno dirigido por fluxo").toBeGreaterThan(requeue);
+    expect(source).toContain("payload.purpose === 'send_message'");
   });
 });
 
