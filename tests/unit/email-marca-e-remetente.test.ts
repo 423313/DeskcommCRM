@@ -232,3 +232,55 @@ describe("remetente", () => {
     vi.doUnmock("resend");
   });
 });
+
+/**
+ * O MESMO CONTRATO DE REMETENTE, DO OUTRO LADO — o transporte SMTP.
+ *
+ * Os casos da Resend acima NÃO foram substituídos, e isso é o ponto: os dois
+ * caminhos convivem (decisão do dono do produto sobre o PR #714), então cada um
+ * precisa do seu próprio guarda. A regra que os dois compartilham é a mesma que
+ * este arquivo já defendia: sem remetente configurado não existe e-mail, e
+ * NUNCA se inventa um domínio do produto.
+ *
+ * Crédito: @betoarts (PR #714).
+ */
+describe("remetente — SMTP", () => {
+  const config = {
+    host: "smtp.revenda.com.br",
+    port: 465,
+    security: "tls" as const,
+    username: "nao-responda@revenda.com.br",
+    password: "segredo",
+    fromEmail: "nao-responda@revenda.com.br",
+    fromName: "",
+    source: "environment" as const,
+  };
+
+  it("sem remetente não existe e-mail de saída — e NUNCA um domínio do produto", async () => {
+    const { formatFromAddress, isSmtpConfigured } = await import("@/lib/email/smtp");
+
+    expect(isSmtpConfigured({ ...config, fromEmail: "" })).toBe(false);
+    expect(formatFromAddress({ ...config, fromEmail: "" }, "Vendas Turbo")).toBeNull();
+  });
+
+  it("o endereço é do operador e o NOME é da marca", async () => {
+    const { formatFromAddress } = await import("@/lib/email/smtp");
+
+    expect(formatFromAddress(config, "Vendas Turbo")).toBe(
+      "Vendas Turbo <nao-responda@revenda.com.br>",
+    );
+    // Sem marca não se inventa uma: sai o endereço puro.
+    expect(formatFromAddress(config)).toBe("nao-responda@revenda.com.br");
+  });
+
+  it("nome de marca não injeta cabeçalho SMTP", async () => {
+    const { formatFromAddress } = await import("@/lib/email/smtp");
+
+    const sujo = formatFromAddress(config, 'Acme" <evil@x.com>\r\nBcc: vitima@y.com');
+    expect(sujo).not.toContain("\r");
+    expect(sujo).not.toContain("\n");
+    // `<`, `>`, `"` e as quebras somem; o resto do texto fica, colado — o que
+    // importa é que não sobrou cabeçalho nenhum para o SMTP interpretar.
+    expect(sujo).toBe("Acme evil@x.comBcc: vitima@y.com <nao-responda@revenda.com.br>");
+  });
+});
