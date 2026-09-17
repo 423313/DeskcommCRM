@@ -9150,6 +9150,22 @@ export const DICIONARIO: Traducoes = {
   "Um material marcado aqui foi arquivado no acervo — o agente não lê mais ele.": { es: "Un material marcado aquí fue archivado en el acervo — el agente ya no lo lee." },
   "Materiais marcados aqui foram arquivados no acervo — o agente não lê mais eles.": { es: "Materiales marcados aquí fueron archivados en el acervo — el agente ya no los lee." },
   "Desmarque para voltar a salvar.": { es: "Desmárcalo para volver a guardar." },
+  // Do PR #773 (@xxjjjj): o aria-label do alternador de tema e as frases da
+  // agenda que passaram a sair por t(). As três de "este horário…" são as
+  // razões dinâmicas de `razaoDoBloco` — o gate de espanhol não as enxerga.
+  "Tema: light. Cmd+Shift+L para alternar.": { es: "Tema: claro. Cmd+Shift+L para cambiar." },
+  "Tema: dark. Cmd+Shift+L para alternar.": { es: "Tema: oscuro. Cmd+Shift+L para cambiar." },
+  "Tema: system. Cmd+Shift+L para alternar.": { es: "Tema: sistema. Cmd+Shift+L para cambiar." },
+  "este horário já passou": { es: "esta hora ya pasó" },
+  "já há um compromisso neste horário": { es: "ya hay una cita en este horario" },
+  "fora dos horários que você publicou": { es: "fuera de los horarios que publicaste" },
+  "Marcar às {hora} de {data}": { es: "Agendar a las {hora} del {data}" },
+  "{data} às {hora} — {motivo}": { es: "{data} a las {hora} — {motivo}" },
+  "A remarcação não foi aceita — o compromisso voltou para {data}.": { es: "No se aceptó el cambio de horario — la cita volvió al {data}." },
+  "Não dá para remarcar para esse horário — {motivo}.": { es: "No se puede reprogramar para ese horario — {motivo}." },
+  "o compromisso": { es: "la cita" },
+  "Entendi": { es: "Entendido" },
+  "e-mail do convidado inválido": { es: "correo del invitado no válido" },
 
   // ─── issue #924 — a origem de quem chega pelo site ───
   // app/app/settings/conversoes/page.tsx (a explicação do link) e
