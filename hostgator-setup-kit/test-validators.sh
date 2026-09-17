@@ -2273,6 +2273,72 @@ STUB
 rm -rf "$TMP_SEM_IA"
 
 
+echo "integração: consentimento de telemetria no --yes (issue #668)"
+# O que a #668 mediu: o `.env.hostgator.example` trazia `SENTRY_DSN=` ATIVO, o
+# `load_env` definia a variável, e o `[ -z "${SENTRY_DSN+x}" ]` do install.sh
+# (:1423) lia isso como "a pessoa já decidiu" — a pergunta do modo interativo e o
+# `off` do modo --yes eram pulados. Toda instalação feita copiando o exemplo saía
+# enviando relatório de erro sem ninguém ter escolhido.
+#
+# O que este bloco acrescenta aos testes de presença de texto: ele RODA o
+# install.sh e lê o `.env` que sobrou, que é o arquivo com que a pessoa fica. A
+# distinção que a issue pede é entre "nunca decidiu" (chave AUSENTE) e "aceitou"
+# (chave declarada e VAZIA) — as duas viram texto igual em qualquer grep do
+# fonte, e só aparecem no comportamento.
+#
+# O caso (a) COPIA do template as linhas do Sentry em vez de reescrevê-las: é
+# assim que reativar a chave lá reprova aqui. Sem isso, o cenário mediria o
+# fixture, não o template que a pessoa copia.
+SENTRY_DO_TEMPLATE="$(grep -E '^[[:space:]]*#?[[:space:]]*SENTRY_DSN=' "$EXEMPLO" 2>/dev/null || true)"
+if [ -z "$SENTRY_DO_TEMPLATE" ]; then
+  # Voz alta: o kit também roda fora do repositório, e pular calado é
+  # indistinguível de passar.
+  printf '  — pulado: não achei linha de SENTRY_DSN em %s\n' "$EXEMPLO"
+else
+  telemetria_ok() {  # telemetria_ok <descrição> <linhas extras do .env> <linha esperada no .env final>
+    local desc="$1" extra="$2" esperado="$3" raiz
+    raiz="$(mktemp -d)"
+    (
+      # O cenário declara o próprio ambiente: um SENTRY_DSN exportado no shell
+      # de quem roda a suíte entraria no install.sh pelo `env` do `rodar` e
+      # decidiria o caso no lugar do fixture.
+      unset SENTRY_DSN
+      montar_vps "$raiz" "crmsentry" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$DOCKER_LOG"
+case "$1" in
+  compose) case "$*" in *" exec "*) printf 'healthy\n{"data":{"status":"healthy"}}\n' ;; esac; exit 0 ;;
+esac
+exit 0
+STUB
+      mkdir -p "$VPS_PROJ/supabase"; : > "$VPS_PROJ/supabase/baseline.sql"
+      saida="$(rodar install.sh --yes "$extra")"
+      # CONTROLE POSITIVO: a régua dos cenários de provedor acima. Se o `.env`
+      # saiu pela metade, a ausência da linha esperada não mede consentimento
+      # nenhum — mede um install que morreu.
+      if ! grep -qE '^OWNER_PASSWORD="' "$VPS_PROJ/.env"; then
+        printf '  ✗ %s — o .env saiu pela metade (parou antes da última linha do bloco)\n' "$desc"
+        printf '     última linha da saída: %s\n' "$(printf '%s' "$saida" | grep -v '^$' | tail -1)"
+        exit 1
+      fi
+      if ! grep -qx "SENTRY_DSN=$esperado" "$VPS_PROJ/.env"; then
+        printf '  ✗ %s — esperava SENTRY_DSN=%s, veio: %s\n' "$desc" "$esperado" \
+          "$(grep -E '^SENTRY_DSN=' "$VPS_PROJ/.env" || echo '(ausente)')"
+        exit 1
+      fi
+      printf '  ✓ %s\n' "$desc"
+    ) || fail=1
+    rm -rf "$raiz"
+  }
+  telemetria_ok "template copiado (sem escolha): o --yes grava off, não consente por ninguém" \
+    "$SENTRY_DO_TEMPLATE" '"off"'
+  telemetria_ok "quem ACEITOU (chave declarada e vazia) continua aceitando na reexecução" \
+    "SENTRY_DSN=''" '""'
+  telemetria_ok "DSN próprio sobrevive à reexecução" \
+    "SENTRY_DSN='https://abc123@o0.ingest.sentry.io/42'" '"https://abc123@o0.ingest.sentry.io/42"'
+fi
+
+
 echo "integração: instalação NOVA numa VPS com Traefik em modo host"
 # O install.sh roda contra um `docker` dublê que imita a Hostinger: 80/443
 # ocupadas, NINGUÉM publicando, um Traefik em `--network host`, e a rede do
