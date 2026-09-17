@@ -3,14 +3,20 @@ import { createClient } from "@supabase/supabase-js";
 import { anunciarDestino, credenciaisSupabaseDeTeste, destinoEhLocal } from "./lib/env-de-teste";
 import { NOMES_DE_SESSAO_E2E } from "./lib/sessoes-e2e";
 
-export async function limparSessoesDeCanalE2E(): Promise<{ removidas: number }> {
+interface OpcoesDeLimpeza {
+  allowRemote?: boolean;
+}
+
+export async function limparSessoesDeCanalE2E(
+  opcoes: OpcoesDeLimpeza = {},
+): Promise<{ removidas: number }> {
   const credenciais = credenciaisSupabaseDeTeste();
   anunciarDestino("cleanup-e2e-channel-sessions", credenciais);
 
-  if (!destinoEhLocal(credenciais.url)) {
+  if (!destinoEhLocal(credenciais.url) && !opcoes.allowRemote) {
     throw new Error(
       `cleanup-e2e-channel-sessions recusou Supabase remoto (${credenciais.url}). ` +
-        "A limpeza automática só roda contra o ambiente E2E local.",
+        "O teardown automático só limpa o E2E local. Para remover resíduo antigo de uma instalação, rode de propósito com --allow-remote.",
     );
   }
 
@@ -27,7 +33,10 @@ export async function limparSessoesDeCanalE2E(): Promise<{ removidas: number }> 
   const ids = (sessoes ?? []).map((s) => s.id as string);
   if (ids.length === 0) return { removidas: 0 };
 
-  const { error: conversasErro } = await admin.from("conversations").delete().in("channel_session_id", ids);
+  const { error: conversasErro } = await admin
+    .from("conversations")
+    .delete()
+    .in("channel_session_id", ids);
   if (conversasErro) throw new Error(`apagar conversations E2E: ${conversasErro.message}`);
 
   const { error: saudeErro } = await admin
@@ -43,7 +52,8 @@ export async function limparSessoesDeCanalE2E(): Promise<{ removidas: number }> 
 }
 
 async function main(): Promise<void> {
-  const resultado = await limparSessoesDeCanalE2E();
+  const allowRemote = process.argv.includes("--allow-remote");
+  const resultado = await limparSessoesDeCanalE2E({ allowRemote });
   console.log(`✅ Sessões de canal E2E removidas: ${resultado.removidas}`);
 }
 
