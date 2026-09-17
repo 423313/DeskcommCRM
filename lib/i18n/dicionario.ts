@@ -7870,7 +7870,14 @@ export const DICIONARIO: Traducoes = {
     { es: "Dirección inválida — revísala antes de agendar." },
   "Preenchido, o Google envia o convite por e-mail para esta pessoa.":
     { es: "Si se completa, Google envía la invitación por correo a esta persona." },
-
+  "Rua, número, sala": { es: "Calle, número, sala" },
+  "Onde o atendimento acontece. Aparece no calendário.":
+    { es: "Dónde ocurre la atención. Aparece en el calendario." },
+  "Observação": { es: "Observación" },
+  "O que a equipe precisa lembrar neste horário": {
+    es: "Lo que el equipo necesita recordar en este horario",
+  },
+  "Aparece na descrição do compromisso.": { es: "Aparece en la descripción de la cita." },
 
   // ─── Tarefas (extraídas do PR #418) ───
   "Tarefas": { es: "Tareas" },
