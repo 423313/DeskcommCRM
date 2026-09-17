@@ -122,7 +122,7 @@ function montar(sobre: Props = {}) {
       // Nenhuma janela consultada: o painel abre na âncora (terça, 15) e a
       // grade só tem quarta.
       horariosPorDia={{}}
-      podeMarcarEncaixe
+      permiteEncaixe
       {...sobre}
       onConfirmar={vi.fn(async () => undefined)}
     />,
@@ -228,4 +228,3 @@ describe("(c) o Atendente lê a lista de pessoas da agenda", () => {
     expect(hook).toContain("motivoDaFalhaNaLista");
   });
 });
-

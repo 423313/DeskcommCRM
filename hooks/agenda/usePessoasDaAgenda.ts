@@ -5,10 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
-import {
-  ROTA_DA_LISTA_DE_PESSOAS,
-  motivoDaFalhaNaLista,
-} from "@/lib/agenda/lista-de-pessoas";
+import { ROTA_DA_LISTA_DE_PESSOAS, motivoDaFalhaNaLista } from "@/lib/agenda/lista-de-pessoas";
 import { trilhasDaEquipe } from "@/lib/agenda/tipos";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
@@ -41,23 +38,24 @@ export function usePessoasDaAgenda() {
     queryFn: async (): Promise<Pessoa[]> => {
       try {
         const r = await apiClient.get<{ data: MembroDto[] }>(ROTA_DA_LISTA_DE_PESSOAS);
-        const lista = (r as unknown as { data?: MembroDto[] }).data ?? (r as unknown as MembroDto[]);
+        const lista =
+          (r as unknown as { data?: MembroDto[] }).data ?? (r as unknown as MembroDto[]);
         const ativos = (lista ?? []).filter((m) => !m.revoked_at);
         // As trilhas saem da EQUIPE inteira de uma vez, não pessoa a pessoa: é a
         // única forma de garantir que duas pessoas não caiam na mesma cor. O
         // hash sozinho dá estabilidade e não dá distinção — medido, duas caíram
         // na trilha 7 nesta organização.
         const trilhas = trilhasDaEquipe(ativos.map((m) => m.user_id));
-        return ativos
-          .map((m) => ({
-            id: m.user_id,
-            // `full_name` pode vir null quando o service role não está
-            // configurado — a rota degrada assim de propósito. O e-mail antes do
-            // @ é melhor que "Sem nome": identifica a pessoa para quem trabalha
-            // com ela todo dia.
-            nome: m.full_name ?? m.email?.split("@")[0] ?? "Sem nome",
-            trilha: trilhas.get(m.user_id) ?? 1,
-          }));
+        return ativos.map((m) => ({
+          id: m.user_id,
+          // `full_name` pode vir null quando o service role não está
+          // configurado — a rota degrada assim de propósito. A lista mínima
+          // não traz e-mail (item 1 da issue 896: quem atende lê o nome e se
+          // a pessoa tem agenda, e nada além disso), então não há de onde
+          // tirar um apelido melhor: o rótulo neutro é o que sobra.
+          nome: m.full_name ?? "Sem nome",
+          trilha: trilhas.get(m.user_id) ?? 1,
+        }));
       } catch (err) {
         // O 403 desta lista chegava como "Você não tem permissão para esta
         // ação", sem dizer QUAL permissão nem que a grade continuava lá — era o
