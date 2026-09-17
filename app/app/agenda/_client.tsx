@@ -416,9 +416,9 @@ export function AgendaClient({
               {t("Cadastre um tipo de agendamento para começar")}
             </span>
           )}
-          // PRIMEIRA PORTA da escrita nesta tela. Quem só lê não vê o botão: o
-          // 403 da rota nunca chega a ser oferecido, e o rótulo segue igual (a
-          // spec e2e o acha por papel/rótulo, e não muda).
+          {/* PRIMEIRA PORTA da escrita nesta tela. Quem só lê não vê o botão: o
+              403 da rota nunca chega a ser oferecido, e o rótulo segue igual (a
+              spec e2e o acha por papel/rótulo, e não muda). */}
           {podeMarcar && (
             <Button
               size="sm"
