@@ -10,6 +10,7 @@ import {
   lerAjustesDeEstiloDaOrg,
   removerTravessaoLongo,
 } from "@/lib/agent-engine/guardrails/ajustes-de-estilo-da-org";
+import type { Queryable } from "@/lib/agent-engine/queue/queue";
 
 describe("ajustes de estilo da organização", () => {
   it("nasce desligado e não muda o texto", () => {
@@ -55,7 +56,7 @@ describe("ajustes de estilo da organização", () => {
           fields: [],
         };
       },
-    };
+    } as unknown as Queryable;
 
     await expect(lerAjustesDeEstiloDaOrg(db, "org-1")).resolves.toEqual({
       sem_travessao_longo: true,
@@ -70,7 +71,7 @@ describe("ajustes de estilo da organização", () => {
       async query() {
         throw new Error("db indisponível");
       },
-    };
+    } as unknown as Queryable;
     await expect(lerAjustesDeEstiloDaOrg(db, "org-1")).resolves.toEqual(AJUSTES_DESLIGADOS);
   });
 });
