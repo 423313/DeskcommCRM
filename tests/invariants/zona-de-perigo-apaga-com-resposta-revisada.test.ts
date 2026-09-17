@@ -79,12 +79,10 @@ function semear(org: string, tag: string): Semente {
       on conflict (id) do nothing;
   `);
 
-  // Mensagem + rascunho revisado pela função REAL do fluxo (fn_service_begin
-  // dá a fronteira canônica que a 0227 exige como NOT NULL), no formato de
-  // tests/invariants/rls-isolation.test.ts.
+  // Mensagem + rascunho revisado com a fronteira canônica que a 0227 exige
+  // como NOT NULL, no formato de tests/invariants/rls-isolation.test.ts
+  // (fn_service_begin dá o jsonb; a mensagem é inserida por nós, como lá).
   const boundary = sql(`select public.fn_service_begin('${org}', '${s.contato}')::text;`);
-  const msgDaFuncao = sql(`select id::text from public.messages where organization_id = '${org}'
-                             order by created_at desc limit 1;`);
 
   sql(`
     insert into public.ai_agents (id, organization_id, name, system_prompt, operation_mode)
@@ -98,12 +96,12 @@ function semear(org: string, tag: string): Semente {
   `);
 
   // Duas mensagens: uma é a que a resposta revisada usa (`message_id`), a
-  // outra representa o eco que o gateway apaga por deduplicação.
-  const msgIdOriginal = msgDaFuncao || s.msgAlvo;
+  // outra representa o eco do aparelho do operador que o gateway apaga por
+  // deduplicação (v. `fn_reply_confirm`, baseline 21770).
   sql(`
-    update public.messages set id = '${s.msgAlvo}' where id = '${msgIdOriginal}';
     insert into public.messages (id, organization_id, conversation_id, channel_session_id, contact_id, type, direction, body)
-      values ('${s.msgEco}', '${org}', '${s.conversa2}', '${s.sess}', '${s.contato}', 'text', 'outbound', 'eco do gateway');
+      values ('${s.msgAlvo}', '${org}', '${s.conversa}', '${s.sess}', '${s.contato}', 'text', 'outbound', 'resposta enviada'),
+             ('${s.msgEco}', '${org}', '${s.conversa2}', '${s.sess}', '${s.contato}', 'text', 'outbound', 'eco do gateway');
     insert into public.ai_reply_drafts
       (id, organization_id, conversation_id, contact_id, agent_id, agent_version_id, channel_session_id,
        service_boundary, context_revision, operation_revision, status, original_body, approved_body, message_id)
