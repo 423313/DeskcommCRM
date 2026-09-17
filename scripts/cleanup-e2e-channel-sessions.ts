@@ -54,7 +54,7 @@ export async function limparSessoesDeCanalE2E(
 async function main(): Promise<void> {
   const allowRemote = process.argv.includes("--allow-remote");
   const resultado = await limparSessoesDeCanalE2E({ allowRemote });
-  console.log(`✅ Sessões de canal E2E removidas: ${resultado.removidas}`);
+  console.info(`✅ Sessões de canal E2E removidas: ${resultado.removidas}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
