@@ -408,7 +408,7 @@ if (!parsed.success) {
   console.error("[env] Falha de validação de variáveis de ambiente:");
   console.error(parsed.error.flatten().fieldErrors);
   throw new Error(
-    "Variáveis de ambiente inválidas. Veja o erro acima e ajuste .env.local / Vercel.",
+    "Variáveis de ambiente inválidas. Veja o erro acima e ajuste o .env da instalação (ou .env.local, em dev).",
   );
 }
 
