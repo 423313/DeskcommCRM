@@ -1560,6 +1560,18 @@ export const DICIONARIO: Traducoes = {
   "Etapa que dispara o fluxo": { es: "Etapa que dispara el flujo" },
   "Carregando etapas…": { es: "Cargando etapas…" },
   "Escolha a etapa": { es: "Elige la etapa" },
+  "Nenhuma etapa ativa encontrada — crie o funil antes de usar esta regra.": {
+    es: "No se encontró ninguna etapa activa — crea el embudo antes de usar esta regla.",
+  },
+  "A etapa escolhida não existe mais ou foi arquivada. Escolha outra na lista.": {
+    es: "La etapa elegida ya no existe o fue archivada. Elige otra en la lista.",
+  },
+  "foi digitado à mão e não é uma etapa do funil. Escolha a etapa na lista — do jeito que está, esta regra nunca decide nada.": {
+    es: "se escribió a mano y no es una etapa del embudo. Elige la etapa en la lista — tal como está, esta regla nunca decide nada.",
+  },
+  "Esta regra não aponta para uma etapa ativa do funil. Abra o nó e escolha a etapa na lista.": {
+    es: "Esta regla no apunta a una etapa activa del embudo. Abre el nodo y elige la etapa en la lista.",
+  },
   "Nenhuma etapa ativa encontrada — crie o funil antes de armar este gatilho.": {
     es: "No se encontró ninguna etapa activa — crea el embudo antes de configurar este disparador.",
   },

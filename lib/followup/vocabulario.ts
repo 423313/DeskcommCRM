@@ -141,6 +141,11 @@ const aspas = (valor: string | number): string =>
 
 const FORMA_DE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** O valor tem forma de identificador interno (uuid) — nunca é algo que a pessoa digitou. */
+export function temFormaDeId(valor: string | number): boolean {
+  return FORMA_DE_ID.test(String(valor).trim());
+}
+
 function passos(valor: string | number): string {
   if (semValor(valor)) return `${VALOR_A_PREENCHER} passos`;
   const n = Number(valor);
@@ -316,7 +321,7 @@ function valorExibido(campo: CampoDaCondicao, valor: string | number, nomes: Nom
   // Sem nome resolvido, um fluxo antigo que guardou o NOME digitado ("PAGO")
   // continua legível — o formulário e o publish avisam que ele não aponta para
   // etapa nenhuma. Já um id sem nome não tem o que mostrar.
-  return FORMA_DE_ID.test(texto) ? ETAPA_NAO_ENCONTRADA : valor;
+  return temFormaDeId(texto) ? ETAPA_NAO_ENCONTRADA : valor;
 }
 
 export const COMBINADORES: Record<Combinador, string> = {

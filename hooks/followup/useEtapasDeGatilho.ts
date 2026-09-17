@@ -37,6 +37,31 @@ export interface EtapasDeGatilho {
   carregando: boolean;
 }
 
+/**
+ * «Etapa · Funil». Todo funil nasce com «Novo / Em andamento / Ganho / Perdido»:
+ * dois funis bastam para quatro pares homônimos, então o nome da etapa sozinho
+ * não identifica nada — o funil viaja junto em toda superfície que dura.
+ */
+export function nomeDaEtapa(etapa: EtapaDeGatilho): string {
+  return `${etapa.stageName} · ${etapa.pipelineName}`;
+}
+
+/** Agrupa por funil preservando a ordem em que as etapas chegaram (a ordem do funil). */
+export function etapasPorFunil(
+  etapas: EtapaDeGatilho[],
+): Array<{ id: string; nome: string; etapas: EtapaDeGatilho[] }> {
+  const funis: Array<{ id: string; nome: string; etapas: EtapaDeGatilho[] }> = [];
+  for (const etapa of etapas) {
+    let grupo = funis.find((f) => f.id === etapa.pipelineId);
+    if (!grupo) {
+      grupo = { id: etapa.pipelineId, nome: etapa.pipelineName, etapas: [] };
+      funis.push(grupo);
+    }
+    grupo.etapas.push(etapa);
+  }
+  return funis;
+}
+
 export function useEtapasDeGatilho(habilitado = true): EtapasDeGatilho {
   const funis = useQuery({
     queryKey: ["pipelines"],

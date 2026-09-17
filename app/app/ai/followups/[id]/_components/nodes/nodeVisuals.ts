@@ -24,6 +24,25 @@ export interface NodeVisual {
   defaultConfig: () => FlowNode["config"];
 }
 
+type RegraDeCondicao = Extract<FlowNode, { type: "condition" }>["config"]["checks"][number];
+
+/**
+ * A regra com que o nó de condição nasce, e a que o "+ Condição" acrescenta.
+ *
+ * Era `passos ≥ 0` — válida no schema e VERDADEIRA PARA TODO LEAD (o contador
+ * nasce em zero e só soma). No modo uma-saída-por-regra ela desviava todo mundo
+ * e tornava "Nenhuma delas" inalcançável; num OU, fixava o nó em "Sim". E o card
+ * a mostrava com cara de regra pronta.
+ *
+ * Agora nasce INCOMPLETA de propósito: o schema aceita (o rascunho salva), o
+ * motor nunca a satisfaz e o publish a recusa até alguém escolher a etapa. Etapa
+ * porque é a pergunta mais comum de um funil — e a que o seletor responde sem
+ * digitar nada.
+ */
+export function regraEmBranco(): RegraDeCondicao {
+  return { field: "lead_stage", op: "eq", value: "" };
+}
+
 export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
   trigger: {
     type: "trigger",
@@ -50,10 +69,7 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
     chipClassName: "bg-warning-bg text-warning-fg",
     borderClassName: "border-l-warning",
     defaultLabel: "Verificar condição",
-    defaultConfig: () => ({
-      combinator: "and",
-      checks: [{ field: "steps_taken", op: "gte", value: 0 }],
-    }),
+    defaultConfig: () => ({ combinator: "and", checks: [regraEmBranco()] }),
   },
   ai_classify: {
     type: "ai_classify",

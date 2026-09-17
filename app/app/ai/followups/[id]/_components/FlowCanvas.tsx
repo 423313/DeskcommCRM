@@ -47,6 +47,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Plus, X } from "@/lib/ui/icons";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import { EdgeConfigPanel } from "./EdgeConfigPanel";
+import { EtapasDoFluxoProvider, useEtapasDoFluxo } from "./EtapasDoFluxo";
 import { NodePalette } from "./NodePalette";
 import { PublishBar } from "./PublishBar";
 import { NODE_VISUALS } from "./nodes/nodeVisuals";
@@ -82,6 +83,7 @@ interface Props {
 
 function FlowCanvasInner({ flowId, initialData }: Props) {
   const t = useT();
+  const { nomes } = useEtapasDoFluxo();
   const { data: flow } = useFollowupFlow(flowId, { initialData });
   // `initial` seeds React Flow state ONCE on mount — it must NOT react to
   // `flow` changing on every refetch (that would clobber in-progress edits).
@@ -168,11 +170,11 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
         return {
           ...e,
           type: "smoothstep" as const,
-          label: branch ? t(rotuloDoRamo(branch)) : t(conditionLabel(condition)),
+          label: branch ? t(rotuloDoRamo(branch, nomes)) : t(conditionLabel(condition)),
           selected: e.id === selectedEdgeId,
         };
       }),
-    [edges, nodes, selectedEdgeId, t],
+    [edges, nodes, selectedEdgeId, t, nomes],
   );
 
   // Quais saídas do nó selecionado já têm aresta. Quem sabe isso é o canvas —
@@ -433,7 +435,9 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 export function FlowCanvas(props: Props) {
   return (
     <ReactFlowProvider>
-      <FlowCanvasInner {...props} />
+      <EtapasDoFluxoProvider>
+        <FlowCanvasInner {...props} />
+      </EtapasDoFluxoProvider>
     </ReactFlowProvider>
   );
 }

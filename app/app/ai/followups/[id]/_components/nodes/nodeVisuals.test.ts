@@ -6,7 +6,10 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { describeNodeConfig, NODE_VISUAL_LIST } from "./nodeVisuals";
+import { validateFlowForPublish } from "@/lib/followup/validate-publish";
+import type { FlowGraph } from "@/lib/followup/graph-schema";
+
+import { describeNodeConfig, NODE_VISUAL_LIST, NODE_VISUALS } from "./nodeVisuals";
 
 describe("describeNodeConfig — nó final", () => {
   it.each([
@@ -51,5 +54,26 @@ describe("describeNodeConfig — nó de condição", () => {
     });
     expect(texto).toBe("2 regras · uma saída por regra");
     expect(texto).not.toMatch(/\bE\b|\bOU\b/);
+  });
+});
+
+describe("o nó de condição nasce sem decidir sozinho", () => {
+  it("a regra padrão está a preencher, e o publish não a deixa passar", () => {
+    // Era `passos ≥ 0`: verdadeira para todo lead, com cara de regra pronta no card.
+    const config = NODE_VISUALS.condition.defaultConfig();
+    const grafo: FlowGraph = {
+      nodes: [
+        { id: "t1", type: "trigger", label: "t1", position: { x: 0, y: 0 }, config: {} },
+        { id: "c1", type: "condition", label: "c1", position: { x: 0, y: 0 }, config } as FlowGraph["nodes"][number],
+        { id: "fim", type: "end", label: "fim", position: { x: 0, y: 0 }, config: { outcome: "exhausted" } },
+      ],
+      edges: [
+        { id: "e1", source: "t1", target: "c1", priority: 0, condition: { type: "always" } },
+        { id: "e2", source: "c1", target: "fim", priority: 0, condition: { type: "cond_result", value: true } },
+        { id: "e3", source: "c1", target: "fim", priority: 0, condition: { type: "cond_result", value: false } },
+      ],
+    };
+    const r = validateFlowForPublish(grafo);
+    expect(r.ok ? [] : r.errors.map((e) => e.code)).toEqual(["empty_check_value"]);
   });
 });
