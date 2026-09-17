@@ -133,6 +133,40 @@ latência que ela existe para matar.
 
 ---
 
+## 2-bis. Destino da mudança — núcleo, extensão ou ambos
+
+Para uma mudança de comportamento, registre o destino e a razão antes da reconciliação. A lei
+é a [doutrina de extensões](../docs/doctrine/extensoes.md) (item 18 do DoD); o critério foi
+aprovado no PROG-017, seção 2 (documento interno de decisão, fora do repositório público; a régua que vale para PR está em [`docs/doctrine/extensoes.md`](../docs/doctrine/extensoes.md)).
+O núcleo precisa continuar útil com zero extensões; nichos podem acrescentar capacidades sem
+determinar a operação de todas as instalações.
+
+| Destino | O que sustenta a classificação |
+|---|---|
+| Núcleo | Operação comum ou garantia compartilhada: identidade, autorização, isolamento, auditoria, contratos e cadeia de envio. Correções de comportamento já entregue continuam no componente responsável. |
+| Extensão | Jornada adicional, aparência, integração ou especialização com configuração, dados e manutenção próprios, cuja ausência não compromete a operação comum. |
+| Ambos | Um ponto genérico necessário no núcleo e uma extensão que o consome. Declare o consumidor real, o contrato e a prova dos dois lados. |
+| Infraestrutura/documentação | Mudança em build, CI, kit de instalação, ferramenta interna ou documentação, inclusive a correção de um comportamento desses componentes (um `update.sh` que falhava é infraestrutura). Correção de comportamento do produto fica no destino do componente que corrige: núcleo ou extensão. Indique a superfície que ela mantém. |
+
+Ser útil a vários setores não obriga um recurso a ficar ligado para todos. Também não basta
+chamar uma pasta de plugin: um candidato precisa de caminho previsto de instalação, permissões,
+compatibilidade, atualização, desativação e preservação dos dados. Se uma fronteira ainda não
+existe, registre a dependência; não anuncie um SDK ou isolamento que ainda não foi entregue.
+
+**Durante a construção da plataforma**, classificar como extensão é orientação de destino, não
+exigência de que o contribuidor use uma ferramenta inexistente. Preserve o trabalho, separe a
+parte genérica quando isso mantiver a intenção e leve apenas a escolha de produto ainda aberta
+ao mantenedor. Uma correção urgente não espera a plataforma inteira ficar pronta. Recursos já
+distribuídos só serão extraídos com equivalência demonstrada e migração explícita; esta
+classificação não autoriza removê-los ou desligá-los.
+
+Na revisão, percorra três relações: o que a mudança usa, quem depende dela e quais falhas externas
+podem alterá-la. Compatibilidade de contrato, filas antigas, revogação e exportação/anonimização
+entram na prova quando forem alcançadas pelo diff. O parecer registra o destino; a publicação e
+o merge continuam sujeitos à fronteira de autorização deste procedimento.
+
+---
+
 ## 3. Gates — na prévia do merge, não na branch
 
 `strict=false` na branch protection: um PR pode ser mergeado sem estar rebasado na `main`. O CI testa
@@ -1035,6 +1069,7 @@ Três regras duras:
 ```
 VEREDITO: MERGEAR | MERGEAR+ISSUE | SEGURAR
 main: <sha curto>            prévia do merge: <tree>
+DESTINO:     <núcleo | extensão | ambos | infraestrutura/documentação> — <razão e dependências>
 MEDIDO:      <o quê> — <comando> — <saída observada>
 NÃO MEDIDO:  <o quê> — <por quê>
 BLOQUEADOR:  <arquivo:linha> — <o defeito> — <como reproduzir>
@@ -1221,9 +1256,45 @@ E confira o desfecho, porque "a tag saiu" não é "a versão chegou":
 ```bash
 git ls-remote --tags origin 'refs/tags/vX.Y.Z'          # a tag existe
 gh release list --limit 1                                # a release é a Latest
+
+# A vitrine lista, nos TRÊS idiomas. O href carrega o prefixo da PÁGINA, então o padrão
+# se monta com ele: trocar só a URL e manter `href="/changelog/..."` devolve 0 nas
+# páginas em en e es COM a versão listada. Cada linha tem de dar http=200 e listada≥1.
+# O http= vai junto porque `listada=0` sozinho não distingue "não listou ainda" de
+# "essa página não existe" — num 404 a contagem também é 0.
+V=X.Y.Z
+for p in /changelog /en/changelog /es/changelog; do
+  u="https://www.deskcomm.com.br$p"
+  echo "$p: http=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 30 "$u")" \
+       "listada=$(curl -sL --max-time 30 "$u" | grep -c "href=\"$p/$V\"")"
+done
+
 # e as três imagens no digest da versão, contra `stable` — receita em
 # docs/runbooks/ativar-packaging.md
 ```
+
+**Deu 0? Olhe o `http=` ANTES de repetir.** `http=404` não é janela de cache: é a página não
+existir, e nenhuma quantidade de repetição conserta isso. Nesse estado o 0 não fala da versão,
+fala do site — a vitrine sai de um PR do repositório `deskcomm-site`, e sem ele no ar o passo do
+corte reprova toda release. Escale ao mantenedor em vez de investigar o `CHANGELOG.md`.
+
+**`http=200` com `listada=0`? Repita antes de concluir qualquer coisa.** A página revalida a cada
+10 minutos e lê o `CHANGELOG.md` pelo `raw.githubusercontent.com`, que guarda outros 5: a versão
+aparece em até ~15 min, e é o próprio acesso que agenda a regeneração. Por isso o passo do
+`release.yml` repete a sonda 35 vezes com um minuto entre elas — não duas. Se persistir depois
+disso, a ordem de investigação está em `docs/doctrine/versionamento.md` (seção "A vitrine").
+
+O `grep -c` é de propósito: ele conta, e para contar lê a entrada inteira. Um `grep -q` no lugar
+sai no primeiro casamento, o `curl` do outro lado do cano leva EPIPE e desiste — e a versão
+LISTADA aparece como faltando assim que o HTML tiver uma quebra de linha depois do link.
+
+**O status desse caso é 23, não 141.** O `curl` ignora o SIGPIPE e escolhe o próprio código de
+saída (`CURLE_WRITE_ERROR`); com `set -o pipefail` o status do cano vira 23, e o `-s` engole a
+única frase que explicaria (`curl: (23) Failure writing output to destination` — troque por `-S -s`
+para vê-la). O **141** que a lista de erros registra é o caso vizinho — `echo "$DIFF" | grep -q`
+no `complemento.sh` —, em que a esquerda do cano é builtin do shell: builtin morre de sinal mesmo,
+e aí sim 128+13. Procurar 141 numa triagem vermelha por ESTA receita não acha nada.
+
 ---
 
 ## 12-ter. O PR cujo conteúdo entrou DERIVADO — o merge de proveniência

@@ -557,9 +557,34 @@ export const AUDIT_ACTIONS = [
   // porque toda leitura de `admin/` é auditada neste repo — e porque aqui o
   // operador enxerga o agente publicado na organização de outra pessoa.
   "platform_admin.tenant_agents_viewed",
+  "extension.catalog_admitted",
+  "extension.installed",
+  "extension.install_failed",
+  "extension.configured",
+  "extension.deactivated",
+  "extension.preparation_cancelled",
+  // Troca de versão, desfazer a última troca e remoção da instalação. A remoção grava, além
+  // da linha da instância, um `extension.deactivated_by_removal` por organização desligada, com
+  // `metadata.reason = "installation_removed"`.
+  "extension.updated",
+  "extension.update_failed",
+  "extension.reverted",
+  "extension.removed",
+  // Nome próprio, e não `extension.deactivated`: na auditoria da organização, "nós desligamos" e
+  // "o responsável pela instalação removeu" precisam ser distinguíveis sem abrir os metadados.
+  "extension.deactivated_by_removal",
   // "Cliente pela agenda" ligada ou desligada (migration 0262). Ligar reescreve
   // etiquetas de toda a organização; metadata leva as contagens.
   "crm.cliente_pela_agenda_alterado",
+  // A etiqueta da ORGANIZAÇÃO renomeada, juntada ou excluída na tela de Tags
+  // (issue #852, fatia S4). É um código só porque a linha já carrega
+  // `metadata.acao` (renomear/juntar/excluir) e o alcance da operação (contatos,
+  // leads, conversas, regras). Três códigos para a mesma decisão deixariam o
+  // filtro do painel com três opções onde houve UMA escolha do operador.
+  "tag_vocabulary.changed",
+  // Mover um card para OUTRO funil (issue #922) clona o negócio no destino e
+  // encerra o original: é a escrita que mexe em DOIS funis de uma vez.
+  "lead.moved_to_pipeline",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
