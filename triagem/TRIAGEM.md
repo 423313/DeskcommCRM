@@ -109,8 +109,9 @@ Nesta ordem:
 **A liberação do CI é o primeiro comando da triagem, antes de ler o diff.** Medido em 2026-09-03: numa fila de 26 PRs, **12 workflows** de cinco contribuidores estavam parados em `action_required`, um deles havia mais de um dia — e três PRs tinham **zero** execuções no `head_sha` (ver modo de falha 17). Cada minuto entre abrir o PR e liberar é latência pura, que é o gargalo que este documento existe para matar. Libere primeiro; avalie depois.
 
 A acolhida **não contém juízo técnico**. É isso, e só isso, que a torna segura de ser automática:
-ela não pode estar errada sobre o mérito porque não fala do mérito. Ela diz três coisas — o `Vercel`
-vermelho é esperado em fork e não é culpa dele, o CI está sendo liberado, e quando vem o veredito.
+ela não pode estar errada sobre o mérito porque não fala do mérito. Ela diz três coisas — o CI está
+sendo liberado, onde olhar o que trava o merge, e quando vem o veredito. O texto vive em
+`references/resposta-ao-contribuidor.md`, espelhado em `.github/workflows/acolhida.yml`.
 
 Todo comentário desta triagem abre com a âncora invisível `<!-- triagem-de-pr:v1:pass=N -->`. Leia as
 âncoras existentes antes de escrever: **acolhida nunca é postada duas vezes.**
@@ -2469,7 +2470,7 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
 
     ```bash
     gh pr checks <N> --json name,bucket --jq '
-      [.[]|select(.bucket!="skipping")|select(.name|test("^Vercel")|not)]
+      [.[]|select(.bucket!="skipping")]
       | if   (any(.bucket=="fail"))    then "VERMELHO"
         elif (any(.bucket=="pending")) then "AINDA RODANDO"
         else "VERDE" end'

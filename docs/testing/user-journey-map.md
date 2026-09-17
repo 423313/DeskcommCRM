@@ -861,12 +861,12 @@ esta jornada prende.
 | Seed antigo restaurado (`git show HEAD~1`) e re-semeado | `agenda-escopo` reprova como no CI | **reprovou** com `não terminou` + `element(s) not found`, literal |
 ## J18 — O follow-up anda em hospedagem sem agendador `[P0]`
 
-**Por que P0:** para quem **não tem** o `scheduler` da VPS — o plano gratuito da
-Vercel é o caso comum, e é o cenário inteiro do runbook
-[`vercel-hobby-relogio.md`](../runbooks/vercel-hobby-relogio.md) — o relógio
-externo não é conveniência: é o **único** motor do follow-up. E a falha dele é
-silenciosa: os follow-ups não andam, ninguém recebe erro, e a instalação parece
-saudável.
+**Por que P0:** para quem **não tem** o `scheduler` da VPS — hospedagem sem cron
+de minuto, ou instalação em que o serviço não subiu; é o cenário inteiro do
+runbook [`vercel-hobby-relogio.md`](../runbooks/vercel-hobby-relogio.md) — o
+relógio externo não é conveniência: é o **único** motor do follow-up. E a falha
+dele é silenciosa: os follow-ups não andam, ninguém recebe erro, e a instalação
+parece saudável.
 
 **O que existia media TEXTO.** `tests/unit/relogio-hobby-workflow.test.ts`
 confere que o `.yml` cita o caminho do tick, a variável e o `exit 1` — ancora o
