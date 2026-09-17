@@ -81,7 +81,7 @@ function corpo(yml: string, nome: string): string {
  * precisam ganhar junto ou o gate fica vermelho no mesmo PR.
  */
 function imagensDaMatriz(): string[] {
-  const t = corpo(publish, "build-and-push");
+  const t = job(publish, "build-and-push");
   const bloco = /matrix:\s*\n\s+include:\s*\n([\s\S]*?)(?=\n {4}steps:)/.exec(t)?.[1] ?? "";
   return [...bloco.matchAll(/^\s*-\s+name:\s*([A-Za-z0-9._-]+)\s*$/gm)]
     .map((m) => m[1]!)
@@ -108,7 +108,10 @@ describe("o canal `stable` move em bloco", () => {
     expect(job(publish, "build-and-push")).not.toBe("");
     expect(job(publish, "imagens-ok")).not.toBe("");
     expect(job(publish, "build-and-push")).toContain("matrix:");
-    expect(IMAGENS.length, "não consegui extrair nenhuma imagem da matriz build-and-push").toBeGreaterThan(0);
+    expect(
+      IMAGENS.length,
+      "não consegui extrair nenhuma imagem da matriz build-and-push",
+    ).toBeGreaterThan(0);
     expect(new Set(IMAGENS).size, "a matriz declara nome de imagem duplicado").toBe(IMAGENS.length);
   });
 
@@ -173,9 +176,15 @@ describe("o canal `stable` move em bloco", () => {
 describe("o corte da release confere o CANAL, não só a existência da versão", () => {
   it("os dois laços da release cobrem exatamente as imagens da matriz", () => {
     const lacos = imagensDosLacos(corpo(release, "cortar-tag"));
-    expect(lacos, "cortar-tag deve ter dois `for img in ...`: publicação da versão e conferência do stable").toHaveLength(2);
+    expect(
+      lacos,
+      "cortar-tag deve ter dois `for img in ...`: publicação da versão e conferência do stable",
+    ).toHaveLength(2);
     for (const [i, imagens] of lacos.entries()) {
-      expect(imagens, `o laço de imagens #${i + 1} de cortar-tag divergiu da matriz build-and-push`).toEqual(IMAGENS);
+      expect(
+        imagens,
+        `o laço de imagens #${i + 1} de cortar-tag divergiu da matriz build-and-push`,
+      ).toEqual(IMAGENS);
     }
   });
 
