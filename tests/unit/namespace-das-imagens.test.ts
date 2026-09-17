@@ -254,6 +254,22 @@ describe("catraca: ninguém mais repete o namespace", () => {
     "docker-compose.prod.yml",
     ".env.hostgator.example",
     "tests/unit/namespace-das-imagens.test.ts",
+    // `.env`/`.env.local` da RAIZ são estado de máquina, gitignorados — não
+    // existem num checkout fresco nem em CI. Mas uma instalação real nasce com
+    // um deles carregando o mesmo `APP_IMAGE` que o `.env.hostgator.example`
+    // (logo acima) já tem permissão de ter: o modo não-interativo copia o
+    // exemplo, o interativo gera a linha. Sem esta entrada, `pnpm test:unit`
+    // reprova em toda VPS de verdade, apontando um arquivo que nem é versionado.
+    //
+    // Por que AQUI e não em `excluiArq`: `--exclude=GLOB` do `grep` casa o NOME
+    // do arquivo em QUALQUER profundidade, então excluir `.env` cegaria a
+    // varredura para um `.env` versionado em qualquer subdiretório — um caso que
+    // esta catraca existe para pegar. `PERMITIDO` é comparado com o caminho
+    // relativo EXATO (`PERMITIDO.has(rel)`, mais abaixo), então o perdão vale
+    // para a raiz e só para a raiz. Medido nos dois sentidos: com a exclusão por
+    // glob, `hostgator-setup-kit/.env` carregando o literal passava com 16/16.
+    ".env",
+    ".env.local",
   ]);
 
   /**
@@ -291,15 +307,7 @@ describe("catraca: ninguém mais repete o namespace", () => {
     ].map((d) => `--exclude-dir=${d}`);
     // `.bak`/`.orig`/`.rej`/`~` são sobra de editor e de `sed -i.bak`. Sem isto,
     // uma sabotagem local deixa o gate vermelho pelo motivo errado.
-    //
-    // `.env`/`.env.local` são ESTADO DE MÁQUINA, gitignorado — nunca existem num
-    // checkout fresco nem em CI. Uma instalação real copia `.env.hostgator.example`
-    // (que já está em `PERMITIDO`) para `.env` e herda o mesmo literal resolvido;
-    // varrer esse arquivo reprovaria toda VPS de verdade rodando `pnpm test:unit`
-    // localmente, pelo mesmo texto que o exemplo já tem permissão de ter.
-    const excluiArq = ["*.md", "*.bak", "*.orig", "*.rej", "*~", ".env", ".env.local"].map(
-      (g) => `--exclude=${g}`,
-    );
+    const excluiArq = ["*.md", "*.bak", "*.orig", "*.rej", "*~"].map((g) => `--exclude=${g}`);
 
     let saida = "";
     try {
