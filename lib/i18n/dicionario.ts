@@ -2014,8 +2014,62 @@ export const DICIONARIO: Traducoes = {
   "A IA para de responder ao chegar em": { es: "La IA deja de responder al llegar a" },
   "A parada começa a valer": { es: "La parada empieza a valer" },
   "A parada começa a valer em": { es: "La parada empieza a valer el" },
-  "A proteção de gasto está desligada nesta instalação (AI_BUDGET_ENFORCEMENT=off). O que estiver escolhido aqui não vale enquanto quem cuida do servidor não religar.": {
-    es: "La protección de gasto está apagada en esta instalación (AI_BUDGET_ENFORCEMENT=off). Lo que esté elegido aquí no vale hasta que quien administra el servidor la vuelva a encender.",
+  "A proteção de gasto está desligada nesta instalação. O que estiver escolhido aqui não vale até que alguém religue em Comportamento, no Admin.": {
+    es: "La protección de gasto está apagada en esta instalación. Lo que esté elegido aquí no vale hasta que alguien la vuelva a encender en Comportamiento, en Admin.",
+  },
+  "Comportamento": {
+    es: "Comportamiento",
+  },
+  "Comportamento desta instalação": {
+    es: "Comportamiento de esta instalación",
+  },
+  "Como esta instalação se comporta em operação. Vale para todas as empresas hospedadas aqui.": {
+    es: "Cómo se comporta esta instalación en operación. Vale para todas las empresas alojadas aquí.",
+  },
+  "O que esta instalação faz": {
+    es: "Qué hace esta instalación",
+  },
+  "Cada escolha vale para todas as empresas daqui. Quem cuida do servidor pode declarar um valor no arquivo de ambiente, mas ele só responde até a primeira leitura do banco: a partir daí, manda o que estiver aqui.": {
+    es: "Cada elección vale para todas las empresas de aquí. Quien administra el servidor puede declarar un valor en el archivo de entorno, pero solo responde hasta la primera lectura de la base: a partir de ahí, manda lo que esté aquí.",
+  },
+  "Proteção de gasto de IA": {
+    es: "Protección de gasto de IA",
+  },
+  "Decide o que acontece quando o gasto passa do teto que a empresa escolheu. Não liga a proteção de ninguém: só pode afrouxá-la.": {
+    es: "Decide qué pasa cuando el gasto supera el límite que eligió la empresa. No activa la protección de nadie: solo puede aflojarla.",
+  },
+  "Respeita o teto de cada empresa": {
+    es: "Respeta el límite de cada empresa",
+  },
+  "Só avisa, nunca para a IA": {
+    es: "Solo avisa, nunca detiene la IA",
+  },
+  "Desligada": {
+    es: "Apagada",
+  },
+  "Exigir assinatura nas entregas do canal": {
+    es: "Exigir firma en las entregas del canal",
+  },
+  "Ligado, toda entrega de webhook precisa vir assinada com o segredo da sessão. Desligado por padrão porque nem todo servidor de canal assina: ligar sem que ele assine corta a entrada de mensagens.": {
+    es: "Activado, toda entrega de webhook debe venir firmada con el secreto de la sesión. Desactivado por defecto porque no todo servidor de canal firma: activarlo sin que firme corta la entrada de mensajes.",
+  },
+  "Divulgação de pagamento no atendimento": {
+    es: "Divulgación de pago en la atención",
+  },
+  "Injetar acrescenta o texto de divulgação à primeira mensagem. Vetar bloqueia o envio sem ele e devolve ao modelo a razão, para ele reescrever.": {
+    es: "Inyectar agrega el texto de divulgación al primer mensaje. Vetar bloquea el envío sin él y le devuelve al modelo la razón, para que reescriba.",
+  },
+  "Injetar": {
+    es: "Inyectar",
+  },
+  "Vetar": {
+    es: "Vetar",
+  },
+  "Conferência de promessa antes de enviar": {
+    es: "Verificación de promesa antes de enviar",
+  },
+  "Ligado, cada envio passa por uma conferência de modelo para não prometer o que a empresa não cumpre. Custa uma chamada de modelo por envio.": {
+    es: "Activado, cada envío pasa por una verificación de modelo para no prometer lo que la empresa no cumple. Cuesta una llamada de modelo por envío.",
   },
   "Abrimos um aviso na Central de avisos. A IA continua respondendo normalmente.": {
     es: "Abrimos un aviso en la Central de avisos. La IA sigue respondiendo normalmente.",
@@ -2157,8 +2211,8 @@ export const DICIONARIO: Traducoes = {
     es: "Ninguna skill nueva en el catálogo — ya instalaste todo lo que la plataforma ofrece hoy.",
   },
   "Nenhuma versão publicada ainda": { es: "Ninguna versión publicada todavía" },
-  "Nesta instalação a proteção só avisa (AI_BUDGET_ENFORCEMENT=avisar): mesmo com \"Parar a IA\" escolhido, ela vai continuar respondendo.": {
-    es: "En esta instalación la protección solo avisa (AI_BUDGET_ENFORCEMENT=avisar): incluso con \"Detener la IA\" elegido, ella va a seguir respondiendo.",
+  'Nesta instalação a proteção só avisa: mesmo com "Parar a IA" escolhido, ela vai continuar respondendo. Quem administra a instalação escolheu assim em Comportamento, no Admin.': {
+    es: 'En esta instalación la protección solo avisa: incluso con "Detener la IA" elegido, ella va a seguir respondiendo. Quien administra la instalación lo eligió así en Comportamiento, en Admin.',
   },
   "Novo aprendizado": { es: "Nuevo aprendizaje" },
   "Não consegui carregar a configuração de IA": { es: "No pude cargar la configuración de IA" },

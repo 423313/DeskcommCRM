@@ -342,6 +342,13 @@ export const AUDIT_ACTIONS = [
   // (nenhum handler o consumiria — ver register-handlers.ts) e a troca não
   // deixa rastro em nenhuma outra tabela.
   "platform.signup_mode_updated",
+  // O COMPORTAMENTO da instalação trocado em `platform_settings` pela tela
+  // `/admin/sistema` (migration 0265, issue #1034) — irmã da linha de cima, e
+  // mutação de plataforma. Auditável porque pergunta "por que a IA não parou no
+  // teto?" / "por que a entrega do webhook foi recusada?" só tem resposta aqui:
+  // é a única tabela que guarda quem desligou o bloqueio de gasto, mudou o
+  // portão de divulgação ou passou a exigir assinatura nas entregas.
+  "platform.comportamento_updated",
   "platform_google_oauth.updated",
   // A credencial do APP da Meta da INSTALAÇÃO (migration 0257): o App Secret que
   // assina a entrega do webhook e o verify token que responde ao handshake.

@@ -14,6 +14,7 @@ import {
   CalendarBlank,
   Palette,
   Key,
+  Gear,
   WebhooksLogo,
   ArrowRight,
 } from "@/lib/ui/icons";
@@ -56,6 +57,11 @@ const NAV_ITEMS: NavItem[] = [
   // razão das duas de cima: é configuração da INSTALAÇÃO, e /admin tem
   // navegação própria (o registro de `lib/navigation/` cobre só `app/app/**`).
   { href: "/admin/cadastro", label: "Cadastro", icon: Key },
+  // A porta da tela do COMPORTAMENTO da instalação (issue #1034) — mesma razão
+  // das três de cima: são chaves da INSTALAÇÃO, e /admin tem navegação própria.
+  // O rótulo é o do assunto da tela para quem chega por aqui sabendo o que foi
+  // mexer, e não o nome de um arquivo de configuração.
+  { href: "/admin/sistema", label: "Comportamento", icon: Gear },
 ];
 
 interface AdminSidebarProps {

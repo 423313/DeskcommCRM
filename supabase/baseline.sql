@@ -26537,17 +26537,40 @@ comment on column public.user_organizations.provisional_until_handover is
 create table if not exists public.platform_settings (
   id           smallint    primary key default 1,
   signup_mode  text        not null default 'aberto',
+  -- Comportamento da instalação (0265). NULAS de propósito: null = "a
+  -- instalação não opinou" e quem responde é o arquivo de ambiente, o que faz
+  -- a migration não mudar comportamento de quem nunca abrir a tela.
+  orcamento_de_ia              text,
+  exigir_assinatura_no_webhook boolean,
+  divulgacao_de_pagamento      text,
+  promessa_semantica           boolean,
   updated_at   timestamptz not null default now(),
   updated_by   uuid,
   constraint platform_settings_singleton check (id = 1),
-  constraint platform_settings_signup_mode check (signup_mode in ('aberto', 'so_convite'))
+  constraint platform_settings_signup_mode check (signup_mode in ('aberto', 'so_convite')),
+  constraint platform_settings_orcamento_de_ia
+    check (orcamento_de_ia is null or orcamento_de_ia in ('on', 'avisar', 'off')),
+  constraint platform_settings_divulgacao_de_pagamento
+    check (divulgacao_de_pagamento is null or divulgacao_de_pagamento in ('inject', 'veto'))
 );
 
 comment on table public.platform_settings is
-  'Configuração da INSTALAÇÃO (não do tenant) — linha única id=1. Hoje só a política de cadastro. Lida/escrita apenas server-side (service_role); a ausência da linha significa o default, que é o comportamento anterior à 0253. Ver lib/auth/politica-de-cadastro.ts.';
+  'Configuração da INSTALAÇÃO (não do tenant) — linha única id=1. Hoje a política de cadastro e o COMPORTAMENTO (orçamento de IA, assinatura de webhook, divulgação de pagamento, conferência de promessa). Coluna nula = a instalação não opinou, e quem responde é o arquivo de ambiente. Lida/escrita apenas server-side (service_role); a ausência da linha significa o default. Ver lib/auth/politica-de-cadastro.ts e lib/instalacao/comportamento.ts.';
 
 comment on column public.platform_settings.signup_mode is
   'aberto = qualquer pessoa cria conta em /signup (comportamento histórico). so_convite = só quem chega com convite válido; sem convite, /signup recusa com tela e /auth/confirm NÃO provisiona organização.';
+
+comment on column public.platform_settings.orcamento_de_ia is
+  'on = a IA respeita o teto de gasto que cada organização escolheu (default do produto, e o que o .env declara). avisar = a IA responde e apenas avisa quem opera. off = sem proteção de gasto. null = a instalação não opinou; vale AI_BUDGET_ENFORCEMENT do arquivo de ambiente. Só AFROUXA o que a organização escolheu: nunca liga proteção que a empresa não pediu.';
+
+comment on column public.platform_settings.exigir_assinatura_no_webhook is
+  'true = toda entrega de webhook do canal precisa vir assinada com o segredo da sessão; sem assinatura (ou com assinatura errada) a entrega é recusada. null = a instalação não opinou; vale WAHA_WEBHOOK_REQUIRE_SIGNATURE do arquivo de ambiente (default do produto: false).';
+
+comment on column public.platform_settings.divulgacao_de_pagamento is
+  'inject = o texto de divulgação de pagamento entra na primeira mensagem. veto = o envio sem esse texto é bloqueado e devolvido ao modelo com a razão, para ele reescrever. null = a instalação não opinou; vale DISCLOSURE_MODE do arquivo de ambiente (default do produto: inject).';
+
+comment on column public.platform_settings.promessa_semantica is
+  'true = cada envio passa por uma conferência de modelo antes de sair, para não prometer o que a empresa não cumpre (custa uma chamada de modelo por envio). null = a instalação não opinou; vale PROMISE_SEMANTIC_ENABLED do arquivo de ambiente (default do produto: true).';
 
 alter table public.platform_settings enable row level security;
 

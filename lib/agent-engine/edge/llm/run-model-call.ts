@@ -37,6 +37,7 @@ import {
   type ChaveDeOrcamento,
 } from './orcamento';
 import { costCents } from './pricing';
+import { chaveDeOrcamentoDaInstalacao } from '../../../instalacao/comportamento';
 import { createDefaultRegistry, type ProviderRegistry } from './providers';
 import { buildStablePrefix } from './stable-prefix';
 
@@ -392,7 +393,12 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     organizationId: input.tenantId,
     orcamentoDaConfig: config.orcamento,
     orcamentoIndisponivelPorque: config.orcamentoIndisponivelPorque,
-    chave: cfg.budgetEnforcement ?? 'on',
+    // A chave EFETIVA da instalação: a linha escrita na tela de admin vence, e
+    // o valor do `.env` (que veio na config) é o PISO. A leitura é feita AQUI,
+    // a cada chamada, porque é aqui que a decisão acontece — um snapshot no
+    // boot faria o kill switch da tela só valer depois de reiniciar o worker
+    // (issue #1034). Sem banco lido nesta vida do processo, isto é o de hoje.
+    chave: chaveDeOrcamentoDaInstalacao(cfg.budgetEnforcement ?? 'on'),
     purpose,
     provider: config.provider,
     model,
