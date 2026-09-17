@@ -286,6 +286,18 @@ export function resolveWaitPhase(events: EnrollmentEventRef[], nodeId: string, s
   return events.some((e) => e.node_id === nodeId && e.idempotency_key === priorKey);
 }
 
+/**
+ * Passos é número, mas o formulário gravou por meses o que se DIGITAVA — texto.
+ * Com `"3"`, `gte` nunca era verdadeiro e `neq` sempre era: a regra aparecia
+ * pronta no card e decidia sozinha. Lê o número que a pessoa escreveu; texto que
+ * não é número segue como está (e o publish o recusa).
+ */
+function valorDePassos(value: string | number): string | number {
+  if (typeof value === "number") return value;
+  const limpo = value.trim();
+  return /^-?\d+$/.test(limpo) ? Number(limpo) : value;
+}
+
 function evaluateCheck(
   check: { field: "lead_stage" | "tag" | "steps_taken" | "last_outcome"; op: "eq" | "neq" | "gte" | "lte" | "contains"; value: string | number },
   lead: LeadFacts,
@@ -304,17 +316,18 @@ function evaluateCheck(
     return false;
   }
 
+  const expected = check.field === "steps_taken" ? valorDePassos(check.value) : check.value;
   switch (check.op) {
     case "eq":
-      return actual === check.value;
+      return actual === expected;
     case "neq":
-      return actual !== check.value;
+      return actual !== expected;
     case "gte":
-      return typeof actual === "number" && typeof check.value === "number" && actual >= check.value;
+      return typeof actual === "number" && typeof expected === "number" && actual >= expected;
     case "lte":
-      return typeof actual === "number" && typeof check.value === "number" && actual <= check.value;
+      return typeof actual === "number" && typeof expected === "number" && actual <= expected;
     case "contains":
-      return typeof actual === "string" && typeof check.value === "string" && actual.includes(check.value);
+      return typeof actual === "string" && typeof expected === "string" && actual.includes(expected);
   }
 }
 

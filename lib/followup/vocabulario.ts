@@ -120,9 +120,19 @@ const AVISO_SO_NUMERO =
   "Comparar maior/menor só funciona com número. Do jeito que está, esta condição nunca é verdadeira.";
 const AVISO_SO_TEXTO = "“Contém” só funciona com texto. Em número, esta condição nunca é verdadeira.";
 
-const aspas = (valor: string | number): string => `“${valor}”`;
+/**
+ * Regra ainda sem valor. Aspas vazias (`“”`) se liam como "a etapa de nome
+ * vazio" — uma regra com cara de pronta. É o estado em que toda regra nova
+ * nasce, e o publish a recusa até alguém preencher.
+ */
+export const VALOR_A_PREENCHER = "(a preencher)";
+
+const semValor = (valor: string | number): boolean => String(valor).trim() === "";
+
+const aspas = (valor: string | number): string => (semValor(valor) ? VALOR_A_PREENCHER : `“${valor}”`);
 
 function passos(valor: string | number): string {
+  if (semValor(valor)) return `${VALOR_A_PREENCHER} passos`;
   const n = Number(valor);
   return Number.isFinite(n) && Math.abs(n) === 1 ? `${valor} passo` : `${valor} passos`;
 }
@@ -268,13 +278,29 @@ export function comparadoresDoCampo(
     .map((op) => ({ op, rotulo: COMPARADORES[campo][op].rotulo }));
 }
 
+/**
+ * Como transformar um valor salvo no que a pessoa escolheu. A etapa é gravada
+ * pelo `stage_id` — é o que o motor compara —, e só quem tem a lista de etapas
+ * (a tela, a rota) sabe o nome. Este módulo é puro, então o nome chega injetado.
+ */
+export interface NomesDeValor {
+  /** «Etapa · Funil» da etapa com este id, ou `null` quando nenhuma etapa tem esse id. */
+  etapa?: (id: string) => string | null;
+}
+
 /** A checagem inteira em uma frase — para resumo do nó, `aria-label` e revisão antes de publicar. */
 export function fraseDaCondicao(
   campo: CampoDaCondicao,
   op: OperadorDaCondicao,
   valor: string | number,
+  nomes: NomesDeValor = {},
 ): string {
-  return comparador(campo, op).frase(valor);
+  // Sem nome resolvido o valor sai como foi salvo: um fluxo antigo que guardou o
+  // NOME digitado ("PAGO") continua legível — e o formulário e o publish avisam
+  // que ele não aponta para etapa nenhuma.
+  const exibido =
+    campo === "lead_stage" && !semValor(valor) ? (nomes.etapa?.(String(valor)) ?? valor) : valor;
+  return comparador(campo, op).frase(exibido);
 }
 
 export const COMBINADORES: Record<Combinador, string> = {
@@ -363,8 +389,9 @@ export function fraseDaRegraSemNome(
   campo: CampoDaCondicao,
   op: OperadorDaCondicao,
   valor: string | number,
+  nomes: NomesDeValor = {},
 ): string {
-  return `quando ${encaixa(fraseDaCondicao(campo, op, valor))}`;
+  return `quando ${encaixa(fraseDaCondicao(campo, op, valor, nomes))}`;
 }
 
 export const RAMOS_RESERVADOS: Record<RamoReservado, string> = {

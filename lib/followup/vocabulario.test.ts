@@ -453,6 +453,38 @@ describe("o ramo em frase — o registro do dossiê", () => {
   });
 });
 
+describe("a regra mostra o que a pessoa escolheu, nunca o identificador", () => {
+  const ID_DA_ETAPA = "0b3c6a3e-8a1f-4a51-9d0e-3f2b7c9d1e22";
+  const nomes = { etapa: (id: string) => (id === ID_DA_ETAPA ? "Pago · Vendas" : null) };
+
+  it("etapa gravada por id aparece pelo nome, com o funil junto", () => {
+    // O motor compara `stage_id`; a tela grava o id e LÊ o nome. Sem o nome, o
+    // card mostraria o uuid — o defeito que este módulo existe para impedir.
+    expect(fraseDaCondicao("lead_stage", "eq", ID_DA_ETAPA, nomes)).toBe("O lead está na etapa “Pago · Vendas”");
+    expect(fraseDaRegraSemNome("lead_stage", "neq", ID_DA_ETAPA, nomes)).toBe(
+      "quando o lead não está na etapa “Pago · Vendas”",
+    );
+  });
+
+  it("valor que não é id de etapa nenhuma aparece como foi salvo — o texto antigo não some", () => {
+    expect(fraseDaCondicao("lead_stage", "eq", "PAGO", nomes)).toBe("O lead está na etapa “PAGO”");
+  });
+
+  it("o nome da etapa só vale para o campo etapa", () => {
+    const tudoViraNome = { etapa: () => "NÃO DEVIA APARECER" };
+    expect(fraseDaCondicao("tag", "eq", "vip", tudoViraNome)).toBe("O contato tem a etiqueta “vip”");
+    expect(fraseDaCondicao("last_outcome", "eq", "x", tudoViraNome)).toBe("O desfecho do passo anterior foi “x”");
+  });
+
+  it("regra sem valor diz que falta preencher, em vez de aspas vazias", () => {
+    // `“”` se lia como "a etapa de nome vazio" — uma regra que parecia pronta.
+    expect(fraseDaCondicao("lead_stage", "eq", "")).toBe("O lead está na etapa (a preencher)");
+    expect(fraseDaCondicao("tag", "eq", "  ")).toBe("O contato tem a etiqueta (a preencher)");
+    expect(fraseDaCondicao("steps_taken", "gte", "")).toBe("O fluxo já deu pelo menos (a preencher) passos");
+    expect(fraseDaCondicao("lead_stage", "eq", "", nomes)).toBe("O lead está na etapa (a preencher)");
+  });
+});
+
 describe("o antigo 'Grace' virou uma pergunta com consequência", () => {
   it("o mínimo declarado é exatamente o piso do schema", () => {
     const base = { classes: ["x"], target: "last_reply" as const };
