@@ -156,6 +156,19 @@ psql_install() {
   docker exec -i "$CONTAINER" psql -U postgres -d "$TEMPLATE" -v ON_ERROR_STOP=1 -q -f - "$@"
 }
 
+# Toda aplicação do baseline deixa UMA linha em `test_db.aplicacoes_do_baseline`,
+# no próprio molde. Com isso um invariante PROVA quantas aplicações o banco que ele
+# lê recebeu, em vez de confiar na posição das linhas deste script.
+aplicar_baseline() {
+  psql_install < "$BASELINE"
+  psql_install <<'SQL'
+set client_min_messages = warning;
+create schema if not exists test_db;
+create table if not exists test_db.aplicacoes_do_baseline (aplicada_em timestamptz not null default clock_timestamp());
+insert into test_db.aplicacoes_do_baseline default values;
+SQL
+}
+
 echo "==> prelude: stubs mínimos do Supabase (roles, auth.uid(), extensions)"
 # Um Postgres cru não tem os roles/schemas do Supabase que o baseline (pg_dump) supõe.
 # Criamos os stubs mínimos AQUI — nunca editar o baseline.sql pra isso.
@@ -405,8 +418,20 @@ fi
 echo "    ✓ tabela nova nasce com DELETE direto para anon, authenticated e service_role"
 
 echo "==> modo INSTALL: aplicando baseline.sql com ON_ERROR_STOP=1"
-psql_install < "$BASELINE"
+aplicar_baseline
 echo "    ✓ install ok"
+
+# O MOLDE DE APLICAÇÃO ÚNICA: cópia do banco NESTE instante, antes do UPDATE.
+#
+# O `install.sh` aplica o baseline UMA vez. O molde acima recebe DUAS, e a segunda
+# esconde toda diferença entre instalação nova e atualização: o que a primeira
+# passada deixou de fazer por ordem dentro do arquivo, a segunda faz. Invariante
+# que precisa medir a instalação nova lê `$TEST_DB_TEMPLATE_UMA_APLICACAO` e confere
+# em `test_db.aplicacoes_do_baseline` que ela é de fato de UMA aplicação.
+TEMPLATE_UMA_APLICACAO="inv_baseline_uma_aplicacao"
+docker exec "$CONTAINER" psql -U postgres -d template1 -q -v ON_ERROR_STOP=1 \
+  -c "create database $TEMPLATE_UMA_APLICACAO template $TEMPLATE" >/dev/null
+echo "    ✓ molde de aplicação única: $TEMPLATE_UMA_APLICACAO"
 
 # COM `ON_ERROR_STOP=1`, e é isto que torna o passo uma prova (issue #184).
 #
@@ -419,7 +444,7 @@ echo "    ✓ install ok"
 #
 # A flag é a diferença entre "re-aplicar terminou" e "re-aplicar não errou".
 echo "==> modo UPDATE: re-aplicando baseline.sql COM ON_ERROR_STOP=1 (idempotência de verdade)"
-psql_install < "$BASELINE"
+aplicar_baseline
 echo "    ✓ update ok (zero erro na re-aplicação)"
 
 echo "==> banco \`postgres\` a partir do molde (o setupFile o recria a cada arquivo)"
@@ -441,6 +466,7 @@ echo "==> invariantes: vitest (tests/invariants) — banco novo por ARQUIVO, ord
 # variável escondida, e sortear é o que impede a próxima colisão de fixture de
 # ficar dormente até alguém renomear um arquivo.
 TEST_DB_CONTAINER="$CONTAINER" TEST_DB_TEMPLATE="$TEMPLATE" TEST_DB_PORT="$PORT" \
+  TEST_DB_TEMPLATE_UMA_APLICACAO="$TEMPLATE_UMA_APLICACAO" \
   vitest run --config vitest.db.config.ts --sequence.shuffle.files=true "$@"
 
 # A RECUSA. Vem depois do vitest e ANTES da palavra "verde", porque o que se
