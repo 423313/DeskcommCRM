@@ -199,13 +199,21 @@ function extrairMotivos(erro: unknown): string[] {
   // motivo que vira a frase persistida, e `invalid` diz o que consertar
   // enquanto `INVALID_ARGUMENT` só repete a categoria. (O bloco do corpo cru
   // logo acima mantém a ordem antiga — trocá-la não é o escopo da #950.)
+  //
+  // Daqui só sai o que tem FORMATO de identificador (`invalid`,
+  // `INVALID_ARGUMENT`). O corpo é de quem respondeu, e nem sempre é o Google:
+  // um proxy que devolva `{"error":"<texto livre>"}` levaria nome e e-mail para
+  // a frase gravada no compromisso.
   const corpoDaRecusa = comoObjeto(e.corpo);
   if (corpoDaRecusa) {
+    const antes = achados.length;
     empilhar(corpoDaRecusa.error);
     const erroDaRecusa = comoObjeto(corpoDaRecusa.error);
     if (erroDaRecusa) listaDeReasons(erroDaRecusa.errors);
     listaDeReasons(corpoDaRecusa.errors);
     if (erroDaRecusa) empilhar(erroDaRecusa.status);
+    const doCorpo = achados.splice(antes).filter((m) => /^[a-z_]{1,64}$/.test(m));
+    achados.push(...doCorpo);
   }
 
   // A mensagem entra por último e só serve para os motivos que o Google manda

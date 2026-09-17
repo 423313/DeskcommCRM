@@ -143,4 +143,22 @@ describe("recusa do Google na publicação: o motivo volta para a frase persisti
     expect(mensagem).not.toContain("Bad gateway");
     expect(classificarErroDoGoogle(erro, "atualizar").desfecho).toBe("transitorio");
   });
+
+  it("corpo JSON que não é do Google não leva texto livre para a frase persistida", async () => {
+    // Um proxy no meio pode responder JSON com a MESMA forma e texto humano no
+    // lugar do identificador. Só o que tem formato de `reason` entra na frase.
+    for (const corpo of [
+      { error: "Maria maria@x.test recusou" },
+      { errors: [{ reason: "Convidado joao@y.test inválido" }] },
+    ]) {
+      respond = (res) => {
+        res.setHeader("content-type", "application/json; charset=UTF-8");
+        res.statusCode = 400;
+        res.end(JSON.stringify(corpo));
+      };
+      const mensagem = mensagemDaRecusaDePublicacao(await recusaDaPublicacao(), "PATCH");
+      expect(mensagem).toContain("HTTP 400");
+      expect(mensagem).not.toContain("@");
+    }
+  });
 });
