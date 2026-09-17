@@ -2060,8 +2060,8 @@ export const DICIONARIO: Traducoes = {
   "Conversas encaminhadas": { es: "Conversaciones encaminadas" },
   "Custo da IA no período": { es: "Costo de la IA en el período" },
   "Custo no período": { es: "Costo en el período" },
-  "Deixe em branco para usar o endereço oficial do provedor. Use isto para apontar para um gateway compatível com a API da OpenAI — inclusive um modelo rodando na sua própria máquina.": {
-    es: "Déjalo en blanco para usar la dirección oficial del proveedor. Usa esto para apuntar a un gateway compatible con la API de OpenAI — incluso un modelo corriendo en tu propia máquina.",
+  "Deixe em branco para usar o endereço oficial do provedor. Use isto para apontar para um gateway compatível com a API da OpenAI — inclusive um modelo rodando na sua própria máquina, desde que o endereço interno esteja liberado em IA_DESTINOS_INTERNOS_PERMITIDOS por quem opera o servidor.": {
+    es: "Déjalo en blanco para usar la dirección oficial del proveedor. Usa esto para apuntar a un gateway compatible con la API de OpenAI — incluso un modelo corriendo en tu propia máquina, siempre que quien opera el servidor haya liberado la dirección interna en IA_DESTINOS_INTERNOS_PERMITIDOS.",
   },
   "Descreva a regra ou o aprendizado em texto simples.": {
     es: "Describe la regla o el aprendizaje en texto simple.",

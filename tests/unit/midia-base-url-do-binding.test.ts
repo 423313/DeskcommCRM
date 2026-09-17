@@ -170,6 +170,9 @@ vi.mock("@/lib/env", async (importOriginal) => {
       get TRANSCRIPTION_MODEL() {
         return transcricaoDoEnv.model;
       },
+      get IA_DESTINOS_INTERNOS_PERMITIDOS() {
+        return destinosInternosDoEnv.valor;
+      },
     },
   };
 });
@@ -211,10 +214,30 @@ function depsDaChamada(): DeriveDeps {
   return deps;
 }
 
+/** A lista de destinos internos autorizados pelo dono da instalação (#1004). */
+const destinosInternosDoEnv = vi.hoisted(() => ({ valor: "" }));
+
+/**
+ * Declara a lista do dono como o operador a escreve no `.env`. Quem a lê é o
+ * `env` do app — o mesmo caminho da transcrição acima —, então o caso controla
+ * por aqui, e não por `vi.stubEnv`.
+ */
+function comDestinosAutorizados(valor = ""): void {
+  destinosInternosDoEnv.valor = valor;
+}
+
+/** Os corpos já escritos na Central: é por onde a recusa deixa rastro. */
+function corposDaCentral(): string[] {
+  return inboxInsertMock.mock.calls.map((c) =>
+    String((c[0] as { body?: string } | undefined)?.body ?? ""),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   comTranscricaoNoEnv();
+  comDestinosAutorizados();
   dns.erro = null;
   dns.resposta = [{ address: "93.184.216.34", family: 4 }];
   bindingDaVez = BINDING_COM_ENDPOINT;
@@ -410,5 +433,87 @@ describe("worker de mídia: base_url do binding de visão (#855)", () => {
     expect(provedorDeTranscricaoMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ baseUrl: "https://api.groq.com/openai/v1" }),
     );
+  });
+
+  /**
+   * A decisão 22-d entrega a alavanca a quem paga a máquina: o dono da
+   * instalação declara no `.env` os endereços internos que ele quer alcançar —
+   * o mesmo nível de confiança de configurar banco e chaves. A organização,
+   * sozinha, continua sem poder: o endereço que ELA escolhe no painel passa
+   * pela régua de antes, e a credencial da instalação continua tendo o degrau
+   * que a impede de sair para endereço escolhido por uma empresa.
+   */
+  describe("#1004: destinos internos autorizados pelo dono da instalação", () => {
+    it("endereço interno que ninguém declarou continua recusado", async () => {
+      comDestinosAutorizados();
+      bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://coletor.interno.exemplo/v1" };
+      dns.resposta = [{ address: "10.1.2.3", family: 4 }];
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+      expect(factoryMock).not.toHaveBeenCalled();
+      expect(texto).toBeTruthy();
+      const corpos = corposDaCentral();
+      expect(corpos.some((b) => b.includes("unsafe_url:private_ip"))).toBe(true);
+      // O aviso tem de dizer ONDE fica a alavanca: sem isso, quem pôs a IA na
+      // própria rede descobre o nome da variável por tentativa e erro.
+      expect(corpos.some((b) => b.includes("IA_DESTINOS_INTERNOS_PERMITIDOS"))).toBe(true);
+    });
+
+    it("lista declarada não é coringa: endereço fora dela segue recusado", async () => {
+      comDestinosAutorizados("outra-maquina.interno");
+      bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "http://10.9.9.9:8080/v1" };
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+      expect(factoryMock).not.toHaveBeenCalled();
+      expect(texto).toBeTruthy();
+      expect(corposDaCentral().some((b) => b.includes("unsafe_url:private_host"))).toBe(true);
+    });
+
+    it("endereço interno declarado pelo dono passa", async () => {
+      comDestinosAutorizados("coletor.interno.exemplo");
+      bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://coletor.interno.exemplo/v1" };
+      dns.resposta = [{ address: "10.1.2.3", family: 4 }];
+
+      await deriveMessageMedia(eventRow());
+      await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+      expect(factoryMock).toHaveBeenCalledWith(
+        "chave-do-binding",
+        "acme/visao-1",
+        "https://coletor.interno.exemplo/v1",
+      );
+    });
+
+    it("faixa CIDR declarada cobre o IP escrito no endereço", async () => {
+      comDestinosAutorizados("10.1.0.0/16");
+      comTranscricaoNoEnv({ apiKey: "chave-do-servico", baseUrl: "http://10.1.2.7:8080/v1" });
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+      expect(transcribeDoSvcMock).toHaveBeenCalledTimes(1);
+      expect(texto).toBe("transcrição de mentira");
+    });
+
+    it("declarado, mas com a chave da INSTALAÇÃO em endereço da organização, continua recusando", async () => {
+      // A lista autoriza o ENDEREÇO, nunca a credencial. O degrau que impede a
+      // chave que paga a conta de todas as empresas de sair para um endereço
+      // escolhido por uma delas continua de pé, mesmo com o endereço declarado.
+      comDestinosAutorizados("gateway.interno.exemplo");
+      vi.stubEnv("OPENROUTER_API_KEY", "chave-do-binding");
+      bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://gateway.interno.exemplo/v1" };
+      dns.resposta = [{ address: "10.1.2.3", family: 4 }];
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+      expect(factoryMock).not.toHaveBeenCalled();
+      expect(texto).toBeTruthy();
+      expect(corposDaCentral().some((b) => b.includes("cadastre a chave da empresa"))).toBe(true);
+    });
   });
 });

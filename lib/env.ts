@@ -198,6 +198,15 @@ const schema = z.object({
   TRANSCRIPTION_API_KEY: z.string().optional().default(""),
   TRANSCRIPTION_BASE_URL: z.string().optional().default(""),
   TRANSCRIPTION_MODEL: z.string().optional().default(""),
+  // Destinos internos que o DONO DA INSTALAÇÃO autoriza (decisão 22-d, #1004):
+  // a lista de hosts e faixas CIDR que a saída pode alcançar mesmo estando na
+  // rede de dentro — `localhost`, `10.`, `192.168.`, `172.16/12` continuam
+  // recusados para quem não está aqui. É a alavanca de quem opera o servidor,
+  // o mesmo nível de confiança de configurar banco e chaves; a organização,
+  // sozinha, continua sem poder, porque não escreve neste arquivo. Vazio é
+  // ausente, como no resto do arquivo: sem a variável, nada passa. Quem lê é
+  // `lib/automation/destinos-internos-autorizados.ts`.
+  IA_DESTINOS_INTERNOS_PERMITIDOS: z.string().optional().default(""),
 
   // Fusão (Fase 4): DONO ÚNICO dos eventos ai_agent.dispatch_requested.
   // 'engine' (default) = o worker agent-engine é o único consumidor (o cron

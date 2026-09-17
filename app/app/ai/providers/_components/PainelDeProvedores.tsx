@@ -631,7 +631,7 @@ function CartaoDoPonto({
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 {t(
-                  "Deixe em branco para usar o endereço oficial do provedor. Use isto para apontar para um gateway compatível com a API da OpenAI — inclusive um modelo rodando na sua própria máquina.",
+                  "Deixe em branco para usar o endereço oficial do provedor. Use isto para apontar para um gateway compatível com a API da OpenAI — inclusive um modelo rodando na sua própria máquina, desde que o endereço interno esteja liberado em IA_DESTINOS_INTERNOS_PERMITIDOS por quem opera o servidor.",
                 )}
               </p>
             </div>
