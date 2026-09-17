@@ -618,8 +618,14 @@ check "a linha do cron aponta para o arquivo de cabeçalho (conserto aplicado ne
   grep -q -- "-H @" "$FAKE_CRONTAB"
 check "  e o segredo NÃO está escrito na linha do cron" \
   bash -c '! grep -q "Authorization: Bearer" "$FAKE_CRONTAB"'
+# `stat -c` (GNU) PRIMEIRO e `stat -f` (BSD) como reserva, nesta ordem: no Linux,
+# `stat -f %Lp` NÃO falha — ele responde sobre o SISTEMA DE ARQUIVOS e sai 0 —,
+# então a ordem inversa nunca chega à reserva e a prova reprova no CI dizendo que
+# a permissão está errada quando ela está certa. Medido: reprovou 1 prova no
+# `verify` do #1115, só esta.
+modo_do_arquivo() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1" 2>/dev/null; }
 check "  o arquivo de cabeçalho nasceu com permissão 600" \
-  bash -c '[ "$(stat -f %Lp "'"$CASO11"'/.env.cron-drain" 2>/dev/null || stat -c %a "'"$CASO11"'/.env.cron-drain" 2>/dev/null)" = "600" ]'
+  test "$(modo_do_arquivo "$CASO11/.env.cron-drain")" = "600"
 cd "$PROJ" || exit 1
 
 if [ "$FAILS" -eq 0 ]; then echo "OK — todas as provas passaram."; else echo "FALHOU — $FAILS prova(s)."; fi
