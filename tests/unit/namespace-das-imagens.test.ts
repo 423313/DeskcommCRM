@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
  * ── Por que este arquivo existe ────────────────────────────────────────────
  *
  * `tests/shell/update-guard.test.sh` e `hostgator-setup-kit/test-validators.sh`
- * repetiam `ghcr.io/melgarafael` à mão em 31 lugares — fixtures E asserções.
+ * repetiam `ghcr.io/423313` à mão em 31 lugares — fixtures E asserções.
  * Isso amarrava a suíte a UM publicador: um fork que publica as próprias
  * imagens ficava vermelho em 4 casos sem ter quebrado nada, com a mensagem de
  * falha apontando para o valor "certo" do upstream. Derivar tudo de `IMG_NS`
@@ -53,7 +53,7 @@ const PUBLICA = fs.readFileSync(path.join(RAIZ, ".github/workflows/publish-image
 const ENV_EXEMPLO = fs.readFileSync(path.join(RAIZ, ".env.hostgator.example"), "utf8");
 
 /** O valor literal que este repositório publica. A âncora. */
-const NAMESPACE_DESTE_REPO = "ghcr.io/melgarafael";
+const NAMESPACE_DESTE_REPO = "ghcr.io/423313";
 
 /**
  * Um fork que publica as próprias imagens muda `IMG_NS` — e precisa mudar junto
@@ -79,7 +79,7 @@ const RECADO_AO_FORK =
  * `gravar_imagens` escrevia no `.env` do cliente as referências do FORK.
  *
  * A catraca não pegava por acidente de forma: ela procura a string contígua
- * `ghcr.io/melgarafael`, e a URL do token parte o valor em
+ * `ghcr.io/423313`, e a URL do token parte o valor em
  * `ghcr.io/token?scope=repository:melgarafael/`. Instrução que promete mais do
  * que o gate confere é pior que instrução nenhuma — quem a segue conclui que
  * terminou.
@@ -160,7 +160,7 @@ describe("o default do compose diz o mesmo que o kit", () => {
 
 describe("o kit aponta para o que o CI realmente publica", () => {
   it("os defaults de código e os labels de origem apontam para este repositório", () => {
-    const repo = "https://github.com/melgarafael/DeskcommCRM";
+    const repo = "https://github.com/423313/DeskcommCRM";
     for (const script of ["install.sh", "comecar.sh"]) {
       const texto = fs.readFileSync(path.join(RAIZ, "hostgator-setup-kit", script), "utf8");
       expect(texto).toContain(`REPO_URL="\${REPO_URL:-${repo}.git}"`);

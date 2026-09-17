@@ -61,6 +61,34 @@ vez de empurrar.
    `merge=union`, e o git passa a resolvê-los sozinho — mas só funciona se os dois
    lados acrescentarem no fim.
 
+## O fork publica as próprias imagens
+
+A VPS puxa três imagens: `deskcommcrm`, `deskcomm-worker` e `deskcomm-scheduler`.
+Enquanto elas vinham do upstream, a VPS não tinha o financeiro — **as telas nunca
+estiveram no ar até a primeira publicação do fork**, em 17/09/2026. Os dados
+estavam no banco; a imagem que os lia, não.
+
+- **Namespace:** `ghcr.io/423313`. A fonte é `IMG_NS` em
+  `hostgator-setup-kit/_common.sh`; quem vigia os outros lugares (compose,
+  `.env.hostgator.example`, `REPO_URL`, os `LABEL` dos Dockerfiles) é
+  `tests/unit/namespace-das-imagens.test.ts`. Ele **conflita a cada sync** em que
+  o upstream o edite — resolva ficando com o valor do fork nas duas constantes.
+- **A `main` do repo `423313` é o fork.** O job `a-tag-veio-da-main` do
+  `publish-image.yml` só publica tag contida na `main` do próprio repositório.
+  Trabalhe em `fork/financeiro`; publique com `git push fork fork/financeiro:main`.
+- **Versão em CalVer: `v2026.9.1`, `v2026.9.2`, `v2026.10.1`.** Não use hífen
+  (`ultima_versao_publicada` descarta como pré-release) nem quarto segmento
+  (`type=semver` do metadata-action não emite tag). CalVer é semver válido e
+  ordena acima de qualquer `v1.x` do upstream que sobre no clone. A versão do
+  upstream de origem vai **no corpo da tag** (`git tag -a ... -m "base: ..."`).
+- **Pacote novo no GHCR nasce privado.** Torne os três públicos depois da primeira
+  publicação, senão o `pull` da VPS é negado sem dizer por quê. Confira com
+  `ghcr_status` do `_common.sh`: quer `200` nas três.
+- **O fork não corta CHANGELOG.** `scripts/cortar-release.ts` deriva o número do
+  CHANGELOG e tem o repo do upstream cravado. `pnpm release:conferir` fica só
+  como linter dos fragmentos em `.changes/`, que continuam sendo escritos: são o
+  material do dia em que o módulo voltar ao upstream.
+
 ## O que NÃO vale a pena consertar
 
 Medido em 17/09/2026, para você não gastar uma tarde onde não dói:
