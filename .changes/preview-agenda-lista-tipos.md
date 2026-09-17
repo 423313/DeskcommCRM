@@ -1,5 +1,5 @@
 ---
-impacto: corrigido
+impacto: nada_mudou
 secao: corrigido
 titulo: Prévia do agente volta a listar tipos de atendimento da Agenda
 ---
