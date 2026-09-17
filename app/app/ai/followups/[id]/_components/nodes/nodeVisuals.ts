@@ -79,7 +79,13 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
     borderClassName: "border-l-accent-700",
     defaultLabel: "Classificar resposta",
     defaultConfig: () => ({
-      classes: ["hot", "cold"],
+      // Em português, e dizendo o CRITÉRIO: estes nomes são a definição inteira
+      // que o modelo recebe para classificar a resposta (`followup-flow-classify`),
+      // e aparecem crus na saída do card, na aresta e no dossiê. "hot"/"cold"
+      // pedia ao dono da loja que adivinhasse o critério — e ao modelo também.
+      // Fora do dicionário de propósito: são DADO do usuário, e uma chave faria
+      // o card traduzir o que o motor compara ao pé da letra.
+      classes: ["Interessado", "Sem interesse"],
       grace_timeout_ms: 900_000,
       target: "last_reply",
     }),

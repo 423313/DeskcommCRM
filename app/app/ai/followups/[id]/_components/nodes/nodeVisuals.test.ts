@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
-import type { FlowGraph } from "@/lib/followup/graph-schema";
+import { RESERVED_BRANCH_IDS, type FlowGraph } from "@/lib/followup/graph-schema";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 import { describeNodeConfig, NODE_VISUAL_LIST, NODE_VISUALS } from "./nodeVisuals";
@@ -108,6 +108,21 @@ describe("nenhum card fala a língua do banco", () => {
         es,
       ),
     ).toBe("1 regla · espera 15 min");
+  });
+});
+
+describe("o nó de classificação nasce falando português", () => {
+  it("as classes padrão dizem o critério, e ficam FORA do dicionário", () => {
+    const { classes } = NODE_VISUALS.ai_classify.defaultConfig() as { classes: string[] };
+    expect(classes).toEqual(["Interessado", "Sem interesse"]);
+    // Classe é dado do usuário: se virasse chave, o card mostraria uma palavra e
+    // o motor compararia outra para quem usa espanhol.
+    for (const classe of classes) expect(traduzir(classe, "es")).toBe(classe);
+  });
+
+  it("nenhum nome padrão colide com um ramo reservado do contrato", () => {
+    const { classes } = NODE_VISUALS.ai_classify.defaultConfig() as { classes: string[] };
+    for (const classe of classes) expect(RESERVED_BRANCH_IDS as readonly string[]).not.toContain(classe);
   });
 });
 

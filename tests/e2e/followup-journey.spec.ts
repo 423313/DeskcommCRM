@@ -284,7 +284,7 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     await moveNodeTo(page, endNoReplyId, ...at(260, 650));
     await moveNodeTo(page, endFallbackId, ...at(460, 650));
 
-    // Configura: classify → 1 classe "positivo" (troca o default hot/cold);
+    // Configura: classify → 1 classe "positivo" (troca o padrão Interessado/Sem interesse);
     // action → prompt_hint real; end-positivo → outcome "Convertido" (os
     // outros 2 fins ficam no default "Esgotado", coerente com no_reply/fallback).
     await page.locator(`[data-testid="node-card-${classifyId}"]`).click();

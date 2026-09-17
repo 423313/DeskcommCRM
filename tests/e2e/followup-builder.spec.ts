@@ -741,7 +741,7 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     await moveNodeTo(page, end1Id, ...at(225, 620));
     await moveNodeTo(page, end2Id, ...at(650, 220));
 
-    // 2. Configure ai_classify classes = positivo, objecao (replacing the hot/cold default).
+    // 2. Configure ai_classify classes = positivo, objecao (no lugar do padrão Interessado/Sem interesse).
     await page.locator(`[data-testid="node-card-${classifyId}"]`).click();
     const panel = page.getByTestId("node-config-panel");
     await panel.getByLabel("Classes (separadas por vírgula)").fill("positivo, objecao");
