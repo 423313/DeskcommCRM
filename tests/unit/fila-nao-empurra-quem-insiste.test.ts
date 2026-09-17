@@ -279,7 +279,9 @@ describe("a aba Fila devolve o cliente que insiste na frente", () => {
     // A ordem que a rota PEDIU — é ela que o dublê aplicou acima. Sem esta
     // asserção, o caso passaria a medir o dublê em vez da rota.
     expect(ordensPedidas.map((o) => o.coluna)).toEqual(["awaiting_since", "id"]);
-    expect(ordensPedidas[0].opcoes).toEqual({ ascending: true, nullsFirst: false });
+    const primeiraOrdem = ordensPedidas[0];
+    if (primeiraOrdem === undefined) throw new Error("a rota não pediu ordem nenhuma");
+    expect(primeiraOrdem.opcoes).toEqual({ ascending: true, nullsFirst: false });
   });
 
   it("a pílula e a hora do canto leem o MESMO instante que ordena a lista", async () => {
@@ -294,7 +296,8 @@ describe("a aba Fila devolve o cliente que insiste na frente", () => {
       { limit: 50, comando: ["aguardando"] } as never,
     );
 
-    const [primeira] = r.conversations;
+    const primeira = r.conversations[0];
+    if (primeira === undefined) throw new Error("a Fila veio vazia");
     expect(primeira.id).toBe("conv-a");
     // `last_inbound_at` diria 10h10 — a linha mostraria "há 1 min" embaixo da
     // posição 1º de quem espera desde 10h00.
