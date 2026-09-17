@@ -7396,6 +7396,10 @@ export const DICIONARIO: Traducoes = {
   // ("Peso mexicano") por chave DINÂMICA, que o guarda do AST não enxerga —
   // passariam no CI e cairiam no português na tela em espanhol.
   "Moeda": { es: "Moneda" },
+  "País": { es: "País" },
+  "De onde saem o documento do contato, a lei citada no documento de acesso e o prazo em dias úteis. Só aparecem países com a lei revisada — a lista é curta de propósito.": {
+    es: "De aquí salen el documento del contacto, la ley citada en el documento de acceso y el plazo en días hábiles. Solo aparecen países con la ley revisada: la lista es corta a propósito.",
+  },
   "Vale para todo preço do catálogo. Produto já cadastrado guarda a moeda com que nasceu.": {
     es: "Vale para todo precio del catálogo. Un producto ya cargado conserva la moneda con la que nació.",
   },
