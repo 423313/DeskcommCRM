@@ -28,6 +28,11 @@ describe("ajustes de estilo da organização", () => {
     expect(removerTravessaoLongo("Até amanhã —")).toBe("Até amanhã");
   });
 
+  it("preserva quebras de linha ao ajustar pontuação", () => {
+    expect(removerTravessaoLongo("Primeiro\n— Segundo")).toBe("Primeiro\n, Segundo");
+    expect(removerTravessaoLongo("Primeiro —\nSegundo")).toBe("Primeiro, \nSegundo");
+  });
+
   it("liga a regra pela configuração da organização", () => {
     expect(
       aplicarAjustesDeEstilo("Olá — tudo bem?", { sem_travessao_longo: true }),
