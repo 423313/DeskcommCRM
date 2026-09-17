@@ -161,4 +161,20 @@ describe("recusa do Google na publicação: o motivo volta para a frase persisti
       expect(mensagem).not.toContain("@");
     }
   });
+
+  it("404 do CALENDÁRIO depois do evento sumido não vira 'evento sumiu' nem 'já estava feito'", async () => {
+    respond = (res) => {
+      res.setHeader("content-type", "application/json; charset=UTF-8");
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: { code: 404, errors: [{ reason: "notFound" }] } }));
+    };
+    const leitura = await api()
+      .get("primary/calendar@example.test", "event /exact")
+      .then(() => null, (e: unknown) => e);
+    expect(mensagemDaRecusaDePublicacao(leitura, "PATCH")).toContain("o calendário do Google não existe mais");
+    const apagar = await api()
+      .write("primary/calendar@example.test", "event /exact", "DELETE", undefined, '"v1"')
+      .then(() => null, (e: unknown) => e);
+    expect(mensagemDaRecusaDePublicacao(apagar, "DELETE")).toContain("o calendário do Google não existe mais");
+  });
 });

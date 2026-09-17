@@ -306,6 +306,10 @@ export function classificarErroDoGoogle(erro: unknown, operacao: OperacaoNoGoogl
     //
     // A distinção não é cosmética: `evento_sumiu` pede reconciliar (recriar),
     // `calendario_sumiu` pede reconectar. Consertos opostos.
+    // A recusa veio da consulta ao CALENDÁRIO (o transporte marca `alvo`): o
+    // evento nem chegou a ser a pergunta, e nenhuma das leituras acima vale.
+    if ((status === 404 || status === 410) && comoObjeto(erro)?.alvo === "calendario")
+      return "calendario_sumiu";
     if (status === 404) {
       if (operacao === "apagar") return "ja_esta_feito";
       if (operacao === "criar") return "calendario_sumiu";

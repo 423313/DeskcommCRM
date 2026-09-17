@@ -41,6 +41,14 @@ export class GoogleHttpError extends Error {
      * identificadores (`errors[].reason`, `error.status`).
      */
     readonly corpo: unknown = null,
+    /**
+     * De qual recurso veio a recusa. `get` e `DELETE` engolem o 404 do EVENTO e
+     * consultam o CALENDÁRIO; o 404 que sobe dali é do calendário, e lido como
+     * se fosse do evento a frase gravada dizia "o evento não existe mais" (ou,
+     * no DELETE, "o Google já estava no estado desejado") para um calendário
+     * apagado.
+     */
+    readonly alvo: "evento" | "calendario" = "evento",
   ) {
     super(
       status === 412
@@ -78,6 +86,15 @@ export function googleTransport(accessToken: string, transport: GoogleFetch = fe
       );
     return r.status === 204 ? null : r.json();
   }
+  async function consultaOCalendario(calendar: string): Promise<void> {
+    try {
+      await request(`/calendars/${encodeURIComponent(calendar)}`);
+    } catch (e) {
+      if (e instanceof GoogleHttpError)
+        throw new GoogleHttpError(e.status, e.retryAfter, e.corpo, "calendario");
+      throw e;
+    }
+  }
   const path = (calendar: string, event?: string) =>
     `/calendars/${encodeURIComponent(calendar)}/events${event ? `/${encodeURIComponent(event)}` : ""}`;
   return {
@@ -88,7 +105,7 @@ export function googleTransport(accessToken: string, transport: GoogleFetch = fe
         return parsed as EventoDoGoogle;
       } catch (e) {
         if (e instanceof GoogleHttpError && (e.status === 404 || e.status === 410)) {
-          await request(`/calendars/${encodeURIComponent(calendar)}`);
+          await consultaOCalendario(calendar);
           return null;
         }
         throw e;
@@ -115,7 +132,7 @@ export function googleTransport(accessToken: string, transport: GoogleFetch = fe
         return parsed as EventoDoGoogle;
       } catch (e) {
         if (method === "DELETE" && e instanceof GoogleHttpError && [404, 410].includes(e.status)) {
-          await request(`/calendars/${encodeURIComponent(calendar)}`);
+          await consultaOCalendario(calendar);
           return null;
         }
         throw e;
