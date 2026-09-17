@@ -105,52 +105,57 @@ function LembreteDoCompromisso({ tipo }: { tipo: TipoRow }) {
   const t = useT();
   const [ligado, setLigado] = React.useState(tipo.reminder_enabled);
 
+  // Grade própria, e não filhos da grade de Nome/Duração/Quem atende: col-span
+  // no filho misturava o aviso com o responsável e empurrava os minutos para o
+  // canto. A seção começa DEPOIS da identidade do tipo.
   return (
-    <>
-      <label className="flex items-center gap-2 text-xs text-text-muted sm:col-span-2">
+    <div className="grid gap-3 border-t border-border pt-3">
+      <label className="flex items-center gap-2 text-xs text-text-muted">
         <input
           type="checkbox"
           name="reminder_enabled"
           checked={ligado}
           data-testid={`editar-lembrete-${tipo.id}`}
           onChange={(e) => setLigado(e.target.checked)}
-          className="size-4 rounded-sm border-border accent-accent"
+          className="size-4 shrink-0 rounded-sm border-border accent-accent"
         />
         {t("Avisar o cliente antes do compromisso, pelo WhatsApp")}
       </label>
+      <div className="grid items-start gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1 text-xs text-text-muted">
+          {t("Quantos minutos antes")}
+          <input
+            name="reminder_minutes_before"
+            type="number"
+            // Os limites do `criarSchema` da rota, repetidos aqui para a recusa
+            // chegar no campo em vez de virar um toast vindo do servidor. Quem
+            // decide continua sendo a rota — a tela só evita a viagem.
+            min={15}
+            max={10080}
+            disabled={!ligado}
+            defaultValue={tipo.reminder_minutes_before}
+            data-testid={`editar-lembrete-minutos-${tipo.id}`}
+            className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text disabled:opacity-50"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-text-muted">
+          {t("E de novo, quantos minutos antes")}
+          <input
+            name="reminder_extra_offsets_minutes"
+            type="text"
+            inputMode="numeric"
+            disabled={!ligado}
+            placeholder="180"
+            defaultValue={(tipo.reminder_extra_offsets_minutes ?? []).join(", ")}
+            data-testid={`editar-lembrete-extras-${tipo.id}`}
+            className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text disabled:opacity-50"
+          />
+          <span className="text-[11px] text-text-muted">
+            {t("Opcional. Até 3, separados por vírgula. Ex.: 180 avisa de novo 3 horas antes.")}
+          </span>
+        </label>
+      </div>
       <label className="flex flex-col gap-1 text-xs text-text-muted">
-        {t("Quantos minutos antes")}
-        <input
-          name="reminder_minutes_before"
-          type="number"
-          // Os limites do `criarSchema` da rota, repetidos aqui para a recusa
-          // chegar no campo em vez de virar um toast vindo do servidor. Quem
-          // decide continua sendo a rota — a tela só evita a viagem.
-          min={15}
-          max={10080}
-          disabled={!ligado}
-          defaultValue={tipo.reminder_minutes_before}
-          data-testid={`editar-lembrete-minutos-${tipo.id}`}
-          className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text disabled:opacity-50"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-text-muted">
-        {t("E de novo, quantos minutos antes")}
-        <input
-          name="reminder_extra_offsets_minutes"
-          type="text"
-          inputMode="numeric"
-          disabled={!ligado}
-          placeholder="180"
-          defaultValue={(tipo.reminder_extra_offsets_minutes ?? []).join(", ")}
-          data-testid={`editar-lembrete-extras-${tipo.id}`}
-          className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text disabled:opacity-50"
-        />
-        <span className="text-[11px] text-text-muted">
-          {t("Opcional. Até 3, separados por vírgula. Ex.: 180 avisa de novo 3 horas antes.")}
-        </span>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-text-muted sm:col-span-3">
         {t("Mensagem do lembrete")}
         <textarea
           name="reminder_body"
@@ -166,7 +171,7 @@ function LembreteDoCompromisso({ tipo }: { tipo: TipoRow }) {
           {t("Deixe em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.")}
         </span>
       </label>
-    </>
+    </div>
   );
 }
 
@@ -509,7 +514,7 @@ export function TiposDeAgendamentoClient({
             {editandoId === tipo.id ? (
               <form
                 data-testid={`form-editar-${tipo.id}`}
-                className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-3"
+                className="mt-3 flex flex-col gap-3 border-t border-border pt-3"
                 onSubmit={async (e) => {
                   e.preventDefault();
                   const dados = new FormData(e.currentTarget);
@@ -565,45 +570,47 @@ export function TiposDeAgendamentoClient({
                   if (feito) setEditandoId(null);
                 }}
               >
-                <label className="flex flex-col gap-1 text-xs text-text-muted">
-                  Nome
-                  <input
-                    name="name"
-                    defaultValue={tipo.name}
-                    data-testid={`editar-nome-${tipo.id}`}
-                    className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs text-text-muted">
-                  {t("Duração")}
-                  <input
-                    name="duration_minutes"
-                    type="number"
-                    min={5}
-                    max={1440}
-                    defaultValue={tipo.duration_minutes}
-                    data-testid={`editar-duracao-${tipo.id}`}
-                    className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs text-text-muted">
-                  {t("Quem atende")}
-                  <select
-                    name="default_owner_user_id"
-                    defaultValue={tipo.default_owner_user_id ?? ""}
-                    data-testid={`editar-dono-${tipo.id}`}
-                    className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
-                  >
-                    <option value="">{t("Sem responsável")}</option>
-                    {pessoas.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nome}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_minmax(0,18rem)]">
+                  <label className="flex flex-col gap-1 text-xs text-text-muted">
+                    Nome
+                    <input
+                      name="name"
+                      defaultValue={tipo.name}
+                      data-testid={`editar-nome-${tipo.id}`}
+                      className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-text-muted">
+                    {t("Duração")}
+                    <input
+                      name="duration_minutes"
+                      type="number"
+                      min={5}
+                      max={1440}
+                      defaultValue={tipo.duration_minutes}
+                      data-testid={`editar-duracao-${tipo.id}`}
+                      className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-text-muted">
+                    {t("Quem atende")}
+                    <select
+                      name="default_owner_user_id"
+                      defaultValue={tipo.default_owner_user_id ?? ""}
+                      data-testid={`editar-dono-${tipo.id}`}
+                      className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                    >
+                      <option value="">{t("Sem responsável")}</option>
+                      {pessoas.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <LembreteDoCompromisso tipo={tipo} />
-                <div className="flex justify-end sm:col-span-3">
+                <div className="flex justify-end">
                   <Button type="submit" size="sm" data-testid={`salvar-${tipo.id}`} disabled={salvando}>
                     {salvando ? t("Salvando…") : t("Salvar")}
                   </Button>
