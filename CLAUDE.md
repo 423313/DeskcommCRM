@@ -280,6 +280,36 @@ ou qualquer arquivo à mão. Se exigir, não entra: vira issue com plano de
 migração e vai para uma major.
 ---
 
+## Extensões — DOUTRINA (NÃO NEGOCIÁVEL)
+
+Lei completa em [`docs/doctrine/extensoes.md`](docs/doctrine/extensoes.md); o
+contrato que existe hoje em
+[`docs/specs/extensoes-declarativas-v1.md`](docs/specs/extensoes-declarativas-v1.md).
+A pergunta que decide o destino de uma mudança não é "isto serve a muita gente?",
+e sim **"se nenhuma organização ativar isto, a operação comum continua inteira?"**.
+O não-negociável:
+
+1. **O núcleo continua útil com zero extensões.** Identidade, autorização,
+   isolamento, auditoria, contratos e cadeia de envio são núcleo; jornada de nicho,
+   aparência e integração com dados e manutenção próprios podem ser extensão.
+2. **Extensão pede capacidade nomeada; não importa código interno nem lê o banco.**
+   Instalar não concede autoridade: toda escrita revalida ator, organização e papel
+   atuais no banco.
+3. **A instância decide o pacote; a organização decide o uso.** Instalar, atualizar,
+   desfazer e remover são do administrador da instalação; ativar e configurar, do
+   administrador da organização. A plataforma não reativa decisão da organização.
+4. **Toda operação é recibo idempotente com saída pela tela, e toda troca de
+   ponteiro exige a revisão que a tela viu.** Tirar é lógico e preserva dados.
+5. **Não anunciar o que não existe** (SDK, código isolado, marketplace público), e
+   não extrair do núcleo recurso já distribuído sem equivalência e migração.
+6. **Módulo oficial com dados não põe tabela no baseline para todos**
+   ([ADR-0002](docs/adr/0002-tabelas-de-modulo-num-banco-so.md), aceita em 17/09/2026). Um banco
+   só, schema `public`; as tabelas nascem por função provisionadora fixa do módulo, quando ele é
+   **instalado na instância**. Ninguém opera segundo banco — é decisão do dono, e seria impossível
+   com chave estrangeira para o núcleo.
+
+---
+
 ## Como rodar local
 
 ```bash
@@ -582,5 +612,11 @@ Antes de declarar uma task pronta:
     fragmento é, portanto, nota pública. Enquanto as três páginas não responderem 200 esse passo
     reprova TODO corte — a vitrine vem de um PR do `deskcomm-site`, e o `curl` que diz em que
     estado ela está abre a seção. Lei: seção "A vitrine" de `versionamento.md`.
+
+18. **Se o PR muda comportamento, ele declara o destino: núcleo, extensão, ambos ou
+    infraestrutura** (lei em [`docs/doctrine/extensoes.md`](docs/doctrine/extensoes.md)), com a razão
+    medida pela pergunta "se nenhuma organização ativar isto, a operação comum continua inteira?".
+    "Ambos" traz o consumidor real do ponto novo do núcleo e a prova dos dois lados. Classificar como
+    extensão não autoriza remover nem desligar o que já foi distribuído.
 
 Um staff engineer aprovaria? Se não, itera.
