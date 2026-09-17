@@ -301,6 +301,11 @@ O não-negociável, em cinco linhas:
    ponteiro exige a revisão que a tela viu.** Tirar é lógico e preserva dados.
 5. **Não anunciar o que não existe** (SDK, código isolado, marketplace público), e
    não extrair do núcleo recurso já distribuído sem equivalência e migração.
+6. **Módulo oficial com dados não põe tabela no baseline para todos**
+   ([ADR-0002](docs/adr/0002-tabelas-de-modulo-num-banco-so.md), aceita em 17/09/2026). Um banco
+   só, schema `public`; as tabelas nascem por função provisionadora fixa do módulo, quando ele é
+   **instalado na instância**. Ninguém opera segundo banco — é decisão do dono, e seria impossível
+   com chave estrangeira para o núcleo.
 
 ---
 

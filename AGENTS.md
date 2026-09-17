@@ -452,6 +452,9 @@ isto, a operação comum continua inteira?** O não-negociável:
   que a tela viu.** Remover é lógico e preserva dados e configuração.
 - **Não anuncie SDK, código isolado ou marketplace público**, e não extraia do núcleo recurso já
   distribuído sem equivalência e migração.
+- **Módulo oficial com dados não põe tabela no baseline para todos**
+  ([ADR-0002](docs/adr/0002-tabelas-de-modulo-num-banco-so.md)): um banco só, `public`, tabelas criadas
+  por função provisionadora fixa quando o módulo é instalado na instância.
 
 ## Critério de conclusão
 

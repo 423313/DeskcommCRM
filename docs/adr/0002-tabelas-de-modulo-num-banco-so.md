@@ -1,6 +1,6 @@
 # ADR-0002 — Tabelas de módulo opcional: um banco só, criadas quando o módulo é instalado
 
-- **Status:** proposto — aguarda aceite do dono do produto
+- **Status:** aceito em 2026-09-17 pelo dono do produto
 - **Data:** 2026-09-17
 - **Contexto medido em:** `84788aa64` (`main`) e `e24a2b94e` (branch de extensões)
 - **Lei que muda quando aceita:** [`docs/doctrine/extensoes.md`](../doctrine/extensoes.md), não-negociável 9 e a linha "Schema próprio de extensão" da tabela do que ainda não existe
@@ -177,10 +177,13 @@ com `record`, nunca `tabela%rowtype`), e o invariante cria toda a cadeia com
 
 ## Aceite
 
-Esta ADR vira `aceito` quando o dono do produto confirmar:
+**Aceita em 2026-09-17 pelo dono do produto**, com as duas confirmações que esta seção pedia:
 
 1. o corte **por instalação**, e não por organização;
 2. a função provisionadora `security definer` sem parâmetro como a única via de criação de tabela
    de módulo, com o argumento da D4.
 
-Enquanto isso não acontecer, nenhum módulo com dados deve ser implementado por este caminho.
+A partir do aceite, esta é a via para módulo oficial com dados. O aceite não implementa nada: a
+função provisionadora, as rotinas de proteção extraídas do laço do baseline, o molde de teste com
+módulos instalados e o invariante das provisionadoras ainda precisam ser construídos e provados,
+e o primeiro módulo a usá-los é a comanda.

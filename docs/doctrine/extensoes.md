@@ -96,6 +96,13 @@ preserve o trabalho do contribuidor e registre a dependência.
    `baseline.sql` + MANIFEST; `revoke execute … from public, anon`; vocabulário com CHECK tem par
    em `tests/invariants/vocabulario-banco-x-typescript.test.ts`. Tabelas de instância ficam
    fechadas a `anon`/`authenticated`; leitura por organização passa por RLS.
+   **Módulo oficial com dados não põe as tabelas no baseline para todos** ([ADR-0002](../adr/0002-tabelas-de-modulo-num-banco-so.md),
+   aceita em 17/09/2026): um banco só e o schema `public`; as tabelas nascem por uma função
+   provisionadora fixa do módulo — sem parâmetro, executável só por `service_role`, entregue pela
+   tripla de sempre — quando o módulo é **instalado na instância**, nunca na ativação por
+   organização. A função aplica na mesma transação as proteções que o baseline aplica a toda
+   tabela; reaplicar nas atualizações é explícito e falha alto; anonimização, export e varreduras
+   alcançam as tabelas do módulo. Pacote de terceiro continua sem trazer SQL.
 
 10. **Publicar espera o sistema; tirar não espera.** Preparar, concluir e desfazer recusam enquanto
     há atualização do core `dispatched` há menos de 15 minutos (`RUN_STALE_AFTER_MS`). Remover não
@@ -137,7 +144,7 @@ preserve o trabalho do contribuidor e registre a dependência.
 | Pacote JSON estrito com cards de orientação e a capacidade `tasks.open` | Execução de código de terceiros em executor isolado | Prova: a escolha do executor é por evidência (PROG-017 §7 e §14) |
 | Instalar, atualizar, trocar, desfazer a última troca, remover e reinstalar | Histórico de mais de um passo | Recusado por escrito na spec; volta pelo catálogo |
 | Uma versão por instalação, ativação por organização | Versão por organização | Recusada sem necessidade comprovada (PROG-017 §5) |
-| Nenhum dado de domínio de extensão | Schema próprio de extensão | Módulo nativo oficial: migration + baseline + MANIFEST; tabelas de módulo opcional num banco só, criadas ao instalar o módulo: [ADR-0002](../adr/0002-tabelas-de-modulo-num-banco-so.md), **proposta, aguarda aceite**; dados de extensão de terceiro: marco 4 (PROG-017 §8) |
+| Nenhum dado de domínio de extensão | Schema próprio de extensão | Módulo nativo oficial: migration + baseline + MANIFEST; tabelas de módulo opcional num banco só, criadas ao instalar o módulo: [ADR-0002](../adr/0002-tabelas-de-modulo-num-banco-so.md), **aceita em 17/09/2026, ainda não construída**; dados de extensão de terceiro: marco 4 (PROG-017 §8) |
 | Recibos, auditoria por organização na remoção (menos quando a resposta se perde e a repetição não reaplica), Atividade recente | Dependências entre extensões; downloads e avaliações | Prova (PROG-017 §5 e §12; DEC-004 §3) |
 | Nenhuma telemetria de extensões | Relato de uso enviado pela VPS | Decisão própria antes (DEC-004 §3; PROG-017 §12) |
 
