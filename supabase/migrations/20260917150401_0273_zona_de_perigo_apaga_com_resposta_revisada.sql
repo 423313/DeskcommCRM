@@ -55,12 +55,18 @@
 -- `conversation_id`. O resultado final é o prometido — nada de atendimento
 -- sobra —, mas sem o 23503 no meio do caminho.
 --
--- MESMO DEFEITO EM ROTAS IRMÃS (levantado por grep, ver corpo do PR):
--- `app/api/v1/contacts/_handler.ts` (exclusão de contato apaga `messages`),
--- `app/api/v1/admin/tenants/[id]/route.ts` e
--- `app/api/v1/admin/inbox/conversations/[id]/route.ts` (wipe de admin) e
--- `app/api/v1/messages/_handler.ts` (excluir uma mensagem). Todas passavam pela
--- mesma recusa; todas passam a funcionar com esta migration, sem tocar no TS.
+-- MESMO DEFEITO EM ROTAS IRMÃS (levantado por grep, ver corpo do PR).
+-- Caminhos de escrita que apagam `messages` e herdavam a mesma recusa:
+-- `app/api/v1/messages/_handler.ts` (excluir uma mensagem avulsa) e
+-- `app/api/v1/contacts/_handler.ts` (excluir o contato apaga as mensagens dele
+-- antes de `conversations`), e ainda `fn_reply_record_receipt` (a deduplicação
+-- do eco do aparelho do operador, baseline v. 21770). Todos passam a funcionar
+-- com esta migration, sem tocar em TypeScript.
+-- NÃO afetados (levantamento literal): as rotas de admin
+-- (`app/api/v1/admin/tenants/[id]/route.ts`, `admin/inbox/conversations/[id]/route.ts`)
+-- só contam/leem `messages`; as funções de LGPD/retenção não têm nenhuma linha
+-- de `delete from public.messages`; e os demais `.from("messages")` de `lib/`
+-- são leitura/update.
 --
 -- Nome do constraint preservado (`ai_reply_drafts_message_id_fkey`): é o nome
 -- que o Postgres deu à FK inline da 0227 e o que aparece na mensagem de erro
