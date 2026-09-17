@@ -64,9 +64,14 @@ describe("MessageBubble — rótulo de origem", () => {
     expect(screen.getByText("Celular")).toBeInTheDocument();
   });
 
-  it("automação não inventa rótulo — ninguém grava esse valor", () => {
+  it("automação tem rótulo próprio — o motor passou a gravar esse valor (#652)", () => {
+    // Até a #652 ninguém carimbava `'automation'` — tudo que não era pessoa saía
+    // `'ai'` —, e este caso prendia o rótulo AUSENTE: a tela não podia oferecer
+    // uma distinção que o motor não fazia. Com o carimbo em `origemDaMensagem`,
+    // o rótulo ganhou emissor e o caso inverte de lado. O par continua vigiado
+    // nas duas direções por tests/unit/rotulo-de-origem-tem-emissor.test.ts.
     render(<MessageBubble message={msg({ sent_via: "automation" })} />);
-    expect(screen.queryByText("Automação")).not.toBeInTheDocument();
+    expect(screen.getByText("Automação")).toBeInTheDocument();
   });
 
   it("digitada no CRM por QUEM ESTÁ LENDO mostra 'Você'", () => {

@@ -143,7 +143,7 @@ async function removerEcoDoProprioEnvio(
  * #866 decide o valor daquele caminho, e trocar aqui sem aquele PR misturaria
  * duas decisões numa linha.
  *
- * Quem lê estes valores: o filtro de eco (`lib/waha/ingest.ts`, lista que anda
+ * Quem lê estes valores: o filtro de eco da ingestão do canal (a lista anda
  * junto), o resgate da fila (`session-reconciler.ts`), a métrica de atrito e o
  * rótulo do balão (`components/inbox/MessageBubble.tsx`).
  */
