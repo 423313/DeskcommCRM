@@ -43,12 +43,37 @@ type Excecao = {
 
 const DIA_INTEIRO = { start_minute: 0, end_minute: 1440 };
 
+/**
+ * Um ano de repetição semanal, e o motivo é o dedo escorregando na data: um
+ * "2036" digitado sem querer viraria 520 requisições e 520 linhas para apagar
+ * uma a uma. Cinquenta e três cobre o ano inteiro, que é o horizonte de quem
+ * publica agenda.
+ */
+const TETO_DA_REPETICAO = 53;
+
 /** "0..1440" vira "o dia todo"; o resto vira "09:00–12:00". */
 function faixa(e: Excecao, t: (s: string) => string): string {
   if (e.start_minute === 0 && e.end_minute === 1440) return t("o dia todo");
   const hhmm = (m: number) =>
     `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
   return `${hhmm(e.start_minute)}–${hhmm(e.end_minute)}`;
+}
+
+/**
+ * As datas de uma repetição SEMANAL, da primeira até o limite, inclusive.
+ *
+ * Meio-dia UTC de propósito: `new Date("2026-10-01")` nasce à meia-noite UTC e,
+ * somado a fusos a oeste, volta um dia ao ser formatado. Ancorar no meio-dia tira
+ * o horário de verão e a virada de dia da conta — a aritmética aqui é de DIAS.
+ */
+function datasSemanais(inicio: string, ate: string, teto: number): string[] {
+  const fim = new Date(`${ate}T12:00:00Z`).getTime();
+  const datas: string[] = [];
+  for (let d = new Date(`${inicio}T12:00:00Z`); d.getTime() <= fim; d.setUTCDate(d.getUTCDate() + 7)) {
+    if (datas.length >= teto) break;
+    datas.push(d.toISOString().slice(0, 10));
+  }
+  return datas;
 }
 
 /** "14:00" vira 840 — o caminho inverso do `faixa` acima. */
@@ -65,6 +90,8 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
   const [modo, setModo] = useState<"fechar" | "abrir">("fechar");
   const [de, setDe] = useState("08:00");
   const [ate, setAte] = useState("12:00");
+  const [repetirAte, setRepetirAte] = useState("");
+  const [resultado, setResultado] = useState<{ criados: number; pulados: number } | null>(null);
 
   const abrindo = modo === "abrir";
   // O CHECK do banco é `end_minute > start_minute`; barrar aqui troca um 422 por
@@ -77,24 +104,55 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
       (await apiClient.get<{ data: Excecao[] }>("/api/v1/agenda/excecoes")).data,
   });
 
+  const lista = query.data ?? [];
+
   const invalidar = () => {
     // A agenda também muda: um dia fechado tira horários da consulta.
     void qc.invalidateQueries({ queryKey: ["agenda"] });
   };
 
   const criar = useMutation({
-    mutationFn: () =>
-      apiClient.post("/api/v1/agenda/excecoes", {
-        exception_date: data,
-        is_unavailable: !abrindo,
-        // Dia FECHADO é sempre inteiro — fechar meio dia é o caso de quem
-        // ABRE o outro meio, e esse caminho é o de cima.
-        ...(abrindo ? { start_minute: emMinutos(de), end_minute: emMinutos(ate) } : DIA_INTEIRO),
-        ...(motivo.trim() ? { reason: motivo.trim() } : {}),
-      }),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const faixa = abrindo
+        ? { start_minute: emMinutos(de), end_minute: emMinutos(ate) }
+        : // Dia FECHADO é sempre inteiro — fechar meio dia é o caso de quem ABRE
+          // o outro meio, e esse caminho é o de cima.
+          DIA_INTEIRO;
+      const alvos = repetirAte ? datasSemanais(data, repetirAte, TETO_DA_REPETICAO) : [data];
+
+      // O QUE JÁ EXISTE É PULADO, e não recusado.
+      //
+      // A tabela não tem unicidade por data — de propósito, porque um dia pode
+      // ter duas faixas abertas (manhã num lugar, tarde noutro). Sem esta
+      // conferência, repetir duas vezes o mesmo trimestre dobraria cada linha
+      // em silêncio, e o dono só descobriria pela lista crescendo.
+      const jaTem = new Set(
+        lista
+          .filter((e) => e.is_unavailable === !abrindo)
+          .map((e) => `${e.exception_date}|${e.start_minute}|${e.end_minute}`),
+      );
+      const novos = alvos.filter(
+        (d) => !jaTem.has(`${d}|${faixa.start_minute}|${faixa.end_minute}`),
+      );
+
+      // Em série, e não em paralelo: são poucas requisições e o servidor de
+      // quem se auto-hospeda é pequeno. Cada dia é uma linha real e uma linha
+      // de auditoria — o lote é da tela, não do banco.
+      for (const dia of novos) {
+        await apiClient.post("/api/v1/agenda/excecoes", {
+          exception_date: dia,
+          is_unavailable: !abrindo,
+          ...faixa,
+          ...(motivo.trim() ? { reason: motivo.trim() } : {}),
+        });
+      }
+      return { criados: novos.length, pulados: alvos.length - novos.length };
+    },
+    onSuccess: (r) => {
       setData("");
       setMotivo("");
+      setRepetirAte("");
+      setResultado(r);
       invalidar();
     },
     onError: showApiError,
@@ -105,8 +163,6 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
     onSuccess: invalidar,
     onError: showApiError,
   });
-
-  const lista = query.data ?? [];
 
   return (
     <section className="space-y-3 rounded-xl border p-4" data-testid="dias-bloqueados">
@@ -139,7 +195,10 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
               className="mt-1 rounded-md border p-2"
               type="date"
               value={data}
-              onChange={(e) => setData(e.target.value)}
+              onChange={(e) => {
+                setData(e.target.value);
+                setResultado(null);
+              }}
             />
           </label>
           {abrindo ? (
@@ -177,6 +236,17 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
               onChange={(e) => setMotivo(e.target.value)}
             />
           </label>
+          <label className="block">
+            <span className="block text-sm">{t("Repetir toda semana até (opcional)")}</span>
+            <input
+              aria-label={t("Repetir toda semana até (opcional)")}
+              className="mt-1 rounded-md border p-2"
+              type="date"
+              min={data || undefined}
+              value={repetirAte}
+              onChange={(e) => setRepetirAte(e.target.value)}
+            />
+          </label>
           <Button
             // Alvo de toque generoso: esta tela também é usada no celular.
             className="min-h-11"
@@ -188,6 +258,14 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
           {faixaInvalida ? (
             <p className="w-full text-sm text-destructive">
               {t("A hora final precisa ser maior que a inicial.")}
+            </p>
+          ) : null}
+          {resultado ? (
+            // Dizer QUANTOS, e quantos já existiam, é o que diferencia "repeti
+            // sem querer" de "não aconteceu nada".
+            <p className="w-full text-sm text-text-muted" data-testid="resultado-do-lote">
+              {`${resultado.criados} ${t("dia(s) gravado(s)")}`}
+              {resultado.pulados > 0 ? ` · ${resultado.pulados} ${t("já existia(m)")}` : ""}
             </p>
           ) : null}
         </div>

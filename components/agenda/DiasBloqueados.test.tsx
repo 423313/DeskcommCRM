@@ -33,9 +33,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const post = vi.fn(() => Promise.resolve({ data: {} }));
+/** O que a tela já tem cadastrado — o lote confere duplicata contra isto. */
+let jaCadastrado: unknown[] = [];
 vi.mock("@/lib/api/client", () => ({
   apiClient: {
-    get: () => Promise.resolve({ data: [] }),
+    get: () => Promise.resolve({ data: jaCadastrado }),
     post: (...a: unknown[]) => post(...a),
     delete: () => Promise.resolve({}),
   },
@@ -61,7 +63,10 @@ function corpoEnviado(): Record<string, unknown> {
 }
 
 describe("Dias fora da rotina — fechar e abrir", () => {
-  beforeEach(() => post.mockClear());
+  beforeEach(() => {
+    post.mockClear();
+    jaCadastrado = [];
+  });
 
   it("fechar continua mandando o dia INTEIRO", async () => {
     const u = userEvent.setup();
@@ -113,5 +118,83 @@ describe("Dias fora da rotina — fechar e abrir", () => {
 
     expect(screen.getByRole("button", { name: "Abrir este dia" })).toBeDisabled();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("repete semanalmente até a data limite, um POST por dia", async () => {
+    const u = userEvent.setup();
+    montar();
+
+    await u.selectOptions(screen.getByTestId("modo-do-dia"), "abrir");
+    await u.type(screen.getByLabelText("Dia"), "2026-10-01");
+    await u.clear(screen.getByLabelText("Das"));
+    await u.type(screen.getByLabelText("Das"), "14:00");
+    await u.clear(screen.getByLabelText("Até"));
+    await u.type(screen.getByLabelText("Até"), "18:00");
+    // 01, 08, 15 e 22 de outubro — quatro quintas.
+    await u.type(screen.getByLabelText("Repetir toda semana até (opcional)"), "2026-10-22");
+    await u.click(screen.getByRole("button", { name: "Abrir este dia" }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(4));
+    expect(post.mock.calls.map((c) => (c[1] as { exception_date: string }).exception_date)).toEqual([
+      "2026-10-01",
+      "2026-10-08",
+      "2026-10-15",
+      "2026-10-22",
+    ]);
+    // Um dia é uma linha: a faixa não pode variar ao longo do lote.
+    for (const c of post.mock.calls) {
+      expect(c[1]).toMatchObject({ is_unavailable: false, start_minute: 840, end_minute: 1080 });
+    }
+    expect(await screen.findByTestId("resultado-do-lote")).toHaveTextContent("4");
+  });
+
+  it("não repete além de um ano, por mais longe que a data peça", async () => {
+    const u = userEvent.setup();
+    montar();
+
+    await u.selectOptions(screen.getByTestId("modo-do-dia"), "abrir");
+    await u.type(screen.getByLabelText("Dia"), "2026-10-01");
+    // Dez anos: é o dedo escorregando na data, e sem teto viraria 520 linhas.
+    await u.type(screen.getByLabelText("Repetir toda semana até (opcional)"), "2036-10-01");
+    await u.click(screen.getByRole("button", { name: "Abrir este dia" }));
+
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls.length).toBe(53);
+  });
+
+  it("pula o que já está cadastrado em vez de duplicar a linha", async () => {
+    // A tabela NÃO tem unicidade por data — de propósito, porque um dia pode ter
+    // duas faixas (manhã num lugar, tarde noutro). Sem esta conferência, repetir
+    // o mesmo período duas vezes dobraria cada linha em silêncio.
+    jaCadastrado = [
+      {
+        id: "ja-existe",
+        exception_date: "2026-10-08",
+        is_unavailable: false,
+        start_minute: 840,
+        end_minute: 1080,
+        reason: null,
+      },
+    ];
+    const u = userEvent.setup();
+    montar();
+    await screen.findByText(/08\/10\/2026|10\/8\/2026/);
+
+    await u.selectOptions(screen.getByTestId("modo-do-dia"), "abrir");
+    await u.type(screen.getByLabelText("Dia"), "2026-10-01");
+    await u.clear(screen.getByLabelText("Das"));
+    await u.type(screen.getByLabelText("Das"), "14:00");
+    await u.clear(screen.getByLabelText("Até"));
+    await u.type(screen.getByLabelText("Até"), "18:00");
+    await u.type(screen.getByLabelText("Repetir toda semana até (opcional)"), "2026-10-15");
+    await u.click(screen.getByRole("button", { name: "Abrir este dia" }));
+
+    // 01, 08 e 15 eram os alvos; o 08 já existia com a MESMA faixa.
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect(post.mock.calls.map((c) => (c[1] as { exception_date: string }).exception_date)).toEqual([
+      "2026-10-01",
+      "2026-10-15",
+    ]);
+    expect(await screen.findByTestId("resultado-do-lote")).toHaveTextContent("1");
   });
 });
