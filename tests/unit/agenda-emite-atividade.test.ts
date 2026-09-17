@@ -455,3 +455,57 @@ describe("quando a gravação da timeline falha", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("marcar grava local e observação neste compromisso", () => {
+  function linhaDoCompromisso(): Linha {
+    const linhas = banco.inserido["calendar_appointments"] ?? [];
+    expect(linhas, "o compromisso nem chegou a nascer — a sonda está no caminho errado").toHaveLength(
+      1,
+    );
+    return linhas[0]!;
+  }
+
+  it("o que a tela mandou vence o default do tipo, e não cai em notes", async () => {
+    banco.tipo = { ...banco.tipo, location_details: "Sala 2" };
+    await marcarAgendamentoHandler(cliente(), ctx, {
+      event_type_id: TIPO,
+      starts_at: HORARIO,
+      contact_id: CONTATO,
+      location_details: "Rua das Flores, 10",
+      description: "Trazer exames",
+    });
+
+    const linha = linhaDoCompromisso();
+    expect(linha.location_details).toBe("Rua das Flores, 10");
+    expect(linha.description).toBe("Trazer exames");
+    expect(
+      linha.notes,
+      "observação gravada em notes: o calendário não publica notes, e o compromisso nasce mudo",
+    ).toBeNull();
+  });
+
+  it("endereço em branco NÃO herda o do tipo — quem apagou quis apagar", async () => {
+    banco.tipo = { ...banco.tipo, location_details: "Sala 2" };
+    await marcarAgendamentoHandler(cliente(), ctx, {
+      event_type_id: TIPO,
+      starts_at: HORARIO,
+      contact_id: CONTATO,
+      location_details: "   ",
+    });
+
+    expect(linhaDoCompromisso().location_details).toBeNull();
+  });
+
+  it("sem os campos, herda o local do tipo e nasce sem observação", async () => {
+    banco.tipo = { ...banco.tipo, location_details: "Sala 2" };
+    await marcarAgendamentoHandler(cliente(), ctx, {
+      event_type_id: TIPO,
+      starts_at: HORARIO,
+      contact_id: CONTATO,
+    });
+
+    const linha = linhaDoCompromisso();
+    expect(linha.location_details).toBe("Sala 2");
+    expect(linha.description).toBeNull();
+  });
+});

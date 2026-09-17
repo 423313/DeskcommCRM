@@ -72,6 +72,17 @@ describe("paraEventoDoGoogle", () => {
     expect(paraEventoDoGoogle(agendamento()).transparency).toBe("opaque");
   });
 
+  it("a observação vira descrição do evento, e o endereço vira o local", () => {
+    const corpo = paraEventoDoGoogle(agendamento());
+    expect(corpo.description).toBe("Primeira consulta");
+    expect(corpo.location).toBe("Rua das Acácias, 120");
+    // Em branco não manda a chave: o Google trata "" como descrição, e o
+    // evento nasceria com um campo vazio em vez de sem campo.
+    expect(paraEventoDoGoogle(agendamento({ description: "   " }))).not.toHaveProperty(
+      "description",
+    );
+  });
+
   it("traduz os cinco status nossos nos três do Google", () => {
     const de = (status: AgendamentoParaGoogle["status"]) => paraEventoDoGoogle(agendamento({ status })).status;
     expect(de("pending")).toBe("tentative");
