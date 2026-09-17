@@ -8783,6 +8783,21 @@ export const DICIONARIO: Traducoes = {
   "Um material marcado aqui foi arquivado no acervo — o agente não lê mais ele.": { es: "Un material marcado aquí fue archivado en el acervo — el agente ya no lo lee." },
   "Materiais marcados aqui foram arquivados no acervo — o agente não lê mais eles.": { es: "Materiales marcados aquí fueron archivados en el acervo — el agente ya no los lee." },
   "Desmarque para voltar a salvar.": { es: "Desmárcalo para volver a guardar." },
+  // ── Erros do acervo de conhecimento que CHEGAM À TELA ──────────────────────
+  // Eles saem de `lib/ai/rag/extractors/csv.ts` e de `lib/ai/rag/ingest/documento.ts`
+  // e são renderizados por `t(err.message)` na rota de upload. O gate de espanhol
+  // NÃO alcança `app/api/**` (a varredura ignora a pasta), então quem garante a
+  // tradução aqui é esta entrada, não o CI — por isso ela vem com este comentário.
+  "a planilha está vazia": { es: "la planilla está vacía" },
+  "a planilha só tem cabeçalho, sem linha de dado nenhuma": {
+    es: "la planilla solo tiene encabezado, sin ninguna fila de datos",
+  },
+  "nenhuma linha tem conteúdo para indexar": {
+    es: "ninguna fila tiene contenido para indexar",
+  },
+  "não leio Excel diretamente — no Excel use \"Salvar como\" → \"CSV UTF-8 (delimitado por vírgulas)\" e envie o CSV.": {
+    es: "no leo Excel directamente — en Excel usa \"Guardar como\" → \"CSV UTF-8 (delimitado por comas)\" y envía el CSV.",
+  },
 };
 
 /**

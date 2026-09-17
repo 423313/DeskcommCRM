@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 
-import { parseReaisToCents, formatCentsBRL, formatCents, MOEDAS_SERVIDAS } from "./money";
+import {
+  parseReaisToCents,
+  formatCentsBRL,
+  formatCents,
+  MOEDAS_SERVIDAS,
+  MOEDA_PADRAO,
+} from "./money";
 
 describe("parseReaisToCents", () => {
   it("lê ponto como decimal quando o grupo final não é de milhar", () => {
@@ -124,5 +130,28 @@ describe("formatCents", () => {
 
     // O fallback precisa continuar informativo — o número certo, não "—" nem "".
     expect(formatCents(24990, "")).toContain("249");
+  });
+});
+describe("MOEDAS_SERVIDAS — a lista que a tela oferece", () => {
+  /**
+   * ⚠️ ESTE CASO EXISTE PORQUE O ITEM NÃO TINHA GATE NENHUM.
+   * Acrescentar `AOA` à lista é aditivo e não quebra teste algum: medido
+   * tirando a moeda de volta — `lib/money.test.ts` seguia 11/11 e o
+   * `tsc` saía zerado. Ou seja, nada prendia a oferta na tela, e quem
+   * instalou em Angola voltaria a não ter como escolher a própria moeda
+   * sem ninguém ficar sabendo.
+   *
+   * O que este caso prende é a OFERTA, não o padrão: o padrão continua
+   * sendo o real, e isso é o caso seguinte.
+   */
+  it("serve o kwanza, e continua servindo as três de antes", () => {
+    expect(MOEDAS_SERVIDAS).toContain("AOA");
+    expect(MOEDAS_SERVIDAS).toContain("BRL");
+    expect(MOEDAS_SERVIDAS).toContain("MXN");
+    expect(MOEDAS_SERVIDAS).toContain("USD");
+  });
+
+  it("e o padrão de quem não escolheu segue sendo o real", () => {
+    expect(MOEDA_PADRAO).toBe("BRL");
   });
 });
