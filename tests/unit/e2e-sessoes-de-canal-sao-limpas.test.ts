@@ -28,13 +28,23 @@ describe("sessões de canal criadas pelo E2E", () => {
   });
 
   it("a limpeza recusa destino remoto e remove dependências antes da sessão", () => {
-    expect(CLEANUP).toContain("destinoEhLocal(credenciais.url)");
-    expect(CLEANUP).toContain('from("conversations").delete()');
-    expect(CLEANUP).toContain('from("channel_session_health")');
-    expect(CLEANUP).toContain('from("channel_sessions").delete()');
+    // A cadeia do supabase-js chega ao arquivo QUEBRADA EM LINHAS pelo
+    // formatador (`.from("conversations")` numa linha, `.delete()` na
+    // seguinte), e a sonda procurava o literal de uma linha só: ela reprovava a
+    // formatação, não o script. Medido neste PR: 0 ocorrências de
+    // `from("conversations").delete()` num script que apaga as conversas do
+    // jeito certo. A regex tolera a quebra e o espaço; o que ela prende
+    // continua sendo a tabela e a operação.
+    const apagaConversas = /from\("conversations"\)\s*\.delete\(\)/;
+    const apagaSessoes = /from\("channel_sessions"\)\s*\.delete\(\)/;
 
-    const conversas = CLEANUP.indexOf('from("conversations").delete()');
-    const sessoes = CLEANUP.indexOf('from("channel_sessions").delete()');
+    expect(CLEANUP).toContain("destinoEhLocal(credenciais.url)");
+    expect(CLEANUP).toMatch(apagaConversas);
+    expect(CLEANUP).toContain('from("channel_session_health")');
+    expect(CLEANUP).toMatch(apagaSessoes);
+
+    const conversas = CLEANUP.search(apagaConversas);
+    const sessoes = CLEANUP.search(apagaSessoes);
     expect(conversas).toBeGreaterThan(-1);
     expect(sessoes).toBeGreaterThan(conversas);
   });
