@@ -129,6 +129,23 @@ async function cortes(page: Page, seletor: string): Promise<Array<{ texto: strin
   );
 }
 
+/**
+ * Fecha o painel do nó sem clicar no canvas. O Radix deixa `pointer-events:
+ * none` no `body` por um instante depois que um `Select` fecha; sob carga isso
+ * demora, e o clique no canvas é engolido pelo `<html>` (medido: 178 tentativas
+ * em 7 minutos). Esperar o `body` voltar a aceitar ponteiro é o que falta — o
+ * Esc não serve: o painel deste canvas não fecha por teclado.
+ */
+async function fecharPainel(page: Page): Promise<void> {
+  await page
+    .waitForFunction(() => document.body.style.pointerEvents !== "none", null, { timeout: 15_000 })
+    .catch(() => {});
+  // Ponto vazio do canvas, longe do cabeçalho fixo (que intercepta o clique no
+  // canto superior) e dos nós, que este teste posiciona à direita.
+  await page.locator(".react-flow__pane").click({ position: { x: 30, y: 420 } });
+  await expect(page.getByTestId("node-config-sheet")).toHaveCount(0, { timeout: PRAZO });
+}
+
 /** Cria uma etapa própria pela API pública e devolve id e nome do funil. */
 async function criarEtapa(page: Page, nome: string): Promise<{ funilId: string; etapaId: string; funilNome: string }> {
   const funisRes = await page.request.get("/api/v1/pipelines");
@@ -192,11 +209,15 @@ test.describe("o cartão do nó diz o que o motor faz", () => {
     const regra2 = painel.getByTestId("condition-check-1");
     await regra2.getByRole("combobox", { name: "Campo" }).click();
     await page.getByRole("option", { name: "Passos já dados no fluxo", exact: true }).click();
+    // O operador é escolhido de propósito: trocar o campo preserva o operador
+    // quando ele continua válido (a regra nasce em "é exatamente" por vir de
+    // "está na etapa"), e quem monta o fluxo escolhe o que quer comparar.
+    await regra2.getByRole("combobox", { name: "Operador" }).click();
+    await page.getByRole("option", { name: "é pelo menos", exact: true }).click();
     await regra2.getByLabel("Valor").fill("3");
     await regra2.getByLabel("Valor").blur();
 
-    await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
-    await expect(page.getByTestId("node-config-sheet")).toHaveCount(0);
+    await fecharPainel(page);
 
     // ─── 2. o cartão: nome da etapa, sem identificador, sem corte ─────────
     const cartaoCondicao = page.locator(`[data-testid="node-card-${condicaoId}"]`);
@@ -241,7 +262,7 @@ test.describe("o cartão do nó diz o que o motor faz", () => {
     await page.locator(`[data-testid="node-card-${condicaoId}"]`).click();
     await expect(painel).toBeVisible({ timeout: PRAZO });
     await painel.getByRole("button", { name: "Condição", exact: true }).click(); // regra 3, em branco
-    await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+    await fecharPainel(page);
     await page.getByRole("button", { name: "Salvar" }).click();
     await expect(page.getByTestId("dirty-indicator")).toHaveCount(0, { timeout: PRAZO });
     await page.getByTestId("publish-button").click();
@@ -291,7 +312,7 @@ test.describe("o cartão do nó diz o que o motor faz", () => {
     await page.getByRole("option", { name: "Uma saída por regra" }).click();
     await painel.getByTestId("condition-check-0").getByRole("combobox", { name: "Valor" }).click();
     await page.getByRole("option", { name: nomeDaEtapa }).click();
-    await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+    await fecharPainel(page);
 
     await ligar(page, gatilhoId, condicaoId);
     await ligar(page, condicaoId, fimDaEtapa, "regra-1");
