@@ -650,6 +650,7 @@ jobs:
         extensoes-declarativas.spec.ts
         extensoes-recuperacao.spec.ts
         extensoes-versao.spec.ts
+        followup-modelos-de-clinica.spec.ts
 
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts

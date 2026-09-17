@@ -45,6 +45,21 @@ escolhe quais usa.
 
 ## 6. IA › Follow-ups ("Fluxos")
 
+**Começar de um modelo** é o caminho curto, e para clínica é o caminho certo: quatro fluxos
+prontos, com os textos escritos — *consulta* (retomar quem sumiu na marcação, dispara com um dia
+de silêncio), *exame* (marcar o que foi pedido, dispara na etapa do funil que você escolher),
+*cirurgia* (acompanhar a decisão por quase três meses) e *falta* (remarcar quem não veio, dispara
+quando alguém confirma a falta na agenda). Instalar **não manda mensagem**: o fluxo nasce
+rascunho, com o gatilho armado, e abre no construtor para a pessoa ler os textos na voz da
+clínica. Nos quatro, responder qualquer coisa encerra o fluxo e devolve a conversa a quem
+atende. Os modelos vivem em `lib/followup/modelos/`; para ver os que existem sem confiar nesta
+linha: `grep -n 'jornada:' lib/followup/modelos/clinica.ts`.
+
+⚠️ Depois de instalar faltam **dois** passos, e sem eles o fluxo fica vivo na lista e morto no
+motor: **Publicar** no construtor, e ligar o fluxo no agente (passo 7 abaixo, campo
+*follow-ups que arma*). Gatilho automático só cria inscrição se um agente **publicado** arma o
+ponteiro.
+
 **Novo fluxo** → nome (único). No editor: **gatilho** (manual; silêncio por N minutos; mudança de
 etapa; falta a compromisso; caso aberto; webhook) com *cancelar quando responder*; depois os nós:
 **espera** (fixa, de 5 min a 90 dias, ou inteligente com mínimo/máximo), **mensagem** (texto,
