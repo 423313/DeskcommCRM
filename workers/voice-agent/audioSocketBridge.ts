@@ -329,9 +329,24 @@ export class AudioSocketCallBridge {
         case "response.output_audio.delta":
           this.sendAudioToAsterisk(Buffer.from(event.delta, "base64"));
           break;
-        case "response.output_audio_transcript.done":
-          this.ctx.onTranscriptTurn({ speaker: "agent", text: event.transcript });
+        case "response.output_audio_transcript.done": {
+          // Visto ao vivo em 17/09: o modelo às vezes NARRA a function em vez
+          // de chamá-la de verdade -- terminou uma resposta com
+          // "...Até mais! \n\n(functions.encerrar_chamada)" na fala, sem
+          // nenhum response.function_call_arguments.done correspondente. É a
+          // convenção textual antiga de function-calling vazando pra dentro
+          // da voz. Sem este fallback a ligação nunca desliga sozinha nesse
+          // caso -- response.done (abaixo) só vê o output real quando a tool
+          // é chamada pelo mecanismo estruturado, que aqui não aconteceu.
+          const narracaoDeEncerrar = new RegExp(`\\(?\\s*functions?\\.${ENCERRAR_CHAMADA_TOOL_NAME}\\s*\\)?`, "i");
+          if (narracaoDeEncerrar.test(event.transcript)) {
+            console.info(`[realtime] call=${this.ctx.callId} modelo narrou a function de encerrar em texto (fallback ativado)`);
+            this.endCallRequested = true;
+          }
+          const transcriptLimpo = event.transcript.replace(narracaoDeEncerrar, "").trim();
+          this.ctx.onTranscriptTurn({ speaker: "agent", text: transcriptLimpo });
           break;
+        }
         case "conversation.item.input_audio_transcription.completed":
           this.ctx.onTranscriptTurn({ speaker: "customer", text: event.transcript });
           break;
