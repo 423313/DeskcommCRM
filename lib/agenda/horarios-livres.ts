@@ -288,11 +288,11 @@ function slotInflado(inicio: number, fim: number, tipo: TipoDeAgendamento): Faix
  * afrouxar só uma das duas não deixa vermelho no caso "encostado" de
  * `tests/unit/pessoa-marca-fora-da-grade.test.ts`.
  *
- * A chamada fica porque a coleta da GRADE foi alargada pelo buffer (issue #876,
- * PR #1027, dentro de `horariosLivresDaOrg`). O encaixe chama `coletaOQueOcupa`
- * direto, com a janela estreita, e por isso segue redundante; se um dia a coleta
- * do encaixe também for alargada, esta é a régua que separa o vizinho que só
- * encosta, e sem ela o encaixe passaria a recusar o encostado.
+ * A chamada fica como defesa. A coleta da GRADE já é alargada pelo buffer
+ * (issue #876, PR #1027, dentro de `horariosLivresDaOrg`), mas o encaixe chama
+ * `coletaOQueOcupa` direto, com a janela estreita. Se um dia a coleta do encaixe
+ * também for alargada, esta é a régua que separa o vizinho que só encosta; sem
+ * ela, o encaixe passaria a recusar o encostado.
  */
 export function colide(inicio: number, fim: number, faixa: FaixaEmInstantes): boolean {
   return inicio < faixa.fim && fim > faixa.inicio;
