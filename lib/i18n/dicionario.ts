@@ -3979,6 +3979,20 @@ export const DICIONARIO: Traducoes = {
   "Quem recebe o cliente novo": { es: "Quién recibe al cliente nuevo" },
   "Vale para conversa que chega sem dono.": { es: "Vale para conversación que llega sin dueño." },
   "Tentativas antes de desistir": { es: "Intentos antes de desistir" },
+  "Quando a pessoa some, a IA volta?": { es: "Cuando la persona desaparece, ¿la IA vuelve?" },
+  "Quando alguém assume uma conversa, o agente de IA para de responder nela até ser devolvido. Se ninguém devolve, o cliente que escreve de novo fica sem resposta.": {
+    es: "Cuando alguien asume una conversación, el agente de IA deja de responder en ella hasta que se la devuelvan. Si nadie la devuelve, el cliente que vuelve a escribir se queda sin respuesta.",
+  },
+  "Devolver ao agente sozinho depois de um tempo sem resposta da equipe": {
+    es: "Devolver al agente por sí solo tras un tiempo sin respuesta del equipo",
+  },
+  "O tempo conta a partir do último sinal de uma pessoa na conversa: assumir, responder pela tela ou pelo celular. Só devolve onde há agente publicado. Desligado, vale a regra de sempre: a IA só volta quando alguém clica em Devolver.": {
+    es: "El tiempo cuenta desde la última señal de una persona en la conversación: asumir, responder por la pantalla o por el celular. Solo devuelve donde hay un agente publicado. Apagado, vale la regla de siempre: la IA solo vuelve cuando alguien hace clic en Devolver.",
+  },
+  "Minutos sem resposta da equipe": { es: "Minutos sin respuesta del equipo" },
+  "Entre 5 minutos e 24 horas. Sessenta minutos é a ordem de grandeza de um atendimento humano.": {
+    es: "Entre 5 minutos y 24 horas. Sesenta minutos es el orden de magnitud de una atención humana.",
+  },
   "Quando não há ninguém disponível, o sistema tenta de novo mais tarde. Ao estourar, a conversa fica na fila esperando alguém.": {
     es: "Cuando no hay nadie disponible, el sistema lo intenta de nuevo más tarde. Al agotarse, la conversación queda en la fila esperando a alguien.",
   },
