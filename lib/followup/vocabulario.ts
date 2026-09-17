@@ -357,6 +357,14 @@ export const MODOS_DE_RAMIFICACAO: Record<ModoDeRamificacao, string> = {
  * mesmo fluxo lido de dois jeitos conforme o ramo chegue como `class_match`
  * (v1) ou como `branch_id` (v2). Um dicionário, duas portas, um texto.
  */
+/**
+ * O escape de um nó que JÁ tem saídas específicas, em frase. "caminho normal"
+ * (abaixo) descreve a única saída de um nó simples; ao lado de "quando a IA
+ * classifica como “Interessado”", ele sugeriria o caminho PRINCIPAL — e é o
+ * contrário: só se sai por aqui quando nenhuma outra saída serve.
+ */
+export const FRASE_DE_OUTROS_CASOS = "nos outros casos";
+
 export const RAMOS_RESERVADOS_EM_FRASE: Record<RamoReservado, string> = {
   [FALLBACK_BRANCH_ID]: "caminho normal",
   [NO_REPLY_BRANCH_ID]: "quando ninguém responde",

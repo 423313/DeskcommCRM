@@ -1674,6 +1674,7 @@ export const DICIONARIO: Traducoes = {
   "Não": { es: "No" },
   Sempre: { es: "Siempre" },
   "Nenhuma delas": { es: "Ninguna de ellas" },
+  "Outros casos": { es: "Otros casos" },
   "Sem resposta": { es: "Sin respuesta" },
   // Rótulos das saídas do nó de repetição: chegaram por outra branch e nunca
   // entraram aqui, então o card do repeat aparecia meio em português no espanhol.

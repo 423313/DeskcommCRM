@@ -186,6 +186,26 @@ describe("rotuloDoStatus", () => {
   });
 });
 
+describe("rotuloDaAresta — a saída de escape depende de quem a tem", () => {
+  const aresta = { id: "e", source: "a", target: "b", priority: 0, condition: { type: "always" as const } };
+
+  it("num nó de saída única é o caminho normal; num nó ramificado, o que sobra", () => {
+    expect(rotuloDaAresta(aresta, espera)).toBe("caminho normal");
+    const classify: FlowNode = {
+      id: "ac1",
+      type: "ai_classify",
+      label: "Interpreta",
+      position: { x: 0, y: 0 },
+      config: { classes: ["Interessado"], grace_timeout_ms: 900_000, target: "last_reply" },
+    };
+    expect(rotuloDaAresta(aresta, classify)).toBe("nos outros casos");
+  });
+
+  it("sem saber a origem, continua o caminho normal — não inventa ramificação", () => {
+    expect(rotuloDaAresta(aresta)).toBe("caminho normal");
+  });
+});
+
 describe("rotuloDaAresta — o ramo nomeado do grafo v2", () => {
   const classify: FlowNode = {
     id: "ac1",

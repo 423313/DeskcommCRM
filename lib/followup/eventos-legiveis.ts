@@ -24,10 +24,12 @@ import {
   CONDITION_TRUE_BRANCH_ID,
   FALLBACK_BRANCH_ID,
   NO_REPLY_BRANCH_ID,
+  nodeBranches,
   type FlowEdge,
   type FlowNode,
 } from "./graph-schema";
 import {
+  FRASE_DE_OUTROS_CASOS,
   RAMOS_RESERVADOS_EM_FRASE,
   fraseDaClasse,
   fraseDaRegraNomeada,
@@ -208,7 +210,13 @@ export function resumoDoNo(node: FlowNode): NoDoDossie {
  */
 export function rotuloDaAresta(edge: FlowEdge, origem?: FlowNode, nomes: NomesDeValor = {}): string {
   const c = edge.condition;
-  if (c.type === "always") return RAMOS_RESERVADOS_EM_FRASE[FALLBACK_BRANCH_ID];
+  if (c.type === "always") {
+    // Num nó com saídas específicas, o escape não é o "caminho normal": é o que
+    // sobra quando nenhuma das outras serve.
+    return origem !== undefined && nodeBranches(origem).length > 1
+      ? FRASE_DE_OUTROS_CASOS
+      : RAMOS_RESERVADOS_EM_FRASE[FALLBACK_BRANCH_ID];
+  }
   if (c.type === "cond_result") {
     return RAMOS_RESERVADOS_EM_FRASE[c.value ? CONDITION_TRUE_BRANCH_ID : CONDITION_FALSE_BRANCH_ID];
   }
