@@ -97,7 +97,7 @@ function semear(org: string, tag: string): Semente {
 
   // Duas mensagens: uma é a que a resposta revisada usa (`message_id`), a
   // outra representa o eco do aparelho do operador que o gateway apaga por
-  // deduplicação (v. `fn_reply_confirm`, baseline 21770).
+  // deduplicação (v. `fn_reply_record_receipt`, baseline 21770).
   sql(`
     insert into public.messages (id, organization_id, conversation_id, channel_session_id, contact_id, type, direction, body)
       values ('${s.msgAlvo}', '${org}', '${s.conversa}', '${s.sess}', '${s.contato}', 'text', 'outbound', 'resposta enviada'),
