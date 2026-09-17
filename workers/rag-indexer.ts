@@ -349,7 +349,14 @@ export async function indexarFonte(
     }
   } catch (err) {
     if (err instanceof ErroDeExtracao) {
-      return { tipo: "erro", detalhe: err.message };
+      // A mensagem é a chave estável; a causa (erro do Storage, do parser de
+      // PDF) mora em `detalhe`. Aqui é o único registro da falha numa
+      // reindexação — o cartão da fonte e o aviso da Central mostram este texto
+      // como está, sem traduzir —, então gravar só a chave apagaria a causa.
+      return {
+        tipo: "erro",
+        detalhe: err.detalhe ? `${err.message} (${err.detalhe})` : err.message,
+      };
     }
     return { tipo: "erro", detalhe: err instanceof Error ? err.message : String(err) };
   }

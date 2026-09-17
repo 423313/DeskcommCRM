@@ -88,7 +88,7 @@ export async function extrairTextoDoArquivo(
 
   if (error || !blob) {
     throw new ErroDeExtracao(
-      "Falha ao processar o envio do arquivo.",
+      "O arquivo não está mais guardado. Envie de novo.",
       error?.message ?? "arquivo não encontrado no Storage",
     );
   }

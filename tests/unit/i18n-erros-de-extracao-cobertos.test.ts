@@ -8,6 +8,14 @@ import { DICIONARIO } from "@/lib/i18n/dicionario";
 
 const RAIZ = process.cwd();
 const DOCUMENTO = join(RAIZ, "lib/ai/rag/ingest/documento.ts");
+/**
+ * O worker de indexação também lança `ErroDeExtracao`. A mensagem dele não
+ * passa pela rota de upload (só a reindexação a vê, e o cartão da fonte mostra
+ * `last_index_error` como está, sem `t()`), então ele entra na regra de chave
+ * ESTÁVEL mas não na de espanhol: exigir tradução ali seria cobrar um texto que
+ * nenhuma tela traduz.
+ */
+const WORKER_INDEXADOR = join(RAIZ, "workers/rag-indexer.ts");
 const ROTA_UPLOAD = join(RAIZ, "app/api/v1/ai/knowledge/sources/upload/route.ts");
 
 type ChaveEncontrada = { chave: string; local: string };
@@ -26,13 +34,13 @@ function textoEstatico(expr: ts.Expression): string | null {
   return null;
 }
 
-function mensagensDeErroDeExtracao(): {
+function mensagensDeErroDeExtracao(arquivo: string): {
   chaves: ChaveEncontrada[];
   dinamicas: string[];
 } {
-  const src = readFileSync(DOCUMENTO, "utf8");
-  const fonte = ts.createSourceFile(DOCUMENTO, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const rel = relative(RAIZ, DOCUMENTO).split(sep).join("/");
+  const src = readFileSync(arquivo, "utf8");
+  const fonte = ts.createSourceFile(arquivo, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const rel = relative(RAIZ, arquivo).split(sep).join("/");
   const chaves: ChaveEncontrada[] = [];
   const dinamicas: string[] = [];
 
@@ -58,7 +66,9 @@ function mensagensDeErroDeExtracao(): {
 
 describe("erros de extração que chegam à tela", () => {
   it("toda mensagem de ErroDeExtracao é uma chave estável, nunca texto de runtime", () => {
-    const { dinamicas } = mensagensDeErroDeExtracao();
+    const dinamicas = [DOCUMENTO, WORKER_INDEXADOR].flatMap(
+      (arquivo) => mensagensDeErroDeExtracao(arquivo).dinamicas,
+    );
     expect(
       dinamicas,
       "ErroDeExtracao chega à rota de upload e vira texto visível; mensagem dinâmica não pode ser chave de tradução",
@@ -66,7 +76,7 @@ describe("erros de extração que chegam à tela", () => {
   });
 
   it("toda chave de ErroDeExtracao tem espanhol", () => {
-    const { chaves } = mensagensDeErroDeExtracao();
+    const { chaves } = mensagensDeErroDeExtracao(DOCUMENTO);
     const semEspanhol = chaves
       .filter(({ chave }) => !DICIONARIO[chave]?.es)
       .map(({ chave, local }) => `${local} → ${JSON.stringify(chave)}`);
