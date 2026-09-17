@@ -244,7 +244,7 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     // ── L12.G2.1: a rota das tags responde 200, não 400 do PostgREST ───────
     // Ela só é pedida quando o editor de tags MONTA, e o editor monta no clique.
     const respostaTags = page.waitForResponse((r) => r.url().includes("/api/v1/contact-tags"));
-    await page.getByRole("button", { name: "Tag", exact: true }).click();
+    await page.getByRole("button", { name: "Tags do contato", exact: true }).click();
     const rt = await respostaTags;
     const corpoTags = await rt.text();
     registra(`L12.G2.1 · GET /api/v1/contact-tags = ${rt.status()} · corpo = ${corpoTags.slice(0, 400)}`);
