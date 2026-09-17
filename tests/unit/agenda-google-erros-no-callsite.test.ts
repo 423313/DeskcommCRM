@@ -10,16 +10,16 @@ import { GoogleHttpError, googleTransport } from "@/lib/agenda/google/transport"
 
 const RAIZ = process.cwd();
 
-function catchDaFuncao(caminho: string, nome: string): string {
+function catchDaFuncao(caminho: string, nome: string, marcador: string): string {
   const texto = readFileSync(join(RAIZ, caminho), "utf8");
   const fonte = ts.createSourceFile(caminho, texto, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  let resultado = "";
+  const catches: string[] = [];
 
   const visita = (no: ts.Node): void => {
     if (ts.isFunctionDeclaration(no) && no.name?.text === nome) {
       const procuraCatch = (filho: ts.Node): void => {
-        if (ts.isCatchClause(filho)) resultado = filho.getText(fonte);
-        else ts.forEachChild(filho, procuraCatch);
+        if (ts.isCatchClause(filho)) catches.push(filho.getText(fonte));
+        ts.forEachChild(filho, procuraCatch);
       };
       procuraCatch(no);
       return;
@@ -28,7 +28,11 @@ function catchDaFuncao(caminho: string, nome: string): string {
   };
 
   visita(fonte);
-  expect(resultado, `não encontrei o catch de ${nome} em ${caminho}`).not.toBe("");
+  const resultado = catches.find((bloco) => bloco.includes(marcador)) ?? "";
+  expect(
+    resultado,
+    `não encontrei em ${nome} o catch responsável por ${marcador}`,
+  ).not.toBe("");
   return resultado;
 }
 
@@ -54,10 +58,19 @@ async function recusaNaLeitura(): Promise<unknown> {
     }),
   );
 
-  return api.page("primary/calendar@example.test", "sync-token").then(
-    () => null,
-    (erro: unknown) => erro,
-  );
+  return api
+    .page("primary/calendar@example.test", {
+      generation: "00000000-0000-4000-8000-000000000001",
+      mode: "incremental",
+      base_sync_token: "sync-token",
+      page_token: null,
+      window_start: "2026-09-17T00:00:00.000Z",
+      window_end: "2026-09-18T00:00:00.000Z",
+    })
+    .then(
+      () => null,
+      (erro: unknown) => erro,
+    );
 }
 
 describe("erros do Google são sanitizados no ponto que os persiste", () => {
@@ -88,6 +101,7 @@ describe("erros do Google são sanitizados no ponto que os persiste", () => {
     const catchReal = catchDaFuncao(
       "lib/agenda/google/sync-executor.ts",
       "reconcileAppointment",
+      "mensagemDaRecusaDePublicacao",
     );
     expect(catchReal).toContain("mensagemDaRecusaDePublicacao(e, metodoEmVoo)");
     expect(catchReal).toContain('call("error", { message })');
@@ -95,7 +109,11 @@ describe("erros do Google são sanitizados no ponto que os persiste", () => {
   });
 
   it("a leitura persiste a função sanitizada no catch real, não e.message", () => {
-    const catchReal = catchDaFuncao("lib/agenda/google/calendar-executor.ts", "syncCalendar");
+    const catchReal = catchDaFuncao(
+      "lib/agenda/google/calendar-executor.ts",
+      "syncCalendar",
+      "mensagemDaRecusaDeLeitura",
+    );
     expect(catchReal).toContain("mensagemDaRecusaDeLeitura(e)");
     expect(catchReal).not.toMatch(/\be\.message\b/);
   });
