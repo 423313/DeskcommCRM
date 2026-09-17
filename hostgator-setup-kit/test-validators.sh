@@ -892,9 +892,10 @@ TMP_CRON="$(mktemp -d)"
     'grep -F "$URL" "$TMP_CRON/crontab" | grep -qF -- "-H @\"$CAB\""'
   checa "o arquivo tem o cabeçalho que a rota espera" \
     '[ "$(cat "$CAB")" = "Authorization: Bearer segredo-novo-9f8e7d" ]'
-  # POSIX: no Windows o `stat` do Git Bash não reflete o chmod; no CI, Linux, reflete.
+  # `stat -c` é GNU; no macOS o equivalente é `stat -f '%Lp'` (mesma forma usada mais
+  # abaixo neste arquivo). No Windows o `stat` do Git Bash não reflete o chmod; no CI, Linux, reflete.
   checa "o arquivo nasce só para o dono (600)" \
-    '[ "$(stat -c %a "$CAB")" = 600 ]'
+    '[ "$(stat -c "%a" "$CAB" 2>/dev/null || stat -f "%Lp" "$CAB" 2>/dev/null)" = 600 ]'
 
   # Trocar o segredo no `.env` e rodar o update de novo é a rotação inteira.
   INTERNAL_CRON_SECRET="segredo-rotacionado-4c3b2a"
