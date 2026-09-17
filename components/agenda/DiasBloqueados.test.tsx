@@ -32,7 +32,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const post = vi.fn(() => Promise.resolve({ data: {} }));
+const post = vi.fn((..._a: unknown[]) => Promise.resolve({ data: {} }));
 /** O que a tela já tem cadastrado — o lote confere duplicata contra isto. */
 let jaCadastrado: unknown[] = [];
 vi.mock("@/lib/api/client", () => ({

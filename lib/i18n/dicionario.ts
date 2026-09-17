@@ -434,7 +434,6 @@ export const DICIONARIO: Traducoes = {
   "Fechar o dia": { es: "Cerrar el día" },
   "Abrir para atendimento": { es: "Abrir para atención" },
   "Das": { es: "Desde" },
-  "Até": { es: "Hasta" },
   "Abrir este dia": { es: "Abrir este día" },
   "Repetir toda semana até (opcional)": { es: "Repetir cada semana hasta (opcional)" },
   "dia(s) gravado(s)": { es: "día(s) guardado(s)" },
