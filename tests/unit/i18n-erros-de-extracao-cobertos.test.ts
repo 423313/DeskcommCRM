@@ -89,8 +89,16 @@ describe("erros de extração que chegam à tela", () => {
 
   it("a rota de upload traduz a mensagem de ErroDeExtracao antes de responder", () => {
     const rota = readFileSync(ROTA_UPLOAD, "utf8");
+    // A janela é generosa de propósito. Ela existe para exigir que os dois
+    // marcadores estejam no MESMO ramo, não para medir quantas linhas cabem
+    // entre eles — e o ramo cresce: o log da causa já ocupou 209 dos 240
+    // caracteres que a versão anterior permitia, e a próxima linha (o
+    // console.error de falha de infraestrutura do #1061) o estouraria. O
+    // vermelho resultante falaria de i18n num arquivo onde ninguém mexeu em
+    // i18n. Só existe um `err instanceof ErroDeExtracao` neste arquivo, então
+    // afrouxar a distância não afrouxa o que o caso afirma.
     expect(rota).toMatch(
-      /err instanceof ErroDeExtracao[\s\S]{0,240}t\(err\.message\)/,
+      /err instanceof ErroDeExtracao[\s\S]{0,800}t\(err\.message\)/,
     );
   });
 });
