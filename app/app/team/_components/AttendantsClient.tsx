@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/hooks/i18n/useT";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useMemo, useState } from "react";
 import { FUSOS_OFERECIDOS } from "@/lib/tempo/fusos";
 
@@ -145,12 +146,13 @@ function StatusBadge({ attendant, now }: { attendant: Attendant; now: Date }) {
  */
 function PresenceBadge({ attendant }: { attendant: Attendant }) {
   const t = useT();
+  const tagDoIdioma = useTagDeIdioma();
   const carimbo = attendant.availability?.last_heartbeat_at ?? null;
   const presente = !!attendant.availability?.present;
   const hora =
     carimbo === null
       ? null
-      : new Date(carimbo).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      : new Date(carimbo).toLocaleTimeString(tagDoIdioma, { hour: "2-digit", minute: "2-digit" });
 
   if (hora === null) {
     return (
