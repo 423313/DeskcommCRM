@@ -4,7 +4,7 @@
   "meta": {
     "titulo": "Modelos prontos de follow-up (clínica)",
     "pergunta": "Como uma clínica recém-instalada passa a ter follow-up sem desenhar um grafo?",
-    "resumo": "O catálogo é dado do produto. A galeria manda só o id do modelo; a rota valida o grafo do catálogo e grava um ponteiro RASCUNHO com o gatilho armado. Publicar e armar no agente continuam sendo atos de gente — e é por isso que as duas últimas arestas existem: sem elas o fluxo fica vivo na lista e morto no motor."
+    "resumo": "O catálogo é dado do produto. A galeria manda só o id do modelo; a rota valida o grafo do catálogo e grava um ponteiro RASCUNHO com o gatilho armado. Publicar e armar no agente continuam sendo atos de gente — e quando o segundo não acontece, quem denuncia é o cron `followup-sem-agente`, que abre um aviso na Central e o FECHA sozinho quando o vínculo aparece."
   },
   "lanes": [
     {
@@ -182,6 +182,22 @@
       "type": "worker",
       "label": "reactivity (cancel_on_reply)",
       "sublabel": "respondeu qualquer coisa → cancela e devolve ao atendimento"
+    },
+    {
+      "id": "watcher",
+      "lane": "motor",
+      "col": 6,
+      "type": "worker",
+      "label": "cron followup-sem-agente",
+      "sublabel": "1×/hora: reconcilia — abre o aviso e o fecha quando conserta"
+    },
+    {
+      "id": "central",
+      "lane": "humano",
+      "col": 6,
+      "type": "frontend",
+      "label": "Central de avisos",
+      "sublabel": "kind `followup_sem_agente` · warn · um por fluxo"
     }
   ],
   "edges": [
@@ -340,6 +356,36 @@
       "from": "pointers",
       "to": "reatividade",
       "label": "cancel_on_reply mora no trigger_config do ponteiro"
+    },
+    {
+      "id": "m27",
+      "from": "pointers",
+      "to": "watcher",
+      "label": "fluxos `active` de gatilho que EXIGE agente (nunca manual/webhook)"
+    },
+    {
+      "id": "m28",
+      "from": "gate",
+      "to": "watcher",
+      "label": "a mesma pergunta do produtor: existe agente publicado armando?"
+    },
+    {
+      "id": "m29",
+      "from": "watcher",
+      "to": "central",
+      "label": "desarmado → abre o aviso, nomeando o fluxo e quando ele dispararia"
+    },
+    {
+      "id": "m30",
+      "from": "watcher",
+      "to": "central",
+      "label": "armado → FECHA o aviso aberto (o laço, invariante 7)"
+    },
+    {
+      "id": "m31",
+      "from": "central",
+      "to": "agente",
+      "label": "«Ver o fluxo parado» + o corpo com os três passos"
     }
   ],
   "cards": [
@@ -353,7 +399,7 @@
     },
     {
       "titulo": "O laço de retorno (invariante 7)",
-      "texto": "Quando um modelo erra, quem mostra é a Fila e o dossiê do enrollment, que já existem: cada degrau grava `followup_enrollment_events`. O desfecho de cada inscrição (`converted`, `replied`, `exhausted`) diz se o modelo reengaja ou só incomoda — e `outcome_stats` já lê essa coluna."
+      "texto": "Quando um modelo erra, quem mostra é a Fila e o dossiê do enrollment, que já existem: cada degrau grava `followup_enrollment_events`, e o desfecho (`converted`, `replied`, `exhausted`) diz se o modelo reengaja ou só incomoda. Quando o modelo nem chega a rodar — publicado sem agente que o arme —, quem mostra é o cron `followup-sem-agente`: era o único estado do desenho em que o silêncio era total, e ele fechava o laço em lugar nenhum."
     }
   ]
 }

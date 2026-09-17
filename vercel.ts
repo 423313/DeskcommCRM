@@ -37,6 +37,7 @@ const config: VercelConfig = {
     { path: "/api/v1/cron/risk-watcher", schedule: "*/15 * * * *" },
     { path: "/api/v1/cron/contact-phones", schedule: "*/30 * * * *" },
     { path: "/api/v1/cron/contact-proposals-watcher", schedule: "17 * * * *" },
+    { path: "/api/v1/cron/followup-sem-agente", schedule: "23 * * * *" },
     { path: "/api/v1/cron/lgpd-sla-watcher", schedule: "0 12 * * *" },
     { path: "/api/v1/cron/kb-conversations-batch", schedule: "30 3 * * *" },
     { path: "/api/v1/cron/sync-model-catalog", schedule: "15 4 * * *" },

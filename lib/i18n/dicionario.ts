@@ -9150,6 +9150,63 @@ export const DICIONARIO: Traducoes = {
   "Um material marcado aqui foi arquivado no acervo — o agente não lê mais ele.": { es: "Un material marcado aquí fue archivado en el acervo — el agente ya no lo lee." },
   "Materiais marcados aqui foram arquivados no acervo — o agente não lê mais eles.": { es: "Materiales marcados aquí fueron archivados en el acervo — el agente ya no los lee." },
   "Desmarque para voltar a salvar.": { es: "Desmárcalo para volver a guardar." },
+
+  // ─── Modelos prontos de follow-up (galeria + aviso da Central) ───
+  // O NOME do modelo não entra aqui de propósito: ele vira o `name` do
+  // ponteiro no banco, e nome de registro sai como foi gravado, em qualquer
+  // idioma — mesma regra do nome de funil e do rótulo de etapa.
+  "Começar de um modelo": { es: "Empezar desde un modelo" },
+  "Modelos prontos": { es: "Modelos listos" },
+  "Fluxos com os textos já escritos, para as quatro vezes em que um paciente some no meio do caminho. Instalar não manda mensagem para ninguém: o fluxo nasce como rascunho para você revisar.": {
+    es: "Flujos con los textos ya escritos, para las cuatro veces en que un paciente desaparece a mitad de camino. Instalar no envía mensaje a nadie: el flujo nace como borrador para que lo revises.",
+  },
+  "Já instalado": { es: "Ya instalado" },
+  "mensagens, se ninguém responder": { es: "mensajes, si nadie responde" },
+  "acompanha por": { es: "acompaña por" },
+  "Dispara quando": { es: "Se dispara cuando" },
+  "Etapa do funil que dispara": { es: "Etapa del embudo que dispara" },
+  "Carregando etapas…": { es: "Cargando etapas…" },
+  "Instalando…": { es: "Instalando…" },
+  "Não consegui instalar o modelo. Tente de novo.": { es: "No pude instalar el modelo. Inténtalo de nuevo." },
+  "Depois de instalar: revise os textos no construtor, clique em Publicar e ligue o fluxo no seu agente (Agentes › Follow-up). Sem um agente publicado armando o fluxo, o gatilho automático não dispara.": {
+    es: "Después de instalar: revisa los textos en el constructor, haz clic en Publicar y conecta el flujo a tu agente (Agentes › Follow-up). Sin un agente publicado que arme el flujo, el disparador automático no funciona.",
+  },
+  // As jornadas e os resumos do catálogo (`lib/followup/modelos/`). Chegam à
+  // tela por `t(modelo.resumo)` — chave dinâmica, que o varredor de AST não
+  // enxerga —, então quem cobra a existência destas entradas é
+  // `lib/followup/modelos/modelos.test.ts`.
+  Exame: { es: "Examen" },
+  Cirurgia: { es: "Cirugía" },
+  "O paciente perguntou sobre consulta, a conversa parou antes de marcar e ninguém voltou nela.": {
+    es: "El paciente preguntó por una consulta, la conversación se detuvo antes de agendar y nadie la retomó.",
+  },
+  "Saiu o pedido de exame e o paciente ainda não marcou. O fluxo cobra por duas semanas e sai de cena.": {
+    es: "Salió la orden del examen y el paciente todavía no agendó. El flujo insiste por dos semanas y se retira.",
+  },
+  "Quem foi avaliado e não marcou não desistiu: está decidindo. O fluxo acompanha por quase três meses, sem pressionar.": {
+    es: "Quien fue evaluado y no agendó no desistió: está decidiendo. El flujo acompaña por casi tres meses, sin presionar.",
+  },
+  "A falta foi confirmada na agenda e o horário ficou vago. O fluxo oferece outra data em vez de deixar o paciente sumir.": {
+    es: "La ausencia fue confirmada en la agenda y el horario quedó libre. El flujo ofrece otra fecha en vez de dejar que el paciente desaparezca.",
+  },
+  "Um dia inteiro sem o paciente responder, com a marcação em aberto.": {
+    es: "Un día entero sin que el paciente responda, con la cita pendiente.",
+  },
+  "O negócio entrar na etapa do funil que você escolher.": {
+    es: "Que el negocio entre en la etapa del embudo que elijas.",
+  },
+  "Alguém confirmar na agenda que o paciente não compareceu.": {
+    es: "Que alguien confirme en la agenda que el paciente no asistió.",
+  },
+  // O aviso da Central quando nenhum agente arma o fluxo.
+  "Um follow-up está publicado e não está disparando": {
+    es: "Un follow-up está publicado y no se está disparando",
+  },
+  "Abrir o fluxo": { es: "Abrir el flujo" },
+  "Ver o fluxo parado": { es: "Ver el flujo detenido" },
+  "Abra o agente que atende esse número, ligue este fluxo em «follow-ups que arma» e publique a versão.": {
+    es: "Abre el agente que atiende ese número, conecta este flujo en «follow-ups que arma» y publica la versión.",
+  },
 };
 
 /**

@@ -362,6 +362,13 @@ continuam sendo atos de gente. Sem um agente PUBLICADO com o ponteiro em
 (`agent-followup-gate.ts`) — fluxo com cara de vivo. A linha está no rodapé do
 diálogo e é asserida na spec.
 
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J23.9 | Fluxo automático publicado que nenhum agente arma | a Central abre um aviso nomeando o fluxo e quando ele dispararia | **PASS (unit)** — `app/api/v1/cron/followup-sem-agente/route.test.ts`; tela **NÃO MEDIDA** |
+| J23.10 | O mesmo fluxo depois de ligado no agente | o aviso é FECHADO pelo próprio cron, sem ninguém tocar nele | **PASS (unit)** |
+| J23.11 | Fluxo manual ou de webhook sem agente | nenhum aviso — eles funcionam sem agente, e o alarme seria falso | **PASS (unit)** |
+| J23.12 | Rodada do cron que não mudou nada | não audita (CLAUDE.md §Audit log) | **PASS (unit)** |
+
 ---
 
 ## J9 — Ver o que o follow-up já fez, e intervir sem matá-lo `[P1]`

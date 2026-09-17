@@ -58,7 +58,10 @@ linha: `grep -n 'jornada:' lib/followup/modelos/clinica.ts`.
 ⚠️ Depois de instalar faltam **dois** passos, e sem eles o fluxo fica vivo na lista e morto no
 motor: **Publicar** no construtor, e ligar o fluxo no agente (passo 7 abaixo, campo
 *follow-ups que arma*). Gatilho automático só cria inscrição se um agente **publicado** arma o
-ponteiro.
+ponteiro. Esquecer o segundo passo não é mais silencioso: uma verificação de hora em hora abre
+na **Central de avisos** um aviso por fluxo publicado que nenhum agente arma, e o fecha sozinho
+quando o vínculo aparece. Vale para silêncio, etapa, atendimento aberto e falta — manual e
+webhook funcionam sem agente e não geram aviso.
 
 **Novo fluxo** → nome (único). No editor: **gatilho** (manual; silêncio por N minutos; mudança de
 etapa; falta a compromisso; caso aberto; webhook) com *cancelar quando responder*; depois os nós:
