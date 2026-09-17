@@ -22,6 +22,7 @@ import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agen
 import { EmptyAgenda } from "@/components/empty";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
+import { janelaDoMesVisivel } from "@/lib/agenda/janela-do-mes-visivel";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
 import { Button } from "@/components/ui/button";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
@@ -222,26 +223,33 @@ export function AgendaClient({
   // aqui.
   const { data: pessoas = [] } = usePessoasDaAgenda();
 
-  // A JANELA DE BUSCA PRECISA SER ESTÁVEL, e não era.
+  // A JANELA ACOMPANHA O MÊS QUE O PAINEL MOSTRA.
   //
-  // ⚠️ Isto era `de: new Date().toISOString()` calculado no CORPO do render. A
-  // chave do React Query inclui o recorte, e `new Date()` devolve milissegundos
-  // diferentes a cada passagem — então cada resposta causava re-render, que
-  // gerava chave nova, que disparava outra busca. O painel nunca estabilizava:
-  // `horarios` ficava `undefined` entre as idas, `horariosPorDia` nascia vazio e
-  // TODO dia aparecia "sem horário" — com a rota respondendo 200 e slots reais.
+  // ⚠️ Isto era `hoje + 30 dias`, fixo na abertura. O mês visível era estado
+  // LOCAL do painel, a consulta não ia junto, e "Próximo mês" desligava assim
+  // que acabavam os dias já pedidos — daqui a dois meses o calendário parava
+  // e a ocupação do Google acusava período sem cobertura, mesmo com a janela
+  // de agendamento do tipo (60 dias por padrão, até 365) ainda valendo.
   //
-  // Medido pela spec de marcar, que capturou as respostas: cinco 200 seguidos
-  // com vagas, e a tela mostrando 42 dias apagados. Em produção isto é um laço
-  // de requisições por usuário com o painel aberto.
-  //
-  // `useMemo` sem dependência de tempo: a janela é fixada quando o painel abre.
-  const janelaDeBusca = React.useMemo(
-    () => ({ de: new Date().toISOString(), ate: addDays(new Date(), 30).toISOString() }),
-    // A janela só precisa mudar quando o painel REABRE ou o tipo muda — nunca a
-    // cada render. `marcando` na lista é o que a renova entre duas aberturas.
+  // A estabilidade continua: a chave do React Query só muda quando o mês, o
+  // tipo ou a abertura mudam — nunca a cada render. `new Date()` aqui corre
+  // uma vez por essas mudanças, não no corpo.
+  const [mesDoPainel, setMesDoPainel] = React.useState(() => startOfMonth(new Date()));
+  const onMesVisivel = React.useCallback((mes: Date) => {
+    const proximo = startOfMonth(mes);
+    setMesDoPainel((atual) => (atual.getTime() === proximo.getTime() ? atual : proximo));
+  }, []);
+  // Reabrir o painel ou trocar o tipo pede `agora` novo. O relógio não entra
+  // na chave do React Query por milissegundo — só quando estes mudam.
+  const agoraDaAbertura = React.useMemo(
+    () => new Date(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `new Date()` é o ponto: o valor só pode mudar quando a abertura ou o tipo mudam.
     [marcando, tipo?.id],
   );
+  const janelaDeBusca = React.useMemo(() => {
+    const { de, ate } = janelaDoMesVisivel(mesDoPainel, agoraDaAbertura);
+    return { de: de.toISOString(), ate: ate.toISOString() };
+  }, [mesDoPainel, agoraDaAbertura]);
 
   // Os horários vêm da rota real — a mesma que a IA usa, então tela e agente
   // oferecem exatamente os mesmos horários. Só consulta quando o painel abre.
@@ -756,6 +764,7 @@ export function AgendaClient({
                 fusoSuposto={horarios?.fuso_suposto ?? false}
                 fontesDefasadas={horarios?.fontes_defasadas}
                 googleCoberturaParcial={horarios?.google_cobertura_parcial}
+                onMesVisivel={onMesVisivel}
                 horarioInicial={horarioEscolhido ?? undefined}
                 // O ENCAIXE é desta tela, e só dela: aqui quem marca é uma
                 // pessoa da equipe com sessão, que é exatamente o ator a quem a
