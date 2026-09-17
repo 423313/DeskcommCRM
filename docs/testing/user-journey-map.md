@@ -2148,7 +2148,7 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 - [P1] Pausar e retomar: ponteiro publicado permanece; assistência manual continua. Troca de modo em voo impede efeitos automáticos obsoletos.
 - Provas Task9 em preparação: `tests/invariants/autonomia-replies.test.ts`, `lib/agent-engine/agent/preview.test.ts`. Evidência browser será registrada após revisão e aplicação da migration0227 no QA.
 
-## J24 — Instalar e usar uma extensão declarativa publicada após o build `[P0]`
+## J25 — Instalar e usar uma extensão declarativa publicada após o build `[P0]`
 
 Specs: `tests/e2e/extensoes-declarativas.spec.ts` e `tests/e2e/extensoes-recuperacao.spec.ts`.
 Estado: **as duas passaram inteiras em 16/09/2026**, sobre o build `mpuyz81eEv5s9QLf96iqr` gerado do
@@ -2188,11 +2188,11 @@ publica dois pacotes pelo CLI depois de encontrar `.next/BUILD_ID` e inicia o ca
 
 Limite declarado: esta jornada prova o perfil declarativo e o catálogo local de ensaio. Não prova
 marketplace público, autoria criptográfica nem execução de código de pacote. Atualizar, desfazer,
-remover e reinstalar são o J25, abaixo. A escrita SQL direta sob RLS pertence à suíte de
+remover e reinstalar são o J26, abaixo. A escrita SQL direta sob RLS pertence à suíte de
 invariantes de banco desta integração.
 
 
-## J25 — Atualizar, desfazer a última troca, remover e reinstalar uma extensão `[P0]`
+## J26 — Atualizar, desfazer a última troca, remover e reinstalar uma extensão `[P0]`
 
 Spec: `tests/e2e/extensoes-versao.spec.ts`. Fixture: `criarCatalogoDeVersoes` em
 `tests/e2e/fixtures/catalogo-extensoes.ts`, que publica a MESMA identidade em 1.0.0 e 1.1.0 depois
@@ -2201,7 +2201,7 @@ religar o catálogo no meio da jornada. Evidência: `evidence/extensoes/versao/`
 catálogo daquela rodada).
 
 Estado: **passou inteira em 16/09/2026**, em 28,3 s, sobre o build `mpuyz81eEv5s9QLf96iqr` (do
-commit `6a5d46710`, a branch já integrada com a `main`), na mesma rodada das duas specs do J24. As
+commit `6a5d46710`, a branch já integrada com a `main`), na mesma rodada das duas specs do J25. As
 capturas abaixo são dessa rodada. Antes dela: seis rodadas até a primeira vez inteira (sobre o build
 `FL9GZvWqPoj8aE9XSY2E_`, commit `540a76082`), cujos defeitos da própria prova estão listados abaixo,
 e duas repetições mortas por ambiente — uma na fixture com a máquina em load 53, outra com o servidor

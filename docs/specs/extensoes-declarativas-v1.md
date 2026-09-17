@@ -1,6 +1,6 @@
 # Extensões declarativas v1 — primeira integração
 
-Estado em 16/set/2026: instalação, configuração e recuperação **implementadas e provadas em tela** no J24; atualizar, desfazer a última troca e remover **implementados**, com a prova em tela no J25 (o resultado de cada rodada fica no fim do PROG-021). Complementa o PROG-017 e o marco 2 do PROG-018. A autorização de arquitetura e as respostas A/A/A do DEC-004 continuam vigentes. Os relatórios [08](../research/extensoes/08-integracao-bases.md), [09](../research/extensoes/09-integracao-impactos.md) e [10](../research/extensoes/10-integracao-riscos.md) são as três investigações deste recorte.
+Estado em 16/set/2026: instalação, configuração e recuperação **implementadas e provadas em tela** no J25; atualizar, desfazer a última troca e remover **implementados**, com a prova em tela no J26 (o resultado de cada rodada fica no fim do PROG-021). Complementa o PROG-017 e o marco 2 do PROG-018. A autorização de arquitetura e as respostas A/A/A do DEC-004 continuam vigentes. Os relatórios [08](../research/extensoes/08-integracao-bases.md), [09](../research/extensoes/09-integracao-impactos.md) e [10](../research/extensoes/10-integracao-riscos.md) são as três investigações deste recorte.
 
 ## Jornada e limites
 
@@ -145,7 +145,7 @@ Gestão em `/app/extensions`, declarada no catálogo canônico de navegação; u
 
 ## Prova e laço de retorno
 
-Validações de parser/rede hostil; banco real para RLS/RBAC, repetição/revisão, cancelamento tardio, conflito de versão e concorrência com atualização; baseline fresco e reaplicado. E2E real instala pacote publicado após o build, ativa em A sem afetar B, configura, usa guia e cria/conclui tarefa pela UI existente; desativa, abre URL antiga, reativa e confere preservação. O J25 atualiza de 1.0.0 para 1.1.0 com A ativa, desfaz com o catálogo desligado, recusa a aba antiga, remove, reinstala e reativa. Ensaia download inválido/interrompido, repetição de pedido, catálogo desligado, reinício/reconexão, troca de organização, papéis negados, tela estreita, teclado, marca e espanhol. Captura screenshot/trace e inspeciona backend.
+Validações de parser/rede hostil; banco real para RLS/RBAC, repetição/revisão, cancelamento tardio, conflito de versão e concorrência com atualização; baseline fresco e reaplicado. E2E real instala pacote publicado após o build, ativa em A sem afetar B, configura, usa guia e cria/conclui tarefa pela UI existente; desativa, abre URL antiga, reativa e confere preservação. O J26 atualiza de 1.0.0 para 1.1.0 com A ativa, desfaz com o catálogo desligado, recusa a aba antiga, remove, reinstala e reativa. Ensaia download inválido/interrompido, repetição de pedido, catálogo desligado, reinício/reconexão, troca de organização, papéis negados, tela estreita, teclado, marca e espanhol. Captura screenshot/trace e inspeciona backend.
 
 | Pergunta da doutrina | Artefato implementado neste incremento |
 |---|---|

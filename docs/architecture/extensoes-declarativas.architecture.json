@@ -349,7 +349,7 @@
     }
   ],
   "contracts": {
-    "status": "implementado nesta branch; instalação e recuperação provadas em tela no J24 (15/09/2026); atualizar, desfazer e remover provados no banco, com a jornada em tela J25; nada publicado",
+    "status": "implementado nesta branch; instalação e recuperação provadas em tela no J25 (15/09/2026); atualizar, desfazer e remover provados no banco, com a jornada em tela J26; nada publicado",
     "spec": "docs/specs/extensoes-declarativas-v1.md",
     "no_links": [
       "Catálogo não recebe contatos, conversas, tarefas ou identidade persistente da VPS.",

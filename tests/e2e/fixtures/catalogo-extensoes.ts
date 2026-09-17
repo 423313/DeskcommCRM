@@ -571,8 +571,8 @@ export interface CatalogoDeVersoes {
 }
 
 /**
- * Catálogo do J25: a MESMA identidade publicada em 1.0.0 e 1.1.0 depois do build, num SQLite
- * próprio, servido pelo processo HTTP real na porta do ensaio. Diferente da fixture do J24, o
+ * Catálogo do J26: a MESMA identidade publicada em 1.0.0 e 1.1.0 depois do build, num SQLite
+ * próprio, servido pelo processo HTTP real na porta do ensaio. Diferente da fixture do J25, o
  * catálogo pode ser desligado e religado: desfazer tem de funcionar com ele fora do ar, e
  * reinstalar precisa dele de volta.
  */

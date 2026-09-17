@@ -9,9 +9,9 @@ import {
   type CatalogoDeVersoes,
 } from "./fixtures/catalogo-extensoes";
 
-// J25 — atualizar, desfazer a última troca, remover e reinstalar, pela tela, como o responsável
+// J26 — atualizar, desfazer a última troca, remover e reinstalar, pela tela, como o responsável
 // pela instalação faria. As asserções esperam a mutação e a recarga da lista; o prazo sobe pelo
-// mesmo motivo medido no J24 (duas idas ao servidor sob carga).
+// mesmo motivo medido no J25 (duas idas ao servidor sob carga).
 const expect = expectBase.configure({ timeout: 20_000 });
 
 const EVIDENCE = "evidence/extensoes/versao";
@@ -66,7 +66,7 @@ async function login(page: Page, email: string, senha: string): Promise<void> {
 }
 
 async function trocarOrganizacao(page: Page, organizationId: string): Promise<void> {
-  // Mesma receita medida no J24: subir a página antes do seletor e esperar o documento novo.
+  // Mesma receita medida no J25: subir a página antes do seletor e esperar o documento novo.
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.getByTestId("tenant-switcher").click();
   const item = page.getByTestId(`tenant-switcher-item-${organizationId}`);

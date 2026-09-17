@@ -151,6 +151,6 @@ por dentro.
 - Serviço e tela: os testes co-localizados em `lib/extensions/` e `components/extensions/`, por
   `pnpm test:unit` sem caminho.
 - Tela: `tests/e2e/extensoes-declarativas.spec.ts`, `tests/e2e/extensoes-recuperacao.spec.ts` e
-  `tests/e2e/extensoes-versao.spec.ts` (J24 e J25 em `docs/testing/user-journey-map.md`).
+  `tests/e2e/extensoes-versao.spec.ts` (J25 e J26 em `docs/testing/user-journey-map.md`).
 - Códigos do banco: `lib/extensions/erros-do-banco.test.ts` exige frase e status para todo código
   que a migration levanta.
