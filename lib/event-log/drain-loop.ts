@@ -43,6 +43,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Logger } from '@/lib/agent-engine/obs/logger';
+import { sincronizarAvisoDoLacoDeEventLog } from '@/lib/event-log/aviso-do-laco';
 // `import type` e nunca import de valor: em runtime esta linha desaparece, e é
 // isso que mantém a cadeia que termina em `@/lib/env` fora do boot do worker.
 import type { DrainSummary } from '@/lib/event-log/drain';
@@ -123,12 +124,21 @@ export function _reiniciarProntidaoDoLaco(): void {
  * produção quebrava.
  */
 export async function carregarDepsDoLaco(log: Logger): Promise<Deps | null> {
+  let adminParaAviso: SupabaseClient | null = null;
+
   try {
+    // O admin sobe PRIMEIRO de propósito: se um import posterior do drain ou dos
+    // handlers quebrar, ainda existe um canal independente para contar o
+    // incidente na Central. Se o próprio admin não subir, o /healthz + log.error
+    // continuam sendo as redes de segurança e a notificação vira best-effort.
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    adminParaAviso = createAdminClient();
     const { drainEventLog } = await import('@/lib/event-log/drain');
     const { ensureHandlersRegistered } = await import('@/lib/event-log/register-handlers');
-    const { createAdminClient } = await import('@/lib/supabase/admin');
     ensureHandlersRegistered();
-    const deps: Deps = { drainEventLog, admin: createAdminClient() };
+
+    const deps: Deps = { drainEventLog, admin: adminParaAviso };
+    await sincronizarAvisoDoLacoDeEventLog(adminParaAviso, 'saudavel', log);
     prontidao = { carregado: true, motivo: null };
     log.info(MARCA_LACO_CARREGADO, { carregado: true });
     return deps;
@@ -139,10 +149,31 @@ export async function carregarDepsDoLaco(log: Logger): Promise<Deps | null> {
     // aviso. Com `warn` o defeito da #648 era indistinguível de ruído por dez
     // dias; agora ele é o que o gate procura no log e o que o `/healthz`
     // publica em `event_log_drain`.
+    //
+    // Não nomeia mais "admin client": `drain`, `register-handlers` OU o admin
+    // podem ter sido a dependência que falhou. Acusar uma só manda o operador
+    // investigar o componente errado.
     log.error(
-      'event-log drain OFF — não consegui montar o admin client; os handlers seguem só pelo cron event-log-drain',
+      'event-log drain OFF — falha ao carregar dependências do laço; os handlers seguem só pelo cron event-log-drain',
       { error: motivo },
     );
+
+    if (adminParaAviso) {
+      await sincronizarAvisoDoLacoDeEventLog(adminParaAviso, 'degradado', log);
+    } else {
+      // Se a falha aconteceu ANTES de termos o client (inclusive no próprio
+      // import dele), ainda tentamos uma vez. Nunca propagamos esse segundo
+      // erro: perder a superfície de aviso não pode derrubar o worker.
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        adminParaAviso = createAdminClient();
+        await sincronizarAvisoDoLacoDeEventLog(adminParaAviso, 'degradado', log);
+      } catch (avisoErr) {
+        log.error('event-log drain: a Central também ficou indisponível para registrar a degradação', {
+          error: (avisoErr instanceof Error ? avisoErr.message : String(avisoErr)).slice(0, 300),
+        });
+      }
+    }
     return null;
   }
 }
