@@ -409,6 +409,32 @@ describe("listExtensions: removidas e conferência da plataforma", () => {
   });
 });
 
+describe("falha do banco sem código conhecido", () => {
+  it("fica registrada com a causa do banco, e o erro de domínio esperado não vira ruído no log", async () => {
+    let resposta: Result = {
+      data: null,
+      error: { code: "42P01", message: 'relation "public.extension_installations" does not exist' },
+    };
+    mocks.admin = fakeClient({}, { fn_extensions_remove_installation: () => resposta });
+
+    await expect(
+      removeExtension(ACTOR, randomUUID(), randomUUID(), { expected_installation_revision: 1 }),
+    ).rejects.toMatchObject({ code: "upstream_unavailable", status: 503 });
+    expect(mocks.warn).toHaveBeenCalledWith("[extensions] falha do banco sem código conhecido", {
+      db_code: "42P01",
+      detail: 'relation "public.extension_installations" does not exist',
+    });
+
+    // Controle: um código que a migration levanta de propósito é resposta, não falha a investigar.
+    mocks.warn.mockReset();
+    resposta = { data: null, error: { code: "P0001", message: "extension_removed" } };
+    await expect(
+      removeExtension(ACTOR, randomUUID(), randomUUID(), { expected_installation_revision: 1 }),
+    ).rejects.toMatchObject({ code: "extension_removed", status: 410 });
+    expect(mocks.warn).not.toHaveBeenCalled();
+  });
+});
+
 describe("auditoria só quando a chamada fez a transição", () => {
   it("remover grava a linha da instância e uma por organização desligada; a repetição não grava", async () => {
     const installation = randomUUID();

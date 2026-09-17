@@ -10,8 +10,8 @@ Esta é a **lei**. As decisões e o que foi recusado vivem nos documentos de dec
 
 | Se você quer… | Vá para |
 |---|---|
-| o critério núcleo × extensão aprovado e o desenho do programa inteiro | `Decisão Implementações/PROG-017 — Extensões — arquitetura e contratos.md` |
-| as políticas de publicação, incidentes e métricas (Rafael aprovou A nas três) | `Decisão Implementações/DEC-004 — Extensões — publicação, incidentes e métricas.md` |
+| o critério núcleo × extensão aprovado e o desenho do programa inteiro | `Decisão Implementações/PROG-017 — Extensões — arquitetura e contratos.md` (documento interno de decisão, fora deste repositório; o que vale para PR está nesta doutrina) |
+| as políticas de publicação, incidentes e métricas (Rafael aprovou A nas três) | `Decisão Implementações/DEC-004 — Extensões — publicação, incidentes e métricas.md` (documento interno; as três políticas estão no não-negociável 13) |
 | o contrato que existe hoje (pacote, catálogo, RPCs, portas HTTP, versões) | [`../specs/extensoes-declarativas-v1.md`](../specs/extensoes-declarativas-v1.md) |
 | classificar o destino de um PR de contribuidor | [`../../triagem/TRIAGEM.md`](../../triagem/TRIAGEM.md), seção 2-bis |
 | o mapa das peças e das arestas | [`../architecture/extensoes-declarativas.architecture.json`](../architecture/extensoes-declarativas.architecture.json) |
@@ -100,8 +100,8 @@ preserve o trabalho do contribuidor e registre a dependência.
    aceita em 17/09/2026): um banco só e o schema `public`; as tabelas nascem por uma função
    provisionadora fixa do módulo — sem parâmetro, executável só por `service_role`, entregue pela
    tripla de sempre — quando o módulo é **instalado na instância**, nunca na ativação por
-   organização. A função aplica na mesma transação as proteções que o baseline aplica a toda
-   tabela; reaplicar nas atualizações é explícito e falha alto; anonimização, export e varreduras
+   organização. A função aplica na mesma transação as proteções que toda tabela de
+   organização precisa ter; reaplicar nas atualizações é explícito e falha alto; anonimização, export e varreduras
    alcançam as tabelas do módulo. Pacote de terceiro continua sem trazer SQL.
 
 10. **Publicar espera o sistema; tirar não espera.** Preparar, concluir e desfazer recusam enquanto

@@ -117,6 +117,13 @@ function dbFailure(error: { code?: string; message?: string } | null): void {
   const known = error.code === "P0001" && error.message ? SQL_ERRORS[error.message] : undefined;
   if (known && error.message)
     throw new ExtensionServiceError(error.message, known.message, known.status);
+  // O código e a mensagem do banco só existem aqui: o erro que sobe é genérico de propósito, porque
+  // a tela não mostra detalhe do banco. Sem este registro, "a tabela não existe" — um deploy cujo
+  // código chegou antes da migration — virava um aviso na tela de todo mundo e nada no log.
+  logger.warn("[extensions] falha do banco sem código conhecido", {
+    db_code: error.code ?? null,
+    detail: (error.message ?? "").slice(0, 200),
+  });
   throw new ExtensionServiceError(
     "upstream_unavailable",
     "Não foi possível confirmar o resultado. Consulte o histórico antes de repetir o pedido.",

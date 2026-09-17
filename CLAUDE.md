@@ -286,7 +286,7 @@ contrato que existe hoje em
 [`docs/specs/extensoes-declarativas-v1.md`](docs/specs/extensoes-declarativas-v1.md).
 A pergunta que decide o destino de uma mudança não é "isto serve a muita gente?",
 e sim **"se nenhuma organização ativar isto, a operação comum continua inteira?"**.
-O não-negociável, em cinco linhas:
+O não-negociável:
 
 1. **O núcleo continua útil com zero extensões.** Identidade, autorização,
    isolamento, auditoria, contratos e cadeia de envio são núcleo; jornada de nicho,

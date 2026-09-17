@@ -25,7 +25,7 @@ Os relatórios foram produzidos por agentes distintos e reconciliados na síntes
 
 ## Escopo e preservação do trabalho existente
 
-A pesquisa usa a branch `docs/plataforma-extensoes-20260914`, numa worktree própria. A pasta principal estava em outra branch, com alterações de outras sessões. Esses arquivos não foram incorporados nem revertidos. Os documentos solicitados ficam em `Decisão Implementações`; a branch da pesquisa preserva uma cópia versionada e as evidências técnicas.
+A pesquisa foi feita numa worktree própria, sem incorporar nem reverter alterações de outras sessões. As decisões que ela alimentou são documentos internos, fora deste repositório; o que vale para PR está na [doutrina de extensões](../../doctrine/extensoes.md) e na [ADR-0002](../../adr/0002-tabelas-de-modulo-num-banco-so.md).
 
 O diagrama da proposta descreve responsabilidades futuras. Ele não foi publicado como mapa de componentes já operacionais, nem autoriza declarar a arquitetura implantada. Escolhas técnicas que dependem de medição permanecem explícitas no plano de provas.
 
@@ -42,7 +42,7 @@ O [runbook da bancada](../../../experiments/extensoes/README.md) permite repetir
 
 ## Primeira integração ao CRM
 
-A branch `feat/extensoes-declarativas-20260914` preserva a bancada e incorpora `origin/main` em `60079eb5`. O PROG-021 *(documento interno de decisão)* acompanha implementação e provas do marco 2. O [contrato v1](../../specs/extensoes-declarativas-v1.md) define o pacote declarativo, admissão e jornada.
+A bancada foi preservada na branch deste PR, que incorpora `origin/main`. O PROG-021 *(documento interno de decisão)* acompanha implementação e provas do marco 2. O [contrato v1](../../specs/extensoes-declarativas-v1.md) define o pacote declarativo, admissão e jornada.
 
 | Investigação | Foco desta integração |
 |---|---|

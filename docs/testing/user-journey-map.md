@@ -2152,15 +2152,15 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 
 Specs: `tests/e2e/extensoes-declarativas.spec.ts` e `tests/e2e/extensoes-recuperacao.spec.ts`.
 Estado: **as duas passaram inteiras em 16/09/2026**, sobre o build `mpuyz81eEv5s9QLf96iqr` gerado do
-commit `6a5d46710` — a branch já integrada com a `main` —, a principal em 39,1 s e a de recuperação em
+commit `2bce4b7ec` — a branch já integrada com a `main` —, a principal em 39,1 s e a de recuperação em
 16,6 s, rodando sozinhas depois de duas tentativas mortas por ambiente (a fixture recebeu
 `Processing this request timed out` com a máquina em load 53; depois o servidor de teste foi morto
 com 0,06 GB livres). A primeira vez que passaram inteiras foi em 15/09, sobre o build
-`ALAqeLI0VQJi4bpWWFbUL` do commit `b4b186219`. Foram sete
+`ALAqeLI0VQJi4bpWWFbUL` do commit `5a19ce8fa`. Foram sete
 rodadas até lá: quatro defeitos da própria prova (espera por URL que a aba já tinha, seletor
 `data-slot` que o Card do repositório não tem, clique no cabeçalho rolado para fora da vista, prazo
 de 5 s em asserções que dependem de duas idas ao servidor) e um defeito de produto que só ela achou
-(a aba original não recarregava depois que outra aba reconciliava o recibo). Entre `b4b186219` e o
+(a aba original não recarregava depois que outra aba reconciliava o recibo). Entre `5a19ce8fa` e o
 HEAD, `git diff --stat b4b186219..HEAD -- app lib components` só mostra arquivos de voz vindos da
 `main`, um comentário e as frases de voz no dicionário — nada do caminho das extensões. A fixture
 recusa credenciais fora das portas locais dedicadas, cria usuários e organizações exclusivos,
@@ -2201,9 +2201,9 @@ religar o catálogo no meio da jornada. Evidência: `evidence/extensoes/versao/`
 catálogo daquela rodada).
 
 Estado: **passou inteira em 16/09/2026**, em 28,3 s, sobre o build `mpuyz81eEv5s9QLf96iqr` (do
-commit `6a5d46710`, a branch já integrada com a `main`), na mesma rodada das duas specs do J25. As
+commit `2bce4b7ec`, a branch já integrada com a `main`), na mesma rodada das duas specs do J25. As
 capturas abaixo são dessa rodada. Antes dela: seis rodadas até a primeira vez inteira (sobre o build
-`FL9GZvWqPoj8aE9XSY2E_`, commit `540a76082`), cujos defeitos da própria prova estão listados abaixo,
+`FL9GZvWqPoj8aE9XSY2E_`, commit `213dee0d4`), cujos defeitos da própria prova estão listados abaixo,
 e duas repetições mortas por ambiente — uma na fixture com a máquina em load 53, outra com o servidor
 de teste morto por falta de memória.
 

@@ -1,6 +1,6 @@
 # Integração declarativa — riscos e mínimo viável
 
-14/set/2026 · leitura em `feat/extensoes-declarativas-20260914`, HEAD `44dcdafa8`.
+14/set/2026 · leitura na branch do PR #1016, commit `b3a056b85`.
 
 Escopo: marco 2; pesquisa documental, sem implementação, serviços, testes ou SQL executados.
 

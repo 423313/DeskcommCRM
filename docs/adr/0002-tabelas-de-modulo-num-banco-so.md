@@ -2,7 +2,7 @@
 
 - **Status:** aceito em 2026-09-17 pelo dono do produto
 - **Data:** 2026-09-17
-- **Contexto medido em:** `84788aa64` (`main`) e `e24a2b94e` (branch de extensões)
+- **Contexto medido em:** `84788aa64` (`main`) e na branch do PR #1016
 - **Lei que muda quando aceita:** [`docs/doctrine/extensoes.md`](../doctrine/extensoes.md), não-negociável 9 e a linha "Schema próprio de extensão" da tabela do que ainda não existe
 
 ---
@@ -100,8 +100,11 @@ porque:
   0167).
 - **É idempotente.** Chamá-la de novo não muda nada além do que a primeira chamada fez.
 - **A execução é só de `service_role`**: `revoke execute … from public, anon, authenticated`.
-- **A separação de DDL continua:** DDL arbitrária segue exigindo a conexão de dono, que não vai para
-  os contêineres (`tests/unit/env-ddl-fora-do-app.test.ts`).
+- **Não é a separação de DDL que sustenta o argumento.** A conexão de dono do banco
+  (`SUPABASE_DB_ADMIN_URL`) **chega aos contêineres** quando declarada — o `docker-compose.prod.yml`
+  entrega o `.env` inteiro ao app e ao worker —, e o que existe hoje é um gate que proíbe o código do
+  app de usá-la (`tests/unit/env-ddl-fora-do-app.test.ts`). O argumento desta decisão é o anterior:
+  a provisionadora não dá ao app nenhuma DDL que ele possa escolher.
 - **Um invariante novo reprova** função provisionadora com parâmetro, com `execute` concedido a
   qualquer papel além de `service_role`, ou com corpo que referencie tabela de fora do módulo.
 
@@ -109,10 +112,10 @@ O caminho manual de self-host concede `execute` em todas as funções de `public
 (`docs/deploy-selfhost/README.md:96`). Quando esta ADR for aceita, esse passo passa a revogar
 explicitamente as funções provisionadoras, e o invariante confere o resultado depois do grant.
 
-### D5 — A função termina aplicando as proteções que o baseline aplica a toda tabela
+### D5 — A função termina aplicando as proteções que toda tabela de organização precisa ter
 
-Tabela criada fora do baseline não recebe as proteções que ele aplica em laço. Por isso a função
-provisionadora termina, **na mesma transação**, chamando as mesmas rotinas de proteção do baseline:
+Tabela criada fora do baseline não recebe sozinha as proteções que ele aplica ao catálogo. Por isso a
+função provisionadora termina, **na mesma transação**, chamando as rotinas de proteção:
 RLS ligada, `revoke all … from anon`, isolamento por organização e as policies restritivas que
 valem para sessão de suporte. Essas rotinas saem do laço do baseline para funções sem parâmetro,
 chamadas pelo baseline e pela provisionadora. A prova de que a tabela recém-provisionada está

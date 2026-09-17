@@ -1,6 +1,6 @@
 # Marco 2 — o que será impactado
 
-Referência informada: branch `feat/extensoes-declarativas-20260914`, HEAD `44dcdafa`, incorporando `origin/main` `60079eb5`. Investigação por leitura de código em 14/set/2026; não executou SQL, serviços, testes ou jornadas. `CONFIRMADO` abaixo significa observado no código, não comportamento medido nesta rodada.
+Referência informada: a branch do PR #1016, commit `b3a056b85`, incorporando `origin/main` `60079eb5`. Investigação por leitura de código em 14/set/2026; não executou SQL, serviços, testes ou jornadas. `CONFIRMADO` abaixo significa observado no código, não comportamento medido nesta rodada.
 
 ## Fronteira aprovada
 

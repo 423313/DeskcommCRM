@@ -1,6 +1,6 @@
 # Marco 2 — bases reais para instalação declarativa
 
-**Referência:** `44dcdafa8`, branch `feat/extensoes-declarativas-20260914`, já integrada a `origin/main` @ `60079eb5`. Investigação de 14/set/2026, somente leitura de código; nenhum serviço iniciado, teste/migration executado ou credencial acessada. **CONFIRMADO** indica código lido; **INFERIDO** indica consequência sem ensaio; **NECESSÁRIO** traduz o aceite aprovado em trabalho ainda não implementado.
+**Referência:** `b3a056b85`, na branch do PR #1016, já integrada a `origin/main` @ `60079eb5`. Investigação de 14/set/2026, somente leitura de código; nenhum serviço iniciado, teste/migration executado ou credencial acessada. **CONFIRMADO** indica código lido; **INFERIDO** indica consequência sem ensaio; **NECESSÁRIO** traduz o aceite aprovado em trabalho ainda não implementado.
 
 **Conclusão:** podemos reutilizar preparação de conteúdo, versões imutáveis, publicação por ponteiro, Storage privado, autorização canônica e pedido durável ao host. Não existe nessas bases um catálogo de extensões separado nem um instalador completo com confiança de origem. Ativar implementação já compilada não demonstra baixar e instalar pacote novo sem rebuild.
 
