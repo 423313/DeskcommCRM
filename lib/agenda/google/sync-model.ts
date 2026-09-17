@@ -209,7 +209,11 @@ export function checkpoint(
 }
 /** Só grupos locais dirty entram no PATCH; RSVP e participantes externos sobrevivem. */
 export function delta(
-  a: AgendamentoParaGoogle & { guest_email?: string | null },
+  a: AgendamentoParaGoogle & {
+    guest_email?: string | null;
+    contact_email?: string | null;
+    contact_nome?: string | null;
+  },
   e: EventoDoGoogle,
   base: Base | null,
   changed: readonly Group[],
@@ -226,16 +230,33 @@ export function delta(
     if (g === "description") patch.description = body.description ?? "";
     if (g === "location") patch.location = body.location ?? "";
     if (g === "guest") {
-      const wanted = a.guest_email?.trim().toLowerCase();
+      const wantedGuest = a.guest_email?.trim().toLowerCase();
+      const wantedContact = a.contact_email?.trim().toLowerCase();
       const existing = e.attendees ?? [];
       const kept = existing.filter(
         (p) =>
           p.organizer ||
           hash(p.email?.toLowerCase()) !== base?.remote.guest ||
-          p.email?.toLowerCase() === wanted,
+          p.email?.toLowerCase() === wantedGuest,
       );
-      if (wanted && !kept.some((p) => p.email?.toLowerCase() === wanted))
-        kept.push({ email: wanted, responseStatus: "needsAction" });
+      if (wantedGuest && !kept.some((p) => p.email?.toLowerCase() === wantedGuest))
+        kept.push({ email: wantedGuest, responseStatus: "needsAction" });
+      // O e-mail da ficha não entra no hash `guest` (stamp SQL só vê
+      // `guest_email`). Sem esta linha, um compromisso já publicado nunca
+      // ganharia o lead como convidado. ponytail: troca de e-mail na ficha
+      // depois da primeira ida não dispara push sozinha — o teto é o stamp;
+      // upgrade é incluir o e-mail do contato em `fn_google_projection_stamp`.
+      if (
+        wantedContact &&
+        !kept.some((p) => p.email?.toLowerCase() === wantedContact)
+      ) {
+        const convidado: { email: string; responseStatus: "needsAction"; displayName?: string } = {
+          email: wantedContact,
+          responseStatus: "needsAction",
+        };
+        if (a.contact_nome?.trim()) convidado.displayName = a.contact_nome.trim();
+        kept.push(convidado);
+      }
       patch.attendees = kept;
     }
   }

@@ -21,8 +21,8 @@ export interface NovoAgendamento {
   /** Endereço/local deste compromisso. Vazio grava sem local. */
   location_details?: string;
   /**
-   * Convidado externo. Vazio ou ausente cria o evento como sempre foi — sem
-   * `attendees` e sem convite nenhum saindo do Google.
+   * Convidado externo. O e-mail da ficha do cliente já entra no convite do
+   * Google quando existe. Vazio ou ausente não convida outra pessoa.
    */
   guest_email?: string;
 }

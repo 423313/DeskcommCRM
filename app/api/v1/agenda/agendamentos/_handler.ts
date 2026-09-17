@@ -83,9 +83,10 @@ export interface MarcarInput {
   /**
    * Convidado externo, digitado na tela. `""` limpa; ausente não mexe.
    *
-   * NÃO é `contact_id`, e a distinção é o motivo de a coluna existir: o contato
-   * é quem recebe o atendimento, e quem precisa entrar na sala pode ser outra
-   * pessoa. Quem transforma isto em convite do Google é o worker de push.
+   * NÃO é o e-mail da ficha do contato. O contato (quem é atendido) entra no
+   * convite do Google pelo e-mail da ficha, quando existe. Este campo é a outra
+   * pessoa — acompanhante, responsável. Quem transforma os dois em `attendees`
+   * é o worker de push.
    */
   guest_email?: string;
 }

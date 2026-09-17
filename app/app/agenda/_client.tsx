@@ -163,8 +163,9 @@ export function AgendaClient({
   // o que a equipe lê ao ver o horário vago.
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
   const [motivo, setMotivo] = React.useState("");
-  // O CONVIDADO, opcional. Vazio mantém o comportamento de sempre: evento no
-  // Google do atendente, sem `attendees` e sem convite saindo para ninguém.
+  // O CONVIDADO, opcional. O e-mail da ficha do cliente já vai no convite
+  // do Google quando existe. Este campo é a outra pessoa (acompanhante).
+  // Vazio = só o cliente (se tiver e-mail) ou só a agenda do atendente.
   const [emailConvidado, setEmailConvidado] = React.useState("");
   const emailConvidadoLimpo = emailConvidado.trim();
   // A MESMA pergunta que a rota faz, feita aqui só para não gastar um 422 com
@@ -649,9 +650,10 @@ export function AgendaClient({
               </div>
             )}
             {/*
-              O CONVIDADO — opcional, e é o que faz o convite do Google existir.
-              Sem e-mail aqui o evento nasce só na agenda do atendente, que é o
-              comportamento que este produto teve desde sempre.
+              O CONVIDADO — opcional. O e-mail da ficha do cliente já entra no
+              convite do Google; este campo é para outra pessoa (acompanhante).
+              Sem os dois, o evento nasce só na agenda do atendente — o lembrete
+              do cliente segue no WhatsApp.
 
               Fica ACIMA do painel de horários de propósito: quem vai convidar
               alguém decide isso ANTES de escolher o horário, e um campo abaixo de
@@ -686,7 +688,9 @@ export function AgendaClient({
               <p id="ajuda-do-convidado" className="mt-1 text-xs text-text-muted">
                 {emailConvidadoInvalido
                   ? t("Endereço inválido — confira antes de marcar.")
-                  : t("Preenchido, o Google envia o convite por e-mail para esta pessoa.")}
+                  : t(
+                      "O cliente com e-mail na ficha já recebe o convite. Preencha só se quiser chamar mais alguém.",
+                    )}
               </p>
             </div>
             {!remarcandoId ? (

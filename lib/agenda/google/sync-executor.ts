@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { observeMeeting, type MeetingObservation } from "./meet";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { paraEventoDoGoogle, PREFIXO_PROPRIEDADE, type EventoDoGoogle } from "./evento";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import {
+  paraEventoDoGoogle,
+  participantesDoAgendamento,
+  PREFIXO_PROPRIEDADE,
+  type EventoDoGoogle,
+} from "./evento";
 import {
   compare,
   checkpoint,
@@ -59,6 +65,30 @@ export function mensagemDaRecusaDePublicacao(
   return erro instanceof Error && "code" in erro
     ? "O compromisso mudou. A sincronização vai reler a versão atual."
     : "Não foi possível sincronizar. Confira a conexão e tente novamente.";
+}
+
+async function emailDoContato(
+  db: SupabaseClient,
+  org: string,
+  contactId: string | null,
+): Promise<{ email: string; nome: string | null } | null> {
+  if (!contactId) return null;
+  const { data, error } = await db
+    .from("contacts")
+    .select("email,name,display_name,is_anonymized")
+    .eq("organization_id", org)
+    .eq("id", contactId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || data.is_anonymized) return null;
+  const email = typeof data.email === "string" ? data.email.trim() : "";
+  if (!email) return null;
+  return { email, nome: nomeDoContato(data) };
+}
+
+function eventoTemEmail(event: EventoDoGoogle | null | undefined, email: string): boolean {
+  const chave = email.trim().toLowerCase();
+  return (event?.attendees ?? []).some((p) => p.email?.trim().toLowerCase() === chave);
 }
 
 export async function tokenForConnection(db: SupabaseClient, org: string, connectionId: string) {
@@ -123,6 +153,7 @@ export async function reconcileAppointment(
   // `apagar` e em `criar`).
   let metodoEmVoo: PendingWrite["method"] = "PATCH";
   try {
+    const contato = await emailDoContato(db, org, a.contact_id);
     if (!a.google_event_id && a.status === "cancelled") {
       await commit({ ack: true });
       return "processed";
@@ -349,9 +380,11 @@ export async function reconcileAppointment(
           "POST",
           paraEventoDoGoogle({
             ...a,
-            participantes: a.guest_email
-              ? [{ email: a.guest_email, aguardandoResposta: true }]
-              : [],
+            participantes: participantesDoAgendamento({
+              contactEmail: contato?.email,
+              contactName: contato?.nome,
+              guestEmail: a.guest_email,
+            }),
           }) as unknown as Record<string, unknown>,
           null,
           [...groups],
@@ -361,7 +394,26 @@ export async function reconcileAppointment(
       }
     }
     if (!remote) throw new Error("Evento sem projeção válida.");
-    const decision = compare(base, local, remote);
+    let decision = compare(base, local, remote);
+    // Compromisso já no Google sem o e-mail da ficha: o stamp não vê o contato,
+    // então `compare` diz convergido e o lead nunca ganharia o convite. Forçar
+    // o grupo `guest` numa PATCH só disto é o conserto — sendUpdates=all manda
+    // o e-mail. Não mexe em conflito nem em accept_remote: nesses casos a
+    // decisão humana vem primeiro.
+    if (
+      contato?.email &&
+      event &&
+      event.status !== "cancelled" &&
+      a.status !== "cancelled" &&
+      !eventoTemEmail(event, contato.email) &&
+      (decision.kind === "converged" || decision.kind === "publish")
+    ) {
+      decision = {
+        kind: "publish",
+        shared: decision.shared,
+        groups: decision.groups.includes("guest") ? decision.groups : [...decision.groups, "guest"],
+      };
+    }
     if (decision.kind === "conflict") {
       await conflict(decision.reason!, remote, decision.groups);
       return "processed";
@@ -420,7 +472,19 @@ export async function reconcileAppointment(
     }
     await send(
       local.shared.cancelled ? "DELETE" : "PATCH",
-      local.shared.cancelled ? undefined : delta(a, event, base, decision.groups, decision.shared),
+      local.shared.cancelled
+        ? undefined
+        : delta(
+            {
+              ...a,
+              contact_email: contato?.email ?? null,
+              contact_nome: contato?.nome ?? null,
+            },
+            event,
+            base,
+            decision.groups,
+            decision.shared,
+          ),
       event.etag ?? null,
       decision.groups,
       decision.shared,

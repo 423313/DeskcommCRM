@@ -16,6 +16,7 @@ import {
   type LeituraDeEvento,
   doEventoDoGoogle,
   paraEventoDoGoogle,
+  participantesDoAgendamento,
 } from "@/lib/agenda/google/evento";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
@@ -182,6 +183,26 @@ describe("paraEventoDoGoogle", () => {
     // e o evento continua válido.
     const corpo = paraEventoDoGoogle(agendamento());
     expect(corpo).not.toHaveProperty("attendees");
+  });
+
+  it("o e-mail da ficha e o convidado digitado viram attendees, sem repetir", () => {
+    expect(
+      participantesDoAgendamento({
+        contactEmail: "lead@clinica.test",
+        contactName: "Ian",
+        guestEmail: "acompanhante@casa.test",
+      }),
+    ).toEqual([
+      { email: "lead@clinica.test", nome: "Ian", aguardandoResposta: true },
+      { email: "acompanhante@casa.test", aguardandoResposta: true },
+    ]);
+    expect(
+      participantesDoAgendamento({
+        contactEmail: "MESMO@clinica.test",
+        guestEmail: "mesmo@clinica.test",
+      }),
+    ).toEqual([{ email: "MESMO@clinica.test", aguardandoResposta: true }]);
+    expect(participantesDoAgendamento({ contactEmail: "  ", guestEmail: null })).toEqual([]);
   });
 
   it("recusa a linha que não é traduzível, em vez de mandar evento pela metade", () => {

@@ -7890,8 +7890,10 @@ export const DICIONARIO: Traducoes = {
   "cliente@empresa.com": { es: "cliente@empresa.com" },
   "Endereço inválido — confira antes de marcar.":
     { es: "Dirección inválida — revísala antes de agendar." },
-  "Preenchido, o Google envia o convite por e-mail para esta pessoa.":
-    { es: "Si se completa, Google envía la invitación por correo a esta persona." },
+  "O cliente com e-mail na ficha já recebe o convite. Preencha só se quiser chamar mais alguém.":
+    {
+      es: "El cliente con correo en la ficha ya recibe la invitación. Complétalo solo si quieres llamar a alguien más.",
+    },
   "Rua, número, sala": { es: "Calle, número, sala" },
   "Onde o atendimento acontece. Digite para filtrar ou salvar para a próxima vez.":
     { es: "Dónde ocurre la atención. Escribe para filtrar o guardar para la próxima vez." },
