@@ -1256,9 +1256,45 @@ E confira o desfecho, porque "a tag saiu" não é "a versão chegou":
 ```bash
 git ls-remote --tags origin 'refs/tags/vX.Y.Z'          # a tag existe
 gh release list --limit 1                                # a release é a Latest
+
+# A vitrine lista, nos TRÊS idiomas. O href carrega o prefixo da PÁGINA, então o padrão
+# se monta com ele: trocar só a URL e manter `href="/changelog/..."` devolve 0 nas
+# páginas em en e es COM a versão listada. Cada linha tem de dar http=200 e listada≥1.
+# O http= vai junto porque `listada=0` sozinho não distingue "não listou ainda" de
+# "essa página não existe" — num 404 a contagem também é 0.
+V=X.Y.Z
+for p in /changelog /en/changelog /es/changelog; do
+  u="https://www.deskcomm.com.br$p"
+  echo "$p: http=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 30 "$u")" \
+       "listada=$(curl -sL --max-time 30 "$u" | grep -c "href=\"$p/$V\"")"
+done
+
 # e as três imagens no digest da versão, contra `stable` — receita em
 # docs/runbooks/ativar-packaging.md
 ```
+
+**Deu 0? Olhe o `http=` ANTES de repetir.** `http=404` não é janela de cache: é a página não
+existir, e nenhuma quantidade de repetição conserta isso. Nesse estado o 0 não fala da versão,
+fala do site — a vitrine sai de um PR do repositório `deskcomm-site`, e sem ele no ar o passo do
+corte reprova toda release. Escale ao mantenedor em vez de investigar o `CHANGELOG.md`.
+
+**`http=200` com `listada=0`? Repita antes de concluir qualquer coisa.** A página revalida a cada
+10 minutos e lê o `CHANGELOG.md` pelo `raw.githubusercontent.com`, que guarda outros 5: a versão
+aparece em até ~15 min, e é o próprio acesso que agenda a regeneração. Por isso o passo do
+`release.yml` repete a sonda 35 vezes com um minuto entre elas — não duas. Se persistir depois
+disso, a ordem de investigação está em `docs/doctrine/versionamento.md` (seção "A vitrine").
+
+O `grep -c` é de propósito: ele conta, e para contar lê a entrada inteira. Um `grep -q` no lugar
+sai no primeiro casamento, o `curl` do outro lado do cano leva EPIPE e desiste — e a versão
+LISTADA aparece como faltando assim que o HTML tiver uma quebra de linha depois do link.
+
+**O status desse caso é 23, não 141.** O `curl` ignora o SIGPIPE e escolhe o próprio código de
+saída (`CURLE_WRITE_ERROR`); com `set -o pipefail` o status do cano vira 23, e o `-s` engole a
+única frase que explicaria (`curl: (23) Failure writing output to destination` — troque por `-S -s`
+para vê-la). O **141** que a lista de erros registra é o caso vizinho — `echo "$DIFF" | grep -q`
+no `complemento.sh` —, em que a esquerda do cano é builtin do shell: builtin morre de sinal mesmo,
+e aí sim 128+13. Procurar 141 numa triagem vermelha por ESTA receita não acha nada.
+
 ---
 
 ## 12-ter. O PR cujo conteúdo entrou DERIVADO — o merge de proveniência

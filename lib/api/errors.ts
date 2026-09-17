@@ -69,7 +69,7 @@ export const ApiErrorCodes = {
   next_action_absent: "next_action_absent", // decisão sobre proposta que não existe (mais) [wave 4]
   next_action_changed: "next_action_changed", // o agente reescreveu a proposta entre o render e o clique
   channel_archived: "channel_archived", // ação sobre canal que o usuário excluiu (a linha só sobrevive como âncora das FKs)
-  knowledge_source_type_in_use: "knowledge_source_type_in_use", // já existe fonte ATIVA daquele tipo para o agente (índice ai_knowledge_sources_unique_per_agent)
+  knowledge_source_type_in_use: "knowledge_source_type_in_use", // fonte ATIVA do mesmo tipo no agente — era o índice ai_knowledge_sources_unique_per_agent, que a 0181 derrubou; nenhuma rota emite mais este código
   voice_already_paired: "voice_already_paired", // POST /voice/sessions/pair com aparelho já vinculado — a saída é DELETE /voice/sessions, nunca re-parear por cima (ver a rota)
 
   // 422 — semântica

@@ -535,6 +535,12 @@ naquele clone — no Claude Code a skill GLOBAL vence a do projeto com o mesmo n
 - `deskcomm-contribuir` — o espelho da triagem, antes do PR; fica quieto para o mantenedor
 - `deskcomm-doutrina` — as três regras que mais custam, antes de escrever código
 
+Os guias têm página pública em [deskcomm.com.br/guias](https://www.deskcomm.com.br/guias), escrita
+à mão em `deskcomm-site/conteudo/guias.ts`: guia criado, renomeado ou com comando novo pede a mesma
+mudança lá — senão a página ensina um guia que não existe. Ela e a de changelog saem do mesmo PR do
+`deskcomm-site`; enquanto as duas não responderem 200, vale o `curl` que abre a seção "A vitrine" de
+[`docs/doctrine/versionamento.md`](docs/doctrine/versionamento.md), não a frase acima.
+
 - `superpowers:brainstorming` — antes de implementar feature não-trivial
 - `superpowers:writing-plans` — pra task com mais de 1 etapa de DB/API
 - `superpowers:test-driven-development` — feature crítica (LGPD, RLS, anti-banimento)
@@ -594,6 +600,12 @@ Antes de declarar uma task pronta:
     presença num check obrigatório reprovaria PR de Dependabot, PR de fork, e o próprio PR
     de release, que consome os fragmentos e deixa o diretório vazio. A presença é cobrada
     aqui, e por quem revisa.
+    **Toda versão publicada aparece na página de changelog da LP** (deskcomm.com.br/changelog,
+    pt-BR/en/es). Ninguém escreve no site: a LP lê o `CHANGELOG.md` da `main`, e o último passo
+    do corte (`release.yml`, job `cortar-tag`) reprova quando a versão não chegou. O texto do
+    fragmento é, portanto, nota pública. Enquanto as três páginas não responderem 200 esse passo
+    reprova TODO corte — a vitrine vem de um PR do `deskcomm-site`, e o `curl` que diz em que
+    estado ela está abre a seção. Lei: seção "A vitrine" de `versionamento.md`.
 
 18. **Se o PR muda comportamento, ele declara o destino: núcleo, extensão, ambos ou
     infraestrutura** (lei em [`docs/doctrine/extensoes.md`](docs/doctrine/extensoes.md)), com a razão
