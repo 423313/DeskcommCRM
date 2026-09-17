@@ -123,7 +123,11 @@ export async function publishFirstVersion(
     .maybeSingle();
   if (orgErr) return { published: false, reason: "failed", message: orgErr.message };
 
-  let provider = selection?.provider ?? provedorDaInstalacao(org?.settings);
+  // Só LEITURA daqui para baixo: depois da decisão da #1007, a escolha do
+  // onboarding é gravada na EMPRESA (no passo da chave, `chaveDaIa.ts`) e a
+  // publicação não move mais o provedor — o que ela escolhe é por onde publica,
+  // e por isso `const` (o `let` era de quando este passo adotava outra chave).
+  const provider = selection?.provider ?? provedorDaInstalacao(org?.settings);
 
   /*
    * ⚠️ QUAL CHAVE ESTA VERSÃO USA — e por que o provedor NÃO muda mais aqui.

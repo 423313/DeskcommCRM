@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: A chave colada de outro provedor publica o atendente
+titulo: A IA escolhida no onboarding passa a valer para a empresa inteira
 ---
 
-Quem configurava a IA colando a chave da OpenAI ficava com o atendente salvo como rascunho, e a tela pedia uma chave da Anthropic — o provedor padrão da instalação. A chave estava gravada e era utilizável; a publicação é que só procurava credencial do provedor da instalação. Agora, quando não há chave utilizável para esse provedor, a publicação adota a credencial validada que a organização já tem, de qualquer provedor, e leva provedor, modelo e chave juntos — o par não pode ser emprestado pela metade. Quem instalou pelo kit, com chave no ambiente, continua publicando exatamente como antes. E quando a chave foi colada há pouco e o provedor ainda não confirmou, a tela passa a dizer que é isso que falta, em vez de pedir para colar de novo uma chave que já está lá.
+Quem escolhia um provedor no passo "Configurar IA" do onboarding e colava a chave dele ficava com a escolha valendo só para o atendente que nascia ali, e o atendente nascia como rascunho pedindo uma chave de outro provedor. A prova de crédito da própria tela piorava a impressão: ela procurava a chave no provedor da empresa, e dizia que não conseguia testar o crédito sobre uma chave que funcionava. Agora a escolha daquele passo passa a valer para a empresa inteira, com o provedor e o modelo do catálogo dele gravados juntos — um não serve sem o outro. Quando a lista de modelos do provedor escolhido ainda não chegou nesta instalação, a IA da empresa continua a anterior e a tela diz por quê; a chave fica guardada do mesmo jeito, e não é preciso colá-la de novo. Trocar a IA de um atendente continua possível, depois, no editor dele.
