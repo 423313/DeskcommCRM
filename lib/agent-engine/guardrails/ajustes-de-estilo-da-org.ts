@@ -61,16 +61,16 @@ export async function lerAjustesDeEstiloDaOrg(
 /**
  * Primeiro item da lista fechada: troca travessão longo por vírgula + espaço.
  *
- * Os dois trims de borda são parte do contrato: `— oi` não pode virar `, oi`, e
- * `até amanhã —` não pode terminar em vírgula. No meio, apenas espaços horizontais
- * em volta do travessão são absorvidos (`a—b` e `a — b`); quebras de linha são
- * preservadas para um ajuste de pontuação não achatar parágrafos da resposta.
+ * Nas bordas de uma linha o travessão some, em vez de virar vírgula órfã. No
+ * meio, apenas espaços horizontais ao redor dele são absorvidos (`a—b` e
+ * `a — b`); `\n` nunca entra na regex, então um ajuste de pontuação não achata
+ * os parágrafos escritos pelo modelo.
  */
 export function removerTravessaoLongo(texto: string): string {
   return texto
-    .replace(/[ \t]*—[ \t]*/g, ", ")
-    .replace(/^,[ \t]*/, "")
-    .replace(/,[ \t]*$/, "");
+    .replace(/(^|\n)[ \t]*—[ \t]*/g, "$1")
+    .replace(/[ \t]*—[ \t]*(?=\n|$)/g, "")
+    .replace(/[ \t]*—[ \t]*/g, ", ");
 }
 
 /** Aplica os itens ligados em ordem de código, nunca por regra livre do usuário. */
