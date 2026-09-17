@@ -6,6 +6,12 @@
  * A consulta em si vive em `lib/escalacao/chamados.ts`: a capacidade "ver os
  * chamados em aberto" do agente lê exatamente a mesma lista, e a tela e o agente
  * discordarem sobre o que está aberto seria o pior tipo de divergência.
+ *
+ * O que a tela e o agente NÃO compartilham é o alcance: `conversations` tem RLS
+ * por atendente, e esta lista devolve nome e telefone do contato. Por isso o
+ * conjunto de conversas visíveis é resolvido ANTES, com o cliente de SESSÃO — é
+ * a policy do banco que responde, não uma cópia da regra aqui —, e a divergência
+ * vai declarada no argumento `visiveisPara` (o agente passa `"todas"`).
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -13,8 +19,9 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { listarChamados } from "@/lib/escalacao/chamados";
+import { conversasVisiveisDosCasos, listarChamados } from "@/lib/escalacao/chamados";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -41,8 +48,14 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   try {
+    // A ordem importa: o recorte é resolvido pelo cliente de SESSÃO (RLS
+    // aplicada) ANTES da leitura privilegiada. Manager e admin seguem vendo
+    // tudo porque é `fn_can_view_conversation` que decide — eles são org-wide
+    // por desenho, e não há regra de papel repetida aqui para desatualizar.
+    const visiveisPara = await conversasVisiveisDosCasos(await createClient(), org.orgId);
     const { chamados, abertos } = await listarChamados(createAdminClient(), org.orgId, {
       estado: parsed.data.status === "open" ? "abertos" : "fechados",
+      visiveisPara,
     });
     return ok({ cases: chamados, open_count: abertos }, { requestId });
   } catch {
