@@ -6,6 +6,9 @@
    Antigravity): o guia `deskcomm-contribuir` (`.agents/skills/deskcomm-contribuir/SKILL.md`) mede
    antes do PR o que a triagem mede depois — branch atrasada, tripla de migration, marca do fork no
    diff, fragmento de release — e arma os hooks de git com `bash .agents/skills/deskcomm-contribuir/scripts/armar-hooks.sh`.
+   Para ter os guias em qualquer pasta: `bash scripts/instalar-guias.sh`. Vai **editar** um guia?
+   Rode `bash scripts/instalar-guias.sh --fonte .` no seu clone — no Claude Code a skill global
+   vence a do projeto, e sem isso você testaria a versão da `main`, não a sua.
 1. Leia [`CLAUDE.md`](CLAUDE.md) — convenções não-negociáveis.
 2. Leia [`ARCHITECTURE.md`](ARCHITECTURE.md) — visão de 1 página.
 3. Identifique o epic de origem em [`docs/stories/epics/MASTER.md`](docs/stories/epics/MASTER.md).
@@ -133,6 +136,14 @@ essas personalizações ao produto inteiro. Isso não gera conflito e não acend
 entram em silêncio para todas as instalações. Foi medido (PR #465): sete arquivos com a marca de um
 cliente, seis deles mergeando sem um único conflito. O caminho é `git checkout -b fix/o-que-voce-conserta`
 a partir da `main` **deste** repositório, com só o seu conserto dentro.
+
+**Com "Allow edits by maintainers" ligado no seu PR, o projeto pode empurrar um conserto direto na
+branch do PR** — um ajuste mecânico, ou a `main` trazida para dentro quando há conflito. Sempre como
+commit novo: nunca `--force`, nunca rebase, e os seus commits ficam como estão. Avisamos no PR antes
+de empurrar. Quando isso acontecer, traga a branch antes de continuar (`git pull --no-rebase`) e só
+então empurre de novo; um `--force` do seu lado apagaria o que foi empurrado do lado de cá. Com a
+opção desligada, o conserto vai numa branch nossa. Nos dois caminhos, o trabalho que é seu entra com
+você como autor.
 
 **A marca da sua instalação não se troca editando código.** Não altere `DEFAULT_APP_NAME` em
 `lib/branding.ts`, nem os títulos em `app/`. O banco manda (`platform_branding`,

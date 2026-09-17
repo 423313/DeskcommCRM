@@ -51,7 +51,7 @@ const PARES: Array<{
   {
     tabela: "extension_operations",
     coluna: "kind",
-    // O recibo das extensões (0263). Quatro cópias no TypeScript viraram uma; um kind
+    // O recibo das extensões (0271). Quatro cópias no TypeScript viraram uma; um kind
     // novo que nascesse só no banco faria o navegador descartar o recibo como inválido.
     arquivo: "lib/extensions/vocabulario.ts",
     simbolo: "EXTENSION_OPERATION_KINDS",

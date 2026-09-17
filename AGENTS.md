@@ -123,7 +123,7 @@ pnpm install          # deps (frozen-lockfile no CI)
 pnpm dev              # dev server
 pnpm build            # next build
 pnpm lint             # eslint
-pnpm typecheck        # tsc --noEmit (estrito)
+pnpm typecheck        # tsc --noEmit -p tsconfig.typecheck.json (inclui tests/)
 pnpm test:unit        # vitest — EXCLUI tests/invariants, tests/e2e e tests/journeys (lista viva em vitest.config.ts → exclude)
 pnpm test:db          # invariantes de banco + gate do baseline (PRECISA de Docker)
 pnpm test:e2e         # Playwright (PRECISA de app rodando + banco semeado)
@@ -465,7 +465,8 @@ regra de packaging acima se mudou o artefato que o self-hoster instala.
 O repositório embute guias em `.agents/skills/` — lidos por Codex, Cursor, OpenCode e
 Antigravity; o Claude Code lê o espelho em `.claude/skills/` (`pnpm skills:sync` regrava, e
 `tests/unit/skills-embutidas.test.ts` reprova divergência). Carregue o guia quando o pedido
-casar, mesmo que a pessoa não saiba que ele existe:
+casar, mesmo que a pessoa não saiba que ele existe. Fora de um clone (ou num clone antigo),
+`bash scripts/instalar-guias.sh` liga os guias nas pastas globais dos cinco CLIs:
 
 | situação | guia |
 |---|---|

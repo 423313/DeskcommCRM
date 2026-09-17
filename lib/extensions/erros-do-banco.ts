@@ -4,7 +4,7 @@
  *
  * Um código que falte aqui não vira erro conhecido: o serviço responde 503 "não foi possível
  * confirmar o resultado", e a tela guarda o pedido como incerto até alguém reconciliar. Por isso
- * `lib/extensions/erros-do-banco.test.ts` lê o bloco da migration 0263 e exige cada código nesta
+ * `lib/extensions/erros-do-banco.test.ts` lê o bloco da migration 0271 e exige cada código nesta
  * tabela. Módulo puro, sem cliente de banco.
  */
 export const SQL_ERRORS: Readonly<Record<string, { message: string; status: number }>> = {

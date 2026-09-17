@@ -101,7 +101,7 @@ export async function POST(_req: NextRequest): Promise<Response> {
 
   if (error) {
     // A preparação de extensão e a atualização dividem a mesma cerca no
-    // banco (migration 0263). A recusa tem uma saída pela gestão, não é uma pane.
+    // banco (migration 0271). A recusa tem uma saída pela gestão, não é uma pane.
     if (error.code === "P0001" && error.message === "extension_preparation_in_progress") {
       return fail(
         "state_conflict",

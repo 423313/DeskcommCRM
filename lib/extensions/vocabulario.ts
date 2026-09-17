@@ -1,7 +1,7 @@
 /**
  * O vocabulário dos recibos de extensão — a ÚNICA lista.
  *
- * `extension_operations.kind` e `.status` têm CHECK no banco (migration 0263). Antes disto o
+ * `extension_operations.kind` e `.status` têm CHECK no banco (migration 0271). Antes disto o
  * TypeScript repetia as listas em quatro lugares (a view, o Zod do serviço e dois módulos do
  * navegador), e nada comparava nenhuma delas com o banco: um kind novo na migration passaria
  * verde e o navegador descartaria o recibo como inválido. O par é vigiado por

@@ -9,8 +9,8 @@ import { SQL_ERRORS } from "./erros-do-banco";
 
 const RAIZ = path.resolve(__dirname, "../..");
 const pasta = path.join(RAIZ, "supabase/migrations");
-const arquivo = readdirSync(pasta).find((nome) => /_0263_extensoes_declarativas\.sql$/.test(nome));
-if (!arquivo) throw new Error("Migration 0263 das extensões não encontrada");
+const arquivo = readdirSync(pasta).find((nome) => /_0271_extensoes_declarativas\.sql$/.test(nome));
+if (!arquivo) throw new Error("Migration 0271 das extensões não encontrada");
 const migration = readFileSync(path.join(pasta, arquivo), "utf8");
 
 describe("códigos das funções de extensão", () => {

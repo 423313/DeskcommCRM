@@ -321,7 +321,7 @@ Ver `README.md` pra detalhes de setup.
 ## Testes
 
 ```bash
-pnpm typecheck   # tsc --noEmit (estrito)
+pnpm typecheck   # tsc --noEmit -p tsconfig.typecheck.json (inclui tests/)
 pnpm lint        # eslint next/core-web-vitals
 pnpm test:unit   # Vitest (NÃO inclui tests/invariants/** — ver abaixo)
 pnpm test:db     # Postgres efêmero + baseline install/update + 364 invariantes
@@ -524,7 +524,9 @@ Processo padrão (siga sempre):
 ## Skills relevantes a usar (Claude Code)
 
 **Guias embutidos neste repositório** (`.claude/skills/`, espelho gerado de `.agents/skills/` — a
-mesma tabela vale para Codex, Cursor, OpenCode e Antigravity; ver `AGENTS.md`):
+mesma tabela vale para Codex, Cursor, OpenCode e Antigravity; ver `AGENTS.md`). Para tê-los em
+qualquer pasta, `bash scripts/instalar-guias.sh`; editando um guia numa branch, rode com `--fonte .`
+naquele clone — no Claude Code a skill GLOBAL vence a do projeto com o mesmo nome:
 
 - `deskcomm-instalar` — instalar, atualizar ou consertar a instalação numa VPS
 - `deskcomm-cliente-novo` — configurar o CRM para um cliente ou nicho (agentes, roteadores, follow-ups, conhecimento)
