@@ -133,6 +133,40 @@ latência que ela existe para matar.
 
 ---
 
+## 2-bis. Destino da mudança — núcleo, extensão ou ambos
+
+Para uma mudança de comportamento, registre o destino e a razão antes da reconciliação. A lei
+é a [doutrina de extensões](../docs/doctrine/extensoes.md) (item 18 do DoD); o critério foi
+aprovado no PROG-017, seção 2 (documento interno de decisão, fora do repositório público; a régua que vale para PR está em [`docs/doctrine/extensoes.md`](../docs/doctrine/extensoes.md)).
+O núcleo precisa continuar útil com zero extensões; nichos podem acrescentar capacidades sem
+determinar a operação de todas as instalações.
+
+| Destino | O que sustenta a classificação |
+|---|---|
+| Núcleo | Operação comum ou garantia compartilhada: identidade, autorização, isolamento, auditoria, contratos e cadeia de envio. Correções de comportamento já entregue continuam no componente responsável. |
+| Extensão | Jornada adicional, aparência, integração ou especialização com configuração, dados e manutenção próprios, cuja ausência não compromete a operação comum. |
+| Ambos | Um ponto genérico necessário no núcleo e uma extensão que o consome. Declare o consumidor real, o contrato e a prova dos dois lados. |
+| Infraestrutura/documentação | Mudança em build, CI, kit de instalação, ferramenta interna ou documentação, inclusive a correção de um comportamento desses componentes (um `update.sh` que falhava é infraestrutura). Correção de comportamento do produto fica no destino do componente que corrige: núcleo ou extensão. Indique a superfície que ela mantém. |
+
+Ser útil a vários setores não obriga um recurso a ficar ligado para todos. Também não basta
+chamar uma pasta de plugin: um candidato precisa de caminho previsto de instalação, permissões,
+compatibilidade, atualização, desativação e preservação dos dados. Se uma fronteira ainda não
+existe, registre a dependência; não anuncie um SDK ou isolamento que ainda não foi entregue.
+
+**Durante a construção da plataforma**, classificar como extensão é orientação de destino, não
+exigência de que o contribuidor use uma ferramenta inexistente. Preserve o trabalho, separe a
+parte genérica quando isso mantiver a intenção e leve apenas a escolha de produto ainda aberta
+ao mantenedor. Uma correção urgente não espera a plataforma inteira ficar pronta. Recursos já
+distribuídos só serão extraídos com equivalência demonstrada e migração explícita; esta
+classificação não autoriza removê-los ou desligá-los.
+
+Na revisão, percorra três relações: o que a mudança usa, quem depende dela e quais falhas externas
+podem alterá-la. Compatibilidade de contrato, filas antigas, revogação e exportação/anonimização
+entram na prova quando forem alcançadas pelo diff. O parecer registra o destino; a publicação e
+o merge continuam sujeitos à fronteira de autorização deste procedimento.
+
+---
+
 ## 3. Gates — na prévia do merge, não na branch
 
 `strict=false` na branch protection: um PR pode ser mergeado sem estar rebasado na `main`. O CI testa
@@ -1035,6 +1069,7 @@ Três regras duras:
 ```
 VEREDITO: MERGEAR | MERGEAR+ISSUE | SEGURAR
 main: <sha curto>            prévia do merge: <tree>
+DESTINO:     <núcleo | extensão | ambos | infraestrutura/documentação> — <razão e dependências>
 MEDIDO:      <o quê> — <comando> — <saída observada>
 NÃO MEDIDO:  <o quê> — <por quê>
 BLOQUEADOR:  <arquivo:linha> — <o defeito> — <como reproduzir>
