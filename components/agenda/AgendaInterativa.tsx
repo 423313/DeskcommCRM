@@ -252,7 +252,10 @@ export function AgendaInterativa({
           {motivo === "sem-jornada" ? (
             <>
               <span className="font-semibold text-text">
-                {t("Você ainda não publicou seus horários de atendimento.")}
+                {/* Sem "Você": esta grade é a de quem a agenda mostra, que não é
+                    necessariamente quem está logado (o atendente abre a agenda
+                    da dona). Quem é, o cabeçalho acima já nomeia. */}
+                {t("A jornada de atendimento ainda não foi publicada.")}
               </span>{" "}
               {t("Sem eles ninguém consegue marcar clicando na grade — nem você, nem o agente.")}
             </>

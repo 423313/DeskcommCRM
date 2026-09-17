@@ -11,6 +11,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { instanteDe } from "@/lib/agenda/fuso";
+import { mensagemDoDiaSemJanela } from "@/lib/agenda/o-que-falta-no-dia";
 import { ApiError } from "@/lib/api/types";
 import { CaretLeft, CaretRight, CheckCircle, Clock, MapPin, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -344,7 +345,19 @@ export function PainelDeMarcacao({
     encaixeLigado && dia ? (
       <div data-testid="encaixe" className={cn("shrink-0", doDia.length > 0 && "mt-2")}>
         {doDia.length === 0 && (
-          <p className="mb-2 text-xs text-text-muted">{t("Nenhum horário publicado neste dia.")}</p>
+          /*
+            DOIS casos diferentes, e a tela dizia um só.
+
+            `publicouHorarios === false` é "esta pessoa NUNCA publicou jornada":
+            nenhum dia abre, e o que falta é configurar os horários. Com jornada
+            publicada, um dia sem janela é FOLGA (ou dia sem expediente) — a
+            pessoa tem jornada, este dia é que não abre. Dizer "nenhum horário
+            publicado neste dia" nos dois casos lê-se como "a pessoa não tem
+            jornada", que é falso no segundo.
+          */
+          <p className="mb-2 text-xs text-text-muted">
+            {t(mensagemDoDiaSemJanela(publicouHorarios))}
+          </p>
         )}
         {/*
           Recolhido quando o dia TEM horários — a grade continua sendo o
@@ -604,10 +617,13 @@ export function PainelDeMarcacao({
             className="mb-3 rounded-sm border border-warning/40 bg-warning-bg p-3"
           >
             <p className="text-sm font-semibold text-text">
-              {t("Você ainda não publicou seus horários de atendimento")}
+              {/* Sem "Você": quem está logado pode não ser o dono desta jornada
+                  — o atendente abre a agenda da dona. Ver
+                  `lib/agenda/responsavel-do-painel.ts`. */}
+              {t("A jornada de atendimento ainda não foi publicada")}
             </p>
             <p className="mt-1 text-xs leading-4 text-text-muted">
-              {t("Sem eles ninguém consegue marcar — nem você, nem o agente.")}
+              {t("Sem eles ninguém consegue marcar — nem quem atende, nem o agente.")}
             </p>
             {/*
               O AVISO VIRA PORTA.

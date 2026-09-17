@@ -201,6 +201,11 @@ export default async function AgendaPage() {
   return (
     <AgendaClient
       fusoDeApresentacao={fusoDeApresentacao}
+      // QUEM ESTÁ LOGADO, do servidor. É o único jeito de a tela saber se o
+      // dono da agenda é ela mesma: sem isto, sem lista da equipe (papel sem
+      // leitura de `/api/v1/team`) a agenda inventava uma pessoa chamada "Você"
+      // para a jornada de OUTRA pessoa — ver o painel em `_client.tsx`.
+      usuarioId={user.id}
       googleConfigurado={googleConfigurado}
       contaConectada={conexoes?.map(c => c.account_email).join(", ") || null}
       enderecoDeRetorno={enderecoDeRetorno()}
