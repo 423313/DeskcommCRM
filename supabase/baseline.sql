@@ -26119,7 +26119,7 @@ create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
 
--- ---- CSV como material de conhecimento (migration 0271) ----
+-- ---- CSV como material de conhecimento (migration 0278) ----
 -- O bucket `ai-policy` (acima, migration 0014) tinha `allowed_mime_types`
 -- fechado em PDF/Markdown/texto. O acervo de IA passou a aceitar CSV
 -- (lib/ai/rag/extractors/csv.ts) — sem esta linha o Storage recusa o upload
