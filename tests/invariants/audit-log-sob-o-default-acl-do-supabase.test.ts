@@ -21,13 +21,14 @@ import { motivoDoErro, sql } from "./psql-transporte";
  *
  * ─── Por que um arquivo próprio ─────────────────────────────────────────────
  *
- * O prelude de `scripts/test-db.sh` reproduz o default ACL do Supabase para
- * FUNÇÕES, não para TABELAS. No Postgres do gate a tabela nasce só com o que o
- * dump concede, e a sonda de `retencao-poda-e-expurgo.test.ts` fica verde com
- * ou sem o revoke de UPDATE/DELETE — ela mede um universo onde o defeito não
- * pode existir. Mudar o prelude muda a régua de todos os arquivos da suíte; este
- * arquivo reproduz o Supabase só para esta tabela, dentro de uma transação
- * desfeita, e deixa o molde intacto.
+ * Ele nasceu porque o prelude de `scripts/test-db.sh` reproduzia o default ACL
+ * do Supabase só para FUNÇÕES: no gate a tabela nascia só com o que o dump
+ * concede, e a sonda de `retencao-poda-e-expurgo.test.ts` ficava verde com ou
+ * sem o revoke de UPDATE/DELETE. Desde a issue #887 o prelude reproduz também o
+ * de TABELAS, e aquela sonda passou a medir o Supabase. Este arquivo continua
+ * pelo que só ele tem: o CONTROLE (sem o bloco da 0258, a simulação reproduz o
+ * defeito e apaga a linha). É ele que prova que o universo medido é um em que o
+ * defeito existe.
  *
  * ─── Como ───────────────────────────────────────────────────────────────────
  *
