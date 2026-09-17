@@ -8,6 +8,120 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.31.0] — 2026-09-17
+
+### Adicionado
+
+- **O agente confere e marca o horário na mesma chamada** Quando a pessoa já dizia o dia **e** a hora ("quinta às 14h"), o agente conferia a agenda,
+  respondia que o horário estava livre e encerrava o turno — **ninguém marcava nada**, e o
+  compromisso só existia na conversa. Consultar e marcar eram duas idas ao modelo, e o turno
+  parava no meio do caminho com o cliente achando que estava agendado.
+
+  Agora o agente tem uma ferramenta que faz as duas coisas numa chamada só: se o horário pedido
+  estiver livre, ele é marcado na mesma resposta, com o mesmo tipo de atendimento, a mesma reserva
+  de horário e a mesma exigência de aprovação da equipe dos agendamentos que já existem.
+
+  Se o horário **não** estiver livre, nada é marcado — e o agente recebe os horários que a agenda
+  tem naquele dia, para oferecer uma alternativa na mesma conversa em vez de pedir outra data no
+  escuro. O horário marcado é sempre o que a agenda confirmou como livre, nunca o texto que veio
+  na mensagem.
+
+  Em quem já usa o assistente, a capacidade nasce desligada: o que cada assistente pode fazer
+  fica gravado na versão publicada dele, e capacidade nova não entra sozinha. Abra o assistente,
+  vá em "O que o agente pode fazer", ligue "Ver se o horário está livre e já marcar" — o pacote
+  "Vender e mover o funil" vai aparecer como parcial até você ligar — e publique. Em instalação
+  nova o assistente já nasce com ela.
+
+- **Etiquetas ganham tela própria para renomear, juntar e excluir** Configurações agora tem a tela de Etiquetas: a lista das etiquetas em uso, com quantos
+  contatos, negócios, conversas e regras de agente cada uma alcança. De lá dá para renomear,
+  juntar duas numa só e excluir. No renomear e no juntar, a regra de marcação dos agentes que
+  escrevia a etiqueta é corrigida na mesma operação, numa transação só; no excluir, a tela avisa
+  quantas regras continuam escrevendo a etiqueta e não mexe nelas.
+
+  Era esse o defeito de origem: renomear a etiqueta sem corrigir a regra deixava o agente
+  escrevendo a grafia velha na próxima conversa. Quem instala não precisa fazer nada: o
+  `update.sh` aplica a migration e a tela aparece em Configurações para gerentes e
+  administradores.
+
+- **Levar um negócio aberto para outro funil (o clone que a P-01 mandava usar)** Negócio que começou no funil errado (ou que muda de natureza no meio do caminho —
+  o pedido de suporte que virou venda) não tinha por onde sair: o quadro só sabe
+  trocar a etapa DENTRO do mesmo funil, e quem tentava pela API recebia "não é
+  permitido, clone o negócio" — apontando para um clone que não existia em lugar
+  nenhum do produto. A instrução apontava para o vazio.
+
+  Agora existe a troca de funil, por enquanto pela API (`POST
+  /api/v1/leads/[id]/clone`); o botão no quadro vem na fatia seguinte. O negócio é
+  criado no funil de destino (na primeira etapa aberta, ou na etapa que você
+  escolher) com os mesmos dados — título, contato, valor, dono, previsão, tags e
+  campos personalizados (os que o funil de destino não tiver continuam guardados no
+  negócio, mas só aparecem na tela quando você criá-los lá) — e a origem é encerrada
+  como perdida. Os dois lados contam a troca na linha do tempo: o novo negócio mostra
+  de qual funil veio, e o antigo mostra para qual funil foi levado, em vez de
+  aparecer como uma perda comum.
+
+  Duas coisas que a troca NÃO faz, de propósito: negócio já encerrado não é clonado
+  (reescrever um ganho como perda apagaria o desfecho que alguém registrou) e trocar
+  de etapa dentro do mesmo funil continua sendo o arrastar de sempre, sem encerrar
+  nada.
+
+### Alterado
+
+- **O botão que cria um lead no painel do Inbox passa a se chamar "Novo Lead"** No painel lateral do Inbox, o botão "Lead" passa a se chamar "Novo Lead". Ele sempre abriu o cadastro de uma negociação nova para o contato, mas o nome curto dava a entender que mostraria o lead que já existe. O lead existente continua sendo editado em "Leads recentes", no mesmo painel, e a ficha da pessoa continua em "Ver contato". Nada muda no que o botão faz. Crédito: @rafaelbatistazz.
+
+### Corrigido
+
+- **A janela de perder mostra os motivos que você cadastrou no funil** Quem cadastrava os próprios motivos de perda em Funis não os encontrava na hora de marcar um
+  card como perdido: a janela oferecia sempre a lista padrão do produto. O operador escolhia
+  "Outro", digitava o motivo à mão e só descobria no clique se aquele funil aceitava o texto —
+  com erro na cara quando não aceitava.
+
+  Agora a janela lê os motivos do funil do próprio card. Se você cadastrou "Sem orçamento" e
+  "Fora do perfil", são esses dois que aparecem, com as suas palavras; sem nada cadastrado, a
+  lista padrão continua valendo. Nos funis com motivos cadastrados, "Outro" passa a recusar ali na
+  tela o texto que aquele funil não aceita — antes do clique, em vez de depois dele — e a dizer onde
+  se cadastra um motivo novo. Deixar o detalhe em branco continua valendo em qualquer funil: grava
+  "Outro", como sempre.
+
+- **Arrastar o mesmo card duas vezes seguidas no funil deixa de dar "modificado por outro usuário"** No funil, o primeiro arrastar de um card funcionava, mas arrastar o mesmo card de novo logo em seguida mostrava "Lead foi modificado por outro usuário. Recarregue e tente novamente.", sem ninguém mais usando, e só voltava a funcionar recarregando a página. O próprio movimento registra a mudança de etapa no histórico, e esse registro atualizava o card de novo depois que a tela já tinha guardado a versão anterior. Agora o servidor devolve a versão final do card e a tela a guarda na hora, então, assim que o primeiro movimento é confirmado, dá para mover o mesmo card de novo sem recarregar a página. Crédito: @rafaelbatistazz.
+
+- **O compromisso do Google que atravessa a borda do período volta a aparecer na grade** O compromisso do Google Agenda que começa antes do período que a tela desenha e termina dentro dele — das 23:30 às 00:30, por exemplo — passa a aparecer quando atravessa a borda desse período: a virada da semana na visão Semana, a virada do mês na visão Mês e toda meia-noite na visão Dia. Ele entra fatiado no pedaço que cai dentro do período. Antes, a grade perguntava pelo começo do compromisso e só desenhava os que começavam dentro do período: o horário que a tela mostrava livre era recusado na hora de marcar. A tela e a rota que a alimenta passam a usar a mesma conta do motor de disponibilidade (interseção de intervalos), lida de um só lugar. Para quem lê a lista pela API, o bloco do Google passa a vir recortado no período pedido — o instante de começo nunca é anterior ao período, e o de fim nunca é posterior. Fora isso, nada mudou: a grade continua recebendo apenas identificador, dono e os dois instantes, nunca o conteúdo do evento.
+
+- **Mover um card para uma etapa de perda sem motivo deixa de dar erro 500** Mover um card para uma etapa que fecha o negócio como perdido sem informar o
+  motivo respondia "Erro inesperado" (500) — e o card não se movia, sem dizer por
+  quê. Acontecia nos três caminhos que trocam a etapa do negócio: o arrasto no
+  quadro, o movimento em lote e o movimento feito pelo assistente de IA.
+
+  O motivo da perda é exigência do banco desde sempre (a etapa de perda fecha o
+  negócio, e fechar como perdido sem causa registrada não é permitido). Quem estava
+  errado era a tela, que deixava a pergunta chegar ao banco e devolvia a recusa como
+  falha de servidor.
+
+  Agora a resposta é a recusa de negócio, com o que fazer: no arrasto, o card volta
+  para a coluna de origem e a tela avisa "Informe o motivo da perda: use “Marcar
+  como perdido” no menu do card, que pede o motivo."; no lote, a recusa avisa antes de tentar, em vez de derrubar o lote inteiro
+  por causa de um card; e o assistente de IA não leva o card para a etapa de perda:
+  ele avisa na Central que o negócio deveria ser marcado como perdido e que o motivo
+  é uma decisão de quem está no negócio. O aviso não se repete a cada mensagem do
+  cliente: enquanto o primeiro estiver aberto na Central, não nasce outro igual para o
+  mesmo negócio.
+
+  Nenhuma ação é necessária na instalação: a regra do banco não mudou e nenhum dado
+  foi tocado.
+
+- **Dá para excluir um card do funil pelo menu do próprio card, inclusive no celular** Para excluir um card do funil era preciso selecioná-lo e usar a barra de ações em lote. No celular e no tablet isso era impossível: a caixa de seleção e o botão de menu do card só apareciam com o mouse em cima. Agora o menu de ações do card tem "Excluir", com confirmação que diz o nome do card e o que vai junto (o histórico de atividades; o contato e as conversas continuam), e o botão do menu fica visível em telas de toque. A opção aparece para quem já podia mexer no funil. Selecionar vários cards de uma vez continua só no computador: a caixa de seleção do card segue aparecendo apenas com o mouse em cima. Crédito: @rafaelbatistazz.
+
+- **Conectar o Google Agenda deixa escolher qualquer conta do Google, não só a do e-mail de login** Ao conectar o Google Agenda, quem já tinha aberta no navegador a conta com o mesmo e-mail do login no CRM ia direto para ela, sem passar pela escolha de conta. Quem entra no CRM com um e-mail e tem a agenda em outro não conseguia vincular a agenda certa. Agora o CRM pede ao Google o seletor de contas em toda conexão, com a conta do login apenas sugerida — quem desenha essa tela é o Google. A conexão continua sem expirar sozinha. Crédito: @rafaelbatistazz e @webtecnica.
+
+- **"Leads recentes" do Inbox diz o funil, a etapa e o status em português** No painel lateral do Inbox, a seção "Leads recentes" mostrava só título, status e valor. Dois leads de mesmo nome em funis diferentes ficavam idênticos ("open · —"), e o status aparecia em inglês. Agora cada lead mostra o funil e a etapa onde está e o status traduzido (Aberto, Ganho, Perdido). Leads de funil arquivado deixam de aparecer na lista. Arquivar um funil não fecha os leads dele, então eles continuavam na lista. Nenhum dado é alterado. Crédito: @rafaelbatistazz.
+
+- **O nome que você edita no contato passa a aparecer no lugar do nome do WhatsApp** Quem corrigia o nome de um contato em "Editar contato" continuava vendo o nome do perfil do WhatsApp — às vezes um apelido ou um emoji — no Inbox, na lista de contatos, nas notificações e no radar de risco. O agente de IA e o lembrete da agenda também chamavam o cliente pelo nome do perfil. Agora o nome preenchido na ficha vem primeiro em todos esses lugares; o nome do WhatsApp só aparece quando o contato não tem nome cadastrado. Nada precisa ser refeito: contatos que já têm nome passam a mostrá-lo na hora. O mesmo vale para o card da Agenda, para a prévia de um pedido de LGPD e para o título do negócio que uma automação cria — três lugares que ainda montavam o nome por conta própria e podiam mostrar um código interno do WhatsApp no lugar do nome. Um efeito fica GRAVADO: o card de negócio que nascer de uma primeira mensagem a partir de agora leva esse nome no título — os cards que já existem continuam com o título que receberam quando nasceram. Crédito: @rafaelbatistazz.
+
+- **O Radar de risco deixa de mostrar leads de funil arquivado** Depois de arquivar um funil, os leads dele continuavam aparecendo no Radar de risco, e na lista de demandas sem próximo passo, como se precisassem de atenção. Arquivar um funil não fecha os leads, e o radar lia todos os leads abertos da organização. Agora leads de funil arquivado e as demandas ligadas a eles ficam de fora do radar, tanto na tela quanto na consulta que o agente de IA faz. Nenhum dado é alterado: os leads e o histórico continuam guardados no funil arquivado. Um número ainda não acompanha: o contador "Demandas abertas sem próximo passo", na tela de Métricas, continua somando as demandas de funil arquivado — ele sai de outra consulta, e será alinhado em seguida. Até lá as duas telas mostram números diferentes para a mesma coisa, e o do Radar é o que já exclui o funil arquivado. Crédito: @rafaelbatistazz.
+
+- **Tag em lote no funil mostra as tags que já existem** No funil, ao selecionar vários cards, o menu "Tag…" da barra de ações só oferecia um campo para digitar uma tag nova, sem mostrar as tags que os leads já usam. Agora o menu lista até 10 tags já usadas pelos leads do funil, filtrando pelo que você digita, e clicar aplica a tag a todos os cards selecionados. Digitar uma tag nova continua funcionando. A atualização não muda nada no seu banco: a tela passa a mostrar tags que já existem. Crédito: @rafaelbatistazz.
+
+- **Tags do contato no Inbox sugerem as tags que já existem** No painel lateral do Inbox, o editor de tags do contato não sugeria nada: cada pessoa digitava a tag do zero, e a mesma ideia virava várias tags diferentes ("google", "gogle", "google ads"). Agora ele mostra, como botões "+ tag", as tags que já existem nos contatos mais recentes da organização — até oito por vez —, do mesmo jeito que o editor de tags da conversa já fazia. Clicar aplica a tag, sempre em minúsculas — é a mesma forma com que o editor já gravava o que se digita, então o rótulo do botão diz exatamente o que vai ser gravado. A atualização não mexe em nenhum dado: as tags que já estão gravadas continuam como estão, e o que muda é a sugestão aparecendo na tela. Crédito: @rafaelbatistazz.
+
 ## [1.30.0] — 2026-09-16
 
 ### Adicionado
@@ -4983,7 +5097,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.31.0...HEAD
+[1.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...v1.31.0
 [1.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.29.0...v1.30.0
 [1.29.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.28.0...v1.29.0
 [1.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.3...v1.28.0
