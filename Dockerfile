@@ -45,6 +45,23 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
 # concern só da Vercel; aqui o ganho de tempo de build é o que importa pro leigo.
 RUN pnpm build
 
+# `outputFileTracingIncludes` (next.config.ts) copia o CONTEÚDO de pdfjs-dist e
+# @napi-rs/canvas pro standalone, mas não os DOIS SYMLINKS que pnpm cria e que a
+# resolução de módulo do Node precisa pra achar os pacotes pelo nome — o Turbopack
+# não tem como emiti-los por glob (é o "Is a directory" do comentário ao lado do
+# glob do canvas: ele tenta ler o symlink como arquivo pra hashear o .nft.json e
+# quebra). Sem isto, medido: os 554 arquivos de pdfjs-dist chegam ao standalone e
+# mesmo assim `import("pdfjs-dist/legacy/build/pdf.mjs")` falha em runtime com
+# "Cannot find package 'pdfjs-dist'" — o pacote existe em disco e é inalcançável
+# por nome. `cp -a` roda como shell puro, fora do tracer, e preserva os dois como
+# symlink de verdade: o de topo (pra o import do PRÓPRIO app) e o interno de
+# pdfjs-dist (pra o `require("@napi-rs/canvas")` que a lib faz sozinha).
+RUN PDFJS_DIR=$(basename node_modules/.pnpm/pdfjs-dist@*) && \
+    cp -a "node_modules/pdfjs-dist" ".next/standalone/node_modules/pdfjs-dist" && \
+    mkdir -p ".next/standalone/node_modules/.pnpm/$PDFJS_DIR/node_modules/@napi-rs" && \
+    cp -a "node_modules/.pnpm/$PDFJS_DIR/node_modules/@napi-rs/canvas" \
+          ".next/standalone/node_modules/.pnpm/$PDFJS_DIR/node_modules/@napi-rs/canvas"
+
 # ---- runner: imagem slim de produção ----
 FROM node:22-alpine AS runner
 WORKDIR /app
