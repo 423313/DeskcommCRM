@@ -210,6 +210,31 @@ alter default privileges for role postgres in schema public grant all on functio
 alter default privileges for role postgres in schema public grant all on functions to service_role;
 alter default privileges for role postgres in schema public revoke execute on functions from public;
 
+-- O MESMO DEFAULT ACL, PARA TABELAS (issue #887).
+--
+-- O bloco acima cobria só funções, e o gate ficava cego para privilégio de
+-- TABELA. Num Supabase de verdade toda tabela criada em `public` nasce com
+-- privilégio total para anon, authenticated e service_role, e o `GRANT` que o
+-- dump enumera depois só ACRESCENTA — não revoga nada. Aqui, sem estas linhas, a
+-- tabela do corpo nascia só com o que o dump concede, e todo invariante do tipo
+-- "o papel X não tem o privilégio Y na tabela Z" ficava verde por construção.
+-- Foi assim que o `service_role` seguia apagando e reescrevendo linhas de
+-- `api_audit_log` com este gate verde, até a migration 0258.
+--
+-- Medido em 2026-09-17 no `pg_default_acl` de um Supabase local
+-- (supabase/postgres:17.6.1.106):
+--
+--     postgres | public | TABLES | {postgres=arwdDxtm,anon=arwdDxtm,
+--                                   authenticated=arwdDxtm,service_role=arwdDxtm}
+--
+-- `grant all` reproduz as duas majors: o `m` (MAINTAIN) só existe no pg17.
+--
+-- `scripts/test-update-com-dados.sh` extrai este bloco inteiro, então as linhas
+-- abaixo valem para os dois scripts.
+alter default privileges for role postgres in schema public grant all on tables to anon;
+alter default privileges for role postgres in schema public grant all on tables to authenticated;
+alter default privileges for role postgres in schema public grant all on tables to service_role;
+
 create schema if not exists auth;
 create schema if not exists extensions;
 
@@ -342,6 +367,36 @@ if [ "$fidelidade" != "t" ]; then
   exit 1
 fi
 echo "    ✓ definer nova nasce com grant direto a anon (armadilha do produto reproduzida)"
+
+# A GÊMEA PARA TABELAS (issue #887), no mesmo instante e pelo mesmo motivo: depois
+# de o baseline rodar, as tabelas do corpo já existem e o banco fiel e o fictício
+# deixam de ser distinguíveis por dentro da suíte.
+#
+# Mede os TRÊS papéis, e não só anon como a sonda de funções: o dano que abriu a
+# issue foi do service_role, e uma sonda que olhasse só anon aprovaria o prelude
+# sem a linha dele. DELETE é o privilégio medido porque é o que apaga linha de
+# tabela append-only.
+fidelidade_tabelas="$(docker exec -i "$CONTAINER" psql -U postgres -d "$TEMPLATE" -v ON_ERROR_STOP=1 -q -tA -f - <<'SQL'
+create table public.sonda_fidelidade_do_harness (id int);
+select count(distinct a.grantee)
+  from pg_class c, aclexplode(c.relacl) a
+ where c.oid = 'public.sonda_fidelidade_do_harness'::regclass
+   and a.privilege_type = 'DELETE'
+   and a.grantee in ('anon'::regrole, 'authenticated'::regrole, 'service_role'::regrole);
+drop table public.sonda_fidelidade_do_harness;
+SQL
+)"
+if [ "$fidelidade_tabelas" != "3" ]; then
+  echo "FATAL: neste banco uma tabela nova em public NÃO nasce com DELETE direto para anon," >&2
+  echo "       authenticated e service_role (achei ${fidelidade_tabelas:-nada} de 3). Num projeto" >&2
+  echo "       Supabase de verdade ela nasce, porque o bootstrap grava um ALTER DEFAULT PRIVILEGES" >&2
+  echo "       … ON TABLES em pg_default_acl antes de qualquer SQL nosso. Sem reproduzir isso," >&2
+  echo "       todo invariante que afirma 'o papel X não tem o privilégio Y na tabela Z' fica" >&2
+  echo "       VERDE por construção (issue #887). Restaure as 3 linhas de" >&2
+  echo "       'alter default privileges … on tables' no prelude acima." >&2
+  exit 1
+fi
+echo "    ✓ tabela nova nasce com DELETE direto para anon, authenticated e service_role"
 
 echo "==> modo INSTALL: aplicando baseline.sql com ON_ERROR_STOP=1"
 psql_install < "$BASELINE"
