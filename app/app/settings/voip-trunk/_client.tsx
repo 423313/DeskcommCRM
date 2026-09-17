@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ export function TrunkSettingsClient({
   initialData: TrunkSettingsRow | null;
   canWrite: boolean;
 }) {
+  const t = useT();
   const { data: trunk } = useTrunkSettings(initialData);
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => estadoInicial(trunk));
@@ -136,11 +138,11 @@ retry_interval=60`
     <div className="flex max-w-2xl flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Provedor SIP</CardTitle>
+          <CardTitle>{t("Provedor SIP")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="host">Host</Label>
+            <Label htmlFor="host">{t("Host")}</Label>
             <Input
               id="host"
               placeholder="sip.seuprovedor.com.br"
@@ -150,7 +152,7 @@ retry_interval=60`
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="port">Porta</Label>
+            <Label htmlFor="port">{t("Porta")}</Label>
             <Input
               id="port"
               type="number"
@@ -160,7 +162,7 @@ retry_interval=60`
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="username">Usuário</Label>
+            <Label htmlFor="username">{t("Usuário")}</Label>
             <Input
               id="username"
               value={form.username}
@@ -170,22 +172,27 @@ retry_interval=60`
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="password">
-              Senha {trunk ? <span className="text-muted-foreground">(configurada, termina em {trunk.password_last4})</span> : null}
+              {t("Senha")}{" "}
+              {trunk ? (
+                <span className="text-muted-foreground">
+                  ({t("configurada, termina em")} {trunk.password_last4})
+                </span>
+              ) : null}
             </Label>
             <Input
               id="password"
               type="password"
-              placeholder={trunk ? "Deixe em branco para manter a atual" : ""}
+              placeholder={trunk ? t("Deixe em branco para manter a atual") : ""}
               value={form.password}
               disabled={!canWrite}
               onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="from_domain">From-domain (opcional)</Label>
+            <Label htmlFor="from_domain">{t("From-domain (opcional)")}</Label>
             <Input
               id="from_domain"
-              placeholder="IP público da VPS, se o provedor exigir"
+              placeholder={t("IP público da VPS, se o provedor exigir")}
               value={form.from_domain}
               disabled={!canWrite}
               onChange={(e) => setForm((f) => ({ ...f, from_domain: e.target.value }))}
@@ -198,11 +205,11 @@ retry_interval=60`
               disabled={!canWrite}
               onCheckedChange={(checked) => setForm((f) => ({ ...f, is_active: checked }))}
             />
-            <Label htmlFor="is_active">Ativo</Label>
+            <Label htmlFor="is_active">{t("Ativo")}</Label>
           </div>
           {canWrite && (
             <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-fit">
-              {mutation.isPending ? "Salvando..." : "Salvar"}
+              {mutation.isPending ? t("Salvando...") : t("Salvar")}
             </Button>
           )}
         </CardContent>
@@ -211,12 +218,13 @@ retry_interval=60`
       {blocoParaColar && (
         <Card>
           <CardHeader>
-            <CardTitle>Cole em asterisk/pjsip.conf</CardTitle>
+            <CardTitle>{t("Cole em asterisk/pjsip.conf")}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
-              Só aparece agora, logo após salvar — a senha não é guardada em claro, então este bloco
-              completo não pode ser reconstruído depois.
+              {t(
+                "Só aparece agora, logo após salvar — a senha não é guardada em claro, então este bloco completo não pode ser reconstruído depois.",
+              )}
             </p>
             <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">{blocoParaColar}</pre>
             <Button
@@ -224,7 +232,7 @@ retry_interval=60`
               className="w-fit"
               onClick={() => navigator.clipboard.writeText(blocoParaColar)}
             >
-              Copiar
+              {t("Copiar")}
             </Button>
           </CardContent>
         </Card>

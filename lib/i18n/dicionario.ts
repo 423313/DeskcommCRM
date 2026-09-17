@@ -8135,6 +8135,24 @@ export const DICIONARIO: Traducoes = {
   "Este ponto usa o modelo definido na versão publicada do agente; a escolha do painel não se aplica.": {
     es: "Este punto usa el modelo definido en la versión publicada del agente; la elección del panel no se aplica.",
   },
+
+  // ─── app/app/settings/voip-trunk (Trunk SIP, migration 0257) ───
+  "Trunk SIP": { es: "Trunk SIP" },
+  "Credenciais de registro do seu provedor SIP (Asterisk/AudioSocket). Depois de salvar, aplique o bloco abaixo em": {
+    es: "Credenciales de registro de tu proveedor SIP (Asterisk/AudioSocket). Después de guardar, aplica el bloque de abajo en",
+  },
+  "na VPS — a aplicação ainda é manual.": { es: "en la VPS — la aplicación todavía es manual." },
+  "Provedor SIP": { es: "Proveedor SIP" },
+  Host: { es: "Host" },
+  Porta: { es: "Puerto" },
+  "configurada, termina em": { es: "configurada, termina en" },
+  "Deixe em branco para manter a atual": { es: "Déjalo en blanco para mantener la actual" },
+  "From-domain (opcional)": { es: "From-domain (opcional)" },
+  "IP público da VPS, se o provedor exigir": { es: "IP público de la VPS, si el proveedor lo exige" },
+  "Cole em asterisk/pjsip.conf": { es: "Pega esto en asterisk/pjsip.conf" },
+  "Só aparece agora, logo após salvar — a senha não é guardada em claro, então este bloco completo não pode ser reconstruído depois.": {
+    es: "Solo aparece ahora, justo después de guardar — la contraseña no se guarda en texto plano, así que este bloque completo no se puede reconstruir después.",
+  },
 };
 
 /**

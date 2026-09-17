@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useT } from "@/hooks/i18n/useT";
 import { useCallsQuery, useDialCall, type CallRow } from "@/hooks/calls/useCallsQuery";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 
@@ -69,6 +70,7 @@ function counterpartLabel(call: CallRow): string {
 }
 
 function DialerDialog() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
   const dial = useDialCall();
@@ -89,18 +91,18 @@ function DialerDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Nova ligação</Button>
+        <Button>{t("Nova ligação")}</Button>
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Nova ligação</DialogTitle>
+            <DialogTitle>{t("Nova ligação")}</DialogTitle>
             <DialogDescription>
-              A IA liga pra esse número e conduz a chamada — falar você mesmo ainda não está disponível.
+              {t("A IA liga pra esse número e conduz a chamada — falar você mesmo ainda não está disponível.")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 py-4">
-            <Label htmlFor="dialer-number">Número</Label>
+            <Label htmlFor="dialer-number">{t("Número")}</Label>
             <Input
               id="dialer-number"
               type="tel"
@@ -114,7 +116,7 @@ function DialerDialog() {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={dial.isPending || toNumber.trim().length < 8}>
-              {dial.isPending ? "Ligando…" : "Ligar com IA"}
+              {dial.isPending ? t("Ligando…") : t("Ligar com IA")}
             </Button>
           </DialogFooter>
         </form>
@@ -124,6 +126,7 @@ function DialerDialog() {
 }
 
 export function CallsClient() {
+  const t = useT();
   const { data: calls, isLoading } = useCallsQuery();
   const [selected, setSelected] = useState<CallRow | null>(null);
 
@@ -131,9 +134,9 @@ export function CallsClient() {
     <div className="flex h-full flex-col gap-6 p-6">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Chamadas</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("Chamadas")}</h1>
           <p className="text-sm text-muted-foreground">
-            Histórico de ligações (voz por IA) com transcrição.
+            {t("Histórico de ligações (voz por IA) com transcrição.")}
           </p>
         </div>
         <DialerDialog />
@@ -150,12 +153,12 @@ export function CallsClient() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Direção</TableHead>
-                <TableHead>Quem é</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Atendido por</TableHead>
-                <TableHead>Duração</TableHead>
+                <TableHead>{t("Data")}</TableHead>
+                <TableHead>{t("Direção")}</TableHead>
+                <TableHead>{t("Quem é")}</TableHead>
+                <TableHead>{t("Status")}</TableHead>
+                <TableHead>{t("Atendido por")}</TableHead>
+                <TableHead>{t("Duração")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -166,19 +169,19 @@ export function CallsClient() {
                   onClick={() => setSelected(call)}
                 >
                   <TableCell>{fmtDate(call.started_at)}</TableCell>
-                  <TableCell>{call.direction === "outbound" ? "Saída" : "Entrada"}</TableCell>
+                  <TableCell>{call.direction === "outbound" ? t("Saída") : t("Entrada")}</TableCell>
                   <TableCell className="font-medium">{counterpartLabel(call)}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{STATUS_LABEL[call.status]}</Badge>
+                    <Badge variant="outline">{t(STATUS_LABEL[call.status])}</Badge>
                   </TableCell>
-                  <TableCell>{call.handled_by === "ai" ? "IA" : "Humano"}</TableCell>
+                  <TableCell>{call.handled_by === "ai" ? t("IA") : t("Humano")}</TableCell>
                   <TableCell>{fmtDuration(call.duration_seconds)}</TableCell>
                 </TableRow>
               ))}
               {(calls ?? []).length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    Nenhuma chamada ainda.
+                    {t("Nenhuma chamada ainda.")}
                   </TableCell>
                 </TableRow>
               )}
@@ -193,11 +196,12 @@ export function CallsClient() {
             <>
               <DialogHeader>
                 <DialogTitle>
-                  Chamada com {counterpartLabel(selected)}
+                  {t("Chamada com")} {counterpartLabel(selected)}
                 </DialogTitle>
                 <DialogDescription>
-                  {fmtDate(selected.started_at)} · {selected.direction === "outbound" ? "Saída" : "Entrada"} ·{" "}
-                  {STATUS_LABEL[selected.status]}
+                  {fmtDate(selected.started_at)} ·{" "}
+                  {selected.direction === "outbound" ? t("Saída") : t("Entrada")} ·{" "}
+                  {t(STATUS_LABEL[selected.status])}
                 </DialogDescription>
               </DialogHeader>
               <ScrollArea className="max-h-[60vh] pr-4">
@@ -217,13 +221,13 @@ export function CallsClient() {
                             ? "Iara"
                             : counterpartLabel(selected)}
                         </div>
-                        {turn.text || <span className="italic opacity-60">(sem áudio detectado)</span>}
+                        {turn.text || <span className="italic opacity-60">{t("(sem áudio detectado)")}</span>}
                       </div>
                     ))}
                   </div>
                 ) : (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    Sem transcrição pra esta chamada.
+                    {t("Sem transcrição pra esta chamada.")}
                   </p>
                 )}
               </ScrollArea>

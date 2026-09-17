@@ -243,6 +243,42 @@ beforeAll(() => {
               'auth-rls'
             );
         end if;
+
+        -- voip_trunk_settings (migration 0257): credenciais do trunk SIP da
+        -- organizacao. PK e o proprio organization_id (um trunk por org), e a
+        -- senha cifrada tem o MESMO esquema de ai_provider_credentials -- os
+        -- bytea aqui sao so preenchimento minimo pra satisfazer os NOT NULL,
+        -- nunca material real.
+        if not exists (select 1 from public.voip_trunk_settings where organization_id = v_org) then
+          insert into public.voip_trunk_settings
+            (organization_id, host, username, password_encrypted, password_iv, password_tag, password_last4, endpoint_name)
+            values (v_org, 'sip.rls-invariant.test', 'rls-user', '\\x00'::bytea, '\\x00'::bytea, '\\x00'::bytea, '0000', 'org-' || v_org::text || '-trunk-endpoint');
+        end if;
+
+        -- phone_numbers (SIP module, #677): numeros (DID) que a org cadastrou
+        -- pra receber ligacoes. 'number' e UNIQUE global, entao cada org
+        -- precisa de um valor distinto -- sufixado pelo proprio v_org.
+        if not exists (select 1 from public.phone_numbers where organization_id = v_org) then
+          insert into public.phone_numbers (organization_id, number, trunk_endpoint)
+            values (v_org, 'rls-' || v_org::text, 'trunk-endpoint');
+        end if;
+
+        -- voice_calls (0233, trazida de main): a chamada pendurada na sessao
+        -- de canal da org -- mesmo seed que a main ja usa pra esta tabela.
+        if not exists (select 1 from public.voice_calls where organization_id = v_org) then
+          insert into public.voice_calls
+            (organization_id, channel_session_id, contact_id, wacalls_call_id,
+             direction, peer_phone, status)
+            values (v_org, v_sess, v_contact, 'rls-' || v_org::text,
+                    'inbound', '5511900000000', 'ended');
+        end if;
+
+        -- org_voice_calls (0236, trazida de main): o opt-in da chamada de voz,
+        -- uma linha por organizacao. PK e o proprio organization_id.
+        if not exists (select 1 from public.org_voice_calls where organization_id = v_org) then
+          insert into public.org_voice_calls (organization_id, enabled)
+            values (v_org, false);
+        end if;
       end loop;
     end
     $seed$;
@@ -294,6 +330,23 @@ export const TABLES = [
   "crm_tasks",
   // 0227 — texto de sugestões: org + visibilidade da conversa por authenticated.
   "ai_reply_drafts",
+  // migration 0257 — credenciais do trunk SIP por organizacao. Leitura e
+  // qualquer membro da org (a tela de originar chamada precisa saber SE
+  // existe trunk configurado); a ESCRITA exige admin (mesmo nivel de
+  // ai_provider_credentials) e NAO e medida aqui.
+  "voip_trunk_settings",
+  // phone_numbers (SIP module, #677): numeros (DID) que recebem ligacao.
+  // Leitura/escrita org-scoped (sem segundo eixo medido aqui -- ver a nota
+  // de DIVIDA_RBAC_CONHECIDA em rbac-config-ia-canais.test.ts).
+  "phone_numbers",
+  // voice_calls (migration 0233, trazida de main via #677/#252): historico
+  // de chamada, compartilhado entre SIP e WhatsApp/WaCalls (discriminado por
+  // `provider`). Prova propria da main; entra aqui so pra esta branch nao
+  // ficar sem prova ate o rebase renumerar as migrations.
+  "voice_calls",
+  // org_voice_calls (migration 0236, trazida de main): opt-in da chamada de
+  // voz por organizacao, uma linha por org.
+  "org_voice_calls",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"
