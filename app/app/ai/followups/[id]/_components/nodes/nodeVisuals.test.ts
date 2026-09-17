@@ -8,8 +8,13 @@ import { describe, expect, it } from "vitest";
 
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
+import { traduzir } from "@/lib/i18n/dicionario";
 
 import { describeNodeConfig, NODE_VISUAL_LIST, NODE_VISUALS } from "./nodeVisuals";
+
+/** Em português o dicionário devolve a própria chave — é o `t` do provider na língua da chave. */
+const pt = (texto: string) => texto;
+const es = (texto: string) => traduzir(texto, "es");
 
 describe("describeNodeConfig — nó final", () => {
   it.each([
@@ -17,7 +22,7 @@ describe("describeNodeConfig — nó final", () => {
     ["exhausted", "Esgotado"],
     ["custom", "Personalizado"],
   ] as const)("outcome '%s' aparece no card como '%s'", (outcome, esperado) => {
-    expect(describeNodeConfig("end", { outcome })).toBe(esperado);
+    expect(describeNodeConfig("end", { outcome }, pt)).toBe(esperado);
   });
 });
 
@@ -42,8 +47,8 @@ describe("describeNodeConfig — nó de condição", () => {
   ];
 
   it("no modo combinado anuncia o combinador, que é o que decide", () => {
-    expect(describeNodeConfig("condition", { combinator: "and", checks: regras })).toBe("2 condição(ões) · E");
-    expect(describeNodeConfig("condition", { combinator: "or", checks: regras })).toBe("2 condição(ões) · OU");
+    expect(describeNodeConfig("condition", { combinator: "and", checks: regras }, pt)).toBe("2 condições · E");
+    expect(describeNodeConfig("condition", { combinator: "or", checks: regras }, pt)).toBe("2 condições · OU");
   });
 
   it("no modo uma-saída-por-regra NÃO anuncia combinador nenhum", () => {
@@ -51,9 +56,58 @@ describe("describeNodeConfig — nó de condição", () => {
       combinator: "and",
       branching: "per_check",
       checks: regras,
-    });
+    }, pt);
     expect(texto).toBe("2 regras · uma saída por regra");
     expect(texto).not.toMatch(/\bE\b|\bOU\b/);
+  });
+
+  it("uma regra só não vira '1 regras' — o plural é de quem lê, não do código", () => {
+    expect(describeNodeConfig("condition", { combinator: "and", checks: [regras[0]!] }, pt)).toBe("1 condição · E");
+    expect(
+      describeNodeConfig("condition", { combinator: "and", branching: "per_check", checks: [regras[0]!] }, pt),
+    ).toBe("1 regra · uma saída por regra");
+  });
+});
+
+/**
+ * O card falava o nome do CAMPO do banco ("grace"), que não é palavra nenhuma
+ * para o dono de uma loja — e o formulário do mesmo nó já perguntava "Esperar a
+ * resposta por (minutos)". A varredura é por TIPO, derivada de NODE_VISUAL_LIST,
+ * para que um tipo de nó novo entre nesta conta sem ninguém lembrar.
+ */
+describe("nenhum card fala a língua do banco", () => {
+  const JARGAO = /\b(grace|timeout|class_match|no_reply|branch|steps_taken|lead_stage|per_check)\b/i;
+
+  it.each(NODE_VISUAL_LIST.map((v) => [v.type, v] as const))("o card de '%s' em pt e em es", (_tipo, visual) => {
+    for (const idioma of [pt, es]) {
+      const texto = describeNodeConfig(visual.type, visual.defaultConfig(), idioma);
+      expect(texto, `subtítulo de ${visual.type}: ${texto}`).not.toMatch(JARGAO);
+      expect(texto.trim()).not.toBe("");
+    }
+  });
+
+  it("o tempo de espera aparece com a mesma forma do card de espera: '15 min'", () => {
+    expect(
+      describeNodeConfig("ai_classify", { classes: ["a", "b"], grace_timeout_ms: 900_000, target: "last_reply" }, pt),
+    ).toBe("2 classes · espera 15 min");
+    expect(
+      describeNodeConfig("ai_classify", { classes: ["a"], grace_timeout_ms: 900_000, target: "last_reply" }, pt),
+    ).toBe("1 classe · espera 15 min");
+    expect(describeNodeConfig("wait", { mode: "fixed", duration_ms: 600_000 }, pt)).toBe("10 min");
+  });
+
+  it("em espanhol o card de repetição e o de casar resposta também traduzem", () => {
+    // Os dois chegaram por outra branch chamando `describeNodeConfig` sem `t`, e
+    // o padrão identidade escondia o esquecimento de quem só lê em português.
+    expect(describeNodeConfig("repeat", { max_count: 12 }, es)).toBe("hasta 12 vueltas");
+    expect(describeNodeConfig("repeat", { max_count: 1 }, es)).toBe("hasta 1 vuelta");
+    expect(
+      describeNodeConfig(
+        "match_reply",
+        { branches: [{ id: "br_sim", label: "Sim", op: "contains", pattern: "sim" }], grace_timeout_ms: 900_000 },
+        es,
+      ),
+    ).toBe("1 regla · espera 15 min");
   });
 });
 
