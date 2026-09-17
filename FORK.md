@@ -1,64 +1,122 @@
-# FORK.md — o modulo financeiro fora do upstream
+# FORK.md — o módulo financeiro fora do upstream
 
-Este fork carrega **uma coisa**: comanda, financeiro, comissao e fidelidade.
-Tudo o mais e espelho do upstream (`melgarafael/DeskcommCRM`).
+Este fork carrega **uma coisa**: comanda, financeiro, comissão e fidelidade.
+Tudo o mais é espelho do upstream (`melgarafael/DeskcommCRM`).
 
-O modulo esta em espera no upstream por arquitetura, nao por qualidade: ele so
-entra quando existir instalacao de banco independente por extensao (issue #792,
-decisao de 16/09/2026). Ate la, vive aqui.
+O módulo está fora do upstream por arquitetura, não por qualidade. **A razão
+mudou em 17/09/2026 e ficou menor** — leia "O caminho de saída" antes de
+planejar qualquer coisa de longo prazo aqui.
 
 ## Remotes
 
 | Nome | Aponta para |
 |---|---|
 | `origin` | upstream, `melgarafael/DeskcommCRM` — **nunca receba push** |
-| `fork` | `423313/DeskcommCRM` — e para ca que vai o seu trabalho |
+| `fork` | `423313/DeskcommCRM` — é para cá que vai o seu trabalho |
 
 ## Branches
 
-- `fork/financeiro` — a unica branch de trabalho. Todo o modulo vive nela.
-- Nao mantenha a pilha de sete branches empilhadas: ela multiplicava por sete o
-  custo de cada sync, e os PRs upstream ja registram a historia fatiada.
+- `fork/financeiro` — a única branch de trabalho. Todo o módulo vive nela.
+- Não mantenha a pilha de sete branches empilhadas: ela multiplicava por sete o
+  custo de cada sync, e os PRs upstream já registram a história fatiada.
 
 ## O ciclo
 
 ```bash
-bash scripts/fork-setup.sh   # uma vez por arvore
-bash scripts/fork-sync.sh    # TODA SEMANA
+bash scripts/fork-setup.sh   # uma vez por árvore
+bash scripts/fork-sync.sh    # quando houver MOTIVO — ver abaixo
 ```
 
-Semanalmente, nao trimestralmente. O upstream faz ~2.500 commits por mes; uma
-semana de atraso e meia hora de trabalho, tres meses e reescrita.
+**Sincronize por gatilho, não por calendário.** Este arquivo mandava sincronizar
+toda semana, e a régua estava errada: media o volume do upstream (~2.500 commits
+por mês) em vez do que de fato chega até você. Os três gatilhos:
 
-## As tres convencoes que evitam quase toda a dor
+1. **Antes de publicar qualquer versão** — a VPS recebe o que você publicar, e
+   publicar de uma base velha é entregar bug que o upstream já consertou.
+2. **Quando houver correção do upstream que te interessa** — você leu o
+   changelog e quer aquilo.
+3. **Teto de segurança: não deixe passar de ~200 commits.** Acima disso o merge
+   deixa de ser leitura e vira arqueologia.
+
+**O custo real, medido em 17/09/2026:** um sync de **169 commits** (mais de um
+mês de upstream) produziu **dois** conflitos para resolver na mão, ambos de um
+minuto — uma lista de exceções em que os dois lados acrescentaram um item, e um
+arquivo que o upstream apagou de propósito. Todo o resto foi automático. Se um
+sync seu custar muito mais que isso, algo mudou de forma e vale investigar em
+vez de empurrar.
+
+## As três convenções que evitam quase toda a dor
 
 1. **Migration do fork usa a faixa `9001+`.** O upstream produz ~5 migrations por
-   dia e ja chegou a `0264` — qualquer numero baixo colide. A faixa alta nunca
-   colide e deixa obvio no diff o que e seu.
+   dia e já passou de `0271` — qualquer número baixo colide. A faixa alta nunca
+   colide e deixa óbvio no diff o que é seu.
 
-2. **`supabase/baseline.sql` e DERIVADO: nao edite.** O que e seu mora em
+2. **`supabase/baseline.sql` é DERIVADO: não edite.** O que é seu mora em
    `supabase/fork-apendice.sql`. O `fork-sync.sh` regenera o baseline como
-   *upstream puro + apendice*. Editar o baseline direto ressuscita o conflito de
-   900 linhas que essa separacao existe para matar.
+   *upstream puro + apêndice*. Editar o baseline direto ressuscita o conflito de
+   900 linhas que essa separação existe para matar.
 
 3. **Escreva sempre no FIM** de `lib/audit/actions.ts`, `lib/i18n/dicionario.ts` e
-   `supabase/migrations/MANIFEST.md`. O `fork-setup.sh` marca os tres como
-   `merge=union`, e o git passa a resolve-los sozinho — mas so funciona se os dois
+   `supabase/migrations/MANIFEST.md`. O `fork-setup.sh` marca os três como
+   `merge=union`, e o git passa a resolvê-los sozinho — mas só funciona se os dois
    lados acrescentarem no fim.
 
-## O que o git NAO vai avisar
+## O que NÃO vale a pena consertar
 
-Conflito de texto e o problema facil, e o esqueleto ja o resolve. O que quebra um
-fork longo e **mudanca de contrato** no upstream: uma tabela que voce referencia
+Medido em 17/09/2026, para você não gastar uma tarde onde não dói:
+
+- **`lib/database.types.ts` não precisa ser extraído.** O fork acrescenta 590
+  linhas e remove 1, num arquivo de 9.452. O upstream o tocou 8 vezes em 169
+  commits e o merge foi **automático**, sem conflito. Separar os tipos do
+  financeiro num arquivo próprio é trabalho real para pagar uma dor que não
+  existe.
+- **O enxerto da agenda não precisa virar tabela do fork.** Pôr
+  `default_price_cents` no tipo de evento toca quatro arquivos do upstream, mas
+  com poucas linhas cada, e esses arquivos foram tocados 0 e 2 vezes no mesmo
+  período.
+
+## O que o git NÃO vai avisar
+
+Conflito de texto é o problema fácil, e o esqueleto já o resolve. O que quebra um
+fork longo é **mudança de contrato** no upstream: uma tabela que você referencia
 muda de forma, `ok()`/`fail()` mudam de assinatura, a RLS troca de helper. O
-merge fica verde e o codigo fica errado.
+merge fica verde e o código fica errado.
 
-Quem pega isso e `pnpm test:db` — o unico gate que aplica o `baseline.sql` num
-Postgres real. Rode-o em todo sync, nao so quando mexer em schema.
+Quem pega isso é `pnpm test:db` — o único gate que aplica o `baseline.sql` num
+Postgres real. Rode-o em todo sync, não só quando mexer em schema.
 
-## Quando o modulo voltar para o upstream
+**Depois de todo sync, rode `pnpm install` antes dos gates.** O upstream adiciona
+dependência sem avisar, e o sintoma engana: em 17/09 o `jsonc-parser` novo fez o
+typecheck falhar e dez arquivos de teste ficarem vermelhos, o que lê como "o
+merge quebrou o mundo" e era só um pacote faltando.
 
-A camada de baixo (contas, formas de pagamento, plano de contas, lancamento
-avulso) **ja foi aceita no nucleo**. Quando ela entrar, sai daqui, e este fork
-encolhe para comanda + comissao + fidelidade — menos superficie compartilhada,
-sync mais barato.
+## O caminho de saída
+
+**A premissa que criou este fork caiu em 17/09/2026.** Este arquivo dizia que o
+módulo só entraria "quando existir instalação de banco independente por extensão
+(issue #792)". A [`docs/adr/0002-tabelas-de-modulo-num-banco-so.md`](docs/adr/0002-tabelas-de-modulo-num-banco-so.md),
+aceita nessa data, **recusa banco independente por escrito e para sempre** —
+chave estrangeira não atravessa bancos, e as tabelas do financeiro têm 23 chaves
+para o núcleo. A barreira não foi removida: foi trocada por outra, menor e
+definida.
+
+O que vale hoje, e é preciso ler na fonte antes de agir:
+
+- **O financeiro é duas metades.** [`docs/doctrine/extensoes.md`](docs/doctrine/extensoes.md)
+  classifica o **caixa** (contas, formas de pagamento, plano de contas,
+  lançamento avulso) como **núcleo, já liberado**; e **comanda, comissão e
+  fidelidade** como o que fica em cima, opcional. Só a segunda metade tem razão
+  de morar aqui.
+- **A v1 de extensões não serve** para este módulo, e não é perto: um pacote de
+  extensão é um JSON de até 64 KiB que publica cards de texto, sem SQL, sem
+  rotas, sem telas, sem cron. Não tente encaixar o financeiro nela.
+- **O caminho real é a ADR-0002**, ainda **não construída**: tabelas de módulo
+  criadas por uma função `fn_<modulo>_provisionar()`, `security definer`, só
+  `service_role`, disparada ao instalar o módulo. A própria ADR diz que **o
+  primeiro módulo a usá-la é a comanda** — este aqui.
+- **A ADR resolve tabelas, não o resto.** As ~20 rotas, as 3 telas e o cron
+  continuam sendo código do produto, revisado PR a PR. Mesmo depois dela, o fork
+  não desaparece sozinho.
+
+Enquanto isso não for construído, o fork é a residência do módulo. Quando for,
+ele deixa de ser residência e vira etapa.

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Traz a main do upstream para dentro da branch do fork.
-# Rode SEMANALMENTE. Com 2500 commits/mes no upstream, atraso longo vira reescrita.
+# Rode por MOTIVO, nao por calendario: antes de publicar, quando houver correcao
+# do upstream que te interessa, ou quando o atraso passar do teto (ver TETO).
+# A regua e o FORK.md, secao "O ciclo".
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -8,8 +10,21 @@ cd "$(git rev-parse --show-toplevel)"
 
 git fetch origin --quiet
 ANTES=$(git rev-list --count HEAD..origin/main)
-echo "upstream esta $ANTES commits a frente."
+DESDE=$(git log -1 --format=%cd --date=short origin/main 2>/dev/null || echo "?")
+echo "upstream esta $ANTES commits a frente (ultimo commit la: $DESDE)."
 [ "$ANTES" -gt 0 ] || { echo "nada a trazer."; exit 0; }
+
+# TETO: acima disto o merge deixa de ser leitura e vira arqueologia. O numero
+# saiu de medicao, nao de chute: 169 commits custaram DOIS conflitos de um
+# minuto (17/09/2026). Nao e limite tecnico - e o ponto onde vale parar e
+# decidir com calma, em vez de empurrar.
+TETO=200
+if [ "$ANTES" -gt "$TETO" ]; then
+  echo
+  echo "ATENCAO: passou do teto de $TETO commits. Reserve tempo e rode os tres"
+  echo "gates depois; nao encaixe este sync antes de outra coisa."
+  echo
+fi
 
 # baseline.sql e DERIVADO aqui: o do upstream + o apendice do fork.
 # Resolver conflito nele a mao e trabalho perdido; a gente regenera.
@@ -33,6 +48,8 @@ if ! git merge origin/main --no-edit; then
 fi
 
 echo "merge feito. agora prove, que e o que o git NAO sabe:"
+echo "  pnpm install      # PRIMEIRO: o upstream adiciona dependencia sem avisar,"
+echo "                    # e o sintoma parece 'o merge quebrou o mundo'"
 echo "  pnpm typecheck && pnpm test:unit"
 echo "  pnpm test:db      # o unico que pega mudanca de contrato no schema"
 echo
