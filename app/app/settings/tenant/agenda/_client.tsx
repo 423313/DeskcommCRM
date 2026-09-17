@@ -30,6 +30,7 @@ export interface TipoRow {
   reminder_enabled: boolean;
   reminder_minutes_before: number;
   reminder_extra_offsets_minutes: number[] | null;
+  reminder_body: string | null;
 }
 
 /**
@@ -147,6 +148,22 @@ function LembreteDoCompromisso({ tipo }: { tipo: TipoRow }) {
         />
         <span className="text-[11px] text-text-muted">
           {t("Opcional. Até 3, separados por vírgula. Ex.: 180 avisa de novo 3 horas antes.")}
+        </span>
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-text-muted sm:col-span-3">
+        {t("Mensagem do lembrete")}
+        <textarea
+          name="reminder_body"
+          rows={3}
+          maxLength={1000}
+          disabled={!ligado}
+          defaultValue={tipo.reminder_body ?? ""}
+          placeholder={t("Oi {{nome}}! Passando pra lembrar: {{titulo}}, {{dia}} às {{hora}}.")}
+          data-testid={`editar-lembrete-texto-${tipo.id}`}
+          className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text disabled:opacity-50"
+        />
+        <span className="text-[11px] text-text-muted">
+          {t("Deixe em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.")}
         </span>
       </label>
     </>
@@ -432,6 +449,7 @@ export function TiposDeAgendamentoClient({
                     .sort((a, b) => b - a)
                     .join(", ")}{" "}
                   min {t("antes")}
+                  {tipo.reminder_body ? ` · ${t("texto próprio")}` : ""}
                 </span>
               ) : null}
               {!tipo.is_active ? <span className="text-xs text-text-subtle">{t("desativado")}</span> : null}
@@ -531,6 +549,7 @@ export function TiposDeAgendamentoClient({
                               reminder_extra_offsets_minutes: lerDegrausExtras(
                                 String(dados.get("reminder_extra_offsets_minutes") ?? ""),
                               ),
+                              reminder_body: String(dados.get("reminder_body") ?? ""),
                             }
                           : {}),
                         ...(dados.get("reminder_minutes_before")

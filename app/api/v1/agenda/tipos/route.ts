@@ -148,7 +148,27 @@ const camposDoTipo = {
 const criarSchema = z.object(camposDoTipo);
 // `.partial()` em vez de repetir os doze campos como opcionais: repetir criaria
 // duas listas para manter em sincronia, e a segunda envelhece calada.
-const alterarSchema = criarSchema.partial().extend({ id: z.string().uuid() });
+const alterarSchema = criarSchema.partial().extend({
+  id: z.string().uuid(),
+  /**
+   * O TEXTO que o cron manda. Vazio/nulo = a frase padrão. Distinto de
+   * `reminder_template_name` (nome do template no provedor oficial).
+   *
+   * Mora só no PATCH de propósito: o tipo nasce com a frase de fábrica, e
+   * quem quer outra escreve depois. No POST, o campo nem entra — senão um
+   * `""` no nascimento gravaria nulo por cima do default, e a ausência no
+   * formulário de criação deixaria de ser ausência.
+   *
+   * Transforma string em branco em `null` para o PATCH poder VOLTAR ao padrão
+   * sem um campo-sentinela: quem apaga o textarea está pedindo o texto de
+   * fábrica, não uma mensagem vazia no WhatsApp.
+   */
+  reminder_body: z
+    .string()
+    .max(1000, { message: "A mensagem do lembrete cabe em 1000 caracteres." })
+    .nullish()
+    .transform((v) => (v == null ? v : v.trim() === "" ? null : v.trim())),
+});
 const desativarSchema = z.object({ id: z.string().uuid() });
 
 /**
@@ -210,6 +230,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       reminder_enabled: t.lembreteLigado,
       reminder_minutes_before: t.lembreteAntecedenciaMin,
       reminder_extra_offsets_minutes: t.lembreteDegrausExtras,
+      reminder_body: t.lembreteMensagem,
     })),
     { requestId },
   );
@@ -274,7 +295,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     // legível a quem opera em espanhol.
     return fail("validation_failed", t(lido.error.issues[0]?.message ?? "corpo inválido"), 422, { requestId });
   }
-  const { id, ...campos } = lido.data;
+  const { id, ...bruto } = lido.data;
+  const campos = Object.fromEntries(
+    Object.entries(bruto).filter(([, v]) => v !== undefined),
+  );
   if (Object.keys(campos).length === 0) {
     // Recusa em vez de UPDATE vazio: "alterei" sobre nada é a mesma família de
     // mentira que o "Marcado ✓" sem linha no banco.

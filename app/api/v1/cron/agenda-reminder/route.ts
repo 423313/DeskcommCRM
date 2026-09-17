@@ -89,6 +89,7 @@ interface TipoDoCompromisso {
   reminder_minutes_before: number;
   reminder_extra_offsets_minutes: number[] | null;
   reminder_template_name: string | null;
+  reminder_body: string | null;
   location_details: string | null;
 }
 
@@ -113,11 +114,25 @@ function tipoDe(linha: CompromissoAVencer): TipoDoCompromisso | null {
 /**
  * O texto do lembrete.
  *
- * `reminder_template_name` é a outra coluna que a 0177 criou e ninguém leu.
- * Quando ela aponta para um modelo de mensagem da organização, ele vence; sem
- * ela, sai o texto abaixo, que diz as três coisas que a pessoa precisa saber:
- * o que é, quando, e onde.
+ * Sem molde, sai a frase abaixo — o quê, quando e onde. Com molde, as
+ * variáveis `{{nome}}`, `{{primeiro_nome}}`, `{{titulo}}`, `{{tipo}}`,
+ * `{{dia}}`, `{{hora}}`, `{{endereco}}` e `{{quando}}` são preenchidas com
+ * os mesmos dados; chave desconhecida fica no texto, para quem digitou
+ * `{{foo}}` ver o erro em vez de uma mensagem manca.
+ *
+ * `reminder_body` do tipo vence; senão `reminder_template_name` aponta para
+ * um modelo da organização; senão, esta frase.
  */
+export function aplicarMoldeDoLembrete(
+  molde: string,
+  pecas: Record<string, string>,
+): string {
+  return molde.replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (literal, raw: string) => {
+    const v = pecas[raw.toLowerCase()];
+    return v === undefined ? literal : v;
+  });
+}
+
 export function montarLembrete(input: {
   nomeDoContato: string | null;
   titulo: string;
@@ -138,6 +153,10 @@ export function montarLembrete(input: {
    * banco — o mesmo desenho de `montarPares` em `lib/metrics/atrito.ts`.
    */
   idioma?: Idioma;
+  /** Texto próprio do tipo. Vazio/nulo = a frase padrão. */
+  molde?: string | null;
+  /** Nome do tipo de atendimento, para `{{tipo}}`. Cai no título se faltar. */
+  tipoNome?: string | null;
 }): string {
   const idioma = input.idioma ?? IDIOMA_PADRAO;
   const t = (texto: string) => traduzir(texto, idioma);
@@ -156,16 +175,29 @@ export function montarLembrete(input: {
     hourCycle: "h23",
   }).format(input.quando);
 
+  const nome = input.nomeDoContato?.trim() ?? "";
+  const pecas: Record<string, string> = {
+    nome,
+    primeiro_nome: nome.split(/\s+/)[0] ?? "",
+    titulo: input.titulo,
+    tipo: (input.tipoNome ?? input.titulo).trim() || input.titulo,
+    dia,
+    hora,
+    endereco: input.local?.trim() ?? "",
+    quando: `${dia} ${t("às")} ${hora}`,
+  };
+
+  const molde = input.molde?.trim();
+  if (molde) return aplicarMoldeDoLembrete(molde, pecas);
+
   // Cada `t()` cobre só a parte FIXA da frase: nome, título, data e endereço
   // são dado do tenant e nunca passam por tradução.
   // A pontuação entra na CHAVE de propósito: em espanhol a exclamação abre a
   // frase ("¡Hola"), e um `t("Oi")` solto com o `!` colado do lado de fora
   // devolveria "Hola, Rose!" — meio traduzido, que é o defeito que o guarda de
   // i18n existe para impedir.
-  const saudacao = input.nomeDoContato
-    ? `${t("Oi,")} ${input.nomeDoContato}!`
-    : t("Oi!");
-  const onde = input.local ? ` ${t("Endereço")}: ${input.local}.` : "";
+  const saudacao = nome ? `${t("Oi,")} ${nome}!` : t("Oi!");
+  const onde = pecas.endereco ? ` ${t("Endereço")}: ${pecas.endereco}.` : "";
   return (
     `${saudacao} ${t("Passando pra lembrar do seu compromisso:")} ` +
     `${input.titulo}, ${dia} ${t("às")} ${hora}.${onde}`
@@ -233,7 +265,7 @@ async function handle(req: NextRequest): Promise<Response> {
     .from("calendar_appointments")
     .select(
       "id, organization_id, contact_id, title, starts_at, location_details, reminder_sent_offsets_minutes, " +
-        "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, location_details)",
+        "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, reminder_body, location_details)",
     )
     .eq("status", "confirmed")
     .eq("calendar_event_types.reminder_enabled", true)
@@ -333,16 +365,8 @@ async function handle(req: NextRequest): Promise<Response> {
       .eq("id", org)
       .maybeSingle();
 
-    let corpo = montarLembrete({
-      nomeDoContato: nomeDoContato(contato),
-      titulo: linha.title,
-      quando: new Date(linha.starts_at),
-      timezone: organizacao?.timezone ?? "America/Sao_Paulo",
-      local: linha.location_details ?? tipo.location_details ?? null,
-      idioma: normalizarIdioma(organizacao?.locale),
-    });
-
-    if (tipo.reminder_template_name) {
+    let molde = tipo.reminder_body?.trim() || null;
+    if (!molde && tipo.reminder_template_name) {
       const { data: modelo } = await admin
         .from("message_templates")
         .select("body")
@@ -350,8 +374,19 @@ async function handle(req: NextRequest): Promise<Response> {
         .or(`shortcut.eq.${tipo.reminder_template_name},title.eq.${tipo.reminder_template_name}`)
         .limit(1)
         .maybeSingle();
-      if (modelo?.body) corpo = modelo.body;
+      if (modelo?.body) molde = modelo.body;
     }
+
+    const corpo = montarLembrete({
+      nomeDoContato: nomeDoContato(contato),
+      titulo: linha.title,
+      quando: new Date(linha.starts_at),
+      timezone: organizacao?.timezone ?? "America/Sao_Paulo",
+      local: linha.location_details ?? tipo.location_details ?? null,
+      idioma: normalizarIdioma(organizacao?.locale),
+      molde,
+      tipoNome: tipo.name,
+    });
 
     await espacarEnvio(canal.id);
 

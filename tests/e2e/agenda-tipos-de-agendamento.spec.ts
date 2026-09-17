@@ -384,5 +384,20 @@ test("ligo o aviso do compromisso pela tela, e ele fica ligado", async ({ page }
   ).toBeVisible({ timeout: 20_000 });
   await expect(depois).toContainText("60 min");
 
+  await depois.getByRole("button", { name: "Editar" }).click();
+  const texto = depois.getByTestId(/^editar-lembrete-texto-/).first();
+  await expect(texto).toBeEnabled();
+  await texto.fill("Oi {{nome}}, te espero {{dia}} às {{hora}}.");
+  await depois.getByTestId(/^salvar-/).first().click();
+
+  await expect(depois).toContainText("texto próprio", { timeout: 20_000 });
+  await page.reload();
+  const gravado = page.getByTestId("lista-de-tipos").getByRole("listitem").filter({ hasText: nome });
+  await expect(gravado).toContainText("texto próprio", { timeout: 20_000 });
+  await gravado.getByRole("button", { name: "Editar" }).click();
+  await expect(gravado.getByTestId(/^editar-lembrete-texto-/).first()).toHaveValue(
+    "Oi {{nome}}, te espero {{dia}} às {{hora}}.",
+  );
+
   await page.screenshot({ path: "evidence/calendario/lembrete-ligado.png", fullPage: true });
 });

@@ -116,6 +116,38 @@ describe("montarLembrete", () => {
     });
     expect(texto).not.toContain("Endereço");
   });
+
+  it("molde próprio interpola nome, dia e hora, e deixa chave desconhecida no texto", () => {
+    const texto = montarLembrete({
+      nomeDoContato: "Ian Couto",
+      titulo: "Atendimento",
+      quando,
+      timezone: "America/Sao_Paulo",
+      local: "Sala 2",
+      molde: "Oi {{primeiro_nome}}! {{titulo}} {{dia}} às {{hora}} em {{endereco}}. {{foo}}",
+      tipoNome: "Consulta",
+    });
+    expect(texto).toBe("Oi Ian! Atendimento segunda-feira, 31/08 às 09:45 em Sala 2. {{foo}}");
+  });
+
+  it("molde em branco cai na frase padrão", () => {
+    const comMolde = montarLembrete({
+      nomeDoContato: "Ana",
+      titulo: "Retirada",
+      quando,
+      timezone: "America/Sao_Paulo",
+      local: null,
+      molde: "   ",
+    });
+    const semMolde = montarLembrete({
+      nomeDoContato: "Ana",
+      titulo: "Retirada",
+      quando,
+      timezone: "America/Sao_Paulo",
+      local: null,
+    });
+    expect(comMolde).toBe(semMolde);
+  });
 });
 
 describe("isolamento entre organizações (estrutural)", () => {

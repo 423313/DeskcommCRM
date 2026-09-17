@@ -258,6 +258,38 @@ describe("PATCH /api/v1/agenda/tipos — ligar e desligar depois", () => {
     expect(linhas[0]?.reminder_enabled).toBe(false);
     expect(linhas[0]?.reminder_minutes_before).toBe(90);
   });
+
+  it("grava o texto próprio, e string em branco VOLTA ao padrão", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG })];
+    const db = makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const gravou = await PATCH(
+      req("PATCH", { id: TIPO_DA_ORG, reminder_body: "  Oi {{nome}}, te espero {{hora}}.  " }),
+    );
+    expect(gravou.status).toBe(200);
+    expect(linhas[0]?.reminder_body).toBe("Oi {{nome}}, te espero {{hora}}.");
+
+    const limpou = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_body: "   " }));
+    expect(limpou.status).toBe(200);
+    expect(linhas[0]?.reminder_body).toBeNull();
+    expect(db.escritas.at(-1)?.campos).toMatchObject({ reminder_body: null });
+  });
+
+  it("recusa texto maior que 1000 caracteres sem escrever", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG })];
+    const db = makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_body: "x".repeat(1001) }));
+
+    expect(res.status).toBe(422);
+    const corpo = await corpoDeErro(res);
+    expect(corpo.error.message).toMatch(/1000/);
+    expect(db.escritas).toEqual([]);
+  });
 });
 
 describe("a faixa aceita — mais estreita que o CHECK do banco, de propósito", () => {
@@ -383,6 +415,7 @@ describe("GET /api/v1/agenda/tipos", () => {
           lembreteLigado: true,
           lembreteAntecedenciaMin: 180,
           lembreteDegrausExtras: [],
+          lembreteMensagem: "Oi {{nome}}, te espero {{dia}} às {{hora}}.",
         },
       ],
     });
@@ -392,9 +425,14 @@ describe("GET /api/v1/agenda/tipos", () => {
 
     expect(res.status).toBe(200);
     const corpo = (await res.json()) as {
-      data: Array<{ reminder_enabled: boolean; reminder_minutes_before: number }>;
+      data: Array<{
+        reminder_enabled: boolean;
+        reminder_minutes_before: number;
+        reminder_body: string | null;
+      }>;
     };
     expect(corpo.data[0]?.reminder_enabled).toBe(true);
     expect(corpo.data[0]?.reminder_minutes_before).toBe(180);
+    expect(corpo.data[0]?.reminder_body).toBe("Oi {{nome}}, te espero {{dia}} às {{hora}}.");
   });
 });
