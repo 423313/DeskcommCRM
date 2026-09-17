@@ -247,7 +247,6 @@ const DEBITO_CONHECIDO: readonly Excecao[] = [
   "ai_invocations",
   "ai_knowledge_sources",
   "ai_knowledge_versions",
-  "ai_provider_credentials",
   "ai_purpose_bindings",
   "ai_router_members",
   "api_audit_log",
