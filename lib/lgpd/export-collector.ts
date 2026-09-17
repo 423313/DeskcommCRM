@@ -145,6 +145,30 @@ export interface TaskRow {
 }
 
 /**
+ * Comanda do titular (migrations 9002 / 9010).
+ *
+ * Entrou pela mesma porta das duas acima, e achada pelo mesmo gate: a 9010 pôs
+ * `notes`, `cancel_reason` e `reverse_reason` na redação da anonimização, e o
+ * que se apaga a pedido do titular é o que se entrega a pedido dele.
+ *
+ * Valor, número e data vêm junto de propósito. Eles NÃO são apagados na
+ * anonimização — a comanda é registro financeiro —, e um relatório que
+ * mostrasse só o texto negaria ao titular um atendimento que ele pagou.
+ */
+export interface SaleRow {
+  id: string;
+  number: number;
+  status: string;
+  total_cents: number;
+  currency: string;
+  notes: string | null;
+  cancel_reason: string | null;
+  reverse_reason: string | null;
+  finalized_at: string | null;
+  created_at: string;
+}
+
+/**
  * Captação por webhook — de onde a pessoa veio.
  *
  * ⚠️ ESTA NÃO É DA ENTREGA DO CALENDÁRIO. Ela apareceu porque o gate novo
@@ -251,6 +275,8 @@ export interface ExportPayload {
    * próprio cascade.
    */
   voice_calls: VoiceCallRow[];
+  /** Comandas do titular — ver `SaleRow`. */
+  sales: SaleRow[];
   reply_drafts?: Array<{
     id: string;
     status: string;
@@ -635,6 +661,31 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Comandas — contact_id direto em `sales` (migrations 9002 / 9010).
+  //
+  // A 9010 pôs o texto livre da comanda na redação da anonimização; o que se
+  // apaga a pedido do titular é o que se entrega a pedido dele.
+  let sales: SaleRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("sales")
+      .select(
+        "id, number, status, total_cents, currency, notes, cancel_reason, reverse_reason, finalized_at, created_at",
+      )
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] sales load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      sales = data as SaleRow[];
+    }
+  }
+
   // Captação por webhook — a MESMA classe do bloco acima, achada pelo gate.
   let webhook_captures: CaptureRow[] = [];
   if (contactId) {
@@ -810,6 +861,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     meeting_deliveries,
     appointment_notices,
     voice_calls,
+    sales,
   };
 }
 
@@ -841,5 +893,6 @@ function emptyPayload(
     meeting_deliveries: [],
     appointment_notices: [],
     voice_calls: [],
+    sales: [],
   };
 }

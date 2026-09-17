@@ -51,6 +51,17 @@ const PADRAO_PII =
  * razão precisa dizer QUANDO sai, não só por que está.
  */
 const DIVIDA_LGPD_CONHECIDA: Record<string, string> = {
+  sales:
+    "Comanda do módulo financeiro do fork (migration 9002). Guarda `notes`, `cancel_reason` e " +
+    "`reverse_reason` — os três campos em que alguém digita frase inteira sobre a pessoa. " +
+    "⚠️ ELA JÁ ESTÁ PROTEGIDA: o trigger `trg_redigir_comandas_ao_anonimizar` (migration 9010) " +
+    "apaga os três na transição `is_anonymized false → true`, com backfill para quem já tinha " +
+    "sido anonimizado antes, e `tests/invariants/fork-financeiro-rls.test.ts` prova o efeito pelo " +
+    "comportamento (texto presente antes, vazio depois, comanda do vizinho com o mesmo texto " +
+    "intacta). A LINHA da venda fica de pé de propósito: é registro financeiro, e o invariante 1 " +
+    "do módulo é que nada de dinheiro se apaga. A entrada existe pela mesma razão de `crm_tasks` " +
+    "abaixo — este instrumento lê UMA função e não enxerga trigger. Sai no dia em que " +
+    "`tabelasNaCascata()` derivar também os triggers de `contacts`.",
   calendar_appointments:
     "Achado do levantamento 13 §2 (QAVivo/maestro). Guarda title e notes do compromisso. " +
     "Conserto DESPACHADO ao Arquiteto — sai desta lista no mesmo commit que acrescentar a tabela à cascata.",

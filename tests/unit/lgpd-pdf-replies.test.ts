@@ -45,6 +45,7 @@ function payload(): ExportPayload {
       },
     ],
     voice_calls: [],
+    sales: [],
   appointment_notices: [
       {
         id: "aviso-aberto",

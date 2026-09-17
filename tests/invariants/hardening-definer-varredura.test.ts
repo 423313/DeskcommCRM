@@ -67,6 +67,32 @@ const ANON_PERMITIDO: readonly Excecao[] = [];
  */
 const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
   {
+    fn: "fn_finalizar_comanda(uuid,uuid,uuid,integer)",
+    razao:
+      "POST app/api/v1/financeiro/comandas/[id]/finalizar/route.ts e " +
+      "faturar-lote/route.ts chamam com createClient da sessão, de propósito: é " +
+      "auth.uid() que faz a função exigir fn_role_at_least(p_org,'agent') antes " +
+      "de qualquer escrita e que assina o lançamento e o ponto de fidelidade. " +
+      "As seis escritas são uma transação só sob FOR UPDATE — trocar pelo client " +
+      "de service role apagaria a autoria e a conferência de papel. " +
+      "tests/invariants/fork-financeiro-rls.test.ts prova a recusa cross-org " +
+      "(comanda_forbidden, sem efeito parcial na comanda do vizinho) e o " +
+      "controle positivo na própria organização.",
+  },
+  {
+    fn: "fn_estornar_comanda(uuid,uuid,text)",
+    razao:
+      "POST app/api/v1/financeiro/comandas/[id]/estornar/route.ts chama com " +
+      "createClient da sessão; a função exige fn_role_at_least(p_org,'manager') " +
+      "— estorno não é do balcão — e assina o contra-lançamento com auth.uid(). " +
+      "tests/invariants/fork-financeiro-rls.test.ts prova a recusa cross-org " +
+      "(estorno_forbidden, comanda do vizinho intacta) e o contra-lançamento " +
+      "nascendo na organização certa. " +
+      "⚠️ fn_proximo_numero_de_comanda NÃO está nesta lista: a 9010 a passou a " +
+      "`stable` (ela só lê) e acrescentou a conferência de pertencimento, então " +
+      "ela sai desta varredura pela porta da frente, não por exceção.",
+  },
+  {
     fn: "fn_reply_action(uuid,uuid,text,text,text,text)",
     razao:
       "POST app/api/v1/ai/replies/[id]/route.ts usa createClient da sessão. " +

@@ -75,6 +75,23 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  // As DEZ do módulo financeiro do fork (migrations 9001–9008). Ficam fora de
+  // TABLES porque o seed de `rls-isolation.test.ts` semeia um `agent` e uma
+  // linha solta por tabela, e estas exigem a cadeia inteira (conta → forma de
+  // pagamento → plano → comanda → item → comissão → lançamento) mais um
+  // `manager`, que é o piso do estorno. Prova em
+  // `tests/invariants/fork-financeiro-rls.test.ts`: `TABELAS_DO_FINANCEIRO`,
+  // com cross-org zero, controle positivo e a direção inversa nas dez.
+  { tabela: "financial_accounts", razao: "tests/invariants/fork-financeiro-rls.test.ts — TABELAS_DO_FINANCEIRO, três casos por tabela (A→B zero, positivo local, inversa B→A)" },
+  { tabela: "payment_methods", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },
+  { tabela: "account_plans", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },
+  { tabela: "sales", razao: "tests/invariants/fork-financeiro-rls.test.ts — TABELAS_DO_FINANCEIRO e, por cima, a ACL de fn_finalizar_comanda/fn_estornar_comanda nos dois sentidos" },
+  { tabela: "sale_items", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },
+  { tabela: "commission_rules", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },
+  { tabela: "commissions", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },
+  { tabela: "financial_entries", razao: "tests/invariants/fork-financeiro-rls.test.ts — TABELAS_DO_FINANCEIRO, e o contra-lançamento do estorno medido na org certa" },
+  { tabela: "loyalty_ledger", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },
+  { tabela: "recurring_entries", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },
   { tabela: "channel_routing_policies", razao: "tests/invariants/channel-routing.test.ts — dois tenants reais, leitura positiva local e negativa cruzada por JWT; FK composta rejeita canal de outra org" },
   { tabela: "channel_routing_responsibles", razao: "tests/invariants/channel-routing.test.ts — JWT do tenant B não lê responsáveis de A; revogação remove vínculo e claim revalida membro ativo" },
   { tabela: "channel_connection_requests", razao: "tests/invariants/channel-routing.test.ts — recibo privado sem SELECT authenticated; reserva admin com MFA e finalização service-only cercada por org e lease" },
