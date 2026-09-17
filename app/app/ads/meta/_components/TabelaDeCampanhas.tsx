@@ -71,8 +71,28 @@ function Numero({ valor, casas = 0 }: { valor: number | null; casas?: number }) 
   );
 }
 
-function Percentual({ valor, casas = 2 }: { valor: number | null; casas?: number }) {
-  if (valor === null) return <span className="text-muted-foreground">{TRACO}</span>;
+function Percentual({
+  valor,
+  casas = 2,
+  titulo,
+}: {
+  valor: number | null;
+  casas?: number;
+  /**
+   * Por que a célula está vazia, quando ela está vazia por FALTA e não por zero.
+   *
+   * Vem da ressalva da leitura (`avisos` da resposta): "—" sozinho não separa
+   * "a plataforma não devolveu esta métrica" de "esta campanha não mediu", e é
+   * essa diferença que muda a ação de quem opera.
+   */
+  titulo?: string;
+}) {
+  if (valor === null)
+    return (
+      <span className="text-muted-foreground" title={titulo}>
+        {TRACO}
+      </span>
+    );
   return (
     <>
       {valor.toLocaleString("pt-BR", {
@@ -95,10 +115,25 @@ interface Props {
    * custo. Vem de `/me/adaccounts`, por conta.
    */
   moeda: string;
+  /**
+   * Ressalvas da leitura, como a rota as devolve (`avisos`).
+   *
+   * Hoje só a coluna do Connect rate usa isto: quando a plataforma recusa os
+   * campos da métrica, o número é AUSENTE (não zero) e a célula precisa dizer
+   * isso no hover, em vez de mostrar um "—" mudo que parece medição faltando.
+   */
+  avisos?: string[];
 }
 
-export function TabelaDeCampanhas({ linhas, moeda }: Props) {
+export function TabelaDeCampanhas({ linhas, moeda, avisos }: Props) {
   const t = useT();
+
+  /**
+   * A ressalva da leitura, quando existe: é o `title` do "—" da coluna do
+   * Connect rate. Sem ela, "não veio da plataforma" e "mediu zero" ficam
+   * idênticos na tela — e o erro invisível é pior que o visível.
+   */
+  const ressalvaDoConnectRate = avisos?.length ? avisos.join(" ") : undefined;
 
   const dinheiro = (valor: number | null, casas = 2) => {
     if (valor === null) return <span className="text-muted-foreground">{TRACO}</span>;
@@ -235,7 +270,7 @@ export function TabelaDeCampanhas({ linhas, moeda }: Props) {
                   <Percentual valor={linha.ctr} />
                 </TableCell>
                 <TableCell className="text-right">
-                  <Percentual valor={linha.connectRate} />
+                  <Percentual valor={linha.connectRate} titulo={ressalvaDoConnectRate} />
                 </TableCell>
                 <TableCell className="text-right">
                   <Numero valor={linha.frequencia} casas={2} />
