@@ -333,13 +333,18 @@ export async function resolverSaudeDaConexaoRemovida(
   admin: SupabaseClient,
   sessao: SessaoParaVigiar,
 ): Promise<"resolvido" | "sem_mudanca"> {
-  const { data: abertos } = await admin
+  // O supabase-js não lança em erro do PostgREST: devolve `error`. Engolido,
+  // uma leitura que falhou viraria "nenhum aviso aberto" e a auditoria diria
+  // "sem_mudanca" com o alarme ainda na Central. Lançar é o que faz a rota
+  // registrar "falhou" e logar o motivo. A mensagem leva só a etapa e o código.
+  const { data: abertos, error: erroLeitura } = await admin
     .from("agent_inbox_items")
     .select("id")
     .eq("organization_id", sessao.organization_id)
     .eq("ref_kind", REF_KIND_SESSAO)
     .eq("ref_id", sessao.id)
     .eq("status", "open");
+  if (erroLeitura) throw falhaNaEtapa("ler os avisos abertos", erroLeitura);
 
   let fechou = false;
 
@@ -347,33 +352,40 @@ export async function resolverSaudeDaConexaoRemovida(
     // Pelo FILTRO, e não pela lista de ids lida acima: a sessão já não existe,
     // nada mais pode abrir aviso para ela, e um `in (ids)` deixaria de fora
     // justamente o item que aparecesse entre a leitura e a escrita.
-    await admin
+    const { error } = await admin
       .from("agent_inbox_items")
       .update({ status: "resolved" })
       .eq("organization_id", sessao.organization_id)
       .eq("ref_kind", REF_KIND_SESSAO)
       .eq("ref_id", sessao.id)
       .eq("status", "open");
+    if (error) throw falhaNaEtapa("resolver os avisos abertos", error);
     fechou = true;
   }
 
-  const { data: linha } = await admin
+  const { data: linha, error: erroSaude } = await admin
     .from("channel_session_health")
     .select("escalated_status")
     .eq("organization_id", sessao.organization_id)
     .eq("channel_session_id", sessao.id)
     .maybeSingle();
+  if (erroSaude) throw falhaNaEtapa("ler o episódio de saúde", erroSaude);
 
   if (((linha?.escalated_status as string | null) ?? null) !== null) {
-    await admin
+    const { error } = await admin
       .from("channel_session_health")
       .update({ escalated_status: null, updated_at: new Date().toISOString() })
       .eq("organization_id", sessao.organization_id)
       .eq("channel_session_id", sessao.id);
+    if (error) throw falhaNaEtapa("limpar o episódio de saúde", error);
     fechou = true;
   }
 
   return fechou ? "resolvido" : "sem_mudanca";
+}
+
+function falhaNaEtapa(etapa: string, erro: { code?: string }): Error {
+  return new Error(`Falha ao ${etapa} da conexão removida (código ${erro.code ?? "desconhecido"})`);
 }
 
 /**

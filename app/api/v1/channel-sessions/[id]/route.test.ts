@@ -21,6 +21,7 @@ import type { AuthUser } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getWahaClient } from "@/lib/waha/client";
+import { logger } from "@/lib/logger";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/auth/server", () => ({
@@ -668,6 +669,7 @@ describe("#1023 — a conexão removida fecha o próprio aviso", () => {
 
   it("erro ao LER os avisos não desfaz a exclusão que o operador pediu", async () => {
     authOk();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
     const db = makeDb({
       rows: {
         conversations: [{ id: "c1", organization_id: ORG, channel_session_id: CANAL }],
@@ -683,10 +685,48 @@ describe("#1023 — a conexão removida fecha o próprio aviso", () => {
     // pode transformar uma exclusão bem-sucedida em erro para o operador.
     expect(res.status).toBe(200);
     expect(db.linhas("channel_sessions")[0]?.archived_at).toEqual(expect.any(String));
+    // O supabase-js não lança em erro do PostgREST: se a função engolisse o
+    // `error`, a leitura falha viraria "nenhum aviso aberto" e a auditoria
+    // diria "sem_mudanca" com o crítico ainda na Central.
+    expect(db.linhas("agent_inbox_items")[0]?.status).toBe("open");
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
-        metadata: expect.objectContaining({ avisos_fechados: "sem_mudanca" }),
+        metadata: expect.objectContaining({ avisos_fechados: "falhou" }),
       }),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      "Falha ao fechar os avisos de saúde da conexão removida",
+      expect.objectContaining({ channel_session_id: CANAL, organization_id: ORG }),
+    );
+  });
+
+  it("erro ao RESOLVER os avisos → auditoria diz \"falhou\", não \"resolvido\"", async () => {
+    authOk();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const db = makeDb({
+      rows: {
+        conversations: [{ id: "c1", organization_id: ORG, channel_session_id: CANAL }],
+        agent_inbox_items: [avisoAberto(CANAL)],
+      },
+      writeError: (_n, table) =>
+        table === "agent_inbox_items" ? { code: "57014", message: "boom" } : null,
+    });
+    wahaOk(db);
+    const { DELETE } = await import("./route");
+    const res = await DELETE(reqDelete(), ctx());
+
+    expect(res.status).toBe(200);
+    expect(db.linhas("channel_sessions")[0]?.archived_at).toEqual(expect.any(String));
+    expect(db.linhas("agent_inbox_items")[0]?.status).toBe("open");
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "channel.archived",
+        metadata: expect.objectContaining({ avisos_fechados: "falhou" }),
+      }),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      "Falha ao fechar os avisos de saúde da conexão removida",
+      expect.objectContaining({ erro: expect.stringContaining("57014") }),
     );
   });
 });
