@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { EntradaDaAgenda } from "@/components/agenda/EntradaDaAgenda";
+import { EnderecoDaMarcacao } from "@/components/agenda/EnderecoDaMarcacao";
 import { VinculoDaMarcacao } from "@/components/agenda/VinculoDaMarcacao";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
@@ -588,136 +589,113 @@ export function AgendaClient({
               {remarcandoId ? t("Remarcar agendamento") : t("Novo agendamento")}
             </SheetTitle>
           </SheetHeader>
-          {!remarcandoId ? (
-            <VinculoDaMarcacao
-              contactId={contactId}
-              conversationId={conversationId}
-              onChange={(contact, conversation) => escolherVinculo({ contact, conversation })}
-            />
-          ) : null}
-          {tiposIniciais.length > 1 && (
-            <div className="mt-4" data-testid="tipos-de-agendamento">
-              <p className="mb-2 text-xs font-medium text-text-muted">{t("Tipo de agendamento")}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {tiposIniciais.map((opcao) => (
-                  <button
-                    key={opcao.id}
-                    type="button"
-                    data-testid={`tipo-${opcao.id}`}
-                    aria-pressed={opcao.id === tipo?.id}
-                    onClick={() => {
-                      setTipoId(opcao.id);
-                      // Tipo novo, local novo — senão a Sala 2 do tipo anterior
-                      // viaja para um atendimento online que não tem sala.
-                      setEnderecoEditado(null);
-                    }}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs transition-colors duration-fast",
-                      opcao.id === tipo?.id
-                        ? "border-transparent bg-accent text-accent-foreground"
-                        : "border-border text-text-muted hover:border-border-strong hover:text-text",
-                    )}
-                  >
-                    {opcao.nome}
-                    <span className="ml-1 tabular-nums opacity-70">{opcao.duracaoMin}min</span>
-                  </button>
-                ))}
+          <div className="space-y-4 rounded-lg border p-3">
+            {!remarcandoId ? (
+              <VinculoDaMarcacao
+                contactId={contactId}
+                conversationId={conversationId}
+                onChange={(contact, conversation) => escolherVinculo({ contact, conversation })}
+              />
+            ) : null}
+            {tiposIniciais.length > 1 && (
+              <div data-testid="tipos-de-agendamento">
+                <p className="mb-2 text-sm font-medium">{t("Tipo de agendamento")}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {tiposIniciais.map((opcao) => (
+                    <button
+                      key={opcao.id}
+                      type="button"
+                      data-testid={`tipo-${opcao.id}`}
+                      aria-pressed={opcao.id === tipo?.id}
+                      onClick={() => {
+                        setTipoId(opcao.id);
+                        // Tipo novo, local novo — senão a Sala 2 do tipo anterior
+                        // viaja para um atendimento online que não tem sala.
+                        setEnderecoEditado(null);
+                      }}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs transition-colors duration-fast",
+                        opcao.id === tipo?.id
+                          ? "border-transparent bg-accent text-accent-foreground"
+                          : "border-border text-text-muted hover:border-border-strong hover:text-text",
+                      )}
+                    >
+                      {opcao.nome}
+                      <span className="ml-1 tabular-nums opacity-70">{opcao.duracaoMin}min</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-          {/*
-            O CONVIDADO — opcional, e é o que faz o convite do Google existir.
-            Sem e-mail aqui o evento nasce só na agenda do atendente, que é o
-            comportamento que este produto teve desde sempre.
+            )}
+            {/*
+              O CONVIDADO — opcional, e é o que faz o convite do Google existir.
+              Sem e-mail aqui o evento nasce só na agenda do atendente, que é o
+              comportamento que este produto teve desde sempre.
 
-            Fica ACIMA do painel de horários de propósito: quem vai convidar
-            alguém decide isso ANTES de escolher o horário, e um campo abaixo de
-            uma lista rolável de horários é um campo que ninguém vê.
-          */}
-          <div className="mt-4">
-            <label
-              className="block text-xs font-medium text-text-muted"
-              htmlFor="email-do-convidado"
-            >
-              {t("E-mail do convidado")}{" "}
-              <span className="font-normal opacity-70">({t("opcional")})</span>
-            </label>
-            <input
-              id="email-do-convidado"
-              data-testid="email-do-convidado"
-              type="email"
-              inputMode="email"
-              autoComplete="off"
-              value={emailConvidado}
-              onChange={(e) => setEmailConvidado(e.target.value)}
-              className={cn(
-                // `outline-hidden`, não `outline-none`: no Tailwind 4 os dois
-                // trocaram de significado, e o `outline-none` do v4 apaga o
-                // contorno que o modo de alto contraste do sistema usa.
-                "mt-1 w-full rounded-md border bg-surface p-2 text-sm outline-hidden",
-                emailConvidadoInvalido
-                  ? "border-danger focus:border-danger"
-                  : "border-border focus:border-border-strong",
-              )}
-              placeholder={t("cliente@empresa.com")}
-              aria-invalid={emailConvidadoInvalido || undefined}
-              aria-describedby="ajuda-do-convidado"
-            />
-            <p id="ajuda-do-convidado" className="mt-1 text-xs text-text-muted">
-              {emailConvidadoInvalido
-                ? t("Endereço inválido — confira antes de marcar.")
-                : t("Preenchido, o Google envia o convite por e-mail para esta pessoa.")}
-            </p>
-          </div>
-          {!remarcandoId ? (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  className="block text-xs font-medium text-text-muted"
-                  htmlFor="endereco-do-compromisso"
-                >
-                  {t("Endereço")}{" "}
-                  <span className="font-normal opacity-70">({t("opcional")})</span>
-                </label>
-                <input
-                  id="endereco-do-compromisso"
-                  data-testid="endereco-do-compromisso"
-                  type="text"
-                  autoComplete="off"
-                  value={endereco}
-                  onChange={(e) => setEnderecoEditado(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-surface p-2 text-sm outline-hidden focus:border-border-strong"
-                  placeholder={t("Rua, número, sala")}
-                  aria-describedby="ajuda-do-endereco"
-                />
-                <p id="ajuda-do-endereco" className="mt-1 text-xs text-text-muted">
-                  {t("Onde o atendimento acontece. Aparece no calendário.")}
-                </p>
-              </div>
-              <div>
-                <label
-                  className="block text-xs font-medium text-text-muted"
-                  htmlFor="observacao-do-compromisso"
-                >
-                  {t("Observação")}{" "}
-                  <span className="font-normal opacity-70">({t("opcional")})</span>
-                </label>
-                <textarea
-                  id="observacao-do-compromisso"
-                  data-testid="observacao-do-compromisso"
-                  rows={2}
-                  value={observacao}
-                  onChange={(e) => setObservacao(e.target.value)}
-                  className="mt-1 w-full resize-none rounded-md border border-border bg-surface p-2 text-sm outline-hidden focus:border-border-strong"
-                  placeholder={t("O que a equipe precisa lembrar neste horário")}
-                  aria-describedby="ajuda-da-observacao"
-                />
-                <p id="ajuda-da-observacao" className="mt-1 text-xs text-text-muted">
-                  {t("Aparece na descrição do compromisso.")}
-                </p>
-              </div>
+              Fica ACIMA do painel de horários de propósito: quem vai convidar
+              alguém decide isso ANTES de escolher o horário, e um campo abaixo de
+              uma lista rolável de horários é um campo que ninguém vê.
+            */}
+            <div>
+              <label className="block" htmlFor="email-do-convidado">
+                {t("E-mail do convidado")}{" "}
+                <span className="font-normal opacity-70">({t("opcional")})</span>
+              </label>
+              <input
+                id="email-do-convidado"
+                data-testid="email-do-convidado"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                value={emailConvidado}
+                onChange={(e) => setEmailConvidado(e.target.value)}
+                className={cn(
+                  // `outline-hidden`, não `outline-none`: no Tailwind 4 os dois
+                  // trocaram de significado, e o `outline-none` do v4 apaga o
+                  // contorno que o modo de alto contraste do sistema usa.
+                  "mt-1 w-full rounded-md border bg-surface p-2 outline-hidden",
+                  emailConvidadoInvalido
+                    ? "border-danger focus:border-danger"
+                    : "border-border focus:border-border-strong",
+                )}
+                placeholder={t("cliente@empresa.com")}
+                aria-invalid={emailConvidadoInvalido || undefined}
+                aria-describedby="ajuda-do-convidado"
+              />
+              <p id="ajuda-do-convidado" className="mt-1 text-xs text-text-muted">
+                {emailConvidadoInvalido
+                  ? t("Endereço inválido — confira antes de marcar.")
+                  : t("Preenchido, o Google envia o convite por e-mail para esta pessoa.")}
+              </p>
             </div>
-          ) : null}
+            {!remarcandoId ? (
+              <>
+                <EnderecoDaMarcacao
+                  value={endereco}
+                  onChange={setEnderecoEditado}
+                />
+                <div>
+                  <label className="block" htmlFor="observacao-do-compromisso">
+                    {t("Observação")}{" "}
+                    <span className="font-normal opacity-70">({t("opcional")})</span>
+                  </label>
+                  <textarea
+                    id="observacao-do-compromisso"
+                    data-testid="observacao-do-compromisso"
+                    rows={2}
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    className="mt-1 w-full resize-none rounded-md border bg-surface p-2 outline-hidden"
+                    placeholder={t("O que a equipe precisa lembrar neste horário")}
+                    aria-describedby="ajuda-da-observacao"
+                  />
+                  <p id="ajuda-da-observacao" className="mt-1 text-xs text-text-muted">
+                    {t("Aparece na descrição do compromisso.")}
+                  </p>
+                </div>
+              </>
+            ) : null}
+          </div>
           {tipo && (
             <div className="mt-4 lg:min-h-0 lg:flex-1">
               <PainelDeMarcacao

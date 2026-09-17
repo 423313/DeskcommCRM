@@ -143,6 +143,10 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     razao: "tests/invariants/agenda-rls.test.ts — mesmo `it.each` de TABELAS_DA_AGENDA.",
   },
   {
+    tabela: "calendar_locations",
+    razao: "tests/invariants/agenda-rls.test.ts — mesmo `it.each` de TABELAS_DA_AGENDA.",
+  },
+  {
     tabela: "followup_flow_versions",
     razao:
       "tests/invariants/followup-schema.test.ts — `FOLLOWUP_TABLES`, com " +

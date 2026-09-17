@@ -6502,9 +6502,20 @@ export const DICIONARIO: Traducoes = {
   "Deixe em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.": {
     es: "Déjalo en blanco para el texto predeterminado. Variables: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.",
   },
+  "Quanto antes": { es: "Cuánto antes" },
+  "Unidade": { es: "Unidad" },
+  "minutos": { es: "minutos" },
+  "Mensagem deste lembrete": { es: "Mensaje de este recordatorio" },
+  "Adicionar lembrete": { es: "Agregar recordatorio" },
+  "Deixe a mensagem em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.": {
+    es: "Deja el mensaje en blanco para el texto predeterminado. Variables: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.",
+  },
   "texto próprio": { es: "texto propio" },
   "A mensagem do lembrete cabe em 1000 caracteres.": {
     es: "El mensaje del recordatorio cabe en 1000 caracteres.",
+  },
+  "No máximo 20 lembretes adicionais por tipo.": {
+    es: "Como máximo 20 recordatorios adicionales por tipo.",
   },
   "O lembrete precisa sair pelo menos 15 minutos antes do compromisso.": { es: "El recordatorio debe salir al menos 15 minutos antes de la cita." },
   "O lembrete não pode sair mais de 7 dias (10080 minutos) antes.": { es: "El recordatorio no puede salir más de 7 días (10080 minutos) antes." },
@@ -7882,8 +7893,13 @@ export const DICIONARIO: Traducoes = {
   "Preenchido, o Google envia o convite por e-mail para esta pessoa.":
     { es: "Si se completa, Google envía la invitación por correo a esta persona." },
   "Rua, número, sala": { es: "Calle, número, sala" },
-  "Onde o atendimento acontece. Aparece no calendário.":
-    { es: "Dónde ocurre la atención. Aparece en el calendario." },
+  "Onde o atendimento acontece. Digite para filtrar ou salvar para a próxima vez.":
+    { es: "Dónde ocurre la atención. Escribe para filtrar o guardar para la próxima vez." },
+  "Salvar para os próximos agendamentos": { es: "Guardar para las próximas citas" },
+  "Não foi possível salvar o endereço. Tente novamente.":
+    { es: "No se pudo guardar la dirección. Inténtalo de nuevo." },
+  "Não foi possível carregar os endereços. Tente novamente.":
+    { es: "No se pudieron cargar las direcciones. Inténtalo de nuevo." },
   "Observação": { es: "Observación" },
   "O que a equipe precisa lembrar neste horário": {
     es: "Lo que el equipo necesita recordar en este horario",

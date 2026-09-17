@@ -365,6 +365,7 @@ test("ligo o aviso do compromisso pela tela, e ele fica ligado", async ({ page }
 
   await caixa.check();
   await expect(minutos, "marquei o aviso e o campo continuou travado").toBeEnabled();
+  await linha.getByTestId(/^editar-lembrete-unidade-/).first().selectOption("minutos");
   await minutos.fill("60");
   await linha.getByTestId(/^salvar-/).first().click();
 

@@ -26271,6 +26271,117 @@ alter table public.calendar_event_types
 comment on column public.calendar_event_types.reminder_body is
   'Texto do lembrete no WhatsApp. NULL = a frase padrão do cron. Variáveis {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}. Distinto de reminder_template_name, que é o nome do template aprovado no provedor oficial.';
 
+-- ---- mensagem por lembrete (migration 0266) ----
+-- Cada extra ganha texto próprio (`reminder_bodies`) e o teto de 3 extras
+-- sobe para 20. O CHECK antigo chama a função pelo nome: `create or replace`
+-- basta. Backfill copia reminder_body para cada extra que já existia, para
+-- a atualização não trocar o texto que o cliente já recebia.
+alter table public.calendar_event_types
+  add column if not exists reminder_bodies jsonb not null default '{}'::jsonb;
+
+create or replace function public.fn_degraus_de_lembrete_validos(p_degraus integer[])
+returns boolean
+language sql
+immutable
+as $$
+  select coalesce(array_length(p_degraus, 1), 0) <= 20
+     and coalesce(bool_and(x between 15 and 10080), true)
+    from unnest(coalesce(p_degraus, '{}'::integer[])) as x;
+$$;
+
+revoke execute on function public.fn_degraus_de_lembrete_validos(integer[]) from public, anon;
+grant execute on function public.fn_degraus_de_lembrete_validos(integer[]) to authenticated, service_role;
+
+create or replace function public.fn_corpos_de_lembrete_validos(p_corpos jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select p_corpos is not null
+     and jsonb_typeof(p_corpos) = 'object'
+     and coalesce((select count(*) from jsonb_object_keys(p_corpos)), 0) <= 20
+     and coalesce((
+       select bool_and(
+         e.key ~ '^[0-9]+$'
+         and jsonb_typeof(e.value) = 'string'
+         and length(e.value #>> '{}') <= 1000
+       )
+       from jsonb_each(p_corpos) as e
+     ), true);
+$$;
+
+revoke execute on function public.fn_corpos_de_lembrete_validos(jsonb) from public, anon;
+grant execute on function public.fn_corpos_de_lembrete_validos(jsonb) to authenticated, service_role;
+
+update public.calendar_event_types
+   set reminder_bodies = coalesce((
+     select jsonb_object_agg(x::text, reminder_body)
+       from unnest(reminder_extra_offsets_minutes) as x
+   ), '{}'::jsonb)
+ where reminder_body is not null
+   and length(trim(reminder_body)) > 0
+   and coalesce(array_length(reminder_extra_offsets_minutes, 1), 0) > 0
+   and reminder_bodies = '{}'::jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'calendar_event_types_corpos_validos'
+       and conrelid = 'public.calendar_event_types'::regclass
+  ) then
+    update public.calendar_event_types
+       set reminder_bodies = '{}'::jsonb
+     where not public.fn_corpos_de_lembrete_validos(reminder_bodies);
+
+    alter table public.calendar_event_types
+      add constraint calendar_event_types_corpos_validos
+      check (public.fn_corpos_de_lembrete_validos(reminder_bodies));
+  end if;
+end $$;
+
+comment on column public.calendar_event_types.reminder_bodies is
+  'Texto de cada lembrete ADICIONAL, chave = minutos antes (string). Extra ausente do mapa usa a frase de fábrica do cron, não reminder_body. Vazio = nenhum extra tem texto próprio.';
+
+-- ---- endereços salvos da agenda (migration 0267) ----
+-- Lista da ORGANIZAÇÃO: salas e unidades que a equipe reusa ao marcar.
+-- Unique por (org, endereço normalizado). Escrita agent+; leitura de membro.
+create table if not exists public.calendar_locations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  address text not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  constraint calendar_locations_endereco_tamanho
+    check (char_length(btrim(address)) between 1 and 300)
+);
+
+create unique index if not exists calendar_locations_org_endereco_key
+  on public.calendar_locations (organization_id, lower(btrim(address)));
+
+comment on table public.calendar_locations is
+  'Endereços da ORGANIZAÇÃO reutilizáveis ao marcar. Não é o endereço de um contato: é o lugar onde se atende (sala, unidade). Unique por org + endereço normalizado.';
+comment on column public.calendar_locations.address is
+  'Texto livre, 1–300 caracteres depois do trim. O mesmo teto de calendar_appointments.location_details.';
+
+alter table public.calendar_locations enable row level security;
+
+drop policy if exists calendar_locations_select on public.calendar_locations;
+create policy calendar_locations_select on public.calendar_locations
+  for select using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+
+drop policy if exists calendar_locations_insert on public.calendar_locations;
+create policy calendar_locations_insert on public.calendar_locations
+  for insert with check (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+revoke all on public.calendar_locations from anon;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

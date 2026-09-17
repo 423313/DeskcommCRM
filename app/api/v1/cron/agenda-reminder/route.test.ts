@@ -239,4 +239,10 @@ describe("o cron NÃO pode filtrar por reminder_sent_at", () => {
     expect(fonte).not.toMatch(/\.is\(\s*["']reminder_sent_at["']/);
     expect(fonte).toMatch(/reminder_sent_offsets_minutes/);
   });
+
+  it("lê o texto POR degrau — senão extra sai com a frase do principal", () => {
+    const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+    expect(fonte).toMatch(/reminder_bodies/);
+    expect(fonte).toMatch(/moldeDoDegrau/);
+  });
 });

@@ -103,7 +103,7 @@ export function VinculoDaMarcacao({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border p-3">
+    <div className="space-y-3">
       <div>
         <label className="block" htmlFor="quem-sera-atendido">
           {t("Quem será atendido")}

@@ -74,6 +74,7 @@ import { IDIOMA_PADRAO, normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { moldeDoDegrau } from "@/lib/agenda/lembretes";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,7 @@ interface TipoDoCompromisso {
   reminder_extra_offsets_minutes: number[] | null;
   reminder_template_name: string | null;
   reminder_body: string | null;
+  reminder_bodies: Record<string, string> | null;
   location_details: string | null;
 }
 
@@ -120,8 +122,9 @@ function tipoDe(linha: CompromissoAVencer): TipoDoCompromisso | null {
  * os mesmos dados; chave desconhecida fica no texto, para quem digitou
  * `{{foo}}` ver o erro em vez de uma mensagem manca.
  *
- * `reminder_body` do tipo vence; senão `reminder_template_name` aponta para
- * um modelo da organização; senão, esta frase.
+ * `reminder_body` / `reminder_bodies` do tipo vencem por degrau; senão
+ * `reminder_template_name` aponta para um modelo da organização; senão, esta
+ * frase.
  */
 export function aplicarMoldeDoLembrete(
   molde: string,
@@ -224,9 +227,10 @@ export function estaNaHora(agora: Date, comeca: Date, antecedenciaMin: number): 
  *
  * ⚠️ **Devolve todos os vencidos, e quem chama manda UMA mensagem só.** Se o
  * cron ficou parado e dois degraus venceram no intervalo, o certo é avisar uma
- * vez e dar os dois por cumpridos: mandar dois textos iguais em sequência é o
- * que faz a pessoa bloquear o número, e o degrau mais antecipado já perdeu a
- * função quando o mais próximo venceu.
+ * vez e dar os dois por cumpridos: mandar dois textos em sequência — mesmo
+ * diferentes — é o que faz a pessoa bloquear o número. O texto é o do degrau
+ * mais próximo do compromisso (o "agora"); o mais antecipado já perdeu a
+ * função quando o mais perto venceu.
  *
  * Pura e exportada pelo mesmo motivo que `estaNaHora`: é a regra que decide se
  * alguém recebe mensagem, e ela precisa ser exercitável sem banco.
@@ -265,7 +269,7 @@ async function handle(req: NextRequest): Promise<Response> {
     .from("calendar_appointments")
     .select(
       "id, organization_id, contact_id, title, starts_at, location_details, reminder_sent_offsets_minutes, " +
-        "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, reminder_body, location_details)",
+        "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, reminder_body, reminder_bodies, location_details)",
     )
     .eq("status", "confirmed")
     .eq("calendar_event_types.reminder_enabled", true)
@@ -365,7 +369,7 @@ async function handle(req: NextRequest): Promise<Response> {
       .eq("id", org)
       .maybeSingle();
 
-    let molde = tipo.reminder_body?.trim() || null;
+    let molde = moldeDoDegrau(tipo, Math.min(...pendentes));
     if (!molde && tipo.reminder_template_name) {
       const { data: modelo } = await admin
         .from("message_templates")

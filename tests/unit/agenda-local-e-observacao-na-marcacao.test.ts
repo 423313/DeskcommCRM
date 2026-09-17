@@ -22,14 +22,17 @@ describe("endereço e observação existem na marcação e chegam ao compromisso
   const mcp = readFileSync("lib/mcp/tools/agendamento.ts", "utf8");
 
   it("a tela de marcar tem os dois campos, e só na criação", () => {
-    expect(tela).toContain('data-testid="endereco-do-compromisso"');
+    const campo = readFileSync("components/agenda/EnderecoDaMarcacao.tsx", "utf8");
+    expect(campo).toContain('data-testid="endereco-do-compromisso"');
+    expect(campo).toContain('role="combobox"');
+    expect(tela).toContain("EnderecoDaMarcacao");
     expect(tela).toContain('data-testid="observacao-do-compromisso"');
     // Remarcar não oferece: o PATCH ainda não aceita estes campos.
     const bloco = tela.slice(
       tela.indexOf("{!remarcandoId ? ("),
       tela.indexOf("<PainelDeMarcacao"),
     );
-    expect(bloco).toContain("endereco-do-compromisso");
+    expect(bloco).toContain("EnderecoDaMarcacao");
     expect(bloco).toContain("observacao-do-compromisso");
   });
 
