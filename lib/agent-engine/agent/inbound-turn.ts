@@ -154,7 +154,7 @@ import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { esperarComoHumano } from './atraso-humano';
-import { sendInBubbles } from './split-message';
+import { sendInBubbles, splitForSend } from './split-message';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
@@ -2815,6 +2815,48 @@ async function executarTurnoDoAgente(
             ...(semanticClassifier !== undefined
               ? { classifyPromiseSemantic: semanticClassifier }
               : {}),
+            // Pausa humana do turno, paga FORA do lock do número (issue #654). Antes ela
+            // era paga dentro do `send` logo abaixo (via `antesDaPrimeira`), e o `send`
+            // só acontece com o `pg_advisory_xact_lock` do canal na mão — cada turno
+            // segurava a fila do NÚMERO por 1,2s–7,5s além do necessário. Agora o
+            // guardrail a paga antes de tomar conexão: sem transação aberta durante a espera.
+            //
+            // O texto que dimensiona a pausa é a 1ª bolha do MESMO fatiamento que o
+            // `sendInBubbles` usa (`splitForSend` é a fonte única da decisão) — a pausa
+            // segue proporcional ao que o cliente lê primeiro, não ao corpo todo.
+            //
+            // Diferença declarada: aqui o texto é o `body` PRÉ-cadeia; o `finalBody`
+            // pós-disclosure só existe do lado de dentro do guardrail. Um disclosure
+            // prependado pelo gate F4-05 não entra na conta da espera (antes entrava,
+            // porque o gancho recebia `finalBody`).
+            esperaForaDoLock: async (): Promise<void> => {
+              // Uma vez por TURNO — o flag impede que um re-run do fail-safe (veto de
+              // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
+              if (jaEsperouComoHumano) return;
+              jaEsperouComoHumano = true;
+              // `liveChannel()`, não `channel`: o transporte é anulável (preview não tem
+              // canal) e este é o MESMO acessor que o `send` logo abaixo usa. Resolver
+              // antes da espera mantém o desfecho de preview idêntico ao de antes —
+              // `preview_transport_forbidden` na hora, e não depois da pausa.
+              const canal = liveChannel();
+              const ms = await esperarComoHumano({
+                texto:
+                  splitForSend(
+                    body,
+                    agentConfig?.splitMessages ?? false,
+                    agentConfig?.splitMaxChars ?? 600,
+                  )[0] ?? body,
+                sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
+                log: runLog,
+                ...(canal.signalTyping
+                  ? {
+                      sinalizarDigitando: (): Promise<void> =>
+                        canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
+                    }
+                  : {}),
+              });
+              runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms, fora_do_lock: true });
+            },
             // `finalBody` = corpo após a cadeia (o disclosureGate F4-05 pode prependar o
             // disclosure via inject); é ELE que vai ao canal, não o `body` capturado da tool.
             send: (finalBody: string) =>
@@ -2823,34 +2865,9 @@ async function executarTurnoDoAgente(
                 maxChars: agentConfig?.splitMaxChars ?? 600,
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas
-                // ANTES da 1ª bolha: "digitando…" + espera proporcional ao texto.
-                // É o conserto do "responde rápido demais" (ver atraso-humano.ts).
-                // NÃO substitui o jitter acima: aquele é throttle anti-ban entre
-                // mensagens físicas, este é a pausa humana do turno. Só uma vez
-                // por TURNO — o flag impede que um re-run do fail-safe (veto de
-                // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
-                antesDaPrimeira: async (primeiraBolha: string): Promise<void> => {
-                  if (jaEsperouComoHumano) return;
-                  jaEsperouComoHumano = true;
-                  // `liveChannel()`, não `channel`: o transporte é anulável (preview
-                  // não tem canal) e este é o MESMO acessor que o `send` logo abaixo
-                  // usa. Resolver aqui, antes da espera, mantém o desfecho de preview
-                  // idêntico ao de antes deste recurso — `preview_transport_forbidden`
-                  // na hora, e não depois de segurar o turno por vários segundos.
-                  const canal = liveChannel();
-                  const ms = await esperarComoHumano({
-                    texto: primeiraBolha,
-                    sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
-                    log: runLog,
-                    ...(canal.signalTyping
-                      ? {
-                          sinalizarDigitando: (): Promise<void> =>
-                            canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
-                        }
-                      : {}),
-                  });
-                  runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms });
-                },
+                // A pausa humana do turno NÃO mora mais aqui: ela subiu para
+                // `esperaForaDoLock` (paga antes de o guardrail tomar o lock do número) —
+                // issue #654. Neste ponto fica só o jitter anti-ban entre bolhas.
                 send: (bubble): Promise<ChannelSendResult> => {
                   seq += 1;
                   return liveChannel().send({
