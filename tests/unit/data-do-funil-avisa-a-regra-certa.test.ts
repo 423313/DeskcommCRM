@@ -471,10 +471,37 @@ describe("a varredura da data do funil", () => {
   });
 });
 
-/** O `p_event_type` que a rota realmente passa, pelo mesmo motivo da entidade. */
+/**
+ * O `p_event_type` que a rota realmente passa, pelo mesmo motivo da entidade.
+ *
+ * A rota pode nomear o gatilho de duas formas, e as duas entram na medição: o
+ * literal digitado (`"lead.date_field_due"`, o estilo do cron do aniversário) ou
+ * a CONSTANTE importada do módulo que registra o gatilho. Na segunda forma o que
+ * ainda sobra para medir — e o que este teste pega — é o import: se a rota
+ * referenciar um nome que não vem de `gatilho-de-data-do-funil`, a sonda devolve
+ * `null` e a regra salva pelo operador nunca acorda.
+ */
 function gatilhoDoEmissor(): string | null {
-  const m = /p_event_type:\s*"([^"]+)"/.exec(readFileSync(CRON, "utf8"));
-  return m === null ? null : m[1]!;
+  const fonte = readFileSync(CRON, "utf8");
+
+  const literal = /p_event_type:\s*"([^"]+)"/.exec(fonte);
+  if (literal !== null) return literal[1]!;
+
+  const referencia = /p_event_type:\s*([A-Za-z_$][\w$]*)/.exec(fonte);
+  if (referencia === null) return null;
+  if (referencia[1] !== "GATILHO_DE_DATA_DO_FUNIL") return null;
+
+  const doModulo = new RegExp(
+    'import\\s*\\{([^}]*)\\}\\s*from\\s*"@/lib/automation/gatilho-de-data-do-funil"',
+  ).exec(fonte);
+  const importados = (doModulo?.[1] ?? "")
+    .split(",")
+    .map((nome) => nome.trim().split(/\s+as\s+/).pop()!)
+    .filter(Boolean);
+
+  return importados.includes("GATILHO_DE_DATA_DO_FUNIL")
+    ? GATILHO_DE_DATA_DO_FUNIL
+    : null;
 }
 
 describe("o motor respeita o evento dirigido", () => {

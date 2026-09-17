@@ -1,5 +1,5 @@
 ---
-impacto: nada_mudou
+impacto: capacidade_nova
 secao: adicionado
 titulo: Aviso automático N dias antes (ou depois) de uma data do funil
 ---

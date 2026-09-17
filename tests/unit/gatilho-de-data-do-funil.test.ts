@@ -8,13 +8,12 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { eHoraDaVarredura } from "@/lib/automation/cron-de-data";
+import { diaLocal, eHoraDaVarredura } from "@/lib/automation/cron-de-data";
 import {
   casaNaData,
   chaveDeDisparo,
   configDoGatilhoDeData,
   diaAlvo,
-  diaLocal,
   naoDisparados,
   somarDias,
   DIAS_MAX,
