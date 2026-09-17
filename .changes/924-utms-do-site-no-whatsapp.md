@@ -1,5 +1,5 @@
 ---
-impacto: nada_mudou
+impacto: capacidade_nova
 secao: corrigido
 titulo: A origem da página sobrevive quando o contato chega pelo WhatsApp
 ---
