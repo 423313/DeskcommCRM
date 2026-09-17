@@ -44,10 +44,19 @@ interface Props {
 }
 
 /**
- * Shared card shell for all 6 node types — a card, not a bare React Flow box:
- * icon chip + title + one-line subtitle + connection handles, left border in
- * the type's accent. Red ring + inline message when `errors` is non-empty
- * (publish 422 anchored to this node — Task 6.2 PublishBar wires this).
+ * Shared card shell for every node type — a card, not a bare React Flow box:
+ * icon chip + title + subtitle + connection handles, left border in the type's
+ * accent. Red ring + inline message when `errors` is non-empty (publish 422
+ * anchored to this node — Task 6.2 PublishBar wires this).
+ *
+ * ⚠️ SUBTÍTULO E SAÍDA QUEBRAM EM DUAS LINHAS, NÃO CORTAM. Eram `truncate` numa
+ * linha só dentro de um card de 224px, e o que se perdia era sempre o FIM — que
+ * é onde mora o valor da regra. "O fluxo já deu pelo menos 0 pas…" e "O lead não
+ * está na etapa “Proposta enviada”" chegavam iguais na tela, e o card deixava de
+ * responder "qual aresta sai de qual regra", que é a razão de ele existir. Duas
+ * linhas cobrem toda frase do vocabulário (medido); o que ainda passar disso tem
+ * o texto inteiro no `title`. O canvas mede o card pelo DOM (`FlowCanvas` passa
+ * `measured` ao auto-layout), então o card mais alto não desalinha nada.
  */
 export function NodeCard({
   id,
@@ -90,8 +99,12 @@ export function NodeCard({
           <Icon size={14} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-text">{label}</p>
-          <p className="truncate text-xs text-text-muted">{subtitle}</p>
+          <p className="truncate text-sm font-medium text-text" title={label}>
+            {label}
+          </p>
+          <p className="line-clamp-2 break-words text-xs text-text-muted" title={subtitle}>
+            {subtitle}
+          </p>
         </div>
       </div>
       {hasError && (
@@ -136,7 +149,7 @@ export function NodeCard({
                     )}
                   />
                 )}
-                <span className="truncate text-xs leading-tight">{rotulo}</span>
+                <span className="line-clamp-2 break-words text-xs leading-tight">{rotulo}</span>
                 <Handle
                   type="source"
                   id={branch.id}
