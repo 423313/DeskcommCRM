@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { ok, fail } from "@/lib/api/wrappers";
-import { ehIdentificadorTecnico, rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 export async function GET(req: Request) {
   const requestId = randomUUID();
   const auth = await requireRole("agent", { requestId, resource: "agenda" });
@@ -48,17 +48,7 @@ export async function GET(req: Request) {
     return fail("internal_error", "Não foi possível carregar as conversas.", 500, { requestId });
   return ok(
     {
-      contacts: result.data.map((contato) => {
-        // A Agenda prioriza display_name; o helper global prioriza o nome editado.
-        const nomeExibido = contato.display_name?.trim();
-        return {
-          id: contato.id,
-          name:
-            nomeExibido && !ehIdentificadorTecnico(nomeExibido)
-              ? nomeExibido
-              : rotuloDoContato(contato),
-        };
-      }),
+      contacts: result.data.map((contato) => ({ id: contato.id, name: rotuloDoContato(contato) })),
       conversations: conversations.data,
     },
     { requestId },

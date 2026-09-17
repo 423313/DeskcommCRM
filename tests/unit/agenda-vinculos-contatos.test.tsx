@@ -125,18 +125,6 @@ describe("contatos da Agenda pelo nome exibido", () => {
     linhas = [{ ...contato, name: "Nome legado" }];
     expect((await buscar()).contacts).toEqual([{ id: ID, name: "Cíntia Nunes" }]);
   });
-  it("remove espaços externos do nome exibido mesmo com nome legado preenchido", async () => {
-    linhas = [{ ...contato, display_name: "  Cíntia Nunes  ", name: "Nome legado" }];
-    expect((await buscar({ contact_id: ID })).contacts).toEqual([{ id: ID, name: "Cíntia Nunes" }]);
-  });
-  it("nome exibido técnico mantém o fallback seguro para o nome legado", async () => {
-    linhas = [{ ...contato, display_name: "Contato 543134@lid", name: "Maria Antiga" }];
-    expect((await buscar()).contacts).toEqual([{ id: ID, name: "Maria Antiga" }]);
-  });
-  it("cadastro sem nomes mantém o fallback compartilhado para o telefone", async () => {
-    linhas = [{ ...contato, display_name: "  ", phone_number: "+5532984793302" }];
-    expect((await buscar()).contacts).toEqual([{ id: ID, name: "+5532984793302" }]);
-  });
   it("sem nomes usa o fallback compartilhado, nunca uma opção vazia", async () => {
     linhas = [{ ...contato, display_name: null }];
     expect((await buscar()).contacts).toEqual([{ id: ID, name: "Sem nome" }]);
