@@ -15,9 +15,9 @@ echo "upstream esta $ANTES commits a frente."
 # Resolver conflito nele a mao e trabalho perdido; a gente regenera.
 if ! git merge origin/main --no-edit; then
   if git diff --name-only --diff-filter=U | grep -qx supabase/baseline.sql; then
-    echo "regenerando baseline.sql (upstream puro + supabase/fork-apendice.sql)"
+    echo "regenerando baseline.sql (upstream + supabase/fork-apendice.sql)"
     git checkout --theirs supabase/baseline.sql
-    cat supabase/fork-apendice.sql >> supabase/baseline.sql
+    python scripts/fork-baseline.py
     git add supabase/baseline.sql
   fi
   RESTANTES=$(git diff --name-only --diff-filter=U)
@@ -32,6 +32,10 @@ if ! git merge origin/main --no-edit; then
   git commit --no-edit
 fi
 
-echo "merge feito. agora prove, que e o que o git nao sabe:"
+echo "merge feito. agora prove, que e o que o git NAO sabe:"
 echo "  pnpm typecheck && pnpm test:unit"
 echo "  pnpm test:db      # o unico que pega mudanca de contrato no schema"
+echo
+echo "a 17 falhas em 5 arquivos (leads-import, lgpd-pdf-*, rascunho-superado,"
+echo "followups-de-demonstracao) ja vem vermelhas da main do upstream - confira"
+echo "contra ela antes de culpar o merge."

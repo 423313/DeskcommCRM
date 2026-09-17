@@ -41,6 +41,10 @@ const config: VercelConfig = {
     { path: "/api/v1/cron/kb-conversations-batch", schedule: "30 3 * * *" },
     { path: "/api/v1/cron/sync-model-catalog", schedule: "15 4 * * *" },
     { path: "/api/v1/cron/data-retention", schedule: "40 4 * * *" },
+    // Do fork (modulo financeiro): gera as linhas pendentes dos lancamentos
+    // recorrentes. Mesmo horario do docker/scheduler/entrypoint.sh, que e quem
+    // dispara na VPS — o gate `cron-routes-scheduled` reprova se divergirem.
+    { path: "/api/v1/cron/recurring-entries", schedule: "50 5 * * *" },
   ],
   functions: {
     "app/api/v1/cron/**/route.ts": { maxDuration: 120 },

@@ -1432,6 +1432,7 @@ export const DICIONARIO: Traducoes = {
   Agendada: { es: "Agendada" },
   "Concluída": { es: "Concluida" },
   Cancelada: { es: "Cancelada" },
+  Finalizada: { es: "Finalizada" },
   "Fluxo criado.": { es: "Flujo creado." },
   "Follow-up cancelado.": { es: "Seguimiento cancelado." },
   "Retorno cancelado.": { es: "Retorno cancelado." },

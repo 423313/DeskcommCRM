@@ -836,9 +836,13 @@ export async function listaTiposDeAtendimento(
       janelaDeAgendamentoDias: Number(t.booking_window_days),
       lembreteLigado: Boolean(t.reminder_enabled),
       lembreteAntecedenciaMin: Number(t.reminder_minutes_before),
-      lembreteDegrausExtras: Array.isArray(t.reminder_extra_offsets_minutes, default_price_cents)
-        ? t.reminder_extra_offsets_minutes, default_price_cents.map(Number)
+      lembreteDegrausExtras: Array.isArray(t.reminder_extra_offsets_minutes)
+        ? t.reminder_extra_offsets_minutes.map(Number)
         : [],
+      precoPadraoCents:
+        t.default_price_cents === null || t.default_price_cents === undefined
+          ? null
+          : Number(t.default_price_cents),
     })),
   };
 }

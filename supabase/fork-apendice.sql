@@ -1,4 +1,4 @@
--- ---- catálogo financeiro: contas, formas de pagamento, plano de contas (migration 0239) ----
+-- ---- catálogo financeiro: contas, formas de pagamento, plano de contas (migration 9001) ----
 -- O CATÁLOGO FINANCEIRO — a primeira camada do módulo de comanda/financeiro.
 --
 -- Três tabelas que não guardam dinheiro, só definem PARA ONDE ele vai:
@@ -147,7 +147,7 @@ comment on table public.account_plans is
   'Classificação do lançamento, com direção (in/out) que o sistema de origem tinha e não usava.';
 
 
--- ---- comanda, financeiro, comissão e fidelidade (migration 0240) ----
+-- ---- comanda, financeiro, comissão e fidelidade (migration 9002) ----
 -- A COMANDA E O QUE ELA MOVE — segunda e última camada do módulo financeiro.
 --
 -- Cinco tabelas e uma função. A função é o ponto: finalizar uma comanda faz
@@ -639,7 +639,7 @@ comment on function public.fn_finalizar_comanda(uuid, uuid, uuid, integer) is
   'As seis coisas numa transação: venda, comissão por item, entrada na conta da forma de pagamento, ponto de fidelidade e conclusão do agendamento. Idempotente sob FOR UPDATE.';
 
 
--- ---- uma comanda por agendamento (migration 0243) ----
+-- ---- uma comanda por agendamento (migration 9003) ----
 -- A rota consulta antes de abrir, e isso resolve o toque repetido, não a
 -- corrida: duas requisições simultâneas passam pelas duas consultas antes de
 -- qualquer insert. Duas comandas abertas para o mesmo atendimento não dão erro
@@ -664,7 +664,7 @@ create unique index if not exists sales_agendamento_unico_idx
   on public.sales (organization_id, appointment_id)
   where appointment_id is not null and status <> 'cancelled';
 
--- ---- relatório financeiro (migrations 0244 + 0247) ----
+-- ---- relatório financeiro (migrations 9004 + 9007) ----
 -- Agrega NO BANCO: o PostgREST corta em 1000 linhas sem avisar, e somar na
 -- aplicação devolve um número menor com cara de certo (medido nesta base:
 -- R$ 141.436,00 em vez de R$ 641.103,60). Invoker, para a RLS de cada tabela
@@ -777,7 +777,7 @@ $$;
 revoke execute on function public.fn_relatorio_financeiro(uuid, date, date) from public, anon;
 grant  execute on function public.fn_relatorio_financeiro(uuid, date, date) to authenticated, service_role;
 
--- ---- regra de comissao inativa (migration 0245) ----
+-- ---- regra de comissao inativa (migration 9005) ----
 -- A regra entra no catálogo financeiro genérico, que espera `is_active`.
 -- Antes disto não havia porta nenhuma para cadastrar uma regra, e toda
 -- comissão nascia 0% em toda instalação. Inativar e não apagar preserva a
@@ -799,7 +799,7 @@ create index if not exists commission_rules_org_ativas_idx
 comment on column public.commission_rules.is_active is
   'Regra em vigor. Inativa em vez de apagar: o percentual já aplicado está congelado no item, e o que se perderia é a resposta a "por que aquela comanda saiu com este percentual".';
 
--- ---- saldo de fidelidade (migration 0246) ----
+-- ---- saldo de fidelidade (migration 9006) ----
 -- O saldo é sum(points) do livro-razão, somado NO BANCO: o PostgREST corta em
 -- 1000 linhas sem avisar, e saldo truncado vira prêmio negado a quem tinha
 -- direito. Por CLIENTE, nunca agregado — o total geral esconde erros que se
@@ -822,7 +822,7 @@ grant  execute on function public.fn_saldo_de_fidelidade(uuid, uuid) to authenti
 comment on function public.fn_saldo_de_fidelidade(uuid, uuid) is
   'Saldo de pontos de um contato: sum(points) do livro-razão. Soma no banco porque o PostgREST corta em 1000 linhas sem avisar, e saldo truncado vira prêmio negado a quem tinha direito.';
 
--- ---- lancamento recorrente (migration 0248) ----
+-- ---- lancamento recorrente (migration 9008) ----
 -- O molde de um lançamento que se repete todo mês. Não movimenta dinheiro:
 -- quem nasce é uma linha PENDENTE em `financial_entries`. Nasce pendente e
 -- nunca paga — o sistema sabe que a conta vence, não sabe se alguém pagou.
@@ -884,7 +884,7 @@ comment on table public.recurring_entries is
 comment on column public.recurring_entries.day_of_month is
   'Dia do mês, 1 a 31. O que não existe no mês cai no último dia dele — pular deixaria de cobrar o aluguel em fevereiro.';
 
--- ---- preco do tipo de evento (migration 0249) ----
+-- ---- preco do tipo de evento (migration 9009) ----
 -- O catálogo de serviços JÁ é o de tipos de agendamento (decisão da 0240), e
 -- faltava o preço. Sem ele o balcão digita valor a cada item e o faturamento
 -- em lote é impossível. NULLABLE: nem todo negócio tem preço fixo, e vazio
