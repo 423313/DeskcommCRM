@@ -150,6 +150,15 @@ const ESCRITA_FORJADA: Record<(typeof TABELAS)[number], string> = {
     values ('${ORG}', '${CONVERSA}', '${VIEWER}', '${VIEWER}', 'claim')`,
 };
 
+/**
+ * O mesmo INSERT forjado de `agent_cases`, mas num status TERMINAL — o que não
+ * aciona `trg_agent_case_opened`. Serve ao controle positivo de privilégio, que
+ * precisa medir a tranca do GRANT sem esbarrar na reserva do `emit_event`.
+ */
+const ESCRITA_FORJADA_TERMINAL = `insert into public.agent_cases
+      (organization_id, conversation_id, title, summary, blocker, status)
+    values ('${ORG}', '${CONVERSA}', 'Forjado', 'Resumo forjado', 'Bloqueio forjado', 'resolved')`;
+
 /** A leitura que a tela faz, uma por tabela — o controle de cada caso de escrita. */
 const LEITURA: Record<(typeof TABELAS)[number], string> = {
   agent_cases: `select count(*) from public.agent_cases where id = '${CASO}'`,
@@ -254,15 +263,46 @@ describe("0279 — a escrita das três tabelas do caso sai de `authenticated`", 
     // Reproduz o estado anterior à 0279 numa transação desfeita. Sem este caso,
     // um INSERT malformado (uma coluna NOT NULL esquecida) devolveria erro por
     // outro motivo e os casos (a)–(c) ficariam verdes sem medir privilégio.
+    //
+    // ⚠️ `status = 'resolved'` NÃO é detalhe: o caso nasce `awaiting_human` por
+    // default, e aí `trg_agent_case_opened` chama `emit_event('ai.case_opened')`
+    // — que a MESMA migration reservou. O INSERT então morre na SEGUNDA guarda e
+    // este controle mediria a reserva em vez do privilégio, que é o oposto do
+    // que ele existe para fazer. Um caso que nasce terminal não dispara o
+    // gatilho de abertura (`when (new.status in ('awaiting_human','awaiting_lead'))`,
+    // baseline.sql). A interação entre as duas guardas tem caso próprio abaixo.
     const [inseridas] = sondasDesfeitas(`
       grant insert on public.agent_cases to authenticated;
       create policy tmp_0279_insert on public.agent_cases
         for insert to authenticated with check (true);
       ${comoMembro(VIEWER, true)}
-      with w as (${ESCRITA_FORJADA.agent_cases} returning 1)
+      with w as (${ESCRITA_FORJADA_TERMINAL} returning 1)
       select '${MARCA}' || count(*) from w;
     `);
     expect(inseridas, "a simulação do estado pré-0279 não reproduz a escrita").toBe("1");
+  });
+
+  it("as DUAS guardas se somam: com o GRANT de volta, o caso ABERTO ainda morre na reserva", () => {
+    // Achado da primeira rodada de `test:db` desta onda, e o motivo de ele virar
+    // caso: mesmo que alguém devolva o GRANT e uma policy larga — por engano, ou
+    // por um `grant all` futuro do default privileges — um caso forjado que nasce
+    // ABERTO continua barrado, porque o gatilho de abertura emite um evento que a
+    // reserva do `emit_event` recusa a quem tem `auth.uid()`.
+    //
+    // É a diferença entre uma tranca e duas. O erro muda de `permission denied`
+    // para `reserved_message_received`, e é isso que este caso prende: se alguém
+    // tirar a reserva, ele fica verde por outro motivo — e o (d) abaixo vermelho.
+    const erro = erroDo(`
+      begin;
+      grant insert on public.agent_cases to authenticated;
+      create policy tmp_0279_insert_aberto on public.agent_cases
+        for insert to authenticated with check (true);
+      ${comoMembro(VIEWER, true)}
+      ${ESCRITA_FORJADA.agent_cases};
+      rollback;
+    `);
+    expect(erro, "com o grant de volta, o caso aberto entrou sem nenhuma guarda").not.toBeNull();
+    expect(erro).toContain("reserved_message_received");
   });
 
   it("CONTROLE: com a POLICY de volta e o revoke MANTIDO, o INSERT segue barrado", () => {
@@ -320,8 +360,11 @@ describe("0279 — `emit_event` reserva os eventos de caso ao servidor", () => {
       select '${MARCA}' || (public.emit_event('ai.case_sonda', 'agent_case', '${CASO}'::uuid,
         '{}'::jsonb, '{}'::jsonb, '${ORG}'::uuid) is not null);
     `);
+    // `'SONDA|' || <boolean>` sai como `true`, e não como o `t` que o psql
+    // imprimiria para uma coluna booleana: a concatenação converte pelo tipo
+    // TEXT. Medido na primeira rodada desta suíte.
     expect(emitido, "o membro não emite nem tipo livre — o 42501 acima não prova a reserva").toBe(
-      "t",
+      "true",
     );
   });
 
@@ -329,12 +372,19 @@ describe("0279 — `emit_event` reserva os eventos de caso ao servidor", () => {
     // `service_role` não tem `auth.uid()`, que é a condição da reserva: o motor
     // segue emitindo. Numa transação desfeita para não deixar evento solto no
     // banco compartilhado da suíte.
+    //
+    // A contagem é por `entity_id` PRÓPRIO, e não pelo caso da fixture: o caso
+    // da fixture nasce `awaiting_human`, e o gatilho de abertura JÁ emitiu um
+    // `ai.case_opened` para ele no seed. Contar por tipo devolvia 2 e lia como
+    // defeito — medido na primeira rodada desta suíte.
+    const alvo = "02790000-7777-4000-8000-000000000001";
     const [gravadas] = sondasDesfeitas(`
       set local role service_role;
-      select public.emit_event('${tipo}', 'agent_case', '${CASO}'::uuid,
+      select public.emit_event('${tipo}', 'agent_case', '${alvo}'::uuid,
         '{}'::jsonb, '{}'::jsonb, '${ORG}'::uuid);
       select '${MARCA}' || count(*) from public.event_log
-       where organization_id = '${ORG}' and event_type = '${tipo}';
+       where organization_id = '${ORG}' and event_type = '${tipo}'
+         and entity_id = '${alvo}';
     `);
     expect(gravadas, `o servidor não conseguiu emitir ${tipo}`).toBe("1");
   });
