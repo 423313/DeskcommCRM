@@ -55,9 +55,24 @@ vi.mock("@/hooks/realtime/useRealtimeChannel", () => ({
   },
 }));
 // O dublê do client do browser existe só para GRITAR se alguém voltar a ler
-// contato por ele: `fromDoBrowser` sendo chamado é a regressão da issue.
+// contato por ele: `fromDoBrowser` sendo chamado é a regressão da issue. Ele
+// responde com a forma EXATA do defeito — conjunto vazio, sem erro —, então
+// quem voltar a ler por aqui reprova com "Nova mensagem" no lugar do nome.
 vi.mock("@/lib/supabase/browser", () => ({
-  createClient: () => ({ from: fromDoBrowser }),
+  createClient: () => ({
+    from: (tabela: string) => {
+      fromDoBrowser(tabela);
+      const vazio = { data: null, error: null };
+      const consulta = {
+        select: () => consulta,
+        eq: () => consulta,
+        maybeSingle: async () => vazio,
+        single: async () => vazio,
+        then: (resolver: (v: unknown) => unknown) => Promise.resolve(vazio).then(resolver),
+      };
+      return consulta;
+    },
+  }),
   prepareRealtimeAuthentication: vi.fn(),
 }));
 
