@@ -217,7 +217,14 @@ create table if not exists agent_case_events (
 );
 create index if not exists agent_case_events_case_idx on agent_case_events (case_id, created_at);
 ```
-Append-only, sem RLS de UPDATE/DELETE (como `api_audit_log`). RLS select/insert por org.
+Append-only, sem RLS de UPDATE/DELETE (como `api_audit_log`). **RLS de SELECT por org — e só
+ela, desde a migration 0279**: a policy de INSERT saiu junto com o GRANT de escrita de
+`authenticated`, aqui e em `agent_cases`. Quem escreve caso é o motor (`pg.Pool` em
+`lib/agent-engine/agent/human-cases.ts`) e o cron (service role); nenhum caminho do produto
+escrevia por login de usuário, e enquanto a porta existiu um `viewer` reescrevia pelo PostgREST
+o texto que a equipe lê para decidir. Para ver o que está em vigor sem confiar nesta linha:
+`grep -nEi 'policy .*(agent_cases|agent_case_events)' supabase/baseline.sql`. Vigiado por
+`tests/invariants/caso-so-nasce-do-motor.test.ts`.
 
 ### 8.3 Alterações em tabelas existentes
 - `ai_agent_versions add column if not exists cases_enabled boolean not null default false;`
