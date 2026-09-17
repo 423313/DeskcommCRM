@@ -57,8 +57,17 @@ export function FormularioDeSmtp({
     from_name: nomeDoRemetente,
   });
   const [ocupado, iniciar] = useTransition();
-  const set = (chave: keyof typeof form, valor: string) =>
+  /**
+   * Só os campos de TEXTO. `security` tem tipo próprio e sai do `<select>` como
+   * `string`; escrevê-lo por aqui obrigaria a alargar o estado para `string` e a
+   * perder, no formulário, a única garantia que existe de que o valor enviado é
+   * um dos três que o banco aceita.
+   */
+  type CampoDeTexto = Exclude<keyof typeof form, "security">;
+  const set = (chave: CampoDeTexto, valor: string) =>
     setForm((atual) => ({ ...atual, [chave]: valor }));
+  const setSeguranca = (valor: string) =>
+    setForm((atual) => ({ ...atual, security: valor as SmtpSecurity }));
 
   const testar = () =>
     iniciar(async () => {
@@ -112,10 +121,11 @@ export function FormularioDeSmtp({
             data-testid="smtp-host"
             value={form.host}
             onChange={(e) => set("host", e.target.value)}
-            placeholder="smtp.seudominio.com"
           />
           <p className="text-xs text-muted-foreground">
-            {t("Só o endereço, sem smtp:// na frente e sem a porta no fim.")}
+            {t(
+              "Normalmente é a palavra smtp seguida do seu domínio. Só o endereço: sem smtp:// na frente e sem a porta no fim.",
+            )}
           </p>
         </div>
 
@@ -138,7 +148,7 @@ export function FormularioDeSmtp({
             data-testid="smtp-security"
             className="w-full rounded-md border bg-background p-2 text-sm"
             value={form.security}
-            onChange={(e) => set("security", e.target.value)}
+            onChange={(e) => setSeguranca(e.target.value)}
           >
             <option value="starttls">{t("STARTTLS (normalmente a porta 587)")}</option>
             <option value="tls">{t("TLS/SSL (normalmente a porta 465)")}</option>

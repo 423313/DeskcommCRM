@@ -54,8 +54,8 @@ export const DICIONARIO: Traducoes = {
     es: "Las invitaciones al equipo, la entrega de datos personales y los avisos de plazo salen por aquí. Completar esta pantalla es la alternativa a contratar un servicio externo de envío: el correo pasa a salir por tu propio servidor.",
   },
   "Endereço do servidor": { es: "Dirección del servidor" },
-  "Só o endereço, sem smtp:// na frente e sem a porta no fim.": {
-    es: "Solo la dirección, sin smtp:// al principio y sin el puerto al final.",
+  "Normalmente é a palavra smtp seguida do seu domínio. Só o endereço: sem smtp:// na frente e sem a porta no fim.": {
+    es: "Normalmente es la palabra smtp seguida de tu dominio. Solo la dirección: sin smtp:// al principio y sin el puerto al final.",
   },
   "Porta": { es: "Puerto" },
   "STARTTLS (normalmente a porta 587)": { es: "STARTTLS (normalmente el puerto 587)" },
