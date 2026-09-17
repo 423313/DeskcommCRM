@@ -98,9 +98,10 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
   sonda de `tests/invariants/retencao-poda-e-expurgo.test.ts` ficou verde duas
   vezes medindo o universo errado: primeiro perguntando só por DELETE/UPDATE com
   TRUNCATE concedido ao lado; depois perguntando pelos três num Postgres onde o
-  prelude de `scripts/test-db.sh` reproduz o default ACL do Supabase para
-  FUNÇÕES e não para TABELAS — um banco onde o defeito não pode existir. Quem
-  mede o Supabase real é
+  prelude de `scripts/test-db.sh` reproduzia o default ACL do Supabase só para
+  FUNÇÕES — um banco onde o defeito não podia existir. Desde a issue #887 o
+  prelude reproduz também o de TABELAS, e aquela sonda passou a medir o Supabase.
+  A prova com controle próprio segue sendo
   `tests/invariants/audit-log-sob-o-default-acl-do-supabase.test.ts`: concede o
   default ACL à tabela, reaplica o bloco da 0258 extraído do baseline e só então
   sonda. **Enumerar privilégios no dump não protege tabela nenhuma no Supabase

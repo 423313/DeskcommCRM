@@ -26,9 +26,10 @@ import { motivoDoErro, sql } from "./psql-transporte";
  * concede, e a sonda de `retencao-poda-e-expurgo.test.ts` ficava verde com ou
  * sem o revoke de UPDATE/DELETE. Desde a issue #887 o prelude reproduz também o
  * de TABELAS, e aquela sonda passou a medir o Supabase. Este arquivo continua
- * pelo que só ele tem: o CONTROLE (sem o bloco da 0258, a simulação reproduz o
- * defeito e apaga a linha). É ele que prova que o universo medido é um em que o
- * defeito existe.
+ * porque mede o que ela não mede: o privilégio EFETIVO, inclusive o herdado de
+ * outro papel; o erro de permissão nos três comandos, e não só a ausência de
+ * grant; que INSERT e SELECT seguem de pé; o expurgo e as FKs. E tem controle
+ * próprio: sem o bloco da 0258, a simulação reproduz o defeito e apaga a linha.
  *
  * ─── Como ───────────────────────────────────────────────────────────────────
  *

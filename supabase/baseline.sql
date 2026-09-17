@@ -24741,8 +24741,10 @@ comment on function public.fn_nascer_lead_da_conversa(uuid, uuid, uuid, uuid, te
 -- apagavam porque a RLS não tem policy de UPDATE/DELETE.
 --
 -- Até a issue #887 o prelude do `test:db` reproduzia o default ACL do Supabase
--- só para funções, e por isso o gate de grants ficou verde enquanto isto
--- estava aberto. O invariante `audit-log-sob-o-default-acl-do-supabase`
+-- só para funções, e por isso o gate de grants ficou verde para UPDATE e DELETE
+-- enquanto eles estavam abertos. O TRUNCATE vinha do próprio `GRANT` do dump e
+-- ficou verde por outro motivo: a sonda não perguntava por ele. O invariante
+-- `audit-log-sob-o-default-acl-do-supabase`
 -- reproduz o de tabela e reaplica ESTE bloco, extraído daqui pelo rótulo.
 --
 -- O expurgo legítimo não depende destes grants: `fn_expurgar_auditoria_vencida`

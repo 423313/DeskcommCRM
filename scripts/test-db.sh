@@ -212,12 +212,14 @@ alter default privileges for role postgres in schema public revoke execute on fu
 
 -- O MESMO DEFAULT ACL, PARA TABELAS (issue #887).
 --
--- O bloco acima cobria só funções, e o gate ficava cego para privilégio de
--- TABELA. Num Supabase de verdade toda tabela criada em `public` nasce com
--- privilégio total para anon, authenticated e service_role, e o `GRANT` que o
--- dump enumera depois só ACRESCENTA — não revoga nada. Aqui, sem estas linhas, a
--- tabela do corpo nascia só com o que o dump concede, e todo invariante do tipo
--- "o papel X não tem o privilégio Y na tabela Z" ficava verde por construção.
+-- O bloco acima cobria só funções, e o gate ficava cego para privilégio das
+-- tabelas do CORPO do dump. Num Supabase de verdade toda tabela criada em
+-- `public` nasce com privilégio total para anon, authenticated e service_role, e
+-- o `GRANT` que o dump enumera depois só ACRESCENTA — não revoga nada. Aqui, sem
+-- estas linhas, a tabela do corpo nascia só com o que o dump concede, e um
+-- invariante do tipo "o papel X não tem o privilégio Y na tabela Z" sobre ela
+-- ficava verde por construção. As tabelas do apêndice nunca tiveram o problema:
+-- nascem depois do `ALTER DEFAULT PRIVILEGES … ON TABLES` que o próprio dump grava.
 -- Foi assim que o `service_role` seguia apagando e reescrevendo linhas de
 -- `api_audit_log` com este gate verde, até a migration 0258.
 --
@@ -368,9 +370,13 @@ if [ "$fidelidade" != "t" ]; then
 fi
 echo "    ✓ definer nova nasce com grant direto a anon (armadilha do produto reproduzida)"
 
-# A GÊMEA PARA TABELAS (issue #887), no mesmo instante e pelo mesmo motivo: depois
-# de o baseline rodar, as tabelas do corpo já existem e o banco fiel e o fictício
-# deixam de ser distinguíveis por dentro da suíte.
+# A GÊMEA PARA TABELAS (issue #887), no mesmo instante e pelo mesmo motivo da de
+# funções. O próprio baseline grava um `ALTER DEFAULT PRIVILEGES … ON TABLES`,
+# DEPOIS das tabelas do corpo do dump: uma tabela de sonda criada depois do
+# baseline nasceria certa com ou sem as linhas do prelude. Só antes dele a sonda
+# mede o prelude e nada além. Depois do baseline os dois bancos ainda diferem,
+# mas só nas tabelas do corpo cujo GRANT enumerado omite o privilégio:
+#   grep -nE '^GRANT [A-Z,]+ ON TABLE' supabase/baseline.sql | grep -v 'GRANT ALL'
 #
 # Mede os TRÊS papéis, e não só anon como a sonda de funções: o dano que abriu a
 # issue foi do service_role, e uma sonda que olhasse só anon aprovaria o prelude
@@ -391,8 +397,8 @@ if [ "$fidelidade_tabelas" != "3" ]; then
   echo "       authenticated e service_role (achei ${fidelidade_tabelas:-nada} de 3). Num projeto" >&2
   echo "       Supabase de verdade ela nasce, porque o bootstrap grava um ALTER DEFAULT PRIVILEGES" >&2
   echo "       … ON TABLES em pg_default_acl antes de qualquer SQL nosso. Sem reproduzir isso," >&2
-  echo "       todo invariante que afirma 'o papel X não tem o privilégio Y na tabela Z' fica" >&2
-  echo "       VERDE por construção (issue #887). Restaure as 3 linhas de" >&2
+  echo "       um invariante que afirme 'o papel X não tem o privilégio Y na tabela Z' sobre uma" >&2
+  echo "       tabela do corpo do dump fica VERDE por construção (issue #887). Restaure as 3 linhas de" >&2
   echo "       'alter default privileges … on tables' no prelude acima." >&2
   exit 1
 fi
