@@ -56,18 +56,20 @@ describe("servidor MCP público — busca vazia não é sucesso (#484)", () => {
     resposta.atual = { produtos: [] };
     await chamar();
     expect(auditSpy).toHaveBeenCalledOnce();
-    expect(auditSpy.mock.calls[0][0]).toMatchObject({
-      success: false,
-      desfecho: "sem_resultado",
-      motivo: "nenhum produto casou o termo",
-    });
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        desfecho: "sem_resultado",
+        motivo: "nenhum produto casou o termo",
+      }),
+    );
   });
 
   it("com achado, segue success:true e sem desfecho (controle)", async () => {
     resposta.atual = { produtos: [{ id: "p1" }] };
     await chamar();
     expect(auditSpy).toHaveBeenCalledOnce();
-    expect(auditSpy.mock.calls[0][0]).toMatchObject({ success: true });
-    expect(auditSpy.mock.calls[0][0]).not.toHaveProperty("desfecho");
+    expect(auditSpy).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    expect(auditSpy.mock.lastCall?.[0]).not.toHaveProperty("desfecho");
   });
 });
