@@ -1,6 +1,6 @@
 ---
 impacto: capacidade_nova
-secao: Atualização do sistema
+secao: adicionado
 titulo: A atualização agora conta se o banco deu disputa
 ---
 
