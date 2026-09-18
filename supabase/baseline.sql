@@ -21787,7 +21787,11 @@ begin
  delete from public.messages where organization_id=p_org and conversation_id=d.conversation_id and sent_via='external_device' and external_id=any(p_echo_ids) and id<>p_message;
  update public.messages set status='sent',external_id=p_external,ack=0 where organization_id=p_org and id=p_message returning * into m;
  update public.send_ledger set status='accepted',crm_message_id=p_message,updated_at=now(),last_error=null where organization_id=p_org and job_id=p_job and seq=1 and id::text=m.metadata->>'idempotency_key';
- update public.conversations set last_outbound_at=now(),last_message_at=now(),last_message_preview=left(d.approved_body,280),unread_count_for_assignee=0 where organization_id=p_org and id=d.conversation_id;
+ -- A resposta aprovada é uma SAÍDA: responde tudo até aqui, e a régua da Fila
+ -- (issue #990, migration 0267) volta ao `last_inbound_at` — "não há mensagem do
+ -- cliente sem resposta". Sem esta coluna o valor antigo ficaria congelado e a
+ -- conversa continuaria contando a espera que esta resposta acabou de encerrar.
+ update public.conversations set last_outbound_at=now(),last_message_at=now(),last_message_preview=left(d.approved_body,280),unread_count_for_assignee=0,awaiting_since=last_inbound_at where organization_id=p_org and id=d.conversation_id;
  update public.contacts set last_activity_at=now() where organization_id=p_org and id=contact;
  return to_jsonb(m);
 end;$$;
@@ -26671,6 +26675,46 @@ as $$
 $$;
 revoke all on function public.fn_attendant_metrics(uuid,timestamptz,timestamptz,uuid) from public, anon;
 grant execute on function public.fn_attendant_metrics(uuid,timestamptz,timestamptz,uuid) to authenticated, service_role;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- PAÍS DA ORGANIZAÇÃO (migration 20260918014500_0277) — issue #1033
+--
+-- Derivado de supabase/migrations/20260918014500_0277_pais_da_organizacao.sql;
+-- o porquê inteiro (o defeito medido, o que entra e o que NÃO entra) está no
+-- cabeçalho de lá.
+--
+-- Idempotente: `add column if not exists` + `drop constraint if exists` antes
+-- do `add constraint` — quem ATUALIZA (a coluna já existe) precisa da trava de
+-- forma tanto quanto quem instala do zero.
+--
+-- NENHUM backfill e NENHUM default: `null` é Brasil, que é o comportamento de
+-- antes desta migration. Nenhuma linha existente é reescrita. Nada de RLS,
+-- grant ou policy: a coluna nasce na tabela que já tem as regras dela.
+--
+-- ⚠️ ENTRA ANTES do bloco da VARREDURA anon, que é de propósito o último do
+-- arquivo (esta migration não cria função, mas o apêndice segue a ordem).
+-- ────────────────────────────────────────────────────────────────────────────
+-- 1 · o país, na organização
+-- ────────────────────────────────────────────────────────────────────────────
+alter table public.organizations
+  add column if not exists country text;
+
+alter table public.organizations
+  drop constraint if exists organizations_country_check;
+
+alter table public.organizations
+  add constraint organizations_country_check
+  check (country is null or country ~ '^[A-Z]{2}$');
+
+comment on column public.organizations.country is
+  'O país DA ORGANIZAÇÃO (ISO-3166 alpha-2, maiúsculas; null = Brasil), de onde saem o rótulo e a '
+  'validação do documento do contato, a lei citada no PDF de acesso ao titular, o calendário de dias '
+  'úteis do prazo desse direito e os padrões de dado pessoal que o anonimizador redige antes de a '
+  'conversa ir para o modelo. Resolvido por lib/legal/perfil-do-pais.ts — nenhuma rota lê esta coluna '
+  'inline, pela mesma razão escrita em lib/catalogo/moeda-da-org.ts: duas leituras divergem no dia em '
+  'que uma ganhar fallback e a outra não, e aqui a divergência prometeria a lei de um país com o prazo '
+  'de outro. Sem default e sem backfill: null é o perfil brasileiro, o comportamento de antes da 0277. '
+  'País só é oferecido no seletor quando a citação da lei dele já foi revisada por quem pode revisar.';
 -- ---- extensões declarativas: catálogo, artefato, instalação, vínculo e recibo (migration 0271) ----
 -- BEGIN 0271_extensoes_declarativas — 20260917120000
 -- 0271 — Documentos declarativos locais; nenhuma execução de pacote ou DDL dinâmico.
@@ -27421,6 +27465,117 @@ end $f$;
 -- EXECUTE sai das duas origens e dos papéis que o default ACL do Supabase alcança.
 revoke execute on function public.fn_aplicar_travas_de_suporte() from public, anon, authenticated, service_role;
 
+-- ---- a espera da Fila não recomeça a cada mensagem do cliente (migration 0267) ----
+--
+-- Issue #990. A aba Fila ordena por tempo de espera crescente e a régua era
+-- `last_inbound_at` — a ÚLTIMA mensagem do cliente. Essa coluna é reescrita a
+-- cada mensagem nova (`greatest(last_inbound_at, p_at)`, logo acima neste
+-- arquivo), então o cliente que insiste volta para o fim da fila: a espera dele
+-- "recomeça" a cada pergunta, e quem escreveu uma vez e ficou quieto passa na
+-- frente de quem está tentando ser atendido desde antes.
+--
+-- A régua passa a ser a mensagem do cliente MAIS ANTIGA sem resposta:
+--
+--     min(messages.sent_at) where direction='inbound' and sent_at > last_outbound_at
+--
+-- e ela virou COLUNA (`conversations.awaiting_since`) porque a ordem da Fila é um
+-- `order by` pedido ao PostgREST pela rota da lista, e o PostgREST ordena por
+-- coluna: a expressão acima mora em `messages` e depende de `last_outbound_at`.
+--
+-- `awaiting_since` carrega `last_inbound_at` quando não há mensagem sem resposta
+-- (a bola está com o cliente). Essas linhas nunca tiveram o defeito, e o valor
+-- mantém ordem, pílula "Aguardando há…" e a posição entregue às ferramentas de IA
+-- apontando para o MESMO instante — as três leem esta coluna. Sem ele a linha
+-- ficaria NULL, e NULL ordena por último: na atualização, conversa que hoje
+-- aparece no meio da fila cairia para o fim.
+--
+-- Idempotente: `add column if not exists`, preenchimento em DUAS passadas (a
+-- primeira só copia `last_inbound_at` para quem já está respondido; a segunda
+-- consulta `messages` apenas para quem TEM mensagem sem resposta — um `min()`
+-- por conversa, servido por `idx_messages_conversation_sent`) e o corpo da
+-- função DERIVADO da versão em vigor — recriá-lo a partir de uma versão anterior
+-- apagaria o lock de serviço, a guarda de troca de contato e a fronteira de
+-- `service_closed_at`.
+alter table public.conversations add column if not exists awaiting_since timestamptz;
+
+comment on column public.conversations.awaiting_since is
+  'Desde quando o cliente espera resposta: o instante da mensagem DELE mais antiga que ninguém respondeu ainda (min(sent_at) dos inbound posteriores a last_outbound_at, no atendimento em curso). É a régua da Fila — a ordem da lista, a pílula "Aguardando há…" da linha e a posição entregue às ferramentas de IA leem esta coluna, e é isso que faz a ordem da tela e o número dito ao cliente não divergirem. last_inbound_at (a ÚLTIMA mensagem) reinicia a cada mensagem e fazia quem insiste descer para o fim da fila (issue #990); esta coluna mantém o começo da espera. Quando não há mensagem sem resposta — a bola está com o cliente —, carrega last_inbound_at, que é o que a Fila usava antes desta migration.';
+
+update public.conversations c
+set awaiting_since = c.last_inbound_at
+where c.awaiting_since is null
+  and c.last_inbound_at is not null
+  and c.last_outbound_at is not null
+  and c.last_inbound_at <= c.last_outbound_at;
+
+update public.conversations c
+set awaiting_since = coalesce(
+  (
+    select min(m.sent_at)
+    from public.messages m
+    where m.conversation_id = c.id
+      and m.direction = 'inbound'
+      and m.sent_at > coalesce(c.last_outbound_at, '-infinity'::timestamptz)
+      and m.sent_at > coalesce(c.service_closed_at, '-infinity'::timestamptz)
+  ),
+  c.last_inbound_at
+)
+where c.awaiting_since is null
+  and c.last_inbound_at is not null
+  and (c.last_outbound_at is null or c.last_inbound_at > c.last_outbound_at);
+
+create or replace function public.fn_mark_conversation_message(p_conv uuid,p_direction text,p_preview text,p_at timestamptz)
+returns void language plpgsql security definer set search_path=public as $$
+declare c public.conversations; pre_contact uuid;
+begin
+ select * into c from public.conversations where id=p_conv;
+ if not found then return; end if;
+ pre_contact:=c.contact_id;
+ perform public.fn_service_lock(c.organization_id,c.contact_id);
+ select * into c from public.conversations where id=p_conv for no key update;
+ if c.contact_id is distinct from pre_contact then raise exception 'service_contact_changed' using errcode='40001'; end if;
+ if p_direction='inbound' and p_at<=c.service_closed_at then return; end if;
+ update public.conversations set
+  last_message_at=greatest(last_message_at,p_at),
+  last_message_preview=case when last_message_at is null or p_at>=last_message_at then p_preview else last_message_preview end,
+  last_inbound_at=case when p_direction='inbound' then greatest(last_inbound_at,p_at) else last_inbound_at end,
+  last_outbound_at=case when p_direction='outbound' then greatest(last_outbound_at,p_at) else last_outbound_at end,
+  unread_count_for_assignee=case when p_direction='inbound' then unread_count_for_assignee+1 when p_direction='outbound' then 0 else unread_count_for_assignee end,
+  -- A régua da Fila (issue #990). Inbound, na ordem: (1) mensagem ATRASADA
+  -- (escrita antes da última resposta) já está respondida e não é espera —
+  -- mantém o que havia; (2) a espera guardada é de uma mensagem SEM RESPOSTA
+  -- deste atendimento — o cliente insistiu, e fica o começo da espera, o mais
+  -- ANTIGO dos dois; (3) não havia espera (tudo respondido) ou ela é de um
+  -- atendimento já encerrado — a espera de agora começa nesta mensagem. No
+  -- outbound: resposta anterior à espera guardada não a responde (fora de
+  -- ordem, mantém); qualquer outra responde tudo até aqui e a coluna volta ao
+  -- last_inbound_at — "não há mensagem sem resposta".
+  awaiting_since=case
+    when p_direction='inbound' then
+      case
+        when p_at<=coalesce(c.last_outbound_at,'-infinity'::timestamptz) then
+          coalesce(c.awaiting_since,greatest(coalesce(c.last_inbound_at,'-infinity'::timestamptz),p_at))
+        when c.awaiting_since>coalesce(c.last_outbound_at,'-infinity'::timestamptz)
+         and c.awaiting_since>coalesce(c.service_closed_at,'-infinity'::timestamptz) then
+          least(c.awaiting_since,p_at)
+        else p_at
+      end
+    else
+      case
+        when c.awaiting_since is not null and p_at<c.awaiting_since then c.awaiting_since
+        else c.last_inbound_at
+      end
+  end
+ where id=p_conv and organization_id=c.organization_id;
+ update public.contacts set last_activity_at=greatest(last_activity_at,p_at)
+ where id=c.contact_id and organization_id=c.organization_id;
+end; $$;
+revoke execute on function public.fn_mark_conversation_message(uuid,text,text,timestamptz) from public,anon,authenticated;
+grant execute on function public.fn_mark_conversation_message(uuid,text,text,timestamptz) to service_role;
+
+notify pgrst, 'reload schema';
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -27589,6 +27744,21 @@ create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
 
+-- ---- a regra de automação guarda a CONFIGURAÇÃO do gatilho (migration 0268) ----
+-- O gatilho de data do funil (#989) não nasce de evento: quem o emite é a
+-- varredura `cron/lead-date-field-due`, e ela só sabe onde olhar se a regra
+-- disser o funil, o campo de data e quantos dias antes (ou depois) avisar.
+--
+-- Vazio nos outros gatilhos, e `not null default '{}'` dispensa backfill: regra
+-- que já existe nasce com o objeto vazio, e quem lê trata ausência e objeto
+-- vazio do mesmo jeito.
+alter table public.automation_rules
+  add column if not exists trigger_config jsonb not null default '{}'::jsonb;
+
+comment on column public.automation_rules.trigger_config is
+  'Configuração do gatilho (issue #989). Vazio nos gatilhos que nascem de evento. No gatilho lead.date_field_due guarda {pipeline_id, campo, dias} — o campo de data pertence a UM funil, e sem essa dupla a varredura não sabe onde olhar.';
+
+notify pgrst, 'reload schema';
 -- ---- a resposta revisada para de segurar a Zona de perigo (migration 0273) ----
 -- A FK inline da 0227 nasceu sem ação de exclusão (NO ACTION) e era a ÚNICA das
 -- quatro que apontam para `public.messages(id)` fora do padrão `on delete set
