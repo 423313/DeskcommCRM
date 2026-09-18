@@ -27744,6 +27744,21 @@ create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
 
+-- ---- a regra de automação guarda a CONFIGURAÇÃO do gatilho (migration 0268) ----
+-- O gatilho de data do funil (#989) não nasce de evento: quem o emite é a
+-- varredura `cron/lead-date-field-due`, e ela só sabe onde olhar se a regra
+-- disser o funil, o campo de data e quantos dias antes (ou depois) avisar.
+--
+-- Vazio nos outros gatilhos, e `not null default '{}'` dispensa backfill: regra
+-- que já existe nasce com o objeto vazio, e quem lê trata ausência e objeto
+-- vazio do mesmo jeito.
+alter table public.automation_rules
+  add column if not exists trigger_config jsonb not null default '{}'::jsonb;
+
+comment on column public.automation_rules.trigger_config is
+  'Configuração do gatilho (issue #989). Vazio nos gatilhos que nascem de evento. No gatilho lead.date_field_due guarda {pipeline_id, campo, dias} — o campo de data pertence a UM funil, e sem essa dupla a varredura não sabe onde olhar.';
+
+notify pgrst, 'reload schema';
 -- ---- a resposta revisada para de segurar a Zona de perigo (migration 0273) ----
 -- A FK inline da 0227 nasceu sem ação de exclusão (NO ACTION) e era a ÚNICA das
 -- quatro que apontam para `public.messages(id)` fora do padrão `on delete set
