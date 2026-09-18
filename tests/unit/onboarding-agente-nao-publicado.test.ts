@@ -866,29 +866,39 @@ describe("onboarding: qual chave o funcionário usa", () => {
     expect(estado.versoes).toHaveLength(0);
   });
 
-  it("#1007: a chave colada em OUTRO provedor publica — e o par provedor/modelo é o dela", async () => {
-    // O defeito: a publicação procurava credencial SÓ do provedor da instalação
-    // (anthropic, o default) e, não achando, mandava colar uma chave que a
-    // pessoa JÁ tinha colado — de OpenAI. O conserto adota a credencial validada
-    // que existe; e o modelo tem de sair do MESMO provedor adotado, senão o
-    // agente nasce apontando para um endpoint que não conhece o nome do modelo.
+  it("#1007: chave colada em OUTRO provedor NÃO publica — vale o provedor DA ORGANIZAÇÃO", async () => {
+    // A decisão do dono: a IA escolhida no onboarding vale para a EMPRESA
+    // inteira. Quem cola a chave de outro provedor grava a escolha em
+    // `organizations.settings.llm` no passo da chave; publicar aqui ADOTANDO a
+    // credencial validada de openai poria o atendente num provedor em que a
+    // empresa não está (o provider da versão vence o da organização em
+    // `resolveOrgLlmConfig`).
+    //
+    // Caso INVERTIDO de propósito: era este o comportamento antigo ("adota a
+    // credencial que existir") e é esta a guarda da decisão — no dia em que
+    // alguém "consertar" isso voltando a adotar, o caso reprova e diz por quê.
     const estado = montarBanco({
       chaveDaInstalacao: false,
       credenciais: [
         { id: "cred-openai", provider: "openai", validated_at: "2026-09-15T10:00:00.000Z" },
       ],
-      modelosPorProvedor: { openai: "gpt-5-mini" },
+      modelosPorProvedor: { anthropic: "claude-sonnet-9", openai: "gpt-5-mini" },
     });
 
-    await clicar();
+    const r = await clicar();
 
-    expect(estado.versoes).toHaveLength(1);
-    expect(estado.versoes[0]!.provider).toBe("openai");
-    expect(estado.versoes[0]!.model).toBe("gpt-5-mini");
-    expect(estado.versoes[0]!.credential_id).toBe("cred-openai");
-    // Publicou de verdade: é isto que separa "no ar" de "rascunho parado".
-    expect(redirects).toEqual(["/onboarding"]);
-    expect(estado.agentes[0]?.published_version_id).toBe("versao-1");
+    expect(r).not.toBe("redirecionou");
+    const res = r as Exclude<CreateAgentResult, { ok: false }>;
+    expect(res.publish_blocked_by).toBe("chave");
+    // O provedor nomeado na resposta é o DA ORGANIZAÇÃO, nunca o da chave colada.
+    expect(res.provider).toBe("anthropic");
+    // E a credencial de openai nem como pendência aparece: não é do provedor
+    // que a empresa escolheu.
+    expect(res.chave_em_verificacao).toBeUndefined();
+    // Rascunho: o agente EXISTE (o passo aconteceu); a versão, não.
+    expect(estado.versoes).toHaveLength(0);
+    expect(estado.agentes[0]?.published_version_id ?? null).toBeNull();
+    expect(redirects).toEqual([]);
   });
 
   it("#1007 (controle): com chave da INSTALAÇÃO o provedor dela segue vencendo", async () => {
@@ -911,25 +921,45 @@ describe("onboarding: qual chave o funcionário usa", () => {
     expect(estado.versoes[0]!.credential_id).toBeNull();
   });
 
-  it("#1007: chave colada e ainda NÃO confirmada — a resposta nomeia o provedor dela", async () => {
-    // A chave EXISTE e está gravada; o que falta é o provedor confirmar
-    // (`validated_at` nulo). Sem `chave_em_verificacao` a tela dizia "não achei
-    // chave de anthropic — cole a chave", que é falso e manda a pessoa colar de
-    // novo o que ela acabou de colar.
-    const estado = montarBanco({
+  it("#1007: chave colada e ainda NÃO confirmada — o aviso nomeia o provedor DA ORGANIZAÇÃO", async () => {
+    // `chave_em_verificacao` existe para a tela trocar "cole a chave" por
+    // "espere um instante". Depois da decisão, quem pode estar pendente é só a
+    // chave do provedor da EMPRESA — é nele que a publicação procura.
+    //
+    // Caso INVERTIDO: aqui a pendência é de OUTRO provedor (openai numa empresa
+    // anthropic) e nomeá-la era o defeito antigo. Se a busca voltar a ser "de
+    // qualquer provedor", o campo reaparece como "openai" e este caso reprova.
+    const outroProvedor = montarBanco({
       chaveDaInstalacao: false,
       credenciais: [{ id: "cred-openai", provider: "openai", validated_at: null }],
       modelosPorProvedor: { anthropic: "claude-sonnet-9" },
     });
 
-    const r = await clicar();
+    const r1 = await clicar();
 
-    expect(r).not.toBe("redirecionou");
-    const res = r as Exclude<CreateAgentResult, { ok: false }>;
-    expect(res.publish_blocked_by).toBe("chave");
-    expect(res.provider).toBe("anthropic");
-    expect(res.chave_em_verificacao).toBe("openai");
-    expect(estado.versoes).toHaveLength(0);
+    expect(r1).not.toBe("redirecionou");
+    const res1 = r1 as Exclude<CreateAgentResult, { ok: false }>;
+    expect(res1.publish_blocked_by).toBe("chave");
+    expect(res1.provider).toBe("anthropic");
+    expect(res1.chave_em_verificacao).toBeUndefined();
+    expect(outroProvedor.versoes).toHaveLength(0);
+
+    // A outra metade: a pendência NO provedor da empresa (o que acontece de
+    // verdade no passo da chave, que grava `settings.llm` e cria a credencial
+    // sem `validated_at`) continua nomeada — senão a tela perde o aviso certo.
+    const provedorDaEmpresa = montarBanco({
+      chaveDaInstalacao: false,
+      credenciais: [{ id: "cred-anthropic", provider: "anthropic", validated_at: null }],
+      modelosPorProvedor: { anthropic: "claude-sonnet-9" },
+    });
+
+    const r2 = await clicar();
+
+    expect(r2).not.toBe("redirecionou");
+    const res2 = r2 as Exclude<CreateAgentResult, { ok: false }>;
+    expect(res2.publish_blocked_by).toBe("chave");
+    expect(res2.chave_em_verificacao).toBe("anthropic");
+    expect(provedorDaEmpresa.versoes).toHaveLength(0);
   });
 
   it("o funcionário nasce no formato ATUAL do produto, não no legado", async () => {
