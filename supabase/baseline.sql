@@ -11825,7 +11825,7 @@ begin
        and rel.relname = 'followup_enrollments'
        and con.contype = 'c'
        and pg_get_constraintdef(con.oid) like '%paused_handoff%'
-       and pg_get_constraintdef(con.oid) not like '%paused_manual%'
+       and pg_get_constraintdef(con.oid) not like '%dormente%'
   loop
     execute format('alter table public.followup_enrollments drop constraint %I', c.conname);
   end loop;
@@ -11834,14 +11834,14 @@ end $$;
 do $$ begin
   alter table public.followup_enrollments
     add constraint followup_enrollments_status_valido
-    check (status in ('active','waiting_reply','paused_handoff','paused_manual','completed','cancelled','dead'));
+    check (status in ('active','waiting_reply','dormente','paused_handoff','paused_manual','completed','cancelled','dead'));
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table public.followup_enrollments
     add constraint followup_enrollments_relogio_coerente
     check (
-      (status in ('active','waiting_reply') and next_eval_at is not null)
+      (status in ('active','waiting_reply','dormente') and next_eval_at is not null)
       or (status in ('paused_handoff','paused_manual','completed','cancelled','dead'))
     );
 exception when duplicate_object then null; end $$;
@@ -27575,6 +27575,101 @@ grant execute on function public.fn_mark_conversation_message(uuid,text,text,tim
 
 notify pgrst, 'reload schema';
 
+-- ---- a espera longa dorme: status `dormente` (migration 0308) ----
+--
+-- A espera longa de um fluxo passa a sobreviver ao contato mandar mensagem, que
+-- é o que faltava para uma cadência de retorno ("volte a falar daqui a 28 dias")
+-- caber num fluxo em vez de morar no prompt do agente. Duas coisas a matavam, as
+-- duas caladas: `lib/followup/reactivity.ts` ou CANCELA a inscrição parada num
+-- `wait` (`cancel_on_reply`) ou grava `inbound_woke` e CORTA o timer; e o índice
+-- único anti-spam trancaria o contato fora de qualquer outra cadência por um mês.
+--
+-- O status `dormente` é a projeção em runtime de `wait.immune_to_reply` (campo do
+-- nó, no grafo pinado) — não uma coluna `imune`, que seria segunda verdade sobre o
+-- mesmo fato. Ele faz a feature custar ZERO na reatividade: `LIVE_STATUSES` não o
+-- inclui, então a inscrição dormente nem é carregada (a exceção deliberada é o
+-- opt-out, que alcança todo mundo).
+--
+-- ⚠️ OS DOIS CHECKs NÃO ESTÃO AQUI, DE PROPÓSITO. Eles vivem no bloco da 0145
+-- ("o dossiê do follow-up"), que já os derruba e recria — e `dormente` foi
+-- acrescentado LÁ, no vocabulário final. Um segundo bloco reconstruindo a mesma
+-- constraint deixa a tabela SEM constraint entre o drop de um e o add do outro
+-- quando o `update.sh` reaplica o arquivo, e é reprovado por
+-- `tests/unit/baseline-constraint-reconstruida.test.ts`. O que sobra aqui é só o
+-- que não existia antes: o índice do claim e a função que passa a enxergá-lo.
+--
+-- O índice único anti-spam (`idx_followup_enrollments_one_live`) também NÃO é
+-- tocado: ele enumera os status que ocupam vaga, e `dormente` fica de fora por
+-- construção — a vaga é liberada sem uma linha de DDL sobre ele.
+
+-- ---- 3. o claim tem de enxergar o dormente ---------------------------------
+--
+-- ⚠️ É AQUI QUE ESTA MIGRATION FALHA CALADA se alguém a encurtar. Sem `dormente`
+-- nas duas listas da função, a inscrição dorme e NUNCA acorda: nada reclama a
+-- linha, nada reprova, e o retorno simplesmente não acontece no dia 28.
+create index if not exists idx_followup_enrollments_due_por_org
+  on public.followup_enrollments (organization_id, next_eval_at)
+  where status in ('active','waiting_reply','dormente');
+
+create or replace function fn_claim_due_followup_enrollments(p_limit int, p_lease_seconds int)
+returns setof followup_enrollments
+language sql
+security definer
+set search_path = public
+as $$
+  with orgs as (
+    -- Sem a condição de claim aqui de propósito: o lateral abaixo a aplica, e uma
+    -- organização cujos vencidos estão todos com lease apenas devolve zero linhas.
+    select distinct organization_id
+      from followup_enrollments
+     where status in ('active','waiting_reply','dormente')
+       and next_eval_at <= now()
+  ),
+  fila as (
+    select f.id, f.next_eval_at, f.posicao_na_org
+      from orgs
+      cross join lateral (
+        select d.id,
+               d.next_eval_at,
+               row_number() over (order by d.next_eval_at) as posicao_na_org
+          from followup_enrollments d
+         where d.organization_id = orgs.organization_id
+           and d.status in ('active','waiting_reply','dormente')
+           and d.next_eval_at <= now()
+           and (d.claimed_until is null or d.claimed_until < now())
+         order by d.next_eval_at
+         limit p_limit
+      ) f
+  ),
+  escolhidos as (
+    -- O rodízio: posição 1 de todas as organizações, depois a 2 de todas, etc.
+    -- Empate na mesma posição vai para quem esperou mais.
+    select id from fila order by posicao_na_org, next_eval_at limit p_limit
+  ),
+  travados as (
+    select e.id from followup_enrollments e
+     where e.id in (select id from escolhidos)
+     for update skip locked
+  )
+  update followup_enrollments e
+     set claimed_until = now() + make_interval(secs => p_lease_seconds),
+         updated_at = now()
+   where e.id in (select id from travados)
+     -- A condição de lease É REPETIDA AQUI, e não é redundante com a CTE `fila`.
+     -- Sem ela, duas conexões simultâneas reclamam as MESMAS linhas: a segunda
+     -- espera o lock da primeira, e quando ele sai o Postgres (READ COMMITTED)
+     -- reavalia só o WHERE do UPDATE — que não olhava `claimed_until` — e grava
+     -- por cima. O `skip locked` da CTE não salva: as duas materializam a mesma
+     -- lista antes de qualquer lock existir. Medido: interseção de 5 em 5 no
+     -- invariante de concorrência (followup-schema.test.ts).
+     and (e.claimed_until is null or e.claimed_until < now())
+  returning e.*;
+$$;
+
+revoke execute on function fn_claim_due_followup_enrollments(int, int) from public, anon, authenticated;
+grant execute on function fn_claim_due_followup_enrollments(int, int) to service_role;
+
+notify pgrst, 'reload schema';
 
 
 -- ---- Google Ads: landing page de captura de gclid (migration 0306) ----
