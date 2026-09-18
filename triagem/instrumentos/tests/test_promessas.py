@@ -171,14 +171,16 @@ class Frases(unittest.TestCase):
     def test_compromissos(self):
         for t in ["A gente monta o recorte numa branch nossa.", "Isso é trabalho nosso, não seu.",
                   "Volto aqui com o SHA.", "Vou abrir a issue hoje.", "Eu empurro o conserto na sua branch.",
-                  "Não é pedido de trabalho para você."]:
+                  "Não é pedido de trabalho para você.",
+                  "Não vou prometer prazo, mas volto aqui com o SHA."]:     # a negação não cala o resto
             with self.subTest(t=t):
                 self.assertEqual(len(self.casos(t)), 1)
 
     def test_nao_compromissos(self):
         for t in ["Não vou prometer prazo nem revisão.", "A leitura que eu faço disso é de método.",
                   "Por que provider novo em vez de estender o meta_cloud?",   # pergunta de desenho: bola do autor
-                  "Como a casa faz com a Graph.", "Isso não é nosso."]:
+                  "Como a casa faz com a Graph.", "Isso não é nosso.",
+                  "Não vou empurrar nada na sua branch."]:
             with self.subTest(t=t):
                 self.assertEqual(self.casos(t), [])
 

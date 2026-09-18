@@ -93,8 +93,10 @@ def trechos(texto: str) -> list[str]:
 def achar_promessas(texto: str) -> list[dict]:
     achadas = []
     for t in trechos(texto):
-        n = normalizar(t)
-        if RE_NEGACAO.search(n) or not RE_COMPROMISSO.search(n):
+        # A negação apaga só o trecho NEGADO: "não vou prometer prazo, mas volto aqui"
+        # ainda promete o retorno. Descartar a frase inteira calava a promessa real.
+        n = RE_NEGACAO.sub(" ", normalizar(t))
+        if not RE_COMPROMISSO.search(n):
             continue
         achadas.append({"trecho": t[:240], "condicional": bool(RE_CONDICIONAL.search(n)),
                         "promete_issue": bool(RE_TIPO_ISSUE.search(n)),
