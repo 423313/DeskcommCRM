@@ -60,7 +60,6 @@ async function montarBancada(): Promise<Bancada> {
   const dir = await mkdtemp(path.join(tmpdir(), "portas-novas-"));
   const banco = path.join(dir, "catalog.sqlite");
   const manifesto = path.join(dir, "pacote.json");
-  const arquivoDoCatalogo = path.join(dir, "catalogo.json");
   // A ORIGEM NÃO PODE SER INVENTADA — e foi assim que esta spec reprovou no primeiro
   // veredito em tela. Eu calculava uma porta a partir do PID, e o produto RECUSOU baixar
   // dali, corretamente: `isAllowedLocalOrigin` (lib/extensions/download.ts:59-66) só admite
@@ -131,7 +130,12 @@ async function montarBancada(): Promise<Bancada> {
     .eq("origin", origem)
     .maybeSingle();
   const revisaoVigente = (admitido?.revision as number | undefined) ?? 0;
+  // UM ARQUIVO POR PASSADA. O `export` do catálogo de ensaio não sobrescreve — ele recusa com
+  // "o arquivo de admissão já existe" e não tem flag para forçar (conferido em `export --help`).
+  // A fixture irmã já fazia assim; eu tinha copiado o laço e não o nome do arquivo.
+  let arquivoDoCatalogo = "";
   for (let revisao = 1; revisao <= revisaoVigente + 1; revisao += 1) {
+    arquivoDoCatalogo = path.join(dir, `catalogo-revisao-${revisao}.json`);
     await cli(["export", "--db", banco, "--output", arquivoDoCatalogo]);
   }
   const exportado = JSON.parse(await readFile(arquivoDoCatalogo, "utf8")) as { revision: number };
