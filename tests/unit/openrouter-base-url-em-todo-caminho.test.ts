@@ -11,7 +11,8 @@
  * Técnica: `globalThis.fetch` interceptado, SDK real no caminho, nenhuma
  * chamada de rede sai. A asserção é o host de destino.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LanguageModel } from "ai";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const envMock: Record<string, string> = {};
 vi.mock("@/lib/env", () => ({
@@ -20,12 +21,37 @@ vi.mock("@/lib/env", () => ({
   },
 }));
 
+// Só o 4º caso lê banco: binding da organização em openrouter, sem `base_url`
+// no painel. `@/lib/ai/gateway` fica REAL — é a constante dele que está em jogo.
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: (tabela: string) => {
+      const linha =
+        tabela === "ai_purpose_bindings"
+          ? { provider: "openrouter", credential_id: "cred-1", model_id: "qwen3.8-flash", base_url: null }
+          : { api_key_encrypted: "x", api_key_iv: "y", api_key_tag: "z" };
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        not: () => chain,
+        maybeSingle: async () => ({ data: linha }),
+      };
+      return chain;
+    },
+  }),
+}));
+
+vi.mock("@/lib/crypto/aes_gcm", () => ({
+  decryptKey: () => "chave-decifrada-da-organizacao",
+  byteaToBuffer: (v: unknown) => v,
+}));
+
 const PROXY = "https://meu-proxy.example.com/v1";
 
 let fetchOriginal: typeof globalThis.fetch;
 let destinos: string[];
 
-async function destinoDe(model: import("ai").LanguageModel) {
+async function destinoDe(model: LanguageModel) {
   const { generateText } = await import("ai");
   try {
     await generateText({ model, prompt: "oi" });
@@ -34,6 +60,14 @@ async function destinoDe(model: import("ai").LanguageModel) {
   }
   return destinos;
 }
+
+// A primeira importação de `lib/ai/runtime/agent` transforma um grafo grande
+// (medido: 34s numa máquina com load 63). Paga-se aqui, com prazo próprio, para
+// o primeiro caso não estourar os 15s do teste; o `resetModules` de cada caso
+// reavalia os módulos, mas a transformação fica em cache.
+beforeAll(async () => {
+  await import("@/lib/ai/runtime/agent");
+}, 120_000);
 
 beforeEach(() => {
   destinos = [];
@@ -65,8 +99,23 @@ describe("OPENROUTER_BASE_URL em todo caminho", () => {
     vi.stubEnv("OPENROUTER_BASE_URL", PROXY);
     vi.resetModules();
     const { createDefaultRegistry } = await import("@/lib/agent-engine/edge/llm/providers");
-    const model = createDefaultRegistry().openrouter("sk-x", "qwen3.8-flash");
+    const model = createDefaultRegistry().openrouter!("sk-x", "qwen3.8-flash");
     expect(await destinoDe(model)).toEqual(["meu-proxy.example.com"]);
+  });
+
+  it("credencial da organização, sem base_url no painel, vai ao gateway da variável", async () => {
+    // Caminho de `lib/ai/gateway-binding.ts` (`instanciar`), que lê a constante
+    // `OPENROUTER_BASE_URL` de `lib/ai/gateway.ts` — e não o `env` do módulo.
+    vi.stubEnv("OPENROUTER_BASE_URL", PROXY);
+    vi.resetModules();
+    const { resolverModeloDoPonto } = await import("@/lib/ai/gateway-binding");
+    const r = await resolverModeloDoPonto(
+      "sentiment_classify",
+      "33333333-3333-4333-8333-333333333333",
+      "anthropic/claude-haiku-4-5",
+    );
+    expect(r?.origem).toBe("binding");
+    expect(await destinoDe(r!.model)).toEqual(["meu-proxy.example.com"]);
   });
 
   it("sem a variável, continua na OpenRouter", async () => {
