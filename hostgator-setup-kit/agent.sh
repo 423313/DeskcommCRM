@@ -275,6 +275,13 @@ export API SECRET ERRLOG RUN_ID
 # em vez de o run sumir sem explicação.
 UPDATE_ARGS=()
 [ -n "$LATEST_TAG" ] && UPDATE_ARGS=(--to "$LATEST_TAG")
+
+# Cada execução do agente começa sem medição nenhuma do banco: o arquivo da
+# rodada é desta rodada, e resíduo da execução anterior não pode virar história
+# desta (a tela conta o que aconteceu AGORA). Quem grava é o reaplicar_baseline,
+# no _common.sh.
+export RODADA_DO_BANCO_ARQUIVO="${TMPDIR:-/tmp}/deskcomm-rodada-do-banco.$$"
+rm -f "$RODADA_DO_BANCO_ARQUIVO" 2>/dev/null || true
 set +e
 DESKCOMM_AGENT_REPORT=1 \
 DESKCOMM_AGENT_PREV_IMAGE="$PREV_IMAGE" \
@@ -329,9 +336,14 @@ fi
 
 TAIL="$(esc "$(tail -40 "$LOG" || true)")" || true
 
+# O que a rodada do banco contou de si mesma, já no formato que o campo espera
+# (objeto JSON, não texto). Vazio = não medido — a tela fica calada em vez de
+# afirmar zero.
+RODADA_DO_BANCO="$(ler_rodada_do_banco 2>/dev/null || true)"
+
 # O app acabou de reiniciar: insiste por ~2 min antes de desistir.
 for _ in $(seq 1 12); do
-  OUT="$(post "{\"kind\":\"run_result\",\"run_id\":\"${RUN_ID}\",\"status\":\"${STATUS}\",\"log_tail\":\"${TAIL}\"}")"
+  OUT="$(post "{\"kind\":\"run_result\",\"run_id\":\"${RUN_ID}\",\"status\":\"${STATUS}\",\"log_tail\":\"${TAIL}\",\"rodada_do_banco\":${RODADA_DO_BANCO:-null}}")"
   [ -n "$OUT" ] && break
   sleep 10
 done

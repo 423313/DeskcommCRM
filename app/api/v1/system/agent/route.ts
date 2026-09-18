@@ -56,6 +56,12 @@ const runResult = z.object({
   run_id: z.string().uuid(),
   status: z.enum(["success", "failed", "failed_rolled_back"]),
   log_tail: z.string().max(16_000),
+  // O que a rodada do banco contou de si mesma: se a base estava ocupada, quantas
+  // retentativas custou e em qual passada fechou. Ausente quando o kit não mediu
+  // (rodada que não passou pelo banco) — e aí a tela fica calada, não afirma zero.
+  disputa_de_banco: z.boolean().optional(),
+  retentativas_do_banco: z.number().int().min(0).optional(),
+  passada_do_banco: z.number().int().min(1).optional(),
 });
 
 const body = z.discriminatedUnion("kind", [heartbeat, runProgress, runResult]);
@@ -183,7 +189,15 @@ export async function POST(req: NextRequest): Promise<Response> {
   // ainda vê o pedido e o run em aberto), nunca para o órfão invisível.
   const { error: runUpdateError } = await db
     .from("system_update_runs")
-    .update({ status: payload.status, log_tail: payload.log_tail, finished_at: new Date().toISOString() })
+    .update({
+      status: payload.status,
+      log_tail: payload.log_tail,
+      // "Não medido" é `null`, nunca zero: a tela distingue as duas coisas.
+      disputa_de_banco: payload.disputa_de_banco ?? null,
+      retentativas_do_banco: payload.retentativas_do_banco ?? null,
+      passada_do_banco: payload.passada_do_banco ?? null,
+      finished_at: new Date().toISOString(),
+    })
     .eq("id", payload.run_id);
 
   if (runUpdateError) {

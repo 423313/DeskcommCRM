@@ -9131,6 +9131,41 @@ create unique index if not exists uniq_system_update_runs_dispatched
   on public.system_update_runs (status)
   where status = 'dispatched';
 
+-- ── A rodada conta o que aconteceu com o banco (migration 0276) ─────────────
+-- Disputa de lock com o sistema no ar, quantas retentativas, em qual passada o
+-- banco fechou. Nulo = o caminho não passou pelo banco (não medido, e a tela
+-- não inventa texto para isso).
+alter table public.system_update_runs
+  add column if not exists disputa_de_banco boolean,
+  add column if not exists retentativas_do_banco integer,
+  add column if not exists passada_do_banco integer;
+
+comment on column public.system_update_runs.disputa_de_banco is
+  'Se a rodada do banco enfrentou disputa de lock com o sistema no ar. Nulo = o caminho não passou pelo banco.';
+comment on column public.system_update_runs.retentativas_do_banco is
+  'Quantas retentativas a rodada do banco gastou antes de fechar (0 = fechou na primeira passada). Nulo = o caminho não passou pelo banco.';
+comment on column public.system_update_runs.passada_do_banco is
+  'Em qual passada a rodada do banco fechou (1 = primeira). Nulo = o caminho não passou pelo banco.';
+
+alter table public.system_update_runs
+  drop constraint if exists system_update_runs_rodada_do_banco_coerente;
+alter table public.system_update_runs
+  add constraint system_update_runs_rodada_do_banco_coerente check (
+    (
+      disputa_de_banco is null
+      and retentativas_do_banco is null
+      and passada_do_banco is null
+    )
+    or (
+      disputa_de_banco is not null
+      and retentativas_do_banco is not null
+      and retentativas_do_banco >= 0
+      and passada_do_banco is not null
+      and passada_do_banco >= 1
+      and passada_do_banco >= retentativas_do_banco + 1
+    )
+  );
+
 -- ---- acentos nas etapas padrão do funil (migration 0092) ----
 -- O seed do funil "Pedidos" criava "Em separacao" e "Pos-venda" sem acento —
 -- nomes visíveis no quadro principal, a tela mais usada do CRM. O seed acima já

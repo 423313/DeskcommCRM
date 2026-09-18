@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api/types";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useSystemVersion } from "@/hooks/system/useSystemVersion";
 import { markdownParaTextoSimples } from "@/lib/system/changelog";
+import { textoDaRodadaDoBanco } from "@/lib/system/update-run";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
@@ -143,6 +144,13 @@ export function UpdatePanel() {
    * o campo vira `false` sozinho e a tela cai no texto normal de quem está em
    * dia. Não é um estado que alguém precise fechar.
    */
+  // O que a rodada do banco contou de si mesma, em português de gente. Vale nos
+  // dois desfechos em que o servidor mexeu no banco (deu certo / voltou atrás):
+  // quem clicou tem o direito de saber que a base estava ocupada, quantas
+  // retentativas custou e em qual passada fechou. Sem registro na rodada isto é
+  // `null`, e a tela fica calada em vez de afirmar zero.
+  const contaDoBanco = textoDaRodadaDoBanco(data.run?.rodada_do_banco);
+
   if (data.just_updated) {
     return (
       <Layout titulo={`${t("Pronto — você está na versão")} ${versao}`}>
@@ -155,6 +163,9 @@ export function UpdatePanel() {
             "O servidor confirma isso na próxima vez que falar comigo, daqui a alguns minutos — até lá, esta tela já sabe.",
           )}
         </p>
+        {contaDoBanco ? (
+          <p className="mt-3 text-sm text-muted-foreground">{t(contaDoBanco)}</p>
+        ) : null}
       </Layout>
     );
   }
@@ -181,6 +192,9 @@ export function UpdatePanel() {
           {t("funciona com ele. Se quiser desfazer também o banco, use a cópia de segurança feita antes da tentativa (")}
           <code>bash hostgator-setup-kit/restore.sh</code>).
         </p>
+        {contaDoBanco ? (
+          <p className="mt-3 text-sm text-muted-foreground">{t(contaDoBanco)}</p>
+        ) : null}
         <DetalhesTecnicos texto={data.run.log_tail} />
         <Saida
           botao={false}

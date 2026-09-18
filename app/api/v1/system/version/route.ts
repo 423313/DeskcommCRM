@@ -14,6 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { extractChangelogRange } from "@/lib/system/changelog";
 import {
   isRunStale,
+  rodadaDoBancoDaLinha,
   rollbackFoiSuperado,
   sucessoJaInstalado,
   type RunStatus,
@@ -61,7 +62,9 @@ export async function GET(_req: NextRequest): Promise<Response> {
   // rodando.
   const { data: run, error: runError } = await db
     .from("system_update_runs")
-    .select("id, status, last_step, dispatched_at, finished_at, from_version, to_version, log_tail")
+    .select(
+      "id, status, last_step, dispatched_at, finished_at, from_version, to_version, log_tail, disputa_de_banco, retentativas_do_banco, passada_do_banco",
+    )
     .order("dispatched_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -192,6 +195,10 @@ export async function GET(_req: NextRequest): Promise<Response> {
           to_version: run.to_version ?? "",
           log_tail: run.log_tail ?? "",
           superseded: falhaSuperada,
+          // O que a rodada contou sobre o banco — disputa, retentativas e em
+          // qual passada fechou. Ausente quando o kit não mediu (rodada que não
+          // passou pelo banco): a tela fica calada em vez de afirmar zero.
+          rodada_do_banco: rodadaDoBancoDaLinha(run),
         }
       : null,
   });

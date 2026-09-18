@@ -521,14 +521,65 @@ reaplicar_baseline() {
       BASELINE_INESPERADO="$(printf '%s\n' "$BASELINE_INESPERADO" \
         "a aplicação não chegou ao fim do arquivo (o psql saiu com código $rc): $causa" | sed '/^$/d')"
     fi
-    [ -n "$BASELINE_INESPERADO" ] || return 0
-    [ "$BASELINE_PASSADAS" -lt "$tentativas" ] || return 1
-    grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BASELINE_INESPERADO" || return 1
+    if [ -z "$BASELINE_INESPERADO" ]; then
+      # Fechou: em qual passada, e quantas retentativas custou até aqui.
+      registrar_rodada_do_banco "$([ "$BASELINE_PASSADAS" -gt 1 ] && printf 1 || printf 0)" \
+        "$((BASELINE_PASSADAS - 1))" "$BASELINE_PASSADAS"
+      return 0
+    fi
+    if [ "$BASELINE_PASSADAS" -ge "$tentativas" ]; then
+      # Esgotou as passadas: o que houve até aqui é medição, não palpite.
+      registrar_rodada_do_banco "$([ "$BASELINE_PASSADAS" -gt 1 ] && printf 1 || printf 0)" \
+        "$((BASELINE_PASSADAS - 1))" "$BASELINE_PASSADAS"
+      return 1
+    fi
+    if ! grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BASELINE_INESPERADO"; then
+      # Erro que retentativa não resolve: a rodada fechou na primeira passada.
+      registrar_rodada_do_banco 0 0 1
+      return 1
+    fi
     c_ylw "• parte do banco não aplicou (disputa com o app no ar ou conexão instável) — aplicando de novo, é seguro (passada $((BASELINE_PASSADAS + 1)) de $tentativas). O que não aplicou:"
     listar_erros_do_banco "$BASELINE_INESPERADO" 10 "    "
     sleep "$((espera * BASELINE_PASSADAS))"
     BASELINE_PASSADAS=$((BASELINE_PASSADAS + 1))
   done
+}
+
+# ---------------------------------------------------------------------------
+# O que a rodada do banco conta de si mesma.
+#
+# Achado do PR #997: o baseline reaplicado sobrevive a uma disputa com o sistema
+# no ar — o kit tenta de novo e fecha. Até aqui essa parte da história morria no
+# log do servidor: quem clicou via "terminou" sem saber que a base estava
+# ocupada, nem quanto custou. Estas duas funções passam a rodada ADIANTE, por um
+# arquivo simples, porque o kit e o reporte do agente são passos separados.
+# ---------------------------------------------------------------------------
+# O caminho pode vir do processo que chamou (agent.sh exporta antes de rodar o
+# update.sh): o kit e o reporte são processos diferentes, e os dois precisam
+# apontar para o MESMO arquivo — é ele que carrega a história da rodada.
+RODADA_DO_BANCO_ARQUIVO="${RODADA_DO_BANCO_ARQUIVO:-${TMPDIR:-/tmp}/deskcomm-rodada-do-banco.$$}"
+
+registrar_rodada_do_banco() {
+  # $1 disputa (1|0), $2 retentativas, $3 passada em que fechou.
+  printf 'disputa=%s\nretentativas=%s\npassada=%s\n' "$1" "$2" "$3" \
+    >"$RODADA_DO_BANCO_ARQUIVO" 2>/dev/null || true
+}
+
+ler_rodada_do_banco() {
+  # Sem medição, silêncio: nada é impresso e o campo chega ausente — a tela
+  # ignora. Número impossível (negativo, fracionado, passada 0) também é
+  # silêncio, nunca uma afirmação torta.
+  [ -s "$RODADA_DO_BANCO_ARQUIVO" ] || return 0
+  local disputa retentativas passada
+  disputa="$(sed -n 's/^disputa=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  retentativas="$(sed -n 's/^retentativas=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  passada="$(sed -n 's/^passada=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  case "$disputa" in 0|1) ;; *) return 0 ;; esac
+  case "$retentativas" in ''|*[!0-9]*) return 0 ;; esac
+  case "$passada" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$passada" -ge 1 ] || return 0
+  printf '{"disputa":%s,"retentativas":%s,"passada":%s}\n' \
+    "$([ "$disputa" = "1" ] && printf true || printf false)" "$retentativas" "$passada"
 }
 
 # ── As três imagens que NÓS publicamos ───────────────────────────────────────
