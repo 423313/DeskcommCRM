@@ -4059,6 +4059,11 @@ export const DICIONARIO: Traducoes = {
   "De plantão": { es: "De guardia" },
   "Fora do horário": { es: "Fuera del horario" },
   "Desligado": { es: "Apagado" },
+  // ── Presença do navegador (issue #996): o segundo selo da mesma célula, o
+  //    que responde "tem alguém aí?" sem tocar na decisão de plantão.
+  "Com a tela aberta": { es: "Con la pantalla abierta" },
+  "Sem sinal de tela": { es: "Sin señal de pantalla" },
+  "último sinal às": { es: "última señal a las" },
   "Atualizando para a versão": { es: "Actualizando a la versión" },
   // ── A espera antes de o servidor pegar o pedido, e o fim reconhecido na hora.
   //    Os dois estados que a tela ganhou quando parou de fingir que a conversa
@@ -4082,12 +4087,16 @@ export const DICIONARIO: Traducoes = {
   "Pode fechar esta página: o pedido já está registrado e não se perde.": {
     es: "Puedes cerrar esta página: el pedido ya está registrado y no se pierde.",
   },
-  "Pronto — você está na versão": { es: "Listo — estás en la versión" },
-  "A atualização terminou e o sistema já está no ar na versão": {
-    es: "La actualización terminó y el sistema ya está en línea en la versión",
+  // As três frases que a janela do `just_updated` usava saíram junto com a
+  // promoção da versão do run a "instalada" (issue 1101): elas afirmavam uma
+  // versão que o host não confirmou. No lugar delas, o que a tela pode dizer é
+  // que o PEDIDO terminou e qual é a última versão que o host confirmou.
+  "terminou": { es: "terminó" },
+  "O servidor ainda não me confirmou em que versão ele voltou ao ar — a última versão que ele confirmou é a": {
+    es: "El servidor todavía no me confirmó en qué versión volvió a estar en línea — la última versión que él confirmó es la",
   },
-  "O servidor confirma isso na próxima vez que falar comigo, daqui a alguns minutos — até lá, esta tela já sabe.": {
-    es: "El servidor lo confirma la próxima vez que hable conmigo, en unos minutos — hasta entonces, esta pantalla ya lo sabe.",
+  "Assim que ele falar comigo, daqui a alguns minutos, esta tela se atualiza sozinha. Não ofereço atualizar de novo: o pedido já foi atendido.": {
+    es: "En cuanto hable conmigo, dentro de unos minutos, esta pantalla se actualiza sola. No te ofrezco actualizar otra vez: el pedido ya fue atendido.",
   },
   "O sistema sai do ar por alguns instantes e volta sozinho. Pode deixar esta página aberta.": {
     es: "El sistema se apaga por unos instantes y vuelve solo. Puedes dejar esta página abierta.",
