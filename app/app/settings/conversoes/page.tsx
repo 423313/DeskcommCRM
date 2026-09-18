@@ -42,6 +42,10 @@ import {
 import { traduzir } from "@/lib/i18n/dicionario";
 import { montarCodigoDeOrigemDoSite, TAMANHO_MAXIMO_DO_CODIGO } from "@/lib/leads/origem-do-site";
 import { formatCentsBRL } from "@/lib/money";
+import {
+  faltaParaConectarOGoogleAds,
+  googleAdsEstaConfigurado,
+} from "@/lib/plataformas-de-anuncio/google/config";
 import { lerEstadoDaConexaoGoogle } from "@/lib/plataformas-de-anuncio/google/estado-da-conexao";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -138,7 +142,12 @@ export default async function ConversoesPage({
       )}
 
       <FormularioDeConversoes estado={estado} idioma={idioma} />
-      <FormularioDeConversoesGoogle estado={estadoGoogle} idioma={idioma} />
+      <FormularioDeConversoesGoogle
+        estado={estadoGoogle}
+        idioma={idioma}
+        configurado={googleAdsEstaConfigurado()}
+        falta={faltaParaConectarOGoogleAds()}
+      />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between">
