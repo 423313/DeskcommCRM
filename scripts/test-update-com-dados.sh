@@ -68,10 +68,15 @@ docker run -d --rm --name "$CONTAINER" -p "127.0.0.1::5432" \
   --label "deskcomm.harness=update-com-dados" \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres "$IMAGE" >/dev/null
 
-# `pg_isready` mente aqui: o initdb sobe um servidor temporário só em socket.
+# `pg_isready` e `psql` sem `-h` mentem aqui: o initdb sobe um servidor
+# temporário que atende pelo socket local e depois o derruba antes de subir o
+# definitivo. Forçar `-h 127.0.0.1` faz o libpq usar TCP; esse servidor
+# temporário não escuta TCP, então só damos o banco por pronto quando o servidor
+# definitivo já está aceitando conexões. Mantemos o cliente dentro do próprio
+# contêiner para o único requisito do harness continuar sendo Docker.
 pronto=0
 for _ in $(seq 1 90); do
-  if docker exec "$CONTAINER" psql -U postgres -d postgres -tAc 'select 1' >/dev/null 2>&1; then
+  if docker exec "$CONTAINER" psql -h 127.0.0.1 -U postgres -d postgres -tAc 'select 1' >/dev/null 2>&1; then
     pronto=1; break
   fi
   sleep 1
