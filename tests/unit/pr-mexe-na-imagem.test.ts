@@ -1,0 +1,85 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+import { describe, expect, it } from "vitest";
+
+// scripts/pr-mexe-na-imagem.sh decide se um PR pula os builds Docker. Errar
+// para "nao" deixa passar imagem quebrada com `imagens-ok` verde — o check
+// obrigatório que existe porque o artefato do self-hoster era o único sem gate.
+const SCRIPT = "scripts/pr-mexe-na-imagem.sh";
+
+function responde(caminhos: string[]): string {
+  return execFileSync("bash", [SCRIPT], { input: caminhos.join("\n") + "\n", encoding: "utf-8" }).trim();
+}
+
+describe("pr-mexe-na-imagem", () => {
+  it.each([
+    ["Dockerfile"],
+    ["Dockerfile.worker"],
+    ["Dockerfile.scheduler"],
+    [".dockerignore"],
+    ["package.json"],
+    ["pnpm-lock.yaml"],
+    ["patches/algum.patch"],
+    ["next.config.ts"],
+    ["tsconfig.json"],
+    ["lib/qualquer.ts"],
+    ["workers/event-log.ts"],
+    ["docker/scheduler/entrypoint.sh"],
+    ["public/logo.png"],
+    ["lib/agent-engine/playbooks/platform.md"],
+    ["supabase/baseline.sql"],
+    [".github/workflows/publish-image.yml"],
+    [".github/algum/script.ts"],
+  ])("%s → constrói", (caminho) => {
+    expect(responde(["docs/leia.md", caminho])).toBe("sim");
+  });
+
+  it("entrada vazia constrói — não saber o que mudou nunca vira 'pula'", () => {
+    expect(responde([])).toBe("sim");
+  });
+
+  it("PR só de documentação, teste, fragmento e workflow alheio pula", () => {
+    expect(
+      responde([
+        "docs/runbooks/deploy.md",
+        "tests/unit/x.test.ts",
+        "tests/e2e/y.spec.ts",
+        ".changes/fragmento.md",
+        ".github/workflows/ci.yml",
+        "CLAUDE.md",
+        "playwright.config.ts",
+      ]),
+    ).toBe("nao");
+  });
+
+  // O espelho: tudo que o `.dockerignore` tira do contexto pode pular. Se alguém
+  // acrescenta uma linha lá e não aqui, o PR apenas constrói à toa (custa vaga,
+  // não segurança). Se alguém REMOVE uma linha de lá e esquece o script, o
+  // caminho passaria a entrar na imagem sem ninguém construir — é esse lado que
+  // o teste abaixo cobre, pela volta: toda linha do script tem de estar lá.
+  const ignorados = readFileSync(".dockerignore", "utf-8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+
+  it("toda entrada do .dockerignore pula", () => {
+    const naoPulam = ignorados.filter((e) => {
+      const amostra = e.replace(/\*/g, "amostra");
+      return responde([amostra]) === "sim" && responde([`${amostra}/amostra.txt`]) === "sim";
+    });
+    expect(naoPulam).toEqual([]);
+  });
+
+  it("o espelho do .dockerignore no script não tem entrada que o .dockerignore não tenha", () => {
+    const fonte = readFileSync(SCRIPT, "utf-8");
+    const bloco = [...fonte.matchAll(/^\s*(?:\|\s*)?((?:[.\w*-]+(?:\/\*)?\s*\|\s*)*[.\w*-]+(?:\/\*)?)\s*(?:\\|\) ;;)$/gm)]
+      .flatMap((m) => m[1].split("|").map((s) => s.trim()))
+      .filter(Boolean);
+    const doEspelho = bloco
+      .map((p) => p.replace(/\/\*$/, ""))
+      .filter((p) => !p.startsWith(".github") && p !== "*.md");
+    expect(doEspelho.length).toBeGreaterThan(15);
+    expect(doEspelho.filter((p) => !ignorados.includes(p))).toEqual([]);
+  });
+});
