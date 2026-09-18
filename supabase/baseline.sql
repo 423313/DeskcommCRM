@@ -9972,7 +9972,7 @@ alter table public.agent_inbox_items
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
     'case_stale',
-    -- (migration 0305) O fluxo de follow-up publicado que NUNCA vai disparar:
+    -- (migration 0312) O fluxo de follow-up publicado que NUNCA vai disparar:
     -- gatilho automático (silêncio, etapa, caso, falta) só cria inscrição se
     -- algum agente publicado arma o ponteiro, e sem esse vínculo os produtores
     -- saem por `pointers_armados = 0` em silêncio — `active` na tela, morto no
@@ -9985,7 +9985,7 @@ alter table public.agent_inbox_items
 
 
 
--- ---- índice do watcher de follow-up sem agente (migration 0305) ----
+-- ---- índice do watcher de follow-up sem agente (migration 0312) ----
 create index if not exists agent_inbox_items_followup_sem_agente_aberto_idx
   on public.agent_inbox_items (organization_id, ref_id)
   where kind = 'followup_sem_agente' and status = 'open';
