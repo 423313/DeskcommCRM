@@ -34,6 +34,7 @@ import { LoseLeadDialog } from "@/components/kanban/LoseLeadDialog";
 import { chaveDoQuadro } from "@/hooks/kanban/useBoard";
 import { CANONICAL_LOST_REASONS } from "@/lib/schemas/leads";
 import { motivosDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
+import { MOTIVO_DA_TRANSFERENCIA } from "@/lib/leads/motivo-da-perda";
 import type { BoardData } from "@/lib/kanban/types";
 
 const { apiPost } = vi.hoisted(() => ({
@@ -172,7 +173,9 @@ describe("motivos de perda configurados no funil", () => {
 
   it("sem funil configurado, o padrão do produto e o 'other' vazio continuam valendo", async () => {
     abrir(comFunil({}));
-    expect(valuesDosMotivos()).toEqual([...CANONICAL_LOST_REASONS]);
+    expect(valuesDosMotivos()).toEqual(
+      CANONICAL_LOST_REASONS.filter((motivo) => motivo !== MOTIVO_DA_TRANSFERENCIA),
+    );
 
     fireEvent.click(radio("other"));
     expect(confirmar().disabled).toBe(false);
@@ -184,7 +187,29 @@ describe("motivos de perda configurados no funil", () => {
 
   it("funil com lista VAZIA cai no padrão — nunca numa janela sem motivo nenhum", () => {
     abrir(comFunil({ lost_reasons: [] }));
-    expect(valuesDosMotivos()).toEqual([...CANONICAL_LOST_REASONS]);
+    expect(valuesDosMotivos()).toEqual(
+      CANONICAL_LOST_REASONS.filter((motivo) => motivo !== MOTIVO_DA_TRANSFERENCIA),
+    );
+  });
+
+  it("⭐ o motivo de SISTEMA não é oferecido — nem sem funil configurado, nem com ele cadastrado", () => {
+    // `moved_to_another_pipeline` é canônico, então o trigger o aceita e ele
+    // aparecia na lista. Só que a 0266 o EXCLUI de `fn_attendant_metrics` e
+    // `fn_atrito_metrics`: oferecido na janela, ele é o caminho de um clique para
+    // tirar uma perda comercial real da contagem — e o motivo gravado parece
+    // legítimo para quem audita depois. Quem TRANSFERE continua gravando este
+    // motivo pelo caminho da troca de funil; quem está PERDENDO o negócio não o
+    // escolhe aqui.
+    abrir(comFunil({}));
+    expect(valuesDosMotivos()).not.toContain(MOTIVO_DA_TRANSFERENCIA);
+    // O rótulo que o dava por legítimo na tela também não pode aparecer.
+    expect(screen.queryByText("Levado para outro funil")).toBeNull();
+
+    cleanup();
+    // Cadastrado NO FUNIL também não volta: a exclusão da métrica no banco é
+    // incondicional, então a lista do operador não pode reintroduzir o atalho.
+    abrir(comFunil({ lost_reasons: [MOTIVO_DA_TRANSFERENCIA, "Sem orçamento"] }));
+    expect(valuesDosMotivos()).toEqual(["Sem orçamento", "other"]);
   });
 });
 

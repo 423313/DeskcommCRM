@@ -286,6 +286,30 @@ jobs:
           echo "o app chegou a servir:"
           docker logs smoke 2>&1 | grep -E "Ready in|Next.js" | head -3
 
+      # Issue #1075. O passo acima prova que o contêiner SOBE; nenhum passo provava
+      # que uma rota que depende de um arquivo FORA do bundle FUNCIONA. Em Node o
+      # pdfjs empacotado aponta o worker dele para o specifier relativo
+      # `"./pdf.worker.mjs"`, resolvido a partir do próprio chunk gerado no build — e
+      # o `output: standalone` não levou esse arquivo para a imagem. Toda release
+      # publicada leu PDF de texto como "sem texto"/"não consegui ler", e o defeito
+      # atravessou as releases porque nenhum job olhava dentro da imagem: o teste de
+      # extração roda pelo `node_modules` do repositório (onde o arquivo existe) e o
+      # gate de boot aceita o app subindo — a extração só quebra quando alguém manda
+      # um PDF de verdade.
+      #
+      # A sonda roda DENTRO da imagem construída acima, sobre a MESMA fixture do teste
+      # de extração, e carrega o módulo EMPACOTADO (chunk + runtime do Turbopack), que
+      # é o caminho da rota. Um `import("pdfjs-dist")` cru mediria outro caminho — na
+      # imagem esse pacote não existe fora do bundle.
+      - name: A imagem extrai texto de PDF?
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD/tests/fixtures/sample-text.pdf:/fixture.pdf:ro" \
+            -v "$PWD/scripts/sonda-pdf-na-imagem.mjs:/sonda-pdf-na-imagem.mjs:ro" \
+            -e PDF_ESPERADO="DeskcommCRM RAG fixture" \
+            deskcomm-smoke:pr node /sonda-pdf-na-imagem.mjs
+
       - name: Encerrar
         if: always()
         run: docker rm -f smoke 2>/dev/null || true

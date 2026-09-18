@@ -402,6 +402,8 @@ jobs:
         agenda-tipos-de-agendamento.spec.ts
         cliente-pela-agenda.spec.ts
         agenda-grade-interativa.spec.ts
+        agenda-papel-de-leitura.spec.ts
+        agenda-busca-cliente-pelo-nome-do-perfil.spec.ts
         agente-novo-e-uso.spec.ts
         agente-organiza-operacao.spec.ts
         central-de-avisos-capacidades.spec.ts
@@ -650,6 +652,7 @@ jobs:
         extensoes-declarativas.spec.ts
         extensoes-recuperacao.spec.ts
         extensoes-versao.spec.ts
+        motivo-do-publicar-na-tela.spec.ts
         followup-modelos-de-clinica.spec.ts
 
       FORA_DO_CI: >-
