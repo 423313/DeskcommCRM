@@ -109,8 +109,9 @@ Nesta ordem:
 **A liberação do CI é o primeiro comando da triagem, antes de ler o diff.** Medido em 2026-09-03: numa fila de 26 PRs, **12 workflows** de cinco contribuidores estavam parados em `action_required`, um deles havia mais de um dia — e três PRs tinham **zero** execuções no `head_sha` (ver modo de falha 17). Cada minuto entre abrir o PR e liberar é latência pura, que é o gargalo que este documento existe para matar. Libere primeiro; avalie depois.
 
 A acolhida **não contém juízo técnico**. É isso, e só isso, que a torna segura de ser automática:
-ela não pode estar errada sobre o mérito porque não fala do mérito. Ela diz três coisas — o `Vercel`
-vermelho é esperado em fork e não é culpa dele, o CI está sendo liberado, e quando vem o veredito.
+ela não pode estar errada sobre o mérito porque não fala do mérito. Ela diz três coisas — o CI está
+sendo liberado, onde olhar o que trava o merge, e quando vem o veredito. O texto vive em
+`references/resposta-ao-contribuidor.md`, espelhado em `.github/workflows/acolhida.yml`.
 
 Todo comentário desta triagem abre com a âncora invisível `<!-- triagem-de-pr:v1:pass=N -->`. Leia as
 âncoras existentes antes de escrever: **acolhida nunca é postada duas vezes.**
@@ -2469,7 +2470,7 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
 
     ```bash
     gh pr checks <N> --json name,bucket --jq '
-      [.[]|select(.bucket!="skipping")|select(.name|test("^Vercel")|not)]
+      [.[]|select(.bucket!="skipping")]
       | if   (any(.bucket=="fail"))    then "VERMELHO"
         elif (any(.bucket=="pending")) then "AINDA RODANDO"
         else "VERDE" end'
@@ -2560,17 +2561,17 @@ Cada um destes foi cometido de verdade nesta casa, e é por isso que estão escr
 
 57. **Reconciliação que REMOVE um artefato e deixa o inventário que o declarava.** Tirar um
     workflow, uma rota ou uma tela é metade do conserto: a outra metade é o mapa que a enumera
-    (`GATILHO_ESPERADO`, `vercel.ts`, `registry.ts`, `SPECS_PARTE_*`). Em 14/09 removi o workflow
-    de deploy de um fork e deixei as três entradas dele no `GATILHO_ESPERADO` — e não vi porque, no
-    worktree da reconciliação, rodei só o teste que eu sabia afetado. **Depois de reconciliar, rode
-    a suíte, não o arquivo.** O arquivo que você lembra é o que você já sabe; o que quebra é o que
-    você não pensou.
+    (`GATILHO_ESPERADO`, `registry.ts`, `SPECS_PARTE_*`). Em 14/09 removi o workflow de deploy de
+    um fork e deixei as três entradas dele no `GATILHO_ESPERADO` — e não vi porque, no worktree da
+    reconciliação, rodei só o teste que eu sabia afetado. **Depois de reconciliar, rode a suíte,
+    não o arquivo.** O arquivo que você lembra é o que você já sabe; o que quebra é o que você não
+    pensou.
 
-58. **Duas reconciliações feitas em ordem diferente da ordem de merge.** Reconciliei o `vercel.ts`
-    do #767 antes de o #805 entrar no lote; o #805 criou um cron que aquele `vercel.ts` não
-    conhecia. Cada reconciliação estava certa contra a árvore em que foi feita. **Inventário se
-    confere na árvore do LOTE montado, depois do último merge** — nunca na branch de reconciliação
-    isolada.
+58. **Duas reconciliações feitas em ordem diferente da ordem de merge.** Reconciliei o inventário
+    de crons `vercel.ts` (apagado em 17/09) do #767 antes de o #805 entrar no lote; o #805 criou um
+    cron que aquele inventário não conhecia. Cada reconciliação estava certa contra a árvore em que
+    foi feita. **Inventário se confere na árvore do LOTE montado, depois do último merge** — nunca
+    na branch de reconciliação isolada.
 
 59. **Exit 1 com zero falhas, e as duas sondas concordando em zero.** O rodapé `Tests … 0 failed` e
     o `grep FAIL` vazio não esgotam o que reprova uma suíte: erro não tratado sai numa terceira
