@@ -88,16 +88,15 @@ jobs:
   # subi-lo seria trocar um vermelho honesto por um CI que demora mais a cada
   # mês sem ninguém perceber.
   #
-  # Custo que a parte 4 impõe às outras três, MEDIDO e aceito: os contêineres
-  # de `services:` (WAHA, redis, serverless-redis-http) sobem em TODAS as
-  # pernas, porque `services:` é chave do job e o Actions não aceita condição
-  # por braço da matriz. Na parte 1 do run 35124188017, que não usa nenhum
-  # deles, "Initialize containers" foi de 16:53:22.468 a 16:54:13.725 — 51s,
-  # quase todos no pull do WAHA —, e a parte 3 do mesmo run mediu 26m04s. A
-  # margem até o teto é fina. Se uma perna estourar, a primeira alavanca NÃO é
-  # subir o teto: é tirar os três contêineres de `services:` e subi-los por
-  # `docker run` dentro do passo `if: matrix.parte == 4`, como o dublê de SaaS
-  # já sobe.
+  # A parte 4 já custou às outras três: os contêineres dela (WAHA, redis,
+  # serverless-redis-http) eram `services:`, que é chave do JOB e sobe em
+  # TODAS as pernas — o Actions não aceita condição por braço da matriz. Na
+  # parte 1 do run 35124188017, que não usa nenhum deles, "Initialize
+  # containers" foi de 16:53:22.468 a 16:54:13.725 — 51s, quase todos no pull
+  # do WAHA —, com a parte 3 do mesmo run em 26m04s. Agora eles sobem por
+  # `docker run` no passo "Subir WAHA e o par Redis da VPS fresca", com
+  # `if: matrix.parte == 4`. Não os devolva para `services:`: a guarda
+  # `tests/unit/e2e-parte-4-fala-com-os-servicos-do-runner.test.ts` reprova.
   e2e-parte:
     runs-on: ubuntu-latest
     # O teto FICA EM 30, e essa foi uma correção de rumo desta branch.
@@ -593,12 +592,12 @@ jobs:
       #       A instância está corrigida (a org sai do dono do bootstrap) e a
       #       classe inteira virou gate: `tests/unit/e2e-nao-escolhe-a-primeira-linha`.
       #       A razão (1) — dependência externa — era a que ainda a segurava, e
-      #       foi a que a PARTE_4 resolveu: WAHA e o par Redis sobem como
-      #       `services:` do job, e Resend/Nuvemshop falam com um dublê HTTP real.
+      #       foi a que a PARTE_4 resolveu: WAHA e o par Redis sobem por
+      #       `docker run` só nela, e Resend/Nuvemshop falam com um dublê HTTP real.
       #
       # Ela é a P0 da doutrina de QA Visual, e é por isso que o limite da prova
       # fica escrito onde ela roda: o WAHA do CI é o CORE, não o Plus (ver o
-      # serviço `waha` abaixo) — a jornada de onboarding é exercitada; o que só
+      # passo "Subir WAHA e o par Redis da VPS fresca") — a jornada de onboarding é exercitada; o que só
       # o Plus tem, não.
       #
 # As CINCO specs da missão "Follow-up Vivo" (`followup-linguagem`,
@@ -778,7 +777,8 @@ jobs:
       # A `vps-fresh-onboarding` era a última spec fora do CI. A infraestrutura
       # que faltava chegou em dois lugares:
       #
-      #  * `services:` deste job: WAHA (devlikeapro/waha) e o par Redis do
+      #  * o passo "Subir WAHA e o par Redis da VPS fresca" (`docker run`, só
+      #    nesta parte): WAHA (devlikeapro/waha) e o par Redis do
       #    `docker-compose.prod.yml` — `redis:7-alpine` + o
       #    `hiett/serverless-redis-http` que fala o REST do Upstash;
       #  * `scripts/duble-saas-e2e.mjs`: dublê HTTP REAL (recebe requisição de
@@ -808,97 +808,6 @@ jobs:
       FORA_DO_CI: >-
         inbox-tempo-real.spec.ts
         cadastro-sem-confirmacao-de-email.spec.ts
-    # ─── Serviços da parte 4 — a spec de VPS fresca (issue #179) ────────────
-    #
-    # Sobem para a matriz inteira (é assim que `services:` funciona no Actions:
-    # é chave do job, não do braço) e ficam ociosos nas partes 1 a 3. O que é
-    # por-parte é a INJEÇÃO: só o passo `Ligar a VPS fresca` publica estas URLs
-    # no ambiente, então nenhuma spec das partes 1 a 3 passa a ver WAHA ligado
-    # sem querer.
-    services:
-      waha:
-        # Sobe no runner; é a dificuldade "baixa" que a issue descreve.
-        #
-        # Tag PINADA, e a MESMA do `docker-compose.prod.yml`
-        # (`devlikeapro/waha:latest-2026.7.2`): este job existe para provar o que
-        # o self-hoster recebe, e `:latest` deixou de ser isso em 01/09/2026 — o
-        # digest do `latest` virou `527ff3d6…` (2026.8.2) enquanto o pin segue em
-        # `65e593e3…` (2026.7.2). Medido no run 35095923107 (e já no 35091727922,
-        # antes de qualquer mudança nossa): com `:latest` o contêiner NÃO sobe e
-        # as quatro partes morrem em "Initialize containers".
-        image: devlikeapro/waha:latest-2026.7.2
-        ports: ["3000:3000"]
-        env:
-          WHATSAPP_HOOK_URL: http://127.0.0.1:3001/api/whatsapp/webhook
-          # A chave do WAHA tem UMA fonte: `.env.e2e`, gerado por
-          # `scripts/gerar-env-e2e.sh` e publicado no ambiente do job. Escrever a
-          # chave aqui foi reprovado pelo guard
-          # `tests/unit/e2e-workflow-honra-o-env.test.ts` (eram DOIS valores
-          # diferentes, e o app levava 401) — e um contêiner de SERVIÇO sobe ANTES
-          # do passo que publica o arquivo, então ele não tem como receber o valor
-          # da fonte única.
-          #
-          # Daí o `WAHA_NO_API_KEY`: sem ele o WAHA NÃO roda sem chave — ele
-          # SORTEIA uma no boot. Está no pin, em `core/auth/config.js`:
-          # `FromEnv('WAHA_API_KEY', parseBool(process.env.WAHA_NO_API_KEY), rand(), keys)`,
-          # e o `ApiKeyAuthFactory` só cai em `NoAuth` quando a chave resolve
-          # vazia. Medido no run 35100039158: com a chave sorteada, todo
-          # `X-Api-Key` que o CRM manda — o do `.env.e2e` — toma 401, e o
-          # serviço fica de pé e inútil. Com `True` a API é pública (o próprio
-          # contêiner avisa no log: "No API key detected"), e o que este job
-          # exercita é a jornada de onboarding, não o contrato de autenticação do
-          # WAHA — esse tem fonte e teste no produto.
-          WAHA_NO_API_KEY: "True"
-          # O MESMO motor do `docker-compose.prod.yml`
-          # (`WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}`). Sem
-          # esta linha o contêiner cai no default WEBJS — o log do run
-          # 35124188017 mostra `"engine":"WEBJS"` —, e o produto RECUSA essa
-          # sessão: `compatibleSession()` em `lib/waha/client.ts` devolve false
-          # para qualquer engine que não seja NOWEB, e o `createSession` lança.
-          # Com WEBJS a jornada do QR não teria como ficar verde nem com o WAHA
-          # alcançável.
-          #
-          # Limite escrito para não ser descoberto: isto é o WAHA CORE (o mesmo
-          # log diz `"tier":"CORE"`), não o WAHA Plus que a doutrina exige em
-          # produção. A licença do Plus não pode viver num CI que roda PR de
-          # fork sem segredo nenhum. Multi-sessão, retry e S3 — o que só o Plus
-          # tem — NÃO são exercitados aqui; a jornada de onboarding é.
-          WHATSAPP_DEFAULT_ENGINE: NOWEB
-        # Probe TCP puro, para a saúde do CONTÊINER (liveness). Amarrar essa saúde
-        # a um endpoint amarra também ao contrato de AUTENTICAÇÃO de uma versão do
-        # upstream — o `/api/health` do `:latest` (2026.8.2) responde 401/404 e o
-        # contêiner nunca fica healthy. Quem espera o WAHA RESPONDER — com as
-        # rotas reais, e o histórico no log — é o passo "Ligar a VPS fresca".
-        options: >-
-          --health-cmd "node -e \"require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""
-          --health-interval 10s --health-timeout 5s --health-retries 12
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 5s
-          --health-timeout 3s --health-retries 12
-      redis-http:
-        # O MESMO par do docker-compose.prod.yml: quem traduz o REST do Upstash
-        # para o Redis acima. Sem ele o produto fala Upstash e não tem com quem.
-        #
-        # E o MESMO digest do compose, pela razão do WAHA logo acima: `:latest`
-        # é tag móvel e o job existe para provar o que o self-hoster recebe. O
-        # compose explica por que o pin é por digest e não por `:0.0.10` (não
-        # são a mesma imagem). Medido em 2026-09-16 com `docker buildx
-        # imagetools inspect`: o `:latest` de hoje É este índice (5b0bb923…,
-        # com linux/amd64), então o pin não troca um bit do que rodou — tira do
-        # registry o poder de trocar debaixo do CI. Bumpar é junto com o compose.
-        image: hiett/serverless-redis-http@sha256:5b0bb9239fce53abf87b2018a7a0deb9ec7bd900c5360738fe5fbeeb426f9150
-        ports: ["8079:80"]
-        env:
-          SRH_MODE: env
-          SRH_TOKEN: e2e-token-nao-e-segredo
-          SRH_CONNECTION_STRING: redis://redis:6379
-        # Sem health-cmd de propósito: a imagem não traz wget/curl e um check que
-        # nunca passa travaria o job esperando saúde para sempre. Quem espera o
-        # 8079 responder é o próprio passo abaixo, com curl da máquina.
-
     steps:
       # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
       #
@@ -930,9 +839,10 @@ jobs:
             # valor e o `timeout-minutes` deixarem de concordar.
             echo "TETO_SEGUNDOS=1800"
             # Corte antecipado, 2 min antes do teto. A margem paga o que o
-            # relógio de passo NÃO vê: o `Initialize containers` dos services
-            # roda antes do primeiro passo (~51 s por perna, medido no #983) e
-            # o envio de artefato/resumo precisa de tempo depois da suíte.
+            # relógio de passo NÃO vê: o que o runner faz antes do primeiro passo
+            # (até o #983 incluía ~51 s de `Initialize containers` em toda
+            # perna; os contêineres agora sobem só na parte 4, dentro de um
+            # passo) e o envio de artefato/resumo depois da suíte.
             echo "MARGEM_SEGUNDOS=120"
             # Piso para a suíte sequer começar: com menos que isto, rodar a
             # suíte é gastar o que resta para ver um cancelamento no meio.
@@ -941,6 +851,99 @@ jobs:
           echo "parte ${{ matrix.parte }}: relógio do job iniciado em $(date -u +%H:%M:%S) UTC"
 
       - uses: actions/checkout@v7
+
+      # ─── Serviços da parte 4 — a spec de VPS fresca (issue #179) ──────────
+      #
+      # Eram `services:` do job, e `services:` é chave do JOB, não do braço da
+      # matriz: subiam nas quatro partes e ficavam ociosos em três. Na parte 1
+      # do run 35124188017, que não usa nenhum deles, "Initialize containers"
+      # custou 51s (quase todos no pull do WAHA), com as partes a ~2 min do
+      # teto de 30. Aqui eles sobem por `docker run` SÓ na parte 4 — a alavanca
+      # que o comentário do teto, no topo deste job, nomeava.
+      #
+      # A rede própria devolve o que `services:` dava de graça: o nome `redis`
+      # resolvendo para o contêiner do Redis, que é o endereço do
+      # serverless-redis-http. As portas publicadas são as mesmas (3000, 6379,
+      # 8079), então o passo "Ligar a VPS fresca" — que espera cada serviço
+      # RESPONDER e falha fechado — não muda. O passo sobe logo no começo do
+      # job para os contêineres ficarem prontos enquanto o Supabase e o build
+      # correm; por isso eles continuam nascendo ANTES de o `.env.e2e` existir.
+      - if: matrix.parte == 4
+        name: Subir WAHA e o par Redis da VPS fresca
+        env:
+          # Tag PINADA, e a MESMA do `docker-compose.prod.yml`: este job existe
+          # para provar o que o self-hoster recebe, e `:latest` deixou de ser
+          # isso em 01/09/2026 (o digest do `latest` virou 2026.8.2 enquanto o
+          # pin segue em 2026.7.2). Medido no run 35095923107: com `:latest` o
+          # contêiner NÃO sobe.
+          WAHA_IMAGE: devlikeapro/waha:latest-2026.7.2
+          REDIS_IMAGE: redis:7-alpine
+          # O MESMO digest do compose: `:latest` é tag móvel. Medido em
+          # 2026-09-16 com `docker buildx imagetools inspect`: o `:latest` de
+          # então É este índice. Bumpar é junto com o compose.
+          SRH_IMAGE: hiett/serverless-redis-http@sha256:5b0bb9239fce53abf87b2018a7a0deb9ec7bd900c5360738fe5fbeeb426f9150
+          # Inerte nesta jornada, e escrito para não parecer que funciona: o job
+          # roda no host, então o 127.0.0.1 de dentro do WAHA é o próprio WAHA.
+          # O que a spec exercita é app→WAHA (o QR), não o webhook de volta.
+          WHATSAPP_HOOK_URL: http://127.0.0.1:3001/api/whatsapp/webhook
+          # A chave do WAHA tem UMA fonte: `.env.e2e`, gerado por
+          # `scripts/gerar-env-e2e.sh` e publicado no ambiente do job. Escrever a
+          # chave aqui foi reprovado pelo guard
+          # `tests/unit/e2e-workflow-honra-o-env.test.ts` (eram DOIS valores
+          # diferentes, e o app levava 401) — e este passo roda ANTES do que
+          # publica o arquivo (é o que deixa o pull correr junto com o resto do
+          # job), então o contêiner não tem como receber o valor da fonte única.
+          #
+          # Daí o `WAHA_NO_API_KEY`: sem ele o WAHA NÃO roda sem chave — ele
+          # SORTEIA uma no boot. Está no pin, em `core/auth/config.js`:
+          # `FromEnv('WAHA_API_KEY', parseBool(process.env.WAHA_NO_API_KEY), rand(), keys)`,
+          # e o `ApiKeyAuthFactory` só cai em `NoAuth` quando a chave resolve
+          # vazia. Medido no run 35100039158: com a chave sorteada, todo
+          # `X-Api-Key` que o CRM manda — o do `.env.e2e` — toma 401, e o
+          # serviço fica de pé e inútil. Com `True` a API é pública (o próprio
+          # contêiner avisa no log: "No API key detected"), e o que este job
+          # exercita é a jornada de onboarding, não o contrato de autenticação do
+          # WAHA — esse tem fonte e teste no produto.
+          WAHA_NO_API_KEY: "True"
+          # O MESMO motor do `docker-compose.prod.yml`
+          # (`WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}`). Sem
+          # esta linha o contêiner cai no default WEBJS — o log do run
+          # 35124188017 mostra `"engine":"WEBJS"` —, e o produto RECUSA essa
+          # sessão: `compatibleSession()` em `lib/waha/client.ts` devolve false
+          # para qualquer engine que não seja NOWEB, e o `createSession` lança.
+          # Com WEBJS a jornada do QR não teria como ficar verde nem com o WAHA
+          # alcançável.
+          #
+          # Limite escrito para não ser descoberto: isto é o WAHA CORE (o mesmo
+          # log diz `"tier":"CORE"`), não o WAHA Plus que a doutrina exige em
+          # produção. A licença do Plus não pode viver num CI que roda PR de
+          # fork sem segredo nenhum. Multi-sessão, retry e S3 — o que só o Plus
+          # tem — NÃO são exercitados aqui; a jornada de onboarding é.
+          WHATSAPP_DEFAULT_ENGINE: NOWEB
+        run: |
+          set -euo pipefail
+          docker network create vps-fresca
+
+          docker run -d --name redis --network vps-fresca --network-alias redis \
+            -p 6379:6379 "$REDIS_IMAGE"
+          # O serverless-redis-http conecta no boot: ele só sobe com o Redis de pé.
+          for _ in $(seq 1 30); do
+            if docker exec redis redis-cli ping 2>/dev/null | grep -q PONG; then break; fi
+            sleep 1
+          done
+          if ! docker exec redis redis-cli ping 2>/dev/null | grep -q PONG; then
+            echo "o redis não respondeu PING em 30s"; docker logs --tail 40 redis 2>&1 || true
+            exit 1
+          fi
+
+          docker run -d --name redis-http --network vps-fresca -p 8079:80 \
+            -e SRH_MODE=env -e SRH_TOKEN=e2e-token-nao-e-segredo \
+            -e SRH_CONNECTION_STRING=redis://redis:6379 "$SRH_IMAGE"
+
+          docker run -d --name waha -p 3000:3000 \
+            -e WHATSAPP_HOOK_URL -e WAHA_NO_API_KEY -e WHATSAPP_DEFAULT_ENGINE "$WAHA_IMAGE"
+
+          docker ps --format '{{.Names}} {{.Image}} {{.Status}} {{.Ports}}'
 
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
@@ -1212,7 +1215,7 @@ jobs:
             echo "Redis (REST do Upstash) não respondeu PONG em 30s: $resposta"
             echo "--- o que os contêineres do Redis dizem ---"
             docker ps -a --filter name=redis --format '{{.Names}} {{.Status}} {{.Ports}}' || true
-            docker logs --tail 40 "$(docker ps -aq --filter name=serverlessredishttp | head -1)" 2>&1 || true
+            docker logs --tail 40 redis-http 2>&1 || true
             exit 1
           fi
 
@@ -1241,7 +1244,7 @@ jobs:
           echo "WAHA não respondeu em 120s: /ping=$ping · /api/sessions=$sessoes"
           echo "--- o que o contêiner do WAHA diz ---"
           docker ps -a --filter name=waha --format '{{.Names}} {{.Status}} {{.Ports}}' || true
-          docker logs --tail 40 "$(docker ps -aq --filter name=waha | head -1)" 2>&1 || true
+          docker logs --tail 40 waha 2>&1 || true
           exit 1
 
       # ─── O dono da instalação fresca: o `install.sh` cria, e o CI também ───

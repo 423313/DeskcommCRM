@@ -127,7 +127,7 @@ cat > .env.e2e <<EOF
 NEXT_PUBLIC_SUPABASE_URL=$API_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON
 SUPABASE_SERVICE_ROLE_KEY=$SERVICE
-# Vem do stack que está de pé (ver o comentário do `ler DB_URL` acima), não de
+# Vem do stack que está de pé (ver o comentário do \`ler DB_URL\` acima), não de
 # um literal: é isto que mantém duas sessões locais escrevendo cada uma no seu
 # banco.
 SUPABASE_DB_URL=$DB_URL

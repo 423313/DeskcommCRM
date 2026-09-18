@@ -165,10 +165,12 @@ describe("o workflow do e2e honra o contrato de ambiente que a suíte exige", ()
     // espera por ele passa, e o vermelho aparece longe daqui, em spec. `True` em
     // `WAHA_NO_API_KEY` é o que faz a chave resolver vazia e o
     // `ApiKeyAuthFactory` cair em `NoAuth`.
-    const servico = workflow.slice(
-      workflow.indexOf("      waha:"),
-      workflow.indexOf("      redis:"),
-    );
+    // Hoje o WAHA sobe por `docker run` num passo que roda antes do que publica
+    // o `.env.e2e` (para o pull correr junto com o resto do job) — o mesmo
+    // problema de ordem que o `services:` tinha.
+    const inicio = workflow.indexOf("name: Subir WAHA e o par Redis da VPS fresca");
+    expect(inicio, "o passo que sobe o WAHA sumiu — este caso virou peso morto").toBeGreaterThan(-1);
+    const servico = workflow.slice(inicio, workflow.indexOf("\n      - ", inicio));
     expect(
       servico,
       "sem WAHA_NO_API_KEY o contêiner do CI sorteia uma chave no boot e o CRM toma 401",

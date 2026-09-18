@@ -4,8 +4,9 @@
  * ## Os defeitos
  *
  * A parte 4 (`vps-fresh-onboarding`) sobe WAHA, redis e serverless-redis-http
- * como `services:` do job e publica as URLs deles no passo "Ligar a VPS
- * fresca". No run 35124188017 três coisas estavam erradas ao mesmo tempo, e
+ * (hoje por `docker run` no passo "Subir WAHA e o par Redis da VPS fresca";
+ * no run citado, como `services:` do job) e publica as URLs deles no passo
+ * "Ligar a VPS fresca". No run 35124188017 três coisas estavam erradas ao mesmo tempo, e
  * NENHUMA dizia o próprio nome:
  *
  * 1. **O app falava com outras portas.** O passo anexava
@@ -85,6 +86,17 @@ function lerComoOPlaywright(bruto: string): Record<string, string> {
 }
 
 const PASSO = runDoPasso("Ligar a VPS fresca (WAHA, Redis e dublê de SaaS)");
+
+const NOME_DO_PASSO_DOS_SERVICOS = "Subir WAHA e o par Redis da VPS fresca";
+
+/** O passo INTEIRO (env: e run:), da linha do nome até o passo seguinte. */
+function passoInteiro(nome: string): string {
+  const linhas = workflow.split("\n");
+  const i = linhas.findIndex((l) => l.includes(`name: ${nome}`));
+  expect(i, `o passo "${nome}" sumiu do e2e.yml — este guard virou peso morto`).toBeGreaterThan(-1);
+  const fim = linhas.findIndex((l, j) => j > i && /^ {6}- /.test(l));
+  return linhas.slice(i, fim === -1 ? undefined : fim).join("\n");
+}
 
 /** Um diretório com `docker` e `sleep` de mentira: a sonda roda sem esperar nem sujar nada. */
 function pathComShims(): { pasta: string; PATH: string } {
@@ -201,16 +213,49 @@ describe("a parte 4 do e2e fala com os serviços que ela sobe", () => {
     // Guarda de vacuidade: se o produto deixar de exigir NOWEB, este caso passa
     // a vigiar uma regra que não existe mais.
     expect(ler("lib/waha/client.ts")).toMatch(/actualEngine !== "NOWEB"/);
-    const servico = workflow.slice(workflow.indexOf("      waha:"), workflow.indexOf("      redis:"));
-    expect(servico, "sem a linha o contêiner cai no default WEBJS e o createSession lança").toMatch(
+    const passo = passoInteiro(NOME_DO_PASSO_DOS_SERVICOS);
+    expect(passo, "sem a linha o contêiner cai no default WEBJS e o createSession lança").toMatch(
       /^\s*WHATSAPP_DEFAULT_ENGINE:\s*["']?NOWEB["']?\s*$/m,
+    );
+    // A variável só chega ao contêiner se o `docker run` a repassar.
+    expect(passo, "o docker run do WAHA não repassa o engine ao contêiner").toMatch(
+      /docker run[^\n]*(\\\n[^\n]*)*-e WHATSAPP_DEFAULT_ENGINE/,
     );
   });
 
   it("o serverless-redis-http do CI é a MESMA imagem do docker-compose.prod.yml", () => {
     const doCompose = compose.match(/image:\s*(hiett\/serverless-redis-http\S*)/)?.[1];
-    const doCi = workflow.match(/image:\s*(hiett\/serverless-redis-http\S*)/)?.[1];
+    const doCi = passoInteiro(NOME_DO_PASSO_DOS_SERVICOS).match(
+      /SRH_IMAGE:\s*(hiett\/serverless-redis-http\S*)/,
+    )?.[1];
     expect(doCompose, "o compose deixou de declarar o serverless-redis-http").toBeTruthy();
     expect(doCi, "tag móvel ou imagem diferente da que o self-hoster recebe").toBe(doCompose);
+  });
+
+  it("os contêineres sobem SÓ na parte 4 — nada de `services:` no job da matriz", () => {
+    // `services:` é chave do JOB: sobe nas quatro pernas. Custou ~51 s de
+    // "Initialize containers" a cada parte que não usa nenhum deles (run
+    // 35124188017), com as partes a ~2 min do teto de 30.
+    const job = workflow.slice(workflow.indexOf("\n  e2e-parte:"), workflow.indexOf("\n    steps:", workflow.indexOf("\n  e2e-parte:")));
+    expect(job, "o recorte do job e2e-parte saiu vazio — este caso virou peso morto").toContain("timeout-minutes");
+    expect(job, "`services:` voltou ao job: os contêineres da parte 4 sobem nas quatro pernas").not.toMatch(/^ {4}services:/m);
+
+    const passo = passoInteiro(NOME_DO_PASSO_DOS_SERVICOS);
+    const linhas = workflow.split("\n");
+    const i = linhas.findIndex((l) => l.includes(`name: ${NOME_DO_PASSO_DOS_SERVICOS}`));
+    expect(linhas[i - 1], "o passo dos contêineres perdeu o `if: matrix.parte == 4`").toMatch(
+      /^\s*- if: matrix\.parte == 4\s*$/,
+    );
+    for (const imagem of ["WAHA_IMAGE", "REDIS_IMAGE", "SRH_IMAGE"]) {
+      expect(passo, `o passo não sobe ${imagem}`).toContain(`"$${imagem}"`);
+    }
+    // O srh fala com `redis://redis:6379`: sem a rede e o alias, o nome não resolve.
+    expect(passo).toMatch(/--network-alias redis\b/);
+    expect(passo).toContain("SRH_CONNECTION_STRING=redis://redis:6379");
+
+    // E antes de quem espera por eles: a sonda do passo "Ligar a VPS fresca"
+    // não tem o que achar se os contêineres subirem depois.
+    const ligar = linhas.findIndex((l) => l.includes("name: Ligar a VPS fresca"));
+    expect(i, "os contêineres sobem DEPOIS do passo que espera por eles").toBeLessThan(ligar);
   });
 });
