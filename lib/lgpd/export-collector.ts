@@ -7,6 +7,7 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { valorDaInstalacao } from "@/lib/instalacao/config";
 import { logger } from "@/lib/logger";
 import type { Json } from "@/lib/database.types";
 
@@ -223,7 +224,7 @@ export interface ExportPayload {
   organization_legal_name: string;
   /** Nome fantasia. Não vai para o rodapé; existe para o JSON do export. */
   organization_display_name: string;
-  /** Encarregado da organização. `null` cai em `env.LGPD_DPO_EMAIL`. */
+  /** Encarregado da organização; `null` cai no encarregado da INSTALAÇÃO (0290). */
   dpo_email: string | null;
   generated_at: string;
   no_local_footprint: boolean;
@@ -295,7 +296,11 @@ async function lerControlador(
   organizationId: string,
   requestId: string,
 ): Promise<Controlador> {
-  const vazio: Controlador = { legal_name: "", display_name: "", dpo_email: null };
+  // O encarregado da INSTALAÇÃO é o piso do da organização — a mesma ordem que
+  // `resolverOperador` usa. Resolvido aqui, e não no renderizador do PDF, porque
+  // um componente de desenho não deve consultar configuração no meio da página.
+  const dpoDaInstalacao = (await valorDaInstalacao("LGPD_DPO_EMAIL")).valor?.trim() || null;
+  const vazio: Controlador = { legal_name: "", display_name: "", dpo_email: dpoDaInstalacao };
   const { data, error } = await admin
     .from("organizations")
     .select("legal_name, display_name, dpo_email")
@@ -311,7 +316,7 @@ async function lerControlador(
   return {
     legal_name: data.legal_name ?? "",
     display_name: data.display_name ?? "",
-    dpo_email: data.dpo_email ?? null,
+    dpo_email: data.dpo_email?.trim() || dpoDaInstalacao,
   };
 }
 

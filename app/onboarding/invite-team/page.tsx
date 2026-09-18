@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function InviteTeamPage() {
   const user = await requireAuth();
   const idioma = user.idioma;
-  const emailReady = isEmailConfigured();
+  const emailReady = await isEmailConfigured();
   return (
     <div className="space-y-6">
       <header>
