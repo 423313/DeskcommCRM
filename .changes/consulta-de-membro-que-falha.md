@@ -12,7 +12,12 @@ mexer justamente no que estava certo: quem ele havia escolhido para atender.
 
 Agora a ação separa "não é membro" de "não deu para saber". O responsável que
 realmente não é membro continua sendo recusado do mesmo jeito, com
-`user_not_in_org`. Quando a consulta falha, a execução fica marcada como falha
-com o código `membro_indeterminado` e o histórico da regra mostra a mensagem do
-erro da consulta, apontando o problema onde ele está: na infraestrutura, não na
-configuração da automação.
+`user_not_in_org`. Quando a consulta falha, a execução passa a ser marcada com o
+código `membro_indeterminado`, e a mensagem do erro fica registrada no detalhe da
+execução.
+
+O que muda para quem opera, hoje: o histórico da regra deixa de acusar a
+configuração. Antes ele dizia que o responsável escolhido estava fora da
+organização, o que mandava mexer justamente no que estava certo. A frase amigável
+para esse caso na aba Atividade ainda não existe — o histórico mostra o código —
+e está sendo tratada à parte.
