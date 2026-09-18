@@ -3549,7 +3549,8 @@ export const DICIONARIO: Traducoes = {
   "Origem (utm_source)": { es: "Origen (utm_source)" },
   // Os quatro níveis abaixo da origem, nas duas telas que os nomeiam: a ficha do
   // contato e o editor de regra. As MESMAS palavras nas duas, de propósito.
-  Campanha: { es: "Campaña" },
+  // `Campanha` NÃO se repete aqui: o bloco da tabela de campanhas já a traz,
+  // com o mesmo valor. Chave repetida num literal de objeto é erro de tipo.
   Conjunto: { es: "Conjunto" },
   "Anúncio": { es: "Anuncio" },
   Posicionamento: { es: "Emplazamiento" },
