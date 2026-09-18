@@ -196,6 +196,18 @@ class Prova(unittest.TestCase):
         finally:
             r.fechar()
 
+    def test_sem_aplicar_o_controle_positivo_acusa_que_o_novo_nao_aparece(self):
+        # A sabotagem R6 passou verde: nenhum caso deixava o número novo AUSENTE.
+        # Aqui a prova roda sem a renumeração ter acontecido.
+        r = RepoDescartavel()
+        try:
+            plano = renumerar.planejar(r.dir, "0269", "0277", "pais", "origin/main", "20260918014500")
+            checks = {c["conferencia"]: c["ok"] for c in renumerar.provar(r.dir, plano)}
+            self.assertFalse(checks["`0277` aparece (controle: a sonda enxerga)"])
+            self.assertFalse(checks["`20260918014500` aparece (controle: a sonda enxerga)"])
+        finally:
+            r.fechar()
+
 
 if __name__ == "__main__":
     unittest.main()
