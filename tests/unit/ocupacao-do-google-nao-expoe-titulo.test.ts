@@ -170,6 +170,55 @@ const RELACOES_DO_ESPELHO = /\.from\("calendar_(?:selected_)?external_events"\)(
 const CHAMADA_DA_FUNCAO_DO_DONO = /\.rpc\(\s*"fn_agenda_ocupacao_google_do_dono"/;
 
 /**
+ * ⚠️ O QUE PRENDE A PRIVACIDADE NO CAMINHO DA RPC — e por que faltava.
+ *
+ * Com a leitura por `.rpc(...)`, o caso "nenhuma delas pede a coluna `title`"
+ * ficou sem nada para medir: a varredura de `.from(...)` acha, nos três
+ * caminhos, só o `.delete()` de `google/desconectar/route.ts` — que não
+ * seleciona coluna nenhuma e por isso é descartado pelo filtro. O que sobrava
+ * era a asserção de TIPO, e ela não cobre este furo por dois motivos somados:
+ * `expectTypeOf` é no-op em tempo de execução (só o `pnpm typecheck` a mede) e
+ * o que ela inspeciona é o tipo GERADO (`Database[...]["Returns"]`), não a
+ * interface que o módulo escreve à mão para ler a resposta.
+ *
+ * Medido neste worktree, no head do #1107, com `title` acrescentado à linha da
+ * RPC (`LinhaDaOcupacaoDoGoogle`) E devolvido à tela (`BlocoExternoDaTela`):
+ * `Tests 4 passed (4)`. A exposição inteira passava com o gate verde — que é o
+ * pior desfecho para uma guarda de ausência, e a quinta vez que esta guarda
+ * cega pela mudança de endereço.
+ *
+ * Os dois casos abaixo prendem as DUAS metades da decisão, uma cada:
+ * não PEDIR conteúdo (o nome da coluna não aparece no módulo) e não DEVOLVER
+ * conteúdo (o bloco entregue à tela só declara quando e de quem).
+ */
+
+/**
+ * Os nomes por onde um campo de CONTEÚDO do evento entraria no módulo.
+ *
+ * `title` é a única coluna de conteúdo que o espelho tem hoje
+ * (`calendar_external_events.title`). Os outros três são como a API do Google
+ * chama o mesmo dado — entram porque é por esses nomes que uma coleta nova
+ * pediria o conteúdo, possivelmente antes de existir coluna com esse nome do
+ * nosso lado. Nenhum dos quatro aparece no módulo hoje, nem em comentário:
+ * `grep -cE '\b(title|summary|description|location)\b' lib/agenda/ocupacao-externa.ts`
+ * devolve `0`.
+ */
+const CAMPOS_DE_CONTEUDO_DO_EVENTO = /\b(?:title|summary|description|location)\b/g;
+
+/**
+ * O que o bloco entregue à tela pode declarar: QUANDO e DE QUEM, nunca O QUÊ.
+ *
+ * `id` está aqui porque é DERIVADO (`dono:início:fim`) — a função não devolve o
+ * id do compromisso. Campo novo nesta lista é decisão de produto: é o ponto
+ * onde alguém teria de escrever, de propósito, que a tela passou a carregar
+ * mais do que a fatia de tempo.
+ */
+const CAMPOS_DO_BLOCO_DA_TELA = ["id", "donoId", "iniciaEm", "terminaEm"];
+
+/** A interface que o módulo entrega a quem desenha, sem os comentários. */
+const DECLARACAO_DO_BLOCO = /export interface BlocoExternoDaTela \{([\s\S]*?)\n\}/;
+
+/**
  * As consultas à tabela do espelho e à view de ocupação feitas nos caminhos até
  * a tela da Agenda, com o caminho de origem e as colunas que cada uma pede
  * (vazio quando a cadeia não tem `.select`, como num `.delete()`).
@@ -224,6 +273,65 @@ describe("a ocupação do Google não leva o nome do evento para a tela", () => 
     ).toBe(true);
   });
 
+  it("o dono da leitura não NOMEIA campo de conteúdo do evento (não pedir)", () => {
+    // A metade "não pedir" da decisão, medida no código que roda — não no tipo.
+    // Uma coluna não se lê sem nomeá-la: `linha.title`, `p_campos: "title"`,
+    // `select("title")`, tudo passa por escrever a palavra. O módulo trata só
+    // de OCUPAÇÃO do Google, então nenhum desses nomes tem ali uso legítimo, e
+    // é isso que faz esta varredura ser possível sem allowlist.
+    const fonte = semComentarios(fs.readFileSync(DONO_DA_LEITURA, "utf8"));
+    const dono = path.relative(RAIZ, DONO_DA_LEITURA);
+
+    const achados = [...fonte.matchAll(CAMPOS_DE_CONTEUDO_DO_EVENTO)].map(
+      (m) => `${dono}:${fonte.slice(0, m.index ?? 0).split("\n").length} → ${m[0]}`,
+    );
+
+    expect(
+      achados,
+      `${dono} passou a nomear um campo de CONTEÚDO do evento externo. A agenda conectada é ` +
+        "PESSOAL de quem atende e a tela da Agenda é multi-tenant, vista por gestor: 'consulta " +
+        "médica', 'terapia', 'entrevista' apareceriam para o chefe. A função " +
+        "`fn_agenda_ocupacao_google_do_dono` devolve ocupação (início, fim, transparência, " +
+        "situação) de propósito — nem `id`, nem título. Se a decisão mudou, ela é POR " +
+        "ORGANIZAÇÃO e com aviso de quem vê, e este teste muda junto, para a decisão ser " +
+        "tomada por gente.",
+    ).toEqual([]);
+  });
+
+  it("o bloco entregue à tela declara só QUANDO e DE QUEM (não devolver)", () => {
+    // A metade "não devolver": barrar o nome da coluna não basta, porque o
+    // conteúdo pode chegar renomeado na travessia (`titulo: linha[coluna]`). O
+    // que a tela recebe é esta interface, e ela é a fronteira — por isso o que
+    // se mede aqui é a LISTA de campos, não a ausência de um nome.
+    const fonte = semComentarios(fs.readFileSync(DONO_DA_LEITURA, "utf8"));
+    const dono = path.relative(RAIZ, DONO_DA_LEITURA);
+    const corpo = DECLARACAO_DO_BLOCO.exec(fonte)?.[1];
+
+    // Controle do instrumento: interface renomeada ou movida deixaria a
+    // varredura medindo o vazio e o gate verde sem ter olhado.
+    expect(
+      corpo,
+      `não achei \`export interface BlocoExternoDaTela\` em ${dono} — o bloco entregue à tela ` +
+        "mudou de nome ou de arquivo, e este gate ficou cego.",
+    ).toBeTypeOf("string");
+
+    // `?? ""` porque `noUncheckedIndexedAccess` tipa o grupo como
+    // `string | undefined`, e um campo sem nome não existe: grupo vazio cairia
+    // fora da allowlist e reprovaria com uma mensagem que não explica nada.
+    const campos = [...(corpo ?? "").matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1] ?? "");
+    expect(campos.length, `nenhum campo lido de \`BlocoExternoDaTela\` em ${dono}`).toBeGreaterThan(0);
+
+    expect(
+      campos.filter((campo) => !CAMPOS_DO_BLOCO_DA_TELA.includes(campo)),
+      `\`BlocoExternoDaTela\` ganhou campo fora de ${JSON.stringify(CAMPOS_DO_BLOCO_DA_TELA)}. ` +
+        "O bloco descreve QUANDO o horário está tomado e DE QUEM é a agenda — nunca O QUÊ está " +
+        "marcado. Campo de conteúdo (título, descrição, local, convidados) atravessando aqui é a " +
+        "exposição que este arquivo inteiro existe para impedir. Campo novo de FORMA (dia " +
+        "inteiro, fuso) é legítimo: acrescente-o à lista acima, e a revisão passa a ver a " +
+        "decisão.",
+    ).toEqual([]);
+  });
+
   it("o retorno da função não oferece `title` — o contrato do banco preso no tipo", () => {
     // A asserção de privacidade que sobrevive à mudança de endereço: a função
     // devolve cinco colunas — início, fim, transparência, status e o status da
@@ -267,5 +375,20 @@ describe("a ocupação do Google não leva o nome do evento para a tela", () => 
     for (const relacao of ["calendar_external_events", "calendar_selected_external_events"]) {
       expect([...`.from("${relacao}").select("id");`.matchAll(RELACOES_DO_ESPELHO)]).toHaveLength(1);
     }
+
+    // E as duas sondas do caminho da RPC, pelo mesmo motivo: elas afirmam
+    // AUSÊNCIA, e uma regex quebrada afirmaria a ausência sem ter olhado.
+    expect("  starts_at: string;".match(CAMPOS_DE_CONTEUDO_DO_EVENTO)).toBeNull();
+    expect("  titulo: linha.title ?? null,".match(CAMPOS_DE_CONTEUDO_DO_EVENTO)).toEqual(["title"]);
+    // `\b` não pode deixar passar o nome dentro de outro identificador.
+    expect("  const tituloDoEvento = 1;".match(CAMPOS_DE_CONTEUDO_DO_EVENTO)).toBeNull();
+
+    const corpoFalso = DECLARACAO_DO_BLOCO.exec(
+      'export interface BlocoExternoDaTela {\n  id: string;\n  titulo?: string | null;\n}\n',
+    )?.[1];
+    expect([...(corpoFalso ?? "").matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1] ?? "")).toEqual([
+      "id",
+      "titulo",
+    ]);
   });
 });
