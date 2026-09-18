@@ -58,7 +58,11 @@ permissions:
 
 jobs:
   verify:
-    timeout-minutes: 15
+    # Guarda de travamento. O DETECTOR de crescimento é o passo `Orçamento de
+    # tempo` no fim deste job; a medição que justifica o 25 está em `TETOS`, em
+    # tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts — que é quem cobra
+    # razão escrita, e é lá que ela não se perde.
+    timeout-minutes: 25
     # Executor próprio para trabalho nosso quando EXECUTOR_PROPRIO=ligado; o
     # porquê e a guarda contra fork: comentário do e2e-parte no e2e.yml.
     runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
@@ -67,6 +71,9 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Marcar o início (o orçamento de tempo mede no fim do job)
+        run: echo "VERIFY_INICIO=$(date +%s)" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
@@ -129,6 +136,29 @@ jobs:
       # deixava o .env pela metade — passaram por todos os checks verdes. 15s.
       - name: Kit self-host (bash)
         run: pnpm test:shell
+
+      - name: Orçamento de tempo do verify
+        if: always()
+        env:
+          # Orçamento em MINUTOS. O pior sucesso medido é 14,9; 16 não nasce
+          # vermelho e ainda denuncia o próximo crescimento antes de ele virar
+          # `cancelled`. Gate que nasce vermelho não é gate: é dívida com alarme.
+          ORCAMENTO_MIN: "16"
+        run: |
+          set -euo pipefail
+          if [ -z "${VERIFY_INICIO:-}" ]; then
+            echo "::warning::NÃO MEDIDO — o job não chegou a registrar o início."
+            exit 0
+          fi
+          decorrido=$(( ($(date +%s) - VERIFY_INICIO) / 60 ))
+          echo "verify: ${decorrido} min (orçamento ${ORCAMENTO_MIN} min, teto de travamento 25 min)"
+          if [ "$decorrido" -le "${ORCAMENTO_MIN}" ]; then
+            exit 0
+          fi
+          echo "::error::O verify levou ${decorrido} min contra um orçamento de ${ORCAMENTO_MIN} min."
+          echo "::error::Isto NÃO é defeito do seu PR: a suíte unitária cresceu. Em 18/09/2026, \`Unit tests\` já era 10,3 dos 13,2 min do job."
+          echo "::error::O conserto é repartir \`pnpm test:unit\`, não subir este número."
+          exit 1
 
   # Gate de isolamento multi-tenant + invariantes de governança.
   # Job separado de propósito: roda em paralelo ao verify (não atrasa o feedback
