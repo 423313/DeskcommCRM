@@ -1,17 +1,9 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: O bot volta a responder sozinho quando a IA da instalação é a OpenAI
+titulo: A instalação que escolheu OpenAI deixa de ouvir que falta chave de IA
 ---
 
-Se a instalação foi feita escolhendo **OpenAI** como provedor e a chave ficou em
-`OPENAI_API_KEY`, o bot podia ficar mudo nas mensagens que chegam — enquanto o
-teste do agente e o "Sugerir resposta" respondiam normalmente com a mesma chave.
-A mensagem era registrada, o envio automático era pulado e o motivo registrado
-dizia que não havia chave de IA configurada. Agora o caminho que responde
-sozinho usa a mesma chave que o resto do produto já usava, e o aviso do boot
-deixou de anunciar "nenhuma chave de IA" numa instalação que responde por ela.
+Se a instalação escolheu **OpenAI** como provedor e guardou a chave em `OPENAI_API_KEY`, o boot anunciava `[env] Nenhuma chave de IA configurada` — uma lista que não contava a chave que o produto usa — e o último degrau do caminho que responde sozinho não sabia de qual provedor era a chave da instalação quando o modelo vinha sem o prefixo do provedor (o id do catálogo, como `gpt-5.6-terra`). Agora o aviso conta a chave da OpenAI e o degrau resolve o modelo no provedor que a organização escolheu.
 
-Nada muda para quem opera: nenhuma variável nova, nenhum ajuste, nenhum passo na
-atualização. Quem cadastrou a chave pela tela (IA › Credenciais) já era atendido
-e segue igual. Crédito: @webtecnica.
+Nada muda para quem opera: nenhuma variável nova, nenhum ajuste, nenhum passo na atualização. Quem cadastra a chave pela tela (IA › Credenciais) já era atendido e segue igual. Crédito: @webtecnica.
