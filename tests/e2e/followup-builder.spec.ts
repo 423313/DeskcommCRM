@@ -930,15 +930,26 @@ test.describe("followup flow selector no editor do agente (Task 7.2)", () => {
     const { data: created } = (await createAgentRes.json()) as {
       data: {
         agent: { id: string };
-        version: { id: string; followup: { enabled: boolean; flow_pointer_ids: string[] } };
+        version: {
+          id: string;
+          followup: {
+            enabled: boolean;
+            flow_pointer_ids: string[];
+            send_window: { start: string; end: string; weekdays: number[] } | null;
+          };
+        };
       };
     };
     const agentId = created.agent.id;
     const versionId = created.version.id;
 
-    // Nasce com o default aditivo (enabled=false, []) — prova que o schema novo
-    // não quebra a criação de um agent que nunca falou de follow-up.
-    expect(created.version.followup).toEqual({ enabled: false, flow_pointer_ids: [] });
+    // Nasce com o default aditivo (enabled=false, [], send_window=null) — prova
+    // que o schema novo não quebra a criação de um agent que nunca falou de follow-up.
+    expect(created.version.followup).toEqual({
+      enabled: false,
+      flow_pointer_ids: [],
+      send_window: null,
+    });
 
     // --- 3. abre o editor, habilita o toggle e seleciona o fluxo publicado ---
     await page.goto(`/app/ai/agents/${agentId}`);
