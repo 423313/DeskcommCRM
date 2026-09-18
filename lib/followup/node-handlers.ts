@@ -137,6 +137,15 @@ export const ACTION_RECHECK_MAX_MS = 60 * 60_000;
  * maior noite fechada — e ainda custa poucos ticks. O dead-man continua
  * existindo: worker realmente morto termina em `dead`, só que depois de uma
  * espera que não confunde noite com defeito.
+ *
+ * ⚠️ E SUBIR O NÚMERO NÃO É A DEFESA — a defesa é `EVENTO_ACAO_ADIADA`.
+ * Aumentar o teto só compra tempo contra a espera mais longa que alguém
+ * configurou, e essa espera não tem teto: as horas e os dias da janela
+ * anti-ban são knobs por canal (uma noite de sábado com domingo fechado já dá
+ * 33h), e a faixa de envio do agente permite um único dia da semana (159h).
+ * Contra um orçamento fixo, esse jogo não se ganha. O que o resolve é o turno
+ * DIZER que está estacionado, e o contador medir só a ociosidade depois disso
+ * — ver `rechecksOciososDaAcao` logo abaixo.
  */
 export const MAX_ACTION_RECHECKS = 14;
 
@@ -168,6 +177,39 @@ function modoSeJaExiste(node: Extract<FlowNode, { type: "match_reply" }>): "skip
 export function atrasoDoRecheck(rechecksJaFeitos: number): number {
   const passo = Math.max(0, rechecksJaFeitos);
   return Math.min(ACTION_RECHECK_MS * 2 ** passo, ACTION_RECHECK_MAX_MS);
+}
+
+/**
+ * O evento que o turno grava quando o envio foi ADIADO para um instante CONHECIDO
+ * — janela fechada (anti-ban, ou a faixa do próprio agente), e não defeito.
+ *
+ * É PROVA DE VIDA, e essa é a razão de ele existir. O dead-man da ação mede
+ * "rechecks sem o turno fechar", e essa medida não distingue duas situações
+ * opostas: o worker morreu, e o worker está vivo e o envio está estacionado
+ * até a janela abrir. Enquanto o adiamento era silencioso, as duas só se
+ * pareciam — e o orçamento de ~11h de `MAX_ACTION_RECHECKS` era gasto por
+ * espera legítima, matando o enrollment com um motivo falso
+ * (`action_turn_never_completed`) enquanto o envio ainda ia acontecer.
+ */
+export const EVENTO_ACAO_ADIADA = "action_deferred";
+
+/**
+ * Rechecks ociosos da ação NESTA estadia — o número que o dead-man deve medir.
+ *
+ * Idêntico a `occupancyEventCount` enquanto não houver adiamento (o dead-man
+ * continua exatamente tão severo com worker morto quanto antes); a diferença é
+ * que ele PARA no último `action_deferred`. Cada adiamento é uma prova de vida
+ * nova, e o que se conta é a ociosidade DEPOIS dela.
+ */
+export function rechecksOciososDaAcao(events: EnrollmentEventRef[], nodeId: string): number {
+  let n = 0;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const evento = events[i]!;
+    if (evento.node_id !== nodeId) break;
+    if (evento.event_type === EVENTO_ACAO_ADIADA) return n;
+    n++;
+  }
+  return n;
 }
 
 /**
