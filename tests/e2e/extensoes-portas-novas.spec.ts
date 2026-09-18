@@ -100,15 +100,35 @@ async function montarBancada(): Promise<Bancada> {
   await cli(["export", "--db", banco, "--output", arquivoDoCatalogo]);
 
   const servidor = execFile("python3", [CLI, "serve", "--db", banco, "--port", String(porta)]);
-  // Espera o servidor aceitar conexão em vez de dormir um tempo fixo: sob carga, o fixo
-  // ora sobra ora falta, e o teste vira medida da máquina.
-  for (let i = 0; i < 60; i += 1) {
+
+  // Espera o servidor aceitar conexão em vez de dormir um tempo fixo: sob carga, o fixo ora
+  // sobra ora falta, e o teste vira medida da máquina.
+  //
+  // O `else` no fim não é zelo: a primeira versão deste laço ESGOTAVA EM SILÊNCIO. Se o
+  // servidor não subisse, ele saía como se tivesse subido, e a falha aparecia oito linhas
+  // adiante — na admissão do catálogo — com uma mensagem sobre download, que manda investigar
+  // a feature quando o defeito é da bancada. Laço de espera que desiste calado transforma
+  // "o ambiente não subiu" em "a funcionalidade quebrou", e são coisas diferentes.
+  //
+  // A folga também é deliberada: ~45 s no pior caso. Sob carga, lento é o ESPERADO — um teste
+  // correto fica lento e passa; prazo sem folga para a variância real fica lento e QUEBRA,
+  // e aí o vermelho mede a máquina, não o código.
+  const PRAZO_DO_SERVIDOR = 60;
+  let noAr = false;
+  for (let i = 0; i < PRAZO_DO_SERVIDOR && !noAr; i += 1) {
     try {
       const r = await fetch(`${origem}/`, { signal: AbortSignal.timeout(500) });
-      if (r.status > 0) break;
+      if (r.status > 0) noAr = true;
     } catch {
       await new Promise((r) => setTimeout(r, 250));
     }
+  }
+  if (!noAr) {
+    servidor.kill("SIGTERM");
+    throw new Error(
+      `A bancada do catálogo não atendeu em ${origem} após ${PRAZO_DO_SERVIDOR} tentativas. ` +
+        `Isto é falha de AMBIENTE, não da extensão: nada foi exercitado.`,
+    );
   }
 
   return {

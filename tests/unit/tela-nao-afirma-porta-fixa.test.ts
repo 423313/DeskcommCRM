@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import ts from "typescript";
@@ -76,7 +76,6 @@ describe("a tela não afirma porta fixa", () => {
   it("controle positivo: a sonda ENXERGA a frase quando ela é um literal", () => {
     // Sem isto, um extrator quebrado devolveria zero em tudo e o arquivo ficaria verde sem medir.
     const caminho = join(RAIZ, "tests", "unit", "__sonda-porta-fixa.tsx");
-    const { writeFileSync, rmSync } = require("node:fs") as typeof import("node:fs");
     writeFileSync(caminho, `export const x = t("Abre ${NOMES[0]}; não lê seus dados.");\n`);
     try {
       expect(textosLiterais(caminho).filter(afirmaPorta).length).toBeGreaterThan(0);
@@ -87,7 +86,6 @@ describe("a tela não afirma porta fixa", () => {
 
   it("controle negativo: comentário que cita a frase NÃO é acusado", () => {
     const caminho = join(RAIZ, "tests", "unit", "__sonda-comentario.tsx");
-    const { writeFileSync, rmSync } = require("node:fs") as typeof import("node:fs");
     writeFileSync(caminho, `// antes dizia "Abre ${NOMES[0]}" e virou portasLegiveis()\nexport const y = 1;\n`);
     try {
       expect(textosLiterais(caminho).filter(afirmaPorta)).toEqual([]);
