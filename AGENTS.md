@@ -351,7 +351,9 @@ cabeçalho passava a mentir por todos eles.
 - Arquivos de invariante de banco em `tests/invariants/` — RLS/isolamento cross-tenant, RBAC,
   governança (G1–G6). Excluídos do `test:unit` de propósito; rodam via `pnpm test:db` **e no job
   `invariants` do CI**. Quantos: `git ls-files 'tests/invariants/*.test.ts' | wc -l`.
-- Specs Playwright em `tests/e2e/`, quase todas no CI (via `e2e.yml`, **obrigatório**). As que
+- Specs Playwright em `tests/e2e/`, quase todas no CI (via `e2e.yml`, **obrigatório**), em todo PR que
+  alcança o que elas medem — PR só de documentação/teste de outra suíte pula as partes
+  (`scripts/pr-alcanca-o-e2e.sh`), e ali o `e2e` verde não prova tela. As que
   ficam de fora estão declaradas em `FORA_DO_CI`, **com o motivo escrito ao lado**. Esta linha
   já afirmou "menos uma" depois de deixarem de ser uma — por isso não conta mais. A issue #63,
   que originou a discussão, está **fechada** e o título dela descreve um estado que já não vale.
