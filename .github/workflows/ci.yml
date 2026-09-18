@@ -63,8 +63,8 @@ jobs:
       # vaga numa fila que já é o gargalo). Elas só leem arquivo — baseline ×
       # cadeia, MANIFEST, varredura de anon, docs, workflows — e rodam sem jsdom
       # em segundos; dentro da suíte longa, o mesmo vermelho chegava aos 7–12
-      # minutos. Continuam lá também: isto antecipa, não substitui.
-      # Seleção e medições: vitest.cercas.config.ts.
+      # minutos. Rodam UMA vez: o passo de unit abaixo pula o projeto `cercas`.
+      # Seleção e medições: o bloco `projects` de vitest.config.ts.
       - name: Cercas estruturais
         run: pnpm cercas
 
@@ -97,8 +97,11 @@ jobs:
       - name: Colisão de número de migration
         run: pnpm checar:colisao-de-migration
 
+      # `--project produto` é o `pnpm test:unit` MENOS as cercas, que já
+      # rodaram acima: os dois passos juntos são a suíte inteira, uma vez só.
+      # Localmente o comando continua sendo `pnpm test:unit`, sem recorte.
       - name: Unit tests
-        run: pnpm test:unit
+        run: pnpm test:unit --project produto
 
 
       # Scripts do kit self-host num repo git descartável (docker/crontab

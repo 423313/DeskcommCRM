@@ -11,7 +11,9 @@ import { join, relative } from "node:path";
 // teste estrutural novo, e ele voltaria a ser descoberto só no fim da suíte
 // longa — que é exatamente o defeito que `pnpm cercas` existe para fechar.
 // Qualquer import de `@/`, de caminho relativo ou de pacote de terceiro tira o
-// arquivo da seleção; na dúvida ele fica na suíte longa, que roda de todo modo.
+// arquivo da seleção; na dúvida ele fica no projeto `produto` (jsdom), que é
+// só mais lento — cobertura nenhuma se perde. Os dois projetos estão em
+// vitest.config.ts.
 const MODULOS_DE_CERCA = new Set(["vitest", "typescript", "yaml"]);
 const BUILTINS = new Set(["fs", "path", "child_process", "os", "url", "crypto", "util"]);
 

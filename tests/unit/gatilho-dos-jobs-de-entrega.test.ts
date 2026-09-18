@@ -86,14 +86,22 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "Ela é SEM `if:` de propósito — pulada, ela deixaria `build-and-push` pulado junto " +
       "e o `imagens-ok` leria `skipped` como reprovação.",
   },
+  // Em pull_request ele só construía e descartava as MESMAS três imagens que os
+  // dois jobs `*-sobe` já constroem — 3 builds Docker por push de PR sem medir
+  // nada a mais. A condição tira só o PR; o `imagens-ok` exige `success` dele
+  // em todo outro evento e aceita `skipped` só em pull_request.
   "publish-image.yml::build-and-push": {
-    condicao: null,
+    condicao: "github.event_name != 'pull_request'",
     efeito:
       "Este job PUBLICA as três imagens no GHCR — é o artefato que o self-hoster instala. " +
       "Desligá-lo faz a tag existir sem imagem por trás dela.",
   },
+  // A condição só é falsa em pull_request que não alcança imagem nenhuma
+  // (scripts/pr-mexe-na-imagem.sh); fora de PR o output é sempre `sim`. O
+  // `imagens-ok` aceita o `skipped` SÓ nessa combinação — medida pela matriz
+  // de desfechos em tests/unit/imagens-ok-so-aceita-pulo-declarado.test.ts.
   "publish-image.yml::imagem-do-app-sobe": {
-    condicao: null,
+    condicao: "needs.a-tag-veio-da-main.outputs.imagem == 'sim'",
     efeito:
       "Este job prova que a imagem do app BOOTA, não só que ela constrói. Desligá-lo " +
       "devolve o defeito que derrubou a produção: imagem publicada que morre no " +
@@ -121,7 +129,7 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
   // Desligá-lo devolve exatamente esse buraco: a imagem publica, o canal anda,
   // e nada prova que o laço do event_log chegou a carregar.
   "publish-image.yml::imagens-de-fundo-sobem": {
-    condicao: null,
+    condicao: "needs.a-tag-veio-da-main.outputs.imagem == 'sim'",
     efeito:
       "Este job prova que o worker BOOTA com o laço do event_log carregado e que o " +
       "scheduler tem o evento no crontab. Desligá-lo (`skipped`) faz a tag existir com " +
