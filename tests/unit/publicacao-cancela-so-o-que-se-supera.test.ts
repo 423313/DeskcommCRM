@@ -12,7 +12,7 @@ const YML = readFileSync(".github/workflows/publish-image.yml", "utf-8");
 
 function expressao(chave: string): string {
   const m = YML.match(new RegExp(`^concurrency:\\n(?:  .*\\n)*?  ${chave}: \\$\\{\\{ (.+) \\}\\}$`, "m"));
-  if (!m) throw new Error(`concurrency.${chave} não encontrado`);
+  if (!m?.[1]) throw new Error(`concurrency.${chave} não encontrado`);
   return m[1];
 }
 
@@ -33,12 +33,12 @@ function avaliar(expr: string, c: Contexto): unknown {
 }
 
 const WORKFLOW = "Publicar imagem Docker (GHCR)";
-const EVENTOS: Record<string, Contexto> = {
+const EVENTOS = {
   pr: { event_name: "pull_request", ref: "refs/pull/42/merge", workflow: WORKFLOW, pr: 42 },
   main: { event_name: "push", ref: "refs/heads/main", workflow: WORKFLOW },
   tag: { event_name: "push", ref: "refs/tags/v1.35.0", workflow: WORKFLOW },
   dispatch: { event_name: "workflow_dispatch", ref: "refs/heads/main", workflow: WORKFLOW },
-};
+} satisfies Record<string, Contexto>;
 
 describe("publish-image: cancela só o que se supera", () => {
   const cancela = expressao("cancel-in-progress");

@@ -83,7 +83,7 @@ describe("pr-mexe-na-imagem", () => {
   it("o espelho do .dockerignore no script não tem entrada que o .dockerignore não tenha", () => {
     const fonte = readFileSync(SCRIPT, "utf-8");
     const bloco = [...fonte.matchAll(/^\s*(?:\|\s*)?((?:[.\w*-]+(?:\/\*)?\s*\|\s*)*[.\w*-]+(?:\/\*)?)\s*(?:\\|\) ;;)$/gm)]
-      .flatMap((m) => m[1].split("|").map((s) => s.trim()))
+      .flatMap((m) => (m[1] ?? "").split("|").map((s) => s.trim()))
       .filter(Boolean);
     const doEspelho = bloco
       .map((p) => p.replace(/\/\*$/, ""))

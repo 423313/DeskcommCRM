@@ -23,7 +23,7 @@ function scriptDoImagensOk(): string {
   const linhas = readFileSync(".github/workflows/publish-image.yml", "utf-8").split("\n");
   const job = linhas.findIndex((l) => l === "  imagens-ok:");
   const run = linhas.findIndex((l, i) => i > job && /^\s+run: \|$/.test(l));
-  const indent = linhas[run + 1].match(/^\s*/)![0].length;
+  const indent = (linhas[run + 1] ?? "").match(/^\s*/)![0].length;
   const corpo: string[] = [];
   for (const l of linhas.slice(run + 1)) {
     if (l.trim() && l.match(/^\s*/)![0].length < indent) break;
@@ -59,7 +59,7 @@ for EVENTO in pull_request push; do
 done
 true`;
   return execFileSync("bash", ["-c", programa], {
-    env: { PATH: process.env.PATH, SCRIPT_DO_JOB: SCRIPT },
+    env: { PATH: process.env.PATH ?? "", SCRIPT_DO_JOB: SCRIPT },
     encoding: "utf-8",
   })
     .split("\n")
