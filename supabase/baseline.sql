@@ -1552,14 +1552,25 @@ CREATE TABLE IF NOT EXISTS "public"."idempotency_keys" (
     "key" "text" NOT NULL,
     "endpoint" "text" NOT NULL,
     "request_hash" "bytea" NOT NULL,
-    "status_code" integer NOT NULL,
-    "response_body" "jsonb" NOT NULL,
+    "status_code" integer,
+    "response_body" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "expires_at" timestamp with time zone DEFAULT ("now"() + '24:00:00'::interval) NOT NULL
 );
 
 
 ALTER TABLE "public"."idempotency_keys" OWNER TO "postgres";
+
+
+-- migration 0278 (issue #778): o recibo tem DOIS estados. Terminal = `status_code`
+-- e `response_body` gravados. Reserva = os DOIS nulos, gravados ANTES do efeito.
+-- O CHECK fecha o meio-termo (um gravado e o outro não), que nenhum leitor sabe
+-- interpretar e que só apareceria por bug de escrita.
+ALTER TABLE "public"."idempotency_keys"
+  DROP CONSTRAINT IF EXISTS "idempotency_keys_recibo_ou_reserva";
+ALTER TABLE "public"."idempotency_keys"
+  ADD CONSTRAINT "idempotency_keys_recibo_ou_reserva"
+  CHECK (("status_code" IS NULL) = ("response_body" IS NULL));
 
 
 CREATE TABLE IF NOT EXISTS "public"."incidents" (
