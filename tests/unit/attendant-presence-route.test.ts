@@ -214,7 +214,12 @@ describe("POST /api/v1/attendants/presence — o emissor do sinal", () => {
     expect(res.status).toBe(200);
 
     expect(vi.mocked(audit)).toHaveBeenCalledTimes(1);
-    const [entrada] = vi.mocked(audit).mock.calls[0];
+    // `mock.calls[0]` é opcional para o TypeScript (noUncheckedIndexedAccess), e
+    // desestruturar direto não compila. O `?? []` mantém o teste legível sem
+    // asserção de não-nulo.
+    const [entrada] = vi.mocked(audit).mock.calls[0] ?? [];
+    expect(entrada, "audit foi chamado, mas sem entrada").toBeDefined();
+    if (!entrada) return;
     expect(entrada.action).toBe("attendant.presence_started");
     expect(entrada.organizationId).toBe(ORG);
     expect(entrada.actorUserId).toBe(ANA);

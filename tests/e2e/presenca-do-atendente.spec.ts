@@ -54,13 +54,17 @@ test.describe("Sinal de presença do atendente", () => {
     // E o efeito na tela de quem administra: a Equipe diz quem está com a tela
     // aberta. O seletor é o nome da pessoa logada, que o seed garante existir.
     await page.goto("/app/team");
-    const linhaDoAdmin = page.getByRole("row", { name: /ana|admin/i }).first();
-    await expect(linhaDoAdmin).toBeVisible({ timeout: 30_000 });
 
-    // O selo de presença é texto na linha; aceita as duas redações possíveis
-    // (presente / com a tela aberta) para não prender a spec à palavra exata.
-    await expect(linhaDoAdmin).toContainText(/presente|tela aberta|en pantalla/i, {
-      timeout: 30_000,
-    });
+    // O selo tem `data-testid="presenca"` e carrega o estado em
+    // `data-presente`, que é o dado — o texto ("Com a tela aberta") é a
+    // redação, e prender a spec à redação a quebra na primeira tradução.
+    //
+    // Medido no CI antes deste ajuste: a primeira versão procurava o texto na
+    // linha da TABELA DE CONVITES (nome, e-mail, papel, "Aceito"), que não tem
+    // selo de presença nenhum — a spec reprovava por olhar o lugar errado, com
+    // a batida já provada acima.
+    const selo = page.getByTestId("presenca").first();
+    await expect(selo).toBeVisible({ timeout: 30_000 });
+    await expect(selo).toHaveAttribute("data-presente", "sim", { timeout: 30_000 });
   });
 });
