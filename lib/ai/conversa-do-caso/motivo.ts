@@ -31,6 +31,11 @@ import {
   LlmProviderUnknownError,
 } from "@/lib/agent-engine/edge/llm/run-model-call";
 
+// As frases moram em `frases.ts` e não aqui porque a TELA precisa delas sem ter
+// erro nenhum em mãos — ela lê `error_code` já gravado no banco — e este módulo
+// arrasta `pg` pelo import acima. Ver o cabeçalho de `frases.ts`.
+import { FALHA_ACIONAVEL, FRASE_DA_FALHA } from "./frases";
+
 export interface MotivoDaConversa {
   /** Vai para `agent_case_chat_messages.error_code` e para o `fail()` da rota. */
   readonly codigo: string;
@@ -41,35 +46,15 @@ export interface MotivoDaConversa {
 }
 
 export function motivoDaConversaDoCaso(erro: unknown): MotivoDaConversa {
-  if (erro instanceof LlmNotConfiguredError) {
-    return {
-      codigo: "llm_not_configured",
-      texto:
-        "Nenhum provedor de IA está configurado. Peça a quem administra para configurar em IA › Provedores.",
-      acionavel: true,
-    };
-  }
-  if (erro instanceof LlmBudgetExceededError) {
-    return {
-      codigo: "orcamento_esgotado",
-      texto:
-        "A IA parou porque o gasto do mês atingiu o limite definido. Ajuste em Uso de IA › Orçamento.",
-      acionavel: true,
-    };
-  }
+  if (erro instanceof LlmNotConfiguredError) return motivo("llm_not_configured");
+  if (erro instanceof LlmBudgetExceededError) return motivo("orcamento_esgotado");
   if (erro instanceof LlmModelNotEnabledError || erro instanceof LlmProviderUnknownError) {
-    return {
-      codigo: "modelo_indisponivel",
-      texto:
-        "O modelo escolhido para este uso não está disponível. Reveja a escolha em IA › Provedores.",
-      acionavel: true,
-    };
+    return motivo("modelo_indisponivel");
   }
-  return {
-    codigo: "case_chat_unavailable",
-    // Diz o GESTO, não o estado do servidor: a pessoa que lê ia decidir o caso.
-    texto:
-      "Não deu para responder agora. Tente de novo; se continuar, mande este código para quem instalou o sistema.",
-    acionavel: false,
-  };
+  // Diz o GESTO, não o estado do servidor: a pessoa que lê ia decidir o caso.
+  return motivo("case_chat_unavailable");
+}
+
+function motivo(codigo: keyof typeof FRASE_DA_FALHA): MotivoDaConversa {
+  return { codigo, texto: FRASE_DA_FALHA[codigo], acionavel: FALHA_ACIONAVEL[codigo] };
 }

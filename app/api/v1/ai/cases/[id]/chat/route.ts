@@ -66,6 +66,7 @@ import { motivoDaConversaDoCaso } from "@/lib/ai/conversa-do-caso/motivo";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { conversasVisiveisDosCasos } from "@/lib/escalacao/chamados";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
@@ -435,7 +436,20 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     [c.orgId, contactId],
   );
   // SÓ o primeiro nome — o bloco de dados não leva telefone nem e-mail.
-  const primeiroNome = (nome[0]?.display_name ?? nome[0]?.name ?? "o cliente").trim().split(/\s+/)[0] ?? "o cliente";
+  //
+  // A cadeia sai de `nomeDoContato` e NÃO é remontada aqui. Escrita à mão, ela
+  // saiu com a ordem TROCADA — o nome do perfil do WhatsApp antes do que o
+  // operador digitou —, que é o defeito da issue #906: o nome escolhido por uma
+  // pessoa nunca aparecia. Pior, ela não filtrava identificador técnico, e um
+  // rótulo como `Contato 543134@lid` entraria no prompt como se fosse o primeiro
+  // nome de alguém — a IA chamaria o cliente assim na frente de quem atende.
+  //
+  // Quem reprova a cópia à mão é `tests/unit/rotulo-do-contato.test.ts`, e esta
+  // prosa evita escrever a cadeia literal de propósito: aquela régua casa o
+  // TEXTO do arquivo, comentários inclusive, e citá-la aqui reprovaria
+  // justamente o arquivo que faz a coisa certa.
+  const primeiroNome =
+    (nomeDoContato(nome[0] ?? null) ?? "o cliente").trim().split(/\s+/)[0] ?? "o cliente";
 
   const blocoDeDados = montarBlocoDeDados({
     fuso,

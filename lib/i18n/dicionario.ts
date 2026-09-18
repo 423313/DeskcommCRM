@@ -9198,6 +9198,48 @@ export const DICIONARIO: Traducoes = {
     { es: "El modelo elegido para este uso no está disponible. Revisa la elección en IA › Proveedores." },
   "Não deu para responder agora. Tente de novo; se continuar, mande este código para quem instalou o sistema.":
     { es: "No se pudo responder ahora. Inténtalo de nuevo; si continúa, envía este código a quien instaló el sistema." },
+
+  // CaseChatPanel.tsx — o painel de "Conversar sobre o caso" (onda 5). Ao
+  // contrário das frases da rota logo acima, ESTAS são cobradas por catraca:
+  // o guarda varre `app/` e `components/`, então uma frase nova sem espanhol
+  // reprova antes de chegar a quem lê em espanhol.
+  "Conversar sobre o caso": { es: "Conversar sobre el caso" },
+  "Conversa interna. O cliente não vê nada disto, e a IA aqui não envia mensagem nem muda o caso.":
+    { es: "Conversación interna. El cliente no ve nada de esto, y la IA aquí no envía mensajes ni cambia el caso." },
+  "Este atendimento é de outra pessoa. Peça para ela, ou para quem administra, se precisar acompanhar.":
+    { es: "Esta atención es de otra persona. Pídeselo a ella, o a quien administra, si necesitas acompañarla." },
+  "A IA que abriu este caso não está mais no ar.":
+    { es: "La IA que abrió este caso ya no está activa." },
+  "Quem responde aqui é o assistente padrão da organização — ele não tem as instruções daquele agente.":
+    { es: "Quien responde aquí es el asistente predeterminado de la organización: no tiene las instrucciones de aquel agente." },
+  "o agente foi removido": { es: "el agente fue eliminado" },
+  "o agente foi arquivado": { es: "el agente fue archivado" },
+  "o agente está pausado": { es: "el agente está pausado" },
+  "o agente não tem versão publicada": { es: "el agente no tiene versión publicada" },
+  "O atendimento que originou este caso já foi encerrado e reaberto. A conversa abaixo pode não ser a que gerou o caso.":
+    { es: "La atención que originó este caso ya fue cerrada y reabierta. La conversación de abajo puede no ser la que generó el caso." },
+  "Não deu para conferir se o atendimento mudou.":
+    { es: "No se pudo comprobar si la atención cambió." },
+  "Este contato pediu para não receber mensagens. Dá para entender o caso aqui, mas nada pode ser enviado a ele.":
+    { es: "Este contacto pidió no recibir mensajes. Puedes entender el caso aquí, pero no se le puede enviar nada." },
+  "Pergunte antes de decidir.": { es: "Pregunta antes de decidir." },
+  "Por que a IA não resolveu sozinha?": { es: "¿Por qué la IA no lo resolvió sola?" },
+  "O que o cliente já tentou?": { es: "¿Qué ya intentó el cliente?" },
+  "O que muda se eu concluir agora?": { es: "¿Qué cambia si lo concluyo ahora?" },
+  "A IA está lendo o caso…": { es: "La IA está leyendo el caso…" },
+  "Abrir IA › Provedores": { es: "Abrir IA › Proveedores" },
+  "Sua pergunta para a IA": { es: "Tu pregunta para la IA" },
+  "Pergunte à IA sobre este caso…": { es: "Pregúntale a la IA sobre este caso…" },
+  "Ctrl + Enter envia. Enter quebra linha.": { es: "Ctrl + Enter envía. Enter salta de línea." },
+  "Perguntar": { es: "Preguntar" },
+  "Perguntando…": { es: "Preguntando…" },
+  "Pergunta da equipe": { es: "Pregunta del equipo" },
+  "Assistente da organização": { es: "Asistente de la organización" },
+  "Mensagem apagada a pedido do contato.": { es: "Mensaje borrado a pedido del contacto." },
+  "Você fez muitas perguntas seguidas. Tente de novo em um minuto.":
+    { es: "Hiciste demasiadas preguntas seguidas. Inténtalo de nuevo en un minuto." },
+  "As perguntas dos colegas aparecem aqui em alguns segundos.":
+    { es: "Las preguntas de tus colegas aparecen aquí en unos segundos." },
 };
 
 /**
