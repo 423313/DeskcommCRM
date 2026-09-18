@@ -56,6 +56,31 @@ on:
 permissions:
   contents: read
 
+# ── Uma rodada por PR: o push novo cancela a antiga ──────────────────────────
+#
+# Medido em 18/09/2026, com a fila do Actions estrangulada: `ci/rebalancear-
+# partes-do-e2e` tinha **8 runs ativos em 2 heads distintos**, e
+# `feat/marketplace-de-extensoes`, 7 em 2. Cada push deixava a rodada anterior
+# queimando runner até o fim, competindo com trabalho vivo — e o efeito que
+# chega ao contribuidor é o PR parado, porque o job dele espera atrás de uma
+# medição de um commit que já não existe.
+#
+# `cancel-in-progress` é CONDICIONAL de propósito, e a condição é a parte que
+# importa:
+#
+#   pull_request        → cancela. A medição de um head superado não vale nada.
+#   push (main) e tag   → NUNCA cancela. A rodada da `main` é a ÚNICA medição da
+#                         árvore integrada; matá-la deixa o repositório sem saber
+#                         se o conjunto passa, que é pior que a fila cheia. E o
+#                         run de publicação de tag reporta `headBranch` de tag,
+#                         não `main` — cancelá-lo publicaria versão sem registro.
+#
+# O grupo é por PR (e não por branch) para que reabrir um PR não colida com o
+# run de outro que aponte para a mesma ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # AS DUAS PARTES RODAM EM PARALELO, e o motivo é medido, não estético.
   #
