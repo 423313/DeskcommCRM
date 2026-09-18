@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- 0311_automacao_tem_numero_proprio — a mensagem que a automação manda tem NÚMERO PRÓPRIO (#652)
+-- 0322_automacao_tem_numero_proprio — a mensagem que a automação manda tem NÚMERO PRÓPRIO (#652)
 --
 -- Decisão do mantenedor (16/09/2026, issue #652): "mensagem que não foi escrita
 -- nem por pessoa nem pela IA ganha categoria própria. O painel de atrito passa a
@@ -27,8 +27,12 @@
 -- baseline ficava com dois blocos da mesma função, e o último vencia — nos dois
 -- caminhos de instalação alguma coisa se perdia.
 --
--- Renumerada de 0272 para 0311 (max+1 na main) COM timestamp novo: renumerar só
+-- Renumerada de 0272 para 0322 COM timestamp novo: renumerar só
 -- o NNNN já fabricou 12 colisões de timestamp neste repositório.
+--
+-- Por que 0322 e não 0311: o #865 também pediu 0311, e os dois PRs esperam o
+-- mesmo corte. A regra da casa decide por ordem de merge, o que faria o segundo
+-- renumerar sob pressão — então eu cedo agora, e qualquer ordem funciona.
 -- ---------------------------------------------------------------------------
 
 drop function if exists public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int);
