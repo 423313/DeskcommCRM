@@ -22,8 +22,12 @@ describe("ajuste determinístico de estilo na tela", () => {
   });
 
   it("não oferece campo livre de localizar/substituir", () => {
-    expect(componente).not.toMatch(/<Input|<Textarea/);
-    expect(componente).not.toMatch(/regex|pattern|localizar|substituir/i);
+    // Comentário de doc não é UI: a guarda varre o CÓDIGO, não a prosa do header.
+    const codigo = componente
+      .replace(/\/\/[^\n]*/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(codigo).not.toMatch(/<Input|<Textarea/);
+    expect(codigo).not.toMatch(/regex|pattern|localizar|substituir/i);
   });
 
   it("aparece antes das conferências de saída, como no runtime", () => {
