@@ -45,6 +45,14 @@ const OUTRO_CONTATO = "02930003-3333-4000-8000-000000000002";
 const CONVERSA = "02930003-4444-4000-8000-000000000001";
 const OUTRA_CONVERSA = "02930003-4444-4000-8000-000000000002";
 const DONO = "02930003-5555-4000-8000-000000000001";
+/**
+ * Um membro `viewer` da MESMA organização. Ele existe porque a função é
+ * `security definer` e está liberada para `authenticated`: o que impede um
+ * membro qualquer de fechar passagem alheia é a guarda de PAPEL dentro dela,
+ * e guarda sem caso é promessa. A exceção declarada em
+ * `hardening-definer-varredura.test.ts` cita este arquivo como prova.
+ */
+const ESPECTADOR = "02930003-5555-4000-8000-000000000002";
 
 function texto(consulta: string): string {
   return (sql(consulta).trim().split("\n").at(-1) ?? "").trim();
@@ -96,7 +104,8 @@ beforeAll(() => {
     -- pulado: o rodape diz '10 skipped', nao '10 failed'. Medido.
     -- (sem crase nesta prosa: o bloco inteiro e um template literal de JS.)
     insert into auth.users (id, email)
-      values ('${DONO}', 'passagem-0293-dono@invariant.test')
+      values ('${DONO}',        'passagem-0293-dono@invariant.test'),
+             ('${ESPECTADOR}',  'passagem-0293-viewer@invariant.test')
       on conflict do nothing;
     insert into public.organizations (id, slug, legal_name, display_name)
       values ('${ORG}', 'passagem-0293', 'Passagem 0293', 'Passagem 0293')
@@ -107,7 +116,8 @@ beforeAll(() => {
     -- o gatilho nunca chegaria a ser exercitado.
     -- (sem crase nesta prosa: o bloco inteiro e um template literal de JS.)
     insert into public.user_organizations (user_id, organization_id, role, accepted_at)
-      values ('${DONO}', '${ORG}', 'agent', now()) on conflict do nothing;
+      values ('${DONO}', '${ORG}', 'agent', now()),
+             ('${ESPECTADOR}', '${ORG}', 'viewer', now()) on conflict do nothing;
     do $seed$ begin
       insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
         values ('${SESSAO}', '${ORG}', 'passagem-0293', '\\x00'::bytea);
@@ -260,6 +270,23 @@ describe("0293 — fn_passagem_devolvida", () => {
       valor(`select public.fn_passagem_devolvida('00000000-0000-4000-8000-000000000999', '${CONVERSA}');`),
     ).toBe(0);
     expect(reconhecidas()).toBe(0);
+  });
+
+  it("um `viewer` da própria organização NÃO fecha a passagem", () => {
+    // A função é executável por `authenticated` de propósito (a rota de devolver
+    // ao automático usa o client de sessão). Quem separa um `agent` de um
+    // `viewer` é a guarda de papel DENTRO dela — e é este caso que a mede.
+    let erro: string | null = null;
+    try {
+      sql(`set role authenticated;
+           select set_config('request.jwt.claims', '{"sub":"${ESPECTADOR}"}', false);
+           select public.fn_passagem_devolvida('${ORG}', '${CONVERSA}');`);
+    } catch (err) {
+      erro = motivoDoErro(err);
+    }
+    expect(erro, "um viewer fechou a passagem — a guarda de papel não pegou").not.toBeNull();
+    expect(erro).toContain("caller_not_authorized_for_org");
+    expect(reconhecidas(), "a linha foi tocada mesmo com o erro").toBe(0);
   });
 
   it("NÃO é executável por `anon` — a chave anônima vai para o browser", () => {

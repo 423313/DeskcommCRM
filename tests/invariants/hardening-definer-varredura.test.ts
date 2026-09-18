@@ -67,6 +67,19 @@ const ANON_PERMITIDO: readonly Excecao[] = [];
  */
 const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
   {
+    fn: "fn_passagem_devolvida(uuid,uuid)",
+    razao:
+      "POST app/api/v1/conversations/[id]/reactivate-bot/route.ts usa createClient da " +
+      "sessão e chama por lib/escalacao/retomada.ts — devolver o atendimento ao " +
+      "automático fecha a passagem aberta. Ela NÃO pode ser um update daqui: a policy " +
+      "de passagens_de_atendimento é `for select` apenas, de propósito, para ninguém " +
+      "reescrever um fato. A definer carrega a mesma guarda de fn_conversation_assign: " +
+      "com sessão, exige membro `agent`+ DAQUELA organização (fn_role_at_least), e o " +
+      "update é fechado por organization_id + conversation_id, só em linha ainda não " +
+      "reconhecida. tests/invariants/passagem-se-reconhece-sozinha.test.ts prova " +
+      "cross-org, viewer e a idempotência.",
+  },
+  {
     fn: "fn_reply_action(uuid,uuid,text,text,text,text)",
     razao:
       "POST app/api/v1/ai/replies/[id]/route.ts usa createClient da sessão. " +
