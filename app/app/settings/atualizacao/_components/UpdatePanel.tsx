@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api/types";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useSystemVersion } from "@/hooks/system/useSystemVersion";
 import { markdownParaTextoSimples } from "@/lib/system/changelog";
+import { textoDaRodadaDoBanco } from "@/lib/system/update-run";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
@@ -157,6 +158,13 @@ export function UpdatePanel() {
    * outros estados). Sem botão: o pedido já foi atendido, e reoferecê-lo era o
    * outro defeito desta janela.
    */
+  // O que a rodada do banco contou de si mesma, em português de gente. Vale nos
+  // dois desfechos em que o servidor mexeu no banco (deu certo / voltou atrás):
+  // quem clicou tem o direito de saber que a base estava ocupada, quantas
+  // retentativas custou e em qual passada fechou. Sem registro na rodada isto é
+  // `null`, e a tela fica calada em vez de afirmar zero.
+  const contaDoBanco = textoDaRodadaDoBanco(data.run?.rodada_do_banco);
+
   if (data.just_updated) {
     const pedida = semV(data.run?.to_version);
     return (
@@ -172,6 +180,9 @@ export function UpdatePanel() {
             "Assim que ele falar comigo, daqui a alguns minutos, esta tela se atualiza sozinha. Não ofereço atualizar de novo: o pedido já foi atendido.",
           )}
         </p>
+        {contaDoBanco ? (
+          <p className="mt-3 text-sm text-muted-foreground">{t(contaDoBanco)}</p>
+        ) : null}
       </Layout>
     );
   }
@@ -198,6 +209,9 @@ export function UpdatePanel() {
           {t("funciona com ele. Se quiser desfazer também o banco, use a cópia de segurança feita antes da tentativa (")}
           <code>bash hostgator-setup-kit/restore.sh</code>).
         </p>
+        {contaDoBanco ? (
+          <p className="mt-3 text-sm text-muted-foreground">{t(contaDoBanco)}</p>
+        ) : null}
         <DetalhesTecnicos texto={data.run.log_tail} />
         <Saida
           botao={false}

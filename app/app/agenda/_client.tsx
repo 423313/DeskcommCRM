@@ -21,6 +21,7 @@ import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agen
 import { EmptyAgenda } from "@/components/empty";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
+import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
 import { Button } from "@/components/ui/button";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
@@ -70,6 +71,7 @@ const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
  */
 export function AgendaClient({
   fusoDeApresentacao,
+  usuarioId,
   googleConfigurado,
   contaConectada,
   enderecoDeRetorno,
@@ -80,6 +82,8 @@ export function AgendaClient({
   podeMarcar,
 }: {
   fusoDeApresentacao: string | null;
+  /** Id de quem está logado — a única fonte para o rótulo "Você". */
+  usuarioId: string;
   googleConfigurado: boolean;
   contaConectada?: string | null;
   enderecoDeRetorno?: string;
@@ -688,8 +692,12 @@ export function AgendaClient({
                   // O DONO DO TIPO, não o primeiro da lista. A tela dizia "com
                   // <primeira pessoa>" enquanto oferecia a jornada de outra —
                   // e marcava na agenda da primeira, que não tinha jornada.
-                  pessoas.find((p) => p.id === tipo.donoId) ??
-                  pessoas[0] ?? { id: "", nome: t("Você"), trilha: 1 }
+                  //
+                  // "Você" só quando o dono da agenda É quem está logado. A
+                  // regra está em `lib/agenda/responsavel-do-painel.ts`: com a
+                  // lista da equipe vazia (o 403 do item 1 da issue 896) este
+                  // fallback dizia "Você" para a jornada de OUTRA pessoa.
+                  resolverResponsavelDoPainel({ pessoas, donoId: tipo.donoId, usuarioId })
                 }
                 tipo={tipo.nome}
                 duracaoMin={tipo.duracaoMin}
