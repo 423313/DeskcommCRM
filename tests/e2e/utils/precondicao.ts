@@ -172,9 +172,17 @@ export async function afirmarDonoDoServidor(email: string): Promise<void> {
   }
   if (count > 0) return;
 
-  const { error: erroInsert } = await svc
-    .from("platform_admins")
-    .insert({ user_id: userId, scope: "full" });
+  // `granted_by` é NOT NULL — a tabela registra QUEM promoveu, e a primeira
+  // versão desta função omitia a coluna. O CI reprovou com a mensagem do
+  // Postgres inteira, que é o comportamento desejado: a precondição falhou alto
+  // e nomeou a causa em vez de deixar a bateria medir a superfície errada.
+  // Auto-concessão é o que `seed-e2e-system-update.ts:93-97` já faz — não há um
+  // "quem promoveu" anterior num banco semeado do zero.
+  const { error: erroInsert } = await svc.from("platform_admins").insert({
+    user_id: userId,
+    granted_by: userId,
+    reason: "precondição e2e — dono do servidor para a bateria do painel da instalação",
+  } as never);
   if (erroInsert) {
     throw new Error(
       `PRECONDIÇÃO NÃO SATISFEITA: ${email} não é dono do servidor e a promoção falhou ` +
