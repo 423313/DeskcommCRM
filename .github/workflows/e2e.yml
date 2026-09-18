@@ -312,14 +312,27 @@ jobs:
     #
     # Três arquivos mudam de lista, escolhidos pelo relógio e pela vizinhança:
     #
-    #   `navegacao` (4,62 min)  PARTE_2 → PARTE_1. Volta para onde estava antes
-    #       de 2026-09-04; o bloco acima já registra por que ela é a de menos
-    #       aresta, e alfabeticamente segue caindo antes de
-    #       `relogio-http-cron-externo`, então a restrição do tick global fica.
+    #   `prova-painel-provedores` (4,03 min)  PARTE_2 → PARTE_1. Volta para onde
+    #       estava antes de 2026-09-04.
     #   `inbox-busca-e-filtros-dizem-a-verdade` (3,98 min)  PARTE_3 → PARTE_1.
     #       É o maior item da parte 3, e a parte 1 já tem as outras `inbox-*`.
     #   `agenda-google-meet` (0,92 min)  PARTE_3 → PARTE_2, onde já moram
     #       `agenda-conectar-google` e as duas `agenda-ocupacao-do-google-*`.
+    #
+    # ⚠️ `navegacao` NÃO se move, e a razão é medida, não preferência. A primeira
+    # versão deste rebalanceamento a levava da 2 para a 1, e lá ela REPROVOU
+    # (run 35345305473, parte 1: 153 passaram, 1 falhou em 18,6 min):
+    #
+    #     navegacao.spec.ts:222 — "em 900px o menu inteiro tem de caber sem
+    #     scroll": esperado false, recebido true. `titulosFora` = 0, ou seja,
+    #     nenhum grupo saiu da dobra — o menu passa do alto por pouco.
+    #
+    # A mesma spec passa na PARTE_2. A diferença não é a partição: é o ESTADO do
+    # banco daquela parte (cada parte tem o seu), que muda o que o menu mostra.
+    # Ou seja, o menu está no limite e alguma vizinhança da parte 1 o empurra —
+    # sinal de PRODUTO, não de CI, e por isso vira item próprio em vez de virar
+    # uma partição escolhida para esconder o vermelho. Quem for atrás: rodar
+    # `navegacao` na parte 1 e ler `nav.scrollHeight` contra a altura visível.
     #
     # PREVISÃO (é previsão; a rodada deste PR é que mede): 18,0 / 18,4 / 18,7 min
     # de casos, ou ~25 min de relógio por parte, com ~5 min de folga cada.
@@ -357,8 +370,8 @@ jobs:
         lote-no-quadro-do-funil.spec.ts
         motivos-de-perda-do-funil.spec.ts
         importar-leads-planilha.spec.ts
-        navegacao.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
+        prova-painel-provedores.spec.ts
         relatorio-de-atividades.spec.ts
         qa-l12-inbox.spec.ts
         qa-l12-troca-de-funil.spec.ts
@@ -470,7 +483,7 @@ jobs:
         agenda-google-volta-do-consentimento.spec.ts
         agenda-google-volta-nao-desloga.spec.ts
         qa-l12-funil.spec.ts
-        prova-painel-provedores.spec.ts
+        navegacao.spec.ts
         agenda-google-meet.spec.ts
       # `moeda-da-organizacao` entrou na PARTE_2 em 2026-09-04, ao lado de
       # `navegacao` — mesmo domínio (Configurações) e a mesma ausência de
