@@ -288,5 +288,5 @@ else falha "F-BIG+: volume >3000 e match na posição <10" "encenados=$encenados
 r=$(rodar "$fbig" validate-features.sh)
 assert_exit "$(exit_de "$r")" 1 "F-BIG+: em merge grande o hook AINDA valida — a sonda não falha aberta"
 
-printf '\n%s casos, %s falha(s)\n' "$casos" "$falhas"
+printf '\nhooks-nao-acusam-a-main: %s casos, %s falha(s)\n' "$casos" "$falhas"
 [ "$falhas" -eq 0 ] || exit 1

@@ -39,8 +39,12 @@ violations=$(git diff --cached --name-status \
 # merge passaria com exit 0. Comparar o blob ENCENADO com o da main distingue
 # os dois: igual = a main chegando; diferente = autoria desta branch.
 #
-# `[ -n "$encenado" ]` preserva a acusação em DELETE (não há blob no índice) —
-# sem essa metade, apagar um invariante que a main tem passaria batido.
+# `[ -n "$encenado" ]` cobre um DELETE específico, e vale escrever QUAL porque o
+# palpite intuitivo é o errado. Apagar invariante que a main TEM já é pego sem ela
+# (o blob da main é não-vazio, então os dois lados diferem). Quem ela pega é o
+# delete de invariante que a branch mesma criou e a main NÃO tem: aí os dois lados
+# são vazios, comparam IGUAIS e o caminho sairia da lista em silêncio. Medido nos
+# dois estados — sem esta condição, o caso D2 do teste é o único que fica vermelho.
 # O `git rev-parse --verify origin/main` do `if` é guarda de intenção e economia de
 # duas chamadas por arquivo, NÃO o que sustenta o fork: medido num clone sem a ref,
 # com e sem ele, os três estados (modificar, deletar o da main, deletar o próprio)
