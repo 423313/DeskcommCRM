@@ -3,7 +3,10 @@ import { beforeEach, expect, it, vi } from "vitest";
 const deps = vi.hoisted(() => ({ audit: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: deps.audit }));
 
-import { cancelarAgendamentoHandler } from "@/app/api/v1/agenda/agendamentos/_handler";
+import {
+  alterarAgendamentoHandler,
+  cancelarAgendamentoHandler,
+} from "@/app/api/v1/agenda/agendamentos/_handler";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -197,5 +200,63 @@ it("IA no compromisso de um colega, opção desligada: passa (não é um atenden
   const salvo = await cancelarAgendamentoHandler(sb, ctxDaIA(), cancelamento);
 
   expect(salvo).toMatchObject({ status: "cancelled" });
+  expect(chamadas).toContain("rpc:fn_appointment_change");
+});
+
+/**
+ * ─── O MESMO RECORTE NA REMARCAÇÃO (`alterarAgendamentoHandler`) ─────────────
+ *
+ * A issue #978 é literal: "qualquer Atendente cancela ou REMARCA o compromisso
+ * de qualquer colega". Os dois handlers usam a MESMA função
+ * (`exigeDonoDoCompromisso`) — e é justamente por serem dois lugares que a
+ * guarda volta a faltar num deles sem ninguém ver. Aqui a remarcação é
+ * exercitada pelo caminho em que a recusa tem de vencer ANTES de qualquer
+ * consulta de grade: com a opção desligada e o compromisso de outro, a recusa
+ * sai em `exigeDonoDoCompromisso` e `fn_appointment_change` não é chamada.
+ */
+
+const NOVO_INICIO = "2026-09-21T13:00:00.000Z";
+
+it("Atendente REMARCANDO o compromisso de um colega, opção desligada: recusa SEM escrita", async () => {
+  const chamadas: string[] = [];
+  const sb = sbDeTeste(linhaDoCompromisso(OUTRO), false, chamadas);
+
+  await expect(
+    alterarAgendamentoHandler(sb, ctxDe("agent", DONO), {
+      id: COMPROMISSO,
+      revision: 3,
+      starts_at: NOVO_INICIO,
+    }),
+  ).rejects.toMatchObject({ status: 403, code: "appointment_do_colega" });
+
+  expect(chamadas).not.toContain("rpc:fn_appointment_change");
+  expect(deps.audit).not.toHaveBeenCalled();
+});
+
+it("Atendente no compromisso de um colega, opção LIGADA: altera como sempre", async () => {
+  const chamadas: string[] = [];
+  const sb = sbDeTeste(linhaDoCompromisso(OUTRO), true, chamadas);
+
+  const salvo = await alterarAgendamentoHandler(sb, ctxDe("agent", DONO), {
+    id: COMPROMISSO,
+    revision: 3,
+    notes: "anotar o portão de entrada",
+  });
+
+  expect(salvo).toBeTruthy();
+  expect(chamadas).toContain("rpc:fn_appointment_change");
+});
+
+it("Gerente alterando o compromisso de um colega, opção desligada: passa", async () => {
+  const chamadas: string[] = [];
+  const sb = sbDeTeste(linhaDoCompromisso(OUTRO), false, chamadas);
+
+  const salvo = await alterarAgendamentoHandler(sb, ctxDe("manager", DONO), {
+    id: COMPROMISSO,
+    revision: 3,
+    notes: "encaixe combinado por telefone",
+  });
+
+  expect(salvo).toBeTruthy();
   expect(chamadas).toContain("rpc:fn_appointment_change");
 });
