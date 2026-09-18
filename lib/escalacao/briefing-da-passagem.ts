@@ -42,18 +42,23 @@
  */
 import { renderDeclaracaoParaHumano, type DeclaracaoDoTurno } from "@/lib/agent-engine/agent/declaracao";
 
-import { FRASE_DO_MOTIVO, type MotivoDaPassagem, type TentativaDaPassagem } from "./passagem";
+import {
+  FRASE_DO_MOTIVO,
+  PISO_DO_BRIEFING,
+  type MotivoDaPassagem,
+  type TentativaDaPassagem,
+} from "./passagem";
 
 /**
  * O texto que sai quando não há contexto nenhum.
  *
- * É o mesmo de antes desta entrega, e continua sendo por dois motivos: `body` é
- * `not null` no banco, e um briefing VAZIO na tela de quem assume é pior que a
- * ausência do cartão — ele afirma que não há contexto, quando o que houve foi a
- * montagem não ter recebido nada.
+ * Reexportado, não redeclarado: a frase mora em `./passagem` junto do resto do
+ * vocabulário, porque a ESCRITA da linha precisa dela tanto quanto a montagem —
+ * `body` é `not null` no banco. Duas cópias da mesma frase de tela envelhecem
+ * separadas. O reexport existe porque os leitores de hoje (e
+ * `tests/unit/briefing-da-passagem.test.ts`) apontam para cá.
  */
-export const PISO_DO_BRIEFING =
-  "Sem resumo acumulado ainda (conversa recente) — abra a conversa no CRM para o contexto completo.";
+export { PISO_DO_BRIEFING } from "./passagem";
 
 /**
  * O checkpoint durável, na forma mínima que esta montagem lê. É a mesma linha
@@ -70,6 +75,34 @@ export interface CheckpointParaBriefing {
    * ausência degrada para o resumo de hoje, nunca quebra a passagem.
    */
   declaracao?: DeclaracaoDoTurno | null;
+}
+
+/**
+ * A LINHA DO BANCO virando `CheckpointParaBriefing`, sem `as`.
+ *
+ * Existe porque os dois leitores do checkpoint (a rota do caso escalado, por
+ * `pg`; o orquestrador do CRM, por supabase-js) recebem uma linha não tipada e
+ * a entregavam à montagem com um cast. Um cast não valida nada: bastou um
+ * `select` devolver outra coisa para `rolling_summary.trim()` estourar DENTRO
+ * de uma passagem — e a passagem é o efeito que não pode falhar por causa do
+ * texto que a descreve. Falhar fechado na AÇÃO, aberto na INFORMAÇÃO.
+ *
+ * As colunas são `not null` no schema de hoje; a guarda não é desconfiança do
+ * schema, é do CAMINHO — quem chama pode mudar o `select` e só descobrir em
+ * produção, num caminho que roda quando alguém já está esperando atendimento.
+ */
+export function checkpointDoBanco(linha: unknown): CheckpointParaBriefing | null {
+  if (linha === null || typeof linha !== "object") return null;
+  const l = linha as Record<string, unknown>;
+  const lista = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  return {
+    commitments: lista(l.commitments),
+    objections: lista(l.objections),
+    next_action: typeof l.next_action === "string" ? l.next_action : null,
+    rolling_summary: typeof l.rolling_summary === "string" ? l.rolling_summary : "",
+    declaracao: (l.declaracao ?? null) as DeclaracaoDoTurno | null,
+  };
 }
 
 export interface EntradaDoBriefing {

@@ -158,12 +158,17 @@ Três camadas; a 3ª é a garantia dura.
 
 Quando o humano clica **"Não consigo → escalar"**, o caso vira `escalated` e dispara o **handoff canônico do engine** — a IA sai de cena e um humano assume a conversa (fluxo existente). O texto do humano vira o `reason` do handoff.
 
-**Resolvido (era risco §10.1):** o caminho canônico do engine é **`performHumanHandoff`** (`lib/agent-engine/agent/human-handoff.ts:149`) — já é o que a tool inline `request_human_handoff` delega internamente, e o que a detecção determinística e o opt-out chamam. A escalação do caso chama:
-```ts
-await performHumanHandoff(pool, { tenantId, leadId, conversationId },
-  { reason: <texto do humano>, conversationSummary: buildHandoffSummary(previous), log });
+**Resolvido (era risco §10.1):** o caminho canônico do engine é **`performHumanHandoff`** (`lib/agent-engine/agent/human-handoff.ts`) — já é o que a tool inline `request_human_handoff` delega internamente, e o que a detecção determinística e o opt-out chamam. Não criamos um 3º caminho.
+
+O que a escalação do caso passa a ele mudou com a migration 0291/0293: além do `reason` (o texto do humano), ela monta o **briefing da passagem** (`lib/escalacao/briefing-da-passagem.ts`) com o caso **mais o checkpoint durável da conversa**, e declara `passagem: { origem: 'caso_escalado', motivoCodigo: 'caso_escalado', casoId }`. Esta seção mandava usar `buildHandoffSummary(previous)` e o código nunca o fez — quem recebia a passagem de um caso escalado via o título, o resumo e o bloqueio do caso, e nada da conversa.
+
+Para ver a chamada em vigor sem acreditar nesta prosa (comando não envelhece):
+
+```bash
+grep -n "performHumanHandoff" -B 20 'app/api/v1/ai/cases/[id]/reply/route.ts'
 ```
-Efeitos (idempotentes): `contacts.force_human=true`, `conversations.status ai_handling→pending` + `bot_silenced_until='infinity'`, `cancelPendingCronsForLead`, INSERT `agent_inbox_items(kind='handoff')`. Não criamos um 3º caminho.
+
+Efeitos (idempotentes): `contacts.force_human=true`, `conversations.status ai_handling→pending` + `bot_silenced_until='infinity'`, `cancelPendingCronsForLead`, INSERT em `passagens_de_atendimento`, e o item de `agent_inbox_items(kind='handoff', ref_kind='conversation')` — que é **inserido ou acrescentado**, nunca descartado.
 
 ---
 

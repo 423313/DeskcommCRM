@@ -9326,6 +9326,20 @@ export const DICIONARIO: Traducoes = {
   "O WhatsApp recusou o envio do aviso.": { es: "WhatsApp rechazó el envío del aviso." },
   "O aviso não saiu e a causa não pôde ser identificada.":
     { es: "El aviso no salió y la causa no pudo ser identificada." },
+
+  // O CORPO do aviso de passagem na Central. Ele é traduzido no SERVIDOR, no
+  // instante do insert, e não por `t()` na tela — porque na tela ele é DADO (o
+  // que a Central mostra é o corpo como ele veio, e há um teste que guarda
+  // isso). Acrescentadas no fim do bloco, nunca reordenando o arquivo.
+  "Abra a conversa para ver o contexto.":
+    { es: "Abre la conversación para ver el contexto." },
+  "O cliente JÁ FOI avisado de que uma pessoa vai assumir.":
+    { es: "El cliente YA FUE avisado de que una persona va a asumir." },
+  "O aviso ficou na fila (o canal está fora do ar) — o cliente ainda não recebeu.":
+    { es: "El aviso quedó en la cola (el canal está fuera del aire) — el cliente aún no lo recibió." },
+  "O cliente NÃO foi avisado": { es: "El cliente NO fue avisado" },
+  "ele está esperando sem saber.": { es: "está esperando sin saberlo." },
+  "motivo desconhecido": { es: "motivo desconocido" },
 };
 
 /**

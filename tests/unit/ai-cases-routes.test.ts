@@ -515,7 +515,7 @@ describe("POST /api/v1/ai/cases/:id/reply", () => {
     session("agent");
     const pool = makePoolStub(caseRowFixture());
     vi.mocked(getRequestPool).mockReturnValue(pool as unknown as ReturnType<typeof getRequestPool>);
-    const { escalateCase, buildCaseSummary } = await import("@/lib/agent-engine/agent/human-cases");
+    const { escalateCase } = await import("@/lib/agent-engine/agent/human-cases");
     const { performHumanHandoff } = await import("@/lib/agent-engine/agent/human-handoff");
 
     const { POST } = await import("@/app/api/v1/ai/cases/[id]/reply/route");
@@ -537,12 +537,28 @@ describe("POST /api/v1/ai/cases/:id/reply", () => {
       USER_ID,
       "Fora do playbook, precisa de humano",
     );
-    expect(vi.mocked(buildCaseSummary)).toHaveBeenCalled();
     expect(vi.mocked(performHumanHandoff)).toHaveBeenCalledWith(
       pool,
       { tenantId: ORG_ID, leadId: CONTACT_ID, conversationId: CONV_ID },
       expect.objectContaining({ reason: "Fora do playbook, precisa de humano" }),
     );
+
+    // ⚠️ O CONTEXTO DA ESCALAÇÃO MUDOU, e o que este bloco mede mudou com ele.
+    // Era `buildCaseSummary(caseRow)` — título + resumo + bloqueio, e mais nada
+    // da conversa. A spec 15 §7 já mandava levar o resumo do checkpoint junto e
+    // o código nunca o fez: quem recebia a passagem de um caso escalado não via
+    // NADA do que a IA tinha conversado com o cliente antes de travar.
+    const opts = vi.mocked(performHumanHandoff).mock.calls[0]?.[2];
+    expect(opts?.passagem?.origem).toBe("caso_escalado");
+    expect(opts?.passagem?.motivoCodigo).toBe("caso_escalado");
+    expect(opts?.passagem?.casoId).toBe(CASE_ID);
+    const corpo = opts?.passagem?.briefing.body ?? "";
+    expect(corpo, "o caso sumiu do briefing").toContain("Desconto especial");
+    expect(corpo, "o bloqueio sumiu do briefing").toContain("Alçada");
+    expect(
+      corpo,
+      "o texto que a PESSOA escreveu ao escalar não chegou a quem vai assumir",
+    ).toContain("Fora do playbook, precisa de humano");
     // O handoff (idempotente) vem ANTES de fechar o caso: se ele falhar, o caso
     // segue awaiting_human e a retentativa se cura. Na ordem inversa sobraria um
     // caso `escalated` que nunca chegou a um humano.

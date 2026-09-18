@@ -23,18 +23,19 @@
  * BANCO aceita. Amarrar os dois faria uma mudança de contrato do motor virar
  * `23514` num INSERT de caminho pouco exercitado.
  *
- * ─── O que esta onda NÃO entrega, declarado ────────────────────────────────
+ * ─── A escrita, e por que ela mora aqui ────────────────────────────────────
  *
- * `registrarPassagem(db, p)` — a escrita da linha — é da onda seguinte, junto
- * com os 13 call sites que a chamam. Ela vai aplicar `sanitizarTextoDoLead` (da
- * onda do aviso no WhatsApp, que ainda não existe nesta árvore) a `title`,
- * `notes` e `content` ANTES do insert: sem isso, um agente externo escreve
- * `https://…` no resumo e o cartão exibe um link de phishing dentro da tela de
- * quem vai atender. O schema Zod de `tentativas` já mora aqui porque ele é o que
- * o CHECK do banco não consegue exprimir (o CHECK garante só que é um array) e
- * porque o par do invariante cita ESTE arquivo.
+ * `registrarPassagem(db, p)` (no fim do arquivo) é quem grava a linha, chamada
+ * pelos treze caminhos que passam conversa para humano. Ela aplica
+ * `sanitizarTextoDoLead` a `title`, `notes` e `content` ANTES do insert: sem
+ * isso, um agente externo escreve `https://…` no resumo e o cartão exibe um link
+ * de phishing dentro da tela de quem vai atender. O schema Zod de `tentativas`
+ * mora aqui porque ele é o que o CHECK do banco não consegue exprimir (o CHECK
+ * garante só que é um array) e porque o par do invariante cita ESTE arquivo.
  */
 import { z } from "zod";
+
+import { sanitizarTextoDoLead } from "./sanitizar-texto-do-lead";
 
 /**
  * Qual dos dois motores passou a conversa.
@@ -146,6 +147,21 @@ export const FRASE_DO_MOTIVO_DO_AVISO = {
 } satisfies Record<MotivoDoAviso, string>;
 
 /**
+ * O TEXTO QUE SAI QUANDO NÃO HÁ CONTEXTO NENHUM. Uma frase, uma fonte.
+ *
+ * Ele é lido em dois lugares — a montagem do briefing (que o devolve quando
+ * nenhum bloco foi impresso) e a escrita da linha (onde `body` é `not null`) —
+ * e por isso mora no arquivo de vocabulário, não em nenhum dos dois. Duas
+ * cópias da MESMA frase de tela envelhecem separadas, e a segunda a divergir é
+ * sempre a que ninguém relê.
+ *
+ * Por que não string vazia: um briefing em branco na tela de quem assume AFIRMA
+ * que não há contexto, quando o que houve foi a montagem não ter recebido nada.
+ */
+export const PISO_DO_BRIEFING =
+  "Sem resumo acumulado ainda (conversa recente) — abra a conversa no CRM para o contexto completo.";
+
+/**
  * Uma tentativa da IA, do jeito que o cartão a mostra: o que ela fez e no que
  * deu. `desfecho` é opcional porque a ferramenta pode declarar só a ação.
  *
@@ -161,8 +177,288 @@ export const tentativaDaPassagemSchema = z.object({
 export type TentativaDaPassagem = z.infer<typeof tentativaDaPassagemSchema>;
 
 /**
- * A lista inteira. É ESTE schema que `registrarPassagem` (onda seguinte) aplica
+ * A lista inteira. É ESTE schema que `registrarPassagem` (no fim do arquivo) aplica
  * antes do insert — o CHECK do banco garante só que o valor é um array, porque
  * `jsonb` lido por path sem schema central é o anti-pattern nº 6.
  */
 export const tentativasDaPassagemSchema = z.array(tentativaDaPassagemSchema).max(10);
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * A ESCRITA DA LINHA — a onda dos call sites (migration 0293)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * O desfecho do aviso ao cliente, no vocabulário que a LINHA guarda.
+ *
+ * `null` (o campo ausente) = ninguém tentou avisar, e é diferente de "tentou e
+ * não conseguiu". Quem assume precisa saber qual dos dois: no primeiro caso a
+ * pessoa do outro lado não está esperando nada; no segundo ela está esperando
+ * sem saber que alguém vem.
+ */
+export interface DesfechoDoAvisoDaPassagem {
+  avisado: boolean;
+  /** Por que NÃO foi avisado. Ignorado quando `avisado` é `true`. */
+  motivoCodigo?: MotivoDoAviso | null;
+}
+
+/**
+ * O MESMO desfecho, do jeito que os dois EMISSORES do aviso o devolvem.
+ *
+ * Mora aqui, e não em cada mundo, porque ele já divergiu: o motor de conversa
+ * tinha uma união discriminada e o do CRM tinha um `{ avisado: boolean }` solto,
+ * e o segundo é exatamente o tipo que deixou `avisado: true` passar sem ninguém
+ * olhar o status da mensagem. União discriminada obriga quem devolve `false` a
+ * dizer POR QUÊ — o compilador cobra o que a revisão esqueceu.
+ *
+ * `porque` é o código técnico (log, diagnóstico). `motivoCodigo` é o vocabulário
+ * fechado que a linha da passagem guarda e que a tela traduz; opcional porque
+ * nem todo veto tem par, e inventar um seria afirmar o que ninguém mediu.
+ */
+export type DesfechoDoAvisoAoCliente =
+  | { avisado: true }
+  | { avisado: false; porque: string; motivoCodigo?: MotivoDoAviso };
+
+/** Os fatos de UMA passagem, do jeito que a linha os guarda. */
+export interface PassagemNova {
+  organizationId: string;
+  contactId: string;
+  conversationId: string;
+  /** Só quando a passagem nasceu do "Não consigo → escalar" de um caso. */
+  casoId?: string | null;
+  motor: MotorDaPassagem;
+  origem: OrigemDaPassagem;
+  motivoCodigo: MotivoDaPassagem;
+  /** O que `montarBriefingDaPassagem` devolveu — a montagem é dela, não daqui. */
+  briefing: {
+    body: string;
+    title: string | null;
+    notes: string | null;
+    content: string | null;
+    tentativas: readonly TentativaDaPassagem[];
+  };
+  /** Ausente = ninguém tentou avisar o cliente. */
+  aviso?: DesfechoDoAvisoDaPassagem | null;
+}
+
+/**
+ * Tetos por coluna. Não são zelo: `title`/`notes`/`content` vêm do MODELO ou de
+ * um agente MCP externo, e uma linha sem teto vira uma página de texto dentro da
+ * conversa de quem vai atender. `body` é NOSSA montagem e leva o teto mais largo
+ * porque é ele que carrega o contexto acumulado.
+ */
+const TETOS_DA_PASSAGEM = { title: 300, notes: 2000, content: 1200, body: 8000 } as const;
+
+/** A linha, pronta para o INSERT. As chaves são as colunas, de propósito. */
+export interface LinhaDaPassagem {
+  organization_id: string;
+  contact_id: string;
+  conversation_id: string;
+  caso_id: string | null;
+  motor: MotorDaPassagem;
+  origem: OrigemDaPassagem;
+  motivo_codigo: MotivoDaPassagem;
+  title: string | null;
+  body: string;
+  notes: string | null;
+  content: string | null;
+  tentativas: TentativaDaPassagem[];
+  cliente_avisado: boolean | null;
+  aviso_motivo_codigo: MotivoDoAviso | null;
+}
+
+/**
+ * Valida e higieniza — PURA, e é ela que os dois motores compartilham.
+ *
+ * Duas coisas acontecem aqui, e nenhuma pode acontecer no chamador:
+ *
+ *   1. **`tentativas` passa pelo Zod.** O CHECK do banco garante só que o valor
+ *      é um array; o que há DENTRO dele vem do modelo. `jsonb` lido por path cru
+ *      é o anti-pattern nº 6, e a defesa é ter um schema no caminho da escrita.
+ *   2. **`title`, `notes` e `content` passam por `sanitizarTextoDoLead`.** Os
+ *      três carregam texto de fora (o `por_que` que o modelo escreveu, a fala do
+ *      cliente, o `reason` de um agente MCP) e vão ser renderizados na tela de
+ *      quem atende. Sem isso, escrever `https://…` na conversa põe um link de
+ *      phishing dentro do CRM — de graça, e com a autoridade da nossa interface.
+ *
+ * ⚠️ O que a higienização CUSTA, escrito porque ninguém o vê depois: ela apaga
+ * corrida de 8+ dígitos. Um cliente que digite o próprio telefone perde esse
+ * trecho em `notes`. O `body` — que é a nossa montagem e é onde a citação
+ * completa mora — NÃO passa por ela, então a fala literal sobrevive lá; quem
+ * renderiza o cartão é que não pode transformar texto em link.
+ */
+export function prepararLinhaDaPassagem(p: PassagemNova): LinhaDaPassagem {
+  const tentativas = tentativasDaPassagemSchema.parse(p.briefing.tentativas ?? []);
+  const corpo = p.briefing.body.trim();
+  return {
+    organization_id: p.organizationId,
+    contact_id: p.contactId,
+    conversation_id: p.conversationId,
+    caso_id: p.casoId ?? null,
+    motor: p.motor,
+    origem: p.origem,
+    motivo_codigo: p.motivoCodigo,
+    title: sanitizarTextoDoLead(p.briefing.title, TETOS_DA_PASSAGEM.title),
+    // `body` é `not null` na coluna: montagem vazia vira o piso, nunca `''`.
+    body: (corpo === "" ? PISO_DO_BRIEFING : corpo).slice(0, TETOS_DA_PASSAGEM.body),
+    notes: sanitizarTextoDoLead(p.briefing.notes, TETOS_DA_PASSAGEM.notes),
+    content: sanitizarTextoDoLead(p.briefing.content, TETOS_DA_PASSAGEM.content),
+    tentativas,
+    cliente_avisado: p.aviso == null ? null : p.aviso.avisado,
+    aviso_motivo_codigo:
+      p.aviso == null || p.aviso.avisado ? null : (p.aviso.motivoCodigo ?? null),
+  };
+}
+
+
+/** As colunas do INSERT, na ordem dos `$n`. Uma lista, dois motores. */
+const COLUNAS_DA_PASSAGEM = [
+  "organization_id",
+  "contact_id",
+  "conversation_id",
+  "caso_id",
+  "motor",
+  "origem",
+  "motivo_codigo",
+  "title",
+  "body",
+  "notes",
+  "content",
+  "tentativas",
+  "cliente_avisado",
+  "aviso_motivo_codigo",
+] as const;
+
+/** O mínimo de `pg.Pool` que a escrita usa. Tipado aqui para não arrastar `pg`. */
+interface PoolDoMotor {
+  query(text: string, values?: readonly unknown[]): Promise<unknown>;
+}
+/** O mínimo de `supabase-js` que a escrita usa. */
+interface ClienteDoCrm {
+  from(tabela: string): {
+    insert(linha: Record<string, unknown>): PromiseLike<{ error: { message: string } | null }>;
+  };
+}
+
+export type ResultadoDaPassagem = { gravada: true } | { gravada: false; erro: string };
+
+/**
+ * GRAVA A PASSAGEM. Uma passagem = uma linha. **Sem dedup**: é o fato, e dois
+ * fatos seguidos são dois fatos. Quem deduplica é o AVISO da Central, que é
+ * alerta e não registro.
+ *
+ * ─── Por que ela não lança ─────────────────────────────────────────────────
+ *
+ * Porque a passagem já aconteceu quando esta linha roda: o `force_human` está
+ * gravado, a conversa saiu do automático, o cliente já foi (ou não) avisado.
+ * Deixar um erro de INSERT subir daqui derrubaria o turno DEPOIS do efeito, e o
+ * retry replicaria tudo. Falhar fechado na AÇÃO, aberto na INFORMAÇÃO — e o erro
+ * não é engolido: ele volta no retorno, e o chamador o registra com o logger que
+ * ele tem (este módulo é dos dois mundos e não tem um).
+ *
+ * ─── Por que um nome e dois encanamentos ───────────────────────────────────
+ *
+ * O motor de conversa fala `pg.Pool` e o do CRM fala `supabase-js`; não há
+ * cliente comum. O que NÃO pode divergir é o que se grava — e isso é
+ * `prepararLinhaDaPassagem`, uma função só, que os dois caminhos atravessam.
+ */
+export async function registrarPassagem(
+  db: PoolDoMotor | ClienteDoCrm,
+  p: PassagemNova,
+): Promise<ResultadoDaPassagem> {
+  let linha: LinhaDaPassagem;
+  try {
+    linha = prepararLinhaDaPassagem(p);
+  } catch (err) {
+    // Payload que o modelo escreveu fora do schema. Não é erro de banco, e
+    // também não pode derrubar a passagem.
+    return { gravada: false, erro: err instanceof Error ? err.message.slice(0, 200) : "payload_invalido" };
+  }
+
+  try {
+    if (typeof (db as PoolDoMotor).query === "function") {
+      const valores = COLUNAS_DA_PASSAGEM.map((c) =>
+        c === "tentativas" ? JSON.stringify(linha.tentativas) : linha[c],
+      );
+      await (db as PoolDoMotor).query(
+        `insert into passagens_de_atendimento (${COLUNAS_DA_PASSAGEM.join(", ")})
+         values (${COLUNAS_DA_PASSAGEM.map((_, i) => `$${i + 1}`).join(", ")})`,
+        valores,
+      );
+      return { gravada: true };
+    }
+    const { error } = await (db as ClienteDoCrm)
+      .from("passagens_de_atendimento")
+      .insert(linha as unknown as Record<string, unknown>);
+    if (error) return { gravada: false, erro: error.message.slice(0, 200) };
+    return { gravada: true };
+  } catch (err) {
+    return { gravada: false, erro: err instanceof Error ? err.message.slice(0, 200) : "erro_desconhecido" };
+  }
+}
+
+/**
+ * O CORPO CURTO do aviso da Central — o que uma pessoa lê na lista de avisos.
+ *
+ * ⚠️ Ele NÃO carrega conteúdo da conversa, e isso é a decisão, não um descuido.
+ * A rota da Central lê os avisos com o client de serviço e entrega `body` a
+ * qualquer `agent` da organização — inclusive a quem a política de visibilidade
+ * de conversa não deixaria abrir aquele atendimento. Enquanto o resumo morava
+ * aqui, a Central era uma porta lateral para o texto da conversa. O briefing
+ * mora na passagem, que é lida sob `fn_can_view_conversation`.
+ *
+ * O texto é traduzido AQUI, no servidor, no instante do insert: o corpo do aviso
+ * é DADO (a tela o mostra cru, de propósito — é o que `central-avisos-mostra-o-
+ * aviso-como-veio` guarda), então ele não passa por `t()` na renderização.
+ */
+export function corpoCurtoDoAviso(
+  entrada: { motivoCodigo: MotivoDaPassagem; aviso?: DesfechoDoAvisoDaPassagem | null },
+  traduzirTexto: (texto: string) => string,
+): string {
+  const partes = [traduzirTexto(FRASE_DO_MOTIVO[entrada.motivoCodigo])];
+  const linha = linhaDoAvisoAoCliente(entrada.aviso, traduzirTexto);
+  if (linha !== null) partes.push(linha);
+  partes.push(traduzirTexto("Abra a conversa para ver o contexto."));
+  return partes.join(" · ");
+}
+
+/**
+ * "Essa pessoa sabe que estou vindo?" — a pergunta que muda a primeira frase
+ * que o atendente digita.
+ *
+ * ⚠️ **As duas primeiras frases são CONTRATO** e saem literalmente iguais ao que
+ * existia antes desta entrega: `tests/invariants/handoff-avisa-o-lead.test.ts`
+ * casa `/JÁ FOI avisado/` num turno real. A terceira é NOVA e existe porque o
+ * estado que ela descreve não era distinguido: `queued` (o canal está fora do
+ * ar) contava como "avisado", e o cliente não tinha recebido nada.
+ */
+export function linhaDoAvisoAoCliente(
+  aviso: DesfechoDoAvisoDaPassagem | null | undefined,
+  traduzirTexto: (texto: string) => string,
+): string | null {
+  if (aviso == null) return null;
+  if (aviso.avisado) return traduzirTexto("O cliente JÁ FOI avisado de que uma pessoa vai assumir.");
+  if (aviso.motivoCodigo === "na_fila_canal_fora") {
+    return traduzirTexto("O aviso ficou na fila (o canal está fora do ar) — o cliente ainda não recebeu.");
+  }
+  const porque =
+    aviso.motivoCodigo == null
+      ? traduzirTexto("motivo desconhecido")
+      : traduzirTexto(FRASE_DO_MOTIVO_DO_AVISO[aviso.motivoCodigo]);
+  return `⚠️ ${traduzirTexto("O cliente NÃO foi avisado")} (${porque}) — ${traduzirTexto("ele está esperando sem saber.")}`;
+}
+
+/**
+ * O texto livre que um agente externo mandou como `reason` vira um código do
+ * nosso vocabulário quando corresponde a um; senão, `requested_human`.
+ *
+ * O texto NÃO se perde: ele vai para `content`, que é redigível pela cascata de
+ * LGPD. Antes desta entrega ele ia para `api_audit_log.metadata`, tabela sem
+ * `UPDATE`/`DELETE` para papel nenhum — texto livre de fora, gravado onde
+ * ninguém consegue apagar.
+ */
+export function motivoCodigoDoTexto(texto: string | null | undefined): MotivoDaPassagem {
+  const bruto = (texto ?? "").trim();
+  return (MOTIVOS_DA_PASSAGEM as readonly string[]).includes(bruto)
+    ? (bruto as MotivoDaPassagem)
+    : "requested_human";
+}
