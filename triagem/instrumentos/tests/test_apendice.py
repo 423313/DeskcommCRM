@@ -159,6 +159,14 @@ class Recusa(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "renumerar"):
             apendice.resolver(texto)
 
+    def test_md5_do_vazio_e_nao_medido(self):
+        # A sabotagem A3 mostrou que nenhum caso de `verificar` alcança esta guarda
+        # (bloco sempre tem ao menos o cabeçalho); ela é vigiada aqui, direto.
+        from medicao import NaoMedido, md5_de_bloco
+        with self.assertRaises(NaoMedido):
+            md5_de_bloco("", "vazio")
+        self.assertEqual(len(md5_de_bloco("x", "x")), 32)
+
     def test_linha_de_prosa_com_migration_nao_e_cabecalho(self):
         linhas = ["-- Cópia de `fn_mesclar_contatos` como está em vigor (migration 0222, a última a"]
         self.assertIsNone(apendice.numero_do_cabecalho(linhas, 0))
