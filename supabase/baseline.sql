@@ -27754,7 +27754,7 @@ comment on column public.ad_platform_connections.google_login_customer_id is
 comment on column public.ad_platform_connections.google_conversion_action_id is
   'Qual ação de conversão, dentro de google_customer_id, recebe os envios de venda. Formato: só o id numérico, o resource name completo é montado no transporte.';
 
--- ---- transporte SMTP da instalação: a segunda opção de e-mail (migration 0309) ----
+-- ---- transporte SMTP da instalação: a segunda opção de e-mail (migration 0313) ----
 --
 -- Singleton de escopo de INSTALAÇÃO, no mesmo desenho de `platform_meta_app`
 -- (0257) e `platform_google_oauth` (0201): um servidor SMTP atende os e-mails de
