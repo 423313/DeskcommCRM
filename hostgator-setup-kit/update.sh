@@ -163,6 +163,13 @@ fi
 # COMPOSE, cores, REFUSED_RC), então reler é idempotente: nada é reexecutado
 # com efeito. O que muda é de onde vêm as funções daqui para baixo.
 source "$KIT_DIR/_common.sh"
+# E o aviso de manutenção pelo MESMO motivo, na mesma linha do raciocínio acima:
+# ele também é carregado no topo, também é só definição de função, e o passo que
+# o USA (a pausa do banco) vem depois daqui. Sem esta linha o parágrafo acima
+# valeria para `_common.sh` e seria falso para o kit — um conserto na página de
+# manutenção chegaria uma atualização atrasada, que é exatamente o defeito que a
+# releitura existe para fechar.
+source "$KIT_DIR/manutencao.sh"
 
 [ -n "${DESKCOMM_AGENT_REPORT:-}" ] && eval "${DESKCOMM_AGENT_REPORT_CMD}" codigo
 
