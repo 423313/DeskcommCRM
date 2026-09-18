@@ -1,6 +1,11 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 
+// Mora na RAIZ, e não em tests/, porque vitest.config.ts o importa e o `next
+// build` da imagem Docker typecheca todo `**/*.ts` do contexto — onde `tests/`
+// não entra (.dockerignore). Em tests/ ele derrubou a imagem do app no #1190
+// (TS2307), e só o gate `imagens-ok` viu.
+//
 // Quem é CERCA: o arquivo de teste que só importa builtin do Node, o próprio
 // vitest e os dois parsers que as cercas usam. Ele lê arquivo do repositório
 // (baseline, migrations, MANIFEST, docs, workflows, compose…) e não executa

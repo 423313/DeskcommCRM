@@ -82,7 +82,7 @@ const SO_PR =
   "${{ vars.EXECUTOR_PROPRIO == 'ligado' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'deskcomm-proprio' || 'ubuntu-latest' }}";
 
 const ESPERADO: Record<string, string> = {
-  "ci.yml::verify": TODOS,
+  "ci.yml::verify-parte": TODOS,
   "ci.yml::invariants-majors": TODOS,
   "e2e.yml::e2e-parte": TODOS,
   "perf.yml::build-and-size": TODOS,

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { dirname, join, normalize } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -90,5 +91,47 @@ describe("pr-mexe-na-imagem", () => {
       .filter((p) => !p.startsWith(".github") && p !== "*.md");
     expect(doEspelho.length).toBeGreaterThan(15);
     expect(doEspelho.filter((p) => !ignorados.includes(p))).toEqual([]);
+  });
+
+  // A regra acima pula o build quando o PR só mexe no que o `.dockerignore` tira
+  // do contexto. Isso só é verdade se NADA que entra na imagem importa de lá —
+  // o `next build` typecheca todo `**/*.ts` do contexto, e um import para
+  // `tests/` quebra a imagem (TS2307). Aconteceu no #1190 com vitest.config.ts
+  // importando de tests/: o PR tocava o workflow, construiu, e o gate pegou. Um
+  // PR só de tests/ que mexesse no arquivo importado passaria com o build pulado.
+  // Entra no contexto, mas nenhuma imagem o executa nem o typecheca (tsconfig
+  // exclui `scripts/**`). A lista só encolhe; entrada nova precisa de razão.
+  const SO_FORA_DA_IMAGEM = new Set([
+    // seed das credenciais do E2E: roda no job de e2e, contra o Supabase local.
+    "scripts/seed-e2e-credentials.ts",
+  ]);
+
+  it("nenhum arquivo que entra na imagem importa de pasta que o .dockerignore exclui", () => {
+    const pastasFora = new Set(ignorados.filter((e) => !e.includes("*") && !e.includes(".")));
+    for (const p of ["docs", "tests", "tasks"]) expect(pastasFora.has(p)).toBe(true);
+    const foraDoContexto = (caminho: string) => pastasFora.has(caminho.split("/")[0] ?? "");
+
+    const arquivos = execFileSync("git", ["ls-files", "*.ts", "*.tsx", "*.mts", "*.js", "*.mjs"], {
+      encoding: "utf-8",
+    })
+      .split("\n")
+      .filter((f) => f && !f.startsWith(".") && !foraDoContexto(f) && !f.includes("node_modules/"))
+      // Arquivo de teste co-localizado: o tsconfig.json o exclui (`**/*.test.ts`),
+      // o `next build` não o typecheca, e nada da imagem o executa.
+      .filter((f) => !/\.test\.[cm]?[jt]sx?$/.test(f))
+      .filter((f) => !SO_FORA_DA_IMAGEM.has(f));
+    expect(arquivos.length).toBeGreaterThan(500);
+
+    const IMPORT = /(?:from\s+|import\s*\(\s*|import\s+|require\(\s*)['"]((?:\.{1,2}\/|@\/)[^'"]+)['"]/g;
+    const violacoes: string[] = [];
+    for (const f of arquivos) {
+      const fonte = readFileSync(f, "utf-8");
+      for (const m of fonte.matchAll(IMPORT)) {
+        const esp = m[1] ?? "";
+        const alvo = esp.startsWith("@/") ? esp.slice(2) : normalize(join(dirname(f), esp));
+        if (foraDoContexto(alvo)) violacoes.push(`${f} → ${esp}`);
+      }
+    }
+    expect(violacoes).toEqual([]);
   });
 });

@@ -1,11 +1,11 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
-import { selecionarCercas } from "./tests/cercas/selecao";
+import { selecionarCercas } from "./vitest.cercas";
 
 // As guardas estruturais — o arquivo de teste que só lê o repositório (baseline
 // × cadeia, MANIFEST, varredura de anon, docs, workflows) e não importa código
-// do produto. Quem entra é decidido pelo import, em tests/cercas/selecao.ts.
+// do produto. Quem entra é decidido pelo import, em vitest.cercas.ts.
 const CERCAS = selecionarCercas(__dirname);
 
 export default defineConfig({
