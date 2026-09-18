@@ -28,6 +28,8 @@ import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { zoomAte } from "./utils/canvas-do-fluxo";
+
 const CREDS_PATH = ".e2e-creds.json";
 const ARTIFACTS_DIR = "evidence/followup-cartoes";
 /** A máquina roda saturada por outras sessões (login medido em 15s). */
@@ -71,29 +73,6 @@ async function novoFluxo(page: Page, nome: string): Promise<string> {
   return page.url().split("/").pop()!;
 }
 
-/**
- * Reduz o zoom até a escala ALVO, medindo — nunca contando cliques.
- *
- * As duas specs do canvas clicavam N vezes em "reduzir zoom" para compensar o
- * salto para 200% que o enquadramento automático dava no primeiro nó de um
- * fluxo vazio. Com esse salto consertado (FlowCanvas: fitView só quando o fluxo
- * abre com nós), o mesmo número de cliques leva a escalas pequenas demais — os
- * cartões e as bolinhas de saída encolhem, e o arrasto passa a mirar alvos de
- * poucos pixels. Medir a escala e parar no alvo vale nos dois mundos.
- */
-async function zoomAte(page: Page, alvo: number): Promise<void> {
-  const escala = async (): Promise<number> =>
-    page.locator(".react-flow__viewport").evaluate((el) => {
-      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
-      return m.a || 1;
-    });
-  const zoomOut = page.locator(".react-flow__controls-zoomout");
-  for (let i = 0; i < 10 && (await escala()) > alvo + 0.01; i++) {
-    await zoomOut.click();
-    await page.waitForTimeout(80);
-  }
-}
-
 async function idPorPrefixo(page: Page, prefixo: string): Promise<string[]> {
   const els = await page.locator(`.react-flow__node[data-id^="${prefixo}-"]`).all();
   const ids: string[] = [];
@@ -124,6 +103,10 @@ async function moverNo(page: Page, nodeId: string, x: number, y: number): Promis
   let box = await card.boundingBox();
   if (!box) throw new Error(`nó sem bounding box: ${nodeId}`);
   for (let tentativa = 0; tentativa < 3 && !perto(box); tentativa++) {
+    // Relido a cada volta, então o TypeScript não carrega a garantia da linha
+    // acima para dentro do laço — e a guarda vale mesmo: um nó apagado do DOM
+    // entre duas tentativas não tem caixa.
+    if (!box) throw new Error(`nó sem bounding box: ${nodeId}`);
     const viewport = page.viewportSize();
     const pega = { x: box.x + box.width / 2, y: box.y + 12 };
     if (viewport && (pega.x > viewport.width || pega.y > viewport.height || pega.x < 0 || pega.y < 0)) {

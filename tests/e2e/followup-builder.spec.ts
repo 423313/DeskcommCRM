@@ -13,6 +13,8 @@ import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
 
+import { zoomAte } from "./utils/canvas-do-fluxo";
+
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
 
@@ -57,24 +59,6 @@ let creds = loadCreds();
 test.beforeAll(async () => {
   await afirmarAdminDeTenantPuro(creds.users.admin!.email);
 });
-
-/**
- * Reduz o zoom até a escala ALVO, medindo — nunca contando cliques. Ver o
- * mesmo utilitário em followup-ramos.spec.ts: contar cliques só funcionava
- * enquanto o canvas de um fluxo vazio saltava para 200% no primeiro nó.
- */
-async function zoomAte(page: Page, alvo: number): Promise<void> {
-  const escala = async (): Promise<number> =>
-    page.locator(".react-flow__viewport").evaluate((el) => {
-      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
-      return m.a || 1;
-    });
-  const zoomOut = page.locator(".react-flow__controls-zoomout");
-  for (let i = 0; i < 10 && (await escala()) > alvo + 0.01; i++) {
-    await zoomOut.click();
-    await page.waitForTimeout(80);
-  }
-}
 
 async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
