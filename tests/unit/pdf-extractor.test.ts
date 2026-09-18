@@ -61,9 +61,7 @@ describe("extractPdfText", () => {
     await expect(extractPdfText(fixture("sample-sem-texto.pdf"))).rejects.toBeInstanceOf(
       PdfExtractError,
     );
-    await expect(extractPdfText(fixture("sample-sem-texto.pdf"))).rejects.toThrow(
-      /imagens escaneadas/,
-    );
+    await expect(extractPdfText(fixture("sample-sem-texto.pdf"))).rejects.toThrow(/image-only/);
   });
 
   it("lança PdfExtractError quando o buffer não é PDF", async () => {
