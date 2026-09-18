@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import { DESTINOS_PERMITIDOS, type ExtensionCapability } from "@/lib/extensions/capacidades";
+import { portasLegiveis } from "@/lib/extensions/portas-legiveis";
 import { localize, type ExtensionManifest } from "@/lib/extensions/manifest";
 import type { ExtensionGuideView } from "@/lib/extensions/view";
 import {
@@ -247,7 +248,7 @@ export function ExtensionGuide({
           {displayTitle.fallback || displaySummary.fallback ? <FallbackNotice /> : null}
           <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
             <ListChecks size={16} weight="duotone" aria-hidden className="text-accent" />
-            {t("Abre Tarefas; não lê seus dados.")}
+            {t(portasLegiveis(guide.manifest.permissions))}
           </div>
         </div>
       </header>
