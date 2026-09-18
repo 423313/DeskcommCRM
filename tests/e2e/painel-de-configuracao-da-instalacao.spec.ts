@@ -42,14 +42,24 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { lerCreds, loginComoAdmin, loginComoDono } from "./helpers/login-admin";
+import { afirmarDonoDoServidor } from "./utils/precondicao";
 
 const CHAVE_DE_TESTE = "re_teste_do_painel_9f3a2b";
 
 test.describe("Painel de configuração da instalação", () => {
+  // ⚠️ As partes do job `e2e` compartilham banco SEM reset, e quem promove o
+  // `e2e-dono` a `platform_admins` é `seed-e2e-system-update` — que o CI NÃO
+  // roda como passo. Sem esta afirmação, esta bateria passaria ou reprovaria
+  // conforme a spec que rodou antes dela, que é medir ordem de execução em vez
+  // de produto.
+  test.beforeAll(async () => {
+    await afirmarDonoDoServidor(lerCreds().users.dono!.email);
+  });
+
   test("a porta do modo administrador é achável sem digitar URL", async ({ page }) => {
     const creds = lerCreds();
-    await loginComoAdmin(page, creds);
+    await loginComoDono(page, creds);
 
     // Caminho do usuário: menu do próprio usuário, no canto. Nada de goto().
     await page.getByRole("button", { name: /menu do usuário/i }).click();
@@ -64,9 +74,32 @@ test.describe("Painel de configuração da instalação", () => {
     await expect(page).toHaveURL(/\/admin/);
   });
 
-  test("a tela diz o que falta em vez de fingir que está pronto", async ({ page }) => {
+  test("administrador de ORGANIZAÇÃO não vê a porta — e nem entra digitando a URL", async ({
+    page,
+  }) => {
+    // ⚠️ O CASO QUE PROVA O GATE, e ele nasceu de um erro meu: a primeira versão
+    // desta bateria logava como `admin` e concluía que a porta "não aparecia".
+    // Ela NÃO deve aparecer para ele. `admin` é administrador de UMA
+    // organização; `dono` é o administrador da INSTALAÇÃO. O painel mexe nas
+    // credenciais que valem para TODOS os clientes — num revendedor, dar isso ao
+    // admin de um cliente entregaria a ele as credenciais dos outros.
     const creds = lerCreds();
     await loginComoAdmin(page, creds);
+
+    await page.getByRole("button", { name: /menu do usuário/i }).click();
+    await expect(
+      page.getByTestId("porta-modo-administrador"),
+      "a porta do modo administrador VAZOU para um admin de organização",
+    ).toHaveCount(0);
+
+    // E a segunda barreira: digitar a URL também não entra.
+    await page.goto("/admin/configuracao");
+    await expect(page).not.toHaveURL(/\/admin\/configuracao/);
+  });
+
+  test("a tela diz o que falta em vez de fingir que está pronto", async ({ page }) => {
+    const creds = lerCreds();
+    await loginComoDono(page, creds);
     await page.goto("/admin/configuracao");
 
     await expect(page.getByRole("heading", { name: /configuração da instalação/i })).toBeVisible();
@@ -82,7 +115,7 @@ test.describe("Painel de configuração da instalação", () => {
 
   test("configurar pela tela vale na hora, e o segredo não volta ao navegador", async ({ page }) => {
     const creds = lerCreds();
-    await loginComoAdmin(page, creds);
+    await loginComoDono(page, creds);
     await page.goto("/admin/configuracao");
 
     const campo = page.locator("#config-RESEND_API_KEY");
@@ -113,7 +146,7 @@ test.describe("Painel de configuração da instalação", () => {
 
   test("o que não dá para editar não oferece campo — mostra o motivo", async ({ page }) => {
     const creds = lerCreds();
-    await loginComoAdmin(page, creds);
+    await loginComoDono(page, creds);
     await page.goto("/admin/configuracao");
 
     // Chave de partida: aparece (a pessoa precisa saber que existe), mas sem
@@ -131,7 +164,7 @@ test.describe("Painel de configuração da instalação", () => {
 
   test("voltar ao padrão devolve a palavra ao arquivo de instalação", async ({ page }) => {
     const creds = lerCreds();
-    await loginComoAdmin(page, creds);
+    await loginComoDono(page, creds);
     await page.goto("/admin/configuracao");
 
     const voltar = page.getByRole("button", { name: /voltar ao padrão/i }).first();
@@ -145,7 +178,7 @@ test.describe("Painel de configuração da instalação", () => {
 
   test("a tela é usável: sem rolagem lateral, sem botão fora da vista", async ({ page }) => {
     const creds = lerCreds();
-    await loginComoAdmin(page, creds);
+    await loginComoDono(page, creds);
     await page.goto("/admin/configuracao");
     await page.setViewportSize({ width: 390, height: 844 }); // celular comum
 
