@@ -145,6 +145,20 @@ git -C "$d" rm -q "$INV"
 r=$(rodar "$d" freeze-invariants.sh)
 assert_exit "$(exit_de "$r")" 1 "D: deletar invariante que a main tem SEGUE bloqueado"
 
+# CASO D2 · a branch deleta um invariante que ELA MESMA criou (a main não o tem).
+# Este caso existe porque a sabotagem o exigiu: removida a condição `[ -n "$encenado" ]`
+# do hook, o D acima continua vermelho (o blob da main é não-vazio, os lados diferem) e
+# NADA acusa a perda. Aqui os dois lados são vazios, comparariam IGUAIS, e o caminho
+# sairia da lista em silêncio — é o único caso que essa condição sustenta.
+d2="$TMP/d2"; preparar "$d2" "$principal" "$BASE_DA_BRANCH"
+printf 'test("invariante que a branch criou", () => {});\n' > "$d2/tests/invariants/so-da-branch.test.ts"
+commitar "$d2" "a branch cria um invariante proprio"
+if [ -z "$(git -C "$d2" rev-parse -q --verify 'origin/main:tests/invariants/so-da-branch.test.ts')" ]; then ok "D2: o invariante NÃO está na main (a premissa do caso)"
+else falha "D2: o invariante NÃO está na main" "a main o tem: o caso não mede o que devia"; fi
+git -C "$d2" rm -q tests/invariants/so-da-branch.test.ts
+r=$(rodar "$d2" freeze-invariants.sh)
+assert_exit "$(exit_de "$r")" 1 "D2: deletar invariante que a PRÓPRIA branch criou SEGUE bloqueado"
+
 # CASO ADD · invariante NOVO é permitido (regra declarada no cabeçalho do hook)
 add="$TMP/add"; preparar "$add" "$principal" "$BASE_DA_BRANCH"
 printf 'test("invariante novo", () => {});\n' > "$add/tests/invariants/novinho.test.ts"
@@ -244,10 +258,18 @@ assert_exit "$(exit_de "$r")" 1 "F-CRIA-PRÓPRIA: criar o plano na branch SEGUE 
 
 # CASO F-BIG+ · merge GRANDE: sem pathspec a sonda de entrada morre de SIGPIPE e o hook
 # sai 0 sem validar nada. Com ela, a edição própria é pega no MESMO estado.
+#
+# O NOME do diretório de enchimento é parte do caso, não estética. `git diff --cached`
+# imprime em ordem alfabética, e o SIGPIPE só acontece se o `grep -q` casar CEDO e
+# fechar o pipe com o git ainda escrevendo. Medido: com o enchimento em `enchimento/`
+# (antes de `plan/`) o match cai na posição 6002 de 6003, o grep lê o stream inteiro,
+# não há SIGPIPE, e o caso passava PELO MOTIVO ERRADO — sabotar o pathspec não o
+# deixava vermelho. Com `zzz-enchimento/` (depois de `plan/`) o match é o nome 1 e o
+# `exit 141` aparece. É por isso que a premissa abaixo mede a POSIÇÃO, não só o volume.
 fbig="$TMP/fbig"; preparar "$fbig" "$principal" "$BASE_DA_BRANCH"
 git -C "$fbig" merge --no-commit --no-ff origin/main >/dev/null 2>&1 || true
-mkdir -p "$fbig/enchimento"
-python3 - "$fbig/enchimento" <<'PY'
+mkdir -p "$fbig/zzz-enchimento"
+python3 - "$fbig/zzz-enchimento" <<'PY'
 import sys, pathlib
 d = pathlib.Path(sys.argv[1])
 for i in range(6000):
@@ -260,8 +282,9 @@ json.dump(d, open(p, "w"), indent=2)
 PY
 git -C "$fbig" add -A
 encenados=$(git -C "$fbig" diff --cached --name-only | wc -l | tr -d ' ')
-if [ "$encenados" -gt 3000 ]; then ok "F-BIG+: o índice tem $encenados arquivos encenados (a premissa do caso)"
-else falha "F-BIG+: o índice tem >3000 encenados" "veio $encenados — o caso não estressa o pipe"; fi
+posicao=$(git -C "$fbig" diff --cached --name-only | grep -n -x "$FEAT" | cut -d: -f1)
+if [ "$encenados" -gt 3000 ] && [ "${posicao:-0}" -lt 10 ]; then ok "F-BIG+: $encenados encenados e o match na posição $posicao (as DUAS premissas: volume e match cedo)"
+else falha "F-BIG+: volume >3000 e match na posição <10" "encenados=$encenados posicao=${posicao:-nenhuma} — o caso não estressa o pipe"; fi
 r=$(rodar "$fbig" validate-features.sh)
 assert_exit "$(exit_de "$r")" 1 "F-BIG+: em merge grande o hook AINDA valida — a sonda não falha aberta"
 

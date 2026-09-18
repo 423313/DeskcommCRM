@@ -41,7 +41,12 @@ violations=$(git diff --cached --name-status \
 #
 # `[ -n "$encenado" ]` preserva a acusação em DELETE (não há blob no índice) —
 # sem essa metade, apagar um invariante que a main tem passaria batido.
-# Sem `origin/main` (fork, clone raso) nada é excluído e a guarda segue inteira.
+# O `git rev-parse --verify origin/main` do `if` é guarda de intenção e economia de
+# duas chamadas por arquivo, NÃO o que sustenta o fork: medido num clone sem a ref,
+# com e sem ele, os três estados (modificar, deletar o da main, deletar o próprio)
+# dão exit 1 igual. Quem faz a guarda falhar FECHADA sem a ref é o `[ -n "$encenado" ]`
+# acima — sem a ref, `na_main` é sempre vazio, então M/R diferem e os deletes são
+# pegos por ele. Vale escrever porque o palpite natural é creditar o fork ao `if`.
 if [ -n "$violations" ] && git rev-parse --verify --quiet origin/main >/dev/null; then
   violations=$(while IFS= read -r linha; do
     [ -z "$linha" ] && continue
