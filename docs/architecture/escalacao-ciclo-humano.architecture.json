@@ -400,7 +400,9 @@
       "col": 2,
       "type": "frontend",
       "label": "Configurações › Distribuição de atendimento",
-      "sublabel": "settings.routing.handoff_return_after_minutes — null = IA-06 (nunca)",
+      "sublabel": "settings.routing.handoff_return_after_minutes — null = IA-06 (nunca)"
+    },
+    {
       "id": "presenca_emissor",
       "lane": "humano",
       "col": 4,
@@ -836,9 +838,6 @@
     },
     {
       "id": "e69",
-      "from": "devolucaoPrazo",
-      "to": "retomada",
-      "label": "origem automática — o rastro diz 'após N min', não 'alguém clicou'",
       "from": "presenca_emissor",
       "to": "presenca_rota",
       "label": "batida a cada 60 s"
