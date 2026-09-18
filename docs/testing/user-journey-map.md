@@ -933,11 +933,11 @@ ação `send_ai_message`, retomada manual (`lib/escalacao/retomada.ts`).
 
 | # | Caso | Expectativa | Cobertura |
 |---|---|---|---|
-| J20.1 | Cliente atual manda "boa noite" (gate allowlist, contato não autorizado) | IA NÃO responde; conversa fica humana | **UNIT** — `gate.test.ts` "teste 1/3/4/9", `drain.test.ts` "gate allowlist + contato NÃO autorizado" |
-| J20.2 | Cliente atual com conversa aberta, não autorizado | IA NÃO responde (estado da conversa não pesa) | **UNIT** — `gate.test.ts` "teste 2" |
-| J20.3 | Contato pessoal manda mensagem | IA NÃO responde | **UNIT** — coberto por J20.1 (mesma regra) |
-| J20.4 | Fornecedor manda proposta comercial | IA NÃO responde automaticamente | **UNIT** — coberto por J20.1 |
-| J20.5 | Conversa antiga de 3 dias; publicar agente | publicar NÃO dispara nada (`ai_agent.published` não tem consumidor) + o drain pula evento superado por inbound mais recente | **UNIT** — `drain.test.ts` "evento superado por inbound mais recente"; **CÓDIGO** — grep: zero consumidor de `ai_agent.published` |
+| J27.1 | Cliente atual manda "boa noite" (gate allowlist, contato não autorizado) | IA NÃO responde; conversa fica humana | **UNIT** — `gate.test.ts` "teste 1/3/4/9", `drain.test.ts` "gate allowlist + contato NÃO autorizado" |
+| J27.2 | Cliente atual com conversa aberta, não autorizado | IA NÃO responde (estado da conversa não pesa) | **UNIT** — `gate.test.ts` "teste 2" |
+| J27.3 | Contato pessoal manda mensagem | IA NÃO responde | **UNIT** — coberto por J20.1 (mesma regra) |
+| J27.4 | Fornecedor manda proposta comercial | IA NÃO responde automaticamente | **UNIT** — coberto por J20.1 |
+| J27.5 | Conversa antiga de 3 dias; publicar agente | publicar NÃO dispara nada (`ai_agent.published` não tem consumidor) + o drain pula evento superado por inbound mais recente | **UNIT** — `drain.test.ts` "evento superado por inbound mais recente"; **CÓDIGO** — grep: zero consumidor de `ai_agent.published` |
 | J20.6 | Nova submissão Respondi → o contato fica elegível | IA pode responder o retorno do lead | **UNIT** — webhook seta `ai_authorized_reason='respondi:<form>:<sub>'`; **E2E** — `tests/e2e/j20-elegibilidade-respondi.spec.ts` (submissão real na URL da fonte → `ai_authorized_at` carimbado → o retorno pelo WhatsApp gera `job_queue` `inbound_turn`; CONTROLE: número sem Respondi no mesmo canal → evento `done` sem job) |
 | J20.7 | Segundo turno do Respondi (dias depois, conversa viva) | IA continua atendendo (keep-alive renova o carimbo) | **UNIT** — `gate.test.ts` "teste 6/7"; keep-alive em `inbound-turn.ts` |
 | J20.8 | Nova mensagem de campanha com identificador autorizado | IA pode assumir | **UNIT** — `campanha.test.ts` "teste 8" |
@@ -2514,7 +2514,7 @@ grupo trouxe.
 **A seção "Lote 12 · G2" acima deixa de estar PENDENTE POR EXECUÇÃO**: os três
 casos dela (L12.G2.1, G2.2 e G2.3) estão provados nas linhas acima.
 
-## J20 — A ficha da cliente, a comissão e o cartão `[P1]` (fork financeiro)
+## J27 — A ficha da cliente, a comissão e o cartão `[P1]` (fork financeiro)
 
 Contexto: módulo financeiro do fork (migrations 9011–9014). Prova em
 `.superpowers/evidence/prova-ficha-e-comissoes.mjs`, contra o Supabase local com um
@@ -2522,11 +2522,11 @@ Contexto: módulo financeiro do fork (migrations 9011–9014). Prova em
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J20.1 | Aba **Ficha** no contato com mais comandas | abre e mostra visitas, total gasto, classificação, cartão e histórico | PASS |
-| J20.2 | O número da tela contra o banco | `99 visitas` e `R$ 11.029,00` **iguais** a `count(*)`/`sum(total_cents)` das comandas finalizadas não estornadas | PASS |
-| J20.3 | Tela de **Comissões** sem nenhuma comissão | estado vazio que ENSINA: manda cadastrar regras em Configurações › Financeiro e explica que falta profissional no item | PASS |
-| J20.4 | Cadastrar profissional em Configurações › Financeiro | "Scarlet" aparece na lista logo depois | PASS |
-| J20.5 | Seletor de profissional no item da comanda | "Scarlet" entre as opções, ao lado de "Sem comissão" | PASS |
+| J27.1 | Aba **Ficha** no contato com mais comandas | abre e mostra visitas, total gasto, classificação, cartão e histórico | PASS |
+| J27.2 | O número da tela contra o banco | `99 visitas` e `R$ 11.029,00` **iguais** a `count(*)`/`sum(total_cents)` das comandas finalizadas não estornadas | PASS |
+| J27.3 | Tela de **Comissões** sem nenhuma comissão | estado vazio que ENSINA: manda cadastrar regras em Configurações › Financeiro e explica que falta profissional no item | PASS |
+| J27.4 | Cadastrar profissional em Configurações › Financeiro | "Scarlet" aparece na lista logo depois | PASS |
+| J27.5 | Seletor de profissional no item da comanda | "Scarlet" entre as opções, ao lado de "Sem comissão" | PASS |
 
 Evidência: `.superpowers/evidence/{ficha-01,comissoes-01,profissionais-01,comanda-profissional-01}.png`.
 
@@ -2544,8 +2544,18 @@ Evidência: `.superpowers/evidence/{ficha-01,comissoes-01,profissionais-01,coman
   na primeira comanda em produção. Corrigido com a mesma chave de transação que a função
   da agenda usa.
 
-**O que esta jornada NÃO cobre, e é preciso dizer:** o ciclo de comissão de ponta a ponta
-pela TELA (criar comanda com profissional → finalizar → fechar → ver o lançamento de saída)
-foi provado em SQL, não em navegador — a base local não tinha regra de comissão cadastrada
-no momento da prova. O invariante `fork-financeiro-rls.test.ts` cobre o comportamento; a
-tela do fechamento continua sem prova visual.
+| J27.6 | **O laço da comissão, pela tela** | "a receber" → Fechar e pagar → UM lançamento de saída, com valor igual à soma das comissões que ele paga, aparecendo no Faturamento | PASS |
+
+Prova do laço: `.superpowers/evidence/prova-ciclo-de-comissao.mjs`, com os dados que
+`preparar-teste-local.mjs` semeia (duas profissionais reais, regra de 55% — a do sistema
+anterior — e três comandas). Evidência: `ciclo-0{1,2,3}-*.png`.
+
+**Um achado do próprio teste:** as duas contas financeiras estavam INATIVAS na cópia local,
+resíduo de uma prova anterior. Sem conta ativa o seletor de "de qual conta?" fica vazio e
+**não há como fechar comissão nenhuma** — a tela não explica isso, só não oferece opção.
+Vale um estado vazio que ensine, na mesma linha do resto do módulo; está anotado como
+pendência, não foi feito.
+
+**O que esta jornada ainda NÃO cobre:** o resgate de prêmio pela tela. Exige dez selos, e
+enchê-los na cópia local sujaria o histórico real da cliente. O comportamento está coberto
+por `tests/invariants/fork-fidelidade.test.ts`.

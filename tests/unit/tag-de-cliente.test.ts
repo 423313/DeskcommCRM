@@ -76,6 +76,13 @@ describe("a etiqueta de cliente", () => {
     // o `update.sh` do clone aplicaria a guarda sem o anúncio.
     expect(baseline).toContain("set_config('deskcomm.cliente_pela_agenda', 'on', true)");
     const constantesDoBaseline = [...baseline.matchAll(CONSTANTE)].map((m) => m[1]);
-    expect(constantesDoBaseline).toEqual([TAG_DE_CLIENTE, TAG_DE_CLIENTE]);
+    // TODAS iguais, e ao menos as duas da 0262 — a contagem exata não serve de
+    // régua aqui: o apêndice do fork acrescenta a sua em
+    // `fn_cliente_pela_comanda` (9014), porque no fork a comanda finalizada
+    // também etiqueta. O que o teste protege é a DIVERGÊNCIA de valor, que é o
+    // defeito real (um filtro que não acha ninguém, sem erro para investigar);
+    // contar declarações só media quantas funções existem.
+    expect(constantesDoBaseline.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(constantesDoBaseline)).toEqual(new Set([TAG_DE_CLIENTE]));
   });
 });

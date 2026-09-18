@@ -9376,6 +9376,7 @@ export const DICIONARIO: Traducoes = {
   "Valor do item": { es: "Valor del ítem" },
   "Visitas": { es: "Visitas" },
   "volta a cada": { es: "vuelve cada" },
+  "Quanto entrou, de que forma, e o que saiu do caixa.": { es: "Cuánto entró, de qué forma, y qué salió de la caja." },
 };
 
 /**
