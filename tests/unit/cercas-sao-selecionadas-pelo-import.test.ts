@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ehCerca, selecionarCercas } from "../cercas/selecao";
+import { ehCerca, selecionarCercas } from "../../vitest.cercas";
 
 // `pnpm cercas` só antecipa o vermelho se a seleção pegar as guardas que de fato
 // reprovaram PR no fim da suíte longa. As três abaixo são as medidas em
