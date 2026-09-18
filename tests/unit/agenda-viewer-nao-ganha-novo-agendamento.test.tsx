@@ -143,6 +143,9 @@ function montar({
         faltaNoGoogle={[]}
         tiposIniciais={tipos}
         agendamentosIniciais={[]}
+        // #896: a tela passou a exigir quem está logado (o rótulo "Você" é de
+        // quem lê). Este teste mede o piso de escrita, que não depende do id.
+        usuarioId="u-atendente"
         podeMarcar={podeMarcar}
       />
     </QueryClientProvider>,

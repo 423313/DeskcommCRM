@@ -6791,6 +6791,16 @@ export const DICIONARIO: Traducoes = {
   "Horários livres de": { es: "Horarios libres de" },
   "Você ainda não publicou seus horários de atendimento.": { es: "Todavía no publicaste tus horarios de atención." },
   "Sem eles ninguém consegue marcar clicando na grade — nem você, nem o agente.": { es: "Sin ellos nadie puede agendar haciendo clic en la grilla — ni tú, ni el agente." },
+  // #896: a jornada de atendimento que ainda não foi publicada — DOIS textos, um
+  // com ponto final (painel da grade) e outro sem (painel de marcação), e o
+  // "Sem eles..." da tela de quem atende sem poder de gerente.
+  "A jornada de atendimento ainda não foi publicada.": { es: "La jornada de atención todavía no fue publicada." },
+  "A jornada de atendimento ainda não foi publicada": { es: "La jornada de atención todavía no fue publicada" },
+  // #1107 (item 5): a frase da folga chega à tela por LITERAL
+  // (PainelDeMarcacao.tsx) — `t(variável)` escapava do guarda que varre
+  // `t("literal")`, e a frase ficava sem cobrança em espanhol.
+  "Este dia está fora da jornada publicada (folga ou dia sem expediente).": { es: "Este día está fuera de la jornada publicada (día libre o sin horario de atención)." },
+  "Sem eles ninguém consegue marcar — nem quem atende, nem o agente.": { es: "Sin ellos nadie puede agendar — ni quien atiende, ni el agente." },
   "Não consegui carregar os horários.": { es: "No pude cargar los horarios." },
   "Os blocos ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista.": { es: "Los bloques quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista." },
   "Nenhum horário livre neste período.": { es: "Ningún horario libre en este período." },
