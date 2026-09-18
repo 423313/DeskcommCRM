@@ -101,11 +101,15 @@ fi
 if command -v timeout >/dev/null 2>&1; then
   ok "\`timeout\` existe ($(command -v timeout))"
 else
-  git -C "$RAIZ" grep -l -E '(^|[;&|(]|then|do)[[:space:]]*timeout[[:space:]]+[0-9]' -- '*.sh' 'loop/hooks/*' \
-    > "$TMP/usa_timeout" 2>/dev/null
+  PADRAO='(^|[;&|(]|then|do)[[:space:]]*timeout[[:space:]]+[0-9]'
+  git -C "$RAIZ" grep -l -E "$PADRAO" -- '*.sh' 'loop/hooks/*' ':!triagem/instrumentos/**' > "$TMP/usa_timeout" 2>/dev/null
   rc=$?
   n=$(wc -l < "$TMP/usa_timeout" | tr -d ' ')
-  if [ "$rc" -gt 1 ]; then
+  # Controle no MESMO padrão: ele tem de casar uma chamada sabida. Sem isto, "0
+  # scripts" lê igual para "ninguém usa" e para "o padrão está quebrado".
+  if ! printf 'if x; then timeout 5 docker ps; fi\n' | grep -qE "$PADRAO"; then
+    aviso "\`timeout\` AUSENTE; quem depende dele: NÃO MEDIDO (o padrão de busca não casa nem o controle)"
+  elif [ "$rc" -gt 1 ]; then
     aviso "\`timeout\` AUSENTE; quem depende dele: NÃO MEDIDO (git grep saiu $rc)"
   else
     aviso "\`timeout\` AUSENTE: \`timeout N cmd\` vira exit 127, e um \`2>&1 | grep\` o lê como 'não achei erro'"
