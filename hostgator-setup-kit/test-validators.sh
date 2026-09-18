@@ -9,6 +9,11 @@
 #
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
+# Um GIT_DIR herdado (suíte rodada de dentro de um hook ou de um `rebase --exec`)
+# manda por cima de todo `cd`/`git -C` dos repositórios descartáveis abaixo, e a
+# escrita cai no repositório de quem roda. Zerar o ambiente local do git é o
+# idioma canônico do próprio git para isso.
+unset $(git rev-parse --local-env-vars)
 
 # O _common.sh vem antes porque é dele que saem `nome_do_projeto_compose`,
 # `veredito_rede_do_proxy` e `garantir_rede_do_proxy` — o install.sh e o update.sh
@@ -2008,8 +2013,7 @@ echo "packaging: a instalação resolve a última versão publicada"
   git clone --quiet "$repo_falso/origem.git" "$trabalho/w" 2>/dev/null
   (
     cd "$trabalho/w" || exit 1
-    git config user.email t@t; git config user.name t
-    echo x > a; git add -A; git commit --quiet -m init
+    echo x > a; git add -A; git -c user.email=t@t -c user.name=t commit --quiet -m init
     for t in v1.0.0 v1.9.0 v1.10.0 v1.2.0; do git tag "$t"; done
     git push --quiet origin HEAD --tags 2>/dev/null
   )
@@ -2050,8 +2054,7 @@ TMP_PIN="$(mktemp -d)"
     cd "$TMP_PIN" || exit 1
     git clone --quiet "$origem" w 2>/dev/null
     cd w || exit 1
-    git config user.email t@t; git config user.name t
-    echo x > a; git add -A; git commit --quiet -m init
+    echo x > a; git add -A; git -c user.email=t@t -c user.name=t commit --quiet -m init
     for t in v1.0.0 v1.9.0 v1.10.0; do git tag "$t"; done
     git push --quiet origin HEAD --tags 2>/dev/null
   )
