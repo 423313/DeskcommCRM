@@ -385,6 +385,38 @@
       "type": "service",
       "label": "lib/escalacao/atendimento-manual.ts",
       "sublabel": "pausarIaPorAtendimentoManual — pessoa respondeu por fora do CRM (pausa COM PRAZO)"
+    },
+    {
+      "id": "avisoSuporteMotor",
+      "lane": "motor",
+      "col": 4,
+      "type": "lib",
+      "label": "lib/escalacao/aviso-ao-suporte.ts",
+      "sublabel": "consome ai.case_opened/closed — nunca devolve error, nunca dorme"
+    },
+    {
+      "id": "avisoSuporteTexto",
+      "lane": "regra",
+      "col": 4,
+      "type": "lib",
+      "label": "lib/escalacao/texto-do-aviso.ts",
+      "sublabel": "O QUE A EQUIPE LÊ — puro, sem telefone e sem CPF do cliente"
+    },
+    {
+      "id": "avisoSuporteRegistro",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "config_aviso_de_caso + entregas_de_aviso_de_caso",
+      "sublabel": "a unique (org, caso, destino) é a idempotência; o texto nunca é guardado"
+    },
+    {
+      "id": "numeroInterno",
+      "lane": "borda",
+      "col": 5,
+      "type": "lib",
+      "label": "lib/escalacao/numero-interno-de-aviso.ts",
+      "sublabel": "o número do plantão não vira contato, conversa nem despacho"
     }
   ],
   "edges": [
@@ -783,6 +815,54 @@
       "from": "retomada",
       "to": "atendimentoManual",
       "label": "'Devolver ao automático' desfaz esta pausa ANTES da hora (solta a TRAVA 2, a mesma) — sem clique nenhum, o prazo vence e a IA volta sozinha"
+    },
+    {
+      "id": "e67",
+      "from": "casos",
+      "to": "avisoSuporteMotor",
+      "label": "ai.case_opened / ai.case_closed pelo event_log"
+    },
+    {
+      "id": "e68",
+      "from": "avisoSuporteMotor",
+      "to": "avisoSuporteRegistro",
+      "label": "reivindica a entrega ANTES de tocar a rede"
+    },
+    {
+      "id": "e69",
+      "from": "avisoSuporteMotor",
+      "to": "avisoSuporteTexto",
+      "label": "monta o que a equipe lê no WhatsApp"
+    },
+    {
+      "id": "e70",
+      "from": "avisoSuporteMotor",
+      "to": "central",
+      "label": "falha definitiva vira aviso que leva AO CASO"
+    },
+    {
+      "id": "e71",
+      "from": "avisoSuporteMotor",
+      "to": "casos",
+      "label": "sucesso grava alert_sent na linha do tempo"
+    },
+    {
+      "id": "e72",
+      "from": "avisoSuporteTexto",
+      "to": "chamados",
+      "label": "o único link do aviso: abrir o atendimento"
+    },
+    {
+      "id": "e73",
+      "from": "avisoSuporteRegistro",
+      "to": "numeroInterno",
+      "label": "o número configurado vira INTERNO, mesmo com o aviso pausado"
+    },
+    {
+      "id": "e74",
+      "from": "numeroInterno",
+      "to": "ingestSaida",
+      "label": "corta antes do contato — inbound e eco do próprio envio"
     }
   ],
   "cards": [

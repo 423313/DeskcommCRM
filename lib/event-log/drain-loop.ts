@@ -3,8 +3,9 @@
  *
  * ─── Por que ele existe ──────────────────────────────────────────────────────
  *
- * Os 12 handlers de `register-handlers.ts` (mídia, branding, follow-up…) só
- * tinham UM acionador: o cron `app/api/v1/cron/event-log-drain`, agendado
+ * Os handlers de `register-handlers.ts` (mídia, branding, follow-up, aviso ao
+ * suporte…) só tinham UM acionador: o cron `app/api/v1/cron/event-log-drain`,
+ * agendado
  * `* * * * *` em `docker/scheduler/entrypoint.sh`. Um tick por minuto.
  *
  * Isso é caro quando a cadeia tem mais de um salto. Medido nesta VPS em

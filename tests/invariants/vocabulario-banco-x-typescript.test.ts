@@ -332,6 +332,35 @@ const PARES: Array<{
     simbolo: "MOTIVOS_DO_AVISO",
   },
   {
+    tabela: "entregas_de_aviso_de_caso",
+    coluna: "status",
+    // lib/escalacao/vocabulario-do-aviso.ts → STATUS_DA_ENTREGA_DE_AVISO (tupla
+    // `as const`, como CASE_CHAT_AUTHOR_KINDS). Nasce no MESMO commit da
+    // migration 0292 — a lição desta lista, e a razão de ela existir.
+    //
+    // Um status novo só no CHECK viraria linha que a tela de avisos não sabe
+    // rotular; só no TypeScript viraria `23514` no UPDATE que o handler faz
+    // DEPOIS de a mensagem já ter saído — o pior instante possível, porque ali
+    // a entrega fica `pendente` com o aviso no celular de alguém, e a rodada
+    // seguinte a reenviaria.
+    arquivo: "lib/escalacao/vocabulario-do-aviso.ts",
+    simbolo: "STATUS_DA_ENTREGA_DE_AVISO",
+  },
+  {
+    tabela: "entregas_de_aviso_de_caso",
+    coluna: "erro_codigo",
+    // lib/escalacao/vocabulario-do-aviso.ts → ERROS_DA_ENTREGA_DE_AVISO. A
+    // coluna é `null`-ável (ausência = não houve erro) e o CHECK tem a forma
+    // `col IS NULL OR col = ANY (...)`, que `literaisSeDefine` reconhece como
+    // DEFINIDORA — a permissão de nulo não descaracteriza o vocabulário.
+    //
+    // `FRASE_DO_ERRO_DO_AVISO` é `satisfies Record<ErroDaEntregaDeAviso,string>`
+    // no mesmo arquivo: um código sem frase para de compilar, em vez de virar
+    // identificador cru no rosto de quem opera.
+    arquivo: "lib/escalacao/vocabulario-do-aviso.ts",
+    simbolo: "ERROS_DA_ENTREGA_DE_AVISO",
+  },
+  {
     tabela: "team_invites",
     coluna: "role",
     // lib/schemas/team.ts → ROLES (tupla `as const`). O `z.enum(ROLES)` das

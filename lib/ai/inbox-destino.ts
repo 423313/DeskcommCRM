@@ -70,6 +70,11 @@ export const POLITICAS_DE_AVISO = {
   // cai em "sem destino" com a orientação abaixo: o telefone está no corpo do
   // aviso, escrito pelo worker.
   voice_call_missed: { refs: ["contact"], orientacao: "Retorne a ligação quando puder — quem ligou não foi atendido." },
+  // Leva AO CASO (`REFERENCIAS_DE_AVISO.agent_case` já aponta para
+  // `/app/ai/cases?caso=<id>`), e não a uma tela genérica de conexões: o que
+  // está pendente é o ATENDIMENTO, e quem abre o aviso precisa cair nele. A
+  // conferência da conexão é o segundo passo, e vai na orientação.
+  aviso_de_caso_nao_entregue: { refs: ["agent_case"], orientacao: "O aviso deste atendimento não saiu no WhatsApp. Abra o atendimento — ele continua esperando — e confira a conexão de avisos em Configurações." },
   other: { refs: ["lead", "channel_session", "appointment", "ai_agent"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 
