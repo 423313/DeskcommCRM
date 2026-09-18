@@ -83,7 +83,7 @@ export function FollowupWindowEditor({ value, onChange, disabled }: Props) {
           disabled={disabled}
         />
         <Label htmlFor="followup_window_enabled">
-          {t("Follow-up")} · {t("Só atender em horário de funcionamento")}
+          {t("Só enviar follow-up nestes horários")}
         </Label>
       </div>
 
