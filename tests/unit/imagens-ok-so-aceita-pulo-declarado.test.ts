@@ -59,7 +59,7 @@ for EVENTO in pull_request push; do
 done
 true`;
   return execFileSync("bash", ["-c", programa], {
-    env: { PATH: process.env.PATH ?? "", SCRIPT_DO_JOB: SCRIPT },
+    env: { ...process.env, SCRIPT_DO_JOB: SCRIPT },
     encoding: "utf-8",
   })
     .split("\n")
