@@ -11825,7 +11825,7 @@ begin
        and rel.relname = 'followup_enrollments'
        and con.contype = 'c'
        and pg_get_constraintdef(con.oid) like '%paused_handoff%'
-       and pg_get_constraintdef(con.oid) not like '%paused_manual%'
+       and pg_get_constraintdef(con.oid) not like '%dormente%'
   loop
     execute format('alter table public.followup_enrollments drop constraint %I', c.conname);
   end loop;
@@ -11834,14 +11834,14 @@ end $$;
 do $$ begin
   alter table public.followup_enrollments
     add constraint followup_enrollments_status_valido
-    check (status in ('active','waiting_reply','paused_handoff','paused_manual','completed','cancelled','dead'));
+    check (status in ('active','waiting_reply','dormente','paused_handoff','paused_manual','completed','cancelled','dead'));
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table public.followup_enrollments
     add constraint followup_enrollments_relogio_coerente
     check (
-      (status in ('active','waiting_reply') and next_eval_at is not null)
+      (status in ('active','waiting_reply','dormente') and next_eval_at is not null)
       or (status in ('paused_handoff','paused_manual','completed','cancelled','dead'))
     );
 exception when duplicate_object then null; end $$;
@@ -21787,7 +21787,11 @@ begin
  delete from public.messages where organization_id=p_org and conversation_id=d.conversation_id and sent_via='external_device' and external_id=any(p_echo_ids) and id<>p_message;
  update public.messages set status='sent',external_id=p_external,ack=0 where organization_id=p_org and id=p_message returning * into m;
  update public.send_ledger set status='accepted',crm_message_id=p_message,updated_at=now(),last_error=null where organization_id=p_org and job_id=p_job and seq=1 and id::text=m.metadata->>'idempotency_key';
- update public.conversations set last_outbound_at=now(),last_message_at=now(),last_message_preview=left(d.approved_body,280),unread_count_for_assignee=0 where organization_id=p_org and id=d.conversation_id;
+ -- A resposta aprovada é uma SAÍDA: responde tudo até aqui, e a régua da Fila
+ -- (issue #990, migration 0267) volta ao `last_inbound_at` — "não há mensagem do
+ -- cliente sem resposta". Sem esta coluna o valor antigo ficaria congelado e a
+ -- conversa continuaria contando a espera que esta resposta acabou de encerrar.
+ update public.conversations set last_outbound_at=now(),last_message_at=now(),last_message_preview=left(d.approved_body,280),unread_count_for_assignee=0,awaiting_since=last_inbound_at where organization_id=p_org and id=d.conversation_id;
  update public.contacts set last_activity_at=now() where organization_id=p_org and id=contact;
  return to_jsonb(m);
 end;$$;
@@ -27461,6 +27465,295 @@ end $f$;
 -- EXECUTE sai das duas origens e dos papéis que o default ACL do Supabase alcança.
 revoke execute on function public.fn_aplicar_travas_de_suporte() from public, anon, authenticated, service_role;
 
+-- ---- a espera da Fila não recomeça a cada mensagem do cliente (migration 0267) ----
+--
+-- Issue #990. A aba Fila ordena por tempo de espera crescente e a régua era
+-- `last_inbound_at` — a ÚLTIMA mensagem do cliente. Essa coluna é reescrita a
+-- cada mensagem nova (`greatest(last_inbound_at, p_at)`, logo acima neste
+-- arquivo), então o cliente que insiste volta para o fim da fila: a espera dele
+-- "recomeça" a cada pergunta, e quem escreveu uma vez e ficou quieto passa na
+-- frente de quem está tentando ser atendido desde antes.
+--
+-- A régua passa a ser a mensagem do cliente MAIS ANTIGA sem resposta:
+--
+--     min(messages.sent_at) where direction='inbound' and sent_at > last_outbound_at
+--
+-- e ela virou COLUNA (`conversations.awaiting_since`) porque a ordem da Fila é um
+-- `order by` pedido ao PostgREST pela rota da lista, e o PostgREST ordena por
+-- coluna: a expressão acima mora em `messages` e depende de `last_outbound_at`.
+--
+-- `awaiting_since` carrega `last_inbound_at` quando não há mensagem sem resposta
+-- (a bola está com o cliente). Essas linhas nunca tiveram o defeito, e o valor
+-- mantém ordem, pílula "Aguardando há…" e a posição entregue às ferramentas de IA
+-- apontando para o MESMO instante — as três leem esta coluna. Sem ele a linha
+-- ficaria NULL, e NULL ordena por último: na atualização, conversa que hoje
+-- aparece no meio da fila cairia para o fim.
+--
+-- Idempotente: `add column if not exists`, preenchimento em DUAS passadas (a
+-- primeira só copia `last_inbound_at` para quem já está respondido; a segunda
+-- consulta `messages` apenas para quem TEM mensagem sem resposta — um `min()`
+-- por conversa, servido por `idx_messages_conversation_sent`) e o corpo da
+-- função DERIVADO da versão em vigor — recriá-lo a partir de uma versão anterior
+-- apagaria o lock de serviço, a guarda de troca de contato e a fronteira de
+-- `service_closed_at`.
+alter table public.conversations add column if not exists awaiting_since timestamptz;
+
+comment on column public.conversations.awaiting_since is
+  'Desde quando o cliente espera resposta: o instante da mensagem DELE mais antiga que ninguém respondeu ainda (min(sent_at) dos inbound posteriores a last_outbound_at, no atendimento em curso). É a régua da Fila — a ordem da lista, a pílula "Aguardando há…" da linha e a posição entregue às ferramentas de IA leem esta coluna, e é isso que faz a ordem da tela e o número dito ao cliente não divergirem. last_inbound_at (a ÚLTIMA mensagem) reinicia a cada mensagem e fazia quem insiste descer para o fim da fila (issue #990); esta coluna mantém o começo da espera. Quando não há mensagem sem resposta — a bola está com o cliente —, carrega last_inbound_at, que é o que a Fila usava antes desta migration.';
+
+update public.conversations c
+set awaiting_since = c.last_inbound_at
+where c.awaiting_since is null
+  and c.last_inbound_at is not null
+  and c.last_outbound_at is not null
+  and c.last_inbound_at <= c.last_outbound_at;
+
+update public.conversations c
+set awaiting_since = coalesce(
+  (
+    select min(m.sent_at)
+    from public.messages m
+    where m.conversation_id = c.id
+      and m.direction = 'inbound'
+      and m.sent_at > coalesce(c.last_outbound_at, '-infinity'::timestamptz)
+      and m.sent_at > coalesce(c.service_closed_at, '-infinity'::timestamptz)
+  ),
+  c.last_inbound_at
+)
+where c.awaiting_since is null
+  and c.last_inbound_at is not null
+  and (c.last_outbound_at is null or c.last_inbound_at > c.last_outbound_at);
+
+create or replace function public.fn_mark_conversation_message(p_conv uuid,p_direction text,p_preview text,p_at timestamptz)
+returns void language plpgsql security definer set search_path=public as $$
+declare c public.conversations; pre_contact uuid;
+begin
+ select * into c from public.conversations where id=p_conv;
+ if not found then return; end if;
+ pre_contact:=c.contact_id;
+ perform public.fn_service_lock(c.organization_id,c.contact_id);
+ select * into c from public.conversations where id=p_conv for no key update;
+ if c.contact_id is distinct from pre_contact then raise exception 'service_contact_changed' using errcode='40001'; end if;
+ if p_direction='inbound' and p_at<=c.service_closed_at then return; end if;
+ update public.conversations set
+  last_message_at=greatest(last_message_at,p_at),
+  last_message_preview=case when last_message_at is null or p_at>=last_message_at then p_preview else last_message_preview end,
+  last_inbound_at=case when p_direction='inbound' then greatest(last_inbound_at,p_at) else last_inbound_at end,
+  last_outbound_at=case when p_direction='outbound' then greatest(last_outbound_at,p_at) else last_outbound_at end,
+  unread_count_for_assignee=case when p_direction='inbound' then unread_count_for_assignee+1 when p_direction='outbound' then 0 else unread_count_for_assignee end,
+  -- A régua da Fila (issue #990). Inbound, na ordem: (1) mensagem ATRASADA
+  -- (escrita antes da última resposta) já está respondida e não é espera —
+  -- mantém o que havia; (2) a espera guardada é de uma mensagem SEM RESPOSTA
+  -- deste atendimento — o cliente insistiu, e fica o começo da espera, o mais
+  -- ANTIGO dos dois; (3) não havia espera (tudo respondido) ou ela é de um
+  -- atendimento já encerrado — a espera de agora começa nesta mensagem. No
+  -- outbound: resposta anterior à espera guardada não a responde (fora de
+  -- ordem, mantém); qualquer outra responde tudo até aqui e a coluna volta ao
+  -- last_inbound_at — "não há mensagem sem resposta".
+  awaiting_since=case
+    when p_direction='inbound' then
+      case
+        when p_at<=coalesce(c.last_outbound_at,'-infinity'::timestamptz) then
+          coalesce(c.awaiting_since,greatest(coalesce(c.last_inbound_at,'-infinity'::timestamptz),p_at))
+        when c.awaiting_since>coalesce(c.last_outbound_at,'-infinity'::timestamptz)
+         and c.awaiting_since>coalesce(c.service_closed_at,'-infinity'::timestamptz) then
+          least(c.awaiting_since,p_at)
+        else p_at
+      end
+    else
+      case
+        when c.awaiting_since is not null and p_at<c.awaiting_since then c.awaiting_since
+        else c.last_inbound_at
+      end
+  end
+ where id=p_conv and organization_id=c.organization_id;
+ update public.contacts set last_activity_at=greatest(last_activity_at,p_at)
+ where id=c.contact_id and organization_id=c.organization_id;
+end; $$;
+revoke execute on function public.fn_mark_conversation_message(uuid,text,text,timestamptz) from public,anon,authenticated;
+grant execute on function public.fn_mark_conversation_message(uuid,text,text,timestamptz) to service_role;
+
+notify pgrst, 'reload schema';
+
+-- ---- a espera longa dorme: status `dormente` (migration 0308) ----
+--
+-- A espera longa de um fluxo passa a sobreviver ao contato mandar mensagem, que
+-- é o que faltava para uma cadência de retorno ("volte a falar daqui a 28 dias")
+-- caber num fluxo em vez de morar no prompt do agente. Duas coisas a matavam, as
+-- duas caladas: `lib/followup/reactivity.ts` ou CANCELA a inscrição parada num
+-- `wait` (`cancel_on_reply`) ou grava `inbound_woke` e CORTA o timer; e o índice
+-- único anti-spam trancaria o contato fora de qualquer outra cadência por um mês.
+--
+-- O status `dormente` é a projeção em runtime de `wait.immune_to_reply` (campo do
+-- nó, no grafo pinado) — não uma coluna `imune`, que seria segunda verdade sobre o
+-- mesmo fato. Ele faz a feature custar ZERO na reatividade: `LIVE_STATUSES` não o
+-- inclui, então a inscrição dormente nem é carregada (a exceção deliberada é o
+-- opt-out, que alcança todo mundo).
+--
+-- ⚠️ OS DOIS CHECKs NÃO ESTÃO AQUI, DE PROPÓSITO. Eles vivem no bloco da 0145
+-- ("o dossiê do follow-up"), que já os derruba e recria — e `dormente` foi
+-- acrescentado LÁ, no vocabulário final. Um segundo bloco reconstruindo a mesma
+-- constraint deixa a tabela SEM constraint entre o drop de um e o add do outro
+-- quando o `update.sh` reaplica o arquivo, e é reprovado por
+-- `tests/unit/baseline-constraint-reconstruida.test.ts`. O que sobra aqui é só o
+-- que não existia antes: o índice do claim e a função que passa a enxergá-lo.
+--
+-- O índice único anti-spam (`idx_followup_enrollments_one_live`) também NÃO é
+-- tocado: ele enumera os status que ocupam vaga, e `dormente` fica de fora por
+-- construção — a vaga é liberada sem uma linha de DDL sobre ele.
+
+-- ---- 3. o claim tem de enxergar o dormente ---------------------------------
+--
+-- ⚠️ É AQUI QUE ESTA MIGRATION FALHA CALADA se alguém a encurtar. Sem `dormente`
+-- nas duas listas da função, a inscrição dorme e NUNCA acorda: nada reclama a
+-- linha, nada reprova, e o retorno simplesmente não acontece no dia 28.
+create index if not exists idx_followup_enrollments_due_por_org
+  on public.followup_enrollments (organization_id, next_eval_at)
+  where status in ('active','waiting_reply','dormente');
+
+create or replace function fn_claim_due_followup_enrollments(p_limit int, p_lease_seconds int)
+returns setof followup_enrollments
+language sql
+security definer
+set search_path = public
+as $$
+  with orgs as (
+    -- Sem a condição de claim aqui de propósito: o lateral abaixo a aplica, e uma
+    -- organização cujos vencidos estão todos com lease apenas devolve zero linhas.
+    select distinct organization_id
+      from followup_enrollments
+     where status in ('active','waiting_reply','dormente')
+       and next_eval_at <= now()
+  ),
+  fila as (
+    select f.id, f.next_eval_at, f.posicao_na_org
+      from orgs
+      cross join lateral (
+        select d.id,
+               d.next_eval_at,
+               row_number() over (order by d.next_eval_at) as posicao_na_org
+          from followup_enrollments d
+         where d.organization_id = orgs.organization_id
+           and d.status in ('active','waiting_reply','dormente')
+           and d.next_eval_at <= now()
+           and (d.claimed_until is null or d.claimed_until < now())
+         order by d.next_eval_at
+         limit p_limit
+      ) f
+  ),
+  escolhidos as (
+    -- O rodízio: posição 1 de todas as organizações, depois a 2 de todas, etc.
+    -- Empate na mesma posição vai para quem esperou mais.
+    select id from fila order by posicao_na_org, next_eval_at limit p_limit
+  ),
+  travados as (
+    select e.id from followup_enrollments e
+     where e.id in (select id from escolhidos)
+     for update skip locked
+  )
+  update followup_enrollments e
+     set claimed_until = now() + make_interval(secs => p_lease_seconds),
+         updated_at = now()
+   where e.id in (select id from travados)
+     -- A condição de lease É REPETIDA AQUI, e não é redundante com a CTE `fila`.
+     -- Sem ela, duas conexões simultâneas reclamam as MESMAS linhas: a segunda
+     -- espera o lock da primeira, e quando ele sai o Postgres (READ COMMITTED)
+     -- reavalia só o WHERE do UPDATE — que não olhava `claimed_until` — e grava
+     -- por cima. O `skip locked` da CTE não salva: as duas materializam a mesma
+     -- lista antes de qualquer lock existir. Medido: interseção de 5 em 5 no
+     -- invariante de concorrência (followup-schema.test.ts).
+     and (e.claimed_until is null or e.claimed_until < now())
+  returning e.*;
+$$;
+
+revoke execute on function fn_claim_due_followup_enrollments(int, int) from public, anon, authenticated;
+grant execute on function fn_claim_due_followup_enrollments(int, int) to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ---- Google Ads: landing page de captura de gclid (migration 0306) ----
+-- `lib/plataformas-de-anuncio/registry.ts` (0213) já declarava por que `google_ads`
+-- não tem transporte de conversão: sem extrator de gclid não há o que reportar.
+-- Faltava a LANDING PAGE que captura o clique e o carrega para dentro da
+-- conversa do WhatsApp (o Google Ads, ao contrário da Meta, não tem um
+-- "Clique para o WhatsApp" nativo). Duas tabelas: para onde a landing
+-- redireciona, e o par token-curto↔gclid criado no clique e consultado quando
+-- a mensagem chega. Mesmo desenho server-side-only de `ad_platform_connections`
+-- (0213): RLS ligada sem policies, grants de anon/authenticated revogados.
+
+create table if not exists public.google_ads_landing_pages (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  whatsapp_e164 text not null,
+  message_template text not null default 'Olá! Vim pelo anúncio e quero saber mais. [ref:{token}]',
+  enabled boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid,
+  constraint google_ads_landing_pages_template_tem_placeholder
+    check (message_template like '%{token}%')
+);
+
+comment on table public.google_ads_landing_pages is
+  'Configuração da landing page de captura de gclid, por organização: para qual WhatsApp e com qual texto pré-preenchido ela redireciona. Server-side only.';
+comment on column public.google_ads_landing_pages.message_template is
+  'Precisa conter o literal {token}: é onde o código do clique é injetado antes do redirect para o wa.me.';
+
+alter table public.google_ads_landing_pages enable row level security;
+revoke all on public.google_ads_landing_pages from anon, authenticated;
+grant select, insert, update, delete on public.google_ads_landing_pages to service_role;
+
+drop trigger if exists trg_google_ads_landing_pages_updated_at on public.google_ads_landing_pages;
+create trigger trg_google_ads_landing_pages_updated_at
+  before update on public.google_ads_landing_pages
+  for each row execute function public.fn_set_updated_at();
+
+create table if not exists public.google_ads_click_refs (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  token text not null,
+  gclid text not null,
+  query_raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  matched_at timestamptz,
+  contact_id uuid references public.contacts(id) on delete set null
+);
+
+create unique index if not exists google_ads_click_refs_org_token_uk
+  on public.google_ads_click_refs (organization_id, token);
+
+comment on table public.google_ads_click_refs is
+  'Par token curto ↔ gclid, criado quando a landing page recebe um clique de anúncio e consultado quando a mensagem do WhatsApp chega com o token no texto. Server-side only.';
+comment on column public.google_ads_click_refs.token is
+  'Código opaco no texto pré-preenchido do wa.me — não o gclid cru, que fica só nesta linha.';
+comment on column public.google_ads_click_refs.matched_at is
+  'Carimbado no match com a mensagem recebida. Um clique só casa uma vez: a UPDATE que o faz é condicional a matched_at is null.';
+
+alter table public.google_ads_click_refs enable row level security;
+revoke all on public.google_ads_click_refs from anon, authenticated;
+grant select, insert, update, delete on public.google_ads_click_refs to service_role;
+
+-- ---- Google Ads: credencial de conversão (migration 0307) ----
+-- Refresh token OAuth (não access token longo-vivo) + os três identificadores
+-- que dizem para onde reportar dentro da conta. Mesmo desenho server-side-only
+-- de ad_platform_connections (0213); ver o cabeçalho da migration 0307 para o
+-- racional completo.
+
+alter table public.ad_platform_connections
+  add column if not exists google_refresh_token_encrypted bytea,
+  add column if not exists google_customer_id text,
+  add column if not exists google_login_customer_id text,
+  add column if not exists google_conversion_action_id text;
+
+comment on column public.ad_platform_connections.google_refresh_token_encrypted is
+  'Refresh token OAuth do Google Ads, cifrado por fn_encrypt_oauth. Só platform=google_ads usa esta coluna — o access token derivado dele expira em ~1h e nunca é persistido.';
+comment on column public.ad_platform_connections.google_customer_id is
+  'A conta de anúncios do Google Ads (10 dígitos, sem hífen) para onde a organização reporta conversões.';
+comment on column public.ad_platform_connections.google_login_customer_id is
+  'A conta de GERENTE (MCC) através da qual google_customer_id é acessada, quando aplicável. NULL = acesso direto, sem MCC.';
+comment on column public.ad_platform_connections.google_conversion_action_id is
+  'Qual ação de conversão, dentro de google_customer_id, recebe os envios de venda. Formato: só o id numérico, o resource name completo é montado no transporte.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -27629,6 +27922,21 @@ create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
 
+-- ---- a regra de automação guarda a CONFIGURAÇÃO do gatilho (migration 0268) ----
+-- O gatilho de data do funil (#989) não nasce de evento: quem o emite é a
+-- varredura `cron/lead-date-field-due`, e ela só sabe onde olhar se a regra
+-- disser o funil, o campo de data e quantos dias antes (ou depois) avisar.
+--
+-- Vazio nos outros gatilhos, e `not null default '{}'` dispensa backfill: regra
+-- que já existe nasce com o objeto vazio, e quem lê trata ausência e objeto
+-- vazio do mesmo jeito.
+alter table public.automation_rules
+  add column if not exists trigger_config jsonb not null default '{}'::jsonb;
+
+comment on column public.automation_rules.trigger_config is
+  'Configuração do gatilho (issue #989). Vazio nos gatilhos que nascem de evento. No gatilho lead.date_field_due guarda {pipeline_id, campo, dias} — o campo de data pertence a UM funil, e sem essa dupla a varredura não sabe onde olhar.';
+
+notify pgrst, 'reload schema';
 -- ---- a resposta revisada para de segurar a Zona de perigo (migration 0273) ----
 -- A FK inline da 0227 nasceu sem ação de exclusão (NO ACTION) e era a ÚNICA das
 -- quatro que apontam para `public.messages(id)` fora do padrão `on delete set
@@ -27652,6 +27960,17 @@ alter table public.ai_reply_drafts
 
 notify pgrst, 'reload schema';
 
+-- ---- CSV como material de conhecimento (migration 0310) ----
+-- O bucket `ai-policy` (acima, migration 0014) tinha `allowed_mime_types`
+-- fechado em PDF/Markdown/texto. O acervo de IA passou a aceitar CSV
+-- (lib/ai/rag/extractors/csv.ts) — sem esta linha o Storage recusa o upload
+-- ANTES de qualquer código da aplicação rodar, com erro sem relação nenhuma
+-- com "extensão não suportada". `update`, não `insert ... on conflict`: o
+-- bucket já existe em todo clone; é a MIME list que precisa alcançar quem
+-- instalou antes desta mudança.
+update storage.buckets
+set allowed_mime_types = array['application/pdf', 'text/markdown', 'text/x-markdown', 'text/plain', 'text/csv']
+where id = 'ai-policy';
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
 --
 -- ⚠️ ESTA CHAMADA É O ÚLTIMO BLOCO DO ARQUIVO. Tabela nova, coluna
