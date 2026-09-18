@@ -2,7 +2,7 @@
  * A porta que cria organizações por API nasce FECHADA (doc 38, opção b).
  *
  * O caso que mais importa aqui é o primeiro: numa instalação que não definiu
- * `DESKCOMM_PROVISIONING_SECRET`, a rota não existe para ninguém — nem com um
+ * `TENANT_PROVISIONING_SECRET`, a rota não existe para ninguém — nem com um
  * Bearer qualquer, nem com um vazio. O resto prova a ordem das guardas: limite
  * antes do segredo (é o limite que segura quem tenta adivinhá-lo), segredo antes
  * do corpo, e o provisionamento só roda depois das três.
@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ProvisionModule from "@/lib/auth/provision";
 
 const h = vi.hoisted(() => ({
-  env: { DESKCOMM_PROVISIONING_SECRET: "" },
+  env: { TENANT_PROVISIONING_SECRET: "" },
   provision: vi.fn(),
   rotate: vi.fn(),
   limite: vi.fn(),
@@ -52,7 +52,7 @@ function pedido(bearer: string | null, corpo: unknown = CORPO): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  h.env.DESKCOMM_PROVISIONING_SECRET = SEGREDO;
+  h.env.TENANT_PROVISIONING_SECRET = SEGREDO;
   h.limite.mockResolvedValue({ allowed: true, count: 1, limit: 10, window_sec: 60 });
   h.provision.mockResolvedValue({ organizationId: "org-1", ownerId: "user-1", replay: false });
   h.rotate.mockResolvedValue("dsk_abcd1234_segredo");
@@ -60,7 +60,7 @@ beforeEach(() => {
 
 describe("desligada por padrão", () => {
   it("sem o segredo da instalação, a rota não existe — nem com Bearer", async () => {
-    h.env.DESKCOMM_PROVISIONING_SECRET = "";
+    h.env.TENANT_PROVISIONING_SECRET = "";
     for (const bearer of [null, "", "qualquer-coisa", SEGREDO]) {
       const res = await POST(pedido(bearer));
       expect(res.status, `bearer=${String(bearer)}`).toBe(404);
@@ -69,7 +69,7 @@ describe("desligada por padrão", () => {
   });
 
   it("segredo curto demais também deixa a rota desligada", async () => {
-    h.env.DESKCOMM_PROVISIONING_SECRET = "s".repeat(31);
+    h.env.TENANT_PROVISIONING_SECRET = "s".repeat(31);
     expect((await POST(pedido("s".repeat(31)))).status).toBe(404);
     expect(h.provision).not.toHaveBeenCalled();
   });

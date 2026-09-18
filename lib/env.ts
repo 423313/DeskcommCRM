@@ -79,7 +79,7 @@ const schema = z.object({
    * sistema externo cria organizações). Vazio por padrão = a rota não existe
    * (404); com menos de 32 caracteres também fica desligada.
    */
-  DESKCOMM_PROVISIONING_SECRET: z.string().optional().default(""),
+  TENANT_PROVISIONING_SECRET: z.string().optional().default(""),
 
   // Laboratório local de extensões: origem HTTP exata em 127.0.0.1. O cliente
   // recusa a exceção se a URL do app não for loopback. Vazio mantém HTTPS público.

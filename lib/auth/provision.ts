@@ -163,7 +163,7 @@ function marcadorDe(settings: unknown): MarcadorDeProvisionamento | null {
 /**
  * Provisiona uma organização a partir de um sistema externo, via
  * `POST /api/v1/tenants/provision` — rota que só existe quando o DONO DA
- * INSTALAÇÃO define `DESKCOMM_PROVISIONING_SECRET` (decisão do dono, doc 38 b).
+ * INSTALAÇÃO define `TENANT_PROVISIONING_SECRET` (decisão do dono, doc 38 b).
  *
  * Diferente de `ensureTenantForUser` (signup self-service) e do fluxo de
  * `POST /api/v1/admin/tenants` (que convida o dono por e-mail): aqui o dono é

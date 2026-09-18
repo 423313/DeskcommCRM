@@ -26,7 +26,7 @@ export const PUBLIC_PATHS: RegExp[] = [
   // checado dentro da própria rota) — sem cookie de sessão, igual /cron/.
   /^\/api\/v1\/system\/agent$/,
   // Provisionamento de organização por sistema externo: Bearer do segredo da
-  // instalação (`DESKCOMM_PROVISIONING_SECRET`), checado dentro da rota, que
+  // instalação (`TENANT_PROVISIONING_SECRET`), checado dentro da rota, que
   // responde 404 enquanto o segredo não existe. Sem cookie, igual /cron/.
   /^\/api\/v1\/tenants\/provision$/,
   // Relógio Hobby (GitHub Actions / cron-job.org). Auth é Bearer na própria

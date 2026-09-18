@@ -4,7 +4,7 @@
  * de API `dsk_…` para operá-la.
  *
  * Decisão do dono (doc 38, opção b): a porta existe, mas a chave é do DONO DA
- * INSTALAÇÃO — `DESKCOMM_PROVISIONING_SECRET` no `.env`, nunca uma chave de
+ * INSTALAÇÃO — `TENANT_PROVISIONING_SECRET` no `.env`, nunca uma chave de
  * organização — e nasce DESLIGADA. Sem o segredo (ou com um curto demais), a
  * rota responde 404: para quem não ligou, ela não existe. É uma segunda porta
  * de cadastro que não passa pela chave de cadastro da instalação, então só quem
@@ -35,7 +35,7 @@ const TAMANHO_MINIMO_DO_SEGREDO = 32;
 const PEDIDOS_POR_MINUTO = 10;
 
 function segredoDaInstalacao(): string | null {
-  const segredo = env.DESKCOMM_PROVISIONING_SECRET.trim();
+  const segredo = env.TENANT_PROVISIONING_SECRET.trim();
   return segredo.length >= TAMANHO_MINIMO_DO_SEGREDO ? segredo : null;
 }
 
