@@ -16,6 +16,7 @@ import {
   Key,
   WebhooksLogo,
   ArrowRight,
+  Gear,
 } from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,12 @@ const NAV_ITEMS: NavItem[] = [
   // razão das duas de cima: é configuração da INSTALAÇÃO, e /admin tem
   // navegação própria (o registro de `lib/navigation/` cobre só `app/app/**`).
   { href: "/admin/cadastro", label: "Cadastro", icon: Key },
+  // A porta da tela que reúne a configuração da INSTALAÇÃO (migration 0290):
+  // credenciais e contatos que antes só se trocavam por SSH no `.env`. Vem por
+  // último de propósito — as quatro de cima são assuntos específicos e
+  // reconhecíveis ("Marca", "Google"); esta é o guarda-chuva, e quem procura um
+  // assunto nomeado deve achá-lo antes de cair no genérico.
+  { href: "/admin/configuracao", label: "Configuração", icon: Gear },
 ];
 
 interface AdminSidebarProps {

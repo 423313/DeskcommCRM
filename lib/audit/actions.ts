@@ -349,6 +349,17 @@ export const AUDIT_ACTIONS = [
   // (nenhum handler o consumiria — ver register-handlers.ts) e a troca não
   // deixa rastro em nenhuma outra tabela.
   "platform.signup_mode_updated",
+  // Configuração da INSTALAÇÃO trocada pela tela (migration 0290): credencial de
+  // e-mail, remetente, contatos. Auditável pelo mesmo motivo das vizinhas — é
+  // mutação de plataforma, sem `organization_id`, e "por que parou de enviar
+  // e-mail?" só tem resposta aqui.
+  //
+  // ⚠️ O VALOR NUNCA ENTRA NO metadata, e isto não é zelo: `api_audit_log` é
+  // append-only por schema (nenhum papel tem GRANT de UPDATE/DELETE, nem o
+  // `service_role`), então um segredo que caia ali fica cinco anos e não sai.
+  // O emissor grava só a chave, a natureza e os últimos 4 caracteres.
+  "platform.config_changed",
+  "platform.config_reset",
   "platform_google_oauth.updated",
   // A credencial do APP da Meta da INSTALAÇÃO (migration 0257): o App Secret que
   // assina a entrega do webhook e o verify token que responde ao handshake.
