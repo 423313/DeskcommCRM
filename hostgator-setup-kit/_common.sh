@@ -690,7 +690,8 @@ ler_rodada_do_banco() {
 # `tests/unit/namespace-das-imagens.test.ts`, que assere este valor e cobra que
 # `docker-compose.prod.yml`, `.env.hostgator.example` e a matriz de
 # `publish-image.yml` digam o mesmo. Se você é um fork, é lá que está a lista do
-# que trocar junto.
+# que trocar junto — e, desde 18/09/2026, o CI do SEU fork não cobra este valor:
+# a asserção só vale quando o dono do runner é o dono deste repositório.
 IMG_NS="ghcr.io/melgarafael"
 IMG_APP="${IMG_NS}/deskcommcrm"
 IMG_WORKER="${IMG_NS}/deskcomm-worker"

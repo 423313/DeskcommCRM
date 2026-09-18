@@ -619,13 +619,6 @@ export const DICIONARIO: Traducoes = {
   "DPO email": { es: "Email del DPO" },
   "Retenção de mídia (dias)": { es: "Retención de medios (días)" },
   "URL política de privacidade": { es: "URL de la política de privacidad" },
-  "Motivos de perda extras (separados por vírgula)": {
-    es: "Motivos de pérdida adicionales (separados por coma)",
-  },
-  "ex: Sem orçamento, Concorrente": { es: "ej.: Sin presupuesto, Competencia" },
-  "Adicionados ao set padrão. Cada pipeline pode ter seus próprios motivos.": {
-    es: "Se agregan al conjunto predeterminado. Cada pipeline puede tener sus propios motivos.",
-  },
   "Informações pessoais. Email só pode ser trocado em breve.": {
     es: "Información personal. El email solo se puede cambiar próximamente.",
   },
@@ -7987,6 +7980,8 @@ export const DICIONARIO: Traducoes = {
   "Enviar vendas para o Google Ads": { es: "Enviar ventas a Google Ads" },
   "Google Ads autorizado. Agora informe a conta e a ação de conversão abaixo.":
     { es: "Google Ads autorizado. Ahora indica la cuenta y la acción de conversión abajo." },
+  "Enviar vendas para o Google Ads ainda não está disponível nesta instalação — não é nada que você tenha feito. Quem instalou o sistema precisa configurar":
+    { es: "Enviar ventas a Google Ads todavía no está disponible en esta instalación — no es nada que hayas hecho. Quien instaló el sistema necesita configurar" },
 
   // Convidado do compromisso (agenda)
   "E-mail do convidado": { es: "Correo del invitado" },
@@ -8229,6 +8224,7 @@ export const DICIONARIO: Traducoes = {
   "Este negócio não tem contato, então não há proposta do agente.": { es: "Este negocio no tiene contacto, así que no hay propuesta del agente." },
   "Este número foi excluído da Central de Conexões — reconectar não o traz de volta. Conecte um número para voltar a atender.": { es: "Este número fue eliminado de la Central de Conexiones — reconectar no lo trae de vuelta. Conecta un número para volver a atender." },
   "Falha ao processar o envio do arquivo.": { es: "Falla al procesar el envío del archivo." },
+  "O arquivo não está mais guardado. Envie de novo.": { es: "El archivo ya no está guardado. Envíalo de nuevo." },
   "Esta chave de idempotência já foi usada com outro conteúdo.": { es: "Esta clave de idempotencia ya fue usada con otro contenido." },
   "Filtros inválidos.": { es: "Filtros inválidos." },
   "Header Idempotency-Key é obrigatório.": { es: "El header Idempotency-Key es obligatorio." },
@@ -9369,8 +9365,10 @@ export const DICIONARIO: Traducoes = {
     es: "Cambia el número por el WhatsApp de la empresa y el texto por el tuyo, manteniendo el código al final:",
   },
   "Olá! Vim pelo site.": { es: "¡Hola! Vengo del sitio." },
-  "Este exemplo foi gerado por esta tela. Os campos que o código aceita são utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid e fbclid.": {
-    es: "Este ejemplo fue generado por esta pantalla. Los campos que el código acepta son utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid y fbclid.",
+  // Os NOMES das chaves saíram da frase: a tela os lê de `CHAVES_DE_UTM` e os
+  // imprime fora do `t()`. Uma chave nova não mexe mais em tradução nenhuma.
+  "Este exemplo foi gerado por esta tela. Os campos que o código aceita são:": {
+    es: "Este ejemplo fue generado por esta pantalla. Los campos que el código acepta son:",
   },
   "O código vale só na primeira mensagem do contato: quem recebe um link encaminhado não ganha a origem de quem encaminhou.": {
     es: "El código vale solo en el primer mensaje del contacto: quien recibe un enlace reenviado no hereda el origen de quien lo reenvió.",
