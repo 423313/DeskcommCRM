@@ -87,6 +87,14 @@ export function ChatThread({ conversationId, onResponder, dono, contatoId }: Pro
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const paginasVistas = useRef(0);
+  /**
+   * Esta conversa já ancorou no fim ALGUMA vez, com conteúdo na tela?
+   *
+   * Enquanto for `false`, a abertura ainda não terminou — e a guarda de
+   * distância (que existe para não arrancar quem está lendo o histórico) não
+   * pode valer, porque ninguém rolou nada ainda. Ver o efeito abaixo.
+   */
+  const jaAncorou = useRef(false);
   const activeOrg = useActiveOrg();
   const currentUser = useUser();
   const deleteNote = useDeleteNote(conversationId ?? "");
@@ -129,6 +137,7 @@ export function ChatThread({ conversationId, onResponder, dono, contatoId }: Pro
   // próxima conversa seria confundida com um "carregar mais antigas".
   useEffect(() => {
     paginasVistas.current = 0;
+    jaAncorou.current = false;
   }, [conversationId]);
 
   // Rola ao fim na primeira carga e quando chega mensagem/nota nova — mas NÃO
@@ -143,19 +152,43 @@ export function ChatThread({ conversationId, onResponder, dono, contatoId }: Pro
   // A segunda guarda cobre o outro caso: se o usuário rolou para ler o
   // histórico, mensagem nova não deve arrancá-lo de onde estava.
   useEffect(() => {
-    const primeiraCarga = paginasVistas.current === 0;
-    const carregouAntigas = !primeiraCarga && paginas > paginasVistas.current;
+    const carregouAntigas = paginasVistas.current !== 0 && paginas > paginasVistas.current;
     paginasVistas.current = paginas;
     if (carregouAntigas) return;
 
-    // A guarda de distância NÃO vale na primeira carga: ali o scroller ainda
-    // está no topo por definição, e tratá-lo como "usuário lendo o histórico"
-    // abriria a conversa na mensagem mais antiga da página em vez da mais nova
-    // (medido: a thread abria em msg#15 em vez de msg#64).
-    if (!primeiraCarga) {
+    /**
+     * A guarda de distância NÃO vale ENQUANTO A ABERTURA NÃO TERMINOU.
+     *
+     * A versão anterior chamava isso de "primeira carga" e media pelo contador
+     * de PÁGINAS da consulta de mensagens — e isso é um proxy, não a coisa. O
+     * fio não é só mensagens: ele intercala notas e **cartões de passagem**, que
+     * chegam de consultas próprias e podem resolver DEPOIS da primeira pintura.
+     *
+     * Medido em 2026-09-18, na prova em tela do cartão "Por que a IA passou para
+     * você", numa conversa SEM mensagens (que é o normal logo depois de uma
+     * passagem): a primeira pintura vem vazia e já consome a "primeira carga";
+     * quando o cartão chega, o efeito roda de novo, a guarda passa a valer, e o
+     * scroller está no topo com o conteúdo recém-nascido embaixo — distância
+     * bem maior que 120px. A guarda concluía "o usuário está lendo o histórico"
+     * de um usuário que não tinha rolado nada, e devolvia sem rolar.
+     *
+     * O efeito visível é o pior possível para esta tela: quem assume vê o
+     * cabeçalho do cartão e o motivo, e o convite **"Assumir e responder" fica
+     * abaixo da dobra do fio** — o gesto existe, está montado, é clicável por
+     * programa e ninguém o vê. Medido por ferramenta: botão em y=1008 numa
+     * janela de 720px.
+     *
+     * `jaAncorou` pergunta o que a guarda precisa saber de verdade — "esta
+     * conversa já chegou ao fim alguma vez, com conteúdo na tela?" —, em vez de
+     * inferir isso da paginação de UMA das três fontes do fio.
+     */
+    if (jaAncorou.current) {
       const sc = scrollerRef.current;
       if (sc && sc.scrollHeight - sc.scrollTop - sc.clientHeight > 120) return;
     }
+    // Fio ainda vazio não ancora nada: marcar aqui faria a guarda valer a partir
+    // da pintura em branco, que é exatamente o defeito acima.
+    if (items.length > 0) jaAncorou.current = true;
 
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [items.length, conversationId, paginas]);

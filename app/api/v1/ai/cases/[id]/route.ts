@@ -16,6 +16,7 @@ import { type NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { conversasVisiveisDosCasos, lerChamado } from "@/lib/escalacao/chamados";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -44,7 +45,16 @@ export async function GET(_req: NextRequest, { params }: RouteParams): Promise<R
       caseId: id,
     });
     chamado = await lerChamado(createAdminClient(), org.orgId, id, { visiveisPara });
-  } catch {
+  } catch (erro) {
+    // Mesma correção da lista (ver o `catch` de `app/api/v1/ai/cases/route.ts`):
+    // um 500 sem causa registrada deixa a tela vazia e o log mudo, e quem
+    // diagnostica fica entre um banco correto e uma tela errada sem nada no meio.
+    logger.error("[ai/cases] falha ao carregar o caso", {
+      requestId,
+      organizationId: org.orgId,
+      caseId: id,
+      erro: erro instanceof Error ? erro.message : String(erro),
+    });
     return fail("internal_error", t("Falha ao carregar o caso."), 500, { requestId });
   }
   if (!chamado) return fail("not_found", t("Caso não encontrado."), 404, { requestId });

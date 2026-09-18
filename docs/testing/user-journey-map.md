@@ -2599,3 +2599,112 @@ A prova da jornada veio depois, em outra captura: `evidence/casos-vivos/README.m
 caso aberto e a resposta da IA na tela. **É aquele README que responde "o chat do caso
 funciona?"**, não estas três imagens; esta tabela existe para que ninguém as tome por
 prova ao encontrá-las soltas no diretório.
+
+---
+
+## Onda 12 — A PROVA EM TELA dos casos vivos `[P0]` (2026-09-18)
+
+Três funcionalidades do épico "casos vivos" passam a ter jornada dirigida por **browser**,
+com medida por ferramenta (`getBoundingClientRect` / `getComputedStyle` / `count()`), num
+banco fresco estilo VPS (`supabase/baseline.sql` + `bootstrap-owner` + seeds), build de
+produção e **sem chave de IA** — o dublê `INTERNAL_AGENT_RUN_STUB`, que é como o CI roda.
+
+As capturas e o que cada uma mostra estão em
+[`evidence/casos-vivos/README.md`](../../evidence/casos-vivos/README.md). Aqui fica o estado
+de cada caso.
+
+### J28 — Conversar com a IA que abriu o caso `[P0]`
+
+Spec: `tests/e2e/conversa-do-caso.spec.ts` → `SPECS_PARTE_2`.
+
+| caso | o que se mede | estado |
+|---|---|---|
+| J28.1 | o painel "Conversar sobre o caso" existe UMA vez no detalhe do caso | PASS |
+| J28.2 | o aviso de persona diz **quem** responde quando não é o agente do caso | PASS |
+| J28.3 | a pergunta pronta PREENCHE o campo e **não** envia (contagem de bolhas não muda) | PASS |
+| J28.4 | pergunta e resposta aparecem com **autor e hora**, e a resposta é prosa (não o JSON dos outros ramos do dublê) | PASS |
+| J28.5 | **persistência**: F5 e as duas bolhas continuam lá | PASS |
+| J28.6 | **compartilhamento**: outra pessoa da equipe abre o mesmo caso e vê a pergunta de quem chegou antes | PASS |
+| J28.7 | **visibilidade**: em `visibility_mode='own'`, o `agent` que não é dono não vê o caso **nem na fila nem pelo link direto** | PASS |
+| J28.8 | o painel de decisão vizinho continua alcançável (um só botão "Enviar"; a primeira `textarea` é a dele) | PASS |
+| J28.9 | layout por ferramenta: botão alcançável, fonte e cor do produto, zero rolagem horizontal em 1440px **e** em 390px | PASS |
+| J28.10 | sem jargão (`case_chat`, `purpose`, `llm_call`, `undefined`, `null`, `error_code`) | PASS |
+| J28.11 | contato **anonimizado**: o campo some e a tela diz o motivo | PASS |
+| J28.12 | o estado **sem chave de IA** | **NÃO COBERTO em tela** — o dublê injeta a chave, então `ia_configurada` é sempre verdadeiro sob ele. Guardado por `tests/unit/` |
+
+### J29 — O aviso de caso no WhatsApp da equipe `[P0]`
+
+Duas specs, e a divisão é uma restrição medida, não preguiça:
+`tests/e2e/aviso-de-caso-no-whatsapp.spec.ts` (`SPECS_PARTE_2`) e
+`tests/e2e/aviso-de-caso-chega-no-whatsapp.spec.ts` (`FORA_DO_CI`, com o motivo escrito no
+workflow).
+
+| caso | o que se mede | estado |
+|---|---|---|
+| J29.1 | a tela é de quem **administra** — um `manager` cai em 403 | PASS (CI) |
+| J29.2 | o `admin` entra com verificação em duas etapas | PASS (CI) |
+| J29.3 | o **estado efetivo** vem ANTES do formulário no fio do DOM, e a instalação sem endereço público lê "Este sistema ainda não tem um endereço na internet" | PASS (CI) |
+| J29.4 | o interruptor fica **travado**, e a decisão do dono ("o aviso sai na hora, inclusive fora do horário") está escrita na tela | PASS (CI) |
+| J29.5 | telefone pela metade é recusado, e o seletor fala de **capacidade**, nunca de provedor | PASS (CI) |
+| J29.6 | o preço do teste ("manda mensagem de verdade e conta no limite diário") vem antes do clique | PASS (CI) |
+| J29.7 | o teste **recusa dizendo o que falta**, não um "não deu certo" | PASS (CI) |
+| J29.8 | **a recusa é honesta ponta a ponta**: caso aberto + dreno → entrega `falhou / sem_endereco_publico`, e a tela explica | PASS (CI) |
+| J29.9 | layout por ferramenta e ausência de jargão (inclusive `waha` e `http://`) | PASS (CI) |
+| J29.10 | com endereço público o interruptor **destrava** e o aviso de teste **chega** num receptor HTTP de verdade | PASS (local, `FORA_DO_CI`) |
+| J29.11 | o caso aberto dispara **um** aviso, cujo texto tem assunto, primeiro nome e link, e **não** tem sobrenome, telefone do cliente nem trecho de conversa | PASS (local) |
+| J29.12 | drenar de novo **não** manda de novo (idempotência) | PASS (local) |
+| J29.13 | a entrega aparece como **enviada** na tela, e a linha do tempo do caso diz "Avisamos o suporte no WhatsApp" | PASS (local) |
+| J29.14 | o número interno que responde **não vira contato nem conversa** | **NÃO COBERTO em tela** — o webhook exige token e HMAC do canal, e o cenário desta bancada nasce com segredo de placeholder. Guardado por `tests/unit/numero-interno-de-aviso.test.ts` |
+| J29.15 | a falha de entrega vira aviso na Central **depois do teto de tentativas** | **NÃO COBERTO em tela** — o teto exige atravessar a janela de reivindicação (2 min por rodada); medido por unidade |
+
+**Por que J29.10–13 não rodam no CI.** `lib/escalacao/aviso-de-teste.ts` e
+`lib/escalacao/aviso-ao-suporte.ts` recusam mandar um aviso cujo link não abriria no celular
+de outra pessoa, e `scripts/gerar-env-e2e.sh` grava `NEXT_PUBLIC_APP_URL=http://localhost:$E2E_PORT`
+— que é o endereço em que o servidor sob teste responde de verdade, e do qual três specs de
+fluxo por e-mail dependem. O endereço é lido uma vez no boot, então não há como valer só
+para uma spec. O que roda no CI **não pula o assunto**: J29.8 cobra a recusa inteira.
+
+### J30 — A passagem para humano chega com contexto `[P0]`
+
+Spec: `tests/e2e/passagem-com-contexto.spec.ts` → `SPECS_PARTE_3`. **Isto fecha J27.5 e
+J27.6**, que estavam declarados NÃO COBERTOS na onda do cartão.
+
+| caso | o que se mede | estado |
+|---|---|---|
+| J30.1 (= J27.5) | o cartão "Por que a IA passou para você" está no fio, com motivo em português, "O cliente quer", "A IA já tentou" e a fala literal do cliente entre aspas | PASS |
+| J30.2 | vocabulário de banco não chega à tela (`requested_human`, `suspected_optout`, `ferramenta_do_modelo`, `motivo_codigo`) | PASS |
+| J30.3 | o convite **"Assumir e responder" está dentro da janela** quando a pessoa chega | FAIL → PASS (ver o achado abaixo) |
+| J30.4 (= J27.6) | a Central mostra "O assistente passou um atendimento para um humano" com **"Abrir conversa"** apontando para aquela conversa, e o corpo do aviso **não** repete a fala do cliente | PASS |
+| J30.5 | clicar "Assumir e responder" muda o cartão para **reconhecida** e ele passa a dizer quem assumiu | PASS |
+| J30.6 | e o aviso sai dos abertos da Central **sozinho**, por gatilho | PASS |
+| J30.7 | layout em 390px: o cartão cabe e a conversa não rola para o lado | PASS |
+| J30.8 | o caminho da **ferramenta** do modelo e a passagem por `suspected_optout` | **NÃO COBERTO em tela** — guardados por `tests/unit/cartao-da-passagem.test.ts` |
+
+### Os três defeitos que a prova em tela encontrou, e o conserto de cada um
+
+1. **O convite de assumir nascia abaixo da dobra** (J30.3). Medido: botão em **y=1008 numa
+   janela de 720px** — montado, clicável por programa e invisível para quem chegou.
+   `ChatThread` decidia "a abertura já terminou" pelo contador de páginas da consulta de
+   MENSAGENS, e o cartão chega de consulta própria, depois da primeira pintura; numa conversa
+   sem mensagens (o normal logo após uma passagem) a guarda "o usuário está lendo o histórico"
+   passava a valer sobre alguém que não tinha rolado nada. Consertado em
+   `components/inbox/ChatThread.tsx`; a catraca é a medição do botão contra a janela.
+2. **A fila de casos ficava vazia sem dizer por quê.** `GET /api/v1/ai/cases` (e o detalhe)
+   tinham `catch` NU: o 500 virava `data === undefined` no React Query e a tela mostrava
+   "Nenhum caso aberto" — indistinguível de "não há casos" — com o log do servidor mudo.
+   Quem diagnosticava tinha o banco certo, a tela errada e nada entre os dois. Agora a causa
+   é registrada; a frase para quem lê a tela não mudou.
+3. **A tela do aviso virava beco sem saída no primeiro engasgo.** `useAvisoDeCaso` usava
+   `retry: false` (razão escrita: "403 não muda se repetir"), e com isso QUALQUER falha
+   passageira trocava o formulário por "Não foi possível abrir esta tela agora. Atualize a
+   página", sem volta automática. Medido com o banco saturado (504 e `canceling statement due
+   to statement timeout`): aconteceu em 2 de 3 aberturas. Agora repete o que é passageiro e
+   nunca o que é `4xx`. **Servidor apertado não é exceção de laboratório** — é a VPS pequena
+   que roda banco, aplicação e WhatsApp no mesmo disco.
+
+Um quarto achado, de FERRAMENTA e não de produto: `playwright.config.ts` calculava a porta
+antes de publicar o `.env.e2e` no processo, então o processo que sobe o servidor e o worker
+que dirige o browser resolviam `E2E_PORT` para valores **diferentes** — servidor numa porta,
+`page.goto` em outra, e `ERR_CONNECTION_REFUSED` com um servidor saudável no ar. O CI nunca
+pisou nisso porque o gerador não escreve `E2E_PORT`; quem monta bancada em porta própria,
+sim. Consertado pela ordem: publicar primeiro, decidir a porta depois.

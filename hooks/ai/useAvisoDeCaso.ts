@@ -28,6 +28,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/types";
 import type { AvisoDaTela, ConexaoParaAviso } from "@/lib/escalacao/estado-do-aviso";
 import type { MotivoDoTeste } from "@/lib/escalacao/aviso-de-teste";
 import type { EntregaNaTela } from "@/lib/escalacao/tela-do-aviso";
@@ -60,11 +61,43 @@ export interface ResultadoDoTeste {
   detalhe?: string;
 }
 
+/**
+ * Repete o que é PASSAGEIRO, nunca o que é veredito.
+ *
+ * ## O que havia aqui, e o que custou
+ *
+ * `retry: false`, com a razão escrita: "papel insuficiente devolve 403, e
+ * repetir não muda isso". A razão é boa e cobre metade do mundo — a outra
+ * metade é uma resposta que falhou por pressa, e para ela `false` transforma um
+ * engasgo em beco sem saída: a consulta não volta sozinha, a tela troca o
+ * formulário inteiro por "Não foi possível abrir esta tela agora. Atualize a
+ * página", e o único caminho de volta é a pessoa recarregar à mão.
+ *
+ * Medido em 2026-09-18, na prova em tela: com o banco da bancada saturado, o
+ * servidor devolveu `504 Processing this request timed out` e `canceling
+ * statement due to statement timeout` ao resolver permissões. A tela de
+ * configurar o aviso ficou nesse beco em 2 de 3 aberturas seguidas. **Um
+ * servidor apertado não é exceção de laboratório** — é a VPS de uma instalação
+ * pequena, que roda Postgres, aplicação e WhatsApp no mesmo disco, e é a
+ * primeira coisa que quem instala abre.
+ *
+ * ## Por que assim
+ *
+ * `4xx` é veredito do servidor sobre o pedido (403 de papel, 401 de sessão,
+ * 422 de forma): repetir só gasta tempo e mantém a frase errada na tela. O
+ * resto — 5xx, timeout, rede caída — é estado do mundo, e o estado do mundo
+ * muda sozinho. Duas tentativas extras com espera curta; depois delas a tela
+ * mostra a mensagem, que é a resposta honesta.
+ */
 export function useAvisoDeCaso() {
   return useQuery({
     queryKey: CHAVE_DO_AVISO,
-    // Papel insuficiente devolve 403, e repetir não muda isso.
-    retry: false,
+    retry: (tentativas, erro) => {
+      const status = erro instanceof ApiError ? erro.status : null;
+      if (status !== null && status >= 400 && status < 500) return false;
+      return tentativas < 2;
+    },
+    retryDelay: (tentativa) => 800 * (tentativa + 1),
     queryFn: () =>
       apiClient.get<{ data: EstadoDoAviso }>("/api/v1/ai/cases/alerta").then((r) => r.data),
   });

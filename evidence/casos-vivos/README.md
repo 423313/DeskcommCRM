@@ -6,56 +6,150 @@ e `scripts/seed-e2e-escalacao.ts`, build de produção (`next build` + `next sta
 **sem chave de IA** (o dublê `INTERNAL_AGENT_RUN_STUB`, que é como o CI roda). É o mais perto de
 uma VPS recém-instalada que esta máquina permite.
 
-## Conversar com a IA que abriu o caso (ondas 4 e 5)
+> **O que é afirmação e o que é imagem.** Daqui para baixo, toda medida de layout foi feita
+> por `getBoundingClientRect` / `getComputedStyle` DENTRO do navegador, dirigida por
+> Playwright — as imagens ilustram, quem afirma é a medição. Captura `fullPage` mente sobre
+> posição de elemento fixo (a barra lateral aparece empilhada no meio do conteúdo); é
+> artefato de captura rolada, não defeito de layout.
+
+---
+
+## As três specs da prova em tela (onda 12)
+
+| funcionalidade | spec | onde roda |
+|---|---|---|
+| conversar com a IA do caso | [`tests/e2e/conversa-do-caso.spec.ts`](../../tests/e2e/conversa-do-caso.spec.ts) | `SPECS_PARTE_2` |
+| aviso no WhatsApp — a tela de uma instalação nova | [`tests/e2e/aviso-de-caso-no-whatsapp.spec.ts`](../../tests/e2e/aviso-de-caso-no-whatsapp.spec.ts) | `SPECS_PARTE_2` |
+| aviso no WhatsApp — o envio de verdade | [`tests/e2e/aviso-de-caso-chega-no-whatsapp.spec.ts`](../../tests/e2e/aviso-de-caso-chega-no-whatsapp.spec.ts) | `FORA_DO_CI`, com o motivo escrito no workflow |
+| a passagem para humano chega com contexto | [`tests/e2e/passagem-com-contexto.spec.ts`](../../tests/e2e/passagem-com-contexto.spec.ts) | `SPECS_PARTE_3` |
+
+---
+
+## 1. Conversar com a IA que abriu o caso
 
 | imagem | o que ela mostra |
 |---|---|
-| [`evidence/casos-vivos/chat/10-lista.png`](evidence/casos-vivos/chat/10-lista.png) | a tela de Casos aberta por um `manager`, com o cabeçalho e as abas |
-| [`evidence/casos-vivos/chat/20-login-resultado.png`](evidence/casos-vivos/chat/20-login-resultado.png) | **o defeito que a tela pegou**: "Email ou senha incorretos" com a senha certa. Não era o produto — o serviço de autenticação da bancada devolveu 500 por tempo esgotado no banco, e o produto traduz isso para credencial inválida. Medido no log do próprio GoTrue e confirmado pelo contraste (as mesmas credenciais entram por `curl` e pelo SDK no mesmo minuto) |
-| [`evidence/casos-vivos/chat/30-casos.png`](evidence/casos-vivos/chat/30-casos.png) | a lista com o caso semeado — "Abertos (1) · Desconto acima da alçada · Aguardando você" |
-| [`evidence/casos-vivos/chat/31-caso-aberto.png`](evidence/casos-vivos/chat/31-caso-aberto.png) | o caso aberto: o que o cliente precisa, por que a IA travou, as três decisões e o painel "Conversar sobre o caso" com o aviso de que a IA original não está mais no ar |
-| [`evidence/casos-vivos/chat/32-pergunta-digitada.png`](evidence/casos-vivos/chat/32-pergunta-digitada.png) | a pergunta do atendente digitada no campo |
-| [`evidence/casos-vivos/chat/33-resposta.png`](evidence/casos-vivos/chat/33-resposta.png) | **a prova**: pergunta da equipe e resposta da IA, com autor e hora, sem tocar a conversa do cliente |
+| [`evidence/casos-vivos/chat/10-caso-aberto.png`](evidence/casos-vivos/chat/10-caso-aberto.png) | o caso aberto por um `manager`: o que o cliente precisa, por que a IA travou, as decisões e o painel "Conversar sobre o caso" — com o **aviso de persona** ("A IA que abriu este caso não está mais no ar… quem responde é o assistente padrão da organização") |
+| [`evidence/casos-vivos/chat/20-pergunta-digitada.png`](evidence/casos-vivos/chat/20-pergunta-digitada.png) | a pergunta da equipe no campo, antes de enviar |
+| [`evidence/casos-vivos/chat/30-resposta-da-ia.png`](evidence/casos-vivos/chat/30-resposta-da-ia.png) | **a prova**: pergunta e resposta com autor ("Pergunta da equipe" / o nome da IA) e hora, sem tocar a conversa do cliente |
+| [`evidence/casos-vivos/chat/40-telefone.png`](evidence/casos-vivos/chat/40-telefone.png) | a mesma tela em 390px de largura — medida: **zero** rolagem horizontal |
+| [`evidence/casos-vivos/chat/50-colega-ve-a-pergunta.png`](evidence/casos-vivos/chat/50-colega-ve-a-pergunta.png) | **compartilhamento**: outra pessoa da equipe (`agent`) abre o mesmo caso e vê a pergunta de quem chegou antes |
+| [`evidence/casos-vivos/chat/60-agente-sem-visibilidade.png`](evidence/casos-vivos/chat/60-agente-sem-visibilidade.png) | com a organização em `visibility_mode='own'`, o `agent` que não é dono da conversa vê **"Nenhum caso aberto"** |
+| [`evidence/casos-vivos/chat/61-link-direto-nao-entrega.png`](evidence/casos-vivos/chat/61-link-direto-nao-entrega.png) | e o link direto para o caso **também não entrega** — a fila esconder e o detalhe abrir seria a porta dos fundos da RLS |
+| [`evidence/casos-vivos/chat/70-contato-anonimizado.png`](evidence/casos-vivos/chat/70-contato-anonimizado.png) | contato anonimizado: o campo some e entra a frase que **explica o motivo** |
 
-**O que estas imagens NÃO provam:** as medidas de layout por ferramenta (a sonda achou o painel numa
-rodada e não na seguinte — a bancada oscila sob a carga desta máquina), o aviso no WhatsApp e a
-passagem para humano. Isso é a onda 12, com spec Playwright e repetição.
+Medido por ferramenta nesta jornada (janela 1440×1000): botão "Perguntar" visível
+(`offsetParent` não nulo), fonte `Atkinson Hyperlegible` (a do produto, não a do sistema),
+fundo com cor resolvida, painel dentro da janela, rolagem horizontal **0** em 1440px e em
+390px. O painel não contém `case_chat`, `purpose`, `llm_call`, `undefined`, `null` nem
+`error_code`.
 
-**Captura de página inteira mente sobre posição:** nos PNGs `fullPage`, a barra lateral aparece
-empilhada no meio do conteúdo. É artefato de elemento fixo em captura rolada, não defeito de
-layout — a medição por `getBoundingClientRect` da onda 12 é quem responde isso.
+**O que estas imagens NÃO provam:** o estado "sem chave de IA" — o dublê
+`INTERNAL_AGENT_RUN_STUB` injeta uma chave, então `ia_configurada` é sempre verdadeiro sob
+ele. Aquele ramo é guardado por `tests/unit/`.
 
-## Conversar com a IA do caso — medição por ferramenta (onda 12 parcial)
+### As três imagens antigas, que ficam como registro e não como prova
 
-[`evidence/casos-vivos/chat/40-chat-com-resposta.png`](evidence/casos-vivos/chat/40-chat-com-resposta.png) — a mesma jornada com o app reconstruído com TODAS as ondas.
-Medido no navegador, não a olho (`getBoundingClientRect` / `getComputedStyle`):
+[`evidence/casos-vivos/chat/01-entrou.png`](evidence/casos-vivos/chat/01-entrou.png) mostra a tela de login em branco (o nome promete o contrário);
+[`evidence/casos-vivos/chat/03-detalhe-do-caso.png`](evidence/casos-vivos/chat/03-detalhe-do-caso.png) mostra a tela de Contatos carregando, não o detalhe de caso nenhum;
+[`evidence/casos-vivos/chat/02-lista-de-casos.png`](evidence/casos-vivos/chat/02-lista-de-casos.png) é a única das três que mostra o que o nome diz. O julgamento completo
+está em `docs/testing/user-journey-map.md`. As demais capturas da primeira tentativa —
+[`evidence/casos-vivos/chat/10-lista.png`](evidence/casos-vivos/chat/10-lista.png), [`evidence/casos-vivos/chat/20-login-resultado.png`](evidence/casos-vivos/chat/20-login-resultado.png), [`evidence/casos-vivos/chat/30-casos.png`](evidence/casos-vivos/chat/30-casos.png),
+[`evidence/casos-vivos/chat/31-caso-aberto.png`](evidence/casos-vivos/chat/31-caso-aberto.png), [`evidence/casos-vivos/chat/32-pergunta-digitada.png`](evidence/casos-vivos/chat/32-pergunta-digitada.png), [`evidence/casos-vivos/chat/33-resposta.png`](evidence/casos-vivos/chat/33-resposta.png) e
+[`evidence/casos-vivos/chat/40-chat-com-resposta.png`](evidence/casos-vivos/chat/40-chat-com-resposta.png) — são da exploração manual que antecedeu a spec.
+A captura `evidence/casos-vivos/chat/20-login-resultado.png` guarda um achado de AMBIENTE: "Email ou senha incorretos" com a
+senha certa, porque o serviço de autenticação da bancada devolveu 500 por tempo esgotado no
+banco e o produto traduz isso para credencial inválida. É por isso que o helper de login das
+specs tenta quatro vezes.
 
-| o que | medido |
+---
+
+## 2. O aviso no WhatsApp
+
+### 2a. A tela que uma instalação NOVA encontra (roda no CI)
+
+| imagem | o que ela mostra |
 |---|---|
-| janela | 1440 × 1000 |
-| barra lateral | x 0 → 239 (não invade: o campo começa em x 649) |
-| botão "Perguntar" | x 1259, y 969, 116 × 36, **visível** (`offsetParent` não nulo) |
-| campo da pergunta | 726 × 80 |
-| fonte do botão | `Atkinson Hyperlegible` (a do produto, não a do sistema) |
-| fundo do botão | `rgb(80, 109, 72)` (o verde do produto) |
-| rolagem horizontal da página | **0** |
-| erros de console/página | nenhum (o WebSocket do realtime é ruído da bancada) |
+| [`evidence/casos-vivos/aviso/10-manager-nao-entra.png`](evidence/casos-vivos/aviso/10-manager-nao-entra.png) | um `manager` abre o endereço e cai em **403** — a tela escolhe um número conectado e manda dado de cliente para um celular |
+| [`evidence/casos-vivos/aviso/20-tela-do-aviso.png`](evidence/casos-vivos/aviso/20-tela-do-aviso.png) | a tela aberta pelo `admin` (com verificação em duas etapas), com o alerta **"Este sistema ainda não tem um endereço na internet"** ANTES do formulário |
+| [`evidence/casos-vivos/aviso/30-configurado-mas-recusado.png`](evidence/casos-vivos/aviso/30-configurado-mas-recusado.png) | número e conexão salvos, e o interruptor continua **travado** — o produto se recusa a ligar um aviso cujo link não abriria nada |
+| [`evidence/casos-vivos/aviso/40-teste-recusado-com-motivo.png`](evidence/casos-vivos/aviso/40-teste-recusado-com-motivo.png) | "enviar aviso de teste" **recusa dizendo o que falta e quem resolve**, não um "não deu certo" |
+| [`evidence/casos-vivos/aviso/50-telefone.png`](evidence/casos-vivos/aviso/50-telefone.png) | a mesma tela em 390px — rolagem horizontal **0** |
+| [`evidence/casos-vivos/aviso/60-entrega-recusada-na-tela.png`](evidence/casos-vivos/aviso/60-entrega-recusada-na-tela.png) | **a recusa honesta ponta a ponta**: com um caso aberto de verdade e o dreno rodado, a entrega vira linha `falhou / sem_endereco_publico` e a lista da tela explica por quê |
 
-## O aviso no WhatsApp — a tela numa instalação nova
+Mais duas da exploração que antecedeu a spec: [`evidence/casos-vivos/aviso/40-tela-como-manager.png`](evidence/casos-vivos/aviso/40-tela-como-manager.png) e
+[`evidence/casos-vivos/aviso/50-tela-do-aviso.png`](evidence/casos-vivos/aviso/50-tela-do-aviso.png).
 
-[`evidence/casos-vivos/aviso/50-tela-do-aviso.png`](evidence/casos-vivos/aviso/50-tela-do-aviso.png) — aberta por um `admin` (com verificação em duas etapas, como o seed cria).
+Medido por ferramenta: o bloco de alertas vem ANTES do formulário no fio do DOM
+(`compareDocumentPosition`), o botão "Salvar" está alcançável, com a fonte do produto e
+dentro da janela, e o texto visível não contém `config_aviso_de_caso`,
+`channel_session_id`, `sem_endereco_publico`, `waha` nem `http://`.
 
-Antes dela, [`evidence/casos-vivos/aviso/40-tela-como-manager.png`](evidence/casos-vivos/aviso/40-tela-como-manager.png) prova o outro lado: o
-mesmo endereço aberto por um `manager` não mostra a tela — ela é de `admin`, porque escolhe um
-número conectado e expõe dado de cliente a um telefone.
+### 2b. O envio de verdade, com um receptor HTTP no lugar do WhatsApp
 
-O que ela mostra sozinha, sem ninguém configurar nada:
+Esta é a spec de `FORA_DO_CI`: ela precisa de um `NEXT_PUBLIC_APP_URL` público, e o
+`.env.e2e` do CI aponta para `localhost` por construção. Rodada nesta bancada com
+`NEXT_PUBLIC_APP_URL=https://crm.bancada-casos-vivos.example.com` e um servidor HTTP de
+verdade na porta que o `.env.e2e` declara como transporte.
 
-- **"Este sistema ainda não tem um endereço na internet"** — a bancada não tem `NEXT_PUBLIC_APP_URL` público, e o produto se recusa a ligar o aviso com um link que não abriria nada;
-- **"Nenhum assistente está autorizado a abrir casos"** — `cases_enabled` nasce desligado, então nenhum aviso sairia; a tela diz isso e leva aos assistentes;
-- o seletor de conexão explicando o recorte: *"Só aparecem aqui os números que conseguem mandar uma mensagem a qualquer hora"* — a capacidade, nunca o nome do provedor;
-- a decisão do dono escrita na própria tela: *"O aviso sai na hora, inclusive fora do horário comercial — sua equipe não é cliente"*;
-- o aviso de que o teste **manda mensagem de verdade** e conta no limite diário;
-- "Últimos avisos enviados" com o estado vazio honesto, e o laço de retorno dizendo que ainda não há casos suficientes para comparar.
+| imagem | o que ela mostra |
+|---|---|
+| [`evidence/casos-vivos/aviso/70-configurado-e-ligado.png`](evidence/casos-vivos/aviso/70-configurado-e-ligado.png) | com endereço público o alerta bloqueante some e o interruptor **destrava** |
+| [`evidence/casos-vivos/aviso/71-teste-enviado.png`](evidence/casos-vivos/aviso/71-teste-enviado.png) | "Aviso de teste enviado" — e o receptor registrou **um** `POST /api/sendText` |
+| [`evidence/casos-vivos/aviso/72-entrega-enviada.png`](evidence/casos-vivos/aviso/72-entrega-enviada.png) | a lista "Últimos avisos enviados" com a situação **enviado** |
+| [`evidence/casos-vivos/aviso/73-linha-do-tempo-do-caso.png`](evidence/casos-vivos/aviso/73-linha-do-tempo-do-caso.png) | na linha do tempo do caso, **"Avisamos o suporte no WhatsApp"** — quem abre o caso sabe que a equipe já foi avisada |
 
-**O que ainda NÃO está provado aqui:** o envio de verdade (precisa do WhatsApp pareado — `CRED-006`), a resposta do suporte não virando cliente, e o cartão da passagem dentro da conversa (onda 11).
+**O texto que saiu de verdade** está em
+[`evidence/casos-vivos/aviso/aviso-que-saiu.txt`](evidence/casos-vivos/aviso/aviso-que-saiu.txt), gravado pela própria spec a partir do corpo
+que chegou no receptor:
+
+```
+🔔 DeskcommCRM: novo caso esperando você
+
+Tipo: Outro
+Assunto: Desconto fora da alçada lote mejiut
+Cliente: Escalação
+O que o cliente precisa: Cliente de 200 unidades pedindo 20% de desconto.
+Por que a IA travou: a política do agente vai até 10%
+
+Abrir: https://crm.bancada-casos-vivos.example.com/app/ai/cases?caso=37cdf572-…
+
+Responder aqui não chega ao cliente — abra o link para responder.
+```
+
+Asserções sobre esse corpo: **tem** o assunto, o **primeiro** nome do cliente e o link do
+caso; **não tem** o sobrenome, **não tem** o telefone do cliente (`+5531977776666` nem
+`977776666`) e **não tem** trecho de conversa; termina com a linha que impede a equipe de
+responder para o vazio. A chave do transporte vai no **cabeçalho**, nunca na URL. Drenar de
+novo duas vezes mantém **um** envio (idempotência).
+
+---
+
+## 3. A passagem para humano chega com contexto
+
+| imagem | o que ela mostra |
+|---|---|
+| [`evidence/casos-vivos/passagem/10-cartao-na-conversa.png`](evidence/casos-vivos/passagem/10-cartao-na-conversa.png) | o cartão **"Por que a IA passou para você"** dentro do fio: motivo em português, "O cliente quer", "A IA já tentou" (numerada, com o desfecho) e "Últimas palavras do cliente" entre aspas |
+| [`evidence/casos-vivos/passagem/20-cartao-no-telefone.png`](evidence/casos-vivos/passagem/20-cartao-no-telefone.png) | o mesmo cartão em 390px, inteiro e sem rolagem lateral |
+| [`evidence/casos-vivos/passagem/30-central-aponta-para-a-conversa.png`](evidence/casos-vivos/passagem/30-central-aponta-para-a-conversa.png) | a Central com "O assistente passou um atendimento para um humano" e o gesto **"Abrir conversa"** apontando para aquela conversa |
+| [`evidence/casos-vivos/passagem/40-cartao-reconhecido.png`](evidence/casos-vivos/passagem/40-cartao-reconhecido.png) | depois de "Assumir e responder": o cartão deixa de convidar e passa a dizer **quem assumiu** |
+| [`evidence/casos-vivos/passagem/50-central-sem-o-aviso.png`](evidence/casos-vivos/passagem/50-central-sem-o-aviso.png) | e o aviso saiu dos abertos da Central **sozinho** — prova do gatilho, ninguém apertou "resolver" |
+
+Medido por ferramenta: o cartão tem altura > 40px (um cartão de 0px está montado e
+invisível), cabe na janela, a conversa não rola para o lado em 1440px nem em 390px, e o
+convite "Assumir e responder" está **dentro da janela** — ver o achado abaixo. O cartão não
+contém `requested_human`, `suspected_optout`, `ferramenta_do_modelo` nem `motivo_codigo`.
+
+**O achado que só a medição pegava.** A primeira rodada mediu o botão "Assumir e responder"
+em **y=1008 numa janela de 720px** — montado, clicável por programa e **abaixo da dobra do
+fio**. Causa: `ChatThread` decidia "a abertura já terminou" pelo contador de páginas da
+consulta de MENSAGENS, e o cartão chega de uma consulta própria, depois da primeira pintura
+— numa conversa sem mensagens (o normal logo após uma passagem) a guarda "o usuário está
+lendo o histórico" passava a valer sobre alguém que não tinha rolado nada, e o fio nunca
+descia até o cartão. Consertado na causa em `components/inbox/ChatThread.tsx`, e a medição
+do botão contra a janela é a catraca que impede a volta.
+
+**O que esta spec NÃO prova:** o caminho em que o próprio modelo decide passar (a ferramenta
+`request_human_handoff`) e a passagem por `suspected_optout` — a única que não pode oferecer
+"Assumir e responder". As duas são guardadas por `tests/unit/cartao-da-passagem.test.ts`
+sobre a função pura que o JSX consome.
