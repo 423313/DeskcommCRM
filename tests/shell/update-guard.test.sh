@@ -608,7 +608,7 @@ export DOCKER_BUILD_FEITO="$WORK/build-feito"
 rm -f "$DOCKER_BUILD_FEITO"
 # Instalado numa versão anterior à alvo: sem isto a guarda de retrocesso
 # recusaria antes de chegar ao `up -d`.
-sed -i "s|^APP_IMAGE=.*|APP_IMAGE=${NS}/deskcommcrm:0.9.0|" .env
+sed -i.bak "s|^APP_IMAGE=.*|APP_IMAGE=${NS}/deskcommcrm:0.9.0|" .env && rm -f .env.bak
 : > "$DOCKER_LOG"
 export ARQ_DIFERENTE=1
 run_update --to v1.1.0
@@ -629,7 +629,7 @@ check "e diz no FIM, que é o que o agente manda para a tela" \
 
 # O caminho feliz NÃO muda de comportamento: imagem disponível, nada de build
 # local e nenhuma menção a arquitetura.
-sed -i "s|^APP_IMAGE=.*|APP_IMAGE=${NS}/deskcommcrm:0.9.0|" .env
+sed -i.bak "s|^APP_IMAGE=.*|APP_IMAGE=${NS}/deskcommcrm:0.9.0|" .env && rm -f .env.bak
 : > "$DOCKER_LOG"
 run_update --to v1.1.0
 check "caminho feliz: conclui normalmente" test "$RC" -eq 0
