@@ -27756,6 +27756,28 @@ comment on column public.ad_platform_connections.google_login_customer_id is
 comment on column public.ad_platform_connections.google_conversion_action_id is
   'Qual ação de conversão, dentro de google_customer_id, recebe os envios de venda. Formato: só o id numérico, o resource name completo é montado no transporte.';
 
+-- ---- marcadores do contato no filtro de conversas (migration 0323) ----
+-- Campo calculado do PostgREST: o filtro ?tag= do Inbox casa conversations.tags
+-- OU contacts.tags num único or=, sem lista de ids na URL. SECURITY INVOKER (a
+-- RLS de contacts vale para quem chama); as duas origens de EXECUTE revogadas.
+-- Antes da varredura de anon, como toda função nova do apêndice.
+create or replace function public.tags_do_contato(c public.conversations)
+  returns text[]
+  language sql
+  stable
+  set search_path = public
+as $$
+  select ct.tags from public.contacts ct where ct.id = c.contact_id
+$$;
+
+comment on function public.tags_do_contato(public.conversations) is
+  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0323).';
+
+revoke execute on function public.tags_do_contato(public.conversations) from public, anon;
+grant  execute on function public.tags_do_contato(public.conversations) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
