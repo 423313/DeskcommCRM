@@ -178,11 +178,11 @@ export interface GateContext {
   openedCaseThisTurn: boolean;
   /**
    * Nome(s) próprio(s) que o PROMPT do tenant usa para a retaguarda humana (ex.:
-   * "Fernando"), somados ao vocabulário genérico do `casePromiseGate`
+   * "Fulano"), somados ao vocabulário genérico do `casePromiseGate`
    * (`detectHumanPromise`/`human-promise.ts`). Ausente/vazio = só os cargos
    * genéricos (comportamento anterior, retrocompatível). Sem isto, um agente cujo
    * prompt nomeia a pessoa em vez do cargo escapa 100% do detector — medido em
-   * produção, tenant YADEA: dezenas de promessas nomeando "Fernando", 1 só
+   * produção, num tenant: dezenas de promessas nomeando o gerente pelo nome, 1 só
    * detecção em 3 dias.
    */
   humanPromiseExtraTargets?: readonly string[];
@@ -448,7 +448,7 @@ export const internalVocabularyGate: Gate = {
  * Padrão determinístico de "prometi verificar/confirmar agenda sem checar" — verbo de
  * intenção (vou/estou/iremos) + verbo de checagem (verificar/confirmar/consultar) perto
  * (≤80 chars) de um substantivo de agenda. Curto de propósito: cobre as frases MEDIDAS em
- * produção (2026-08-29, tenant YADEA/gpt-5.6-terra) — "vou verificar as opções de horário
+ * produção (2026-08-29, gpt-5.6-terra) — "vou verificar as opções de horário
  * [...] e te passo assim que tiver a confirmação", "estou confirmando com a equipe os
  * horários disponíveis" — não uma gramática geral de intenção, que erraria para o lado do
  * falso positivo em texto livre de WhatsApp.
@@ -462,7 +462,7 @@ const AGENDA_STALL_PATTERN =
  * ("está confirmado/agendado/marcado/certinho") — o texto exato do incidente original
  * que deu origem a este gate ("Seu agendamento está confirmado para amanhã às 9h",
  * "Confirmando: seu agendamento está certinho para amanhã às 9h"), medido em produção
- * 2026-08-29 (tenant YADEA) ANTES de o `AGENDA_STALL_PATTERN` existir. O padrão de
+ * 2026-08-29 ANTES de o `AGENDA_STALL_PATTERN` existir. O padrão de
  * promessa sozinho não cobre essa frase (não há "vou/estou" + verbo de checagem nela),
  * então uma confirmação categórica sem chamada de ferramenta passava batido mesmo com o
  * gate armado. Mesma disciplina: substantivo de agenda perto de "está/ficou/fica" perto
