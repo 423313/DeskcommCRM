@@ -6877,40 +6877,90 @@ create table if not exists reentry_knob_pointers (
 -- playbook_versions/pointers, skill_versions/pointers, metrics) a MESMA policy
 -- serve: `null in (...)` nunca é true ⇒ linhas de plataforma são visíveis só ao
 -- service role (que bypassa RLS).
+--
+-- A enumeração que morava AQUI virou a função sem parâmetro logo abaixo
+-- (migration 0295) — ela é chamada em cada um dos três pontos onde havia laço,
+-- e de novo no fim do arquivo.
 -- ============================================================================
-do $$
-declare
-  t text;
+
+-- ---- proteções de tabela de organização: o laço vira função (migration 0295) ----
+--
+-- ADR-0002, D5: "Essas rotinas saem do laço do baseline para funções sem
+-- parâmetro, chamadas pelo baseline e pela provisionadora." É a irmã da 0274 —
+-- lá foram as travas do suporte, aqui são RLS ligada, `revoke all … from anon` e
+-- o isolamento por organização.
+--
+-- A RÉGUA É `not relrowsecurity`, e não "toda tabela com organization_id".
+-- Medido no baseline de ed42ad119 (pg17 descartável, ON_ERROR_STOP=1): das 119
+-- tabelas de organização, 0 estão sem RLS — então esta varredura é no-op aqui —,
+-- mas 49 ainda têm privilégio de `anon`, 8 são server-only (RLS ligada e ZERO
+-- policies, de propósito) e 66 não têm a policy ampla. Varrer as 119 abriria as
+-- 8 e atropelaria as policies por papel das 66. Já uma tabela recém-criada — o
+-- que a provisionadora de um módulo produz — nasce com RLS desligada, e é
+-- exatamente ela que esta régua pega. O racional inteiro está no cabeçalho da
+-- migration 20260918090000_0295_*.sql.
+--
+-- Idempotente: `drop policy if exists` antes do `create policy`; reaplicar
+-- converge. A definição fica AQUI, antes da varredura de anon (que é, de
+-- propósito, quem cura o `anon` de toda função nova); a CHAMADA fica no fim do
+-- arquivo, junto com a da 0274.
+
+create or replace function public.fn_proteger_tabelas_de_organizacao()
+returns void
+language plpgsql
+set search_path = public
+as $f$
+declare r record;
 begin
-  foreach t in array array[
-    'agent_inbox_items', 'job_queue', 'send_ledger',
-    'playbook_versions', 'playbook_pointers',
-    'channel_session_health', 'llm_calls',
-    'lead_checkpoints', 'lead_state', 'lead_state_transitions',
-    'metrics', 'channel_knobs', 'pacing_ledger', 'outbound_copies',
-    'cron_jobs',
-    'reentry_template_versions', 'reentry_template_pointers',
-    'lead_notes', 'skill_versions', 'skill_pointers',
-    'promise_table_versions', 'promise_table_pointers',
-    'disclosure_template_versions', 'disclosure_template_pointers',
-    'before_send_traces',
-    'flywheel_judge_verdicts', 'flywheel_distiller_proposals',
-    'judge_alignment_pool',
-    'reentry_knob_versions', 'reentry_knob_pointers'
-  ]
-  loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
-    execute format('revoke all on public.%I from anon', t);
-  end loop;
-end
-$$;
+ for r in
+   select c.relname
+     from pg_class c
+     join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and not c.relrowsecurity
+      and exists (
+        select 1 from pg_attribute a
+         where a.attrelid = c.oid
+           and a.attname = 'organization_id'
+           and a.attnum > 0
+           and not a.attisdropped)
+    order by c.relname
+ loop
+   execute format('alter table public.%I enable row level security', r.relname);
+   execute format('revoke all on public.%I from anon', r.relname);
+   execute format('drop policy if exists tenant_isolation_%s_all on public.%I', r.relname, r.relname);
+   execute format(
+     'create policy tenant_isolation_%s_all on public.%I for all
+        using (organization_id in (select * from public.fn_user_org_ids()))
+        with check (organization_id in (select * from public.fn_user_org_ids()))',
+     r.relname, r.relname);
+ end loop;
+end $f$;
+
+-- O ponto de entrada que a provisionadora de um módulo chama no FIM do corpo,
+-- na MESMA transação em que criou as tabelas. A ORDEM importa: as travas do
+-- suporte (0274) leem o privilégio de `authenticated` de cada tabela para
+-- decidir entre as três policies restritivas e o contrato server-only, então
+-- vêm DEPOIS de a RLS e o isolamento estarem no lugar.
+create or replace function public.fn_proteger_modulo_provisionado()
+returns void
+language plpgsql
+set search_path = public
+as $f$
+begin
+  perform public.fn_proteger_tabelas_de_organizacao();
+  perform public.fn_aplicar_travas_de_suporte();
+end $f$;
+
+revoke execute on function public.fn_proteger_tabelas_de_organizacao() from public, anon, authenticated, service_role;
+revoke execute on function public.fn_proteger_modulo_provisionado() from public, anon, authenticated, service_role;
+
+
+-- A rotina da migration 0295 no lugar do laço enumerado: ela varre o catálogo
+-- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
+-- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
+do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
 
 -- watchdog_cursors não tem organization_id (infra de plataforma): RLS habilitada
 -- SEM policy ⇒ só o service role acessa.
@@ -7622,21 +7672,10 @@ alter table flywheel_distiller_proposals add constraint flywheel_distiller_propo
   check (type in ('playbook_bullet', 'golden_case', 'reentry_trigger', 'org_memory_entry'));
 
 -- RLS (mesmo shape do loop tenant_isolation_* do baseline).
-do $$
-declare t text;
-begin
-  foreach t in array array['org_memory_versions', 'org_memory_pointers', 'org_memory_entries'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
-    execute format('revoke all on public.%I from anon', t);
-  end loop;
-end $$;
+-- A rotina da migration 0295 no lugar do laço enumerado: ela varre o catálogo
+-- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
+-- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
+do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
 
 -- ---- skills instaláveis: manifest + skill_activations + catálogo (migration 0068) ----
 -- 0068: Skills instaláveis + marketplace (Fase 2 do épico harness — spec 2026-07-23).
@@ -7662,21 +7701,10 @@ create index if not exists idx_skill_activations_skill
 
 -- RLS das tabelas org-scoped novas (skill_activations). skill_versions/pointers já
 -- estão no loop tenant_isolation do baseline; a leitura de catálogo é policy extra abaixo.
-do $$
-declare t text;
-begin
-  foreach t in array array['skill_activations'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
-    execute format('revoke all on public.%I from anon', t);
-  end loop;
-end $$;
+-- A rotina da migration 0295 no lugar do laço enumerado: ela varre o catálogo
+-- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
+-- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
+do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
 
 -- Catálogo do marketplace: qualquer usuário autenticado LÊ as skills de plataforma
 -- (organization_id null). Só SELECT; escrita de plataforma continua service-role.
@@ -27576,78 +27604,6 @@ grant execute on function public.fn_mark_conversation_message(uuid,text,text,tim
 notify pgrst, 'reload schema';
 
 
--- ---- proteções de tabela de organização: o laço vira função (migration 0295) ----
---
--- ADR-0002, D5: "Essas rotinas saem do laço do baseline para funções sem
--- parâmetro, chamadas pelo baseline e pela provisionadora." É a irmã da 0274 —
--- lá foram as travas do suporte, aqui são RLS ligada, `revoke all … from anon` e
--- o isolamento por organização.
---
--- A RÉGUA É `not relrowsecurity`, e não "toda tabela com organization_id".
--- Medido no baseline de ed42ad119 (pg17 descartável, ON_ERROR_STOP=1): das 119
--- tabelas de organização, 0 estão sem RLS — então esta varredura é no-op aqui —,
--- mas 49 ainda têm privilégio de `anon`, 8 são server-only (RLS ligada e ZERO
--- policies, de propósito) e 66 não têm a policy ampla. Varrer as 119 abriria as
--- 8 e atropelaria as policies por papel das 66. Já uma tabela recém-criada — o
--- que a provisionadora de um módulo produz — nasce com RLS desligada, e é
--- exatamente ela que esta régua pega. O racional inteiro está no cabeçalho da
--- migration 20260918090000_0295_*.sql.
---
--- Idempotente: `drop policy if exists` antes do `create policy`; reaplicar
--- converge. A definição fica AQUI, antes da varredura de anon (que é, de
--- propósito, quem cura o `anon` de toda função nova); a CHAMADA fica no fim do
--- arquivo, junto com a da 0274.
-
-create or replace function public.fn_proteger_tabelas_de_organizacao()
-returns void
-language plpgsql
-set search_path = public
-as $f$
-declare r record;
-begin
- for r in
-   select c.relname
-     from pg_class c
-     join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public'
-      and c.relkind = 'r'
-      and not c.relrowsecurity
-      and exists (
-        select 1 from pg_attribute a
-         where a.attrelid = c.oid
-           and a.attname = 'organization_id'
-           and a.attnum > 0
-           and not a.attisdropped)
-    order by c.relname
- loop
-   execute format('alter table public.%I enable row level security', r.relname);
-   execute format('revoke all on public.%I from anon', r.relname);
-   execute format('drop policy if exists tenant_isolation_%s_all on public.%I', r.relname, r.relname);
-   execute format(
-     'create policy tenant_isolation_%s_all on public.%I for all
-        using (organization_id in (select * from public.fn_user_org_ids()))
-        with check (organization_id in (select * from public.fn_user_org_ids()))',
-     r.relname, r.relname);
- end loop;
-end $f$;
-
--- O ponto de entrada que a provisionadora de um módulo chama no FIM do corpo,
--- na MESMA transação em que criou as tabelas. A ORDEM importa: as travas do
--- suporte (0274) leem o privilégio de `authenticated` de cada tabela para
--- decidir entre as três policies restritivas e o contrato server-only, então
--- vêm DEPOIS de a RLS e o isolamento estarem no lugar.
-create or replace function public.fn_proteger_modulo_provisionado()
-returns void
-language plpgsql
-set search_path = public
-as $f$
-begin
-  perform public.fn_proteger_tabelas_de_organizacao();
-  perform public.fn_aplicar_travas_de_suporte();
-end $f$;
-
-revoke execute on function public.fn_proteger_tabelas_de_organizacao() from public, anon, authenticated, service_role;
-revoke execute on function public.fn_proteger_modulo_provisionado() from public, anon, authenticated, service_role;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
