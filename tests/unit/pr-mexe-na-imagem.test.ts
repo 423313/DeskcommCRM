@@ -63,11 +63,20 @@ describe("pr-mexe-na-imagem", () => {
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#"));
 
-  it("toda entrada do .dockerignore pula", () => {
-    const naoPulam = ignorados.filter((e) => {
-      const amostra = e.replace(/\*/g, "amostra");
-      return responde([amostra]) === "sim" && responde([`${amostra}/amostra.txt`]) === "sim";
-    });
+  // Um processo bash só, que chama o script por entrada (~50 execuções): menos
+  // de um segundo numa máquina ociosa, 18 s numa com carga 90. O teto é para a
+  // máquina, não para o script.
+  it("toda entrada do .dockerignore pula", { timeout: 60_000 }, () => {
+    const amostras = ignorados.map((e) => e.replace(/\*/g, "amostra"));
+    const programa = `for a in "$@"; do
+      r1=$(printf '%s\\n' "$a" | bash ${SCRIPT})
+      r2=$(printf '%s\\n' "$a/amostra.txt" | bash ${SCRIPT})
+      [ "$r1" = sim ] && [ "$r2" = sim ] && echo "$a"
+    done; true`;
+    const naoPulam = execFileSync("bash", ["-c", programa, "_", ...amostras], { encoding: "utf-8" })
+      .split("\n")
+      .filter(Boolean);
+    expect(amostras.length).toBeGreaterThan(15);
     expect(naoPulam).toEqual([]);
   });
 
