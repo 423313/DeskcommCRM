@@ -48,6 +48,7 @@ import { sql } from "./psql-transporte";
  * tabela está aqui" é a pergunta que a próxima entrega vai fazer.
  */
 const TABELAS_NA_CASCATA = [
+  "agent_case_chat_messages", // 0281 — o `body` da consulta interna da equipe sobre o caso
   "agent_case_events", //  0280 — body/metadata da linha do tempo do caso
   "agent_cases", //        0280 — title/summary/blocker/context_snapshot
   "agent_inbox_items", //  0280 — o aviso da Central que embute o texto do caso

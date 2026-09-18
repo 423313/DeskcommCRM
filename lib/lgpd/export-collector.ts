@@ -231,6 +231,25 @@ export interface CaseEventRow {
   created_at: string;
 }
 
+/**
+ * Uma mensagem da conversa INTERNA da equipe com a IA sobre um caso do titular
+ * (migration 0281). O que se apaga a pedido dele é o que se entrega a pedido
+ * dele: `body` está na cascata de redação, logo a tabela tem de ser visitada
+ * aqui — é o que `tests/unit/lgpd-exporta-o-que-redige.test.ts` cobra.
+ *
+ * O vínculo é a FK DIRETA `contact_id`, e não a conversa: ela existe nesta
+ * tabela exatamente para isso.
+ */
+export interface CaseChatMessageRow {
+  id: string;
+  case_id: string;
+  turn_id: string;
+  author_kind: string;
+  body: string | null;
+  error_code: string | null;
+  created_at: string;
+}
+
 /** Uma demanda do titular — o pedido, seu dono e seu desfecho. */
 export interface DemandaRow {
   id: string;
@@ -310,6 +329,13 @@ export interface ExportPayload {
   cases: CaseRow[];
   case_events: CaseEventRow[];
   demandas: DemandaRow[];
+  /**
+   * O que a equipe PERGUNTOU à IA sobre os casos do titular, e o que ela
+   * respondeu. Obrigatório, não opcional: campo obrigatório faz um caminho de
+   * export novo NÃO COMPILAR se esquecer, que é a única sincronia que não
+   * depende de memória humana.
+   */
+  case_chat_messages: CaseChatMessageRow[];
   reply_drafts?: Array<{
     id: string;
     status: string;
@@ -771,6 +797,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   const cases: CaseRow[] = [];
   const case_events: CaseEventRow[] = [];
   let demandas: DemandaRow[] = [];
+  const case_chat_messages: CaseChatMessageRow[] = [];
   if (contactId) {
     const pageSize = 500;
     const refBatchSize = 100; // Mantém o filtro IN abaixo dos limites de URL dos proxies.
@@ -856,6 +883,28 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       });
     } else if (data) {
       demandas = data;
+    }
+    // A conversa interna sobre o caso (migration 0281). FK direta para o
+    // contato, então não passa pelos ids de conversa acima — e paginada, e não
+    // com `limit`, porque uma deliberação longa num titular antigo não pode
+    // sumir do relatório em silêncio.
+    for (let offset = 0; ; offset += pageSize) {
+      const { data: pagina, error: erro } = await admin
+        .from("agent_case_chat_messages")
+        .select("id, case_id, turn_id, author_kind, body, error_code, created_at")
+        .eq("organization_id", organizationId)
+        .eq("contact_id", contactId)
+        .order("id")
+        .range(offset, offset + pageSize - 1);
+      if (erro) {
+        logger.warn("[lgpd-export-worker] case chat messages load failed", {
+          request_id: requestId,
+          error: erro.message,
+        });
+        break;
+      }
+      case_chat_messages.push(...(pagina ?? []));
+      if (!pagina || pagina.length < pageSize) break;
     }
   }
 
@@ -970,6 +1019,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     cases,
     case_events,
     demandas,
+    case_chat_messages,
   };
 }
 
@@ -1004,5 +1054,6 @@ function emptyPayload(
     cases: [],
     case_events: [],
     demandas: [],
+    case_chat_messages: [],
   };
 }

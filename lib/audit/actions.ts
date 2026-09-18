@@ -585,6 +585,17 @@ export const AUDIT_ACTIONS = [
   // Mover um card para OUTRO funil (issue #922) clona o negócio no destino e
   // encerra o original: é a escrita que mexe em DOIS funis de uma vez.
   "lead.moved_to_pipeline",
+  /**
+   * A equipe perguntou à IA sobre um caso (migration 0281). Uma linha por
+   * PERGUNTA, respondida ou não — `respondeu:false` com `error_code` é o que
+   * torna contável "a IA parou de responder à equipe", que sem isto só
+   * apareceria como casos parados na fila.
+   *
+   * ⚠️ SEM O TEXTO. Nem a pergunta, nem a resposta: `api_audit_log` é
+   * append-only, sem UPDATE nem DELETE para papel nenhum — o que entra ali não
+   * sai pela cascata de LGPD.
+   */
+  "ai.case_chat_asked",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

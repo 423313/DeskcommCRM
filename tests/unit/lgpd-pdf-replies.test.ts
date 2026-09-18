@@ -47,6 +47,7 @@ function payload(): ExportPayload {
     voice_calls: [],
     cases: [],
     case_events: [],
+    case_chat_messages: [],
     demandas: [],
   appointment_notices: [
       {

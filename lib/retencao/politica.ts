@@ -87,6 +87,27 @@ export const RETENCAO_CAPTACAO_DIAS_PADRAO = 365;
  */
 export const RETENCAO_CAPTACAO_DIAS_PISO = 30;
 
+/**
+ * 365 dias para a CONVERSA DO CASO (`agent_case_chat_messages`, migration 0281).
+ *
+ * Um ano fiscal de deliberação. Depois disso, "por que decidimos assim" é
+ * respondido pelos EVENTOS do caso — que são o registro da decisão —, não pela
+ * conversa que a precedeu. Guardar a deliberação para sempre seria manter
+ * indefinidamente texto sobre uma pessoa identificável cuja utilidade acabou.
+ */
+export const RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO = 365;
+/**
+ * Piso da conversa do caso: 90 dias, o MESMO da auditoria e pela mesma razão.
+ *
+ * O knob nunca vira apagador de deliberação recente — a pergunta "quem decidiu
+ * o quê, e com base em quê" ainda se faz três meses depois. O piso mora DENTRO
+ * de `fn_expurgar_conversa_do_caso_vencida` (`greatest(...)` no corpo), o que o
+ * faz valer para qualquer chamador, inclusive um `psql` na mão; a cópia aqui
+ * serve para o operador ver no log que o valor dele foi elevado, em vez de
+ * descobrir pela ausência de efeito.
+ */
+export const RETENCAO_CONVERSA_DO_CASO_DIAS_PISO = 90;
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;

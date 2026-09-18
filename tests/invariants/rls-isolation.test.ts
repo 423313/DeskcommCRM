@@ -101,6 +101,7 @@ beforeAll(() => {
       v_stage uuid;
       v_agent uuid;
       v_version uuid;
+      v_case uuid;
       v_boundary jsonb;
     begin
       foreach v_org in array array['${ORG_A}'::uuid, '${ORG_B}'::uuid] loop
@@ -148,6 +149,37 @@ beforeAll(() => {
               (select reply_context_revision from public.conversations where organization_id = v_org and id = v_conv),
               (select operation_revision from public.ai_agents where organization_id = v_org and id = v_agent),
               'pending', 'RLS invariant private reply');
+        end if;
+
+        -- 0281: a conversa INTERNA da equipe com a IA sobre um caso. Guarda o
+        -- texto que a pessoa perguntou e a resposta que a IA deu sobre um
+        -- contato identificável — vazar entre organizações entregaria ao
+        -- vizinho a deliberação inteira sobre um cliente que não é dele.
+        --
+        -- ⚠️ ARMADILHA DESTA SEMENTE, escrita para o próximo não cair nela: o
+        -- controle positivo só passa porque a conversa semeada tem
+        -- 'assigned_to_user_id' NULO e o default de 'visibility_mode' é
+        -- 'own_and_unassigned'. A policy desta tabela chama
+        -- 'fn_can_view_conversation', e o usuário semeado aqui é 'agent' — quem
+        -- atribuir a conversa a OUTRA pessoa neste seed deixa o caso vermelho
+        -- por ACERTO, e a "correção" natural seria afrouxar a policy. O eixo de
+        -- visibilidade (que é a razão de a tabela existir com 'conversation_id'
+        -- dentro) é medido em 'conversa-do-caso-visibilidade.test.ts', com
+        -- organização em 'visibility_mode = 'own'' e dois atendentes.
+        if not exists (select 1 from public.agent_case_chat_messages where organization_id = v_org) then
+          select id into v_case from public.agent_cases
+            where organization_id = v_org and conversation_id = v_conv limit 1;
+          if v_case is null then
+            insert into public.agent_cases (organization_id, conversation_id, title, summary, blocker)
+              values (v_org, v_conv, 'RLS Invariant Case', 'RLS invariant private summary',
+                      'RLS invariant private blocker')
+              returning id into v_case;
+          end if;
+          insert into public.agent_case_chat_messages
+            (organization_id, case_id, conversation_id, contact_id, turn_id, author_kind, body)
+          values
+            (v_org, v_case, v_conv, v_contact, gen_random_uuid(), 'human',
+             'RLS invariant private question');
         end if;
 
         select id into v_pipe from public.crm_pipelines
@@ -340,6 +372,12 @@ export const TABLES = [
   // positivo. O SELECT de `authenticated` é por COLUNA, sem as colunas cifradas:
   // a contagem abaixo usa só `organization_id` e mede o que um membro enxerga.
   "ai_provider_credentials",
+  // migration 0281 — a conversa interna da equipe com a IA sobre um caso. `body`
+  // é texto livre que descreve uma pessoa identificável do OUTRO tenant, e a
+  // leitura é o único comando que a tabela concede a `authenticated` (a escrita
+  // é do servidor). Ver a armadilha do seed, escrita ao lado da semente: o
+  // controle positivo depende de a conversa semeada estar SEM dono.
+  "agent_case_chat_messages",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"
