@@ -528,14 +528,20 @@ reaplicar_baseline() {
       return 0
     fi
     if [ "$BASELINE_PASSADAS" -ge "$tentativas" ]; then
-      # Esgotou as passadas: o que houve até aqui é medição, não palpite.
-      registrar_rodada_do_banco "$([ "$BASELINE_PASSADAS" -gt 1 ] && printf 1 || printf 0)" \
-        "$((BASELINE_PASSADAS - 1))" "$BASELINE_PASSADAS"
+      # Esgotou as passadas SEM fechar o banco. Não se registra nada: as frases
+      # da tela são todas escritas como "…até a atualização do banco fechar", e
+      # esta rodada não fechou — gravar aqui faria a tela afirmar um fechamento
+      # que não houve, na rodada em que ela mais precisa calar. (Antes, este
+      # ponto gravava os MESMOS três números do sucesso, e os dois desfechos
+      # ficavam indistinguíveis no registro.) O desfecho da rodada vive no log
+      # do kit e no `status` do run.
       return 1
     fi
     if ! grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BASELINE_INESPERADO"; then
-      # Erro que retentativa não resolve: a rodada fechou na primeira passada.
-      registrar_rodada_do_banco 0 0 1
+      # Erro que retentativa não cura — e a rodada NÃO fechou. O `0 0 1` que
+      # este ponto gravava era literal, não medido: se a passada 1 teve disputa
+      # de lock e a passada 2 morreu num erro fatal, ele afirmava "primeira
+      # passada, sem disputa" em cima de duas coisas que ninguém mediu. Silêncio.
       return 1
     fi
     c_ylw "• parte do banco não aplicou (disputa com o app no ar ou conexão instável) — aplicando de novo, é seguro (passada $((BASELINE_PASSADAS + 1)) de $tentativas). O que não aplicou:"
@@ -578,7 +584,13 @@ ler_rodada_do_banco() {
   case "$retentativas" in ''|*[!0-9]*) return 0 ;; esac
   case "$passada" in ''|*[!0-9]*) return 0 ;; esac
   [ "$passada" -ge 1 ] || return 0
-  printf '{"disputa":%s,"retentativas":%s,"passada":%s}\n' \
+  # As três chaves saem PLANAS e com os nomes da rota (`disputa_de_banco`,
+  # `retentativas_do_banco`, `passada_do_banco`), prontas para entrarem no corpo
+  # do `run_result`: é o contrato de `app/api/v1/system/agent/route.ts`. O
+  # arquivo desta função fala a língua do kit; a fronteira fala a da API — e
+  # era aqui que as duas se confundiam, com o `z.object` da rota descartando em
+  # SILÊNCIO o objeto aninhado e gravando as três colunas nulas em toda rodada.
+  printf '"disputa_de_banco":%s,"retentativas_do_banco":%s,"passada_do_banco":%s\n' \
     "$([ "$disputa" = "1" ] && printf true || printf false)" "$retentativas" "$passada"
 }
 

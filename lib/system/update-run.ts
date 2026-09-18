@@ -226,7 +226,11 @@ export function textoDaRodadaDoBanco(
     )} e ${retentativasPorExtenso(retentativas)} até a atualização do banco fechar.`;
   }
 
-  return `A primeira passada não aplicou o banco inteiro: foram ${passadasPorExtenso(
-    passada,
-  )} e ${retentativasPorExtenso(retentativas)} até fechar.`;
+  // `retentativas >= 1` com `disputa: false` é um estado que NINGUÉM produz: quem
+  // grava tira os dois do MESMO contador de passadas (`disputa = passadas > 1`,
+  // `retentativas = passadas - 1`), então retentativa implica disputa por
+  // construção. A frase que existia aqui dava à tela a impressão de cobrir um
+  // caso que não existe — e o caso de teste, a de que estava coberto. Silêncio é
+  // o degrau certo, o mesmo de todo número impossível.
+  return null;
 }

@@ -51,11 +51,13 @@ describe("o que a tela conta da rodada de banco", () => {
     expect(texto).toContain("2 retentativas");
   });
 
-  it("primeira passada incompleta sem disputa: conta a retentativa sem falar de disputa", () => {
-    const texto = textoDaRodadaDoBanco({ disputa: false, retentativas: 1, passada: 2 });
-
-    expect(texto).toContain("duas passadas");
-    expect(texto).not.toContain("disputa");
+  it("retentativa SEM disputa é estado que ninguém produz: silêncio, não uma frase para um caso que não existe", () => {
+    // Quem grava tira os dois do MESMO contador de passadas:
+    // `disputa = passadas > 1` e `retentativas = passadas - 1` — retentativa
+    // implica disputa por construção (`_common.sh`). A frase que existia para
+    // esta combinação dava à tela a impressão de cobrir um estado impossível, e
+    // o caso de teste, a de que estava coberto.
+    expect(textoDaRodadaDoBanco({ disputa: false, retentativas: 1, passada: 2 })).toBeNull();
   });
 
   it("número impossível vira silêncio, não mentira", () => {
@@ -126,5 +128,41 @@ describe("as colunas da rodada existem nos três lugares", () => {
 
     expect(manifest).toContain("0276");
     expect(manifest).toContain("disputa_de_banco");
+  });
+});
+
+describe("o fio entre o kit e a rota fala a MESMA língua", () => {
+  // O defeito que este bloco tranca: o `agent.sh` mandava um objeto aninhado
+  // (`rodada_do_banco: { disputa, retentativas, passada }`) e a rota lê três
+  // campos PLANOS com outros nomes. O `z.object` descarta chave desconhecida em
+  // silêncio, então o parse passava, os três chegavam `undefined` e as colunas
+  // eram gravadas nulas em toda rodada — a tela calada para sempre, que é o
+  // silêncio que o PR veio eliminar. Nenhum gate pegava porque o fio não tinha
+  // teste em lugar nenhum: ele mora entre o shell e o Zod.
+  const raiz = process.cwd();
+  const nomesDaRota = ["disputa_de_banco", "retentativas_do_banco", "passada_do_banco"];
+
+  it("o kit imprime as três chaves com os nomes da rota, planas", () => {
+    const comum = readFileSync(join(raiz, "hostgator-setup-kit", "_common.sh"), "utf8");
+
+    for (const nome of nomesDaRota) expect(comum).toContain(nome);
+    // O objeto aninhado era exatamente o que a rota descartava.
+    expect(comum).not.toContain('{"disputa":');
+  });
+
+  it("o agent.sh manda o corpo PLANO — nenhum `rodada_do_banco` aninhado", () => {
+    const agente = readFileSync(join(raiz, "hostgator-setup-kit", "agent.sh"), "utf8");
+
+    expect(agente).toContain("${RODADA_DO_BANCO}");
+    expect(agente).not.toContain("rodada_do_banco");
+  });
+
+  it("a rota lê exatamente esses três nomes", () => {
+    const rota = readFileSync(
+      join(raiz, "app", "api", "v1", "system", "agent", "route.ts"),
+      "utf8",
+    );
+
+    for (const nome of nomesDaRota) expect(rota).toContain(`${nome}:`);
   });
 });

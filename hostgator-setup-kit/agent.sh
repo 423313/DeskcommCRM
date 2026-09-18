@@ -336,14 +336,19 @@ fi
 
 TAIL="$(esc "$(tail -40 "$LOG" || true)")" || true
 
-# O que a rodada do banco contou de si mesma, já no formato que o campo espera
-# (objeto JSON, não texto). Vazio = não medido — a tela fica calada em vez de
-# afirmar zero.
+# O que a rodada do banco contou de si mesma — três campos PLANOS, com os nomes
+# que a rota lê (`disputa_de_banco`, `retentativas_do_banco`, `passada_do_banco`).
+# Vazio = não medido: os três chegam ausentes e a tela se cala, em vez de afirmar
+# zero. O corpo é montado em pedaços porque campo ausente não vira `null` nem
+# vírgula solta no fim.
 RODADA_DO_BANCO="$(ler_rodada_do_banco 2>/dev/null || true)"
+BODY="{\"kind\":\"run_result\",\"run_id\":\"${RUN_ID}\",\"status\":\"${STATUS}\",\"log_tail\":\"${TAIL}\""
+[ -z "$RODADA_DO_BANCO" ] || BODY="${BODY},${RODADA_DO_BANCO}"
+BODY="${BODY}}"
 
 # O app acabou de reiniciar: insiste por ~2 min antes de desistir.
 for _ in $(seq 1 12); do
-  OUT="$(post "{\"kind\":\"run_result\",\"run_id\":\"${RUN_ID}\",\"status\":\"${STATUS}\",\"log_tail\":\"${TAIL}\",\"rodada_do_banco\":${RODADA_DO_BANCO:-null}}")"
+  OUT="$(post "$BODY")"
   [ -n "$OUT" ] && break
   sleep 10
 done
