@@ -642,7 +642,7 @@ export const NAV_CATALOG = [
     href: "/app/settings/conversoes",
     label: "Conversões",
     description:
-      "Devolver ao anúncio as vendas que ele trouxe, para ele aprender a procurar mais clientes parecidos.",
+      "Devolver ao anúncio as vendas que ele trouxe, e marcar a origem de quem chega pelo site.",
     icon: "ChartLineUp",
     group: "organizacao",
     section: "Sua empresa",

@@ -154,7 +154,7 @@ import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { esperarComoHumano } from './atraso-humano';
-import { sendInBubbles } from './split-message';
+import { sendInBubbles, splitForSend } from './split-message';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
@@ -1766,6 +1766,7 @@ async function executarTurnoDoAgente(
   // suíte de invariantes ficava vermelha das 22h às 7h (fuso do tenant) — nove
   // horas por dia em que um PR reprova por causa do relógio de parede.
   const clock = deps.clock ?? ((): Date => new Date());
+  const inicioDoProcessamento = performance.now();
   const contextKnobs = {
     historyLimit: deps.knobs.historyLimit,
     maxTokens: deps.knobs.maxContextTokens,
@@ -2879,6 +2880,54 @@ async function executarTurnoDoAgente(
             ...(semanticClassifier !== undefined
               ? { classifyPromiseSemantic: semanticClassifier }
               : {}),
+            // Pausa humana do turno, paga FORA do lock do número (issue #654). Antes ela
+            // era paga dentro do `send` logo abaixo (via `antesDaPrimeira`), e o `send`
+            // só acontece com o `pg_advisory_xact_lock` do canal na mão — cada turno
+            // segurava a fila do NÚMERO por 1,2s–7,5s além do necessário. Agora o
+            // guardrail a paga antes de tomar conexão: sem transação aberta durante a espera.
+            //
+            // O texto que dimensiona a pausa é a 1ª bolha do MESMO fatiamento que o
+            // `sendInBubbles` usa (`splitForSend` é a fonte única da decisão) — a pausa
+            // segue proporcional ao que o cliente lê primeiro, não ao corpo todo.
+            //
+            // Diferença declarada: aqui o texto é o `body` PRÉ-cadeia; o `finalBody`
+            // pós-disclosure só existe do lado de dentro do guardrail. Um disclosure
+            // prependado pelo gate F4-05 não entra na conta da espera (antes entrava,
+            // porque o gancho recebia `finalBody`).
+            esperaForaDoLock: async (): Promise<void> => {
+              // Uma vez por TURNO — o flag impede que um re-run do fail-safe (veto de
+              // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
+              if (jaEsperouComoHumano) return;
+              jaEsperouComoHumano = true;
+              // `liveChannel()`, não `channel`: o transporte é anulável (preview não tem
+              // canal) e este é o MESMO acessor que o `send` logo abaixo usa. Resolver
+              // antes da espera mantém o desfecho de preview idêntico ao de antes —
+              // `preview_transport_forbidden` na hora, e não depois da pausa.
+              const canal = liveChannel();
+              const ms = await esperarComoHumano({
+                texto:
+                  splitForSend(
+                    body,
+                    agentConfig?.splitMessages ?? false,
+                    agentConfig?.splitMaxChars ?? 600,
+                  )[0] ?? body,
+                // `processamentoMs` é a contribuição do #849 (@Teowfb): a pausa humana desconta o
+                // tempo que o turno JÁ gastou pensando, em vez de somar em cima dele. Sem este
+                // argumento o `gasto` de `atraso-humano.ts` cai no `?? 0` e o desconto não acontece —
+                // o cliente espera duas vezes. O ponto de chamada mudou de lugar com a #654 (a pausa
+                // saiu de `antesDaPrimeira`, dentro do lock, para cá), e o desconto veio junto.
+                processamentoMs: performance.now() - inicioDoProcessamento,
+                sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
+                log: runLog,
+                ...(canal.signalTyping
+                  ? {
+                      sinalizarDigitando: (): Promise<void> =>
+                        canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
+                    }
+                  : {}),
+              });
+              runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms, fora_do_lock: true });
+            },
             // `finalBody` = corpo após a cadeia (o disclosureGate F4-05 pode prependar o
             // disclosure via inject); é ELE que vai ao canal, não o `body` capturado da tool.
             send: (finalBody: string) =>
@@ -2887,34 +2936,9 @@ async function executarTurnoDoAgente(
                 maxChars: agentConfig?.splitMaxChars ?? 600,
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas
-                // ANTES da 1ª bolha: "digitando…" + espera proporcional ao texto.
-                // É o conserto do "responde rápido demais" (ver atraso-humano.ts).
-                // NÃO substitui o jitter acima: aquele é throttle anti-ban entre
-                // mensagens físicas, este é a pausa humana do turno. Só uma vez
-                // por TURNO — o flag impede que um re-run do fail-safe (veto de
-                // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
-                antesDaPrimeira: async (primeiraBolha: string): Promise<void> => {
-                  if (jaEsperouComoHumano) return;
-                  jaEsperouComoHumano = true;
-                  // `liveChannel()`, não `channel`: o transporte é anulável (preview
-                  // não tem canal) e este é o MESMO acessor que o `send` logo abaixo
-                  // usa. Resolver aqui, antes da espera, mantém o desfecho de preview
-                  // idêntico ao de antes deste recurso — `preview_transport_forbidden`
-                  // na hora, e não depois de segurar o turno por vários segundos.
-                  const canal = liveChannel();
-                  const ms = await esperarComoHumano({
-                    texto: primeiraBolha,
-                    sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
-                    log: runLog,
-                    ...(canal.signalTyping
-                      ? {
-                          sinalizarDigitando: (): Promise<void> =>
-                            canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
-                        }
-                      : {}),
-                  });
-                  runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms });
-                },
+                // A pausa humana do turno NÃO mora mais aqui: ela subiu para
+                // `esperaForaDoLock` (paga antes de o guardrail tomar o lock do número) —
+                // issue #654. Neste ponto fica só o jitter anti-ban entre bolhas.
                 send: (bubble): Promise<ChannelSendResult> => {
                   seq += 1;
                   return liveChannel().send({
@@ -3643,47 +3667,66 @@ async function executarTurnoDoAgente(
     const currentStage: LeadStage = leadState?.stage ?? 'new';
     let stageSuggestion: LeadStage | null = null;
     let stageHintBlock = '';
-    if (deps.knobs.stageClassifier !== undefined) {
-      stageSuggestion = await classifyStage(
-        pool,
-        deps.llmCfg,
-        { tenantId, leadId: leadId || null, jobId: job?.id },
-        {
-          context: effectiveContext,
-          currentStage,
-          ...argsAux(deps.knobs.stageClassifier.model),
-        },
-        { registry: deps.registry, log: runLog },
-      );
-      if (stageSuggestion !== null) {
-        stageHintBlock = renderStageHint(stageSuggestion, currentStage);
-      }
+    let jailbreakLevel: JailbreakLevel = 'none';
+
+    // Os dois classificadores auxiliares rodam EM PARALELO, e não em série.
+    //
+    // Eles são ADVISÓRIOS, leem sinais diferentes (o contexto e o estágio atual
+    // vs. a última mensagem do lead) e nenhum consome o resultado do outro — em
+    // série o turno pagava duas idas-e-voltas de LLM uma atrás da outra, e o
+    // cliente esperava a soma. `Promise.all` paga só a mais lenta das duas.
+    //
+    // O que NÃO muda por rodar junto: o orçamento mensal da organização é
+    // checado dentro de cada `runModelCall` (a mesma checagem que já corre
+    // concorrente entre turnos de leads diferentes), nenhuma decisão de
+    // guardrail depende de ordem entre os dois, e o `jailbreak` segue sem vetar
+    // o inbound — só flagra o turno no trace.
+    const [stageResultado, jailbreakVerdict] = await Promise.all([
+      deps.knobs.stageClassifier !== undefined
+        ? classifyStage(
+            pool,
+            deps.llmCfg,
+            { tenantId, leadId: leadId || null, jobId: job?.id },
+            {
+              context: effectiveContext,
+              currentStage,
+              ...argsAux(deps.knobs.stageClassifier.model),
+            },
+            { registry: deps.registry, log: runLog },
+          )
+        : Promise.resolve(null),
+      // F4-04: classifier ADVISÓRIO anti-jailbreak sobre a mensagem INBOUND do lead (o
+      // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
+      // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
+      // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
+      camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)
+        ? classifyJailbreak(
+            pool,
+            deps.llmCfg,
+            { tenantId, leadId: leadId || null, jobId: job?.id },
+            {
+              message: skillSignal,
+              // Knob ausente + organização ligando = roda com o modelo padrão dela,
+              // que é a convenção já usada pelo stageClassifier.
+              ...argsAux(deps.knobs.jailbreak?.model),
+            },
+            { registry: deps.registry, log: runLog },
+          )
+        : Promise.resolve(null),
+    ]);
+
+    stageSuggestion = stageResultado;
+    if (stageSuggestion !== null) {
+      stageHintBlock = renderStageHint(stageSuggestion, currentStage);
     }
 
-    // F4-04: classifier ADVISÓRIO anti-jailbreak sobre a mensagem INBOUND do lead (o
-    // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
-    // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
-    // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
-    let jailbreakLevel: JailbreakLevel = 'none';
-    if (camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)) {
-      const verdict = await classifyJailbreak(
-        pool,
-        deps.llmCfg,
-        { tenantId, leadId: leadId || null, jobId: job?.id },
-        {
-          message: skillSignal,
-          // Knob ausente + organização ligando = roda com o modelo padrão dela,
-          // que é a convenção já usada pelo stageClassifier.
-          ...argsAux(deps.knobs.jailbreak?.model),
-        },
-        { registry: deps.registry, log: runLog },
-      );
-      jailbreakLevel = verdict.level;
-      if (verdict.flag) {
+    if (jailbreakVerdict !== null) {
+      jailbreakLevel = jailbreakVerdict.level;
+      if (jailbreakVerdict.flag) {
         // trace do turno: só flag/level (não PII) — a mensagem e o reason nunca são logados.
         runLog.warn('jailbreak: sinal detectado na mensagem do lead', {
           jailbreak_flag: true,
-          jailbreak_level: verdict.level,
+          jailbreak_level: jailbreakVerdict.level,
         });
       }
     }

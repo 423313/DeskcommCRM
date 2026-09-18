@@ -184,6 +184,14 @@ const PARES: Array<{
     simbolo: "ChannelProvider",
   },
   {
+    tabela: "messages",
+    coluna: "sent_via",
+    // lib/types/messaging.ts → SentVia. A union deixa de viver inline em Message
+    // para o gate ler a fonte real em vez de manter uma terceira lista manual.
+    arquivo: "lib/types/messaging.ts",
+    simbolo: "SentVia",
+  },
+  {
     tabela: "followup_enrollments",
     coluna: "status",
     // hooks/followup/useFollowupQueue.ts → FollowupEnrollmentStatus.
@@ -465,7 +473,6 @@ function valoresDoCheck(tabela: string, coluna: string): string[] {
   }
   return definidoras[0]?.valores ?? [];
 }
-
 
 /**
  * Os literais do union type, LIDOS DO ARQUIVO — nunca transcritos.

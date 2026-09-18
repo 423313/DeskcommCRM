@@ -428,6 +428,18 @@ export const DICIONARIO: Traducoes = {
   "Feriado, férias, viagem. Nesses dias o sistema deixa de oferecer horários — e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.": { es: "Feriado, vacaciones, viaje. En esos días el sistema deja de ofrecer horarios — y lo que ya estaba agendado sigue agendado, para que decidas qué hacer con cada uno." },
   "Ex.: feriado": { es: "Ej.: feriado" },
   "Fechar este dia": { es: "Cerrar este día" },
+  "Dias fora da rotina": { es: "Días fuera de la rutina" },
+  "Feche um dia (feriado, férias, viagem) ou abra um dia que a sua jornada semanal não cobre. Em dia fechado o sistema deixa de oferecer horários, e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.": { es: "Cierra un día (feriado, vacaciones, viaje) o abre un día que tu jornada semanal no cubre. En día cerrado el sistema deja de ofrecer horarios, y lo que ya estaba agendado sigue agendado, para que decidas qué hacer con cada uno." },
+  "O que fazer": { es: "Qué hacer" },
+  "Fechar o dia": { es: "Cerrar el día" },
+  "Abrir para atendimento": { es: "Abrir para atención" },
+  "Das": { es: "Desde" },
+  "Abrir este dia": { es: "Abrir este día" },
+  "Repetir toda semana até (opcional)": { es: "Repetir cada semana hasta (opcional)" },
+  "dia(s) gravado(s)": { es: "día(s) guardado(s)" },
+  "já existia(m)": { es: "ya existía(n)" },
+  "A hora final precisa ser maior que a inicial.": { es: "La hora final debe ser mayor que la inicial." },
+  "Nenhum dia fora da rotina daqui para a frente.": { es: "Ningún día fuera de la rutina de aquí en adelante." },
   "Nenhum dia fechado daqui para a frente.": { es: "Ningún día cerrado de aquí en adelante." },
   "aberto excepcionalmente": { es: "abierto excepcionalmente" },
   "Abrir atendimento": { es: "Abrir atención" },
@@ -4029,6 +4041,11 @@ export const DICIONARIO: Traducoes = {
   "De plantão": { es: "De guardia" },
   "Fora do horário": { es: "Fuera del horario" },
   "Desligado": { es: "Apagado" },
+  // ── Presença do navegador (issue #996): o segundo selo da mesma célula, o
+  //    que responde "tem alguém aí?" sem tocar na decisão de plantão.
+  "Com a tela aberta": { es: "Con la pantalla abierta" },
+  "Sem sinal de tela": { es: "Sin señal de pantalla" },
+  "último sinal às": { es: "última señal a las" },
   "Atualizando para a versão": { es: "Actualizando a la versión" },
   // ── A espera antes de o servidor pegar o pedido, e o fim reconhecido na hora.
   //    Os dois estados que a tela ganhou quando parou de fingir que a conversa
@@ -4052,12 +4069,16 @@ export const DICIONARIO: Traducoes = {
   "Pode fechar esta página: o pedido já está registrado e não se perde.": {
     es: "Puedes cerrar esta página: el pedido ya está registrado y no se pierde.",
   },
-  "Pronto — você está na versão": { es: "Listo — estás en la versión" },
-  "A atualização terminou e o sistema já está no ar na versão": {
-    es: "La actualización terminó y el sistema ya está en línea en la versión",
+  // As três frases que a janela do `just_updated` usava saíram junto com a
+  // promoção da versão do run a "instalada" (issue 1101): elas afirmavam uma
+  // versão que o host não confirmou. No lugar delas, o que a tela pode dizer é
+  // que o PEDIDO terminou e qual é a última versão que o host confirmou.
+  "terminou": { es: "terminó" },
+  "O servidor ainda não me confirmou em que versão ele voltou ao ar — a última versão que ele confirmou é a": {
+    es: "El servidor todavía no me confirmó en qué versión volvió a estar en línea — la última versión que él confirmó es la",
   },
-  "O servidor confirma isso na próxima vez que falar comigo, daqui a alguns minutos — até lá, esta tela já sabe.": {
-    es: "El servidor lo confirma la próxima vez que hable conmigo, en unos minutos — hasta entonces, esta pantalla ya lo sabe.",
+  "Assim que ele falar comigo, daqui a alguns minutos, esta tela se atualiza sozinha. Não ofereço atualizar de novo: o pedido já foi atendido.": {
+    es: "En cuanto hable conmigo, dentro de unos minutos, esta pantalla se actualiza sola. No te ofrezco actualizar otra vez: el pedido ya fue atendido.",
   },
   "O sistema sai do ar por alguns instantes e volta sozinho. Pode deixar esta página aberta.": {
     es: "El sistema se apaga por unos instantes y vuelve solo. Puedes dejar esta página abierta.",
@@ -4593,6 +4614,7 @@ export const DICIONARIO: Traducoes = {
   "Posição": { es: "Posición" },
   "na fila": { es: "en la cola" },
   "Última mensagem do cliente": { es: "Último mensaje del cliente" },
+  "Desde quando o cliente espera resposta": { es: "Desde cuándo el cliente espera respuesta" },
   Arquivada: { es: "Archivada" },
   "Aguardando o cliente": { es: "Esperando al cliente" },
 
@@ -6770,6 +6792,16 @@ export const DICIONARIO: Traducoes = {
   "Horários livres de": { es: "Horarios libres de" },
   "Você ainda não publicou seus horários de atendimento.": { es: "Todavía no publicaste tus horarios de atención." },
   "Sem eles ninguém consegue marcar clicando na grade — nem você, nem o agente.": { es: "Sin ellos nadie puede agendar haciendo clic en la grilla — ni tú, ni el agente." },
+  // #896: a jornada de atendimento que ainda não foi publicada — DOIS textos, um
+  // com ponto final (painel da grade) e outro sem (painel de marcação), e o
+  // "Sem eles..." da tela de quem atende sem poder de gerente.
+  "A jornada de atendimento ainda não foi publicada.": { es: "La jornada de atención todavía no fue publicada." },
+  "A jornada de atendimento ainda não foi publicada": { es: "La jornada de atención todavía no fue publicada" },
+  // #1107 (item 5): a frase da folga chega à tela por LITERAL
+  // (PainelDeMarcacao.tsx) — `t(variável)` escapava do guarda que varre
+  // `t("literal")`, e a frase ficava sem cobrança em espanhol.
+  "Este dia está fora da jornada publicada (folga ou dia sem expediente).": { es: "Este día está fuera de la jornada publicada (día libre o sin horario de atención)." },
+  "Sem eles ninguém consegue marcar — nem quem atende, nem o agente.": { es: "Sin ellos nadie puede agendar — ni quien atiende, ni el agente." },
   "Não consegui carregar os horários.": { es: "No pude cargar los horarios." },
   "Os blocos ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista.": { es: "Los bloques quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista." },
   "Nenhum horário livre neste período.": { es: "Ningún horario libre en este período." },
@@ -7396,6 +7428,10 @@ export const DICIONARIO: Traducoes = {
   // ("Peso mexicano") por chave DINÂMICA, que o guarda do AST não enxerga —
   // passariam no CI e cairiam no português na tela em espanhol.
   "Moeda": { es: "Moneda" },
+  "País": { es: "País" },
+  "De onde saem o documento do contato, a lei citada no documento de acesso e o prazo em dias úteis. Só aparecem países com a lei revisada — a lista é curta de propósito.": {
+    es: "De aquí salen el documento del contacto, la ley citada en el documento de acceso y el plazo en días hábiles. Solo aparecen países con la ley revisada: la lista es corta a propósito.",
+  },
   "Vale para todo preço do catálogo. Produto já cadastrado guarda a moeda com que nasceu.": {
     es: "Vale para todo precio del catálogo. Un producto ya cargado conserva la moneda con la que nació.",
   },
@@ -7723,6 +7759,14 @@ export const DICIONARIO: Traducoes = {
   CTR: { es: "CTR" },
   Frequência: { es: "Frecuencia" },
   CPC: { es: "CPC" },
+  // Coluna derivada nova (issue #920). O rótulo fica em inglês, como "Hook
+  // Rate", "CPC" e "CTR": é o nome que o operador vê no Gerenciador de
+  // Anúncios, e traduzir só aqui faria a mesma coluna ter dois nomes entre a
+  // tela e o print que ele manda para o cliente. A fórmula vai no `title`.
+  "Connect rate": { es: "Connect rate" },
+  "Visualizações da página ÷ cliques no link": {
+    es: "Visualizaciones de la página ÷ clics en el enlace",
+  },
   "Hook Rate": { es: "Hook Rate" },
   "(reproduções)": { es: "(reproducciones)" },
   "Reproduções de vídeo ÷ impressões": { es: "Reproducciones de video ÷ impresiones" },
@@ -8053,8 +8097,25 @@ export const DICIONARIO: Traducoes = {
   "Body inválido.": { es: "Body inválido." },
   "Cole o conteúdo do material antes de criar.": { es: "Pega el contenido del material antes de crear." },
   "Consulta inválida.": { es: "Consulta inválida." },
-  "Credential referenciada (FK ON DELETE RESTRICT). Remova as versões antes.": { es: "Credential referenciada (FK ON DELETE RESTRICT). Elimina las versiones antes." },
-  "Credential é usada por uma versão publicada de agent. Despublique antes de deletar.": { es: "La credential es usada por una versión publicada de agent. Despublica antes de eliminar." },
+  // Tela de credentials — editar/rotacionar a chave (PATCH). O texto da RECUSA
+  // do DELETE não entra aqui: ele interpola a contagem e os nomes dos agentes,
+  // então é montado em runtime e não tem chave fixa para traduzir.
+  "Editar credencial": { es: "Editar credencial" },
+  "Nova chave (opcional)": { es: "Clave nueva (opcional)" },
+  "Em branco mantém a chave atual": { es: "En blanco mantiene la clave actual" },
+  "Chave salva. Validando…": { es: "Clave guardada. Validando…" },
+  "Chave trocada. A validação segue em segundo plano.": {
+    es: "Clave cambiada. La validación sigue en segundo plano.",
+  },
+  "Credencial atualizada.": { es: "Credencial actualizada." },
+  "Trocar a chave aqui mantém os agentes ligados nela: no próximo atendimento eles já usam a chave nova. Deixe a chave em branco para mudar só o nome.": {
+    es: "Cambiar la clave aquí mantiene los agentes conectados a ella: en la próxima atención ya usan la clave nueva. Deja la clave en blanco para cambiar solo el nombre.",
+  },
+  "versão(ões) de agente": { es: "versión(es) de agente" },
+  "Para trocar a chave, use editar; para excluir, aponte essas versões para outra chave.": {
+    es: "Para cambiar la clave, usa editar; para eliminar, apunta esas versiones a otra clave.",
+  },
+  "Esta ação não pode ser desfeita.": { es: "Esta acción no se puede deshacer." },
   "Cursor inválido.": { es: "Cursor inválido." },
   "Dê um nome ao material (2 a 120 caracteres).": { es: "Ponle un nombre al material (2 a 120 caracteres)." },
   "Erro ao ativar a versão da memória.": { es: "Error al activar la versión de la memoria." },
@@ -8789,7 +8850,7 @@ export const DICIONARIO: Traducoes = {
   "Avise outros sistemas quando algo acontecer aqui dentro.": { es: "Avisa a otros sistemas cuando algo ocurra aquí dentro." },
   "Conectar a conta de anúncios para ler o desempenho das campanhas.": { es: "Conectar la cuenta de anuncios para leer el rendimiento de las campañas." },
   "Conecte a loja para trazer pedidos e clientes para dentro do CRM.": { es: "Conecta la tienda para traer pedidos y clientes al CRM." },
-  "Devolver ao anúncio as vendas que ele trouxe, para ele aprender a procurar mais clientes parecidos.": { es: "Devolver al anuncio las ventas que trajo, para que aprenda a buscar más clientes parecidos." },
+  "Devolver ao anúncio as vendas que ele trouxe, e marcar a origem de quem chega pelo site.": { es: "Devolver al anuncio las ventas que trajo, y marcar el origen de quien llega por el sitio." },
   "Funil e performance por atendente nos últimos 30 dias.": { es: "Embudo y rendimiento por agente en los últimos 30 días." },
   "O catálogo da loja, com o preço que o atendente de IA responde.": { es: "El catálogo de la tienda, con el precio que responde el agente de IA." },
   "O que se pode marcar, quanto dura, onde acontece e quem atende.": { es: "Qué se puede agendar, cuánto dura, dónde ocurre y quién atiende." },
@@ -9553,6 +9614,39 @@ export const DICIONARIO: Traducoes = {
     { es: "Abre la conversación: la tarjeta al final del hilo dice por qué la IA la pasó, qué ya intentó y si el cliente fue avisado." },
   "Limiar de 0,7 e janela de 24h. Quem atende em `visibility_mode='own'` vê só as conversas dele.":
     { es: "Umbral de 0,7 y ventana de 24h. Quien atiende en `visibility_mode='own'` ve solo sus conversaciones." },
+  // ─── issue #924 — a origem de quem chega pelo site ───
+  // app/app/settings/conversoes/page.tsx (a explicação do link) e
+  // app/app/contacts/_client.tsx (o filtro de origem que passou a ter "Site").
+  "Site (landing page)": { es: "Sitio (landing page)" },
+  "Quem chegou pelo site": { es: "Quién llegó por el sitio" },
+  "Quando a pessoa vê a campanha numa página sua e toca num botão que abre o WhatsApp, o link desse botão pode levar a origem junto. O código abaixo vai no texto da mensagem, e a conversa entra no CRM já com a origem do site.": {
+    es: "Cuando la persona ve la campaña en una página tuya y toca un botón que abre WhatsApp, el enlace de ese botón puede llevar el origen consigo. El código de abajo va en el texto del mensaje, y la conversación entra al CRM ya con el origen del sitio.",
+  },
+  "Como montar o link do botão": { es: "Cómo armar el enlace del botón" },
+  "Monte o texto que a pessoa vai enviar — uma saudação basta — e termine com o código.": {
+    es: "Arma el texto que la persona va a enviar — un saludo basta — y termínalo con el código.",
+  },
+  "Troque o número pelo WhatsApp da empresa e o texto pelo seu, mantendo o código no fim:": {
+    es: "Cambia el número por el WhatsApp de la empresa y el texto por el tuyo, manteniendo el código al final:",
+  },
+  "Olá! Vim pelo site.": { es: "¡Hola! Vengo del sitio." },
+  "Este exemplo foi gerado por esta tela. Os campos que o código aceita são utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid e fbclid.": {
+    es: "Este ejemplo fue generado por esta pantalla. Los campos que el código acepta son utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid y fbclid.",
+  },
+  "O código vale só na primeira mensagem do contato: quem recebe um link encaminhado não ganha a origem de quem encaminhou.": {
+    es: "El código vale solo en el primer mensaje del contacto: quien recibe un enlace reenviado no hereda el origen de quien lo reenvió.",
+  },
+  "Ele nunca sobrescreve uma origem já gravada, inclusive a de anúncio: quem chegou do Meta ou do Google antes mantém o anúncio.": {
+    es: "Nunca sobrescribe un origen ya guardado, incluido el de anuncio: quien llegó de Meta o de Google antes conserva el anuncio.",
+  },
+  "Só campos de campanha viajam no código, e nenhum dado pessoal: nome, telefone, e-mail e documento ficam de fora.": {
+    es: "Solo viajan campos de campaña en el código, y ningún dato personal: nombre, teléfono, correo y documento quedan fuera.",
+  },
+  "O código inteiro tem um teto de": { es: "El código entero tiene un tope de" },
+  "caracteres.": { es: "caracteres." },
+  'A origem aparece na ficha do contato e no filtro "Site (landing page)" da lista de contatos.': {
+    es: 'El origen aparece en la ficha del contacto y en el filtro "Sitio (landing page)" de la lista de contactos.',
+  },
 };
 
 /**
