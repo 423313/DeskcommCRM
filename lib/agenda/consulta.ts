@@ -110,6 +110,18 @@ export interface ParametrosDaConsulta {
   ate: Date;
   /** INJETADO, como em `horariosLivres`. Relógio lido aqui dentro é o defeito que `janela-do-canal.ts` documenta. */
   agora: Date;
+  /**
+   * Um agendamento que NÃO conta como ocupação — o que está sendo REMARCADO.
+   *
+   * Ele ocupa o horário de ONDE SAI, não o de DESTINO. Sem o intervalo, o próprio
+   * compromisso já não atrapalhava a si mesmo por acaso: a janela dele não cruza a
+   * janela pedida. Com intervalo, a coleta alarga para trás/para frente e o
+   * horário de saída passa a cruzar a janela do destino — a IA remarcando para
+   * logo depois do próprio fim levava 422 `agenda_horario_indisponivel` por causa
+   * de si mesma (#1084). Quem remarca diz quem remarcar; quem só OFERECE horário
+   * (rota, ferramenta MCP) não passa nada, e a grade segue contando tudo.
+   */
+  ignorarAgendamentoId?: string;
 }
 
 export type ResultadoDaConsulta =
@@ -287,6 +299,9 @@ export async function horariosLivresDaOrg(
       donoId,
       de: new Date(params.de.getTime() - Number(tipo.buffer_before_minutes ?? 0) * MINUTO),
       ate: new Date(params.ate.getTime() + Number(tipo.buffer_after_minutes ?? 0) * MINUTO),
+      // Remarcar: o compromisso de saída não é ocupação do destino (#1084). A
+      // janela alargada acima é justamente o que o fazia parecer um vizinho.
+      ignorarAgendamentoId: params.ignorarAgendamentoId,
     }),
   ]);
 

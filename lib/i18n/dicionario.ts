@@ -428,6 +428,18 @@ export const DICIONARIO: Traducoes = {
   "Feriado, férias, viagem. Nesses dias o sistema deixa de oferecer horários — e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.": { es: "Feriado, vacaciones, viaje. En esos días el sistema deja de ofrecer horarios — y lo que ya estaba agendado sigue agendado, para que decidas qué hacer con cada uno." },
   "Ex.: feriado": { es: "Ej.: feriado" },
   "Fechar este dia": { es: "Cerrar este día" },
+  "Dias fora da rotina": { es: "Días fuera de la rutina" },
+  "Feche um dia (feriado, férias, viagem) ou abra um dia que a sua jornada semanal não cobre. Em dia fechado o sistema deixa de oferecer horários, e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.": { es: "Cierra un día (feriado, vacaciones, viaje) o abre un día que tu jornada semanal no cubre. En día cerrado el sistema deja de ofrecer horarios, y lo que ya estaba agendado sigue agendado, para que decidas qué hacer con cada uno." },
+  "O que fazer": { es: "Qué hacer" },
+  "Fechar o dia": { es: "Cerrar el día" },
+  "Abrir para atendimento": { es: "Abrir para atención" },
+  "Das": { es: "Desde" },
+  "Abrir este dia": { es: "Abrir este día" },
+  "Repetir toda semana até (opcional)": { es: "Repetir cada semana hasta (opcional)" },
+  "dia(s) gravado(s)": { es: "día(s) guardado(s)" },
+  "já existia(m)": { es: "ya existía(n)" },
+  "A hora final precisa ser maior que a inicial.": { es: "La hora final debe ser mayor que la inicial." },
+  "Nenhum dia fora da rotina daqui para a frente.": { es: "Ningún día fuera de la rutina de aquí en adelante." },
   "Nenhum dia fechado daqui para a frente.": { es: "Ningún día cerrado de aquí en adelante." },
   "aberto excepcionalmente": { es: "abierto excepcionalmente" },
   "Abrir atendimento": { es: "Abrir atención" },
@@ -7732,6 +7744,14 @@ export const DICIONARIO: Traducoes = {
   CTR: { es: "CTR" },
   Frequência: { es: "Frecuencia" },
   CPC: { es: "CPC" },
+  // Coluna derivada nova (issue #920). O rótulo fica em inglês, como "Hook
+  // Rate", "CPC" e "CTR": é o nome que o operador vê no Gerenciador de
+  // Anúncios, e traduzir só aqui faria a mesma coluna ter dois nomes entre a
+  // tela e o print que ele manda para o cliente. A fórmula vai no `title`.
+  "Connect rate": { es: "Connect rate" },
+  "Visualizações da página ÷ cliques no link": {
+    es: "Visualizaciones de la página ÷ clics en el enlace",
+  },
   "Hook Rate": { es: "Hook Rate" },
   "(reproduções)": { es: "(reproducciones)" },
   "Reproduções de vídeo ÷ impressões": { es: "Reproducciones de video ÷ impresiones" },
@@ -8815,7 +8835,7 @@ export const DICIONARIO: Traducoes = {
   "Avise outros sistemas quando algo acontecer aqui dentro.": { es: "Avisa a otros sistemas cuando algo ocurra aquí dentro." },
   "Conectar a conta de anúncios para ler o desempenho das campanhas.": { es: "Conectar la cuenta de anuncios para leer el rendimiento de las campañas." },
   "Conecte a loja para trazer pedidos e clientes para dentro do CRM.": { es: "Conecta la tienda para traer pedidos y clientes al CRM." },
-  "Devolver ao anúncio as vendas que ele trouxe, para ele aprender a procurar mais clientes parecidos.": { es: "Devolver al anuncio las ventas que trajo, para que aprenda a buscar más clientes parecidos." },
+  "Devolver ao anúncio as vendas que ele trouxe, e marcar a origem de quem chega pelo site.": { es: "Devolver al anuncio las ventas que trajo, y marcar el origen de quien llega por el sitio." },
   "Funil e performance por atendente nos últimos 30 dias.": { es: "Embudo y rendimiento por agente en los últimos 30 días." },
   "O catálogo da loja, com o preço que o atendente de IA responde.": { es: "El catálogo de la tienda, con el precio que responde el agente de IA." },
   "O que se pode marcar, quanto dura, onde acontece e quem atende.": { es: "Qué se puede agendar, cuánto dura, dónde ocurre y quién atiende." },
@@ -9192,6 +9212,40 @@ export const DICIONARIO: Traducoes = {
   "o compromisso": { es: "la cita" },
   "Entendi": { es: "Entendido" },
   "e-mail do convidado inválido": { es: "correo del invitado no válido" },
+
+  // ─── issue #924 — a origem de quem chega pelo site ───
+  // app/app/settings/conversoes/page.tsx (a explicação do link) e
+  // app/app/contacts/_client.tsx (o filtro de origem que passou a ter "Site").
+  "Site (landing page)": { es: "Sitio (landing page)" },
+  "Quem chegou pelo site": { es: "Quién llegó por el sitio" },
+  "Quando a pessoa vê a campanha numa página sua e toca num botão que abre o WhatsApp, o link desse botão pode levar a origem junto. O código abaixo vai no texto da mensagem, e a conversa entra no CRM já com a origem do site.": {
+    es: "Cuando la persona ve la campaña en una página tuya y toca un botón que abre WhatsApp, el enlace de ese botón puede llevar el origen consigo. El código de abajo va en el texto del mensaje, y la conversación entra al CRM ya con el origen del sitio.",
+  },
+  "Como montar o link do botão": { es: "Cómo armar el enlace del botón" },
+  "Monte o texto que a pessoa vai enviar — uma saudação basta — e termine com o código.": {
+    es: "Arma el texto que la persona va a enviar — un saludo basta — y termínalo con el código.",
+  },
+  "Troque o número pelo WhatsApp da empresa e o texto pelo seu, mantendo o código no fim:": {
+    es: "Cambia el número por el WhatsApp de la empresa y el texto por el tuyo, manteniendo el código al final:",
+  },
+  "Olá! Vim pelo site.": { es: "¡Hola! Vengo del sitio." },
+  "Este exemplo foi gerado por esta tela. Os campos que o código aceita são utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid e fbclid.": {
+    es: "Este ejemplo fue generado por esta pantalla. Los campos que el código acepta son utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid y fbclid.",
+  },
+  "O código vale só na primeira mensagem do contato: quem recebe um link encaminhado não ganha a origem de quem encaminhou.": {
+    es: "El código vale solo en el primer mensaje del contacto: quien recibe un enlace reenviado no hereda el origen de quien lo reenvió.",
+  },
+  "Ele nunca sobrescreve uma origem já gravada, inclusive a de anúncio: quem chegou do Meta ou do Google antes mantém o anúncio.": {
+    es: "Nunca sobrescribe un origen ya guardado, incluido el de anuncio: quien llegó de Meta o de Google antes conserva el anuncio.",
+  },
+  "Só campos de campanha viajam no código, e nenhum dado pessoal: nome, telefone, e-mail e documento ficam de fora.": {
+    es: "Solo viajan campos de campaña en el código, y ningún dato personal: nombre, teléfono, correo y documento quedan fuera.",
+  },
+  "O código inteiro tem um teto de": { es: "El código entero tiene un tope de" },
+  "caracteres.": { es: "caracteres." },
+  'A origem aparece na ficha do contato e no filtro "Site (landing page)" da lista de contatos.': {
+    es: 'El origen aparece en la ficha del contacto y en el filtro "Sitio (landing page)" de la lista de contactos.',
+  },
 };
 
 /**
