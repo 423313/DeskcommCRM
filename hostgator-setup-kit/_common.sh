@@ -5,6 +5,11 @@ set -euo pipefail
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
 COMPOSE_NPM="docker-compose.npm.yml"
+# Overlay que constrói as imagens no lugar de puxá-las. Existe no repo com
+# `pull_policy: never` nas três imagens e sai do MESMO commit que o `git
+# checkout` deixou no disco — é o caminho de quem não consegue usar as imagens
+# publicadas (ver construir_aqui_e_subir, abaixo).
+COMPOSE_BUILD="docker-compose.build.yml"
 
 # Proxy reverso desta instalação. Vem do .env (load_env), com default 'caddy' —
 # ou seja, toda instalação que já existe continua exatamente como está.
@@ -37,6 +42,49 @@ dc_files() {
   npm)     printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_NPM" ;;
   *)       printf -- '-f %s' "$COMPOSE" ;;
   esac
+}
+
+# ── Imagem pronta que não serve para esta VPS: constrói a versão aqui ────────
+# Uma VPS cuja arquitetura não é a das imagens publicadas (Oracle Ampere, por
+# exemplo) recebe "no matching manifest for linux/arm64/v8" ao puxá-las. O
+# `up -d` seguinte morre junto: sem imagem no disco e sem `build:` ao lado do
+# `image:` do app, o Compose não tem o que subir. O desfecho visível era o pior
+# possível — a atualização não acontecia, o script terminava como se tivesse
+# dado certo e o dono só descobria pelo CRM velho. Pelo botão "Atualizar" do
+# site, nem isso: o agente roda sozinho no cron e não há ninguém lendo a tela.
+#
+# A saída já existe no repo e é o docker-compose.build.yml: `pull_policy: never`
+# nas três imagens e o build saindo do MESMO commit que o `git checkout` deixou
+# no disco. A imagem construída aqui é a versão alvo, não sobra de build antigo
+# — e o `up` por este overlay também não volta ao registro para reclamar.
+#
+# O gatilho é o CÓDIGO DE SAÍDA de quem falhou, nunca o texto do erro:
+# arquitetura da VPS, tag que ainda está publicando, pacote que nasceu privado
+# no registro e registro fora do ar caem todos no mesmo caminho, sem depender de
+# casar em inglês uma frase que o Docker escreve como quer.
+construir_aqui_e_subir() {  # construir_aqui_e_subir [versão alvo] → 0 se subiu
+  local versao="${1:-}"
+  # A imagem construída aqui responde /api/v1/health com a versão de verdade —
+  # o código no disco É a versão alvo. Sem isto ela responderia "local".
+  [ -n "$versao" ] && export APP_VERSION="$versao"
+  # O aviso vem ANTES da construção, e não depois: são 15 a 25 minutos de tela
+  # parada, e sem ele o dono conclui que travou e mata o script no meio.
+  c_ylw "⚠ As imagens prontas desta versão não servem para esta VPS."
+  c_ylw "  O motivo mais comum é a arquitetura dela ser diferente da das imagens"
+  c_ylw "  publicadas: o registro responde que não tem manifest para a arquitetura"
+  c_ylw "  daqui. Não é problema da sua VPS nem do seu acesso."
+  c_ylw "  Vou construir as três imagens aqui, do código desta versão."
+  c_ylw "  Leva de 15 a 25 minutos e a tela fica sem novidade nesse tempo —"
+  c_ylw "  não é travamento, pode deixar rodando."
+  if ! dc -f "$COMPOSE_BUILD" build; then
+    c_red "✖ A construção das imagens aqui falhou (o erro está logo acima)."
+    return 1
+  fi
+  if ! dc -f "$COMPOSE_BUILD" up -d; then
+    c_red "✖ As imagens foram construídas, mas os serviços não subiram."
+    return 1
+  fi
+  return 0
 }
 
 # ── A rede externa por onde o proxy de fora alcança o app ────────────────────
