@@ -489,6 +489,46 @@
       "type": "db",
       "label": "fn_atrito_metrics: repeticao_pos_passagem (0294)",
       "sublabel": "o cliente repetiu depois da passagem? limiar 0,7 e janela de 24h — se o briefing chegou, a repeticao cai"
+    },
+    {
+      "id": "devolucaoPrazo",
+      "lane": "motor",
+      "col": 3,
+      "type": "worker",
+      "label": "cron handoff-devolucao",
+      "sublabel": "a cada 5 min: handoff parado além do prazo da org volta ao agente — pela MESMA função"
+    },
+    {
+      "id": "prazoConfig",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "Configurações › Distribuição de atendimento",
+      "sublabel": "settings.routing.handoff_return_after_minutes — null = IA-06 (nunca)"
+    },
+    {
+      "id": "presenca_emissor",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "useSinalDePresenca (AppShell)",
+      "sublabel": "a aba aberta bate a cada 60 s — sem clique"
+    },
+    {
+      "id": "presenca_rota",
+      "lane": "borda",
+      "col": 4,
+      "type": "api",
+      "label": "POST /attendants/presence",
+      "sublabel": "carimba last_heartbeat_at; a 1ª batida audita"
+    },
+    {
+      "id": "presenca_coluna",
+      "lane": "dados",
+      "col": 4,
+      "type": "table",
+      "label": "attendant_availability.last_heartbeat_at",
+      "sublabel": "presença expira em leitura; is_available é decisão, não presença"
     }
   ],
   "edges": [
@@ -1079,6 +1119,38 @@
       "from": "passagemReconhece",
       "to": "passagemCartao",
       "label": "reconhecido_por/em viram o rodape Assumida por, e o convite some"
+    },
+    {
+      "from": "prazoConfig",
+      "to": "devolucaoPrazo",
+      "label": "o prazo por organização; ausente, o cron não lê conversa nenhuma"
+    },
+    {
+      "id": "e68",
+      "from": "devolucaoPrazo",
+      "to": "conversas",
+      "label": "lê quem está com humano de forma durável e há quanto tempo sem sinal (handoff, assumir, última saída)"
+    },
+    {
+      "id": "e69",
+      "from": "presenca_emissor",
+      "to": "presenca_rota",
+      "label": "batida a cada 60 s"
+    },
+    {
+      "from": "presenca_rota",
+      "to": "presenca_coluna",
+      "label": "upsert de uma coluna só"
+    },
+    {
+      "from": "presenca_coluna",
+      "to": "atendentes",
+      "label": "quem está com a tela aberta"
+    },
+    {
+      "from": "presenca_coluna",
+      "to": "availability",
+      "label": "selo presente/ausente na Equipe"
     }
   ],
   "cards": [

@@ -56,6 +56,9 @@ on:
 permissions:
   contents: read
 
+# Cancelamento da rodada superada: por JOB (os pesados), nunca no workflow nem
+# no agregador — razão medida e a tabela por evento no cabeçalho do ci.yml.
+
 jobs:
   # AS DUAS PARTES RODAM EM PARALELO, e o motivo é medido, não estético.
   #
@@ -86,7 +89,25 @@ jobs:
   # mês sem ninguém perceber.
   e2e-parte:
     runs-on: ubuntu-latest
+    # O teto FICA EM 30, e essa foi uma correção de rumo desta branch.
+    #
+    # Eu tinha subido para 45, com o argumento de que o teto acumula dois papéis
+    # que brigam (guarda de travamento × detector de crescimento) e de que só o
+    # primeiro depende do valor. O argumento continua certo para o `verify`.
+    #
+    # Aqui ele é FALSO, e quem mostrou foi o @webtecnica no #1056: com o corte
+    # legível dele em TETO − MARGEM, o `timeout-minutes` vira inalcançável, e o
+    # portão real passa a ser TETO_SEGUNDOS. Subir os dois juntos não separa
+    # papel nenhum — move o portão de 28 para 43 min. É exatamente o
+    # afrouxamento contra o qual ele escreveu uma catraca, e ela me reprovou.
+    #
+    # O conserto certo não é afrouxar: é repartir. Por isso esta branch traz o
+    # rebalanceamento junto (o #1174), e com as partes em ~18 min o portão de 28
+    # deixa de ser apertado sem que ninguém precise ceder.
     timeout-minutes: 30
+    concurrency:
+      group: ${{ github.workflow }}-e2e-parte${{ matrix.parte }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       # Sem fail-fast: se a parte 1 quebrar, ainda quero saber se a 2 também.
       # Com ele ligado, o primeiro vermelho esconde o outro e o conserto vira
@@ -268,8 +289,14 @@ jobs:
     # corte. É o maior item das duas partes depois de `prova-painel-provedores`,
     # e move sozinho quase exatamente o que falta.
     #
-    # Um arquivo só, e não três de peso médio, porque as duas partes rodam
-    # contra o MESMO banco sem reset: cada spec movida é uma vizinhança nova.
+    # Um arquivo só, e não três de peso médio, porque as duas partes rodavam
+    # contra o MESMO banco sem reset: cada spec movida era uma vizinhança nova.
+    # ⚠️ ESTA FRASE VENCEU e fica como registro do que valia: hoje `supabase
+    # start` é passo do PRÓPRIO `e2e-parte`, e a matriz dá um runner (e um banco)
+    # por parte. Mover spec entre partes deixou de criar vizinhança de DADO; o
+    # que sobra é vizinhança de ORDEM dentro da parte, que o Playwright resolve
+    # em ordem alfabética de arquivo. Conferir na fonte, não nesta linha:
+    # `grep -n "supabase start" .github/workflows/e2e.yml` e o job em que ele cai.
     # `navegacao` é a que tem menos aresta — só afirma cromo de navegação
     # (sidebar, abas, ⌘K, medidas de layout), não lê dado semeado por vizinha
     # nenhuma, e a precondição dela (`afirmarAdminDeTenantPuro`) é satisfeita em
@@ -304,8 +331,36 @@ jobs:
     # nomeava) e `navegacao` (239,2 s) vão as duas para a PARTE_2. Medido nos
     # logs deste run: a parte 1 gastou 978 s de Playwright em 138 casos
     # concluídos; tirar 438 s devolve ~7,3 min e põe o job perto de 22 min, com
-    # a parte 2 em ~23 min. Subir `timeout-minutes` não entra: o teto é o que
-    # denuncia o crescimento, e calá-lo devolveria o problema maior mais tarde.
+    # a parte 2 em ~23 min.
+    #
+    # ── ONDE A REGRA DO TETO MORA (correção de 18/09/2026) ─────────────────
+    #
+    # Esta linha dizia, por meses: "subir `timeout-minutes` não entra: o teto é
+    # o que denuncia o crescimento". A INTENÇÃO está certa e segue valendo. A
+    # FORMULAÇÃO estava errada, e ela **contradizia um mecanismo do próprio
+    # repositório** — o que é pior que não dizer nada, porque manda quem lê
+    # obedecer a prosa e desobedecer o gate.
+    #
+    # `tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts` guarda os tetos
+    # num mapa `TETOS` de `{minutos, razao}`: o teto **pode** subir, desde que a
+    # razão seja escrita e versionada ali. Catraca com justificativa, não
+    # proibição. E é o único lugar do repo onde essa decisão fica auditável.
+    #
+    # Então a regra em vigor é a do portão, e esta prosa só aponta para ele:
+    # quem mexer num teto troca o `razao` junto, com a medição nova, ou o portão
+    # reprova — que é exatamente o que ele deve fazer.
+    #
+    # Por que a distinção não é acadêmica: a razão em vigor para o `verify`
+    # ("p90 594s, máximo 609s em 51 verdes — folga de ~4m45") estava CERTA quando
+    # escrita e VENCEU. Medido em 18/09 sobre 39 rodadas, a folga de 4m45 virou
+    # 0,1 min e 13 rodadas morriam no teto. Uma regra que proíbe mexer no número
+    # também proíbe CORRIGIR a razão vencida — e aí o repo fica com uma
+    # afirmação de estado errada que ninguém tem autorização para consertar.
+    #
+    # Aqui, no `e2e`, o teto continua em 30 e a decisão é a mesma de sempre: o
+    # caminho é repartir (foi o que se fez), não afrouxar. A diferença é que
+    # agora isso está escrito como CONCLUSÃO desta medição, e não como proibição
+    # geral que o mecanismo do repo desmente.
 
     # ── A próxima alavanca, quando esta acabar ──────────────────────────────
     #
@@ -315,6 +370,49 @@ jobs:
     # deixa de ser a partição e passa a ser uma terceira parte: o setup de
     # 8-9 min é pago por parte, então três partes custam ~9 min de runner a mais
     # e devolvem ~9 min de relógio a cada uma.
+    # ── 2026-09-18: a parte 3 estourou o teto, e a folga estava toda na 1 ──
+    #
+    # Medido no run 35339808887 (PR de release 1.35.0): parte 1 = 15,9 min de
+    # relógio, parte 2 = 28,4 min, parte 3 = CANCELADA em 30 min 17 s com 91 de
+    # 93 casos. Somando só o tempo de Playwright, por parte:
+    #
+    #     parte 1 →  9,4 min (134 casos)   ← 13 min de folga ociosa
+    #     parte 2 → 22,1 min (131 casos)
+    #     parte 3 → 23,6 min ( 90 casos)   ← piso: 2 casos não chegaram a medir
+    #
+    # O setup (Supabase + baseline + build + browser + seeds) custa ~6,5 min por
+    # parte, e é pago três vezes. Total de 55,1 min de casos em três partes dá
+    # 18,4 min cada como ponto de equilíbrio — e era isso que estava torto.
+    #
+    # Três arquivos mudam de lista, escolhidos pelo relógio e pela vizinhança:
+    #
+    #   `prova-painel-provedores` (4,03 min)  PARTE_2 → PARTE_1. Volta para onde
+    #       estava antes de 2026-09-04.
+    #   `inbox-busca-e-filtros-dizem-a-verdade` (3,98 min)  PARTE_3 → PARTE_1.
+    #       É o maior item da parte 3, e a parte 1 já tem as outras `inbox-*`.
+    #   `agenda-google-meet` (0,92 min)  PARTE_3 → PARTE_2, onde já moram
+    #       `agenda-conectar-google` e as duas `agenda-ocupacao-do-google-*`.
+    #
+    # ⚠️ `navegacao` NÃO se move, e a razão é medida, não preferência. A primeira
+    # versão deste rebalanceamento a levava da 2 para a 1, e lá ela REPROVOU
+    # (run 35345305473, parte 1: 153 passaram, 1 falhou em 18,6 min):
+    #
+    #     navegacao.spec.ts:222 — "em 900px o menu inteiro tem de caber sem
+    #     scroll": esperado false, recebido true. `titulosFora` = 0, ou seja,
+    #     nenhum grupo saiu da dobra — o menu passa do alto por pouco.
+    #
+    # A mesma spec passa na PARTE_2. A diferença não é a partição: é o ESTADO do
+    # banco daquela parte (cada parte tem o seu), que muda o que o menu mostra.
+    # Ou seja, o menu está no limite e alguma vizinhança da parte 1 o empurra —
+    # sinal de PRODUTO, não de CI, e por isso vira item próprio em vez de virar
+    # uma partição escolhida para esconder o vermelho. Quem for atrás: rodar
+    # `navegacao` na parte 1 e ler `nav.scrollHeight` contra a altura visível.
+    #
+    # PREVISÃO (é previsão; a rodada deste PR é que mede): 18,0 / 18,4 / 18,7 min
+    # de casos, ou ~25 min de relógio por parte, com ~5 min de folga cada.
+    #
+    # O teto de 30 min continua fora de discussão: ele é o que denuncia a suíte
+    # crescendo, e foi exatamente o que aconteceu aqui.
     env:
       # Provider controlado; preview/assistência executam core, ferramentas e gates reais.
       INTERNAL_AGENT_RUN_STUB: "true"
@@ -346,6 +444,8 @@ jobs:
         lote-no-quadro-do-funil.spec.ts
         motivos-de-perda-do-funil.spec.ts
         importar-leads-planilha.spec.ts
+        inbox-busca-e-filtros-dizem-a-verdade.spec.ts
+        prova-painel-provedores.spec.ts
         relatorio-de-atividades.spec.ts
         qa-l12-inbox.spec.ts
         qa-l12-troca-de-funil.spec.ts
@@ -459,7 +559,8 @@ jobs:
         agenda-google-volta-do-consentimento.spec.ts
         agenda-google-volta-nao-desloga.spec.ts
         qa-l12-funil.spec.ts
-        navegacao.spec.ts prova-painel-provedores.spec.ts
+        navegacao.spec.ts
+        agenda-google-meet.spec.ts
       # `moeda-da-organizacao` entrou na PARTE_2 em 2026-09-04, ao lado de
       # `navegacao` — mesmo domínio (Configurações) e a mesma ausência de
       # dependência: sem WAHA, Resend, Nuvemshop ou Redis. Toca a organização
@@ -645,7 +746,6 @@ jobs:
         central-avisos-destino.spec.ts
         agenda-presenca-recuperacao.spec.ts
         agenda-google-sync.spec.ts
-        agenda-google-meet.spec.ts
         encerramento-atendimento.spec.ts
         passagem-com-contexto.spec.ts
         interface-por-vinculo.spec.ts
@@ -671,7 +771,6 @@ jobs:
         central-avisos-resolver-em-lote.spec.ts
         voz-desligada-por-padrao.spec.ts
         voz-primeiro-pareamento.spec.ts
-        inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         qa-titulos-das-telas.spec.ts
         qa-equipe-pinta-na-hora.spec.ts
         qa-sugestao-rejeitada-e-motivo.spec.ts
@@ -682,6 +781,7 @@ jobs:
         extensoes-versao.spec.ts
         motivo-do-publicar-na-tela.spec.ts
         followup-cartoes.spec.ts
+        presenca-do-atendente.spec.ts
 
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts
@@ -689,6 +789,46 @@ jobs:
         cadastro-sem-confirmacao-de-email.spec.ts
         aviso-de-caso-chega-no-whatsapp.spec.ts
     steps:
+      # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
+      #
+      # O `timeout-minutes` do job conta do INÍCIO DO JOB, então é do
+      # início do job que o aviso tem de medir. Medir só o relógio do
+      # Playwright deixaria de fora o que o preparo já gastou — e o preparo é
+      # pago por parte (checkout, `preparar-node`, stack do Supabase, baseline,
+      # build, env): no run 35160549180 a parte 1 gastou 978 s de Playwright,
+      # mas o relógio do JOB cravou os 30 min e o caso **141 de 156 estava
+      # VERDE** quando o cancelamento chegou. Sem este T0, a parte que cresce
+      # chega a quem olha o run como "a rodada caiu" — ou seja, como problema
+      # de infraestrutura — e o log precisa ser contado caso a caso para
+      # descobrir que o problema era o TAMANHO da parte.
+      #
+      # Este passo é o PRIMEIRO do job, de propósito: tudo depois dele entra no
+      # DECORRIDO. Se ele descer na ordem, a medição volta a mentir por baixo.
+      - name: Marcar o relógio da parte (orçamento × teto)
+        run: |
+          set -euo pipefail
+          {
+            echo "T0_JOB=$(date -u +%s)"
+            # Orçamento declarado: é aqui que a parte deveria caber, com o
+            # relógio do job inteiro. 24 min < teto de propósito — o aviso vem
+            # ANTES do corte, não no lugar dele.
+            echo "ORCAMENTO_SEGUNDOS=1440"
+            # O MESMO teto do `timeout-minutes` do job (30 min). Dois números
+            # medindo o mesmo relógio divergem: a catraca é
+            # tests/unit/e2e-avisa-antes-do-teto.test.ts, que reprova se este
+            # valor e o `timeout-minutes` deixarem de concordar.
+            echo "TETO_SEGUNDOS=1800"
+            # Corte antecipado, 2 min antes do teto. A margem paga o que o
+            # relógio de passo NÃO vê: o `Initialize containers` dos services
+            # roda antes do primeiro passo (~51 s por perna, medido no #983) e
+            # o envio de artefato/resumo precisa de tempo depois da suíte.
+            echo "MARGEM_SEGUNDOS=120"
+            # Piso para a suíte sequer começar: com menos que isto, rodar a
+            # suíte é gastar o que resta para ver um cancelamento no meio.
+            echo "PISO_SEGUNDOS=120"
+          } >> "$GITHUB_ENV"
+          echo "parte ${{ matrix.parte }}: relógio do job iniciado em $(date -u +%H:%M:%S) UTC"
+
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/preparar-node
@@ -964,7 +1104,44 @@ jobs:
           # (`✓ 12 [chromium] › tests/e2e/x.spec.ts:9:5 › título (3.4s)`), e a
           # soma por arquivo sai de um `gh run view <id> --log`. Custo medido:
           # ~240 linhas a mais de log, zero segundo de execução.
-          pnpm exec playwright test --workers=1 $LISTA --reporter=list
+          # ── O AVISO, ANTES DO CORTE ───────────────────────────────────────
+          # Daqui para baixo o relógio que decide é o do JOB, não o da suíte.
+          # A conta é medida, não estimada: DECORRIDO é o que esta parte já
+          # gastou desde o T0 (checkout, node, stack do Supabase, baseline,
+          # build), e é ele que come a folga do teto de 30 min.
+          #
+          # O `timeout` abaixo é o AVISO ANTES DO CORTE. Sem ele, quem corta é
+          # o `timeout-minutes` do job — que cancela sem dizer do que se
+          # tratava, com a suíte ainda verde no caso 141 de 156 (run
+          # 35160549180). Com ele, a suíte é interrompida MARGEM_SEGUNDOS antes
+          # do teto e o erro nomeia a parte com os números na mão.
+          PARTE="${{ matrix.parte }}"
+          AGORA=$(date -u +%s)
+          DECORRIDO=$(( AGORA - T0_JOB ))
+          FOLGA=$(( TETO_SEGUNDOS - MARGEM_SEGUNDOS - (AGORA - T0_JOB) ))
+          if [ "$FOLGA" -lt "$PISO_SEGUNDOS" ]; then
+            echo "::error title=A parte ${PARTE} chegou à suíte sem folga até o teto::o preparo custou ${DECORRIDO}s e sobravam ${FOLGA}s para uma suíte de centenas de casos, num teto de $(( TETO_SEGUNDOS / 60 )) min. Não é infraestrutura: a parte cresceu além do orçamento de $(( ORCAMENTO_SEGUNDOS / 60 )) min — rebalanceie as listas ou reparta em mais uma parte."
+            exit 1
+          fi
+          echo "::notice title=A parte ${PARTE} entrou na suíte com ${FOLGA}s de folga::preparo de ${DECORRIDO}s; teto do job de $(( TETO_SEGUNDOS / 60 )) min"
+          INICIO_SUITE=$(date -u +%s)
+          # `-k 30` manda SIGKILL 30 s depois do TERM: o TERM deixa o Playwright
+          # escrever o relatório, o KILL garante que o job não pare no meio de um
+          # spec que ignorou o sinal.
+          set +e
+          timeout -k 30 --signal=TERM "${FOLGA}s" pnpm exec playwright test --workers=1 $LISTA --reporter=list
+          CODIGO=$?
+          set -e
+          SUITE=$(( $(date -u +%s) - INICIO_SUITE ))
+          {
+            echo "SUITE_SEGUNDOS=${SUITE}"
+            echo "CUSTO_FIXO_SEGUNDOS=${DECORRIDO}"
+          } >> "$GITHUB_ENV"
+          # 124 = o `timeout` cortou; 137 = o KILL da carência chegou antes.
+          if [ "$CODIGO" -eq 124 ] || [ "$CODIGO" -eq 137 ]; then
+            echo "::error title=A parte ${PARTE} estourou o relógio do e2e::a suíte rodou ${SUITE}s e foi interrompida ${FOLGA}s depois de entrar, o job já tinha ${DECORRIDO}s de preparo e o teto é de $(( TETO_SEGUNDOS / 60 )) min (orçamento: $(( ORCAMENTO_SEGUNDOS / 60 )) min). Não é infraestrutura: a parte cresceu."
+          fi
+          exit "$CODIGO"
         env:
           # Só o que NÃO vem do `.env.e2e`: isto é ajuste de CI, não config do
           # produto. CI = 1 IP para todos os specs, e o teto de produção
@@ -982,6 +1159,50 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+      # ── ONDE A MEDIÇÃO FICA ───────────────────────────────────────────────
+      # A medição que só existe no log se perde: quem decide repartir as listas
+      # é quem olha o resumo do job, e o resumo é este. Os três relógios saem
+      # por parte, com o teto ao lado para o número ser lido contra alguma coisa.
+      #
+      # `if: always()` de propósito: o caso que interessa é justamente o da
+      # parte que falhou ou que foi cortada pelo `timeout` — sem o `always`, o
+      # resumo apareceria só nas rodadas em que nada aconteceu.
+      - name: Publicar o relógio da parte ${{ matrix.parte }} (preparo × suíte × teto)
+        if: always()
+        run: |
+          set -euo pipefail
+          PARTE="${{ matrix.parte }}"
+          # `não medido` quando o passo da suíte não chegou a publicar (parte
+          # que entrou sem folga até o teto): zero ali seria um número falso.
+          SUITE="${SUITE_SEGUNDOS:-não medido}"
+          FIXO="${CUSTO_FIXO_SEGUNDOS:-não medido}"
+          if [ -n "${T0_JOB:-}" ]; then
+            TOTAL=$(( $(date -u +%s) - T0_JOB ))
+          else
+            TOTAL=0
+          fi
+          # Aviso ANTES do corte: a parte que passou do orçamento mas ainda não
+          # estourou o teto. É esta a linha que evita o próximo "cancelado com
+          # 141 de 156 verde" — o orçamento estourado aparece numa rodada ainda
+          # verde, não na rodada em que o teto já cortou tudo.
+          if [ "$TOTAL" -gt "$ORCAMENTO_SEGUNDOS" ]; then
+            echo "::warning title=A parte ${PARTE} passou do orçamento do e2e::${TOTAL}s de relógio do job contra o orçamento de $(( ORCAMENTO_SEGUNDOS / 60 )) min (teto de $(( TETO_SEGUNDOS / 60 )) min). Ainda não estourou, mas a partição está desbalanceada: o bloco de partição das listas, no cabeçalho deste workflow, diz onde mexer."
+          fi
+          {
+            echo "## E2E parte ${PARTE} — o relógio da rodada"
+            echo ""
+            echo "| relógio | medido | referência |"
+            echo "| --- | --- | --- |"
+            echo "| preparo (primeiro passo → suíte) | ${FIXO}s | — |"
+            echo "| suíte (Playwright) | ${SUITE}s | — |"
+            echo "| **total da parte** | **${TOTAL}s** | orçamento $(( ORCAMENTO_SEGUNDOS / 60 )) min · teto $(( TETO_SEGUNDOS / 60 )) min |"
+            echo ""
+            echo "O teto continua sendo o \`timeout-minutes: $(( TETO_SEGUNDOS / 60 ))\` do job — é ele que"
+            echo "denuncia a parte crescendo. Quem corta primeiro é o \`timeout\` que dá"
+            echo "$(( MARGEM_SEGUNDOS / 60 )) min de folga à suíte, para o vermelho dizer o NOME do problema"
+            echo "(qual parte, com quantos segundos medidos) em vez de cancelar em silêncio."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # O NOME DESTE JOB É O CHECK OBRIGATÓRIO, e é por isso que ele existe.
   #
