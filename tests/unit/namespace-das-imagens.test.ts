@@ -4,6 +4,14 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import {
+  corridaInternaDeFork,
+  DONO_DESTE_REPO,
+  donoConfiavelDoRunner,
+  donoDo,
+  NAMESPACE_DESTE_REPO,
+} from "./_identidade-deste-repo";
+
 /**
  * A ÂNCORA do namespace das imagens publicadas.
  *
@@ -75,27 +83,8 @@ const COMPOSE = fs.readFileSync(path.join(RAIZ, "docker-compose.prod.yml"), "utf
 const PUBLICA = fs.readFileSync(path.join(RAIZ, ".github/workflows/publish-image.yml"), "utf8");
 const ENV_EXEMPLO = fs.readFileSync(path.join(RAIZ, ".env.hostgator.example"), "utf8");
 
-/** O valor literal que este repositório publica. A âncora. */
-const NAMESPACE_DESTE_REPO = "ghcr.io/melgarafael";
 
-/**
- * O dono de uma referência `<registry>/<dono>`.
- *
- * Nunca minusculiza: quem compara é que decide a caixa. O GHCR exige namespace
- * minúsculo, e `GITHUB_REPOSITORY_OWNER` devolve o login com a caixa que o dono
- * escolheu — um fork `Founders-BR` publicando CORRETAMENTE em `founders-br`
- * precisa dos dois lados em minúsculas para não ficar vermelho estando certo.
- */
-function donoDo(namespace: string): string {
-  const partes = namespace.split("/");
-  if (partes.length !== 2 || !partes[1]) {
-    throw new Error(`namespace precisa ter a forma <registry>/<dono>; recebido: ${namespace}`);
-  }
-  return partes[1];
-}
 
-/** O dono deste repositório, derivado da âncora — ele não é escrito duas vezes aqui. */
-const DONO_DESTE_REPO = donoDo(NAMESPACE_DESTE_REPO);
 
 /**
  * A deferência à âncora EXTERNA: numa corrida interna a um fork, este arquivo
@@ -126,24 +115,7 @@ const DONO_DESTE_REPO = donoDo(NAMESPACE_DESTE_REPO);
  * dele passa. Vermelho local só sobra para quem trocou um dos dois e esqueceu o
  * outro — e para esse a mensagem de falha diz, em três linhas, o que fazer.
  */
-function donoConfiavelDoRunner(): string | null {
-  if (process.env.GITHUB_ACTIONS !== "true") return null;
-  const dono = process.env.GITHUB_REPOSITORY_OWNER?.trim();
-  if (!dono) {
-    // Falhar fechado na AÇÃO: sem a âncora externa não dá para dizer de quem é a
-    // corrida, e deferir por falta de medição seria desarmar o gate no escuro.
-    throw new Error(
-      "GITHUB_ACTIONS=true sem GITHUB_REPOSITORY_OWNER: sumiu a âncora externa do runner",
-    );
-  }
-  return dono;
-}
 
-function corridaInternaDeFork(): boolean {
-  const dono = donoConfiavelDoRunner();
-  if (dono === null) return false;
-  return dono.toLowerCase() !== DONO_DESTE_REPO.toLowerCase();
-}
 
 /**
  * Um fork que publica as próprias imagens muda `IMG_NS` — e precisa mudar junto
@@ -358,6 +330,15 @@ describe("catraca: ninguém mais repete o namespace", () => {
     "hostgator-setup-kit/_common.sh",
     "docker-compose.prod.yml",
     ".env.hostgator.example",
+    // A CASA DO LITERAL desde 18/09/2026. Ele saiu deste arquivo para um módulo
+    // compartilhado porque DOIS gates precisam da mesma resposta sobre "de quem
+    // é esta corrida?", e eles chegaram a dizer coisas OPOSTAS (ver o cabeçalho
+    // de `_identidade-deste-repo.ts`). Duplicar o literal nos dois seria o
+    // anti-pattern nº 2 do CLAUDE.md e garantiria que voltassem a divergir.
+    "tests/unit/_identidade-deste-repo.ts",
+    // Este arquivo continua permitido porque duas PROSAS citam o literal (a
+    // história dos 31 lugares e o caso da URL do token). Prosa que cita o valor
+    // é legítima; asserção que o reescreve à mão não é.
     "tests/unit/namespace-das-imagens.test.ts",
     // `.env`/`.env.local` da RAIZ são estado de máquina, gitignorados — não
     // existem num checkout fresco nem em CI. Mas uma instalação real nasce com
@@ -442,11 +423,20 @@ describe("catraca: ninguém mais repete o namespace", () => {
     // O controle do instrumento. Sem ele, um `grep` que devolvesse vazio por
     // qualquer motivo (flag errada, cwd errado) leria como "ninguém repete".
     //
-    // O alvo é ESTE arquivo, e não o compose: um fork que renomeia o namespace
-    // de forma coerente muda o compose junto, e o controle apontado para lá
-    // ficaria vermelho por tabela — dois vermelhos onde o desenho promete um.
-    // Aqui o literal existe por construção, em `NAMESPACE_DESTE_REPO`.
-    const alvo = "tests/unit/namespace-das-imagens.test.ts";
+    // O alvo é o MÓDULO DA IDENTIDADE, e não o compose: um fork que renomeia o
+    // namespace de forma coerente muda o compose junto, e o controle apontado
+    // para lá ficaria vermelho por tabela — dois vermelhos onde o desenho
+    // promete um. No módulo o literal existe por CONSTRUÇÃO, em
+    // `NAMESPACE_DESTE_REPO`.
+    //
+    // ⚠️ POR QUE O ALVO MUDOU (18/09/2026), e é a parte que importa: ele
+    // apontava para ESTE arquivo, e depois de o literal mudar de casa o controle
+    // continuou VERDE — porque sobraram duas PROSAS aqui que citam o valor.
+    // Verde por comentário é catraca satisfeita pelo motivo errado: bastaria
+    // alguém reescrever uma frase para o controle ficar vermelho sem nada ter
+    // acontecido, e, pior, ele deixara de provar que a varredura alcança a
+    // âncora de verdade. Medido: 2 ocorrências aqui, as duas em comentário.
+    const alvo = "tests/unit/_identidade-deste-repo.ts";
     const saida = execFileSync("grep", ["-rlF", NAMESPACE_DESTE_REPO, alvo], {
       cwd: RAIZ,
       encoding: "utf8",
