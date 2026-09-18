@@ -2100,8 +2100,24 @@ if ! dc pull; then
   c_ylw "⚠ Não consegui puxar todas as imagens do registro."
   c_ylw "  Sigo assim mesmo: o que faltar é construído aqui (mais lento, mesmo resultado)."
 fi
-dc up -d
+# O "sigo assim mesmo" acima vale para o worker e o scheduler, que têm `build:`
+# ao lado do `image:` — mas NÃO para o app, que não tem: se a imagem dele não
+# veio do registro (arquitetura da VPS diferente da das imagens publicadas, tag
+# ainda publicando, pacote privado), o `up -d` morre e a instalação acabava sem
+# CRM no ar. A promessa da frase acima só se sustenta com esta guarda.
+CONSTRUIU_AQUI=""
+if ! dc up -d; then
+  if construir_aqui_e_subir "$VERSAO_ALVO"; then
+    CONSTRUIU_AQUI=1
+  else
+    die "Não coloquei o CRM no ar: nem as imagens prontas desta versão nem a construção aqui funcionaram. O erro está logo acima; para reproduzir só a construção: docker compose $(dc_files) -f ${COMPOSE_BUILD} build"
+  fi
+fi
 c_grn "✓ containers no ar"
+if [ -n "$CONSTRUIU_AQUI" ]; then
+  c_ylw "  (as três imagens desta versão foram construídas aqui nesta VPS: as prontas"
+  c_ylw "   não servem para a arquitetura dela. É mais lento e não precisa de nada manual.)"
+fi
 
 # ── 10. Healthcheck ─────────────────────────────────────────────────────────
 step "Aguardando o app ficar saudável"

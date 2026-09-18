@@ -542,6 +542,49 @@ describe("remarcar — a mesma regra", () => {
     ).rejects.toMatchObject(RECUSA);
     expect(horarioDoMeu(banco)).toBe(MEU_INICIO);
   });
+
+  // O compromisso que está sendo remarcado ocupa o horário DE ONDE SAI — nunca o
+  // de DESTINO. Sem intervalo configurado isso já valia, por acidente: a janela
+  // crua de `[14:00Z, 15:00Z]` nem encostava no próprio compromisso. Com 30 min
+  // de intervalo ANTES, a coleta alarga para `[13:30Z, 15:00Z]` e o próprio
+  // compromisso (13:00–14:00Z) passa a cruzar a janela: a IA remarcando para
+  // 14:00Z levava 422 `agenda_horario_indisponivel` por causa de SI MESMA — o
+  // horário de onde sai contava como ocupação do horário para onde vai (#1084).
+  it("a IA move para logo DEPOIS do próprio fim, com intervalo antes — o compromisso não ocupa a si mesmo", async () => {
+    const banco = agenda({ agendamentos: [meu()], bufferAntesMin: 30 });
+    await alterarAgendamentoHandler(banco.client, ctx(AGENTE), {
+      id: MEU_COMPROMISSO,
+      starts_at: MEU_FIM,
+    });
+    expect(
+      horarioDoMeu(banco),
+      "o compromisso se viu como conflito ao ser movido para o minuto seguinte ao próprio fim: o horário de saída cruzou a janela alargada",
+    ).toBe(MEU_FIM);
+  });
+
+  it("CONTROLE: com o mesmo intervalo, o destino que invade o respiro de OUTRO compromisso é RECUSADO", async () => {
+    // O vizinho termina 14:45Z e o destino é 15:00Z: com 30 min de intervalo, o
+    // destino cai dentro do respiro pedido (o vizinho invade `[14:30Z, 15:00Z]`).
+    // Tirar o próprio compromisso da conta não pode tirar o intervalo junto.
+    const banco = agenda({
+      agendamentos: [meu(), agendamento("2026-10-07T14:15:00.000Z", "2026-10-07T14:45:00.000Z")],
+      bufferAntesMin: 30,
+    });
+    await expect(
+      alterarAgendamentoHandler(banco.client, ctx(AGENTE), { id: MEU_COMPROMISSO, starts_at: "2026-10-07T15:00:00.000Z" }),
+    ).rejects.toMatchObject(RECUSA);
+    expect(horarioDoMeu(banco), "o intervalo deixou de valer contra outro compromisso").toBe(MEU_INICIO);
+  });
+
+  it("CONTROLE: sem intervalo, o MESMO destino colado no vizinho é ACEITO", async () => {
+    // Prova que a recusa acima é do INTERVALO, e não de uma sobreposição comum: o
+    // vizinho termina 15 min antes do destino e não encosta nele.
+    const banco = agenda({
+      agendamentos: [meu(), agendamento("2026-10-07T14:15:00.000Z", "2026-10-07T14:45:00.000Z")],
+    });
+    await alterarAgendamentoHandler(banco.client, ctx(AGENTE), { id: MEU_COMPROMISSO, starts_at: "2026-10-07T15:00:00.000Z" });
+    expect(horarioDoMeu(banco), "o ajuste do intervalo encostou na ocupação real").toBe("2026-10-07T15:00:00.000Z");
+  });
 });
 
 describe("o intervalo antes do atendimento vale na ESCRITA, não só na leitura (issue #876)", () => {
