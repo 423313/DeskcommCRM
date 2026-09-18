@@ -21,6 +21,11 @@ ok()    { c_grn "  ✓ $*"; }
 falha() { c_red "  ✗ $*"; FALHAS=$((FALHAS + 1)); }
 dica()  { printf '      → %s\n' "$*"; }
 
+# O namespace do FORK, literal: o doutor audita a árvore em que está, e essa
+# árvore pode ser a do upstream (é exatamente o caso em que ele precisa gritar).
+# Derivar de IMG_NS aqui faria o kit do upstream aprovar as imagens do upstream.
+NS_DO_FORK="ghcr.io/423313"
+
 TABELAS_DO_FINANCEIRO="financial_accounts payment_methods account_plans sales sale_items commission_rules commissions financial_entries loyalty_ledger recurring_entries"
 DEFINERS_DO_FINANCEIRO="fn_finalizar_comanda fn_estornar_comanda fn_relatorio_financeiro fn_saldo_de_fidelidade"
 
@@ -41,29 +46,26 @@ fi
 RUIM=""
 for v in APP_IMAGE WORKER_IMAGE SCHEDULER_IMAGE; do
   val="${!v:-}"
-  [[ "$val" == "$IMG_NS"/* ]] || RUIM="$RUIM $v=${val:-<ausente>}"
+  [[ "$val" == "$NS_DO_FORK"/* ]] || RUIM="$RUIM $v=${val:-<ausente>}"
 done
 if [ -z "$RUIM" ]; then
-  ok "as três imagens do .env estão em $IMG_NS"
+  ok "as três imagens do .env estão em $NS_DO_FORK"
 else
   falha "imagem fora do fork:$RUIM"
-  dica "no .env: APP_IMAGE=$IMG_APP:<versão>  WORKER_IMAGE=$IMG_WORKER:<versão>  SCHEDULER_IMAGE=$IMG_SCHEDULER:<versão>"
+  dica "no .env: APP_IMAGE=$NS_DO_FORK/deskcommcrm:<versão>  WORKER_IMAGE=$NS_DO_FORK/deskcomm-worker:<versão>  SCHEDULER_IMAGE=$NS_DO_FORK/deskcomm-scheduler:<versão>"
   dica "docker compose $(dc_files) --env-file .env up -d"
 fi
 
-# 3. A tela do financeiro responde? 307 = existe (manda logar). 404 = sumiu.
-URL="${NEXT_PUBLIC_APP_URL:-}"
-if [ -n "$URL" ]; then
-  CODIGO="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL/app/comandas" || echo 000)"
-  case "$CODIGO" in
-    307|302|200) ok "/app/comandas responde $CODIGO — o módulo está no ar" ;;
-    404) falha "/app/comandas responde 404 — a imagem em execução NÃO tem o financeiro"
-         dica "é o sintoma da pergunta 2: corrija as imagens e suba de novo" ;;
-    *)   falha "/app/comandas respondeu $CODIGO (app fora do ar ou domínio errado)"
-         dica "docker compose $(dc_files) --env-file .env ps" ;;
-  esac
+# 3. A imagem em EXECUÇÃO tem o módulo? Sonda de dentro do contêiner, não HTTP:
+# sem login, o proxy responde 307 (/app/*) ou 401 (/api/*) para QUALQUER rota,
+# exista ela ou não — medido em 17/09/2026 nos dois ambientes. O bundle
+# standalone tem este arquivo se e só se a imagem foi construída com o módulo.
+SONDA=".next/server/app/app/comandas/page.js"
+if docker compose $(dc_files) --env-file .env exec -T app test -e "$SONDA" 2>/dev/null; then
+  ok "o contêiner do app tem o financeiro no bundle ($SONDA)"
 else
-  falha "sem NEXT_PUBLIC_APP_URL no .env — não consegui sondar a tela"
+  falha "o contêiner do app NÃO tem o financeiro — a imagem em execução é sem o módulo"
+  dica "é a pergunta 2: corrija as imagens no .env e suba de novo (docker compose $(dc_files) --env-file .env up -d)"
 fi
 
 # 4. O schema está inteiro? Tabelas presentes e anon sem EXECUTE nas definers.

@@ -112,8 +112,11 @@ bash scripts/fork-doutor.sh
 cp supabase/fork-apendice.sql /root/fork-apendice.sql
 ```
 
-**Se o financeiro sumir depois de um update** (`/app/comandas` responde 404), o
-resgate é uma linha: as três `*_IMAGE` do `.env` de volta para
+**Se o financeiro sumir depois de um update**, quem diz é o `fork-doutor.sh` —
+**não confie em HTTP sem login**: o proxy responde 307 em `/app/*` e 401 em
+`/api/*` para qualquer rota, exista ou não (medido em 17/09/2026). A sonda que
+vale é de dentro do contêiner: `.next/server/app/app/comandas/page.js` existe se
+e só se a imagem tem o módulo. O resgate é uma linha: as três `*_IMAGE` do `.env` de volta para
 `ghcr.io/423313/...:2026.M.N` e `docker compose ... up -d`. Depois confira o
 `origin` do clone e apague qualquer tag `v1.*` que tenha voltado. Os dados nunca
 saem do lugar: estão no Supabase, e nenhum caminho do update os toca.
