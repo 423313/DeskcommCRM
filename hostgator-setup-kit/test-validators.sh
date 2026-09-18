@@ -855,6 +855,58 @@ else
   printf '  ✗ uma apagou a outra (drain=%s, agente=%s — esperava 1 de cada)\n' "$tem_drain" "$tem_agent"; fail=1
 fi
 
+echo "cron: o segredo não vai para a linha do crontab (nem para o syslog)"
+# O `cron` do Ubuntu registra no syslog a linha de comando de cada execução. Com
+# o Bearer escrito na linha, o segredo das rotas de cron ia para o log a cada
+# minuto — medido numa VPS de produção em 2026-09-17: 24.827 linhas no journal.
+# O cenário parte da linha LEGADA, a que toda instalação existente tem.
+TMP_CRON="$(mktemp -d)"
+(
+  . ./_common.sh
+  # Dublê em FUNÇÃO, e não no PATH: `command -v crontab` e os dois lados do cano
+  # enxergam a função, e o crontab real de quem roda a suíte nunca é tocado.
+  crontab() {
+    case "${1:-}" in
+      -l) [ -f "$TMP_CRON/crontab" ] || return 1; cat "$TMP_CRON/crontab" ;;
+      -)  cat > "$TMP_CRON/crontab.novo" && mv "$TMP_CRON/crontab.novo" "$TMP_CRON/crontab" ;;
+    esac
+  }
+  step() { :; }; psql_run() { :; }
+  PROJECT_DIR="$TMP_CRON/projeto"; mkdir -p "$PROJECT_DIR"
+  NEXT_PUBLIC_APP_URL="https://crm.exemplo.com.br"
+  URL="$NEXT_PUBLIC_APP_URL/api/v1/cron/event-log-drain"
+  printf '* * * * * curl -fsS -H "Authorization: Bearer segredo-velho-a1b2c3" "%s" >/dev/null 2>&1 # deskcomm:%s:drain\n' \
+    "$URL" "$PROJECT_DIR" > "$TMP_CRON/crontab"
+  CAB="$PROJECT_DIR/.env.cron-drain"
+  checa() { if eval "$2"; then printf '  ✓ %s\n' "$1"; else printf '  ✗ %s\n' "$1"; exit 1; fi; }
+
+  INTERNAL_CRON_SECRET="segredo-novo-9f8e7d"; INTERNAL_SECRET=""
+  setup_event_log_drain_cron >/dev/null 2>&1
+  checa "a linha do drain continua existindo (controle de vacuidade)" \
+    '[ "$(grep -cF "$URL" "$TMP_CRON/crontab")" = 1 ]'
+  checa "nenhuma linha do crontab carrega o segredo novo" \
+    '! grep -qF "segredo-novo-9f8e7d" "$TMP_CRON/crontab"'
+  checa "a linha legada, com o segredo velho, foi substituída" \
+    '! grep -qF "segredo-velho-a1b2c3" "$TMP_CRON/crontab"'
+  checa "a linha lê o cabeçalho do arquivo" \
+    'grep -F "$URL" "$TMP_CRON/crontab" | grep -qF -- "-H @\"$CAB\""'
+  checa "o arquivo tem o cabeçalho que a rota espera" \
+    '[ "$(cat "$CAB")" = "Authorization: Bearer segredo-novo-9f8e7d" ]'
+  # `stat -c` é GNU; no macOS o equivalente é `stat -f '%Lp'` (mesma forma usada mais
+  # abaixo neste arquivo). No Windows o `stat` do Git Bash não reflete o chmod; no CI, Linux, reflete.
+  checa "o arquivo nasce só para o dono (600)" \
+    '[ "$(stat -c "%a" "$CAB" 2>/dev/null || stat -f "%Lp" "$CAB" 2>/dev/null)" = 600 ]'
+
+  # Trocar o segredo no `.env` e rodar o update de novo é a rotação inteira.
+  INTERNAL_CRON_SECRET="segredo-rotacionado-4c3b2a"
+  setup_event_log_drain_cron >/dev/null 2>&1
+  checa "rodar de novo com segredo novo regrava o arquivo" \
+    '[ "$(cat "$CAB")" = "Authorization: Bearer segredo-rotacionado-4c3b2a" ]'
+  checa "e não empilha linha no crontab" \
+    '[ "$(grep -cF "$URL" "$TMP_CRON/crontab")" = 1 ]'
+) || fail=1
+rm -rf "$TMP_CRON"
+
 echo "provisionamento do Supabase: senha do banco"
 # Dois testes distintos, porque o defeito e o contrato moram em lugares
 # diferentes — e o primeiro teste que escrevi aqui era VÁCUO por não separá-los.
@@ -2648,6 +2700,101 @@ NEXT_PUBLIC_APP_URL='https://crm.exemplo.com.br'")"
   printf '  ✓ baseline (%s psql) e backup (%s pg_dump) pela conexão do dono\n' "$n_psql" "$n_dump"
 ) || fail=1
 rm -rf "$TMP_DDL_C"
+
+echo "install.sh re-executado: deadlock no baseline faz o arquivo ser aplicado de novo"
+# Sobre um banco que JÁ tem o schema, o install.sh segue o contrato do update.sh
+# (sem ON_ERROR_STOP) e tinha o mesmo buraco: um `deadlock detected` com o app no
+# ar deixava um `drop policy` sem o `create` seguinte — medido numa VPS real na
+# v1.27.3, pelo update.sh. A função é uma só (`reaplicar_baseline`, _common.sh),
+# com suíte própria em tests/shell/baseline-reaplica-apos-disputa.test.sh; este
+# caso prova que o install.sh passa por ela.
+TMP_REAPLICA="$(mktemp -d)"
+(
+  montar_vps "$TMP_REAPLICA" "crmreaplica" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$DOCKER_LOG"
+case "$1" in
+  compose) case "$*" in *" exec "*) printf 'healthy\n{"data":{"status":"healthy"}}\n' ;; esac; exit 0 ;;
+esac
+case "$*" in
+  # A sonda "o schema já existe?" responde que sim: é o ramo sob prova.
+  *"table_name='organizations'"*) printf '1\n' ;;
+  # A 1ª aplicação do baseline perde uma disputa; as seguintes saem limpas.
+  *" -f /b.sql")
+    marca="$(dirname "$DOCKER_LOG")/baseline-passadas"
+    printf x >> "$marca"
+    [ "$(wc -c < "$marca" | tr -d ' ')" = 1 ] && printf 'psql:/b.sql:16766: ERROR:  deadlock detected\n' ;;
+esac
+exit 0
+STUB
+  mkdir -p "$VPS_PROJ/supabase"; : > "$VPS_PROJ/supabase/baseline.sql"
+  export BASELINE_ESPERA_S=0
+  saida="$(rodar install.sh --yes)"
+
+  # Vacuidade: sem o ramo de schema existente, não há re-aplicação para medir.
+  if ! printf '%s' "$saida" | grep -q "schema já existe"; then
+    printf '  ✗ o install.sh não entrou no ramo de schema existente — teste inconclusivo, não verde\n'; exit 1
+  fi
+  n="$(grep -c -- '-f /b.sql' "$VPS_LOG")"
+  if [ "$n" != 2 ]; then
+    printf '  ✗ esperava o baseline aplicado 2 vezes (deadlock, depois limpo); foram %s\n' "$n"; exit 1
+  fi
+  printf '  ✓ o deadlock da 1ª passada fez o install.sh aplicar o baseline de novo\n'
+  if ! printf '%s' "$saida" | grep -q "✓ schema re-aplicado"; then
+    printf '  ✗ a 2ª passada saiu limpa e a tela não disse ✓ schema re-aplicado:\n'
+    printf '%s\n' "$saida" | grep -iE "schema|banco|deadlock" | sed 's/^/       /'; exit 1
+  fi
+  if printf '%s' "$saida" | grep -q "NÃO são os esperados"; then
+    printf '  ✗ o deadlock da 1ª passada virou aviso, embora a 2ª tenha curado\n'; exit 1
+  fi
+  printf '  ✓ e o veredito é o da última passada: ✓ schema re-aplicado, sem aviso\n'
+) || fail=1
+rm -rf "$TMP_REAPLICA"
+
+echo "install.sh re-executado: aviso de banco com lista grande não derruba o instalador"
+# O ramo de aviso ("⚠ Erros no banco que NÃO são os esperados") imprimia com
+# `| head -20`: sob pipefail, numa lista maior que o buffer do pipe (milhares de
+# "must be owner" de uma role sem dono) o head fecha cedo, o printf leva SIGPIPE e
+# o set -e mata o instalador ali. Nenhum caso chegava a este ramo.
+TMP_AVISO_GRANDE="$(mktemp -d)"
+(
+  montar_vps "$TMP_AVISO_GRANDE" "crmavisogrande" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$DOCKER_LOG"
+case "$1" in
+  compose) case "$*" in *" exec "*) printf 'healthy\n{"data":{"status":"healthy"}}\n' ;; esac; exit 0 ;;
+esac
+case "$*" in
+  *"table_name='organizations'"*) printf '1\n' ;;
+  *" -f /b.sql")
+    printf 'psql:/b.sql:16766: ERROR:  deadlock detected\n'
+    for i in $(seq 1 4000); do printf 'psql:/b.sql:%s: ERROR:  must be owner of table tabela_%s\n' "$i" "$i"; done ;;
+esac
+exit 0
+STUB
+  mkdir -p "$VPS_PROJ/supabase"; : > "$VPS_PROJ/supabase/baseline.sql"
+  export BASELINE_ESPERA_S=0
+  saida="$(rodar install.sh --yes)"
+
+  if ! printf '%s' "$saida" | grep -q "schema já existe"; then
+    printf '  ✗ o install.sh não entrou no ramo de schema existente — teste inconclusivo, não verde\n'; exit 1
+  fi
+  if ! printf '%s' "$saida" | grep -q "Erros no banco que NÃO são os esperados"; then
+    printf '  ✗ a lista grande não chegou ao aviso de banco\n'; exit 1
+  fi
+  # A linha seguinte ao bloco do schema: se ela saiu, o instalador sobreviveu ao aviso.
+  if ! printf '%s' "$saida" | grep -q "verificação:"; then
+    printf '  ✗ o instalador morreu no aviso de banco (a verificação de tabelas, logo depois, não saiu)\n'
+    printf '%s\n' "$saida" | grep -iE "schema|banco|erro" | tail -5 | sed 's/^/       /'; exit 1
+  fi
+  printf '  ✓ o instalador passa do aviso de banco com uma lista maior que o buffer do pipe\n'
+  n="$(grep -c -- '-f /b.sql' "$VPS_LOG")"
+  if [ "$n" != 3 ]; then
+    printf '  ✗ a disputa no topo da lista grande não foi reconhecida: %s passada(s), esperava 3\n' "$n"; exit 1
+  fi
+  printf '  ✓ e a disputa no topo foi reconhecida (3 passadas)\n'
+) || fail=1
+rm -rf "$TMP_AVISO_GRANDE"
 
 echo "e-mails de acesso: quem JÁ instalou também é avisado — uma vez só"
 # A população realmente quebrada hoje é quem instalou ANTES de a entrevista pedir

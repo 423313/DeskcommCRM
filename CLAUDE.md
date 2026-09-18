@@ -98,9 +98,10 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
   sonda de `tests/invariants/retencao-poda-e-expurgo.test.ts` ficou verde duas
   vezes medindo o universo errado: primeiro perguntando só por DELETE/UPDATE com
   TRUNCATE concedido ao lado; depois perguntando pelos três num Postgres onde o
-  prelude de `scripts/test-db.sh` reproduz o default ACL do Supabase para
-  FUNÇÕES e não para TABELAS — um banco onde o defeito não pode existir. Quem
-  mede o Supabase real é
+  prelude de `scripts/test-db.sh` reproduzia o default ACL do Supabase só para
+  FUNÇÕES — um banco onde o defeito não podia existir. Desde a issue #887 o
+  prelude reproduz também o de TABELAS, e aquela sonda passou a medir o Supabase.
+  A prova com controle próprio segue sendo
   `tests/invariants/audit-log-sob-o-default-acl-do-supabase.test.ts`: concede o
   default ACL à tabela, reaplica o bloco da 0258 extraído do baseline e só então
   sonda. **Enumerar privilégios no dump não protege tabela nenhuma no Supabase
@@ -279,6 +280,36 @@ ou qualquer arquivo à mão. Se exigir, não entra: vira issue com plano de
 migração e vai para uma major.
 ---
 
+## Extensões — DOUTRINA (NÃO NEGOCIÁVEL)
+
+Lei completa em [`docs/doctrine/extensoes.md`](docs/doctrine/extensoes.md); o
+contrato que existe hoje em
+[`docs/specs/extensoes-declarativas-v1.md`](docs/specs/extensoes-declarativas-v1.md).
+A pergunta que decide o destino de uma mudança não é "isto serve a muita gente?",
+e sim **"se nenhuma organização ativar isto, a operação comum continua inteira?"**.
+O não-negociável:
+
+1. **O núcleo continua útil com zero extensões.** Identidade, autorização,
+   isolamento, auditoria, contratos e cadeia de envio são núcleo; jornada de nicho,
+   aparência e integração com dados e manutenção próprios podem ser extensão.
+2. **Extensão pede capacidade nomeada; não importa código interno nem lê o banco.**
+   Instalar não concede autoridade: toda escrita revalida ator, organização e papel
+   atuais no banco.
+3. **A instância decide o pacote; a organização decide o uso.** Instalar, atualizar,
+   desfazer e remover são do administrador da instalação; ativar e configurar, do
+   administrador da organização. A plataforma não reativa decisão da organização.
+4. **Toda operação é recibo idempotente com saída pela tela, e toda troca de
+   ponteiro exige a revisão que a tela viu.** Tirar é lógico e preserva dados.
+5. **Não anunciar o que não existe** (SDK, código isolado, marketplace público), e
+   não extrair do núcleo recurso já distribuído sem equivalência e migração.
+6. **Módulo oficial com dados não põe tabela no baseline para todos**
+   ([ADR-0002](docs/adr/0002-tabelas-de-modulo-num-banco-so.md), aceita em 17/09/2026). Um banco
+   só, schema `public`; as tabelas nascem por função provisionadora fixa do módulo, quando ele é
+   **instalado na instância**. Ninguém opera segundo banco — é decisão do dono, e seria impossível
+   com chave estrangeira para o núcleo.
+
+---
+
 ## Como rodar local
 
 ```bash
@@ -296,7 +327,7 @@ Ver `README.md` pra detalhes de setup.
 ## Testes
 
 ```bash
-pnpm typecheck   # tsc --noEmit (estrito)
+pnpm typecheck   # tsc --noEmit -p tsconfig.typecheck.json (inclui tests/)
 pnpm lint        # eslint next/core-web-vitals
 pnpm test:unit   # Vitest (NÃO inclui tests/invariants/** — ver abaixo)
 pnpm test:db     # Postgres efêmero + baseline install/update + 364 invariantes
@@ -510,6 +541,12 @@ naquele clone — no Claude Code a skill GLOBAL vence a do projeto com o mesmo n
 - `deskcomm-contribuir` — o espelho da triagem, antes do PR; fica quieto para o mantenedor
 - `deskcomm-doutrina` — as três regras que mais custam, antes de escrever código
 
+Os guias têm página pública em [deskcomm.com.br/guias](https://www.deskcomm.com.br/guias), escrita
+à mão em `deskcomm-site/conteudo/guias.ts`: guia criado, renomeado ou com comando novo pede a mesma
+mudança lá — senão a página ensina um guia que não existe. Ela e a de changelog saem do mesmo PR do
+`deskcomm-site`; enquanto as duas não responderem 200, vale o `curl` que abre a seção "A vitrine" de
+[`docs/doctrine/versionamento.md`](docs/doctrine/versionamento.md), não a frase acima.
+
 - `superpowers:brainstorming` — antes de implementar feature não-trivial
 - `superpowers:writing-plans` — pra task com mais de 1 etapa de DB/API
 - `superpowers:test-driven-development` — feature crítica (LGPD, RLS, anti-banimento)
@@ -569,5 +606,17 @@ Antes de declarar uma task pronta:
     presença num check obrigatório reprovaria PR de Dependabot, PR de fork, e o próprio PR
     de release, que consome os fragmentos e deixa o diretório vazio. A presença é cobrada
     aqui, e por quem revisa.
+    **Toda versão publicada aparece na página de changelog da LP** (deskcomm.com.br/changelog,
+    pt-BR/en/es). Ninguém escreve no site: a LP lê o `CHANGELOG.md` da `main`, e o último passo
+    do corte (`release.yml`, job `cortar-tag`) reprova quando a versão não chegou. O texto do
+    fragmento é, portanto, nota pública. Enquanto as três páginas não responderem 200 esse passo
+    reprova TODO corte — a vitrine vem de um PR do `deskcomm-site`, e o `curl` que diz em que
+    estado ela está abre a seção. Lei: seção "A vitrine" de `versionamento.md`.
+
+18. **Se o PR muda comportamento, ele declara o destino: núcleo, extensão, ambos ou
+    infraestrutura** (lei em [`docs/doctrine/extensoes.md`](docs/doctrine/extensoes.md)), com a razão
+    medida pela pergunta "se nenhuma organização ativar isto, a operação comum continua inteira?".
+    "Ambos" traz o consumidor real do ponto novo do núcleo e a prova dos dois lados. Classificar como
+    extensão não autoriza remover nem desligar o que já foi distribuído.
 
 Um staff engineer aprovaria? Se não, itera.
