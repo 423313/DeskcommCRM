@@ -10,6 +10,7 @@ import {
 } from "./evento";
 import {
   compare,
+  comConviteDaFicha,
   checkpoint,
   delta,
   groups,
@@ -406,26 +407,14 @@ export async function reconcileAppointment(
       }
     }
     if (!remote) throw new Error("Evento sem projeção válida.");
-    let decision = compare(base, local, remote);
-    // Compromisso já no Google sem o e-mail da ficha: o stamp não vê o contato,
-    // então `compare` diz convergido e o lead nunca ganharia o convite. Forçar
-    // o grupo `guest` numa PATCH só disto é o conserto — sendUpdates=all manda
-    // o e-mail. Não mexe em conflito nem em accept_remote: nesses casos a
-    // decisão humana vem primeiro.
-    if (
-      contato?.email &&
-      event &&
-      event.status !== "cancelled" &&
-      a.status !== "cancelled" &&
-      !eventoTemEmail(event, contato.email) &&
-      (decision.kind === "converged" || decision.kind === "publish")
-    ) {
-      decision = {
-        kind: "publish",
-        shared: decision.shared,
-        groups: decision.groups.includes("guest") ? decision.groups : [...decision.groups, "guest"],
-      };
-    }
+    // O e-mail da ficha vai junto de uma alteração, nunca sozinho — ver
+    // `comConviteDaFicha` (decisão do dono, doc 36: sem convite em massa na
+    // 1ª sincronização depois da atualização).
+    const decision = comConviteDaFicha(compare(base, local, remote), {
+      temEmail: Boolean(contato?.email),
+      eventoJaTemOEmail: Boolean(contato?.email && event && eventoTemEmail(event, contato.email)),
+      cancelado: event?.status === "cancelled" || a.status === "cancelled",
+    });
     if (decision.kind === "conflict") {
       await conflict(decision.reason!, remote, decision.groups);
       return "processed";
