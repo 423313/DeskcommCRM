@@ -453,7 +453,8 @@ if [ ! -f "$EXEMPLO" ]; then
   # pulo silencioso é indistinguível de teste que passou.
   printf '  — pulado: %s não existe (kit fora do repositório)\n' "$EXEMPLO"
 else
-  GRAVA="$(grep -oE '^[[:space:]]*envq [A-Z_0-9]+' install.sh | awk '{print $2}' | sort -u)"
+  regua_quebrou=0
+  GRAVA="$(grep -oE '^[[:space:]]*envq [A-Z_0-9]+' install.sh | awk '{print $2}' | sort -u)" || regua_quebrou=1
   # VACUIDADE — a lista de escrita é a régua deste caso, e uma régua CURTA acusa
   # o inocente. `$GRAVA` sai de um pipeline de três estágios; quando a máquina
   # está saturada ele às vezes volta truncado, e o efeito não é um teste que
@@ -466,21 +467,38 @@ else
   # rodadas seguintes verdes. Conjuntos diferentes a cada vez é a assinatura de
   # régua truncada, não de defeito.
   #
-  # O piso não precisa acompanhar o crescimento do install.sh: ele separa
-  # "pipeline morreu no meio" de "lista completa", e qualquer valor bem abaixo do
-  # real serve. Para ver quantas há hoje:
-  #   grep -cE '^[[:space:]]*envq [A-Z_0-9]+' hostgator-setup-kit/install.sh
+  # O piso fixo de 30 não pegava isso: 30 é menos da metade da régua real, e a
+  # truncagem parcial (67 → 40, digamos) passava por baixo da guarda e saía como
+  # acusação. Piso escolhido à mão ainda encolhe de valor relativo a cada chave
+  # nova, sem avisar. O que separa "régua truncada" de "chave faltando" é contar
+  # a MESMA régua duas vezes, por caminhos independentes: a lista acima e uma
+  # contagem direta no install.sh, de um processo só — sem pipeline, logo sem
+  # leitura parcial. Batendo, a régua está inteira e as acusações abaixo têm
+  # chão; divergindo, ou voltando o pipeline acima com status ≠ 0, o desfecho é
+  # INCONCLUSIVO — nunca "chave faltando". A contagem direta é por CHAVE ÚNICA,
+  # como a lista: `envq DOMAIN` escrito em dois ramos de um `if` é uma chave só,
+  # e contar linhas acusaria régua truncada para sempre com a régua inteira.
+  #
+  # A contagem dupla fecha a truncagem, mas não era ela a causa das acusações
+  # soltas da issue #1153: as rodadas registradas acusaram uma ou duas chaves
+  # espalhadas, e uma régua truncada perde a CAUDA — para deixar de fora aquelas
+  # chaves teria de acusar de 14 a 54 ao mesmo tempo. O que produz uma acusação
+  # solta é a checagem POR CHAVE, que era um `printf | grep -qx` por chave: um
+  # processo por chave, que pode falhar sozinho sob carga, lido pelo `&&` como
+  # "ausente" para QUALQUER status ≠ 0. `na_regua` responde a pertença sem abrir
+  # processo nenhum. Qual falha do sistema devolvia o status ≠ 0 não foi medido
+  # (carga ~17: 0 em 6000); o conserto não depende de saber.
+  na_regua() { case $'\n'"$GRAVA"$'\n' in *$'\n'"$1"$'\n'*) return 0 ;; esac; return 1; }
   n_grava="$(printf '%s\n' "$GRAVA" | grep -c . || true)"
-  if [ "${n_grava:-0}" -lt 30 ]; then
-    printf '  ✗ a lista de escrita voltou com %s chave(s) — a régua está truncada, não o install.sh\n' "${n_grava:-0}"
+  n_real="$(awk 'match($0, /^[[:space:]]*envq [A-Z_0-9]+/) { k = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*envq /, "", k); u[k] = 1 } END { n = 0; for (k in u) n++; print n }' install.sh)" || regua_quebrou=1
+  if [ "${regua_quebrou:-0}" -ne 0 ] || [ "${n_grava:-0}" -ne "${n_real:-0}" ]; then
+    printf '  ✗ a lista de escrita voltou com %s chave(s) contra %s na contagem direta — a régua está truncada, não o install.sh\n' "${n_grava:-0}" "${n_real:-0}"
     printf '     (cenário INCONCLUSIVO: sem régua inteira, toda acusação abaixo seria falsa)\n'
     fail=1
-    GRAVA=""
-    novas=""
   else
   novas=""
   for k in $(grep -oE '^[A-Z_0-9]+=' "$EXEMPLO" | tr -d '=' | sort -u); do
-    printf '%s\n' "$GRAVA" | grep -qx "$k" && continue
+    na_regua "$k" && continue
     case " $DIVIDA " in *" $k "*) continue ;; esac
     novas="$novas $k"
   done
@@ -491,16 +509,18 @@ else
   else
     printf '  ✓ nenhuma chave nova fora da lista de escrita\n'
   fi
-  fi
+  # Só com a régua inteira: no ramo inconclusivo, conferir a dívida contra uma
+  # régua que não temos imprimiria um ✓ calculado sobre nada.
   estagnada=""
   for k in $DIVIDA; do
-    printf '%s\n' "$GRAVA" | grep -qx "$k" && estagnada="$estagnada $k"
+    na_regua "$k" && estagnada="$estagnada $k"
   done
   if [ -n "$estagnada" ]; then
     printf '  ✗ já é gravada pelo install.sh — tire da lista DÍVIDA deste teste:%s\n' "$estagnada"
     fail=1
   else
     printf '  ✓ dívida ainda condiz (%s chaves conhecidas, só pode encolher)\n' "$(printf '%s' "$DIVIDA" | wc -w | tr -d ' ')"
+  fi
   fi
 fi
 
