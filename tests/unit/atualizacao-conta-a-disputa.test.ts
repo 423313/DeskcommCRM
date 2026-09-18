@@ -154,7 +154,12 @@ describe("o fio entre o kit e a rota fala a MESMA língua", () => {
     const agente = readFileSync(join(raiz, "hostgator-setup-kit", "agent.sh"), "utf8");
 
     expect(agente).toContain("${RODADA_DO_BANCO}");
-    expect(agente).not.toContain("rodada_do_banco");
+    // A chave ANINHADA antiga (`"rodada_do_banco":`) saiu do corpo do run_result —
+    // é ela que o `z.object` da rota descartava em silêncio. A linha do corpo é
+    // localizada pelo próprio `run_result` para o teste não depender do nome da
+    // função que lê o arquivo (`ler_rodada_do_banco`).
+    const corpoDoRunResult = agente.split("\n").find((l) => l.includes("run_result")) ?? "";
+    expect(corpoDoRunResult).not.toContain("rodada_do_banco");
   });
 
   it("a rota lê exatamente esses três nomes", () => {
