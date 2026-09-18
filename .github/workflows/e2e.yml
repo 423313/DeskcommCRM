@@ -716,6 +716,7 @@ jobs:
       SPECS_PARTE_3: >-
         autonomia-assistida.spec.ts
         roteamento-por-canal.spec.ts
+        whatsapp-pareamento-por-codigo.spec.ts
         central-avisos-destino.spec.ts
         agenda-presenca-recuperacao.spec.ts
         agenda-google-sync.spec.ts
