@@ -8193,6 +8193,7 @@ export const DICIONARIO: Traducoes = {
   "Este negócio não tem contato, então não há proposta do agente.": { es: "Este negocio no tiene contacto, así que no hay propuesta del agente." },
   "Este número foi excluído da Central de Conexões — reconectar não o traz de volta. Conecte um número para voltar a atender.": { es: "Este número fue eliminado de la Central de Conexiones — reconectar no lo trae de vuelta. Conecta un número para volver a atender." },
   "Falha ao processar o envio do arquivo.": { es: "Falla al procesar el envío del archivo." },
+  "O arquivo não está mais guardado. Envie de novo.": { es: "El archivo ya no está guardado. Envíalo de nuevo." },
   "Esta chave de idempotência já foi usada com outro conteúdo.": { es: "Esta clave de idempotencia ya fue usada con otro contenido." },
   "Filtros inválidos.": { es: "Filtros inválidos." },
   "Header Idempotency-Key é obrigatório.": { es: "El header Idempotency-Key es obligatorio." },

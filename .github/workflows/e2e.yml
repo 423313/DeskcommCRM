@@ -813,6 +813,7 @@ jobs:
         extensoes-versao.spec.ts
         motivo-do-publicar-na-tela.spec.ts
         followup-cartoes.spec.ts
+        presenca-do-atendente.spec.ts
 
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts
