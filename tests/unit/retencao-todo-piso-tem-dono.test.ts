@@ -53,6 +53,11 @@ const DONO_NO_SQL: Record<string, string> = {
   // desta função (ela só apaga passagem JÁ reconhecida), mas ele é o que esta
   // lista sabe medir — o resto é `tests/invariants/passagem-retencao.test.ts`.
   PASSAGEM: "fn_expurgar_passagens_vencidas",
+  // migration 0292 — o registro de entrega do aviso de caso no WhatsApp da
+  // equipe. Mesma lição: entra aqui no MESMO commit da migration. É o piso mais
+  // BAIXO da lista (30), e isso é decisão escrita em `politica.ts`: o que ele
+  // protege é o incidente em apuração, não rastro legal.
+  AVISO_DE_CASO: "fn_expurgar_avisos_de_caso_vencidos",
 };
 
 /**

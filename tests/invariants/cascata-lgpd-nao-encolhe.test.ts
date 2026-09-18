@@ -57,6 +57,13 @@ const TABELAS_NA_CASCATA = [
   "crm_lead_activities", //0071 — payload, metadata e `reason` escrito por LLM
   "crm_leads", //          0019 — título, descrição, campos personalizados, tags
   "demandas", //           0280 — o assunto do pedido
+  // 0292 — `erro_detalhe` do registro de entrega do aviso: é o texto CRU que o
+  // transporte devolveu, e um provedor que recusa um envio costuma devolver o
+  // destinatário dentro da mensagem de erro. A tabela NÃO satisfaz as duas
+  // condições de `lgpd-cascata-alcanca-quem-guarda-pessoa.test.ts` (sem FK para
+  // `contacts`, sem coluna de nome-de-PII), então aquele gate ficaria VERDE sem
+  // este passo. É esta catraca que o segura.
+  "entregas_de_aviso_de_caso",
   "messages", //           0019 — corpo, mídia e metadata
   "orders", //             0019 — dados pessoais dentro do payload do pedido
   // 0291 — o briefing da passagem: title/body/notes/content e as tentativas.

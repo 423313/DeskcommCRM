@@ -596,6 +596,25 @@ export const AUDIT_ACTIONS = [
    * sai pela cascata de LGPD.
    */
   "ai.case_chat_asked",
+  /**
+   * O aviso de caso no WhatsApp da equipe (migration 0292).
+   *
+   * Três códigos e não um: "saiu", "não saiu em definitivo" e "alguém mudou a
+   * configuração" são perguntas diferentes, feitas por gente diferente. Um
+   * código só obrigaria a abrir o metadata para saber qual dos três aconteceu —
+   * e o painel de auditoria filtra por `action`, não por metadata.
+   *
+   * `ai.case_alert_sent` só quando a entrega virou `enviado`; `ai.case_alert_failed`
+   * só na falha DEFINITIVA (retry não é fato auditável, é o sistema tentando).
+   *
+   * ⚠️ SEM O TEXTO e SEM O NÚMERO INTEIRO. O corpo do aviso nunca entra (ele
+   * carrega o relato do cliente) e o destino entra MASCARADO: `api_audit_log` é
+   * append-only, sem UPDATE nem DELETE para papel nenhum — o que entra ali não
+   * sai pela cascata de LGPD.
+   */
+  "ai.case_alert_sent",
+  "ai.case_alert_failed",
+  "ai.case_alert_settings_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

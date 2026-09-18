@@ -8,6 +8,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
+import { maskPhone } from "@/lib/lgpd/mask";
 import type { Json } from "@/lib/database.types";
 
 // ---------------------------------------------------------------------------
@@ -281,6 +282,29 @@ export interface PassagemDeAtendimentoRow {
   reconhecido_em: string | null;
 }
 
+/**
+ * O registro de que a equipe foi (ou não foi) avisada no WhatsApp sobre um caso
+ * do titular — migration 0292.
+ *
+ * ⚠️ `destino` entra MASCARADO. Ele é o telefone de um FUNCIONÁRIO, não do
+ * titular: entregá-lo inteiro num relatório do Art. 18 II trocaria o dado
+ * pessoal de uma pessoa pelo de outra. O que o titular tem direito de saber é
+ * QUE houve um aviso sobre o atendimento dele, quando, e se chegou.
+ *
+ * O corpo do aviso não aparece porque ele NÃO É GUARDADO — a tabela tem só o
+ * resumo criptográfico, e um hash não reidentifica ninguém.
+ */
+export interface AvisoDeCasoEntregaRow {
+  id: string;
+  case_id: string;
+  destino_mascarado: string | null;
+  status: string;
+  erro_codigo: string | null;
+  tentativas: number;
+  enviado_em: string | null;
+  created_at: string;
+}
+
 /** Uma demanda do titular — o pedido, seu dono e seu desfecho. */
 export interface DemandaRow {
   id: string;
@@ -374,6 +398,7 @@ export interface ExportPayload {
    * depende de memória humana.
    */
   passagens: PassagemDeAtendimentoRow[];
+  avisos_de_caso: AvisoDeCasoEntregaRow[];
   reply_drafts?: Array<{
     id: string;
     status: string;
@@ -837,6 +862,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   let demandas: DemandaRow[] = [];
   const case_chat_messages: CaseChatMessageRow[] = [];
   const passagens: PassagemDeAtendimentoRow[] = [];
+  const avisos_de_caso: AvisoDeCasoEntregaRow[] = [];
   if (contactId) {
     const pageSize = 500;
     const refBatchSize = 100; // Mantém o filtro IN abaixo dos limites de URL dos proxies.
@@ -970,6 +996,37 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       passagens.push(...(pagina ?? []));
       if (!pagina || pagina.length < pageSize) break;
     }
+    // O registro de entrega do aviso ao suporte (migration 0292). O escopo sai
+    // dos CASOS já coletados, e não de uma segunda derivação pela conversa: um
+    // `case_id` que não esteja em `cases` seria de outro titular.
+    //
+    // A cascata de LGPD zera `erro_detalhe` desta tabela, e é por isso que ela
+    // entra aqui: `tests/unit/lgpd-exporta-o-que-redige.test.ts` deriva as duas
+    // pontas da fonte e reprova quem redige e não exporta — o que se apaga a
+    // pedido do titular é o que se entrega a pedido dele.
+    for (let batch = 0; batch < caseIds.length; batch += refBatchSize) {
+      for (let offset = 0; ; offset += pageSize) {
+        const { data: pagina, error: erro } = await admin
+          .from("entregas_de_aviso_de_caso")
+          .select("id, case_id, destino, status, erro_codigo, tentativas, enviado_em, created_at")
+          .eq("organization_id", organizationId)
+          .in("case_id", caseIds.slice(batch, batch + refBatchSize))
+          .order("id")
+          .range(offset, offset + pageSize - 1);
+        if (erro) {
+          logger.warn("[lgpd-export-worker] avisos de caso load failed", {
+            request_id: requestId,
+            error: erro.message,
+          });
+          break;
+        }
+        for (const linha of pagina ?? []) {
+          const { destino, ...resto } = linha;
+          avisos_de_caso.push({ ...resto, destino_mascarado: maskPhone(destino) });
+        }
+        if (!pagina || pagina.length < pageSize) break;
+      }
+    }
   }
 
   const meeting_deliveries: MeetingDeliveryRow[] = [];
@@ -1085,6 +1142,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     demandas,
     case_chat_messages,
     passagens,
+    avisos_de_caso,
   };
 }
 
@@ -1121,5 +1179,6 @@ function emptyPayload(
     demandas: [],
     case_chat_messages: [],
     passagens: [],
+    avisos_de_caso: [],
   };
 }

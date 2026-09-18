@@ -12,6 +12,7 @@ import {
 import {
   RETENCAO_AUDITORIA_DIAS_PADRAO,
   RETENCAO_AUDITORIA_DIAS_PISO,
+  RETENCAO_AVISO_DE_CASO_DIAS_PADRAO,
   RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PADRAO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
@@ -220,6 +221,11 @@ describe("houveEfeito — as duas direções", () => {
     lotes_passagens: 0,
     passagens_tem_resto: false,
     retencao_passagem_dias: RETENCAO_PASSAGEM_DIAS_PADRAO,
+    // Sétima poda (migration 0292): o registro de entrega do aviso de caso.
+    avisos_de_caso_apagados: 0,
+    lotes_avisos_de_caso: 0,
+    avisos_de_caso_tem_resto: false,
+    retencao_aviso_de_caso_dias: RETENCAO_AVISO_DE_CASO_DIAS_PADRAO,
     avisos: [] as string[],
   };
 
@@ -254,6 +260,13 @@ describe("houveEfeito — as duas direções", () => {
     // As cinco anteriores já mostram que esquecer o predicado é o modo de falha
     // natural aqui — e ele é mudo: a rodada apaga e não deixa registro.
     expect(houveEfeito({ ...base, passagens_apagadas: 1 })).toBe(true);
+  });
+
+  it("...e apagou entrega de aviso vencida → TAMBÉM audita (migration 0292)", () => {
+    // A sétima poda entra em `houveEfeito` no MESMO commit em que entra no laço.
+    // As seis anteriores já mostram que esquecer o predicado é o modo de falha
+    // natural aqui — e ele é mudo: a rodada apaga e não deixa registro.
+    expect(houveEfeito({ ...base, avisos_de_caso_apagados: 1 })).toBe(true);
   });
 
   it("...e apagou espelho da agenda → TAMBÉM audita (migration 0187)", () => {

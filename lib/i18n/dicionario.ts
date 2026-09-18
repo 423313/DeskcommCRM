@@ -9275,6 +9275,57 @@ export const DICIONARIO: Traducoes = {
     { es: "El canal de esta conversación fue archivado" },
   "Estamos fora do horário em que este canal envia mensagens":
     { es: "Estamos fuera del horario en que este canal envía mensajes" },
+
+  // ── O aviso de caso no WhatsApp do suporte (migration 0292) ──────────────
+  // O texto sai SEM DOM, pelo dreno do event_log, e o idioma é o da
+  // ORGANIZAÇÃO — ninguém está logado na hora. As chaves aqui são as frases
+  // FIXAS do aviso; o que o modelo escreveu (título, resumo, bloqueio) nunca é
+  // traduzido, porque traduzir o relato de um cliente é reescrevê-lo.
+  "novo caso esperando você": { es: "nuevo caso esperando por ti" },
+  Assunto: { es: "Asunto" },
+  Abrir: { es: "Abrir" },
+  "A IA prometeu algo e travou": { es: "La IA prometió algo y se trabó" },
+  "(resumo escrito pela IA a partir da conversa)":
+    { es: "(resumen escrito por la IA a partir de la conversación)" },
+  "Responder aqui não chega ao cliente — abra o link para responder.":
+    { es: "Responder aquí no llega al cliente — abre el enlace para responder." },
+  "Dúvida": { es: "Duda" },
+  Pagamento: { es: "Pago" },
+  "Acesso ou cadastro": { es: "Acceso o registro" },
+
+  // A linha do tempo do caso e a Central — os rótulos dos vocabulários novos.
+  "Avisamos o suporte no WhatsApp": { es: "Avisamos al soporte por WhatsApp" },
+  "A IA registrou o que aconteceu": { es: "La IA registró lo que pasó" },
+  "Um aviso de atendimento não chegou ao WhatsApp da equipe":
+    { es: "Un aviso de atención no llegó al WhatsApp del equipo" },
+  "O aviso deste atendimento não saiu no WhatsApp. Abra o atendimento — ele continua esperando — e confira a conexão de avisos em Configurações.":
+    {
+      es: "El aviso de esta atención no salió por WhatsApp. Abre la atención — sigue esperando — y revisa la conexión de avisos en Configuración.",
+    },
+
+  // Por que o aviso não saiu — vocabulário fechado, uma frase de gente por
+  // código (lib/escalacao/vocabulario-do-aviso.ts). O código cru nunca aparece.
+  "A conexão de WhatsApp escolhida para os avisos está fora do ar.":
+    { es: "La conexión de WhatsApp elegida para los avisos está fuera de servicio." },
+  "A conexão de WhatsApp escolhida para os avisos foi removida.":
+    { es: "La conexión de WhatsApp elegida para los avisos fue eliminada." },
+  "A conexão escolhida só envia mensagens aprovadas — ela não serve para o aviso de caso.":
+    { es: "La conexión elegida solo envía mensajes aprobados — no sirve para el aviso de atención." },
+  "O serviço de WhatsApp desta instalação não está configurado.":
+    { es: "El servicio de WhatsApp de esta instalación no está configurado." },
+  "O número de aviso não foi aceito pelo WhatsApp.":
+    { es: "El número de aviso no fue aceptado por WhatsApp." },
+  "O número que envia os avisos atingiu o limite diário do período de aquecimento.":
+    { es: "El número que envía los avisos alcanzó el límite diario del período de calentamiento." },
+  "Esta instalação ainda não tem um endereço público — o aviso não teria link para abrir.":
+    { es: "Esta instalación aún no tiene una dirección pública — el aviso no tendría enlace para abrir." },
+  "O cliente deste atendimento pediu para ser esquecido.":
+    { es: "El cliente de esta atención pidió ser olvidado." },
+  "O aviso ficou mais de 24 horas sem conseguir sair e foi encerrado.":
+    { es: "El aviso pasó más de 24 horas sin poder salir y fue cerrado." },
+  "O WhatsApp recusou o envio do aviso.": { es: "WhatsApp rechazó el envío del aviso." },
+  "O aviso não saiu e a causa não pôde ser identificada.":
+    { es: "El aviso no salió y la causa no pudo ser identificada." },
 };
 
 /**

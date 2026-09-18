@@ -58,6 +58,8 @@ import { logger } from "@/lib/logger";
 import {
   RETENCAO_AUDITORIA_DIAS_PADRAO,
   RETENCAO_AUDITORIA_DIAS_PISO,
+  RETENCAO_AVISO_DE_CASO_DIAS_PADRAO,
+  RETENCAO_AVISO_DE_CASO_DIAS_PISO,
   RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO,
   RETENCAO_CONVERSA_DO_CASO_DIAS_PISO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PADRAO,
@@ -114,11 +116,16 @@ export interface ResultadoDaRetencao {
   passagens_apagadas: number;
   lotes_passagens: number;
   passagens_tem_resto: boolean;
+  /** O registro de entrega do aviso de caso no WhatsApp da equipe (0292). */
+  avisos_de_caso_apagados: number;
+  lotes_avisos_de_caso: number;
+  avisos_de_caso_tem_resto: boolean;
   retencao_fila_dias: number;
   retencao_auditoria_dias: number;
   retencao_espelho_dias: number;
   retencao_conversa_do_caso_dias: number;
   retencao_passagem_dias: number;
+  retencao_aviso_de_caso_dias: number;
   /** Avisos de configuração — nunca ausentes em silêncio quando existem. */
   avisos: string[];
 }
@@ -132,7 +139,8 @@ export interface PodaDb {
       | "fn_expurgar_espelho_da_agenda"
       | "fn_expurgar_nonces_de_oauth"
       | "fn_expurgar_conversa_do_caso_vencida"
-      | "fn_expurgar_passagens_vencidas",
+      | "fn_expurgar_passagens_vencidas"
+      | "fn_expurgar_avisos_de_caso_vencidos",
     args: { p_retencao_dias: number; p_limite: number },
   ): Promise<{ data: number | null; error: { message: string } | null }>;
 }
@@ -145,7 +153,8 @@ async function drenar(
     | "fn_expurgar_espelho_da_agenda"
     | "fn_expurgar_nonces_de_oauth"
     | "fn_expurgar_conversa_do_caso_vencida"
-    | "fn_expurgar_passagens_vencidas",
+    | "fn_expurgar_passagens_vencidas"
+    | "fn_expurgar_avisos_de_caso_vencidos",
   dias: number,
 ): Promise<{ apagadas: number; lotes: number; temResto: boolean }> {
   let apagadas = 0;
@@ -179,6 +188,7 @@ export async function podarHistorico(
     CALENDAR_MIRROR_RETENTION_DAYS?: string;
     CASE_CHAT_RETENTION_DAYS?: string;
     PASSAGEM_RETENTION_DAYS?: string;
+    CASE_ALERT_RETENTION_DAYS?: string;
   },
 ): Promise<ResultadoDaRetencao> {
   const fila = interpretarRetencao(ambiente.JOB_QUEUE_RETENTION_DAYS, {
@@ -210,6 +220,12 @@ export async function podarHistorico(
     piso: RETENCAO_PASSAGEM_DIAS_PISO,
   });
 
+  const avisoDeCaso = interpretarRetencao(ambiente.CASE_ALERT_RETENTION_DAYS, {
+    chave: "CASE_ALERT_RETENTION_DAYS",
+    padrao: RETENCAO_AVISO_DE_CASO_DIAS_PADRAO,
+    piso: RETENCAO_AVISO_DE_CASO_DIAS_PISO,
+  });
+
   const jobs = await drenar(db, "fn_podar_fila_de_jobs", fila.dias);
   const linhas = await drenar(db, "fn_expurgar_auditoria_vencida", auditoria.dias);
   const eventos = await drenar(db, "fn_expurgar_espelho_da_agenda", espelho.dias);
@@ -227,6 +243,12 @@ export async function podarHistorico(
   // segunda guarda que só ela tem: passagem NÃO RECONHECIDA nunca é apagada, em
   // nenhuma idade. Uma passagem aberta é alguém esperando resposta.
   const passagens = await drenar(db, "fn_expurgar_passagens_vencidas", passagem.dias);
+  // Sétima poda: o registro de entrega do aviso de caso no WhatsApp da equipe
+  // (0292). O piso de 30 dias mora no CORPO da função, como nas anteriores. Ela
+  // não guarda o texto do aviso (só o resumo criptográfico dele), então o que se
+  // poda aqui é volume de operação — e é a poda de horizonte mais curto das
+  // sete, porque a única pergunta que a linha responde é de semanas.
+  const avisosDeCaso = await drenar(db, "fn_expurgar_avisos_de_caso_vencidos", avisoDeCaso.dias);
 
   return {
     jobs_apagados: jobs.apagadas,
@@ -235,24 +257,33 @@ export async function podarHistorico(
     nonces_apagados: nonces.apagadas,
     conversa_do_caso_apagada: conversas.apagadas,
     passagens_apagadas: passagens.apagadas,
+    avisos_de_caso_apagados: avisosDeCaso.apagadas,
     lotes_fila: jobs.lotes,
     lotes_auditoria: linhas.lotes,
     lotes_espelho: eventos.lotes,
     lotes_conversa_do_caso: conversas.lotes,
     lotes_passagens: passagens.lotes,
+    lotes_avisos_de_caso: avisosDeCaso.lotes,
     fila_tem_resto: jobs.temResto,
     auditoria_tem_resto: linhas.temResto,
     espelho_tem_resto: eventos.temResto,
     conversa_do_caso_tem_resto: conversas.temResto,
     passagens_tem_resto: passagens.temResto,
+    avisos_de_caso_tem_resto: avisosDeCaso.temResto,
     retencao_fila_dias: fila.dias,
     retencao_auditoria_dias: auditoria.dias,
     retencao_espelho_dias: espelho.dias,
     retencao_conversa_do_caso_dias: conversaDoCaso.dias,
     retencao_passagem_dias: passagem.dias,
-    avisos: [fila.aviso, auditoria.aviso, espelho.aviso, conversaDoCaso.aviso, passagem.aviso].filter(
-      (a): a is string => a !== null,
-    ),
+    retencao_aviso_de_caso_dias: avisoDeCaso.dias,
+    avisos: [
+      fila.aviso,
+      auditoria.aviso,
+      espelho.aviso,
+      conversaDoCaso.aviso,
+      passagem.aviso,
+      avisoDeCaso.aviso,
+    ].filter((a): a is string => a !== null),
   };
 }
 
@@ -280,7 +311,11 @@ export function houveEfeito(resultado: ResultadoDaRetencao): boolean {
     // A sexta, pela MESMA razão: uma rodada que só apagou passagem vencida
     // apagaria linhas e não deixaria registro — e o CLAUDE.md manda auditar
     // QUANDO HÁ EFEITO, nunca parar de auditar.
-    resultado.passagens_apagadas > 0
+    resultado.passagens_apagadas > 0 ||
+    // A sétima, pela MESMA razão: uma rodada que só apagou registro de entrega
+    // de aviso vencido apagaria linhas e não deixaria registro — e o CLAUDE.md
+    // manda auditar QUANDO HÁ EFEITO, nunca parar de auditar.
+    resultado.avisos_de_caso_apagados > 0
   );
 }
 
@@ -315,6 +350,7 @@ async function handle(req: NextRequest): Promise<Response> {
       AUDIT_LOG_RETENTION_DAYS: env.AUDIT_LOG_RETENTION_DAYS,
       CASE_CHAT_RETENTION_DAYS: env.CASE_CHAT_RETENTION_DAYS,
       PASSAGEM_RETENTION_DAYS: env.PASSAGEM_RETENTION_DAYS,
+      CASE_ALERT_RETENTION_DAYS: env.CASE_ALERT_RETENTION_DAYS,
     });
     // ── A cascata de anonimização que ficou pela metade ──────────────────
     //

@@ -135,6 +135,36 @@ export const RETENCAO_PASSAGEM_DIAS_PADRAO = 1825;
  */
 export const RETENCAO_PASSAGEM_DIAS_PISO = 90;
 
+/**
+ * 180 dias para o REGISTRO DE ENTREGA do aviso de caso
+ * (`entregas_de_aviso_de_caso`, migration 0292).
+ *
+ * Bem mais curto que a passagem e que a auditoria, e o motivo é a pergunta: a
+ * única que esta tabela responde — "o aviso daquele caso saiu?" — é de semanas,
+ * não de anos. Depois de seis meses o caso já foi resolvido ou abandonado, e o
+ * que sobrou dele está nos EVENTOS do caso, que são o registro da decisão.
+ *
+ * A linha não guarda texto nenhum (só `corpo_hash`), então o que se poda aqui é
+ * volume de operação, não relato de pessoa.
+ */
+export const RETENCAO_AVISO_DE_CASO_DIAS_PADRAO = 180;
+/**
+ * Piso do aviso: 30 dias — o mais baixo dos pisos com dono no SQL, e de
+ * propósito.
+ *
+ * Os 90 dias da auditoria existem para o knob não virar apagador de RASTRO
+ * LEGAL. Aqui o rastro é operacional, e o que o piso protege é outra coisa: o
+ * incidente que ainda está sendo apurado. "Por que a equipe não foi avisada na
+ * semana passada?" é uma pergunta de dias, não de trimestres — e um mês é o
+ * mínimo em que ela ainda tem chance de ser feita.
+ *
+ * O piso mora DENTRO de `fn_expurgar_avisos_de_caso_vencidos`
+ * (`greatest(...)` no corpo), o que o faz valer para qualquer chamador,
+ * inclusive um `psql` na mão; a cópia aqui serve para o operador ver no log que
+ * o valor dele foi elevado, em vez de descobrir pela ausência de efeito.
+ */
+export const RETENCAO_AVISO_DE_CASO_DIAS_PISO = 30;
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;
