@@ -114,9 +114,9 @@ async function removerEcoDoProprioEnvio(
       .in("external_id", candidatos)
       // ⚠️ SEGUNDA CAMADA, SEM COBERTURA POSSÍVEL — escrito porque medi: trocar
       // este `neq` por um que nunca casa deixa a suíte VERDE. O filtro de
-      // `sent_via` acima já exclui a linha deste envio (que nasce `user`/`ai`,
-      // nunca `external_device`), então nenhum teste alcança esta cláusula.
-      // Fica porque o desfecho que ela impede é o pior que esta função poderia
+      // `sent_via` acima já exclui a linha deste envio (que nasce `user`, `ai`
+      // ou `automation`, nunca `external_device`), então nenhum teste alcança
+      // esta cláusula. Fica porque o desfecho que ela impede é o pior que esta função poderia
       // produzir: apagar a própria mensagem que acabou de ser entregue. Quem
       // mexer no filtro de cima não vai ser avisado por teste nenhum.
       .neq("id", minhaLinhaId);
@@ -128,6 +128,29 @@ async function removerEcoDoProprioEnvio(
       err instanceof Error ? err.message : err,
     );
   }
+}
+
+/**
+ * De quem é esta linha, no vocabulário de `messages.sent_via`.
+ *
+ * A pergunta era UMA só (`!== "user"`), e por isso a automação se apresentava
+ * como IA: tudo que não era pessoa saía `'ai'`, inclusive um template fixo de
+ * regra — sem IA nenhuma no caminho. A decisão do mantenedor na #652 é
+ * categoria própria para "nem pessoa nem IA", e `'automation'` é o valor que o
+ * CHECK de `messages.sent_via` já aceitava e que o balão sabe nomear.
+ *
+ * `api_token` (integração com token de servidor) segue `'ai'` de propósito: a
+ * #866 decide o valor daquele caminho, e trocar aqui sem aquele PR misturaria
+ * duas decisões numa linha.
+ *
+ * Quem lê estes valores: o filtro de eco da ingestão do canal (a lista anda
+ * junto), o resgate da fila (`session-reconciler.ts`), a métrica de atrito e o
+ * rótulo do balão (`components/inbox/MessageBubble.tsx`).
+ */
+export function origemDaMensagem(actor: Actor): "user" | "ai" | "automation" {
+  if (actor.type === "user") return "user";
+  if (actor.type === "webhook_source") return "automation";
+  return "ai";
 }
 
 const MSG_COLS =
@@ -551,7 +574,7 @@ export async function sendMessageHandler(
     media_mime: input.media_mime ?? null,
     media_storage_path: input.media_storage_path ?? null,
     media_size_bytes: input.media_size_bytes ?? null,
-    sent_via: ctx.actor.type !== "user" ? ("ai" as const) : ("user" as const),
+    sent_via: origemDaMensagem(ctx.actor),
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {

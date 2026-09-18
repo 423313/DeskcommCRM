@@ -128,6 +128,20 @@ function valoresEmitidos(): Map<string, string[]> {
           mapa.set(v, [...(mapa.get(v) ?? []), path.relative(RAIZ, arquivo)]);
         }
       }
+      // A decisão da origem passou a viver numa FUNÇÃO nomeada (#652,
+      // `origemDaMensagem`): a cadeia com três ramos não cabe numa linha (o
+      // prettier quebra em 100 colunas) e o extrator de par só lia dois valores.
+      // Aqui a função citada na escrita é aberta e os literais que ela DEVOLVE
+      // contam como emissores — a forma que o próximo ramo vai usar.
+      for (const m of src.matchAll(/sent_via:\s*([a-zA-Z_$][\w$]*)\s*\(/g)) {
+        const nome = m[1]!;
+        const definicao = new RegExp(`function\\s+${nome}\\s*\\([\\s\\S]*?\\n\\}`).exec(src);
+        if (!definicao) continue;
+        for (const devolvido of definicao[0].matchAll(/return\s+"([a-z_]+)"/g)) {
+          const v = devolvido[1]!;
+          mapa.set(v, [...(mapa.get(v) ?? []), path.relative(RAIZ, arquivo)]);
+        }
+      }
     }
   }
   return mapa;
