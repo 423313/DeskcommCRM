@@ -38,8 +38,21 @@ const RAIZ = path.resolve(__dirname, "../..");
 const CAMINHO = ".github/workflows/e2e.yml";
 const workflow = readFileSync(path.join(RAIZ, CAMINHO), "utf8");
 
-/** Linhas de COMANDO: comentário que MENCIONA a regra não é a regra. */
-const COMANDOS = workflow
+/**
+ * Só o job `e2e-parte`: é nele que o teto corta. O arquivo tem outros jobs com
+ * `actions/checkout` (o `e2e-alcance` roda antes das partes), e um índice sobre
+ * o arquivo inteiro compararia o relógio das partes com o checkout de outro job.
+ */
+const JOB_PARTE = (() => {
+  const inicio = workflow.indexOf("\n  e2e-parte:\n");
+  if (inicio < 0) return "";
+  const resto = workflow.slice(inicio + 1);
+  const fim = resto.slice(1).search(/\n  [a-zA-Z0-9_-]+:\n/);
+  return fim < 0 ? resto : resto.slice(0, fim + 1);
+})();
+
+/** Linhas de COMANDO do job: comentário que MENCIONA a regra não é a regra. */
+const COMANDOS = JOB_PARTE
   .split("\n")
   .filter((l) => !l.trim().startsWith("#"))
   .map((l) => l.trim());

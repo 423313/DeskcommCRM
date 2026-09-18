@@ -31,7 +31,7 @@ const PESADOS: Record<string, string[]> = {
 };
 const SEM_GRUPO: Record<string, string[]> = {
   "ci.yml": ["verify", "invariants"],
-  "e2e.yml": ["e2e"],
+  "e2e.yml": ["e2e", "e2e-alcance"],
   "publish-image.yml": ["imagens-ok", "promover-stable", "a-tag-veio-da-main"],
 };
 
