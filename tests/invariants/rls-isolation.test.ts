@@ -182,6 +182,24 @@ beforeAll(() => {
              'RLS invariant private question');
         end if;
 
+        -- 0291: a passagem do atendimento para uma pessoa. A coluna body é a
+        -- narrativa que a IA escreveu sobre o cliente, e notes são as palavras
+        -- literais dele — vazar entre organizações entrega ao vizinho o
+        -- atendimento inteiro de alguém que não é cliente dele.
+        -- (sem crase nesta prosa: o bloco inteiro é um template literal de JS.)
+        --
+        -- ⚠️ A MESMA ARMADILHA da semente acima: o controle positivo só passa
+        -- porque 'v_conv' está SEM dono e o default de 'visibility_mode' é
+        -- 'own_and_unassigned'. Atribuir a conversa aqui deixa o caso vermelho
+        -- por ACERTO, e a "correção" natural seria afrouxar a policy.
+        if not exists (select 1 from public.passagens_de_atendimento where organization_id = v_org) then
+          insert into public.passagens_de_atendimento
+            (organization_id, contact_id, conversation_id, motor, origem, motivo_codigo, body, notes)
+          values
+            (v_org, v_contact, v_conv, 'engine', 'pedido_explicito', 'requested_human',
+             'RLS invariant private briefing', 'RLS invariant literal words');
+        end if;
+
         select id into v_pipe from public.crm_pipelines
           where organization_id = v_org and slug = 'rls-inv';
         if v_pipe is null then
@@ -378,6 +396,16 @@ export const TABLES = [
   // é do servidor). Ver a armadilha do seed, escrita ao lado da semente: o
   // controle positivo depende de a conversa semeada estar SEM dono.
   "agent_case_chat_messages",
+  // migration 0291 — a passagem do atendimento para uma pessoa. `body` é a
+  // narrativa que a IA escreveu sobre um cliente identificável do OUTRO tenant,
+  // e `notes` guarda as palavras LITERAIS dele. Mesmo desenho da vizinha acima:
+  // leitura é o único comando concedido a `authenticated`, a escrita é do
+  // servidor, e a MESMA armadilha de seed vale aqui — o controle positivo só
+  // passa porque a conversa semeada está sem dono e o default de
+  // `visibility_mode` é `own_and_unassigned`. O eixo de visibilidade entre
+  // atendentes da MESMA organização é medido em
+  // `passagem-isolamento-e-visibilidade.test.ts`, com `visibility_mode = 'own'`.
+  "passagens_de_atendimento",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"

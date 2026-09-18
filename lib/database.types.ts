@@ -6706,6 +6706,98 @@ export type Database = {
           },
         ]
       }
+      passagens_de_atendimento: {
+        Row: {
+          aviso_motivo_codigo: string | null
+          body: string
+          caso_id: string | null
+          cliente_avisado: boolean | null
+          contact_id: string
+          content: string | null
+          conversation_id: string
+          criado_em: string
+          id: string
+          motivo_codigo: string
+          motor: string
+          notes: string | null
+          organization_id: string
+          origem: string
+          reconhecido_em: string | null
+          reconhecido_por: string | null
+          tentativas: Json
+          title: string | null
+        }
+        Insert: {
+          aviso_motivo_codigo?: string | null
+          body: string
+          caso_id?: string | null
+          cliente_avisado?: boolean | null
+          contact_id: string
+          content?: string | null
+          conversation_id: string
+          criado_em?: string
+          id?: string
+          motivo_codigo: string
+          motor: string
+          notes?: string | null
+          organization_id: string
+          origem: string
+          reconhecido_em?: string | null
+          reconhecido_por?: string | null
+          tentativas?: Json
+          title?: string | null
+        }
+        Update: {
+          aviso_motivo_codigo?: string | null
+          body?: string
+          caso_id?: string | null
+          cliente_avisado?: boolean | null
+          contact_id?: string
+          content?: string | null
+          conversation_id?: string
+          criado_em?: string
+          id?: string
+          motivo_codigo?: string
+          motor?: string
+          notes?: string | null
+          organization_id?: string
+          origem?: string
+          reconhecido_em?: string | null
+          reconhecido_por?: string | null
+          tentativas?: Json
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "passagens_de_atendimento_caso_id_fkey"
+            columns: ["caso_id"]
+            isOneToOne: false
+            referencedRelation: "agent_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "passagens_de_atendimento_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "passagens_de_atendimento_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "passagens_de_atendimento_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_admins: {
         Row: {
           granted_at: string

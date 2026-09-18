@@ -67,6 +67,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { conversasVisiveisDosCasos } from "@/lib/escalacao/chamados";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
@@ -435,7 +436,14 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     [c.orgId, contactId],
   );
   // SÓ o primeiro nome — o bloco de dados não leva telefone nem e-mail.
-  const primeiroNome = (nome[0]?.display_name ?? nome[0]?.name ?? "o cliente").trim().split(/\s+/)[0] ?? "o cliente";
+  //
+  // A cadeia de fallback vem de `nomeDoContato`, e NÃO é reescrita aqui:
+  // `tests/unit/rotulo-do-contato.test.ts` reprova a sétima cópia manual, e com
+  // razão — as seis anteriores nasceram com quatro finais diferentes e uma delas
+  // punha o APELIDO na frente do nome do cadastro. A função central também
+  // recusa identificador técnico (um `display_name` que é só o número do
+  // WhatsApp), o que a cadeia à mão deixava passar para dentro do prompt.
+  const primeiroNome = (nomeDoContato(nome[0]) ?? "o cliente").trim().split(/\s+/)[0] ?? "o cliente";
 
   const blocoDeDados = montarBlocoDeDados({
     fuso,

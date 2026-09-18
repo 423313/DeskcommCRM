@@ -16,6 +16,7 @@ import {
   RETENCAO_ESPELHO_AGENDA_DIAS_PADRAO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
   RETENCAO_FILA_DIAS_PADRAO,
+  RETENCAO_PASSAGEM_DIAS_PADRAO,
   RETENCAO_FILA_DIAS_PISO,
   interpretarRetencao,
 } from "@/lib/retencao/politica";
@@ -214,6 +215,11 @@ describe("houveEfeito — as duas direções", () => {
     lotes_conversa_do_caso: 0,
     conversa_do_caso_tem_resto: false,
     retencao_conversa_do_caso_dias: RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO,
+    // Sexta poda (migration 0291): o registro da passagem para uma pessoa.
+    passagens_apagadas: 0,
+    lotes_passagens: 0,
+    passagens_tem_resto: false,
+    retencao_passagem_dias: RETENCAO_PASSAGEM_DIAS_PADRAO,
     avisos: [] as string[],
   };
 
@@ -241,6 +247,13 @@ describe("houveEfeito — as duas direções", () => {
     // laço: as quatro anteriores mostram que esquecer o predicado é o modo de
     // falha natural aqui, e ele é mudo — a rodada apaga e não deixa registro.
     expect(houveEfeito({ ...base, conversa_do_caso_apagada: 1 })).toBe(true);
+  });
+
+  it("...e apagou passagem vencida → TAMBÉM audita (migration 0291)", () => {
+    // A sexta poda entra em `houveEfeito` no MESMO commit em que entra no laço.
+    // As cinco anteriores já mostram que esquecer o predicado é o modo de falha
+    // natural aqui — e ele é mudo: a rodada apaga e não deixa registro.
+    expect(houveEfeito({ ...base, passagens_apagadas: 1 })).toBe(true);
   });
 
   it("...e apagou espelho da agenda → TAMBÉM audita (migration 0187)", () => {

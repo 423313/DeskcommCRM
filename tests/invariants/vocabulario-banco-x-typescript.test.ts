@@ -293,6 +293,45 @@ const PARES: Array<{
     simbolo: "CASE_CHAT_AUTHOR_KINDS",
   },
   {
+    tabela: "passagens_de_atendimento",
+    coluna: "motor",
+    // lib/escalacao/passagem.ts → MOTORES_DA_PASSAGEM (tupla `as const`, como
+    // `CASE_CHAT_AUTHOR_KINDS`). Os quatro pares desta tabela nascem no MESMO
+    // commit da migration 0291 — a lição desta lista, e a razão de ela existir.
+    arquivo: "lib/escalacao/passagem.ts",
+    simbolo: "MOTORES_DA_PASSAGEM",
+  },
+  {
+    tabela: "passagens_de_atendimento",
+    coluna: "origem",
+    // lib/escalacao/passagem.ts → ORIGENS_DA_PASSAGEM. Treze valores, um por
+    // caminho de código que passa conversa — o que mais cresce dos quatro, e o
+    // que mais tem chance de nascer só de um lado.
+    arquivo: "lib/escalacao/passagem.ts",
+    simbolo: "ORIGENS_DA_PASSAGEM",
+  },
+  {
+    tabela: "passagens_de_atendimento",
+    coluna: "motivo_codigo",
+    // lib/escalacao/passagem.ts → MOTIVOS_DA_PASSAGEM. Superconjunto de
+    // `HandoffReason` (`lib/ai/handoff/orchestrator.ts`) mais `caso_escalado` e
+    // `suspected_optout`; o par aponta para O QUE O BANCO ACEITA, e não para o
+    // contrato do motor — amarrar os dois faria uma mudança lá virar `23514`
+    // num INSERT de caminho pouco exercitado.
+    arquivo: "lib/escalacao/passagem.ts",
+    simbolo: "MOTIVOS_DA_PASSAGEM",
+  },
+  {
+    tabela: "passagens_de_atendimento",
+    coluna: "aviso_motivo_codigo",
+    // lib/escalacao/passagem.ts → MOTIVOS_DO_AVISO. A coluna é `null`-ável (a
+    // ausência significa "ninguém tentou avisar"), e o CHECK tem a forma
+    // `col IS NULL OR col = ANY (...)`, que `literaisSeDefine` reconhece como
+    // DEFINIDORA — a permissão de nulo não descaracteriza o vocabulário.
+    arquivo: "lib/escalacao/passagem.ts",
+    simbolo: "MOTIVOS_DO_AVISO",
+  },
+  {
     tabela: "team_invites",
     coluna: "role",
     // lib/schemas/team.ts → ROLES (tupla `as const`). O `z.enum(ROLES)` das
