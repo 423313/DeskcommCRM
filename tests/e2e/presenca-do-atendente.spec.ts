@@ -55,6 +55,13 @@ test.describe("Sinal de presença do atendente", () => {
     // aberta. O seletor é o nome da pessoa logada, que o seed garante existir.
     await page.goto("/app/team");
 
+    // A lista de atendentes mora na aba "Atendimento", que NÃO é a aba padrão
+    // (a padrão é "Membros"). Medido no CI duas vezes: sem este clique o selo
+    // simplesmente não existe no DOM, e a spec reprovava por procurar numa tela
+    // que não tinha o que ela buscava — primeiro na tabela de convites, depois
+    // no nada.
+    await page.getByRole("tab", { name: /atendimento|atención|attendance/i }).click();
+
     // O selo tem `data-testid="presenca"` e carrega o estado em
     // `data-presente`, que é o dado — o texto ("Com a tela aberta") é a
     // redação, e prender a spec à redação a quebra na primeira tradução.
