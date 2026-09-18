@@ -86,7 +86,28 @@ jobs:
   # mês sem ninguém perceber.
   e2e-parte:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # ── O TETO É GUARDA DE TRAVAMENTO, NÃO DETECTOR DE CRESCIMENTO ──────────
+    #
+    # Ele acumulava os dois papéis, e eles brigam:
+    #
+    #   como GUARDA de travamento → o valor não importa. Job travado consome
+    #       qualquer teto, e 45 min mata tão bem quanto 30.
+    #   como DETECTOR de crescimento → só funciona se alguém DECODIFICAR o
+    #       sinal. E medido em 18/09/2026: ninguém decodifica. A batida chega
+    #       como `cancelled`, que é EXATAMENTE o que `gh run cancel` produz — o
+    #       contribuidor lê "cancelaram meu CI" e a triagem procura um
+    #       cancelador humano. Duas sessões gastaram horas caçando uma terceira
+    #       mão que não existia.
+    #
+    # O detector dispara numa língua que produz o diagnóstico errado. Por isso
+    # os papéis se separam: o teto sobe para 45 min e passa a guardar só
+    # travamento; quem denuncia crescimento é o passo `Orçamento de tempo`, no
+    # fim deste job, que reprova em português e diz o que fazer.
+    #
+    # Isto NÃO é "subir o teto para calar o problema" — a linha que este arquivo
+    # já trazia contra isso continua valendo, e é por causa dela que o detector
+    # não some: ele fica mais alto e mais legível.
+    timeout-minutes: 45
     strategy:
       # Sem fail-fast: se a parte 1 quebrar, ainda quero saber se a 2 também.
       # Com ele ligado, o primeiro vermelho esconde o outro e o conserto vira
@@ -935,6 +956,10 @@ jobs:
           # (`✓ 12 [chromium] › tests/e2e/x.spec.ts:9:5 › título (3.4s)`), e a
           # soma por arquivo sai de um `gh run view <id> --log`. Custo medido:
           # ~240 linhas a mais de log, zero segundo de execução.
+          # O instante vai para o ambiente ANTES da suíte: se ela reprovar, o
+          # `set -e` aborta o passo, e o passo de orçamento (que é `always()`)
+          # ainda precisa do início para medir.
+          echo "E2E_INICIO=$(date +%s)" >> "$GITHUB_ENV"
           pnpm exec playwright test --workers=1 $LISTA --reporter=list
         env:
           # Só o que NÃO vem do `.env.e2e`: isto é ajuste de CI, não config do
@@ -944,6 +969,41 @@ jobs:
           AUTH_RATE_LIMIT_LOGIN_IP: "1000"
           # ver o comentário do passo de build: vazio NÃO desliga.
           SENTRY_DSN: "off"
+
+      - name: Orçamento de tempo da parte ${{ matrix.parte }}
+        if: always()
+        env:
+          # Orçamento em MINUTOS, por parte. Medido em 21 jobs de 20 runs
+          # (18/09/2026): parte 1 mediana 14,7 / máx 24,1 · parte 2 mediana 28,0
+          # / máx 29,2 · parte 3 mediana 26,9 / máx 30,3 com dois cancelamentos.
+          #
+          # 32 não nasce vermelho — passa folgado pelo pior caso medido —, e
+          # denuncia o próximo crescimento ANTES de ele virar cancelamento.
+          # Gate que nasce vermelho não é gate: é dívida com alarme.
+          #
+          # ⚠️ ESTE NÚMERO TEM DESTINO: quando o #1174 (rebalanceamento das três
+          # partes) entrar, o ponto de equilíbrio medido é 18,4 min por parte, e
+          # o orçamento desce para 24. Sem essa descida, o detector fica cego
+          # justamente depois do conserto que o tornaria sensível.
+          ORCAMENTO_MIN: "32"
+        run: |
+          set -euo pipefail
+          if [ -z "${E2E_INICIO:-}" ]; then
+            echo "::warning::NÃO MEDIDO — o passo da suíte não chegou a registrar o início."
+            exit 0
+          fi
+          decorrido=$(( ($(date +%s) - E2E_INICIO) / 60 ))
+          echo "parte ${{ matrix.parte }}: ${decorrido} min (orçamento ${ORCAMENTO_MIN} min, teto de travamento 45 min)"
+          if [ "$decorrido" -le "${ORCAMENTO_MIN}" ]; then
+            exit 0
+          fi
+          # Mensagem em português e com o próximo passo escrito: o ponto inteiro
+          # desta separação é o sinal deixar de chegar como `cancelled`, que não
+          # diz de quem é a culpa nem o que fazer.
+          echo "::error::A parte ${{ matrix.parte }} levou ${decorrido} min contra um orçamento de ${ORCAMENTO_MIN} min."
+          echo "::error::Isto NÃO é defeito do seu PR: a suíte cresceu e as três partes precisam ser reparticionadas."
+          echo "::error::Como medir e repartir: o cabeçalho de SPECS_PARTE_1 neste arquivo explica, e o reporter \`list\` já dá o custo por spec em \`gh run view <id> --log\`."
+          exit 1
 
       - uses: actions/upload-artifact@v7
         if: failure()
