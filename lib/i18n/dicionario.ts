@@ -7958,6 +7958,8 @@ export const DICIONARIO: Traducoes = {
   "Enviar vendas para o Google Ads": { es: "Enviar ventas a Google Ads" },
   "Google Ads autorizado. Agora informe a conta e a ação de conversão abaixo.":
     { es: "Google Ads autorizado. Ahora indica la cuenta y la acción de conversión abajo." },
+  "Enviar vendas para o Google Ads ainda não está disponível nesta instalação — não é nada que você tenha feito. Quem instalou o sistema precisa configurar":
+    { es: "Enviar ventas a Google Ads todavía no está disponible en esta instalación — no es nada que hayas hecho. Quien instaló el sistema necesita configurar" },
 
   // Convidado do compromisso (agenda)
   "E-mail do convidado": { es: "Correo del invitado" },
