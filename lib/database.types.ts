@@ -2116,6 +2116,7 @@ export type Database = {
           name: string
           organization_id: string
           run_count: number
+          trigger_config: Json
           trigger_event: string
           updated_at: string
         }
@@ -2132,6 +2133,7 @@ export type Database = {
           name: string
           organization_id: string
           run_count?: number
+          trigger_config?: Json
           trigger_event: string
           updated_at?: string
         }
@@ -2148,6 +2150,7 @@ export type Database = {
           name?: string
           organization_id?: string
           run_count?: number
+          trigger_config?: Json
           trigger_event?: string
           updated_at?: string
         }

@@ -2516,7 +2516,49 @@ casos dela (L12.G2.1, G2.2 e G2.3) estão provados nas linhas acima.
 
 ---
 
-## J27 — Uma pessoa assume uma conversa que a IA passou `[P0]` (2026-09-18)
+## J27 — O construtor de fluxos diz a verdade sobre a regra `[P1]` (2026-09-17)
+
+Origem: um print do dono do produto, do construtor aberto, com a frase "Corrija
+por favor". O que o cartão mostrava e o que o motor fazia eram coisas
+diferentes — e nada na tela acusava a diferença.
+
+Contexto do código: `app/app/ai/followups/[id]/_components/` (cartão, formulário
+da condição, canvas), `lib/followup/vocabulario.ts` (a frase da regra),
+`lib/followup/node-handlers.ts` (a avaliação) e
+`lib/followup/validate-publish.ts` (o portão do publicar). A etapa do funil é
+comparada pelo `stage_id`; o cartão mostra o nome, resolvido em UMA fonte
+(`EtapasDoFluxo`) que o canvas inteiro lê.
+
+Spec: `tests/e2e/followup-cartoes.spec.ts` (parte 3 do `e2e`). Ambiente desta
+sessão: Supabase local pg15 com o `baseline.sql` reaplicado, `next build` +
+`next start` na porta 3111, sem chave de IA, sem Resend, sem WAHA — o estado de
+um primeiro deploy. Cron drenado pelo endpoint, como em produção.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J27.1 | A regra de etapa é escolhida numa lista, agrupada por funil | grava o `stage_id`; a saída do cartão lê «O lead está na etapa “Etapa · Funil”» | PASS |
+| J27.2 | O cartão não mostra identificador interno | nenhum uuid no texto do cartão | PASS |
+| J27.3 | Nada de texto cortado no cartão | `scrollWidth ≤ clientWidth` e `scrollHeight ≤ clientHeight` em todo subtítulo e toda saída | PASS — medido, não olhado |
+| J27.4 | O passo de classificar fala português | "2 classes · espera 15 min"; saídas "Interessado", "Sem interesse", "Sem resposta", "Outros casos"; nenhum cartão com a palavra "grace" | PASS |
+| J27.5 | A saída de escape de um nó ramificado | "Outros casos", nunca "Sempre" (que prometia o que o motor não faz) | PASS |
+| J27.6 | A linha entre dois passos é visível no tema claro | `stroke` sai de token do tema, não do cinza `#b1b1b7` da biblioteca | PASS |
+| J27.7 | Publicar com regra sem valor | recusado, com o aviso ancorado no nó dizendo QUAL regra | PASS |
+| J27.8 | **A consequência**: dois leads, duas saídas | o lead NA etapa escolhida sai pela saída daquela regra; o de outra etapa sai por "Nenhuma delas" | PASS — antes do conserto os dois terminavam no mesmo nó |
+| J27.9 | Leitura de etapas que falha (500) | o construtor diz que não deu para carregar; NÃO acusa a regra de apontar para etapa inexistente | PASS — provado em unit (`EtapasDoFluxo.test.tsx`, `NodeCard.test.tsx`); visto na tela por acaso, quando a RPC de sessão administrativa falhou sob carga |
+| J27.10 | Nó solto não se acusa antes de Publicar | — | **NÃO CONSERTADO** — item separado: o aviso existe, mas só depois do clique em Publicar |
+| J27.11 | O 422 do publish mostra id interno e jargão dentro do cartão | `Nó "ai_classify-2" não tem edge class_match…` | **NÃO CONSERTADO** — anterior a este trabalho; vale um item próprio, porque é o cartão falando a língua do banco |
+
+Evidência: `evidence/followup-cartoes/cartoes-01-regra-de-etapa-pelo-nome.png` ·
+`evidence/followup-cartoes/cartoes-02-regra-sem-valor-nao-publica.png` ·
+`evidence/followup-cartoes/cartoes-03-dois-leads-duas-saidas.png`.
+
+**Ressalva de ambiente, medida:** com a máquina em load 60+ (outras sessões), a
+RPC `fn_support_context` falhou e derrubou `/api/v1/pipelines` com 500 — e foi
+assim que o estado "não consegui carregar as etapas" apareceu na tela sem ser
+provocado. A função existe e tem `EXECUTE` para `authenticated` no banco local;
+a falha foi de carga, não de permissão.
+
+## J28 — Uma pessoa assume uma conversa que a IA passou `[P0]` (2026-09-18)
 
 **Por que P0:** é a jornada em que o cliente mais sente a diferença entre um CRM com IA e
 um robô que abandona a conversa. Toda passagem para humano termina com uma pessoa lendo
@@ -2532,21 +2574,21 @@ dirigido por um browser, e dizer que passou seria afirmar o que não se mediu.
 
 | caso | estado |
 |---|---|
-| J27.1 · a passagem vira linha nos DOIS motores, com origem declarada | **PASS por unidade** — `tests/unit/passagem-registro-e-dedup.test.ts`, com pool falso (motor A) e client falso (motor B) |
-| J27.2 · a segunda passagem da mesma conversa vira ADENDO, não descarte | **PASS por unidade** — mesmo arquivo, nos dois motores |
-| J27.3 · "o cliente JÁ FOI avisado" só quando a mensagem saiu | **PASS por unidade** — `tests/unit/passagem-verdade-do-aviso.test.ts`, nos dois emissores |
-| J27.4 · assumir a conversa fecha a passagem e resolve o aviso | **PENDENTE POR EXECUÇÃO** — `tests/invariants/passagem-se-reconhece-sozinha.test.ts` existe e precisa de `pnpm test:db` |
-| J27.5 · **pela TELA**, quem assume lê o porquê, o que a IA tentou e a fala do cliente | **NÃO COBERTO** — o cartão JÁ EXISTE (`components/inbox/PassagemCard.tsx`), mas ninguém o dirigiu por um browser; o e2e `passagem-com-contexto.spec.ts` é da onda da prova em tela |
-| J27.6 · **pela TELA**, o aviso da Central leva a "Abrir conversa" e some ao assumir | **NÃO COBERTO** — a projeção e o rótulo existem (`lib/ai/inbox-destino.ts`); o que falta é a prova em tela |
-| J27.7 · o cartão decide os SETE estados (nova, reconhecida, devolvida, recolhida, sem resumo, opt-out, anonimizada) | **PASS por unidade** — `tests/unit/cartao-da-passagem.test.ts` (25 casos), sobre a função pura que o JSX consome |
-| J27.8 · a rota das passagens lê com o client da SESSÃO, e não com o admin | **PASS por unidade** — `tests/unit/passagens-da-conversa-rota.test.ts`; a RLS em si é do `test:db` |
-| J27.9 · a passagem que ninguém assumiu volta a pedir, e para no terceiro aviso | **PASS por unidade** — `tests/unit/cobrador-de-passagem-nao-reconhecida.test.ts` (10 casos) |
-| J27.10 · o laço de retorno: o cliente repetiu depois da passagem? | **PENDENTE POR EXECUÇÃO** — `tests/invariants/atrito-repeticao-pos-passagem.test.ts` existe e precisa de `pnpm test:db` |
+| J28.1 · a passagem vira linha nos DOIS motores, com origem declarada | **PASS por unidade** — `tests/unit/passagem-registro-e-dedup.test.ts`, com pool falso (motor A) e client falso (motor B) |
+| J28.2 · a segunda passagem da mesma conversa vira ADENDO, não descarte | **PASS por unidade** — mesmo arquivo, nos dois motores |
+| J28.3 · "o cliente JÁ FOI avisado" só quando a mensagem saiu | **PASS por unidade** — `tests/unit/passagem-verdade-do-aviso.test.ts`, nos dois emissores |
+| J28.4 · assumir a conversa fecha a passagem e resolve o aviso | **PENDENTE POR EXECUÇÃO** — `tests/invariants/passagem-se-reconhece-sozinha.test.ts` existe e precisa de `pnpm test:db` |
+| J28.5 · **pela TELA**, quem assume lê o porquê, o que a IA tentou e a fala do cliente | **PASS pela tela** — fechado por J30 (`tests/e2e/passagem-com-contexto.spec.ts`), rodado contra a bancada; evidência em `evidence/casos-vivos/passagem/` |
+| J28.6 · **pela TELA**, o aviso da Central leva a "Abrir conversa" e some ao assumir | **PASS pela tela** — fechado por J30, no mesmo spec |
+| J28.7 · o cartão decide os SETE estados (nova, reconhecida, devolvida, recolhida, sem resumo, opt-out, anonimizada) | **PASS por unidade** — `tests/unit/cartao-da-passagem.test.ts` (25 casos), sobre a função pura que o JSX consome |
+| J28.8 · a rota das passagens lê com o client da SESSÃO, e não com o admin | **PASS por unidade** — `tests/unit/passagens-da-conversa-rota.test.ts`; a RLS em si é do `test:db` |
+| J28.9 · a passagem que ninguém assumiu volta a pedir, e para no terceiro aviso | **PASS por unidade** — `tests/unit/cobrador-de-passagem-nao-reconhecida.test.ts` (10 casos) |
+| J28.10 · o laço de retorno: o cliente repetiu depois da passagem? | **PENDENTE POR EXECUÇÃO** — `tests/invariants/atrito-repeticao-pos-passagem.test.ts` existe e precisa de `pnpm test:db` |
 
 ### O que a onda do CARTÃO entregou — e a linha que continua NÃO COBERTA
 
 O cartão existe, dentro do fio da conversa, e a decisão dos sete estados está provada por
-unidade. **J27.5 e J27.6 continuam NÃO COBERTOS**, e a distinção importa: o que foi provado
+unidade. **J28.5 e J28.6 continuam NÃO COBERTOS**, e a distinção importa: o que foi provado
 é que a função decide certo e que a rota entrega a leitura ao client que tem RLS. Que a
 TELA renderiza aquilo, que o botão "Assumir e responder" muda o estado do cartão e que o
 aviso sai da lista de abertos é jornada em tela — DoD 12 —, e é da onda 12. Declarar PASS
@@ -2666,15 +2708,15 @@ para uma spec. O que roda no CI **não pula o assunto**: J29.8 cobra a recusa in
 
 ### J30 — A passagem para humano chega com contexto `[P0]`
 
-Spec: `tests/e2e/passagem-com-contexto.spec.ts` → `SPECS_PARTE_3`. **Isto fecha J27.5 e
-J27.6**, que estavam declarados NÃO COBERTOS na onda do cartão.
+Spec: `tests/e2e/passagem-com-contexto.spec.ts` → `SPECS_PARTE_3`. **Isto fecha J28.5 e
+J28.6**, que estavam declarados NÃO COBERTOS na onda do cartão.
 
 | caso | o que se mede | estado |
 |---|---|---|
-| J30.1 (= J27.5) | o cartão "Por que a IA passou para você" está no fio, com motivo em português, "O cliente quer", "A IA já tentou" e a fala literal do cliente entre aspas | PASS |
+| J30.1 (= J28.5) | o cartão "Por que a IA passou para você" está no fio, com motivo em português, "O cliente quer", "A IA já tentou" e a fala literal do cliente entre aspas | PASS |
 | J30.2 | vocabulário de banco não chega à tela (`requested_human`, `suspected_optout`, `ferramenta_do_modelo`, `motivo_codigo`) | PASS |
 | J30.3 | o convite **"Assumir e responder" está dentro da janela** quando a pessoa chega | FAIL → PASS (ver o achado abaixo) |
-| J30.4 (= J27.6) | a Central mostra "O assistente passou um atendimento para um humano" com **"Abrir conversa"** apontando para aquela conversa, e o corpo do aviso **não** repete a fala do cliente | PASS |
+| J30.4 (= J28.6) | a Central mostra "O assistente passou um atendimento para um humano" com **"Abrir conversa"** apontando para aquela conversa, e o corpo do aviso **não** repete a fala do cliente | PASS |
 | J30.5 | clicar "Assumir e responder" muda o cartão para **reconhecida** e ele passa a dizer quem assumiu | PASS |
 | J30.6 | e o aviso sai dos abertos da Central **sozinho**, por gatilho | PASS |
 | J30.7 | layout em 390px: o cartão cabe e a conversa não rola para o lado | PASS |
