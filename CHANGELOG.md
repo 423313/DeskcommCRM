@@ -8,6 +8,157 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.33.0] — 2026-09-17
+
+### Adicionado
+
+- **Chave de IA editável — dá para trocar sem excluir e recriar** Na tela IA › Chaves de acesso à IA, cada chave agora tem um botão de editar. Por ele você
+  troca a chave (e o nome) sem apagar e recriar: os agentes continuam ligados nela e, no próximo
+  atendimento, já usam a chave nova. Antes só existiam revalidar e excluir, e excluir era um beco
+  sem saída quando algum agente usava a chave.
+
+  Quem tentava o caminho antigo — excluir e recriar — batia numa recusa que ainda mandava "remover
+  as versões antes". Isso era duplo engano: remover a versão apaga o agente e o histórico dele, e
+  a própria instrução não tinha como ser seguida, porque a versão está presa por outros dois
+  vínculos. A recusa agora diz quantas versões usam aquela chave, nomeia os agentes e as versões,
+  e ensina o caminho que existe: apontar cada versão para outra chave. Para girar uma chave que
+  está em uso, o botão de editar resolve em um passo.
+
+  O número "Em uso por" de cada chave passou a contar todas as versões que apontam para ela —
+  inclusive rascunhos e versões antigas —, que é exatamente o que impede a exclusão. Antes ele
+  contava só a versão publicada e podia mostrar zero numa chave que o sistema não deixava excluir.
+
+  Nada a fazer na instalação: nenhuma chave existente é tocada e nenhum dado é convertido.
+
+### Corrigido
+
+- **O aviso de mensagem nova diz quem escreveu** O aviso que aparece na esquina quando chega mensagem dizia sempre "Nova
+  mensagem", nunca o nome de quem escreveu: a leitura do contato saía sem sessão e
+  o banco respondia com zero linhas — sem erro, sem log, sem nada reprovando. O
+  aviso agora busca o contato pelo mesmo caminho autenticado que o avatar já
+  usava, mostra o nome (ou o telefone) de quem escreveu, e traz o botão "Abrir
+  conversa" para ir direto até ela. Nada a fazer na VPS além de atualizar.
+
+- **Condição por "Desfecho do passo anterior" volta a filtrar leads** A condição **Desfecho do passo anterior** — e a negação escrita com ela
+  ("não é <classe>") — agora decide de verdade. O motor montava esse campo como
+  `null` fixo, então o filtro era decorativo: quem escrevia uma negação via o
+  fluxo mandar **todos** os leads pelo ramo da negativa, inclusive os que nunca
+  passaram por um passo de classificação, e o follow-up seguia calado pelo
+  caminho errado.
+
+  O que muda em quem opera a VPS:
+
+  - a condição passa a ler a classe escolhida pelo último passo de classificação
+    da inscrição — o mesmo desfecho que o histórico da conversa mostra;
+  - lead **sem classificação** deixa de satisfazer a negativa: "não foi X" só vale
+    para um lead que **foi classificado** com outra classe. Ausência de dado não
+    prova a negativa (e `é`/`contém` já eram falsos nesse caso);
+  - vale conferir os fluxos que usam essa condição com `não é`: eles podem passar
+    a desviar leads que antes seguiam reto por ali. Nada quebra e nada precisa ser
+    reconfigurado — era o filtro que o dono da VPS achava que já estava valendo.
+
+- **Ligar o pacote "Atender e responder" não oferece mais duas capacidades que o motor descartava** Na configuração do agente, o pacote **Atender e responder** listava duas capacidades com
+  checkbox marcável que o motor recusava em silêncio a cada turno: enviar mensagem de WhatsApp
+  e passar a conversa para uma pessoa. Quem marcava via o agente publicado com a capacidade
+  ligada, e nada acontecia — o único sinal era uma linha no log do worker.
+
+  As duas continuam existindo e continuam acontecendo: quem envia é o próprio sistema, pelo
+  caminho seguro, com opt-out, regra anti-ban e o silêncio dos follow-ups quando um humano
+  assume. O que muda é a tela — em vez de um checkbox que o motor descartava, ela mostra a
+  capacidade com o motivo escrito, e o pacote passa a contar só o que ele de fato entrega.
+
+  Quem instala não precisa fazer nada: nada que o agente já fazia deixou de funcionar, e
+  nenhuma capacidade ligada por engano passa a ter efeito.
+
+- **A pausa que imita digitação humana deixa de segurar o número inteiro** Quando a IA respondia, a pausa que imita digitação humana era paga com a trava do
+  número na mão. Enquanto um cliente esperava 1,2s a 7,5s, todo atendimento do MESMO
+  WhatsApp esperava atrás dele — e com o throttle anti-ban somado no mesmo ponto, o
+  pior turno segurava a fila por até 9,5s. Dois atendentes no mesmo número entravam em
+  fila; a fila ficou mais longa.
+
+  A pausa continua existindo, com a mesma duração e o mesmo aviso de digitando: ela só
+  passou a ser paga antes de a trava do número ser tomada, então durante a espera o
+  número já pode atender o próximo. Nada a fazer na VPS.
+
+- **A Agenda encontra clientes pelo nome exibido em Contatos** Em Novo agendamento, o cliente que chegou pelo WhatsApp e só tem o nome do perfil não era encontrado pela busca e aparecia em branco na lista de quem será atendido. Agora a busca procura pelo nome do cadastro e pelo nome do perfil do WhatsApp, e a lista mostra o mesmo nome da tela de Contatos: o do cadastro e, na falta dele, o do perfil. Nada para configurar. Crédito: @vanksestevao.
+
+- **Na Agenda, o papel Somente leitura não vê mais "Novo agendamento"** Quem entra na Agenda com o papel "Somente leitura" via o botão "Novo agendamento", podia clicar num horário livre da grade e podia abrir o painel de marcação pelo "Marcar compromisso" que chega do Inbox — e só descobria a recusa no 403 da rota, depois do gesto. Agora as três portas somem para esse papel: o botão não aparece, a grade fica só de leitura (sem bloco clicável) e o painel não abre sozinho pelo link. O rótulo do botão e o comportamento de quem tem papel de equipe ficam iguais — e a rota continua decidindo, como sempre. Ficam de fora, ainda com o 403 da rota: "Confirmar", "Remarcar", "Cancelar", "Realizado" e "Faltou" no Histórico da Agenda. Crédito: @webtecnica.
+
+- **Excluir uma conexão de WhatsApp fecha o aviso crítico que ficava aberto para sempre** A Central de avisos mantinha um alarme crítico para uma conexão que já não existia — "WhatsApp fora do ar (STOPPED) — Nenhuma mensagem entra nem sai por esta conexão até ela voltar" — e o cartão nem conseguia mostrar o contexto: "Este contexto não está disponível para você". O aviso só fechava quando a própria sessão avisava que tinha voltado, e uma conexão arquivada nunca mais manda evento nenhum: o único caminho que resolveria o episódio desaparecia no mesmo instante em que a conexão era removida. Enquanto isso, a conexão nova, com o mesmo número, podia estar funcionando normalmente nos dois lados.
+
+  Agora, ao excluir (ou arquivar) uma conexão, os avisos abertos DELA são resolvidos no mesmo ato — e só os dela: o alerta de outro número que segue caído continua na Central, e o número que voltar a cair avisa de novo. O que a operação fez com os avisos fica registrado na auditoria.
+
+  Crédito: @webtecnica. Relato: @rogercampel.
+
+- **O boot não acusa falta de IA quando a credencial pode estar no painel** O aviso de inicialização agora distingue ausência de chave no ambiente de ausência real de credencial, evitando orientar quem opera a corrigir uma configuração que pode já estar válida em IA › Credenciais. Crédito: @joaopaulomirandamatias.
+
+- **A atualização diária da lista de modelos de IA voltou a rodar** Numa instalação nova, a tarefa que atualiza todos os dias a lista de modelos de inteligência artificial disponíveis era recusada pelo próprio sistema e não fazia nada. O instalador cria dois segredos diferentes para as tarefas agendadas, e essa tarefa — só ela, entre as vinte e quatro — aceitava apenas um deles, enquanto o agendador usa o outro. Como a saída dessas chamadas não é guardada, a recusa diária não aparecia em lugar nenhum.
+
+  Você não precisa fazer nada: nenhuma configuração muda e nenhum segredo precisa ser trocado. A tarefa passa a ser aceita como as demais.
+
+  Também saiu do projeto o arquivo de agendamento que só servia a uma plataforma de hospedagem que o produto não usa, junto com a exigência de mantê-lo atualizado a cada tarefa nova. A lista que vale continua sendo a do agendador que acompanha a instalação, e ela segue protegida: tarefa sem agendamento, ou agendamento apontando para tarefa que não existe, continuam reprovando na verificação automática.
+
+- **A ficha do contato identifica o nome do perfil do WhatsApp** Na visão geral do contato, o nome recebido do perfil do WhatsApp deixa de aparecer com o rótulo técnico em inglês e passa a ser identificado claramente na interface. Crédito: @joaopaulomirandamatias.
+
+- **A agenda, o novo contato, o novo lead e o onboarding passam a falar o idioma de quem usa** Quem usa o sistema em espanhol deixa de ver em português os motivos e horários dos blocos da agenda, os avisos de remarcação, o campo de e-mail do novo contato, a janela de novo lead e o rótulo do botão de tema. O onboarding passa a seguir o idioma da organização quando a pessoa não escolheu um idioma próprio, e a página passa a declarar ao navegador o idioma em uso assim que carrega. A tradução completa da interface para chinês simplificado entrou no sistema, mas ainda não aparece para escolha. Em português, nada muda. Crédito: @xxjjjj.
+
+- **O intervalo antes do atendimento passou a valer também na hora de marcar** Se você configurou um intervalo antes (ou depois) do atendimento — aquele tempo de respiro entre um compromisso e outro —, o vizinho só era levado em conta quando caía dentro do horário consultado. Na hora de MARCAR (pela IA, por token ou por webhook) a conferência olhava só a janela do próprio atendimento, o compromisso vizinho ficava fora dela e o horário era aceito, mesmo invadindo o intervalo que você pediu para guardar; e a lista de horários tinha a mesma falha na borda do período pedido. Agora as duas olham também o intervalo antes e depois. Efeito que você pode notar: pedir à IA para passar um compromisso para o horário logo depois dele, com intervalo configurado, passa a ser recusado, porque o próprio compromisso ainda ocupa o intervalo. Nada para configurar: os agendamentos que já existem seguem como estão.
+
+  Crédito: @webtecnica.
+
+- **Arquivo que o sistema não conseguiu ler deixa de virar resposta inventada** Quando a leitura de um arquivo enviado pelo cliente falhava de vez — um PDF
+  escaneado, sem texto de verdade, é o caso mais comum —, o agente recebia apenas
+  a marca "[documento]". Isso diz que chegou um arquivo e não diz que ninguém
+  conseguiu abri-lo, e o agente respondia como se soubesse o que havia ali.
+
+  Medido numa instalação real: uma cliente mandou um PDF de catálogo, o extrator
+  de texto falhou, e o assistente respondeu que o material "parece ser de
+  distribuidora/promocional" — uma afirmação sobre um conteúdo que ele nunca leu.
+
+  Agora a falha grava a mesma marca que os outros casos de arquivo ilegível já
+  gravavam: "não consegui interpretar". Da mensagem seguinte em diante o agente
+  sabe que houve um arquivo que não deu para ler e avisa, em vez de supor. O
+  aviso na Central continua aparecendo como antes, com o motivo técnico.
+
+  O turno que já tinha respondido não volta atrás — a correção vale do próximo em
+  diante, que é quando o agente lê o histórico da conversa.
+
+- **O editor do agente diz na tela por que o Publicar está desabilitado** No editor do agente, o motivo de o botão Publicar estar desabilitado existia só no `title` do botão: aparecia com o ponteiro parado em cima dele. Em celular e tablet não existe hover, e um botão desabilitado não recebe foco do teclado — quem mais precisava da explicação era exatamente quem não a recebia. Agora o motivo aparece como texto na própria tela, logo abaixo do cabeçalho do editor, e o botão aponta para ele por `aria-describedby`, então o leitor de tela anuncia a explicação junto do rótulo. As frases do motivo não mudaram e continuam traduzidas em espanhol. Nada muda na sua VPS: nenhuma migration, nenhuma variável, nenhum comando. Crédito: @webtecnica.
+
+- **Campos de lista fechada voltam a aceitar mais de uma opção** No editor de campos do funil, em Configurações, digitar a vírgula entre as opções de um campo de seleção apagava o separador e colava a palavra seguinte na anterior — na prática só dava para salvar uma opção. Agora a lista aceita quantas opções você digitar. Crédito: @deskcommopp4s-cmd.
+
+- **A recusa do Google passa a dizer o que aconteceu** Quando o Google recusava uma alteração da Agenda, o erro gravado no compromisso dizia apenas "Google HTTP 400". O Google já tinha dito o motivo na resposta (`invalid`, `insufficientPermissions`, `rateLimitExceeded`…), mas ele era descartado antes de virar a frase. Agora a frase diz o tipo da recusa (sem permissão no calendário, limite de uso do Google, evento que não existe mais, recusa que repetir não resolve), o código HTTP e o motivo que o Google mandou — por exemplo: "o Google recusou e repetir não muda o resultado — HTTP 400 (invalid)".
+
+  O compromisso recusado continua marcado com erro e continua sendo reexaminado pela sincronização, como antes. Da resposta só entra o que tem formato de identificador (letras e sublinhado): e-mail de convidado e frases ficam de fora da frase, que é gravada e mostrada na tela. Quando o calendário inteiro foi apagado no Google, a frase agora diz isso, em vez de falar do evento. Nada para configurar. Crédito: @webtecnica.
+
+- **A documentação deixou de dizer que o sistema roda numa plataforma que ele não usa** Vários textos do projeto — o guia de quem contribui, os runbooks de operação, as especificações e até uma mensagem de erro do próprio sistema — afirmavam que o CRM era publicado e testado numa plataforma de hospedagem gerenciada. Isso deixou de ser verdade: o produto é instalado na sua própria infraestrutura, e é lá que ele opera.
+
+  Nada muda no que você roda hoje. O que muda é o que você lê: a mensagem que aparece quando falta uma variável agora manda ajustar o `.env` da instalação, em vez de um painel que você não tem; os procedimentos de trocar chave do WhatsApp e de rotacionar credenciais passam a descrever o `.env` e a recriação dos contêineres; e o texto que quem contribui recebe ao abrir um pedido de mudança deixa de anunciar um resultado de verificação que não existe mais, e diz onde olhar o que de fato trava a entrada do código.
+
+  O agendador de tarefas para quem instala sem cron próprio continua existindo e funcionando igual — só deixou de ser descrito como coisa de uma plataforma específica.
+
+## [1.32.1] — 2026-09-17
+
+### Corrigido
+
+- **A senha das rotinas automáticas deixa de ser gravada no log do servidor** A rotina que processa a fila de eventos a cada minuto levava a senha interna escrita na própria linha do agendamento, e o servidor anota cada execução no log do sistema: a senha ia parar lá uma vez por minuto. Agora ela fica num arquivo que só o administrador do servidor lê, e a linha do agendamento só aponta para ele. Instalações novas já nascem assim; nas existentes, a troca acontece sozinha a partir da atualização SEGUINTE a esta, porque a atualização em curso ainda roda o instalador da versão anterior. Crédito: @rafaeskytrabalho.
+
+## [1.32.0] — 2026-09-17
+
+### Adicionado
+
+- **Guias opcionais podem ser instalados e ativados por organização** A área Extensões permite ao responsável pela instalação admitir um catálogo revisado e baixar guias declarativos sem reconstruir o aplicativo. Cada organização escolhe quais guias ativar e como apresentá-los no CRM; desativar preserva a configuração. Os pedidos ficam registrados, com retomada e cancelamento de preparações interrompidas. O conteúdo instalado continua disponível quando o catálogo está fora do ar.
+
+  O responsável pela instalação também atualiza um guia para outra versão do catálogo, desfaz a última troca mesmo com o catálogo fora do ar e remove um guia da instalação. Enquanto houver um guia sendo preparado, a atualização do sistema pela tela espera; a própria tela diz como retomar ou cancelar essa preparação em Extensões. Remover desliga o guia em todas as organizações, guarda a configuração de cada uma e registra na auditoria de cada organização por que ele saiu; ao reinstalar, cada organização decide se ativa de novo.
+
+  Este primeiro perfil aceita apenas conteúdo e ações conhecidas do sistema. Código externo e o catálogo público com avaliações ainda não são oferecidos. O sistema continua funcionando com zero extensões, e a atualização normal aplica as tabelas necessárias, sem variável obrigatória nem edição manual de arquivo. A única variável nova, `EXTENSIONS_LOCAL_CATALOG_ORIGIN`, é de laboratório e fica vazia por padrão.
+
+### Corrigido
+
+- **As travas do modo somente leitura do suporte cobrem todas as tabelas já na instalação nova** As travas do modo somente leitura do suporte cobrem todas as tabelas da organização já na primeira aplicação do schema, e uma instalação nova chega ao mesmo conjunto de travas que uma instalação atualizada.
+
+  Não há nada a fazer: a próxima atualização aplica a correção sozinha.
+
 ## [1.31.1] — 2026-09-17
 
 ### Corrigido
@@ -5113,7 +5264,10 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.31.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.33.0...HEAD
+[1.33.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.32.1...v1.33.0
+[1.32.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.32.0...v1.32.1
+[1.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.31.1...v1.32.0
 [1.31.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.31.0...v1.31.1
 [1.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...v1.31.0
 [1.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.29.0...v1.30.0
