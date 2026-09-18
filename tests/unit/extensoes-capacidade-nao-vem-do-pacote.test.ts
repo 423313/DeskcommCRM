@@ -144,7 +144,7 @@ describe("a capacidade não vem do pacote — o mapa", () => {
   });
 
   it("toda porta existe no catálogo de navegação — nenhuma leva a 404", () => {
-    const conhecidos = new Set(NAV_CATALOG.map((entrada) => entrada.href));
+    const conhecidos = new Set<string>(NAV_CATALOG.map((entrada) => entrada.href));
     const mortas = DESTINOS_PERMITIDOS.filter((destino) => !conhecidos.has(destino));
     expect(mortas, "porta de extensão apontando para tela inexistente").toEqual([]);
   });
@@ -161,15 +161,16 @@ describe("a capacidade não vem do pacote — comportamento do resolvedor", () =
     }
   });
 
-  it.each([
+  const recusas: ReadonlyArray<readonly [unknown, string]> = [
     ["/app/settings/api-tokens", "endereço cru"],
     ["settings.open", "capacidade inventada"],
     ["tasks.open ", "espaço à direita"],
     ["TASKS.OPEN", "caixa trocada"],
     ["", "vazio"],
     [null, "nulo"],
-    [{ toString: () => "tasks.open" }, "objeto que finge ser a capacidade"],
-  ])("recusa %s (%s) sem destino de reserva", (entrada) => {
+    [{ toString: (): string => "tasks.open" }, "objeto que finge ser a capacidade"],
+  ];
+  it.each(recusas)("recusa (%s) sem destino de reserva — %s", (entrada) => {
     expect(destinoDaCapacidade(entrada)).toBeNull();
   });
 });

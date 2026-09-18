@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
+import { DESTINOS_PERMITIDOS, type ExtensionCapability } from "@/lib/extensions/capacidades";
 import { localize, type ExtensionManifest } from "@/lib/extensions/manifest";
 import type { ExtensionGuideView } from "@/lib/extensions/view";
 import {
@@ -118,11 +119,11 @@ export function ExtensionGuide({
     };
   }, [carregar]);
 
-  async function openTasks(cardId: string, capability: "tasks.open") {
+  async function abrirPorta(cardId: string, capability: ExtensionCapability) {
     if (!guide || !guideFresh) return;
     setOpeningCard(cardId);
     setActionError(null);
-    const result = await requestExtensionApi<{ href: "/app/tasks" }>(
+    const result = await requestExtensionApi<{ href: string }>(
       `/api/v1/extensions/${encodeURIComponent(guide.installation_id)}/open`,
       {
         method: "POST",
@@ -146,7 +147,11 @@ export function ExtensionGuide({
       await carregar(true);
       return;
     }
-    if (result.data.href !== "/app/tasks") {
+    // A tela RECONFERE o destino contra a lista fechada do host. O servidor já resolve a
+    // capacidade por mapa constante; esta segunda conferência existe para que uma resposta
+    // adulterada no meio do caminho não vire navegação. Comparar contra a lista, e não
+    // contra um prefixo, é o que impede `/app/settings/...` de passar.
+    if (!DESTINOS_PERMITIDOS.includes(result.data.href)) {
       setActionError(t("O servidor devolveu um destino que esta extensão não pode abrir."));
       return;
     }
@@ -331,7 +336,7 @@ export function ExtensionGuide({
                 <Button
                   disabled={openingCard !== null || !guideFresh}
                   data-testid={`extension-open-${card.id}`}
-                  onClick={() => void openTasks(card.id, card.action.capability)}
+                  onClick={() => void abrirPorta(card.id, card.action.capability)}
                 >
                   {openingCard === card.id ? (
                     <CircleNotch className="animate-spin" aria-hidden />
