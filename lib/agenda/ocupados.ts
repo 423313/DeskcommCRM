@@ -66,7 +66,17 @@ export interface OQueOcupa {
  * cima daquele horário, e não contá-lo faria um segundo pedido ser aceito para
  * o mesmo instante, com um dos dois levando bolo.
  */
-const LIBERAM_O_HORARIO = new Set<string>(["cancelled", "no_show"]);
+/**
+ * As situações que LIBERAM o horário — e, por consequência, as que não contam
+ * como atendimento. Espelho em SQL: `fn_situacao_conta_como_atendimento`
+ * (migration 0262), e o invariante `cliente-nasce-do-agendamento` prende as
+ * duas juntas.
+ *
+ * Exportada porque a ficha da cliente precisa do MESMO conjunto para filtrar a
+ * agenda: um literal digitado lá seria a terceira cópia, e é sempre a terceira
+ * que desalinha primeiro.
+ */
+export const LIBERAM_O_HORARIO = new Set<string>(["cancelled", "no_show"]);
 
 /**
  * O que cada situação de evento externo faz com o horário.

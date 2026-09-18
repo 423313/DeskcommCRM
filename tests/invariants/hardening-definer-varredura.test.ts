@@ -67,6 +67,35 @@ const ANON_PERMITIDO: readonly Excecao[] = [];
  */
 const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
   {
+    fn: "fn_fechar_comissoes(uuid,uuid,date,date,uuid,uuid)",
+    razao:
+      "POST app/api/v1/financeiro/comissoes/fechar/route.ts chama com o client " +
+      "da sessão: é auth.uid() que faz a função exigir fn_role_at_least(p_org," +
+      "'manager') na PRIMEIRA linha e que assina o lançamento de saída. Definer " +
+      "porque a marcação das comissões e a criação do lançamento são uma " +
+      "transação só, sob advisory lock por org+profissional. " +
+      "tests/invariants/fork-financeiro-rls.test.ts prova a recusa cross-org " +
+      "(comissao_forbidden) com usuário COMUM — o primeiro teste desta função " +
+      "passou por engano com uma conta de platform admin, que tem passe livre.",
+  },
+  {
+    fn: "fn_resgatar_premio(uuid,uuid)",
+    razao:
+      "POST app/api/v1/financeiro/fidelidade/resgatar/route.ts chama com o " +
+      "client da sessão: exige fn_role_at_least(p_org,'agent') na primeira " +
+      "linha. Definer porque desconta o item e zera o cartão numa transação " +
+      "só, sob FOR UPDATE do item e da comanda. Recusa cross-org provada em " +
+      "tests/invariants/fork-fidelidade.test.ts.",
+  },
+  {
+    fn: "fn_ajustar_fidelidade(uuid,uuid,integer,text)",
+    razao:
+      "POST app/api/v1/financeiro/fidelidade/ajustar/route.ts chama com o " +
+      "client da sessão: exige 'manager' e motivo não vazio. Definer para " +
+      "gravar o delta contra o saldo derivado sem depender de grant direto na " +
+      "tabela. Recusa cross-org provada em tests/invariants/fork-fidelidade.test.ts.",
+  },
+  {
     fn: "fn_finalizar_comanda(uuid,uuid,uuid,integer)",
     razao:
       "POST app/api/v1/financeiro/comandas/[id]/finalizar/route.ts e " +

@@ -611,6 +611,11 @@ export const AUDIT_ACTIONS = [
   // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
   // responde — a coluna `updated_at` se move por qualquer motivo.
   "ai.credential_updated",
+  // Fidelidade e comissão (fork: 9012/9013). No FIM do arquivo de propósito —
+  // `merge=union` só resolve sozinho quando os dois lados acrescentam aqui.
+  "fidelidade.premio_resgatado",
+  "fidelidade.cartao_ajustado",
+  "financeiro.comissoes_fechadas",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

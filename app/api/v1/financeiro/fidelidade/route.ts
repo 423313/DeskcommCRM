@@ -59,7 +59,10 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const supabase = await createClient();
 
-  const { data: saldo, error: erroSaldo } = await supabase.rpc("fn_saldo_de_fidelidade", {
+  // O CARTÃO, não o saldo cru: a tela precisa de "7 de 10", e quem sabe a meta
+  // é o banco (ela é configurável desde a 9013). Devolver só o número faria
+  // cada tela inventar a própria meta.
+  const { data: cartao, error: erroSaldo } = await supabase.rpc("fn_cartao_de_fidelidade", {
     p_org: authz.org.orgId,
     p_contact: contactId,
   });
@@ -67,13 +70,24 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const { data: extrato, error } = await supabase
     .from("loyalty_ledger")
-    .select("id, points, reason, sale_id, created_at")
+    .select("id, points, reason, kind, sale_id, created_at")
     .eq("contact_id", contactId)
     .order("created_at", { ascending: false })
     .limit(LIMITE_DO_EXTRATO);
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  return ok({ contact_id: contactId, saldo: saldo ?? 0, extrato: extrato ?? [] }, { requestId });
+  const c = (cartao ?? {}) as { selos?: number; meta?: number; completo?: boolean; faltam?: number };
+  return ok(
+    {
+      contact_id: contactId,
+      // `saldo` continua no corpo: é o nome que o consumidor atual lê, e tirá-lo
+      // seria quebra silenciosa por estética.
+      saldo: c.selos ?? 0,
+      cartao: c,
+      extrato: extrato ?? [],
+    },
+    { requestId },
+  );
 }
 
 export async function POST(req: NextRequest): Promise<Response> {

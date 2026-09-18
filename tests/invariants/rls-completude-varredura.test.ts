@@ -82,6 +82,7 @@ const PROVA_PROPRIA: readonly Excecao[] = [
   // `manager`, que é o piso do estorno. Prova em
   // `tests/invariants/fork-financeiro-rls.test.ts`: `TABELAS_DO_FINANCEIRO`,
   // com cross-org zero, controle positivo e a direção inversa nas dez.
+  { tabela: "professionals", razao: "tests/invariants/fork-financeiro-rls.test.ts — TABELAS_DO_FINANCEIRO (migration 9011): quem executa o serviço, que não é usuária do sistema" },
   { tabela: "financial_accounts", razao: "tests/invariants/fork-financeiro-rls.test.ts — TABELAS_DO_FINANCEIRO, três casos por tabela (A→B zero, positivo local, inversa B→A)" },
   { tabela: "payment_methods", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },
   { tabela: "account_plans", razao: "tests/invariants/fork-financeiro-rls.test.ts — mesmo percurso de TABELAS_DO_FINANCEIRO" },

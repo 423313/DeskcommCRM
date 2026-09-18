@@ -524,12 +524,28 @@ export const NAV_CATALOG = [
     // hub de Análise é onde ela se encontra sem disputar pixel com o que se abre
     // toda hora.
     href: "/app/faturamento",
+    // A promessa "quanto cada pessoa tem a receber" saiu daqui: ela era feita e
+    // não cumprida (mostrava o número, não deixava pagar). Agora é da tela de
+    // Comissões, logo abaixo.
     label: "Faturamento",
-    description: "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.",
+    description: "Quanto entrou, de que forma, e o que saiu do caixa.",
     icon: "ChartBar",
     group: "analise",
     section: "Dinheiro",
     minRole: "viewer",
+  },
+  {
+    href: "/app/comissoes",
+    label: "Comissões",
+    description: "Quanto cada profissional tem a receber, e o fechamento do pagamento.",
+    icon: "Receipt",
+    group: "analise",
+    section: "Dinheiro",
+    // `viewer` para ver, pelo mesmo motivo do Faturamento: conferir não é
+    // privilégio de quem paga. Fechar exige `manager`, e quem barra é o banco.
+    minRole: "viewer",
+    // Fora do sidebar: é pergunta de quinzena ou de mês, não de balcão. Quem
+    // precisa acha pelo hub de Análise ou pelo ⌘K.
   },
   {
     href: "/app/metrics",

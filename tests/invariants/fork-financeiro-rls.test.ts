@@ -91,6 +91,7 @@ const USER_B = "f1a1ce00-1111-4000-8000-00000000000b";
 
 /** As dez tabelas que o módulo acrescentou. Tabela nova do fork entra AQUI. */
 const TABELAS_DO_FINANCEIRO = [
+  "professionals",
   "financial_accounts",
   "payment_methods",
   "account_plans",
@@ -133,6 +134,7 @@ beforeAll(() => {
       v_venda2   uuid;
       v_venda3   uuid;
       v_item1    uuid;
+      v_prof     uuid;
       v_entry    uuid;
     begin
       foreach v_org in array array['${ORG_A}'::uuid, '${ORG_B}'::uuid] loop
@@ -150,23 +152,28 @@ beforeAll(() => {
         insert into public.account_plans (organization_id, name, direction)
           values (v_org, 'Servicos do invariante', 'in') returning id into v_plano;
 
+        -- Quem EXECUTA o serviço. Não é usuária do sistema (9011): v_user é
+        -- quem OPERA a comanda, e os dois papéis não se confundem mais.
+        insert into public.professionals (organization_id, name)
+          values (v_org, 'Profissional do invariante') returning id into v_prof;
+
         -- #9001: a comanda que só existe para ser LIDA (e para a LGPD apagar o texto).
         insert into public.sales (organization_id, number, contact_id, attendant_user_id,
                                   created_by_user_id, notes, cancel_reason, reverse_reason)
           values (v_org, 9001, v_lgpd, v_user, v_user,
                   'Anotacao livre sobre a pessoa', 'Motivo digitado a mao', 'Estorno explicado a mao')
           returning id into v_venda1;
-        insert into public.sale_items (organization_id, sale_id, description, attendant_user_id,
+        insert into public.sale_items (organization_id, sale_id, description, professional_id,
                                        unit_price_cents, total_cents, commission_percent)
-          values (v_org, v_venda1, 'Servico do invariante', v_user, 10000, 10000, 10)
+          values (v_org, v_venda1, 'Servico do invariante', v_prof, 10000, 10000, 10)
           returning id into v_item1;
 
         -- #9002: a que vai ser FINALIZADA pela função, no controle positivo.
         insert into public.sales (organization_id, number, contact_id, attendant_user_id, created_by_user_id)
           values (v_org, 9002, v_contato, v_user, v_user) returning id into v_venda2;
-        insert into public.sale_items (organization_id, sale_id, description, attendant_user_id,
+        insert into public.sale_items (organization_id, sale_id, description, professional_id,
                                        unit_price_cents, total_cents, commission_percent)
-          values (v_org, v_venda2, 'Servico a faturar', v_user, 5000, 5000, 10);
+          values (v_org, v_venda2, 'Servico a faturar', v_prof, 5000, 5000, 10);
 
         -- #9003: já finalizada, com o lançamento de origem, para o ESTORNO ter o que estornar.
         insert into public.sales (organization_id, number, contact_id, attendant_user_id,
@@ -185,10 +192,10 @@ beforeAll(() => {
            description, status, origin, created_by_user_id)
           values (v_org, v_conta, v_plano, 'in', 1234, 'Lancamento do invariante', 'pending', 'manual', v_user)
           returning id into v_entry;
-        insert into public.commission_rules (organization_id, attendant_user_id, percent)
-          values (v_org, v_user, 10);
-        insert into public.commissions (organization_id, sale_item_id, attendant_user_id, percent, amount_cents)
-          values (v_org, v_item1, v_user, 10, 1000);
+        insert into public.commission_rules (organization_id, professional_id, percent)
+          values (v_org, v_prof, 10);
+        insert into public.commissions (organization_id, sale_item_id, professional_id, percent, amount_cents)
+          values (v_org, v_item1, v_prof, 10, 1000);
         insert into public.loyalty_ledger (organization_id, contact_id, points, reason, sale_id)
           values (v_org, v_contato, 10, 'Ponto do invariante', v_venda1);
         insert into public.recurring_entries

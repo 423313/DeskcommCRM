@@ -7,6 +7,9 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { ShieldCheck, PencilSimple } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Fork: a ficha da cliente (comandas, visitas, fidelidade). Componente em
+// diretório próprio para o merge semanal não disputar arquivo com o upstream.
+import { FichaDaCliente } from "@/components/financeiro/FichaDaCliente";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -135,6 +138,7 @@ export function ContactDetailClient({ contactId }: Props) {
           <TabsTrigger value="overview">{t("Visão geral")}</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           {isAdmin && <TabsTrigger value="lgpd">LGPD</TabsTrigger>}
+          <TabsTrigger value="ficha">{t("Ficha")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -242,6 +246,9 @@ export function ContactDetailClient({ contactId }: Props) {
             </Card>
           </TabsContent>
         )}
+        <TabsContent value="ficha" className="mt-4">
+          <FichaDaCliente contactId={contactId} />
+        </TabsContent>
       </Tabs>
 
       <EditContactDialog

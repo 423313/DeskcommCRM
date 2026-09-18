@@ -27217,10 +27217,17 @@ create index if not exists professionals_org_ativas_idx
 
 alter table public.professionals enable row level security;
 drop policy if exists tenant_isolation_professionals_all on public.professionals;
+-- Leitura para a organização; ESCRITA exige `manager` — é cadastro, não é
+-- coisa de quem atende. Mesma forma das outras tabelas do módulo, e o que o
+-- invariante de RBAC cobra de toda tabela de configuração.
 create policy tenant_isolation_professionals_all on public.professionals
-  for all to authenticated
-  using (organization_id in (select public.fn_user_org_ids()))
-  with check (organization_id in (select public.fn_user_org_ids()));
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (
+    public.fn_is_platform_admin()
+    or (organization_id in (select public.fn_user_org_ids())
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
 revoke all on public.professionals from anon;
 
 drop trigger if exists trg_professionals_updated_at on public.professionals;
@@ -27526,6 +27533,10 @@ create or replace function public.fn_finalizar_comanda(
   p_org uuid,
   p_sale uuid,
   p_payment_method uuid,
+  -- ⚠️ IGNORADO desde a 9013. O selo passou a nascer da regra do cartão (um
+  -- por comanda com serviço pontuável), e não do que alguém digita no
+  -- fechamento. O parâmetro fica na assinatura para não quebrar quem chama;
+  -- a tela deixou de enviá-lo.
   p_loyalty_points integer default 0
 )
 returns jsonb
@@ -27618,13 +27629,33 @@ begin
   )
   returning id into v_entry;
 
-  -- (4) o ponto de fidelidade, idempotente pela chave da comanda
-  if p_loyalty_points > 0 and v_sale.contact_id is not null then
+  -- (4) o SELO do cartão: nasce da regra, não do que alguém digitou.
+  --
+  -- Uma comanda gera NO MÁXIMO um selo, e só se tiver ao menos um item de
+  -- serviço marcado como pontuável — reparo, remoção e curso não pontuam. O
+  -- índice único parcial `loyalty_ledger_um_selo_por_comanda` é a garantia; o
+  -- `on conflict` aqui é a cortesia.
+  --
+  -- ⚠️ A comanda que RESGATA o prêmio não ganha selo no mesmo lançamento: o
+  -- cartão novo começa na próxima. É a regra do sistema anterior, e sem ela o
+  -- resgate devolveria um selo de brinde.
+  if v_sale.contact_id is not null
+     and exists (
+       select 1 from public.sale_items si
+         join public.calendar_event_types et
+           on et.id = si.event_type_id and et.organization_id = p_org
+        where si.sale_id = p_sale and et.fidelidade_pontua
+     )
+     and not exists (
+       select 1 from public.loyalty_ledger
+        where organization_id = p_org and sale_id = p_sale and kind = 'resgate'
+     )
+  then
     insert into public.loyalty_ledger
-      (organization_id, contact_id, points, reason, sale_id, idempotency_key, created_by_user_id)
+      (organization_id, contact_id, points, reason, kind, sale_id, idempotency_key, created_by_user_id)
     values (
-      p_org, v_sale.contact_id, p_loyalty_points, 'Comanda finalizada', p_sale,
-      format('sale:%s', p_sale), auth.uid()
+      p_org, v_sale.contact_id, 1, format('Comanda #%s', v_sale.number), 'selo', p_sale,
+      format('selo:%s', p_sale), auth.uid()
     )
     on conflict do nothing;
   end if;
@@ -27639,6 +27670,14 @@ begin
        -- cancelado e faltou são desfechos DECIDIDOS, e faturar não os desfaz.
        and status not in ('cancelled', 'no_show');
   end if;
+
+  -- (6) a cliente passa a ser CLIENTE.
+  --
+  -- No núcleo, `first_service_at` nasce da agenda (0262). Aqui a comanda
+  -- também carimba: o histórico importado tem venda e não tem agendamento, e
+  -- sem isto quem compra há cinco anos fica sem selo de cliente, fora do
+  -- filtro de etiqueta e invisível para as automações.
+  perform public.fn_cliente_pela_comanda(p_org, v_sale.contact_id);
 
   return jsonb_build_object(
     'sale_id', v_sale.id,
@@ -28351,6 +28390,443 @@ grant  execute on function public.fn_fechar_comissoes(uuid, uuid, date, date, uu
 
 comment on function public.fn_fechar_comissoes(uuid, uuid, date, date, uuid, uuid) is
   'Fecha as comissões pendentes de uma profissional num período: cria UM lançamento de saída e marca as comissões com paid_entry_id. Não existe tabela de fechamento — o lançamento é o fechamento.';
+
+
+-- ---- cartão de fidelidade (migration 9013) ----
+-- 9013 — o CARTÃO de fidelidade, como o sistema anterior tinha.
+--
+-- Até aqui o fork só tinha um livro de pontos: quem finalizava a comanda
+-- DIGITAVA quantos pontos dar. Não havia meta, serviço pontuável, prêmio nem
+-- resgate — o saldo existia e não valia nada.
+--
+-- O sistema anterior tem a regra inteira, e é ela que vale (decisão do dono,
+-- 17/09/2026): a cada comanda com ao menos um serviço pontuável a cliente
+-- ganha UM selo; ao completar a meta (padrão 10) fica elegível a um prêmio,
+-- que é um desconto percentual num serviço; o resgate acontece dentro de uma
+-- comanda aberta e zera o cartão.
+--
+-- O que NÃO vem, e por quê:
+--   • "resgate avulso" (zerar fora de comanda) existia só como capacidade do
+--     robô de WhatsApp do sistema anterior, que sai de cena.
+--   • pontos retroativos do histórico da Belasis — o próprio cartão digital
+--     nasceu sem eles.
+--
+-- Efeito colateral herdado e ACEITO: o item premiado gera comissão menor,
+-- porque a comissão incide sobre o valor já descontado.
+
+-- ─── 1. o serviço diz se pontua e qual prêmio dá ─────────────────────────────
+-- Mesmo caminho que `default_price_cents` (9009) abriu: o catálogo de serviços
+-- deste produto JÁ é `calendar_event_types`.
+alter table public.calendar_event_types
+  add column if not exists fidelidade_pontua boolean not null default false;
+alter table public.calendar_event_types
+  add column if not exists fidelidade_premio_percentual numeric(5, 2)
+  check (fidelidade_premio_percentual is null
+         or (fidelidade_premio_percentual > 0 and fidelidade_premio_percentual <= 100));
+
+comment on column public.calendar_event_types.fidelidade_pontua is
+  'Se uma comanda com este serviço gera selo. Reparo, remoção e curso não pontuam.';
+comment on column public.calendar_event_types.fidelidade_premio_percentual is
+  'Desconto percentual quando este serviço é resgatado como prêmio. Nulo = não é prêmio.';
+
+-- ─── 2. a meta ───────────────────────────────────────────────────────────────
+-- Configurável, com 10 de padrão. No sistema anterior era constante em código,
+-- e mudar para 8 exigiria deploy.
+create or replace function public.fn_meta_de_fidelidade(p_org uuid)
+returns integer
+language sql
+stable
+set search_path = public
+as $$
+  select greatest(
+    coalesce(
+      nullif((select settings->'fidelidade'->>'meta' from public.organizations where id = p_org), '')::integer,
+      10
+    ),
+    1
+  );
+$$;
+
+revoke execute on function public.fn_meta_de_fidelidade(uuid) from public, anon;
+grant  execute on function public.fn_meta_de_fidelidade(uuid) to authenticated;
+
+-- ─── 3. um selo por comanda, e um resgate por comanda ────────────────────────
+-- Índices únicos PARCIAIS, como no sistema anterior: a garantia é do schema,
+-- não da boa intenção de quem chama. `reason` não serve para isso — é texto —,
+-- então a marcação entra em coluna própria.
+alter table public.loyalty_ledger
+  add column if not exists kind text not null default 'ajuste'
+  check (kind in ('selo', 'resgate', 'ajuste'));
+
+comment on column public.loyalty_ledger.kind is
+  'selo = ganho pela comanda; resgate = uso do cartão completo; ajuste = mão humana (cartão de papel, correção).';
+
+create unique index if not exists loyalty_ledger_um_selo_por_comanda
+  on public.loyalty_ledger (organization_id, sale_id) where kind = 'selo' and sale_id is not null;
+create unique index if not exists loyalty_ledger_um_resgate_por_comanda
+  on public.loyalty_ledger (organization_id, sale_id) where kind = 'resgate' and sale_id is not null;
+
+-- ─── 4. o saldo, e quanto falta ──────────────────────────────────────────────
+-- O saldo continua DERIVADO por soma; esta função só o veste com a meta.
+create or replace function public.fn_cartao_de_fidelidade(p_org uuid, p_contact uuid)
+returns jsonb
+language sql
+stable
+set search_path = public
+as $$
+  with saldo as (
+    select coalesce(sum(points), 0)::integer as selos
+      from public.loyalty_ledger
+     where organization_id = p_org and contact_id = p_contact
+  ), meta as (
+    select public.fn_meta_de_fidelidade(p_org) as m
+  )
+  select jsonb_build_object(
+    'selos', (select selos from saldo),
+    'meta',  (select m from meta),
+    'completo', (select selos from saldo) >= (select m from meta),
+    'faltam', greatest((select m from meta) - (select selos from saldo), 0)
+  );
+$$;
+
+revoke execute on function public.fn_cartao_de_fidelidade(uuid, uuid) from public, anon;
+grant  execute on function public.fn_cartao_de_fidelidade(uuid, uuid) to authenticated;
+
+-- ─── 5. o resgate, dentro de uma comanda aberta ──────────────────────────────
+--
+-- Aplica o desconto no item premiado e zera o cartão, numa transação só.
+-- `security definer` com organização por argumento ⇒ papel conferido na
+-- primeira linha (a lição da 9010).
+create or replace function public.fn_resgatar_premio(
+  p_org uuid,
+  p_sale_item uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_item    public.sale_items%rowtype;
+  v_sale    public.sales%rowtype;
+  v_premio  numeric(5, 2);
+  v_selos   integer;
+  v_meta    integer;
+  v_desc    bigint;
+begin
+  if auth.uid() is null or not public.fn_role_at_least(p_org, 'agent') then
+    raise exception 'fidelidade_forbidden' using errcode = '42501';
+  end if;
+
+  select * into v_item from public.sale_items
+   where id = p_sale_item and organization_id = p_org for update;
+  if not found then
+    raise exception 'item_nao_encontrado' using errcode = 'P0002';
+  end if;
+
+  select * into v_sale from public.sales where id = v_item.sale_id for update;
+  if v_sale.status <> 'open' then
+    raise exception 'comanda_nao_aberta'
+      using errcode = '22023',
+            hint = 'O prêmio é resgatado dentro de uma comanda aberta. Depois de finalizada, o item não muda mais.';
+  end if;
+  if v_sale.contact_id is null then
+    raise exception 'comanda_sem_cliente'
+      using errcode = '22023',
+            hint = 'O cartão é da cliente: sem cliente na comanda não há cartão para resgatar.';
+  end if;
+
+  select fidelidade_premio_percentual into v_premio
+    from public.calendar_event_types
+   where id = v_item.event_type_id and organization_id = p_org;
+  if v_premio is null then
+    raise exception 'servico_nao_e_premio'
+      using errcode = '22023',
+            hint = 'Marque o percentual de prêmio deste serviço em Configurações › Agenda.';
+  end if;
+
+  v_meta := public.fn_meta_de_fidelidade(p_org);
+  select coalesce(sum(points), 0) into v_selos
+    from public.loyalty_ledger
+   where organization_id = p_org and contact_id = v_sale.contact_id;
+
+  if v_selos < v_meta then
+    raise exception 'cartao_incompleto'
+      using errcode = 'P0001',
+            message = format('O cartão tem %s de %s selos.', v_selos, v_meta);
+  end if;
+
+  -- O desconto é sobre o ITEM, nunca sobre `sales.discount_cents`: o gatilho
+  -- que recalcula o total da venda soma os itens e ignora aquela coluna — a
+  -- armadilha que o sistema anterior documenta.
+  v_desc := floor(v_item.total_cents * v_premio / 100.0);
+  update public.sale_items
+     set discount_cents = discount_cents + v_desc,
+         total_cents = greatest(total_cents - v_desc, 0)
+   where id = p_sale_item;
+
+  -- Zera o cartão: o movimento é o negativo do saldo INTEIRO, não da meta —
+  -- quem juntou 11 selos não perde o 11º por ter resgatado no 10.
+  insert into public.loyalty_ledger
+    (organization_id, contact_id, sale_id, sale_item_id, points, reason, kind,
+     idempotency_key, created_by_user_id)
+  values (
+    p_org, v_sale.contact_id, v_sale.id, p_sale_item, -v_selos,
+    format('Resgate de prêmio · %s%%', trim(to_char(v_premio, 'FM999D99'))), 'resgate',
+    format('resgate:%s', v_sale.id), auth.uid()
+  );
+
+  return jsonb_build_object('desconto_cents', v_desc, 'selos_usados', v_selos);
+end $$;
+
+revoke execute on function public.fn_resgatar_premio(uuid, uuid) from public, anon;
+grant  execute on function public.fn_resgatar_premio(uuid, uuid) to authenticated;
+
+-- ─── 6. o ajuste, com justificativa ──────────────────────────────────────────
+create or replace function public.fn_ajustar_fidelidade(
+  p_org uuid,
+  p_contact uuid,
+  p_selos integer,
+  p_motivo text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_atual integer;
+begin
+  if auth.uid() is null or not public.fn_role_at_least(p_org, 'manager') then
+    raise exception 'fidelidade_forbidden' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_motivo), '') = '' then
+    raise exception 'motivo_obrigatorio'
+      using errcode = '22023',
+            hint = 'Ajuste de cartão sem motivo é saldo que ninguém sabe explicar depois.';
+  end if;
+  if not exists (select 1 from public.contacts where id = p_contact and organization_id = p_org) then
+    raise exception 'contato_nao_encontrado' using errcode = 'P0002';
+  end if;
+
+  select coalesce(sum(points), 0) into v_atual
+    from public.loyalty_ledger where organization_id = p_org and contact_id = p_contact;
+
+  -- Grava o DELTA até o alvo, porque o saldo é derivado por soma e gravá-lo
+  -- direto criaria a segunda fonte do mesmo número.
+  insert into public.loyalty_ledger
+    (organization_id, contact_id, points, reason, kind, created_by_user_id)
+  values (p_org, p_contact, p_selos - v_atual, btrim(p_motivo), 'ajuste', auth.uid());
+
+  return jsonb_build_object('de', v_atual, 'para', p_selos);
+end $$;
+
+revoke execute on function public.fn_ajustar_fidelidade(uuid, uuid, integer, text) from public, anon;
+grant  execute on function public.fn_ajustar_fidelidade(uuid, uuid, integer, text) to authenticated;
+
+
+
+-- ---- ficha da cliente (migration 9014) ----
+-- 9014 — a FICHA DA CLIENTE, e o carimbo que faltava para ela existir.
+--
+-- ## O conflito que esta migration resolve
+--
+-- O produto já tem uma definição de "cliente": `contacts.first_service_at`,
+-- carimbada pelos gatilhos de AGENDAMENTO (0262). Este fork trouxe 4.766
+-- comandas do sistema anterior, e nenhuma delas tem agendamento — foram
+-- importadas como venda, não como horário marcado.
+--
+-- Resultado medido em 17/09/2026 na base do Studio: **536 contatos com comanda,
+-- ZERO com `first_service_at`**. A ficha diria "23 visitas · R$ 4.180" numa
+-- pessoa que, para o resto do CRM, nunca foi cliente: sem selo na listagem,
+-- "Cliente desde" vazio, fora do filtro de etiqueta e invisível para as
+-- automações. Duas verdades sobre a mesma pessoa, na mesma tela.
+--
+-- Por decisão do dono (17/09/2026): **a comanda finalizada também faz cliente.**
+--
+-- ## A régua de VISITA, e por que não é "dias distintos"
+--
+-- Visita = UMA COMANDA finalizada e não estornada. É a régua do sistema
+-- anterior. Contar dias distintos seria defensável, e foi recusado com número:
+-- mudaria o total de 84 das 536 clientes (15,7%), até 5 visitas a menos, e a
+-- Mariana conhece esses números de cinco anos de uso. Um indicador que
+-- contradiz a memória de quem opera é um indicador que ninguém usa.
+
+-- ─── 1. o grant que a ficha precisa ──────────────────────────────────────────
+--
+-- `fn_situacao_conta_como_atendimento` é a régua canônica de "este agendamento
+-- conta" (0262), e hoje está revogada até de `authenticated` — só `postgres` e
+-- `service_role` a executam. A ficha roda na sessão da pessoa, então sem este
+-- grant ela morre com 42501 no primeiro clique.
+--
+-- A alternativa seria copiar `status not in ('cancelled','no_show')` para
+-- dentro da função do fork, criando a SEGUNDA CÓPIA da régua que a 0262 existe
+-- para evitar. A função é `immutable` e pura: recebe um texto, devolve um
+-- booleano, não toca em linha nenhuma e não vaza nada.
+grant execute on function public.fn_situacao_conta_como_atendimento(text) to authenticated;
+
+-- ─── 2. a comanda finalizada também carimba `first_service_at` ───────────────
+--
+-- Espelha `fn_recalcular_cliente_do_contato` (0262) no que importa: trava o
+-- contato ANTES de ler, não escreve se não mudou, e não toca em anonimizado
+-- nem em mesclado. Não reusa aquela função porque ela lê a AGENDA para achar
+-- o primeiro atendimento — aqui a fonte é a comanda.
+create or replace function public.fn_cliente_pela_comanda(p_org uuid, p_contact uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_antes timestamptz;
+  v_primeira timestamptz;
+begin
+  if p_contact is null then return 'sem_contato'; end if;
+
+  -- TRAVA ANTES DE LER, pela mesma razão da 0262: em READ COMMITTED, duas
+  -- finalizações simultâneas do mesmo contato gravariam um min() velho por
+  -- cima do certo. `for no key update` (e não `for update`) para não brigar
+  -- com o `for key share` que a FK de toda tabela que aponta para `contacts`
+  -- toma num INSERT — com `for update` aquilo fechava deadlock.
+  select first_service_at into v_antes
+    from public.contacts
+   where id = p_contact and organization_id = p_org
+     and not coalesce(is_anonymized, false)
+     and is_merged_into is null
+   for no key update;
+  if not found then return 'ignorado'; end if;
+
+  select min(finalized_at) into v_primeira
+    from public.sales
+   where organization_id = p_org and contact_id = p_contact
+     and status = 'finalized' and finalized_at is not null and reversed_at is null;
+
+  if v_primeira is null then return 'sem_comanda'; end if;
+
+  -- `least` porque a agenda pode ter carimbado uma data anterior: quem é
+  -- cliente desde 2021 não vira "cliente desde 2026" por causa da ordem em que
+  -- as duas fontes chegaram.
+  v_primeira := least(v_primeira, coalesce(v_antes, v_primeira));
+  if v_antes is not distinct from v_primeira then return 'igual'; end if;
+
+  update public.contacts
+     set first_service_at = v_primeira,
+         client_recognized_at = coalesce(client_recognized_at, now())
+   where id = p_contact;
+
+  return 'carimbado';
+end $$;
+
+revoke execute on function public.fn_cliente_pela_comanda(uuid, uuid) from public, anon, authenticated;
+comment on function public.fn_cliente_pela_comanda(uuid, uuid) is
+  'Carimba contacts.first_service_at a partir da primeira comanda finalizada. Chamada pela finalização e pelo backfill; nunca por sessão de usuário.';
+
+-- ─── 3. o backfill mora só na migration ─────────────────────────────────────
+-- O `update.sh` reaplica o baseline inteiro em TODA atualização; um backfill
+-- aqui varreria as comandas da base a cada vez, para no fim não mudar nada.
+-- A finalização carimba dali em diante, e quem já tinha histórico foi
+-- carimbado uma vez, pela migration 9014.
+
+-- ─── 4. o resumo da ficha ────────────────────────────────────────────────────
+--
+-- `security invoker` de propósito: a RLS de `sales`, `sale_items` e
+-- `calendar_appointments` continua decidindo o que a pessoa enxerga, em vez de
+-- o isolamento ser reescrito no corpo.
+--
+-- ⚠️ Comanda válida = `status='finalized' AND finalized_at IS NOT NULL AND
+-- reversed_at IS NULL`. O estorno NÃO muda o status (só carimba `reversed_at`),
+-- então filtrar por `status <> 'reversed'` contaria estornada como válida.
+--
+-- ⚠️ As 5 comandas sem contato (medido) não aparecem em ficha nenhuma: a soma
+-- de todas as fichas não fecha com o relatório, e isso é esperado.
+create or replace function public.fn_resumo_do_cliente(p_org uuid, p_contact uuid)
+returns jsonb
+language sql
+stable
+set search_path = public
+as $$
+  with fuso as (
+    select coalesce(
+      (select timezone from public.organizations where id = p_org),
+      'America/Sao_Paulo'
+    ) as tz
+  ),
+  validas as (
+    select s.id, s.total_cents, s.finalized_at,
+           (s.finalized_at at time zone (select tz from fuso))::date as dia
+      from public.sales s
+     where s.organization_id = p_org
+       and s.contact_id = p_contact
+       and s.status = 'finalized'
+       and s.finalized_at is not null
+       and s.reversed_at is null
+  ),
+  base as (
+    select count(*)::int                         as visitas,
+           coalesce(sum(total_cents), 0)::bigint as total_cents,
+           min(dia)                              as primeira,
+           max(dia)                              as ultima,
+           count(distinct dia)::int              as dias
+      from validas
+  ),
+  servicos as (
+    select coalesce(et.name, si.description) as nome,
+           sum(si.quantity)::int             as quantidade,
+           sum(si.total_cents)::bigint       as total_cents
+      from public.sale_items si
+      join validas v on v.id = si.sale_id
+      left join public.calendar_event_types et
+        on et.id = si.event_type_id and et.organization_id = p_org
+     where si.organization_id = p_org
+     group by 1
+     order by 2 desc, 3 desc
+     limit 5
+  ),
+  agenda as (
+    select count(*)::int as futuros
+      from public.calendar_appointments a
+     where a.organization_id = p_org
+       and a.contact_id = p_contact
+       and a.starts_at > now()
+       and public.fn_situacao_conta_como_atendimento(a.status)
+  )
+  select jsonb_build_object(
+    -- VISITA = comanda finalizada (a régua do sistema anterior). `dias` vai
+    -- junto porque é ele que alimenta o intervalo médio — duas comandas no
+    -- mesmo dia são duas visitas, mas um dia só de intervalo.
+    'visitas', (select visitas from base),
+    'dias_distintos', (select dias from base),
+    'total_gasto_cents', (select total_cents from base),
+    'ticket_medio_cents',
+      coalesce((select total_cents / nullif(visitas, 0) from base), 0),
+    'primeira_visita', (select primeira from base),
+    'ultima_visita', (select ultima from base),
+    'dias_desde_ultima',
+      (select case when ultima is null then null
+                   else ((now() at time zone (select tz from fuso))::date - ultima) end from base),
+    'intervalo_medio_dias',
+      (select case when dias > 1 then round((ultima - primeira)::numeric / (dias - 1)) end from base),
+    'classificacao',
+      (select case
+         when visitas = 0 then 'sem_compra'
+         when ((now() at time zone (select tz from fuso))::date - ultima) <= 60  then 'ativa'
+         when ((now() at time zone (select tz from fuso))::date - ultima) <= 120 then 'em_risco'
+         when ((now() at time zone (select tz from fuso))::date - ultima) <= 365 then 'inativa'
+         else 'perdida' end
+       from base),
+    'servicos', coalesce((
+      select jsonb_agg(jsonb_build_object('nome', nome, 'quantidade', quantidade, 'total_cents', total_cents))
+        from servicos
+    ), '[]'::jsonb),
+    'cartao', public.fn_cartao_de_fidelidade(p_org, p_contact),
+    'agendamentos_futuros', (select futuros from agenda)
+  );
+$$;
+
+revoke execute on function public.fn_resumo_do_cliente(uuid, uuid) from public, anon;
+grant  execute on function public.fn_resumo_do_cliente(uuid, uuid) to authenticated, service_role;
+
+comment on function public.fn_resumo_do_cliente(uuid, uuid) is
+  'Indicadores da ficha da cliente. Visita = comanda finalizada não estornada, no fuso da organização. Security invoker: a RLS das tabelas decide o que a pessoa vê.';
 
 
 notify pgrst, 'reload schema';

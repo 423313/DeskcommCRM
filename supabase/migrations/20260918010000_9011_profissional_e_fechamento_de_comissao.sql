@@ -120,10 +120,17 @@ create index if not exists professionals_org_ativas_idx
 
 alter table public.professionals enable row level security;
 drop policy if exists tenant_isolation_professionals_all on public.professionals;
+-- Leitura para a organização; ESCRITA exige `manager` — é cadastro, não é
+-- coisa de quem atende. Mesma forma das outras tabelas do módulo, e o que o
+-- invariante de RBAC cobra de toda tabela de configuração.
 create policy tenant_isolation_professionals_all on public.professionals
-  for all to authenticated
-  using (organization_id in (select public.fn_user_org_ids()))
-  with check (organization_id in (select public.fn_user_org_ids()));
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (
+    public.fn_is_platform_admin()
+    or (organization_id in (select public.fn_user_org_ids())
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
 revoke all on public.professionals from anon;
 
 drop trigger if exists trg_professionals_updated_at on public.professionals;
