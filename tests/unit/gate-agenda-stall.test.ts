@@ -14,7 +14,7 @@ import { SPINNING_DEFAULTS } from "@/lib/agent-engine/spinning/defaults";
 /**
  * O GATE de "vou verificar/confirmar agenda sem checar" — a cura DETERMINÍSTICA para o
  * `AGENDA_SYSTEM_BLOCK` (instrução em texto, `inbound-turn.ts`) sozinho não bastar. Medido
- * em produção, 2026-08-29 (tenant YADEA, `openai/gpt-5.6-terra`): a instrução estava presente
+ * em produção, 2026-08-29 (`openai/gpt-5.6-terra`): a instrução estava presente
  * e por último no prompt, e o modelo prometeu verificar/confirmar horário sem chamar
  * `crm_find_free_slots`/`crm_book_appointment`/`crm_reschedule_appointment` mesmo assim.
  *
@@ -120,7 +120,7 @@ describe("agendaStallGate — veta a promessa vazia, nunca a checagem de verdade
     expect(v.pass).toBe(true);
   });
 
-  // Frase EXATA do incidente original (2026-08-29, tenant YADEA) que deu origem a este
+  // Frase EXATA do incidente original (2026-08-29, em produção) que deu origem a este
   // gate — uma afirmação de FATO CONSUMADO, não uma promessa de checar. O
   // AGENDA_STALL_PATTERN sozinho não cobre ("vou/estou" + verbo de checagem não aparece
   // aqui), e passava batido mesmo com o gate armado até o AGENDA_CONFIRMED_PATTERN existir.
