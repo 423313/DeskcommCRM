@@ -112,7 +112,35 @@ async function montarBancada(): Promise<Bancada> {
   await writeFile(manifesto, JSON.stringify(base));
 
   await cli(["publish", "--db", banco, "--manifest", manifesto]);
-  await cli(["export", "--db", banco, "--output", arquivoDoCatalogo]);
+
+  // A REVISÃO PRECISA SUCEDER A QUE JÁ FOI ADMITIDA — e foi isto, e não a origem, que
+  // deixou a jornada vermelha nas duas primeiras rodadas.
+  //
+  // As três specs irmãs rodam ANTES desta, na mesma parte do CI e na MESMA origem, e cada
+  // uma admite um catálogo. O host recusa revisão menor ou igual à vigente
+  // (`fn_extensions_admit_catalog`), então um catálogo exportado sempre como revisão 1 era
+  // recusado na admissão — e o sintoma é idêntico ao da origem errada: o cartão nunca
+  // aparece. Dois defeitos diferentes no mesmo caminho, com a mesma cara; consertar o
+  // primeiro não moveu o resultado, e foi isso que me fez procurar o segundo em vez de
+  // repetir a rodada esperando sorte.
+  //
+  // Mesmo tratamento da fixture irmã: lê a revisão vigente e exporta até superá-la.
+  const { data: admitido } = await atores!.db
+    .from("extension_catalogs")
+    .select("revision")
+    .eq("origin", origem)
+    .maybeSingle();
+  const revisaoVigente = (admitido?.revision as number | undefined) ?? 0;
+  for (let revisao = 1; revisao <= revisaoVigente + 1; revisao += 1) {
+    await cli(["export", "--db", banco, "--output", arquivoDoCatalogo]);
+  }
+  const exportado = JSON.parse(await readFile(arquivoDoCatalogo, "utf8")) as { revision: number };
+  if (exportado.revision !== revisaoVigente + 1) {
+    throw new Error(
+      `A revisão exportada (${exportado.revision}) não sucede a admitida (${revisaoVigente}). ` +
+        `Sem isto a admissão é recusada e o cartão nunca aparece.`,
+    );
+  }
 
   const servidor = execFile("python3", [CLI, "serve", "--db", banco, "--port", String(porta)]);
 
