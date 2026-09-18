@@ -61,7 +61,7 @@ interface DesfechoGravado {
  * O desfecho do registro do webhook desta sessão, lido em consulta PRÓPRIA.
  *
  * Separado do select principal de propósito: as três colunas chegam na migration
- * 0275, e num banco sem ela o select inteiro voltaria 42703 — a tela perderia o
+ * 0311, e num banco sem ela o select inteiro voltaria 42703 — a tela perderia o
  * canal (conectado, número, URL) por causa de um EXTRA. Aqui a ausência só significa
  * "estado do registro indisponível".
  */

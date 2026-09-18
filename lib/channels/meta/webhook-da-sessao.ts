@@ -10,11 +10,11 @@
  * A conexão já funcionava sem este passo: o operador colava a URL à mão no painel
  * da Meta. Quem não colava seguia com um canal que envia e não recebe — o defeito
  * silencioso que a fatia F1 (#850) fecha. Por isso o desfecho vira COLUNA
- * (`meta_webhook_override_uri|erro|em`, migration 0275): a tela mostra "conectado,
+ * (`meta_webhook_override_uri|erro|em`, migration 0311): a tela mostra "conectado,
  * webhook pendente: <motivo>" com botão de tentar de novo, em vez de dizer
  * "conectado" e deixar a descoberta para a primeira mensagem que nunca chega.
  *
- * ─── Banco sem a migration 0275 não mente nem quebra ────────────────────────
+ * ─── Banco sem a migration 0311 não mente nem quebra ────────────────────────
  * Aplicar migration é passo SEPARADO do deploy neste projeto. Se a coluna não
  * existir, a gravação do desfecho falha com o nome dela na mensagem e é tratada
  * como ausência de schema (log de aviso), não como erro de produto: o desfecho
@@ -29,7 +29,7 @@ import { logger } from "@/lib/logger";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
-/** As três colunas do desfecho, na ordem em que a migration 0275 as cria. */
+/** As três colunas do desfecho, na ordem em que a migration 0311 as cria. */
 export const COLUNAS_DO_DESFECHO_DO_WEBHOOK =
   "meta_webhook_override_uri, meta_webhook_override_erro, meta_webhook_override_em";
 
@@ -44,7 +44,7 @@ export interface DesfechoDoWebhookDaSessao {
   em: string;
 }
 
-/** O erro é "a migration 0275 não rodou neste banco" — e não um erro de verdade. */
+/** O erro é "a migration 0311 não rodou neste banco" — e não um erro de verdade. */
 function ehColunaDoDesfechoAusente(mensagem: string | null | undefined): boolean {
   return (mensagem ?? "").includes("meta_webhook_override");
 }
@@ -74,7 +74,7 @@ export async function registrarWebhookDaSessao(input: {
     if (!error) return;
     if (ehColunaDoDesfechoAusente(error.message)) {
       logger.warn(
-        "migration 0275 não aplicada: o desfecho do webhook não foi gravado (a rota devolve o estado na resposta)",
+        "migration 0311 não aplicada: o desfecho do webhook não foi gravado (a rota devolve o estado na resposta)",
         { requestId: input.requestId, channelSessionId: input.channelSessionId },
       );
       return;

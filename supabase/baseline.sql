@@ -27937,7 +27937,7 @@ comment on column public.automation_rules.trigger_config is
   'Configuração do gatilho (issue #989). Vazio nos gatilhos que nascem de evento. No gatilho lead.date_field_due guarda {pipeline_id, campo, dias} — o campo de data pertence a UM funil, e sem essa dupla a varredura não sabe onde olhar.';
 
 notify pgrst, 'reload schema';
--- 0275 · O webhook do NÚMERO, registrado pela própria instalação (issue #850, fatia F1).
+-- 0311 · O webhook do NÚMERO, registrado pela própria instalação (issue #850, fatia F1).
 --
 -- ─── O que o usuário via ────────────────────────────────────────────────────
 -- Conectar o canal oficial era metade do caminho: o canal ENVIAVA e não RECEBIA até

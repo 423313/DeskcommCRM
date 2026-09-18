@@ -32,7 +32,7 @@ export interface OfficialChannelState {
    * a Meta foi apontada para o endereço desta sessão, ou ainda não.
    *
    * `registrado: false` NÃO é canal quebrado: ele envia normalmente; o que depende
-   * disto é a ENTREGA. Nulo = banco sem a migration 0275 (a tela volta ao passo
+   * disto é a ENTREGA. Nulo = banco sem a migration 0311 (a tela volta ao passo
    * manual, que é o estado anterior — e continua verdadeiro).
    */
   webhookRegistro: {
