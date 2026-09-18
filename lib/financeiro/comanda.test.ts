@@ -14,7 +14,7 @@ const MANICURE = "33333333-3333-4333-8333-333333333333";
 const PEDICURE = "44444444-4444-4444-8444-444444444444";
 
 const regra = (over: Partial<RegraDeComissao>): RegraDeComissao => ({
-  attendant_user_id: null,
+  professional_id: null,
   event_type_id: null,
   percent: 0,
   ...over,
@@ -22,27 +22,27 @@ const regra = (over: Partial<RegraDeComissao>): RegraDeComissao => ({
 
 describe("percentualDaComissao", () => {
   it("sem regra nenhuma é zero, e zero é resposta legítima", () => {
-    expect(percentualDaComissao([], { attendantUserId: ANA, eventTypeId: MANICURE })).toBe(0);
+    expect(percentualDaComissao([], { profissionalId: ANA, eventTypeId: MANICURE })).toBe(0);
   });
 
   it("regra por SERVIÇO vale para quem atender", () => {
     const regras = [regra({ event_type_id: MANICURE, percent: 30 })];
-    expect(percentualDaComissao(regras, { attendantUserId: ANA, eventTypeId: MANICURE })).toBe(30);
-    expect(percentualDaComissao(regras, { attendantUserId: BIA, eventTypeId: MANICURE })).toBe(30);
+    expect(percentualDaComissao(regras, { profissionalId: ANA, eventTypeId: MANICURE })).toBe(30);
+    expect(percentualDaComissao(regras, { profissionalId: BIA, eventTypeId: MANICURE })).toBe(30);
   });
 
   it("regra por PESSOA vale para o que ela fizer", () => {
-    const regras = [regra({ attendant_user_id: ANA, percent: 40 })];
-    expect(percentualDaComissao(regras, { attendantUserId: ANA, eventTypeId: PEDICURE })).toBe(40);
-    expect(percentualDaComissao(regras, { attendantUserId: BIA, eventTypeId: PEDICURE })).toBe(0);
+    const regras = [regra({ professional_id: ANA, percent: 40 })];
+    expect(percentualDaComissao(regras, { profissionalId: ANA, eventTypeId: PEDICURE })).toBe(40);
+    expect(percentualDaComissao(regras, { profissionalId: BIA, eventTypeId: PEDICURE })).toBe(0);
   });
 
   it("PESSOA vence SERVIÇO — a regra sobre quem atende é mais específica", () => {
     const regras = [
       regra({ event_type_id: MANICURE, percent: 30 }),
-      regra({ attendant_user_id: ANA, percent: 40 }),
+      regra({ professional_id: ANA, percent: 40 }),
     ];
-    expect(percentualDaComissao(regras, { attendantUserId: ANA, eventTypeId: MANICURE })).toBe(40);
+    expect(percentualDaComissao(regras, { profissionalId: ANA, eventTypeId: MANICURE })).toBe(40);
   });
 
   it("PESSOA + SERVIÇO vence as duas, mesmo sendo o MENOR percentual", () => {
@@ -51,39 +51,39 @@ describe("percentualDaComissao", () => {
     // seria ignorada sempre que fosse mais baixa.
     const regras = [
       regra({ event_type_id: MANICURE, percent: 30 }),
-      regra({ attendant_user_id: ANA, percent: 40 }),
-      regra({ attendant_user_id: ANA, event_type_id: MANICURE, percent: 10 }),
+      regra({ professional_id: ANA, percent: 40 }),
+      regra({ professional_id: ANA, event_type_id: MANICURE, percent: 10 }),
     ];
-    expect(percentualDaComissao(regras, { attendantUserId: ANA, eventTypeId: MANICURE })).toBe(10);
+    expect(percentualDaComissao(regras, { profissionalId: ANA, eventTypeId: MANICURE })).toBe(10);
   });
 
   it("a regra exata de OUTRO par não contamina este", () => {
     const regras = [
-      regra({ attendant_user_id: BIA, event_type_id: MANICURE, percent: 90 }),
+      regra({ professional_id: BIA, event_type_id: MANICURE, percent: 90 }),
       regra({ event_type_id: MANICURE, percent: 30 }),
     ];
-    expect(percentualDaComissao(regras, { attendantUserId: ANA, eventTypeId: MANICURE })).toBe(30);
+    expect(percentualDaComissao(regras, { profissionalId: ANA, eventTypeId: MANICURE })).toBe(30);
   });
 
   it("item sem profissional cai na regra do serviço, nunca na de uma pessoa", () => {
     const regras = [
-      regra({ attendant_user_id: ANA, percent: 40 }),
+      regra({ professional_id: ANA, percent: 40 }),
       regra({ event_type_id: MANICURE, percent: 30 }),
     ];
-    expect(percentualDaComissao(regras, { attendantUserId: null, eventTypeId: MANICURE })).toBe(30);
+    expect(percentualDaComissao(regras, { profissionalId: null, eventTypeId: MANICURE })).toBe(30);
   });
 
   it("item sem serviço cai na regra da pessoa", () => {
-    const regras = [regra({ attendant_user_id: ANA, percent: 40 })];
-    expect(percentualDaComissao(regras, { attendantUserId: ANA, eventTypeId: null })).toBe(40);
+    const regras = [regra({ professional_id: ANA, percent: 40 })];
+    expect(percentualDaComissao(regras, { profissionalId: ANA, eventTypeId: null })).toBe(40);
   });
 
   it("empate no MESMO nível resolve pelo maior — a favor de quem trabalhou", () => {
     const regras = [
-      regra({ attendant_user_id: ANA, percent: 20 }),
-      regra({ attendant_user_id: ANA, percent: 35 }),
+      regra({ professional_id: ANA, percent: 20 }),
+      regra({ professional_id: ANA, percent: 35 }),
     ];
-    expect(percentualDaComissao(regras, { attendantUserId: ANA, eventTypeId: MANICURE })).toBe(35);
+    expect(percentualDaComissao(regras, { profissionalId: ANA, eventTypeId: MANICURE })).toBe(35);
   });
 });
 

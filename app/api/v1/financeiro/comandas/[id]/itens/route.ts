@@ -61,12 +61,12 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   // não desligar nada.
   const { data: regras } = await supabase
     .from("commission_rules")
-    .select("attendant_user_id, event_type_id, percent")
+    .select("professional_id, event_type_id, percent")
     .eq("organization_id", org)
     .eq("is_active", true);
 
   const percent = percentualDaComissao(regras ?? [], {
-    attendantUserId: lido.data.attendant_user_id ?? null,
+    profissionalId: lido.data.professional_id ?? null,
     eventTypeId: lido.data.event_type_id ?? null,
   });
 
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       sale_id: id,
       event_type_id: lido.data.event_type_id ?? null,
       description: lido.data.description,
-      attendant_user_id: lido.data.attendant_user_id ?? null,
+      professional_id: lido.data.professional_id ?? null,
       quantity: lido.data.quantity,
       unit_price_cents: lido.data.unit_price_cents,
       discount_cents: lido.data.discount_cents,

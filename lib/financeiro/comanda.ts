@@ -15,7 +15,7 @@ import { z } from "zod";
 
 /** Uma linha de `commission_rules`, como a rota a lê. */
 export interface RegraDeComissao {
-  attendant_user_id: string | null;
+  professional_id: string | null;
   event_type_id: string | null;
   percent: number;
 }
@@ -38,32 +38,32 @@ export interface RegraDeComissao {
  */
 export function percentualDaComissao(
   regras: readonly RegraDeComissao[],
-  alvo: { attendantUserId: string | null; eventTypeId: string | null },
+  alvo: { profissionalId: string | null; eventTypeId: string | null },
 ): number {
-  const { attendantUserId, eventTypeId } = alvo;
+  const { profissionalId, eventTypeId } = alvo;
 
   const maior = (candidatas: readonly RegraDeComissao[]): number | null =>
     candidatas.length === 0 ? null : Math.max(...candidatas.map((r) => Number(r.percent)));
 
-  if (attendantUserId && eventTypeId) {
+  if (profissionalId && eventTypeId) {
     const exatas = maior(
       regras.filter(
-        (r) => r.attendant_user_id === attendantUserId && r.event_type_id === eventTypeId,
+        (r) => r.professional_id === profissionalId && r.event_type_id === eventTypeId,
       ),
     );
     if (exatas !== null) return exatas;
   }
 
-  if (attendantUserId) {
+  if (profissionalId) {
     const porPessoa = maior(
-      regras.filter((r) => r.attendant_user_id === attendantUserId && r.event_type_id === null),
+      regras.filter((r) => r.professional_id === profissionalId && r.event_type_id === null),
     );
     if (porPessoa !== null) return porPessoa;
   }
 
   if (eventTypeId) {
     const porServico = maior(
-      regras.filter((r) => r.event_type_id === eventTypeId && r.attendant_user_id === null),
+      regras.filter((r) => r.event_type_id === eventTypeId && r.professional_id === null),
     );
     if (porServico !== null) return porServico;
   }
@@ -93,7 +93,7 @@ export function totalDoItem(input: {
 export const itemSchema = z.object({
   event_type_id: z.string().uuid().nullish(),
   description: z.string().min(1).max(200),
-  attendant_user_id: z.string().uuid().nullish(),
+  professional_id: z.string().uuid().nullish(),
   quantity: z.number().int().min(1).max(999).default(1),
   unit_price_cents: z.number().int().min(0).max(100_000_000),
   discount_cents: z.number().int().min(0).max(100_000_000).default(0),

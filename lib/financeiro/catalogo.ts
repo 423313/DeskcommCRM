@@ -23,6 +23,11 @@ export const ENTIDADES_DO_CATALOGO = {
   // dia consome. Sem esta linha ela não tinha porta nenhuma — e `sale_items`
   // resolve o percentual a partir dela, então toda comissão nascia 0%.
   regras_de_comissao: "commission_rules",
+  // A PROFISSIONAL entra aqui pela mesma razão das outras: é cadastro que o
+  // negócio escreve uma vez e o dia a dia consome. Ela NÃO é usuária do
+  // sistema — quem executa o serviço no balcão não abre o CRM —, e é por isso
+  // que não vem de nenhuma rota de equipe.
+  profissionais: "professionals",
   // O MOLDE do lançamento que se repete. Entra aqui pelo mesmo motivo das
   // outras: é o que o negócio define uma vez e o cron consome todo mês.
   recorrencias: "recurring_entries",
@@ -81,15 +86,27 @@ export const planoDeContaSchema = z.object({
  * sem pessoa E sem serviço seria a regra "de tudo", que é outra coisa e mora em
  * outro lugar.
  */
+/**
+ * Quem executa o serviço.
+ *
+ * `user_id` NÃO entra no schema de propósito: não existe tela que ligue uma
+ * profissional a um login, e aceitar o campo agora abriria a porta para
+ * amarrar comissão ao usuário errado por um id digitado. A coluna existe no
+ * banco para o dia em que essa tela existir.
+ */
+export const profissionalSchema = z.object({
+  name: nome,
+});
+
 export const regraDeComissaoSchema = z
   .object({
     name: nome,
-    attendant_user_id: z.string().uuid().nullish(),
+    professional_id: z.string().uuid().nullish(),
     event_type_id: z.string().uuid().nullish(),
     percent: z.number().min(0).max(100),
   })
-  .refine((v) => Boolean(v.attendant_user_id) || Boolean(v.event_type_id), {
-    message: "Escolha ao menos uma pessoa ou um serviço.",
+  .refine((v) => Boolean(v.professional_id) || Boolean(v.event_type_id), {
+    message: "Escolha ao menos uma profissional ou um serviço.",
   });
 
 /**
@@ -114,6 +131,7 @@ export const SCHEMA_POR_ENTIDADE = {
   formas_de_pagamento: formaDePagamentoSchema,
   planos_de_conta: planoDeContaSchema,
   regras_de_comissao: regraDeComissaoSchema,
+  profissionais: profissionalSchema,
   recorrencias: recorrenciaSchema,
 } as const;
 
@@ -123,7 +141,8 @@ export const COLUNAS_POR_ENTIDADE: Record<EntidadeDoCatalogo, string> = {
   formas_de_pagamento: "id, name, account_id, is_active, created_at",
   planos_de_conta: "id, name, direction, is_active, created_at",
   regras_de_comissao:
-    "id, name, attendant_user_id, event_type_id, percent, is_active, created_at",
+    "id, name, professional_id, event_type_id, percent, is_active, created_at",
+  profissionais: "id, name, user_id, is_active, created_at",
   recorrencias:
     "id, name, account_id, account_plan_id, direction, amount_cents, day_of_month, is_active, created_at",
 };
@@ -134,6 +153,7 @@ export const ROTULO_DA_ENTIDADE: Record<EntidadeDoCatalogo, string> = {
   formas_de_pagamento: "Forma de pagamento",
   planos_de_conta: "Plano de contas",
   regras_de_comissao: "Regra de comissão",
+  profissionais: "Profissional",
   recorrencias: "Lançamento recorrente",
 };
 

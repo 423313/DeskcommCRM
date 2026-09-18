@@ -147,6 +147,91 @@ comment on table public.account_plans is
   'Classificação do lançamento, com direção (in/out) que o sistema de origem tinha e não usava.';
 
 
+-- ---- profissional e fechamento de comissão (migration 9011) ----
+-- 9011 — quem atende deixa de ser um USUÁRIO e passa a ser uma PROFISSIONAL,
+-- e o fechamento de comissão passa a existir.
+--
+-- ## Por que trocar o eixo
+--
+-- O módulo nasceu com `attendant_user_id → auth.users` porque, num CRM, quem
+-- atende costuma ter login. Num estúdio de beleza não tem: a profissional
+-- executa o serviço e nunca abre o sistema. Criar usuário para ela seria pôr
+-- gente que não usa o produto na equipe, no roteamento, no plantão e na conta
+-- de assentos — e ainda assim ela não poderia ser inativada sem sumir do
+-- histórico.
+--
+-- ## Por que DROPAR a coluna antiga, e não conviver com as duas
+--
+-- Medido em 17/09/2026 na base do Studio, a única instalação viva do fork:
+-- `sale_items` com 11.374 linhas e `attendant_user_id` **nulo em todas**;
+-- `commissions` e `commission_rules` **vazias**. Não há dado a preservar.
+--
+-- Dois eixos vivos custariam: `fn_finalizar_comanda` decidindo qual vale, a
+-- tela com dois seletores (ou um que grava escondido), e o índice de alvo
+-- único tendo de cobrir o par. É a dívida que ninguém remove — e aqui ela não
+-- compraria nada.
+--
+-- ⚠️ A GUARDA ABAIXO é o que torna o drop defensável. Sem ela isto é uma aposta
+-- na medição de UMA base: qualquer outro clone que tenha usado o eixo antigo
+-- perderia a atribuição de comissão em silêncio. Com ela, a atualização PARA e
+-- diz o que fazer.
+--
+-- ## Por que o fechamento não ganha tabela
+--
+-- O legado tinha `comissao_fechamentos` guardando `total` e `quantidade`. São
+-- dois números derivados, e derivado gravado é o que diverge no primeiro
+-- estorno. Aqui **o fechamento É o lançamento de saída**: `paid_entry_id`
+-- aponta para ele, os itens do fechamento são as comissões que apontam para a
+-- mesma linha, e o total não pode divergir da soma porque não existe segunda
+-- cópia.
+
+-- ─── 2. A profissional ───────────────────────────────────────────────────────
+create table if not exists public.professionals (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+
+  name text not null check (length(btrim(name)) between 1 and 120),
+
+  -- O dia em que alguma ganhar login. NULO é o estado normal, não a exceção:
+  -- quem atende no balcão não usa o CRM. A coluna existe para que esse dia não
+  -- exija migration nem refazer o histórico.
+  user_id uuid references auth.users(id) on delete set null,
+
+  -- A ponte com o sistema anterior. Identidade é ESTE id, nunca o nome: nome
+  -- muda (casamento, apelido) e casar por nome refaria vínculo errado na
+  -- segunda execução da migração de dados.
+  legacy_id uuid,
+
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Parcial em `is_active`, como as três do catálogo (9001): duas "Scarlet"
+-- ativas é erro de digitação; uma inativa e uma ativa é rotatividade.
+create unique index if not exists professionals_org_nome_key
+  on public.professionals (organization_id, lower(btrim(name))) where is_active;
+create unique index if not exists professionals_org_legacy_key
+  on public.professionals (organization_id, legacy_id) where legacy_id is not null;
+-- Duas linhas para o mesmo usuário partiriam a ficha dele em duas, sem erro.
+create unique index if not exists professionals_org_user_key
+  on public.professionals (organization_id, user_id) where user_id is not null;
+create index if not exists professionals_org_ativas_idx
+  on public.professionals (organization_id) where is_active;
+
+alter table public.professionals enable row level security;
+drop policy if exists tenant_isolation_professionals_all on public.professionals;
+create policy tenant_isolation_professionals_all on public.professionals
+  for all to authenticated
+  using (organization_id in (select public.fn_user_org_ids()))
+  with check (organization_id in (select public.fn_user_org_ids()));
+revoke all on public.professionals from anon;
+
+drop trigger if exists trg_professionals_updated_at on public.professionals;
+create trigger trg_professionals_updated_at
+  before update on public.professionals
+  for each row execute function public.fn_touch_updated_at();
+
 -- ---- comanda, financeiro, comissão e fidelidade (migration 9002) ----
 -- A COMANDA E O QUE ELA MOVE — segunda e última camada do módulo financeiro.
 --
@@ -240,7 +325,7 @@ create table if not exists public.sale_items (
   -- Congelado na inclusão: o nome muda, a linha da venda não.
   description text not null,
 
-  attendant_user_id uuid references auth.users(id) on delete set null,
+  professional_id uuid references public.professionals(id) on delete restrict,
 
   quantity integer not null default 1 check (quantity > 0),
   unit_price_cents bigint not null check (unit_price_cents >= 0),
@@ -267,7 +352,7 @@ create table if not exists public.commission_rules (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
 
-  attendant_user_id uuid references auth.users(id) on delete cascade,
+  professional_id uuid references public.professionals(id) on delete cascade,
   event_type_id uuid references public.calendar_event_types(id) on delete cascade,
 
   percent numeric(5, 2) not null check (percent >= 0 and percent <= 100),
@@ -277,14 +362,14 @@ create table if not exists public.commission_rules (
   -- Pelo menos um dos dois: uma regra sem pessoa E sem serviço seria a regra
   -- "de tudo", que é o default da organização e mora em outro lugar.
   constraint commission_rules_tem_alvo
-    check (attendant_user_id is not null or event_type_id is not null)
+    check (professional_id is not null or event_type_id is not null)
 );
 
 -- `coalesce` no índice: NULL não colide com NULL numa UNIQUE, e sem isto duas
 -- regras "só para a Ana" passariam as duas, em silêncio.
 create unique index if not exists commission_rules_alvo_key on public.commission_rules (
   organization_id,
-  coalesce(attendant_user_id, '00000000-0000-0000-0000-000000000000'::uuid),
+  coalesce(professional_id, '00000000-0000-0000-0000-000000000000'::uuid),
   coalesce(event_type_id, '00000000-0000-0000-0000-000000000000'::uuid)
 );
 
@@ -293,7 +378,7 @@ create table if not exists public.commissions (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   sale_item_id uuid not null references public.sale_items(id) on delete cascade,
-  attendant_user_id uuid not null references auth.users(id) on delete restrict,
+  professional_id uuid not null references public.professionals(id) on delete restrict,
 
   percent numeric(5, 2) not null,
   amount_cents bigint not null,
@@ -307,7 +392,7 @@ create table if not exists public.commissions (
 
 create unique index if not exists commissions_item_key on public.commissions (sale_item_id);
 create index if not exists commissions_org_pessoa_idx
-  on public.commissions (organization_id, attendant_user_id, status);
+  on public.commissions (organization_id, professional_id, status);
 
 -- ─── o lançamento financeiro ─────────────────────────────────────────────────
 create table if not exists public.financial_entries (
@@ -335,7 +420,7 @@ create table if not exists public.financial_entries (
   reverses_entry_id uuid references public.financial_entries(id) on delete restrict,
 
   origin text not null default 'manual'
-    check (origin in ('manual', 'sale', 'reversal', 'recurring')),
+    check (origin in ('manual', 'sale', 'reversal', 'recurring', 'commission')),
 
   created_by_user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -447,7 +532,11 @@ create or replace function public.fn_finalizar_comanda(
   p_payment_method uuid,
   p_loyalty_points integer default 0
 )
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
 declare
   v_sale       public.sales%rowtype;
   v_conta      uuid;
@@ -460,9 +549,6 @@ begin
     raise exception 'comanda_forbidden' using errcode = '42501';
   end if;
 
-  -- FOR UPDATE: duas finalizações simultâneas da mesma comanda geravam
-  -- lançamento em dobro. O lock é o que torna esta função idempotente de fato,
-  -- e não só na intenção.
   select * into v_sale from public.sales
    where id = p_sale and organization_id = p_org
    for update;
@@ -471,24 +557,21 @@ begin
     raise exception 'comanda_nao_encontrada' using errcode = 'P0002';
   end if;
   if v_sale.status = 'finalized' then
-    -- Não é erro: quem chamou duas vezes recebe o mesmo desfecho.
-    return jsonb_build_object('sale_id', v_sale.id, 'ja_finalizada', true);
+    return jsonb_build_object('sale_id', p_sale, 'ja_finalizada', true);
   end if;
   if v_sale.status = 'cancelled' then
     raise exception 'comanda_cancelada' using errcode = '22023';
   end if;
 
   select account_id into v_conta from public.payment_methods
-   where id = p_payment_method and organization_id = p_org and is_active;
+   where id = p_payment_method and organization_id = p_org;
   if not found then
     raise exception 'forma_de_pagamento_invalida' using errcode = '22023';
   end if;
   if v_conta is null then
-    -- A forma existe e não diz para onde o dinheiro vai. Recusar aqui é melhor
-    -- que escolher uma conta por conta própria.
     raise exception 'forma_sem_conta'
       using errcode = '22023',
-            hint = 'Esta forma de pagamento ainda não tem conta de destino. Defina em Configurações → Financeiro.';
+            hint = 'Esta forma de pagamento não diz para qual conta o dinheiro vai. Configure a conta dela em Configurações › Financeiro.';
   end if;
 
   select coalesce(sum(total_cents), 0) into v_total
@@ -504,13 +587,20 @@ begin
    where id = p_sale;
 
   -- (2) a comissão por item, com o percentual CONGELADO na inclusão
+  --
+  -- `commission_percent > 0` é condição, não detalhe: comissão de zero é uma
+  -- linha que não paga ninguém e que, somada num fechamento, gera lançamento
+  -- de R$ 0,00 — recusado pelo CHECK de `financial_entries`.
   for v_item in
-    select * from public.sale_items where sale_id = p_sale and attendant_user_id is not null
+    select * from public.sale_items
+     where sale_id = p_sale
+       and professional_id is not null
+       and coalesce(commission_percent, 0) > 0
   loop
     insert into public.commissions
-      (organization_id, sale_item_id, attendant_user_id, percent, amount_cents)
+      (organization_id, sale_item_id, professional_id, percent, amount_cents)
     values (
-      p_org, v_item.id, v_item.attendant_user_id, v_item.commission_percent,
+      p_org, v_item.id, v_item.professional_id, v_item.commission_percent,
       -- Sobre o item, NUNCA sobre o desconto da comanda: um desconto de caixa
       -- não pode reduzir o que quem atendeu combinou.
       floor(v_item.total_cents * v_item.commission_percent / 100.0)
@@ -563,7 +653,7 @@ begin
 end $$;
 
 revoke execute on function public.fn_finalizar_comanda(uuid, uuid, uuid, integer) from public, anon;
-grant execute on function public.fn_finalizar_comanda(uuid, uuid, uuid, integer) to authenticated;
+grant  execute on function public.fn_finalizar_comanda(uuid, uuid, uuid, integer) to authenticated;
 
 -- ─── O ESTORNO: contra-lançamento, nunca exclusão ────────────────────────────
 create or replace function public.fn_estornar_comanda(p_org uuid, p_sale uuid, p_motivo text)
@@ -662,6 +752,135 @@ comment on function public.fn_finalizar_comanda(uuid, uuid, uuid, integer) is
   'As seis coisas numa transação: venda, comissão por item, entrada na conta da forma de pagamento, ponto de fidelidade e conclusão do agendamento. Idempotente sob FOR UPDATE.';
 
 
+-- ---- eixo da profissional: cura da base existente (migration 9011) ----
+-- As tabelas acima já nascem com `professional_id`. Este bloco é para o banco
+-- que JÁ EXISTE com a coluna antiga — é ele que o `update.sh` do clone aplica.
+-- Vem depois do 9002 de propósito: num banco novo, `sale_items` só existe aqui.
+
+-- ─── 1. A guarda ─────────────────────────────────────────────────────────────
+--
+-- Só olha se a coluna antiga AINDA existe: na segunda aplicação (e o update.sh
+-- do kit reaplica o baseline inteiro em toda atualização) ela já não existe, e
+-- uma guarda que consultasse a coluna morta reprovaria a atualização de quem
+-- já migrou. Idempotência é requisito, não cortesia.
+do $$
+declare v_itens bigint := 0; v_com bigint := 0; v_regras bigint := 0;
+begin
+  if to_regclass('public.sale_items') is null then return; end if;
+
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'sale_items'
+                and column_name = 'attendant_user_id') then
+    execute 'select count(*) from public.sale_items where attendant_user_id is not null'
+      into v_itens;
+  end if;
+
+  if to_regclass('public.commissions') is not null then
+    execute 'select count(*) from public.commissions' into v_com;
+  end if;
+  if to_regclass('public.commission_rules') is not null then
+    execute 'select count(*) from public.commission_rules' into v_regras;
+  end if;
+
+  -- `commissions`/`commission_rules` com linhas E já no eixo novo é o estado
+  -- normal de quem migrou: só barra quem ainda tem a coluna antiga preenchida.
+  if v_itens > 0 then
+    raise exception using
+      errcode = 'P0001',
+      message = format(
+        'A migration 9011 troca quem executa o serviço de usuário para profissional, e esta base JÁ USA o eixo antigo: %s item(ns) de comanda com attendant_user_id preenchido.',
+        v_itens),
+      hint = 'Cadastre as profissionais em public.professionals, repontue os itens para professional_id e rode de novo. Dropar agora apagaria a autoria da comissão.';
+  end if;
+
+  if (v_com > 0 or v_regras > 0)
+     and exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'commissions'
+                    and column_name = 'attendant_user_id') then
+    raise exception using
+      errcode = 'P0001',
+      message = format(
+        'A 9011 dropa attendant_user_id de commissions/commission_rules, e elas não estão vazias (comissões: %s, regras: %s).',
+        v_com, v_regras),
+      hint = 'Repontue para professional_id antes de atualizar.';
+  end if;
+end $$;
+
+-- ─── 3. A troca do eixo ──────────────────────────────────────────────────────
+alter table public.sale_items
+  add column if not exists professional_id uuid
+  -- `restrict`: apagar a profissional levaria embora a autoria do item, que é
+  -- o que a comissão prova. A tela inativa, não apaga.
+  references public.professionals(id) on delete restrict;
+
+alter table public.commission_rules
+  add column if not exists professional_id uuid
+  -- `cascade`: regra de quem saiu não vale mais para ninguém.
+  references public.professionals(id) on delete cascade;
+
+alter table public.commissions
+  add column if not exists professional_id uuid
+  references public.professionals(id) on delete restrict;
+
+-- Índices e constraint que citam a coluna antiga saem ANTES do drop.
+drop index if exists public.commission_rules_alvo_key;
+drop index if exists public.commission_rules_org_ativas_idx;
+drop index if exists public.commissions_org_pessoa_idx;
+alter table public.commission_rules drop constraint if exists commission_rules_tem_alvo;
+
+alter table public.sale_items       drop column if exists attendant_user_id;
+alter table public.commission_rules drop column if exists attendant_user_id;
+alter table public.commissions      drop column if exists attendant_user_id;
+
+-- `commissions.professional_id` é obrigatória: comissão sem destinatário não é
+-- comissão. O `not null` entra depois do drop porque a tabela está vazia.
+do $$
+begin
+  -- Só aperta quando dá: numa base recém-migrada a tabela está vazia e o
+  -- `set not null` passa; numa base que já opera, as linhas já têm valor
+  -- (a coluna nasceu obrigatória para elas) e o comando é no-op.
+  if not exists (select 1 from public.commissions where professional_id is null) then
+    alter table public.commissions alter column professional_id set not null;
+  else
+    raise exception 'commissions tem comissão sem professional_id; repontue antes de atualizar';
+  end if;
+end $$;
+
+alter table public.commission_rules drop constraint if exists commission_rules_tem_alvo;
+alter table public.commission_rules
+  add constraint commission_rules_tem_alvo
+  check (professional_id is not null or event_type_id is not null);
+
+create unique index if not exists commission_rules_alvo_key on public.commission_rules (
+  organization_id,
+  coalesce(professional_id, '00000000-0000-0000-0000-000000000000'::uuid),
+  coalesce(event_type_id,   '00000000-0000-0000-0000-000000000000'::uuid)
+);
+create index if not exists commission_rules_org_ativas_idx
+  on public.commission_rules (organization_id, event_type_id, professional_id);
+create index if not exists commissions_org_pessoa_idx
+  on public.commissions (organization_id, professional_id, status);
+create index if not exists sale_items_profissional_idx
+  on public.sale_items (organization_id, professional_id)
+  where professional_id is not null;
+
+-- ─── 4. O fechamento é o lançamento ──────────────────────────────────────────
+alter table public.commissions
+  add column if not exists paid_entry_id uuid
+  references public.financial_entries(id) on delete restrict;
+create index if not exists commissions_fechamento_idx
+  on public.commissions (paid_entry_id) where paid_entry_id is not null;
+
+-- `add constraint` não é idempotente: derruba e recria (mesma nota da 0242).
+alter table public.financial_entries drop constraint if exists financial_entries_origin_check;
+alter table public.financial_entries
+  add constraint financial_entries_origin_check
+  -- ⚠️ `reversal` continua na lista: é o contra-lançamento do estorno, e
+  -- omiti-lo aqui reprovaria toda comanda estornada que já existe.
+  check (origin in ('manual', 'sale', 'reversal', 'recurring', 'commission'));
+
+
+
 -- ---- uma comanda por agendamento (migration 9003) ----
 -- A rota consulta antes de abrir, e isso resolve o toque repetido, não a
 -- corrida: duas requisições simultâneas passam pelas duas consultas antes de
@@ -714,12 +933,18 @@ as $$
        and status = 'paid'
        and entry_date between p_de and p_ate
   ),
-  comandas as (
+  -- TODAS as finalizadas do período, estornadas inclusive. Serve a UMA coisa:
+  -- contar quantas foram estornadas. Nenhuma soma sai daqui.
+  comandas_todas as (
     select id, status, total_cents, reversed_at, payment_method_id, contact_id
       from public.sales
      where organization_id = p_org
        and finalized_at is not null
        and finalized_at::date between p_de and p_ate
+  ),
+  -- O que de fato valeu. Toda soma de dinheiro sai DAQUI.
+  comandas as (
+    select * from comandas_todas where reversed_at is null
   ),
   por_forma as (
     select coalesce(pm.name, 'Sem forma') as nome,
@@ -731,16 +956,26 @@ as $$
      group by 1
   ),
   por_profissional as (
-    select co.attendant_user_id,
-           count(*)              as itens,
-           sum(co.amount_cents)  as comissao_cents
+    -- O nome vem do banco, e é uma mudança deliberada: `professionals` é
+    -- tabela DESTE módulo, tenant-scoped, e a função é `stable`/invoker, então
+    -- a RLS continua valendo. Sem o join, cada consumidor faria seu próprio
+    -- mapa de id → nome, e a profissional não está em nenhuma rota de equipe
+    -- (ela não é usuária do sistema).
+    select co.professional_id,
+           p.name                                                    as nome,
+           count(*)                                                  as itens,
+           sum(co.amount_cents)                                      as comissao_cents,
+           sum(co.amount_cents) filter (where co.status = 'pending') as pendente_cents,
+           sum(co.amount_cents) filter (where co.status = 'paid')    as pago_cents
       from public.commissions co
       join public.sale_items si
         on si.id = co.sale_item_id and si.organization_id = p_org
       join comandas s on s.id = si.sale_id
+      left join public.professionals p
+        on p.id = co.professional_id and p.organization_id = p_org
      where co.organization_id = p_org
        and co.status <> 'reversed'
-     group by 1
+     group by 1, 2
   ),
   por_servico as (
     -- Agrupa pela DESCRIÇÃO congelada no item, e não pelo nome atual do tipo de
@@ -771,7 +1006,7 @@ as $$
     'saidas_cents',   coalesce((select sum(amount_cents) from lancamentos where direction = 'out'), 0),
     'saldo_cents',    coalesce((select sum(case when direction = 'in' then amount_cents else -amount_cents end) from lancamentos), 0),
     'comandas_finalizadas', (select count(*) from comandas),
-    'comandas_estornadas',  (select count(*) from comandas where reversed_at is not null),
+    'comandas_estornadas',  (select count(*) from comandas_todas where reversed_at is not null),
     'faturado_cents',       coalesce((select sum(total_cents) from comandas), 0),
     'ticket_medio_cents',   coalesce((select sum(total_cents) / nullif(count(*), 0) from comandas), 0),
     'por_forma', coalesce((
@@ -780,7 +1015,13 @@ as $$
         from por_forma
     ), '[]'::jsonb),
     'por_profissional', coalesce((
-      select jsonb_agg(jsonb_build_object('attendant_user_id', attendant_user_id, 'itens', itens, 'comissao_cents', comissao_cents)
+      select jsonb_agg(jsonb_build_object(
+               'professional_id', professional_id,
+               'nome', coalesce(nome, 'Sem profissional'),
+               'itens', itens,
+               'comissao_cents', comissao_cents,
+               'pendente_cents', coalesce(pendente_cents, 0),
+               'pago_cents', coalesce(pago_cents, 0))
              order by comissao_cents desc)
         from por_profissional
     ), '[]'::jsonb),
@@ -816,7 +1057,7 @@ alter table public.commission_rules
   add column if not exists is_active boolean not null default true;
 
 create index if not exists commission_rules_org_ativas_idx
-  on public.commission_rules (organization_id, event_type_id, attendant_user_id)
+  on public.commission_rules (organization_id, event_type_id, professional_id)
   where is_active;
 
 comment on column public.commission_rules.is_active is
@@ -978,5 +1219,142 @@ update public.sales s
    and c.organization_id = s.organization_id
    and c.is_anonymized
    and (s.notes is not null or s.cancel_reason is not null or s.reverse_reason is not null);
+
+-- ---- fechamento de comissão (migration 9012) ----
+--
+-- Paga de uma vez as comissões pendentes de UMA profissional num período,
+-- criando o lançamento de saída que as representa.
+--
+-- ⚠️ `security definer` COM a organização por argumento é a forma que abriu o
+-- vazamento que a 9010 fechou. Por isso a checagem de papel é a primeira coisa
+-- do corpo, e há caso de teste que chama com org de fora.
+create or replace function public.fn_fechar_comissoes(
+  p_org uuid,
+  p_professional uuid,
+  p_de date,
+  p_ate date,
+  p_account uuid,
+  p_account_plan uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_total bigint;
+  v_qtd   integer;
+  v_entry uuid;
+  v_nome  text;
+  v_plano uuid;
+  v_pago  bigint;
+  v_marcadas integer;
+begin
+  if auth.uid() is null or not public.fn_role_at_least(p_org, 'manager') then
+    raise exception 'comissao_forbidden' using errcode = '42501';
+  end if;
+  if p_ate < p_de then
+    raise exception 'periodo_invalido' using errcode = '22023';
+  end if;
+
+  -- Por ORG e profissional: travar só pelo profissional serializaria tenants
+  -- diferentes sem motivo.
+  perform pg_advisory_xact_lock(hashtext(p_org::text || ':' || p_professional::text));
+
+  select name into v_nome from public.professionals
+   where id = p_professional and organization_id = p_org;
+  if not found then
+    raise exception 'profissional_nao_encontrada' using errcode = 'P0002';
+  end if;
+
+  -- A conta de saída é escolha de quem paga, e precisa ser desta organização:
+  -- `security definer` não pode aceitar conta de fora por argumento.
+  if not exists (
+    select 1 from public.financial_accounts
+     where id = p_account and organization_id = p_org and is_active
+  ) then
+    raise exception 'conta_invalida' using errcode = '22023';
+  end if;
+
+  -- ⚠️ SEM TEMP TABLE. A primeira versão usava `create temp table … on commit
+  -- drop`, e duas chamadas na MESMA transação quebravam com "relation already
+  -- exists" — mascarando a recusa correta com um erro de infraestrutura.
+  -- Medido em 17/09/2026. A doutrina de migrations do repo já proíbe temp
+  -- table por razão irmã; aqui o predicado é escrito uma vez e reusado.
+  select coalesce(sum(c.amount_cents), 0), count(*)
+    into v_total, v_qtd
+    from public.commissions c
+    join public.sale_items si on si.id = c.sale_item_id
+    join public.sales s on s.id = si.sale_id
+   where c.organization_id = p_org
+     and c.professional_id = p_professional
+     and c.status = 'pending'
+     and c.paid_entry_id is null
+     and c.amount_cents > 0
+     and s.finalized_at is not null
+     and s.finalized_at::date between p_de and p_ate
+     -- Dupla guarda: o estorno da comanda já marca a comissão como `reversed`,
+     -- mas estorno e fechamento travam coisas diferentes e podem se cruzar.
+     and s.reversed_at is null;
+
+  -- Não devolver "ok, já estava fechado": mascararia o caso de quem achou que
+  -- estava fechando comissão nova. O legado erra explicitamente, e é o certo.
+  if v_qtd = 0 then
+    raise exception 'NENHUM_ITEM_PENDENTE' using errcode = 'P0001';
+  end if;
+
+  select id into v_plano from public.account_plans
+   where organization_id = p_org and direction = 'out' and is_active
+     and (p_account_plan is null or id = p_account_plan)
+   order by (id = p_account_plan) desc, created_at limit 1;
+
+  insert into public.financial_entries
+    (organization_id, account_id, account_plan_id, direction, amount_cents,
+     description, status, paid_at, origin, created_by_user_id)
+  values (
+    p_org, p_account, v_plano, 'out', v_total,
+    format('Comissão de %s · %s a %s', v_nome, to_char(p_de, 'DD/MM/YYYY'), to_char(p_ate, 'DD/MM/YYYY')),
+    'paid', now(), 'commission', auth.uid()
+  )
+  returning id into v_entry;
+
+  -- O MESMO predicado. O advisory lock acima serializa por profissional, e
+  -- `paid_entry_id is null` impede marcar duas vezes; ainda assim o resultado
+  -- é conferido, porque um lançamento cujo valor não corresponde às linhas que
+  -- ele paga é pior que um erro.
+  with pagas as (
+    update public.commissions c
+       set status = 'paid', paid_at = now(), paid_entry_id = v_entry
+      from public.sale_items si, public.sales s
+     where si.id = c.sale_item_id
+       and s.id = si.sale_id
+       and c.organization_id = p_org
+       and c.professional_id = p_professional
+       and c.status = 'pending'
+       and c.paid_entry_id is null
+       and c.amount_cents > 0
+       and s.finalized_at is not null
+       and s.finalized_at::date between p_de and p_ate
+       and s.reversed_at is null
+    returning c.amount_cents
+  )
+  select coalesce(sum(amount_cents), 0), count(*) into v_pago, v_marcadas from pagas;
+
+  if v_marcadas <> v_qtd or v_pago <> v_total then
+    raise exception 'fechamento_inconsistente'
+      using errcode = 'P0001',
+            message = format('O lançamento somaria %s em %s comissões, mas %s linhas de %s foram marcadas. Nada foi pago.',
+                             v_total, v_qtd, v_marcadas, v_pago);
+  end if;
+
+  return jsonb_build_object('entry_id', v_entry, 'itens', v_qtd, 'total_cents', v_total);
+end $$;
+
+revoke execute on function public.fn_fechar_comissoes(uuid, uuid, date, date, uuid, uuid) from public, anon;
+grant  execute on function public.fn_fechar_comissoes(uuid, uuid, date, date, uuid, uuid) to authenticated;
+
+comment on function public.fn_fechar_comissoes(uuid, uuid, date, date, uuid, uuid) is
+  'Fecha as comissões pendentes de uma profissional num período: cria UM lançamento de saída e marca as comissões com paid_entry_id. Não existe tabela de fechamento — o lançamento é o fechamento.';
+
 
 notify pgrst, 'reload schema';

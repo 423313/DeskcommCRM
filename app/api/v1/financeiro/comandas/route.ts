@@ -42,7 +42,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     // resultado a partir do TEXTO do select, e um `+` no meio o reduz a `string`
     // — o embed `sale_items(...)` deixa de existir para o TypeScript.
     .select(
-      "id, number, status, contact_id, attendant_user_id, appointment_id, discount_cents, total_cents, currency, payment_method_id, notes, finalized_at, cancelled_at, reversed_at, created_at, sale_items(id, description, quantity, unit_price_cents, discount_cents, total_cents, commission_percent, attendant_user_id, event_type_id)",
+      "id, number, status, contact_id, attendant_user_id, appointment_id, discount_cents, total_cents, currency, payment_method_id, notes, finalized_at, cancelled_at, reversed_at, created_at, sale_items(id, description, quantity, unit_price_cents, discount_cents, total_cents, commission_percent, professional_id, event_type_id)",
     )
     .order("number", { ascending: false })
     .limit(limite);

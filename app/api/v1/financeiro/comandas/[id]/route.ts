@@ -37,7 +37,7 @@ export async function GET(_req: NextRequest, ctx: Ctx): Promise<Response> {
     .from("sales")
     // Literal único — ver a nota em `comandas/route.ts`.
     .select(
-      "id, number, status, contact_id, attendant_user_id, appointment_id, discount_cents, total_cents, currency, payment_method_id, notes, finalized_at, cancelled_at, cancel_reason, reversed_at, reverse_reason, created_at, sale_items(id, description, quantity, unit_price_cents, discount_cents, total_cents, commission_percent, attendant_user_id, event_type_id, created_at)",
+      "id, number, status, contact_id, attendant_user_id, appointment_id, discount_cents, total_cents, currency, payment_method_id, notes, finalized_at, cancelled_at, cancel_reason, reversed_at, reverse_reason, created_at, sale_items(id, description, quantity, unit_price_cents, discount_cents, total_cents, commission_percent, professional_id, event_type_id, created_at)",
     )
     .eq("id", id)
     .maybeSingle();

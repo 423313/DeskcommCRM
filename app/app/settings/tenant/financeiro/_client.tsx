@@ -52,10 +52,11 @@ export function CatalogoFinanceiro({ podeEditar }: { podeEditar: boolean }) {
 
   // A regra guarda IDs; a lista precisa de nomes. Buscar aqui evita que o
   // catálogo genérico no servidor tenha de conhecer equipe e agenda.
-  const pessoas = useQuery({
-    queryKey: ["team", "assignable"],
-    queryFn: async () => (await apiClient.get<{ data: Pessoa[] }>("/api/v1/team/assignable")).data,
-  });
+  //
+  // ⚠️ Profissional NÃO vem de `/team/assignable`: quem executa o serviço não
+  // é usuária do sistema. Vem do próprio catálogo financeiro, como conta e
+  // forma de pagamento — é cadastro do negócio, não membro da equipe.
+  const profissionais = useCatalogo<Pessoa>("profissionais");
   const servicos = useQuery({
     queryKey: ["agenda", "tipos"],
     queryFn: async () => (await apiClient.get<{ data: Servico[] }>("/api/v1/agenda/tipos")).data,
@@ -82,6 +83,7 @@ export function CatalogoFinanceiro({ podeEditar }: { podeEditar: boolean }) {
   const [nomeForma, setNomeForma] = useState("");
   const [contaDaForma, setContaDaForma] = useState("");
   const [nomePlano, setNomePlano] = useState("");
+  const [nomeProfissional, setNomeProfissional] = useState("");
   const [direcaoPlano, setDirecaoPlano] = useState<"in" | "out" | "">("");
 
   const nomeDaConta = (id: string | null) =>
@@ -273,9 +275,54 @@ export function CatalogoFinanceiro({ podeEditar }: { podeEditar: boolean }) {
         />
       </section>
 
+      {/*
+        PROFISSIONAIS — quem executa o serviço.
+        Fica encostada nas regras de comissão de propósito: cadastrar uma sem a
+        outra faz toda comissão nascer 0%, que é o defeito que a 9005 documenta.
+        E fica aqui, e não numa tela própria, porque é o que o negócio descreve
+        uma vez — a tela de Comissões é o dia a dia, não o cadastro.
+      */}
+      <section className="space-y-3 rounded-xl border p-4">
+        <h2 className="font-semibold">{t("Profissionais")}</h2>
+        <p className="text-sm text-text-muted">
+          {t(
+            "Quem executa o serviço. Não precisa de login: a profissional aparece na comanda e recebe comissão sem nunca abrir o sistema.",
+          )}
+        </p>
+        {podeEditar ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <input
+              aria-label={t("Nome da profissional")}
+              className="min-h-11 rounded-md border p-2"
+              placeholder={t("Ex.: Scarlet")}
+              value={nomeProfissional}
+              onChange={(e) => setNomeProfissional(e.target.value)}
+            />
+            <Button
+              disabled={nomeProfissional.trim().length < 2 || criar.isPending}
+              onClick={() =>
+                criar.mutate(
+                  { tipo: "profissionais", corpo: { name: nomeProfissional.trim() } },
+                  { onSuccess: () => setNomeProfissional("") },
+                )
+              }
+            >
+              {t("Adicionar profissional")}
+            </Button>
+          </div>
+        ) : null}
+        <Lista
+          carregando={profissionais.isLoading}
+          vazio={t("Nenhuma profissional cadastrada.")}
+          itens={(profissionais.data ?? []).map((p) => ({ id: p.id, texto: p.name }))}
+          podeEditar={podeEditar}
+          aoRemover={(id) => inativar.mutate({ tipo: "profissionais", id })}
+        />
+      </section>
+
       <RegrasDeComissao
         regras={regras.data ?? []}
-        pessoas={pessoas.data ?? []}
+        pessoas={profissionais.data ?? []}
         servicos={servicos.data ?? []}
         podeEditar={podeEditar}
         carregando={regras.isLoading}

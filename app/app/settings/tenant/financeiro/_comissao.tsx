@@ -19,12 +19,17 @@ import { useT } from "@/hooks/i18n/useT";
 export type Regra = {
   id: string;
   name: string;
-  attendant_user_id: string | null;
+  professional_id: string | null;
   event_type_id: string | null;
   percent: number;
 };
 
-export type Pessoa = { user_id: string; name: string | null; email: string | null };
+/**
+ * Quem executa o serviço. NÃO é um membro da equipe: a profissional do balcão
+ * não tem login, e é por isso que esta lista vem do catálogo financeiro e não
+ * de nenhuma rota de equipe.
+ */
+export type Pessoa = { id: string; name: string };
 export type Servico = { id: string; name: string };
 
 export function RegrasDeComissao({
@@ -56,16 +61,16 @@ export function RegrasDeComissao({
   const temAlvo = pessoaId !== "" || servicoId !== "";
 
   const nomeDaPessoa = (id: string) => {
-    const p = pessoas.find((x) => x.user_id === id);
-    return p?.name ?? p?.email ?? t("alguém");
+    const p = pessoas.find((x) => x.id === id);
+    return p?.name ?? t("alguém");
   };
   const nomeDoServico = (id: string) => servicos.find((x) => x.id === id)?.name ?? t("um serviço");
 
   const rotuloDe = (r: Regra) => {
-    if (r.attendant_user_id && r.event_type_id) {
-      return `${nomeDaPessoa(r.attendant_user_id)} · ${nomeDoServico(r.event_type_id)}`;
+    if (r.professional_id && r.event_type_id) {
+      return `${nomeDaPessoa(r.professional_id)} · ${nomeDoServico(r.event_type_id)}`;
     }
-    if (r.attendant_user_id) return nomeDaPessoa(r.attendant_user_id);
+    if (r.professional_id) return nomeDaPessoa(r.professional_id);
     if (r.event_type_id) return nomeDoServico(r.event_type_id);
     return r.name;
   };
@@ -74,26 +79,26 @@ export function RegrasDeComissao({
     <section className="space-y-3 rounded-xl border p-4">
       <h2 className="font-semibold">{t("Comissão")}</h2>
       <p className="text-sm text-text-muted">
-        {t("Quanto cada pessoa recebe por atendimento. Sem regra, a comissão é zero.")}
+        {t("Quanto cada profissional recebe por atendimento. Sem regra, a comissão é zero.")}
       </p>
       <p className="text-xs text-text-muted">
         {t(
-          "A regra mais específica vence: pessoa e serviço vence pessoa, que vence serviço. Não é o maior percentual que ganha.",
+          "A regra mais específica vence: profissional e serviço vence profissional, que vence serviço. Não é o maior percentual que ganha.",
         )}
       </p>
 
       {podeEditar ? (
         <div className="flex flex-wrap items-end gap-2">
           <select
-            aria-label={t("Pessoa")}
+            aria-label={t("Profissional")}
             className="min-h-11 rounded-md border p-2"
             value={pessoaId}
             onChange={(e) => setPessoaId(e.target.value)}
           >
-            <option value="">{t("Qualquer pessoa")}</option>
+            <option value="">{t("Qualquer profissional")}</option>
             {pessoas.map((p) => (
-              <option key={p.user_id} value={p.user_id}>
-                {p.name ?? p.email}
+              <option key={p.id} value={p.id}>
+                {p.name}
               </option>
             ))}
           </select>
@@ -134,7 +139,7 @@ export function RegrasDeComissao({
                     : pessoaId
                       ? nomeDaPessoa(pessoaId)
                       : nomeDoServico(servicoId),
-                attendant_user_id: pessoaId || null,
+                professional_id: pessoaId || null,
                 event_type_id: servicoId || null,
                 percent: numero,
               })

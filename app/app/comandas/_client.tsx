@@ -30,7 +30,7 @@ type Item = {
   discount_cents: number;
   total_cents: number;
   commission_percent: number;
-  attendant_user_id: string | null;
+  professional_id: string | null;
   event_type_id: string | null;
 };
 
@@ -50,6 +50,8 @@ type Comanda = {
 
 type Forma = { id: string; name: string; account_id: string | null };
 type Tipo = { id: string; name: string; default_price_cents: number | null };
+/** Quem executa o serviço. Vem do catálogo financeiro: não é membro da equipe. */
+type Profissional = { id: string; name: string };
 
 const ROTULO_DO_STATUS: Record<Comanda["status"], string> = {
   open: "Aberta",
@@ -90,6 +92,12 @@ export function Comandas({
   const tipos = useQuery({
     queryKey: ["agenda", "tipos"],
     queryFn: async () => (await apiClient.get<{ data: Tipo[] }>("/api/v1/agenda/tipos")).data,
+  });
+  const profissionais = useQuery({
+    queryKey: ["financeiro", "catalogo", "profissionais"],
+    queryFn: async () =>
+      (await apiClient.get<{ data: Profissional[] }>("/api/v1/financeiro/catalogo/profissionais"))
+        .data,
   });
 
   const recarregar = () => {
@@ -284,6 +292,7 @@ export function Comandas({
 
             {comanda.status === "open" && podeLancar ? (
               <FormularioDeItem
+                profissionais={profissionais.data ?? []}
                 tipos={tipos.data ?? []}
                 onIncluir={(corpo) => incluirItem.mutate(corpo)}
                 pendente={incluirItem.isPending}
@@ -297,6 +306,9 @@ export function Comandas({
                 onCancelar={() => alterar.mutate({ cancel: true })}
                 pendente={finalizar.isPending}
                 temContato={Boolean(comanda.contact_id)}
+                itensSemProfissional={
+                  (comanda.sale_items ?? []).filter((i) => !i.professional_id).length
+                }
               />
             ) : null}
 
@@ -312,10 +324,12 @@ export function Comandas({
 
 function FormularioDeItem({
   tipos,
+  profissionais,
   onIncluir,
   pendente,
 }: {
   tipos: Tipo[];
+  profissionais: Profissional[];
   onIncluir: (corpo: Record<string, unknown>) => void;
   pendente: boolean;
 }) {
@@ -323,6 +337,7 @@ function FormularioDeItem({
   const [descricao, setDescricao] = useState("");
   const [preco, setPreco] = useState("");
   const [tipoId, setTipoId] = useState("");
+  const [profissionalId, setProfissionalId] = useState("");
 
   // O preço é digitado em reais e convertido AQUI. `parseReaisToCents` devolve
   // null no que não é dinheiro, e o botão fica desabilitado — em vez de mandar
@@ -340,13 +355,35 @@ function FormularioDeItem({
           description: descricao.trim(),
           unit_price_cents: cents,
           event_type_id: tipoId || null,
+          professional_id: profissionalId || null,
           quantity: 1,
         });
         setDescricao("");
         setPreco("");
         setTipoId("");
+        // A profissional NÃO é limpa: numa comanda a mesma pessoa costuma
+        // fazer os itens seguintes, e reescolher a cada linha é o atrito que
+        // faz alguém parar de preencher — e item sem profissional é comissão
+        // perdida sem conserto, porque item finalizado é imutável.
       }}
     >
+      <label className="flex flex-col gap-1 text-xs text-text-muted">
+        {t("Profissional")}
+        <select
+          className="min-h-11 rounded-md border p-2"
+          data-testid="item-profissional"
+          value={profissionalId}
+          onChange={(e) => setProfissionalId(e.target.value)}
+        >
+          <option value="">{t("Sem comissão")}</option>
+          {profissionais.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <label className="flex flex-col gap-1 text-xs text-text-muted">
         {t("Serviço")}
         <select
@@ -412,12 +449,26 @@ function Fechamento({
   onCancelar,
   pendente,
   temContato,
+  itensSemProfissional,
 }: {
   formas: Forma[];
   onFinalizar: (corpo: Record<string, unknown>) => void;
   onCancelar: () => void;
   pendente: boolean;
   temContato: boolean;
+  /**
+   * Quantos itens vão fechar sem ninguém para receber comissão.
+   *
+   * ⚠️ Item de comanda finalizada é IMUTÁVEL: a rota recusa qualquer mudança
+   * em comanda que não esteja aberta. Esquecer a profissional aqui não é um
+   * campo em branco, é comissão que não nasce e não tem conserto — o único
+   * caminho seria estornar a comanda e refazer.
+   *
+   * Por isso avisa e deixa passar, em vez de bloquear: a dona atende sozinha
+   * boa parte do tempo e não recebe comissão de si mesma; travar o balcão
+   * seria pior que o esquecimento.
+   */
+  itensSemProfissional: number;
 }) {
   const t = useT();
   const [formaId, setFormaId] = useState("");
@@ -461,6 +512,17 @@ function Fechamento({
             className="w-24 rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
           />
         </label>
+      ) : null}
+
+      {itensSemProfissional > 0 ? (
+        <p className="text-xs text-warning" data-testid="aviso-item-sem-profissional">
+          {itensSemProfissional === 1
+            ? t("1 item está sem profissional e não vai gerar comissão. Depois de finalizar não dá para mudar.")
+            : t("{n} itens estão sem profissional e não vão gerar comissão. Depois de finalizar não dá para mudar.").replace(
+                "{n}",
+                String(itensSemProfissional),
+              )}
+        </p>
       ) : null}
 
       <Button

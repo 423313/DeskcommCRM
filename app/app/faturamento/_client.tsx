@@ -23,7 +23,7 @@ import { formatCents } from "@/lib/money";
 import { ListaDeLancamentos, type Conta, type Lancamento } from "./_lancamentos";
 
 type Forma = { nome: string; quantidade: number; total_cents: number };
-type Profissional = { attendant_user_id: string | null; itens: number; comissao_cents: number };
+type Profissional = { professional_id: string | null; itens: number; comissao_cents: number };
 type Servico = { nome: string; quantidade: number; total_cents: number };
 type Cliente = { contact_id: string; comandas: number; total_cents: number };
 
@@ -250,8 +250,8 @@ export function Faturamento({ podeLancar }: { podeLancar: boolean }) {
 
           <Tabela titulo={t("Comissão por pessoa")} vazio={t("Nenhuma comissão no período.")}>
             {r.por_profissional.map((p) => (
-              <tr key={p.attendant_user_id ?? "sem"} className="border-b border-border/60">
-                <td className="py-1">{nomeDe(p.attendant_user_id)}</td>
+              <tr key={p.professional_id ?? "sem"} className="border-b border-border/60">
+                <td className="py-1">{nomeDe(p.professional_id)}</td>
                 <td className="py-1 text-right text-text-muted">{p.itens}</td>
                 <td className="py-1 text-right tabular-nums" colSpan={2}>
                   {formatCents(p.comissao_cents, "BRL")}
