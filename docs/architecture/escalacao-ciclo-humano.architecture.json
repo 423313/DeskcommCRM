@@ -417,6 +417,22 @@
       "type": "lib",
       "label": "lib/escalacao/numero-interno-de-aviso.ts",
       "sublabel": "o número do plantão não vira contato, conversa nem despacho"
+    },
+    {
+      "id": "avisoSuporteTela",
+      "lane": "humano",
+      "col": 5,
+      "type": "ui",
+      "label": "/app/ai/cases/avisos",
+      "sublabel": "liga o aviso, prova por envio real e diz os 11 estados em que ele não sai"
+    },
+    {
+      "id": "avisoSuporteRota",
+      "lane": "borda",
+      "col": 4,
+      "type": "route",
+      "label": "/api/v1/ai/cases/alerta (+ /teste)",
+      "sublabel": "escreve só pelo RPC; o teste manda de verdade e paga no pacing_ledger"
     }
   ],
   "edges": [
@@ -863,6 +879,42 @@
       "from": "numeroInterno",
       "to": "ingestSaida",
       "label": "corta antes do contato — inbound e eco do próprio envio"
+    },
+    {
+      "id": "e75",
+      "from": "avisoSuporteTela",
+      "to": "avisoSuporteRota",
+      "label": "a tela nunca escreve no banco: ela fala com a rota"
+    },
+    {
+      "id": "e76",
+      "from": "avisoSuporteRota",
+      "to": "avisoSuporteRegistro",
+      "label": "fn_definir_aviso_de_caso: as sete guardas na MESMA transação da escrita"
+    },
+    {
+      "id": "e77",
+      "from": "avisoSuporteRota",
+      "to": "avisoSuporteMotor",
+      "label": "o botão de teste reusa o caminho do motor a partir do canal"
+    },
+    {
+      "id": "e78",
+      "from": "avisoSuporteRegistro",
+      "to": "avisoSuporteTela",
+      "label": "as entregas são a FONTE da lista — a Central é só superfície e qualquer membro a apaga"
+    },
+    {
+      "id": "e79",
+      "from": "avisoSuporteTela",
+      "to": "casos",
+      "label": "o laço de retorno: casos avisados x não avisados, do mesmo marco"
+    },
+    {
+      "id": "e80",
+      "from": "numeroInterno",
+      "to": "avisoSuporteTela",
+      "label": "os contadores do descarte viram a frase que impede o silêncio de parecer defeito"
     }
   ],
   "cards": [

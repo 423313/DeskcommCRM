@@ -164,6 +164,28 @@ export const ApiErrorCodes = {
   // 404: o funil de destino não existe (ou não é desta organização).
   pipeline_not_found: "pipeline_not_found",
 
+  // ─── AVISO DE CASO NO WHATSAPP (migration 0292, onda 8) ───
+  //
+  // Declarados aqui pelo mesmo motivo dos blocos acima: `fail()` aceita
+  // `(string & {})`, e um código que nasce no call site vira contrato de wire
+  // sem ninguém decidir que virou. Estes quatro precisam ser distinguíveis
+  // porque a TELA faz uma coisa diferente com cada um:
+  //
+  //   • `aviso_numero_de_cliente` NÃO é uma recusa final — é uma PERGUNTA. O
+  //     número digitado já é um cliente desta organização, e confirmar
+  //     significa que as mensagens dessa pessoa param de chegar ao CRM. A tela
+  //     mostra o aviso e reenvia com `confirma_contato: true`;
+  //   • `aviso_numero_da_propria_org` é final: é o laço robô↔robô, e não há
+  //     confirmação que o torne aceitável;
+  //   • `aviso_canal_invalido` manda escolher outra conexão;
+  //   • `aviso_nao_configurado` é do botão de teste, e manda salvar antes.
+  //
+  // Os quatro são 422 — recusa semântica sobre um corpo bem formado.
+  aviso_numero_de_cliente: "aviso_numero_de_cliente",
+  aviso_numero_da_propria_org: "aviso_numero_da_propria_org",
+  aviso_canal_invalido: "aviso_canal_invalido",
+  aviso_nao_configurado: "aviso_nao_configurado",
+
   // 500 / upstream
   internal_error: "internal_error",
   upstream_unavailable: "upstream_unavailable",

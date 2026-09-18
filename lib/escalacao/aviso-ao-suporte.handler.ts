@@ -84,6 +84,13 @@ export const avisoDeCasoAoSuporteHandler: EventHandler = {
  * O transporte, montado a partir do canal — sem nome de provedor fora de
  * `lib/channels/`.
  *
+ * ⚠️ EXPORTADA porque a rota do botão "enviar aviso de teste" (onda 8) usa o
+ * MESMO transporte. Duas montagens do mesmo envelope divergiriam no dia em que
+ * uma delas ganhasse um campo — e a que ficasse para trás produziria um teste
+ * verde sobre um caminho que o aviso real não percorre, que é o único desfecho
+ * que aquele botão não pode ter.
+ *
+
  * `getAdapter`, `resolveSessionRef` e `resolveRecipient` moram lá porque os três
  * precisam saber QUAL canal é; este arquivo só sabe que existe um envelope a
  * preencher. O import é TARDIO para o topo não arrastar os adapters de todos os
@@ -91,7 +98,7 @@ export const avisoDeCasoAoSuporteHandler: EventHandler = {
  * `lib/event-log/drain-loop.ts` carrega este módulo por import dinâmico sob
  * `tsx`, onde um import de topo pesado já parou o dreno por dez dias (#648).
  */
-async function criarTransporteDoAviso(
+export async function criarTransporteDoAviso(
   admin: ReturnType<typeof createAdminClient>,
 ): Promise<TransporteDoAviso> {
   const { getAdapter, resolveSessionRef, CHANNEL_SESSION_REF_COLUMNS } = await import(

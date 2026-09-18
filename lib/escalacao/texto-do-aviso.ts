@@ -127,3 +127,43 @@ export function montarAvisoDeCaso(aviso: AvisoDeCaso): string {
 
   return linhas.join("\n");
 }
+
+/**
+ * A MENSAGEM DO BOTÃO "ENVIAR AVISO DE TESTE".
+ *
+ * Mora aqui, e não na rota, pelo mesmo motivo do texto de cima: **um dono para
+ * o que sai sem DOM**. A marca chega resolvida por `marcaDaSaida(orgId)` e o
+ * idioma é o da organização — uma mensagem de teste carimbada com o nome do
+ * produto apareceria no WhatsApp da equipe de todo cliente de todo revendedor,
+ * e `tests/unit/branding.test.ts` varre este arquivo.
+ *
+ * Ela **NÃO** imita um caso. Repetir "novo caso esperando você" num teste
+ * ensinaria a equipe a ler aquele cabeçalho como ruído — e o primeiro caso de
+ * verdade seria ignorado. Ela diz o que é, diz o que vai chegar quando for
+ * real, e repete a única linha que o teste precisa ensinar: responder ali não
+ * chega a ninguém.
+ *
+ * O link é o da lista de casos e é a razão de o teste exigir endereço público:
+ * é ele que prova, no celular de quem recebeu, que o link do aviso abre.
+ */
+export function montarAvisoDeTeste(entrada: {
+  marca: string;
+  idioma: Idioma;
+  /** O link já montado pelo servidor — a lista de casos desta instalação. */
+  link: string;
+}): string {
+  const t = (texto: string): string => traduzir(texto, entrada.idioma);
+  return [
+    `🔔 ${entrada.marca}: ${t("teste de aviso")}`,
+    "",
+    t("Se esta mensagem chegou, os avisos de caso estão configurados e funcionando."),
+    "",
+    t(
+      "Quando o atendimento automático travar, chega aqui o tipo do assunto, o primeiro nome do cliente, o que ele precisa e um link para abrir o atendimento.",
+    ),
+    "",
+    `${t("Abrir")}: ${entrada.link}`,
+    "",
+    t("Responder aqui não chega ao cliente — abra o link para responder."),
+  ].join("\n");
+}

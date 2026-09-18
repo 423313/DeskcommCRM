@@ -12,13 +12,28 @@
  * 102 pedidos foram resolvidos — e mesmo assim esses 22 ficaram para trás,
  * porque não havia nada que os trouxesse de volta.
  *
- * ═══ POR QUE UM AVISO NA CENTRAL, E NÃO UMA MENSAGEM ═══
+ * ═══ POR QUE ESTE VIGIA COBRA SÓ NA CENTRAL ═══
  *
  * O destinatário da cobrança é a EQUIPE, não o cliente. Um aviso na Central
  * (com o sino) chega a quem pode resolver, não consome janela de envio do
  * WhatsApp, não gasta o número e não corre o risco de a cobrança interna vazar
  * para fora. O sistema que originou este defeito mandava WhatsApp para a dona do
  * negócio; aqui o canal certo já existe.
+ *
+ * ⚠️ **Isto vale para a COBRANÇA REPETIDA, que é o que este cron faz — e deixou
+ * de valer para o produto inteiro** (migration 0292). O WhatsApp da equipe
+ * passou a ser avisado na ABERTURA do caso, uma vez, por opt-in de quem
+ * administra (`config_aviso_de_caso`, tela `/app/ai/cases/avisos`). Decisão do
+ * dono do produto: quem toca uma empresa não fica com o CRM aberto o dia todo,
+ * fica com o WhatsApp aberto.
+ *
+ * Os dois NÃO se sobrepõem, e é por isso que este cron continua só na Central:
+ * o aviso no WhatsApp sai uma vez, na abertura; a insistência sobre o caso que
+ * ninguém abriu é daqui, tem teto de três e mora no sino. Mandar a cobrança
+ * repetida por mensagem gastaria o número da organização três vezes por caso
+ * esquecido — e o `followup_attempts` que segura o teto não protege um canal
+ * que ele não conhece. Quem for "consertar" isto e ligar o WhatsApp aqui está
+ * mudando essa decisão, não completando-a.
  *
  * ═══ POR QUE ELE PARA DE COBRAR ═══
  *

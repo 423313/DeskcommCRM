@@ -96,7 +96,10 @@ Input (Zod `.strict()`, guard prototype-pollution como `schedule-followup.ts`):
   // context_snapshot é montado pelo runtime a partir da conversa REAL — nunca do modelo
 }
 ```
-Efeito: `INSERT agent_cases(status='awaiting_human', ...)` + event `opened` + broadcast realtime `case_pending` no canal `org:<org>:queue`. Retorno `{ok:true, case_id}` ou `{ok:false, error:{message}}` (erro-como-ensino).
+Efeito: `INSERT agent_cases(status='awaiting_human', ...)` + event `opened` + `emit_event('ai.case_opened')`.
+> ⚠️ **Correção de estado (2026-09-18).** Este parágrafo prometia um *broadcast realtime `case_pending` no canal `org:<org>:queue`* — ele **nunca existiu**: `grep -rn "case_pending" lib app hooks workers` sai vazio. Quem avisa é o `event_log`: `ai.case_opened` (reservado pela migration 0279) tem hoje dois consumidores — o gatilho de follow-up e o aviso ao suporte no WhatsApp (migration 0292). A tela de casos continua em consulta periódica, como o próprio §9 descreve.
+
+Retorno `{ok:true, case_id}` ou `{ok:false, error:{message}}` (erro-como-ensino).
 
 ### 4.2 `provide_case_update`
 > **description:** "Quando um caso está esperando informação do cliente e você já colheu essa informação na conversa, use esta tool para devolver a informação ao humano responsável pelo caso. Não invente — só o que o lead realmente disse."
@@ -243,6 +246,11 @@ Reusa o shell `app/app/ai/inbox/` (assistente), **seção/tab própria "Casos"**
   - `[ Não consigo → escalar ]` → `human_action=escalate`
   - `[ Enviar p/ IA ]` → POST cria event `human_replied` + enfileira `case_reply_turn` (ou dispara handoff se `escalate`).
 - **Clareza (requisito):** o estado do caso é sempre visível (esperando você / esperando cliente / resolvido / escalado). A UI não deixa ambíguo de quem é a bola.
+- **Quem é avisado fora da tela, e quando** *(migration 0292, tela `/app/ai/cases/avisos`)*:
+  - **existe**: uma mensagem no WhatsApp de um número da equipe, **na ABERTURA do caso**, uma vez por caso. É opt-in de quem administra (`config_aviso_de_caso.ligado`), sai fora do horário comercial de propósito (a janela protege o cliente, e a equipe é interna) e o registro de cada tentativa fica em `entregas_de_aviso_de_caso`;
+  - **existe**: o vigia `case-stale-watcher`, que cobra até três vezes **na Central** o caso que ninguém abriu;
+  - **NÃO existe**: re-notificação quando o cliente responde e o caso volta de `awaiting_lead` para `awaiting_human`. O aviso não se repete, e a tela do aviso diz isso com essas palavras. Quem quiser acompanhar a volta usa a Central.
+
 - Rota API: `POST /api/v1/ai/cases/[id]/reply` — molde `app/api/v1/leads/[id]/win/route.ts`: `requireRole("agent", {requestId, resource})` (valida JWT via `getUser()`, org do cookie validado — nunca do body), Zod no body, `audit(...)`, `ok()`/`fail()`, `X-Request-Id`. **Sem rate-limit** (rota autenticada de staff, não pública — doutrina: rate-limit só em rota pública). `GET /api/v1/ai/cases` e `GET /api/v1/ai/cases/[id]` (detalhe + timeline) seguem o molde de `app/api/v1/ai/inbox/route.ts`.
 
 ---

@@ -9326,6 +9326,168 @@ export const DICIONARIO: Traducoes = {
   "O WhatsApp recusou o envio do aviso.": { es: "WhatsApp rechazó el envío del aviso." },
   "O aviso não saiu e a causa não pôde ser identificada.":
     { es: "El aviso no salió y la causa no pudo ser identificada." },
+
+  // A porta de descoberta no fim do wizard (lib/onboarding/o-que-mais-existe.ts).
+  // O guarda de espanhol NÃO resolve `t(p.comoChamar)` — tabela em outro
+  // módulo —, então estas entram por DISCIPLINA, como as das peças vizinhas.
+  "Ser avisado no seu WhatsApp":
+    { es: "Recibir aviso en su WhatsApp" },
+  "Você não fica com o sistema aberto o dia todo — mas fica com o WhatsApp.":
+    { es: "Usted no está con el sistema abierto todo el día — pero sí con el WhatsApp." },
+  "Você escolhe um número da equipe para receber os avisos":
+    { es: "Usted elige un número del equipo para recibir los avisos" },
+  "Quando ele trava e abre um pedido de ajuda, chega uma mensagem nesse número, na hora":
+    { es: "Cuando él se traba y abre un pedido de ayuda, llega un mensaje a ese número, al instante" },
+  "A mensagem traz o assunto e um link que abre o atendimento — e nunca o telefone do cliente":
+    { es: "El mensaje trae el asunto y un enlace que abre la atención — y nunca el teléfono del cliente" },
+  "Responder àquele número não chega ao cliente: ele é só da equipe":
+    { es: "Responder a ese número no llega al cliente: es solo del equipo" },
+  // A DESCRIÇÃO da entrada no catálogo de navegação. Ela é cobrada por um
+  // guarda PRÓPRIO (`tests/unit/nav-hub.test.tsx`), que varre rótulo e
+  // descrição de todo destino do grupo IA — e não pelo guarda de espanhol das
+  // telas, que não entra em `lib/navigation/`. Foi ele que me pegou.
+  "Receber no WhatsApp quando o assistente abrir um caso.":
+    { es: "Recibir por WhatsApp cuando el asistente abra una atención." },
+  // ── A TELA DO AVISO DE CASO NO WHATSAPP (onda 8) ──────────────────────
+  // Acrescentado NO FIM do bloco, nunca reordenando o arquivo: ele é
+  // disputado por várias frentes ao mesmo tempo, e reordenar produz um diff
+  // que ninguém consegue revisar.
+  "A conexão escolhida está fora do ar":
+    { es: "La conexión elegida está fuera del aire" },
+  "A conexão que enviava os avisos foi removida":
+    { es: "La conexión que enviaba los avisos fue eliminada" },
+  "Abrir o atendimento":
+    { es: "Abrir la atención" },
+  "Ainda não há casos suficientes nos últimos 30 dias para comparar. A comparação aparece sozinha quando houver.":
+    { es: "Todavía no hay suficientes casos en los últimos 30 días para comparar. La comparación aparece sola cuando los haya." },
+  "As respostas para este número são ignoradas de propósito":
+    { es: "Las respuestas a este número se ignoran a propósito" },
+  "Aviso de teste enviado. Confira o WhatsApp desse número.":
+    { es: "Aviso de prueba enviado. Revise el WhatsApp de ese número." },
+  "Aviso no WhatsApp":
+    { es: "Aviso por WhatsApp" },
+  "Aviso salvo.":
+    { es: "Aviso guardado." },
+  "Casos em que o aviso chegou":
+    { es: "Casos en los que el aviso llegó" },
+  "Casos sem aviso":
+    { es: "Casos sin aviso" },
+  "Comece pelo código do país. Um celular do Brasil fica assim: +55, DDD e o número.":
+    { es: "Comience por el código del país. Un celular de Brasil queda así: +55, código de área y el número." },
+  "Como a conexão não existe mais, o aviso foi desligado sozinho. Escolha outra conexão abaixo e ligue de novo.":
+    { es: "Como la conexión ya no existe, el aviso se apagó solo. Elija otra conexión abajo y actívelo de nuevo." },
+  "Como chamar esse número (opcional)":
+    { es: "Cómo llamar a ese número (opcional)" },
+  "Conecte um WhatsApp lendo o QR code na tela de Conexões. É por ele que os avisos vão sair.":
+    { es: "Conecte un WhatsApp leyendo el código QR en la pantalla de Conexiones. Es por ahí que van a salir los avisos." },
+  "Conexão que envia os avisos":
+    { es: "Conexión que envía los avisos" },
+  "Enquanto ninguém puder abrir um caso, nenhum aviso vai sair. Ligue a opção de abrir casos na configuração do assistente.":
+    { es: "Mientras nadie pueda abrir un caso, no va a salir ningún aviso. Active la opción de abrir casos en la configuración del asistente." },
+  "Enviado para":
+    { es: "Enviado a" },
+  "Enviar aviso de teste":
+    { es: "Enviar aviso de prueba" },
+  "Escolha um número conectado":
+    { es: "Elija un número conectado" },
+  "Escolha um número da equipe para receber uma mensagem toda vez que o assistente travar e precisar de uma pessoa.":
+    { es: "Elija un número del equipo para recibir un mensaje cada vez que el asistente se trabe y necesite a una persona." },
+  "Escolher outro número":
+    { es: "Elegir otro número" },
+  "Esse número ainda não está completo.":
+    { es: "Ese número todavía no está completo." },
+  "Esse número passa a ser só da equipe: o que ele mandar deixa de virar atendimento.":
+    { es: "Ese número pasa a ser solo del equipo: lo que envíe deja de convertirse en atención." },
+  "Este número ainda está em aquecimento":
+    { es: "Este número todavía está en calentamiento" },
+  "Este sistema ainda não tem um endereço na internet":
+    { es: "Este sistema todavía no tiene una dirección en internet" },
+  "Este é o mesmo número que fala com seus clientes":
+    { es: "Este es el mismo número que habla con sus clientes" },
+  "Nenhum assistente está autorizado a abrir casos":
+    { es: "Ningún asistente está autorizado a abrir casos" },
+  "Nenhum aviso saiu ainda. Quando o assistente abrir um caso, a tentativa aparece aqui — inclusive se ela falhar.":
+    { es: "Todavía no salió ningún aviso. Cuando el asistente abra un caso, el intento aparece aquí — incluso si falla." },
+  "Não foi possível abrir esta tela agora. Atualize a página; se continuar, avise quem instalou o sistema.":
+    { es: "No fue posible abrir esta pantalla ahora. Actualice la página; si continúa, avise a quien instaló el sistema." },
+  "Não foi possível mandar o teste agora.":
+    { es: "No fue posible enviar la prueba ahora." },
+  "Não foi possível salvar o aviso. Tente de novo.":
+    { es: "No fue posible guardar el aviso. Intente de nuevo." },
+  "Número que recebe os avisos":
+    { es: "Número que recibe los avisos" },
+  "O atendimento desta conta é conduzido por outro sistema":
+    { es: "La atención de esta cuenta la conduce otro sistema" },
+  "O aviso de teste não saiu.":
+    { es: "El aviso de prueba no salió." },
+  "O aviso está adiantando o atendimento?":
+    { es: "¿El aviso está adelantando la atención?" },
+  "O aviso sai na hora, inclusive fora do horário comercial — sua equipe não é cliente.":
+    { es: "El aviso sale al instante, incluso fuera del horario comercial — su equipo no es cliente." },
+  "O aviso sai quando o assistente abre o caso. Quando o cliente responde e o caso volta a esperar você, o aviso não se repete — acompanhe pela Central de alertas.":
+    { es: "El aviso sale cuando el asistente abre el caso. Cuando el cliente responde y el caso vuelve a esperarlo, el aviso no se repite — siga por la Central de alertas." },
+  "O endereço público do sistema ainda não foi configurado, então o link do aviso não abriria nada. Peça a quem instalou para definir o endereço do seu domínio.":
+    { es: "La dirección pública del sistema todavía no fue configurada, así que el enlace del aviso no abriría nada. Pida a quien instaló que defina la dirección de su dominio." },
+  "O que saiu, o que não saiu e por quê. Esta lista é o registro do sistema — ela não some quando alguém resolve um alerta.":
+    { es: "Lo que salió, lo que no salió y por qué. Esta lista es el registro del sistema — no desaparece cuando alguien resuelve una alerta." },
+  "O teste manda uma mensagem de verdade e conta no limite diário desse número. Salve antes de testar.":
+    { es: "La prueba envía un mensaje de verdad y cuenta en el límite diario de ese número. Guarde antes de probar." },
+  "Os avisos ficam esperando até 24 horas e, se a conexão não voltar, viram alerta na Central.":
+    { es: "Los avisos quedan esperando hasta 24 horas y, si la conexión no vuelve, se convierten en alerta en la Central." },
+  "Os avisos vão contar no mesmo limite diário desse número. Funciona — mas um número só para avisos é mais seguro.":
+    { es: "Los avisos van a contar en el mismo límite diario de ese número. Funciona — pero un número solo para avisos es más seguro." },
+  "Plantão da Ana":
+    { es: "Guardia de Ana" },
+  "Quando o atendimento automático travar, chega aqui o tipo do assunto, o primeiro nome do cliente, o que ele precisa e um link para abrir o atendimento.":
+    { es: "Cuando la atención automática se trabe, llega aquí el tipo del asunto, el primer nombre del cliente, lo que necesita y un enlace para abrir la atención." },
+  "Quem conduz as conversas desta conta é um sistema de fora, e ele não abre casos aqui.":
+    { es: "Quien conduce las conversaciones de esta cuenta es un sistema externo, y no abre casos aquí." },
+  "Quem responder a esse número não vira atendimento, não vira contato e não chega ao CRM. É assim que o recurso funciona.":
+    { es: "Quien responda a ese número no se convierte en atención, ni en contacto, y no llega al CRM. Así funciona el recurso." },
+  "Receber avisos no WhatsApp":
+    { es: "Recibir avisos por WhatsApp" },
+  "Se esta mensagem chegou, os avisos de caso estão configurados e funcionando.":
+    { es: "Si este mensaje llegó, los avisos de atención están configurados y funcionando." },
+  "Seus assistentes só sugerem respostas":
+    { es: "Sus asistentes solo sugieren respuestas" },
+  "Seus números atuais não servem para avisar a equipe":
+    { es: "Sus números actuales no sirven para avisar al equipo" },
+  "Seus números atuais só enviam mensagem para quem falou com você nas últimas 24 horas — isso não serve para um aviso interno. Conecte um número pelo QR code para usar este recurso.":
+    { es: "Sus números actuales solo envían mensaje a quien habló con usted en las últimas 24 horas — eso no sirve para un aviso interno. Conecte un número por código QR para usar este recurso." },
+  "Só aparecem aqui os números que conseguem mandar uma mensagem a qualquer hora.":
+    { es: "Aquí solo aparecen los números que pueden enviar un mensaje a cualquier hora." },
+  "Tempo típico entre o assistente travar e alguém da equipe agir, nos últimos 30 dias. Os dois grupos contam a partir do mesmo momento.":
+    { es: "Tiempo típico entre que el asistente se traba y alguien del equipo actúa, en los últimos 30 días. Los dos grupos cuentan desde el mismo momento." },
+  "Um assistente em modo assistido não abre caso sozinho: ele escreve a sugestão e espera alguém. Nenhum aviso vai sair por ele.":
+    { es: "Un asistente en modo asistido no abre un caso solo: escribe la sugerencia y espera a alguien. No va a salir ningún aviso por él." },
+  "Um número novo começa com poucas mensagens por dia e vai crescendo por cerca de um mês. É o que protege o número de ser bloqueado pelo WhatsApp.":
+    { es: "Un número nuevo empieza con pocos mensajes por día y va creciendo por cerca de un mes. Es lo que protege al número de ser bloqueado por WhatsApp." },
+  "Usar mesmo assim":
+    { es: "Usar de todos modos" },
+  "Você ainda não conectou nenhum número":
+    { es: "Todavía no conectó ningún número" },
+  "a última em":
+    { es: "la última el" },
+  "casos já tiveram uma ação da equipe":
+    { es: "casos ya tuvieron una acción del equipo" },
+  "em aquecimento até":
+    { es: "en calentamiento hasta" },
+  "mensagens já foram ignoradas":
+    { es: "mensajes ya fueron ignorados" },
+  "mensagens neste número":
+    { es: "mensajes en este número" },
+  "teste de aviso":
+    { es: "prueba de aviso" },
+  "Últimos avisos enviados":
+    { es: "Últimos avisos enviados" },
+  "Ir para Conexões":
+    { es: "Ir a Conexiones" },
+  "Ir para os assistentes":
+    { es: "Ir a los asistentes" },
+  "Tentando enviar":
+    { es: "Intentando enviar" },
+  "Este número mandou uma mensagem agora há pouco. O WhatsApp exige um intervalo entre elas — tente de novo em alguns segundos.":
+    { es: "Este número envió un mensaje hace poco. WhatsApp exige un intervalo entre ellos — intente de nuevo en unos segundos." },
 };
 
 /**
