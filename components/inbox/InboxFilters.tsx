@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAuth } from "@/hooks/auth/AuthProvider";
-import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
+import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
 
@@ -92,7 +92,15 @@ export function InboxFilters({ value, onChange }: Props) {
   }, [value.search]);
   const { data: channels } = useChannelSessions({ refetchInterval: 30_000 });
   const { activeOrg } = useAuth();
-  const { data: tagVocabulary } = useConversationTagVocabulary(activeOrg?.orgId ?? null);
+  /**
+   * As opções vêm de `contacts.tags` — a MESMA fonte que o filtro consulta.
+   *
+   * Vinham do vocabulário de CONVERSA, enquanto o filtro passou a ler o
+   * marcador do CONTATO. Quem oferece e quem filtra lendo tabelas diferentes é
+   * o defeito espelhado: ou a opção existe e devolve vazio, ou o marcador que
+   * funciona nunca chega a ser oferecido.
+   */
+  const { data: tagVocabulary } = useContactTagVocabulary(activeOrg?.orgId ?? null);
   // Os MESMOS filtros que a lista aplicou. Badge que conta o que a aba não mostra
   // manda o atendente procurar trabalho que não existe — a regra já estava escrita
   // na rota; faltava alcançar os filtros ao lado da aba.

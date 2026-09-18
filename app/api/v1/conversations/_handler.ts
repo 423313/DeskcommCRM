@@ -94,6 +94,20 @@ const SELECT_COLS = `
   channel_sessions:channel_session_id (phone_number, display_name, provider)
 `;
 
+/**
+ * As MESMAS colunas, com o contato em junção INTERNA.
+ *
+ * Entra SÓ quando o filtro de marcador está presente. Sem `!inner`, o PostgREST
+ * aplica o filtro ao recurso EMBUTIDO: a conversa continua na lista, com
+ * `contacts` nulo — ou seja, o filtro não filtra. Com a junção permanente, a
+ * conversa de GRUPO (que não tem `contact_id`) sumiria da caixa inteira, e esse
+ * é o preço que esta constante existe para não pagar.
+ */
+const SELECT_COLS_COM_CONTATO = SELECT_COLS.replace(
+  "contacts:contact_id (",
+  "contacts:contact_id!inner (",
+);
+
 interface CursorPayload {
   sort: string | null;
   id: string;
@@ -172,7 +186,7 @@ export async function listConversationsHandler(
 
   let query = supabase
     .from("conversations")
-    .select(SELECT_COLS)
+    .select(q.tag ? SELECT_COLS_COM_CONTATO : SELECT_COLS)
     .eq("organization_id", ctx.organization_id)
     .order(sortCol, ordem)
     .order("id", { ascending: asc })
@@ -196,7 +210,17 @@ export async function listConversationsHandler(
     query = query.not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
   }
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
-  if (q.tag) query = query.contains("tags", [q.tag]); // tags @> array[tag] (GIN)
+  // ⚠️ O MARCADOR FILTRADO É O DO CONTATO (`contacts.tags`), não o da conversa.
+  //
+  // Era `conversations.tags`, e o relato mede o buraco: *"adicionei a tag nele
+  // para testar e ele n aparece no filtro"*. O Inbox tem UMA caixa de marcador
+  // para a pessoa — a do contato, em `ContactTagsEditor`, a mesma da ficha e a
+  // mesma que a campanha lê. Com o filtro consultando a outra tabela, marcar um
+  // cliente e depois procurá-lo pelo marcador devolvia "nenhuma conversa".
+  //
+  // `conversations.tags` continua existindo e servindo ao que a IA aplica na
+  // conversa; o que esta linha decide é só o que a barra de filtro pergunta.
+  if (q.tag) query = query.contains("contacts.tags", [q.tag]);
 
   // No BANCO, e não em memória: filtrar depois de paginar devolveria páginas curtas —
   // e, quando a página inteira estivesse lida, uma lista vazia que a tela apresentava

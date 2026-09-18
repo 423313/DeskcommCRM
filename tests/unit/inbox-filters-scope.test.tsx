@@ -39,6 +39,9 @@ const tagsRef: { current: string[] | undefined } = { current: [] };
 vi.mock("@/hooks/inbox/useConversationTags", () => ({
   useConversationTagVocabulary: () => ({ data: tagsRef.current }),
 }));
+vi.mock("@/hooks/contacts/useContactTagVocabulary", () => ({
+  useContactTagVocabulary: () => ({ data: tagsRef.current }),
+}));
 vi.mock("@/hooks/inbox/useConversationCounts", () => ({
   useConversationCounts: () => ({ data: { unassigned: 3, mine: 2, all: 5 } }),
 }));
