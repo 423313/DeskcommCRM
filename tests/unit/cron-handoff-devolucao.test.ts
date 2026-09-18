@@ -10,7 +10,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *   - conversa vencida, sessão com agente → `devolverAtendimentoAoAgente` é
  *     chamada com a origem automática e o prazo, e a rodada audita;
  *   - nada vencido → zero chamadas, zero linhas de auditoria;
- *   - sem o segredo → 403 e nenhum acesso ao banco.
+ *   - sem o segredo → 403 e nenhum acesso ao banco;
+ *   - conflito de atribuição: a corrida benigna é ignorada, o erro de banco
+ *     que veste o mesmo código de erro NÃO é (ver o par de casos no fim);
+ *   - o predicado que escolhe as organizações casa as linhas certas (o último
+ *     bloco — era o único elo da cadeia sem prova).
  */
 
 const SEGREDO = "segredo-do-cron";
@@ -23,6 +27,7 @@ const min = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
 
 const devolver = vi.fn();
 const auditar = vi.fn();
+const erroDeLog = vi.fn();
 let acessosAoBanco = 0;
 
 interface Banco {
@@ -33,9 +38,71 @@ interface Banco {
 }
 let banco: Banco;
 
+/** Um filtro que o código de produção pediu ao PostgREST, como ele o pediu. */
+interface Filtro {
+  metodo: "not" | "is" | "in" | "eq";
+  args: unknown[];
+}
+let filtrosPorTabela: Record<string, Filtro[]>;
+
+/** SQL NULL — distinto do `null` do JSON, e é justamente aí que `->` e `->>` divergem. */
+const SQL_NULL = Symbol("SQL NULL");
+const ehSqlNull = (v: unknown): boolean => v === SQL_NULL;
+
+/**
+ * As semânticas do PostgREST para `coluna->a->b` e `coluna->a->>b`:
+ *   - `->` navega em jsonb e PRESERVA o `null` do JSON (que não é SQL NULL);
+ *   - `->>` extrai texto e converte o `null` do JSON em SQL NULL;
+ *   - chave ausente, ou navegar dentro de algo que não é objeto, dá SQL NULL.
+ */
+function navegarJsonb(coluna: string, linha: Record<string, unknown>): unknown {
+  const partes = coluna.split(/(->>|->)/);
+  let atual: unknown = linha[partes[0] ?? ""];
+  if (atual === undefined) return SQL_NULL;
+  for (let i = 1; i < partes.length; i += 2) {
+    const seta = partes[i];
+    const chave = partes[i + 1] ?? "";
+    if (atual === null || typeof atual !== "object") return SQL_NULL;
+    const proximo = (atual as Record<string, unknown>)[chave];
+    if (proximo === undefined) return SQL_NULL;
+    if (seta === "->>") return proximo === null ? SQL_NULL : String(proximo);
+    atual = proximo;
+  }
+  return atual;
+}
+
+function passa(f: Filtro, linha: Record<string, unknown>): boolean {
+  const [coluna, a, b] = f.args as [string, unknown, unknown];
+  switch (f.metodo) {
+    case "not":
+      // Um filtro que este avaliador não modela precisa ESTOURAR, nunca passar
+      // batido: um `every` que devolve true para o desconhecido transforma
+      // "não medi" em "está certo", e a prova abaixo viraria decoração.
+      if (a !== "is" || b !== null) throw new Error(`not(${String(a)}) não modelado`);
+      return !ehSqlNull(navegarJsonb(coluna, linha));
+    case "is":
+      if (a !== null) throw new Error(`is(${String(a)}) não modelado`);
+      return ehSqlNull(navegarJsonb(coluna, linha));
+    case "eq":
+      return navegarJsonb(coluna, linha) === a;
+    case "in":
+      return (a as unknown[]).includes(navegarJsonb(coluna, linha));
+  }
+}
+
+function aplicar(
+  filtros: readonly Filtro[],
+  linhas: ReadonlyArray<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return linhas.filter((linha) => filtros.every((f) => passa(f, linha)));
+}
+
 // `vi.mock` é içado acima das constantes: o segredo vai literal aqui e em `SEGREDO`.
 vi.mock("@/lib/env", () => ({ env: { INTERNAL_CRON_SECRET: "segredo-do-cron", INTERNAL_SECRET: "" } }));
 vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => auditar(...a) }));
+vi.mock("@/lib/logger", () => ({
+  logger: { error: (...a: unknown[]) => erroDeLog(...a), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 vi.mock("@/lib/escalacao/retomada", () => ({
   devolverAtendimentoAoAgente: (...a: unknown[]) => devolver(...a),
 }));
@@ -43,20 +110,33 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (tabela: keyof Banco) => {
       acessosAoBanco++;
-      // O filtro fino (`.or`, `.in`) é do PostgREST; aqui o banco devolve a
-      // tabela inteira e quem tem de escolher é a regra pura — é ela que o
-      // teste vigia.
+      const filtros: Filtro[] = [];
+      filtrosPorTabela[tabela] = filtros;
+      const registrar =
+        (metodo: Filtro["metodo"]) =>
+        (...args: unknown[]) => {
+          filtros.push({ metodo, args });
+          return chain;
+        };
+      // Em `organizations` o dublê APLICA o que o route.ts pediu — é o predicado
+      // sob prova. Nas demais tabelas o filtro fino continua sendo no-op de
+      // propósito: lá quem escolhe é a regra pura (`selecionarVencidas`), e é ela
+      // que os casos de cima vigiam.
+      const resolver = () =>
+        Promise.resolve({
+          data: tabela === "organizations" ? aplicar(filtros, banco.organizations) : banco[tabela],
+          error: null,
+        });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const chain: any = {
         select: () => chain,
-        not: () => chain,
-        in: () => chain,
-        is: () => chain,
-        eq: () => chain,
+        not: registrar("not"),
+        in: registrar("in"),
+        is: registrar("is"),
+        eq: registrar("eq"),
         or: () => chain,
-        limit: () => Promise.resolve({ data: banco[tabela], error: null }),
-        then: (res: (v: unknown) => unknown) =>
-          Promise.resolve({ data: banco[tabela], error: null }).then(res),
+        limit: () => resolver(),
+        then: (res: (v: unknown) => unknown) => resolver().then(res),
       };
       return chain;
     },
@@ -64,6 +144,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 import { GET } from "@/app/api/v1/cron/handoff-devolucao/route";
+import { lerPrazoDeDevolucaoMinutos } from "@/lib/escalacao/devolucao-automatica";
 
 function chamar(segredo = SEGREDO): Promise<Response> {
   return GET(
@@ -92,7 +173,9 @@ function conversa(id: string, minutosParada: number): Record<string, unknown> {
 beforeEach(() => {
   devolver.mockReset();
   auditar.mockReset();
+  erroDeLog.mockReset();
   acessosAoBanco = 0;
+  filtrosPorTabela = {};
   devolver.mockResolvedValue({ ok: true, conversationId: VENCIDA, jaEstavaComOAgente: false });
   banco = {
     organizations: [{ id: ORG, settings: { routing: { handoff_return_after_minutes: 60 } } }],
@@ -158,10 +241,126 @@ describe("GET /api/v1/cron/handoff-devolucao", () => {
     expect(devolver).not.toHaveBeenCalled();
   });
 
-  it("alguém assumiu no meio (assignment_conflict) não é falha: a pessoa ganhou", async () => {
+  /**
+   * O PAR ABAIXO É UM SÓ ASSUNTO: `assignment_conflict` sai de quatro pontos de
+   * `devolverAtendimentoAoAgente` e só um deles é corrida. Classificar pelo
+   * `erro` sozinho junta os quatro — e o pior deles (o erro ao limpar
+   * `force_human`, que deixa a conversa fora da fila humana com a IA já dona e
+   * muda) saía com `falhas: 0`, sem auditoria e sem uma linha de log.
+   *
+   * O discriminador é o `detalhe`, e quem o produz é `retomada.ts`; que a
+   * corrida volte SEM ele e os erros de banco COM ele está preso em
+   * `tests/unit/escalacao-retomada.test.ts`. Estes dois casos provam o outro
+   * lado do contrato: que o cron o LÊ.
+   */
+  it("corrida pura (conflito sem detalhe) não é falha: a pessoa assumiu e ganhou", async () => {
     devolver.mockResolvedValue({ ok: false, erro: "assignment_conflict" });
     const corpo = (await (await chamar()).json()) as { data: Record<string, number> };
     expect(corpo.data).toMatchObject({ devolvidas: 0, falhas: 0 });
     expect(auditar).not.toHaveBeenCalled();
+    expect(erroDeLog).not.toHaveBeenCalled();
+  });
+
+  it("conflito COM detalhe é defeito de banco, não corrida: conta como falha, loga e audita", async () => {
+    devolver.mockResolvedValue({
+      ok: false,
+      erro: "assignment_conflict",
+      detalhe: "deadlock detected",
+    });
+    const corpo = (await (await chamar()).json()) as { data: Record<string, number> };
+    expect(corpo.data).toMatchObject({ devolvidas: 0, falhas: 1 });
+    // A rodada com efeito (ainda que só de falha) tem de deixar rastro: sem esta
+    // linha o defeito é indistinguível de uma varredura vazia.
+    expect(auditar).toHaveBeenCalledTimes(1);
+    expect(auditar.mock.calls[0]?.[0]).toMatchObject({
+      action: "conversation.handoff_auto_return_run",
+      metadata: { falhas: 1 },
+    });
+    expect(erroDeLog).toHaveBeenCalledTimes(1);
+    expect(erroDeLog.mock.calls[0]?.[1]).toMatchObject({
+      conversation_id: VENCIDA,
+      erro: "assignment_conflict",
+      detalhe: "deadlock detected",
+    });
+  });
+});
+
+/**
+ * O ELO QUE NENHUM CASO ACIMA EXERCIA.
+ *
+ * `prazosPorOrganizacao` reduz as organizações NO BANCO com
+ * `.not("settings->routing->handoff_return_after_minutes", "is", null)` e depois
+ * confere o valor de novo em memória (`lerPrazoDeDevolucaoMinutos`). O predicado
+ * é, portanto, só um redutor — e a única coisa que ele não pode fazer é cortar
+ * uma linha que o leitor aceitaria: aí a organização some da varredura, o prazo
+ * que alguém ligou na tela nunca dispara, e ninguém fica sabendo, porque a
+ * rodada responde 200 com `organizacoes: 0` e não audita (varredura vazia não é
+ * mutação). Falha em silêncio, que é a pior.
+ *
+ * A régua sai do `route.ts`: o dublê CAPTURA o predicado que o código de
+ * produção aplicou e este bloco o avalia contra formas conhecidas de `settings`.
+ * Nada aqui repete a string do filtro — se ela mudar, é a avaliação que muda.
+ */
+describe("o predicado que escolhe as organizações", () => {
+  let filtroDasOrganizacoes: Filtro[];
+
+  beforeEach(async () => {
+    await chamar();
+    filtroDasOrganizacoes = filtrosPorTabela.organizations ?? [];
+  });
+
+  const sobrevive = (settings: unknown): boolean =>
+    aplicar(filtroDasOrganizacoes, [{ id: ORG, settings }]).length === 1;
+
+  const ACEITAS_PELO_LEITOR: Array<{ nome: string; settings: unknown }> = [
+    { nome: "prazo no piso da faixa", settings: { routing: { handoff_return_after_minutes: 5 } } },
+    { nome: "prazo no meio da faixa", settings: { routing: { handoff_return_after_minutes: 60 } } },
+    { nome: "prazo no teto da faixa", settings: { routing: { handoff_return_after_minutes: 1440 } } },
+    {
+      nome: "prazo ao lado de outras chaves de routing",
+      settings: { routing: { handoff_return_after_minutes: 30, modo: "round_robin" }, branding: {} },
+    },
+  ];
+
+  it("controle positivo: o predicado existe e de fato CORTA linha", () => {
+    // Sem isto a prova seguinte seria vazia — um dublê que não aplicasse filtro
+    // nenhum a passaria inteira, e é exatamente essa a cegueira que este bloco
+    // veio consertar.
+    expect(filtroDasOrganizacoes.length).toBeGreaterThan(0);
+    expect(sobrevive({ routing: {} })).toBe(false);
+    expect(sobrevive({})).toBe(false);
+    expect(sobrevive(null)).toBe(false);
+  });
+
+  it.each(ACEITAS_PELO_LEITOR)(
+    "não corta a linha boa: $nome",
+    ({ settings }: { settings: unknown }) => {
+      // A premissa do caso: o leitor em memória aceitaria esta organização.
+      expect(lerPrazoDeDevolucaoMinutos(settings)).not.toBeNull();
+      // Logo o predicado do banco tem de entregá-la. Inverter `not`/`is`, errar
+      // o caminho jsonb ou encadear `->>` no meio derruba esta linha.
+      expect(sobrevive(settings)).toBe(true);
+    },
+  );
+
+  it("o prazo gravado como null explícito chega ao leitor (é `->`, não `->>`)", () => {
+    const settings = { routing: { handoff_return_after_minutes: null } };
+    // Com `->` o `null` do JSON não é SQL NULL, então a linha passa pelo banco e
+    // é o leitor quem a descarta. Com `->>` ela sairia já no PostgREST. As duas
+    // rotas dão o MESMO desfecho de produto (esta org não tem prazo dos dois
+    // jeitos) — esta asserção existe para que trocar o operador seja decisão
+    // registrada, não deriva silenciosa.
+    expect(sobrevive(settings)).toBe(true);
+    expect(lerPrazoDeDevolucaoMinutos(settings)).toBeNull();
+  });
+
+  it("a divisão de trabalho é essa: o banco corta a ausência, a memória corta a faixa", () => {
+    // Fora da faixa o predicado NÃO corta (o valor existe) — quem corta é
+    // `lerPrazoDeDevolucaoMinutos`. Registrar isso impede que alguém "conserte"
+    // o filtro tentando checar faixa em jsonb, que é onde ele passaria a cortar
+    // linha boa por engano.
+    const curto = { routing: { handoff_return_after_minutes: 2 } };
+    expect(sobrevive(curto)).toBe(true);
+    expect(lerPrazoDeDevolucaoMinutos(curto)).toBeNull();
   });
 });

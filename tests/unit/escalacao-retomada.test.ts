@@ -50,6 +50,8 @@ interface CenarioBanco {
   checkpointAnterior?: Record<string, unknown> | null;
   negocios?: Array<Record<string, unknown>>;
   erroDoEmitEvent?: { message: string } | null;
+  /** Falha no UPDATE de `contacts.force_human` — o passo (3) de `retomada.ts`. */
+  erroAoLimparForceHuman?: { message: string } | null;
 }
 
 /**
@@ -94,6 +96,12 @@ function fazerSupabase(cenario: CenarioBanco, cap: Captura) {
         return Promise.resolve({ data: null, error: null });
       },
       then: (res: (v: unknown) => unknown) => {
+        if (ehUpdate && tabela === "contacts" && cenario.erroAoLimparForceHuman) {
+          return Promise.resolve({
+            data: null,
+            error: cenario.erroAoLimparForceHuman,
+          }).then(res);
+        }
         const listas: Record<string, unknown[]> = {
           agent_cases: cenario.chamados ?? [],
           agent_case_events: cenario.eventosDeChamado ?? [],
@@ -389,15 +397,44 @@ describe("devolver o atendimento ao agente", () => {
     expect(cap.updates).toEqual([]);
   });
 
-  it("alguém assumiu na corrida: reporta conflito em vez de estourar a constraint", async () => {
+  it("alguém assumiu na corrida: reporta conflito SEM detalhe — é esse o discriminador", async () => {
     const cap = novaCaptura();
     const res = await retomar(
       cenarioComAtendimentoHumano({ updateDaConversaCasa: false }),
       cap,
     );
     expect(res).toMatchObject({ ok: false, erro: "assignment_conflict" });
+    // A AUSÊNCIA de `detalhe` é contrato, não detalhe de implementação: é por ela
+    // que o cron `handoff-devolucao` separa a corrida benigna (a pessoa ganhou,
+    // segue o baile) dos erros de banco que também voltam como
+    // `assignment_conflict`. Encher isto aqui faz um defeito real voltar a sair
+    // calado lá — ver o caso irmão logo abaixo.
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.detalhe).toBeUndefined();
     // E não chega a mexer no contato: devolver metade seria pior que não devolver.
     expect(cap.updates.filter((u) => u.tabela === "contacts")).toEqual([]);
+  });
+
+  it("erro ao limpar force_human volta como conflito COM detalhe — não é corrida, é defeito", async () => {
+    const cap = novaCaptura();
+    const res = await retomar(
+      cenarioComAtendimentoHumano({ erroAoLimparForceHuman: { message: "deadlock detected" } }),
+      cap,
+    );
+    // Mesmo código de erro da corrida — o tipo `RetomadaFalha` não os separa —,
+    // mas este chega DEPOIS de a conversa já ter virado `assignee_kind='ai'`:
+    // ela saiu da fila humana e a trava que cala os três guards ficou de pé.
+    // Quem classifica só pelo `erro` trata os dois igual e perde este.
+    expect(res).toMatchObject({ ok: false, erro: "assignment_conflict" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.detalhe).toBe("deadlock detected");
+    // Controle positivo do dublê: a escrita SAIU (foi o banco que a recusou).
+    // Sem isto, um dublê que simplesmente não chamasse o UPDATE daria o mesmo
+    // vermelho por outro motivo.
+    expect(cap.updates.filter((u) => u.tabela === "contacts")).toContainEqual({
+      tabela: "contacts",
+      valores: { force_human: false },
+    });
   });
 
   it("é idempotente: repetir com a conversa já no agente segue devolvendo ok", async () => {

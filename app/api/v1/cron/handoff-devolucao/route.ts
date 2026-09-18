@@ -167,9 +167,20 @@ export async function devolverHandoffsVencidos(
       devolvidas++;
       continue;
     }
-    // Conflito de atribuição = alguém assumiu entre a leitura e a escrita; a
-    // pessoa ganhou, e é o desfecho certo. Só o resto é falha de verdade.
-    if (r.erro === "assignment_conflict") continue;
+    // `assignment_conflict` sai de QUATRO pontos de `devolverAtendimentoAoAgente`
+    // e só UM deles é corrida: o UPDATE que casou 0 linhas porque alguém assumiu
+    // entre a leitura e a escrita — a pessoa ganhou, e é o desfecho certo. Os
+    // outros três (release que falhou, erro no UPDATE, erro ao limpar
+    // `force_human`) carregam a mensagem do banco em `detalhe`; a corrida volta
+    // SEM ela. O discriminador é esse, e é o próprio `retomada.ts` que o produz.
+    //
+    // Engolir os quatro escondia justamente o pior: o erro ao limpar
+    // `force_human` acontece DEPOIS de a conversa já ter virado
+    // `assignee_kind='ai'` — ela sai da fila humana, a IA vira dona, e a trava
+    // que cala os três guards (worker nativo, harness, before-send) continua de
+    // pé. Ninguém atende dos dois lados, e a rodada reportava `falhas: 0` sem
+    // auditar nada: um defeito real com cara de disputa benigna.
+    if (r.erro === "assignment_conflict" && r.detalhe === undefined) continue;
     falhas++;
     logger.error("[handoff-devolucao] devolução falhou", {
       conversation_id: conversa.id,
