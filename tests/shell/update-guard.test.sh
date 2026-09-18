@@ -57,6 +57,7 @@ trap 'rm -rf "$WORK"' EXIT
 # git de verdade, resolvido ANTES de $WORK/bin entrar no PATH (senão o shim
 # abaixo se acharia a si mesmo e recursaria pra sempre).
 REAL_GIT="$(command -v git)"
+REAL_UNAME="$(command -v uname)"
 
 FAILS=0
 check() {  # check <descrição> <comando de verificação...>
@@ -157,7 +158,18 @@ if [ "\${FORCE_UNSHALLOW_FAIL:-0}" = "1" ]; then
 fi
 exec "$REAL_GIT" "\$@"
 STUB
-chmod +x "$WORK/bin/docker" "$WORK/bin/crontab" "$WORK/bin/flock" "$WORK/bin/curl" "$WORK/bin/git"
+# `uname -m` responde x86_64. O `_common.sh` recusa, antes de qualquer trabalho,
+# todo `update.sh` que não roda em amd64 — e aqui quem está sob prova é o
+# update.sh, não o processador de quem roda a suíte. Sem o dublê, num Mac Apple
+# Silicon (`arm64`) o script saía na guarda antes de todos os casos (medido: 45
+# provas vermelhas). A recusa de ARM tem prova própria em
+# tests/shell/arquitetura-kit.test.sh; qualquer outro uso de `uname` vai ao real.
+cat > "$WORK/bin/uname" <<STUB
+#!/usr/bin/env bash
+[ "\$*" = "-m" ] && { printf 'x86_64\n'; exit 0; }
+exec "$REAL_UNAME" "\$@"
+STUB
+chmod +x "$WORK/bin/docker" "$WORK/bin/crontab" "$WORK/bin/flock" "$WORK/bin/curl" "$WORK/bin/git" "$WORK/bin/uname"
 export DOCKER_LOG="$WORK/docker.log" CURL_LOG="$WORK/curl.log"
 export FAKE_CRONTAB="$WORK/crontab.txt"
 export PATH="$WORK/bin:$PATH"
