@@ -112,7 +112,7 @@ function makeDb(opts: { sessions?: Linha[]; recusaColunaDoDesfecho?: boolean } =
       return this;
     }
 
-    /** O banco SEM a migration 0275 recusa qualquer menção às colunas do desfecho. */
+    /** O banco SEM a migration 0311 recusa qualquer menção às colunas do desfecho. */
     private semColuna(): { code: string; message: string } | null {
       if (opts.recusaColunaDoDesfecho !== true) return null;
       const citada =
@@ -400,7 +400,7 @@ describe("registrarWebhookDaSessao — o desfecho gravado na sessão", () => {
     expect(desfecho.erro).toContain("decifrada");
   });
 
-  it("banco SEM a migration 0275: não lança e ainda devolve o desfecho para a resposta", async () => {
+  it("banco SEM a migration 0311: não lança e ainda devolve o desfecho para a resposta", async () => {
     const registro = makeDb({ recusaColunaDoDesfecho: true });
     stubMeta({});
 

@@ -6657,6 +6657,7 @@ export const DICIONARIO: Traducoes = {
   "Insistência do agente (média de retornos)": { es: "Insistencia del agente (promedio de retornos)" },
   "Insistência no pior caso": { es: "Insistencia en el peor caso" },
   "Intervenções humanas por demanda": { es: "Intervenciones humanas por demanda" },
+  "Mensagens enviadas por automação": { es: "Mensajes enviados por automatización" },
   "Mensagens enviadas pelo agente": { es: "Mensajes enviados por el agente" },
   "Negócios ganhos": { es: "Negocios ganados" },
   "O cliente que mais recebeu retornos. A média esconde o exagero pontual.": { es: "El cliente que más retornos recibió. El promedio esconde el exceso puntual." },
@@ -6664,6 +6665,7 @@ export const DICIONARIO: Traducoes = {
   "Passagens para humano": { es: "Pases a humano" },
   "Perguntas que a pessoa teve de repetir": { es: "Preguntas que la persona tuvo que repetir" },
   "Quanto o sistema precisou ser contido de si mesmo antes de falar.": { es: "Cuánto el sistema necesitó ser contenido de sí mismo antes de hablar." },
+  "Regra de automação, texto fixo do follow-up e lembrete de agenda: saiu sozinho e ninguém escreveu. Não entra no número do agente — é por isso que ele cai onde há automação.": { es: "Regla de automatización, texto fijo del seguimiento y recordatorio de agenda: salió solo y nadie lo escribió. No entra en el número del agente — por eso baja donde hay automatización." },
   "Respostas dadas pelo agente": { es: "Respuestas dadas por el agente" },
   "Respostas humanas fora do sistema": { es: "Respuestas humanas fuera del sistema" },
   "Turnos até o desfecho (mediana)": { es: "Turnos hasta el desenlace (mediana)" },
@@ -7973,6 +7975,8 @@ export const DICIONARIO: Traducoes = {
   "Enviar vendas para o Google Ads": { es: "Enviar ventas a Google Ads" },
   "Google Ads autorizado. Agora informe a conta e a ação de conversão abaixo.":
     { es: "Google Ads autorizado. Ahora indica la cuenta y la acción de conversión abajo." },
+  "Enviar vendas para o Google Ads ainda não está disponível nesta instalação — não é nada que você tenha feito. Quem instalou o sistema precisa configurar":
+    { es: "Enviar ventas a Google Ads todavía no está disponible en esta instalación — no es nada que hayas hecho. Quien instaló el sistema necesita configurar" },
 
   // Convidado do compromisso (agenda)
   "E-mail do convidado": { es: "Correo del invitado" },

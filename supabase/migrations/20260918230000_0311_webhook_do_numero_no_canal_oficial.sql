@@ -1,4 +1,4 @@
--- 0275 · O webhook do NÚMERO, registrado pela própria instalação (issue #850, fatia F1).
+-- 0311 · O webhook do NÚMERO, registrado pela própria instalação (issue #850, fatia F1).
 --
 -- ─── O que o usuário via ────────────────────────────────────────────────────
 -- Conectar o canal oficial era metade do caminho: o canal ENVIAVA e não RECEBIA até

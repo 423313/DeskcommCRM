@@ -13,7 +13,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * que ele talvez nem tenha mais à mão para repetir uma chamada que é do nosso lado. O
  * que ela exige é a sessão VIVA (não arquivada) e um admin — a mesma guarda da tela.
  *
- * O desfecho é o da tentativa de AGORA, e é gravado nas colunas da 0275: a tela
+ * O desfecho é o da tentativa de AGORA, e é gravado nas colunas da 0311: a tela
  * recarrega o GET e vê o estado novo, não o da tentativa anterior.
  */
 import { randomUUID } from "node:crypto";

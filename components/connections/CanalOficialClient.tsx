@@ -132,7 +132,7 @@ export function CanalOficialClient() {
 
           {/*
             O aviso só aparece quando o CRM TENTOU registrar e não conseguiu. Nulo
-            (banco sem a migration 0275) cai no passo manual acima, que continua
+            (banco sem a migration 0311) cai no passo manual acima, que continua
             verdadeiro — a tela nunca diz "registrado" sem ter registrado.
           */}
           {estado.webhookRegistro && !estado.webhookRegistro.registrado ? (
