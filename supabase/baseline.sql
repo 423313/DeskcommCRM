@@ -27849,7 +27849,7 @@ comment on column public.user_organizations.provisional_until_handover is
 create table if not exists public.platform_settings (
   id           smallint    primary key default 1,
   signup_mode  text        not null default 'aberto',
-  -- Comportamento da instalação (0265). NULAS de propósito: null = "a
+  -- Comportamento da instalação (0317). NULAS de propósito: null = "a
   -- instalação não opinou" e quem responde é o arquivo de ambiente, o que faz
   -- a migration não mudar comportamento de quem nunca abrir a tela.
   orcamento_de_ia              text,
@@ -27888,11 +27888,11 @@ create trigger trg_platform_settings_touch
 
 notify pgrst, 'reload schema';
 
--- ---- comportamento da instalação (migration 0265) ----
+-- ---- comportamento da instalação (migration 0317) ----
 -- O `create table if not exists` acima só age em instalação NOVA: quem já tem
 -- `platform_settings` (desde a 0253, v1.25.0) passa por ele sem efeito no
 -- `update.sh`, e as quatro colunas nunca nasceriam. Este bloco é o espelho da
--- migration 0265 e é o que as leva a quem ATUALIZA. NULAS e sem default, de
+-- migration 0317 e é o que as leva a quem ATUALIZA. NULAS e sem default, de
 -- propósito: null = "a instalação não opinou", e quem responde é o `.env`.
 -- Sem dado a corrigir antes das CHECKs: as colunas nascem nulas, e as CHECKs
 -- aceitam null.

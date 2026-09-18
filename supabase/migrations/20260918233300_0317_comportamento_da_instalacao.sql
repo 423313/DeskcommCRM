@@ -1,4 +1,4 @@
--- 0265 — o COMPORTAMENTO da instalação ganha coluna e tela (issue #1034).
+-- 0317 — o COMPORTAMENTO da instalação ganha coluna e tela (issue #1034).
 --
 -- ─── O que a issue pede ─────────────────────────────────────────────────────
 -- Quatro decisões que valem para a INSTALAÇÃO inteira só se tomam hoje por SSH,

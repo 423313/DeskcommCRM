@@ -9,7 +9,7 @@
  *
  * Usa o admin client porque quem chama já passou por `requirePlatformAdmin()`
  * (ou pela sessão do Server Component): a linha é da INSTALAÇÃO, não de um
- * tenant, e não existe policy de RLS que a isole — ver a migration 0265.
+ * tenant, e não existe policy de RLS que a isole — ver a migration 0317.
  */
 import { normalizarChaveDeOrcamento } from "@/lib/agent-engine/edge/llm/orcamento";
 import { env } from "@/lib/env";
