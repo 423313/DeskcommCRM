@@ -65,6 +65,7 @@ const RAW: AtritoRaw = {
     vetos: 18,
     execucoes_medidas: 120,
     envios_por_ia: 600,
+    envios_por_automacao: 150,
     envios_humano_no_sistema: 300,
     envios_humano_fora: 100,
     demandas_sem_proximo_passo: 6,
@@ -299,6 +300,7 @@ describe("zero lisonjeiro — ausência de dado é null, nunca 0", () => {
     const vazio = {
       ...RAW.empresa,
       envios_por_ia: 0,
+      envios_por_automacao: 0,
       envios_humano_no_sistema: 0,
       envios_humano_fora: 0,
     };
@@ -356,5 +358,40 @@ describe("formatação", () => {
     [5400, "1h 30min"],
   ])("duração de %is é %s", (segundos, esperado) => {
     expect(formatarDuracao(segundos)).toBe(esperado);
+  });
+});
+
+
+/**
+ * O NÚMERO DA AUTOMAÇÃO TEM LUGAR (#652) — o contrário dele mente.
+ *
+ * Quando o carimbo da automação saiu de `'ai'` (issue #652), `envios_por_ia`
+ * CAIU para quem usa regra. A queda é correta — o agente não escreveu aquelas
+ * mensagens —, mas sem um número próprio ela chegaria na tela como o agente
+ * encolhendo, sem nada que a explicasse. Este bloco prende o LUGAR do número
+ * novo: ele é publicado, com o valor que veio do banco, e não infla a conta do
+ * agente em nenhuma das duas pontas.
+ */
+describe("o número próprio da automação (#652)", () => {
+  it("`envios_por_automacao` é publicado no painel, em Contenção", () => {
+    const contencao = montarPares(RAW).find((p) => p.chave === "contencao");
+    expect(contencao, "Contenção sumiu do painel").toBeDefined();
+    const medida = contencao!.danos.find((d) => d.chave === "envios_por_automacao");
+    expect(
+      medida,
+      "o payload traz `envios_por_automacao` e o painel não mostra: a org com automação vê o 'por IA' cair sem explicação na tela",
+    ).toBeDefined();
+    expect(medida!.valor).toBe(150);
+    expect(medida!.unidade).toBe("contagem");
+    expect(formatarMedida(medida!)).toContain("150");
+  });
+
+  it("o número do agente não é inflado pela automação", () => {
+    const contencao = montarPares(RAW).find((p) => p.chave === "contencao")!;
+    expect(contencao.eficiencia.valor).toBe(600);
+    // 600 do agente sobre 600 + 300 + 100 de saídas COM dono entre agente e
+    // pessoa: a automação (150) não entra em nenhuma das duas pontas, senão o
+    // número do agente subiria por mensagem que ele não escreveu.
+    expect(taxaDeAutomacao(RAW.empresa)).toBeCloseTo(0.6, 6);
   });
 });
