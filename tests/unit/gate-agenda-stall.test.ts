@@ -289,7 +289,9 @@ describe("fiação do gate — a EXECUÇÃO da ferramenta de agenda arma o sinal
  * verificar).
  */
 describe("#1019 — a promessa de agenda que o padrão deixava passar", () => {
-  const armado = { active: true, podeMarcar: true, toolCalledThisTurn: false };
+  // O contexto do gate fala em LISTA de ferramentas desde a #831 (a main):
+  // `ferramentas` e a lista exata do agente, e e ela que o veto nomeia.
+  const armado = { active: true, ferramentas: TODAS, toolCalledThisTurn: false };
 
   it("⭐ veta 'vou verificar seu atendimento' (a promessa do relato)", () => {
     const v = agendaStallGate.evaluate(
@@ -322,7 +324,7 @@ describe("#1019 — a promessa de agenda que o padrão deixava passar", () => {
   it("a MESMA frase do relato passa quando a ferramenta rodou neste turno", () => {
     const v = agendaStallGate.evaluate(
       baseCtx({
-        agenda: { active: true, podeMarcar: true, toolCalledThisTurn: true },
+        agenda: { active: true, ferramentas: TODAS, toolCalledThisTurn: true },
         body: "Vou organizar seu atendimento e já te aviso.",
       }),
     );
