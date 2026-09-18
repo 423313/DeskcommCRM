@@ -18,27 +18,43 @@
 #
 # O que está sob prova, hook por hook:
 #
-#   freeze-invariants.sh — o eixo é PROCEDÊNCIA: o que o OUTRO LADO DO MERGE mudou
-#        (`:<p>` == `MERGE_HEAD:<p>` **e** `MERGE_HEAD:<p>` != `merge-base:<p>`).
+#   freeze-invariants.sh — o eixo é PROCEDÊNCIA, e ela exige QUATRO referências: o índice
+#        (`:<p>`), `HEAD:<p>`, `MERGE_HEAD:<p>` e `merge-base:<p>`. Um caminho sai da lista
+#        só quando as CINCO condições valem — (1) há merge de um lado só, (2) o outro lado
+#        é alcançável por `origin/main`, (3) `HEAD:<p>` == `base:<p>`, (4) `:<p>` ==
+#        `MERGE_HEAD:<p>` e (5) `MERGE_HEAD:<p>` != `base:<p>` — e CADA uma tem aqui o caso
+#        que fica vermelho quando ela é removida (medido, uma sabotagem por condição):
+#          2 → FURO-B, COLEGA-DEL, SEM-REF     4 → B+
+#          3 → FURO-A, FURO-A-MH               5 → MODO
+#        (a 1 não tem caso: octopus não está coberto — ver o comentário do caso FURO-B.)
 #     1. o FALSO POSITIVO morreu: invariante que o merge trouxe não é acusado — nem quando
-#        o merge o MODIFICA (caso B) nem quando ele o RENOMEIA (caso REN-LEGIT).
+#        o merge o MODIFICA (caso B), nem quando ele o RENOMEIA (caso REN-LEGIT), nem
+#        quando o caminho tem ACENTO (caso ACENTO-LEGIT).
 #     2. a GUARDA REAL continua inteira, e este é o ponto: editar invariante com conteúdo
 #        PRÓPRIO segue bloqueado — inclusive escondido DENTRO do merge da main, que é o
 #        disfarce mais fácil depois de relaxar o hook.
 #     3. DELETE segue acusado, ADIÇÃO segue liberada (é a regra declarada no cabeçalho do
 #        hook) e a válvula segue funcionando.
-#     4. e os dois eixos mais SIMPLES furam, cada um com o seu caso aqui:
+#     4. e os eixos mais SIMPLES furam, cada um com o seu caso aqui:
 #        · existência de CAMINHO (`git cat-file -e origin/main:$p`, a forma do guard de
 #          migration): o invariante existe na main tanto quando a main o trouxe quanto
 #          quando a branch o reescreveu → caso B+.
-#        · identidade de CONTEÚDO contra `origin/main` (a forma anterior deste arquivo):
-#          também é verdade quando a sessão REVERTE o invariante para a versão da main,
-#          que é autoria → casos R1 e R1-LIMPO. E ela julgava só o `$3` da linha `R`,
-#          deixando o path VELHO ser apagado em silêncio → caso R-VELHO.
-#     5. falha FECHADA onde a procedência não é decidível: sem MERGE_HEAD (R1) e sem
-#        ancestral comum (FECHADO-SEM-BASE). Já `origin/main` deixou de ser NECESSÁRIA —
-#        MERGE_HEAD e a merge-base são locais, então fork e clone raso ganham o conserto
-#        de graça (caso SEM-REF, cuja expectativa virou 0 por isso).
+#        · identidade de CONTEÚDO contra `origin/main` (duas versões atrás): também é
+#          verdade quando a sessão REVERTE o invariante para a versão da main, que é
+#          autoria → casos R1 e R1-LIMPO. E ela julgava só o `$3` da linha `R`, deixando o
+#          path VELHO ser apagado em silêncio → caso R-VELHO.
+#        · julgar só o índice, `MERGE_HEAD` e a base, SEM ler `HEAD` (a versão anterior):
+#          as condições 4 e 5 valem quando a sessão DESCARTA a versão da própria branch
+#          dentro do merge → casos FURO-A e FURO-A-MH.
+#        · aceitar QUALQUER `MERGE_HEAD` (idem): a ref é fabricável pela própria sessão
+#          (`git stash`) e um colega não revisado não é trabalho aceito → FURO-B,
+#          COLEGA-DEL.
+#     5. falha FECHADA onde a procedência não é decidível: sem MERGE_HEAD (R1), sem
+#        ancestral comum (FECHADO-SEM-BASE) e sem a ref `origin/main` (SEM-REF, cuja
+#        expectativa VOLTOU a 1 — mudança declarada, ver o comentário do caso).
+#     6. e a lista de entrada não falha mais ABERTA em caminho que o git CITA (acento com
+#        `core.quotepath`, aspas, barra invertida): a âncora `^tests/invariants/` não
+#        casava e o invariante era invisível à guarda → casos CITADO/ACENTO.
 #
 #   validate-features.sh
 #     5. o FALSO POSITIVO morreu nos dois caminhos: a main EDITANDO e a main CRIANDO
@@ -70,14 +86,38 @@ unset DESKCOMM_GOV_INVARIANTS_EDIT DESKCOMM_GOV_PLAN_EDIT || true
 
 INV=tests/invariants/exemplo-congelado.test.ts
 FEAT=plan/features.json
+# um invariante cujo nome o git CITA (aspas no nome). Ele existe porque a varredura de
+# formas de 18/09/2026 achou aqui um furo ABERTO, não um falso positivo — ver CITADO.
+INV_CITADO='tests/invariants/inv-com-"aspas".test.ts'
+# e um com ACENTO, que o `core.quotepath` do git (padrão: true) também cita
+INV_ACENTO='tests/invariants/inv-acentuação.test.ts'
 
 identificar() { git -C "$1" config user.email "quem@exemplo.com"; git -C "$1" config user.name "Quem"; }
 commitar()    { git -C "$1" add -A >/dev/null && git -C "$1" commit -q --no-verify -m "$2"; }
 
+# O invariante tem TRÊS SLOTS separados por linhas de contexto, e isso é premissa de
+# MEDIÇÃO, não estética: é o que faz o 3-way do git resolver o arquivo SOZINHO quando os
+# dois lados mexem nele — o estado exato do caso FURO-A. Com os slots colados o merge
+# CONFLITA, e o caso passaria a medir outra coisa.
+# $1 slot do colega, $2 slot da branch, $3 slot da main.
+inv() {
+  printf 'import { it } from "vitest";\n%s\nit("MARCADOR-BASE-A", () => {});\nit("MARCADOR-BASE-B", () => {});\nit("MARCADOR-BASE-C", () => {});\n%s\nit("MARCADOR-BASE-D", () => {});\nit("MARCADOR-BASE-E", () => {});\nit("MARCADOR-BASE-F", () => {});\n%s\n' \
+    "${1:-// slot-colega}" "${2:-// slot-branch}" "${3:-// slot-main}"
+}
+MARCA_COLEGA='it("MARCADOR-COLEGA", () => {});'
+MARCA_BRANCH='it("MARCADOR-BRANCH", () => {});'
+MARCA_MAIN='it("MARCADOR-MAIN", () => {});'
+# a sonda de CONSEQUÊNCIA: o MARCADOR de UM lado no HEAD depois do commit. Nunca
+# contagem — a versão da main TAMBÉM tem duas asserções, então contar prova que nada
+# sumiu do total, não que não sumiu a asserção DAQUELE lado.
+tem_marcador() { git -C "$1" show "HEAD:$2" 2>/dev/null | grep -qF "MARCADOR-$3"; }
+
 # ── o "principal" que faz o papel da main ───────────────────────────────────────────
 principal="$TMP/principal"; mkdir -p "$principal/tests/invariants" "$principal/plan"
 git -C "$principal" init -q -b main; identificar "$principal"
-printf 'test("invariante original", () => {});\n' > "$principal/$INV"
+inv > "$principal/$INV"
+inv > "$principal/$INV_CITADO"
+inv > "$principal/$INV_ACENTO"
 printf '{\n  "epico": "G6",\n  "features": [\n    { "id": "F1", "title": "titulo original", "passes": false }\n  ]\n}\n' > "$principal/$FEAT"
 printf '# leia\n' > "$principal/README.md"
 commitar "$principal" "base da main"
@@ -87,12 +127,21 @@ BASE_DA_BRANCH=$(git -C "$principal" rev-parse HEAD)
 # a rota que apaga o fortalecimento de outra pessoa não precisa de válvula em passo nenhum
 # — merge limpo não chama hook, e o commit seguinte só reverte para a versão da main.
 git -C "$principal" checkout -q -b colega
-printf 'test("invariante original", () => {});\ntest("asercao que o COLEGA acrescentou", () => {});\n' > "$principal/$INV"
+inv "$MARCA_COLEGA" > "$principal/$INV"
 commitar "$principal" "o colega fortalece o invariante"
 git -C "$principal" checkout -q main
 
+# e uma branch de COLEGA que APAGA o invariante, mexendo no README para CONFLITAR. Ela
+# existe pelo caso COLEGA-DEL: é a forma mundana do FURO B, sem stash nenhum.
+git -C "$principal" checkout -q -b colega-del
+git -C "$principal" rm -q "$INV"
+printf '# leia\nlinha do COLEGA-DEL\n' > "$principal/README.md"
+commitar "$principal" "o colega apaga o invariante"
+git -C "$principal" checkout -q main
+
 # a main ANDA: edita o invariante e o features.json (só campo proibido, como um ato humano)
-printf 'test("invariante original", () => {});\ntest("linha que a MAIN acrescentou", () => {});\n' > "$principal/$INV"
+inv "" "" "$MARCA_MAIN" > "$principal/$INV"
+inv "" "" "$MARCA_MAIN" > "$principal/$INV_ACENTO"
 printf '{\n  "epico": "G6",\n  "features": [\n    { "id": "F1", "title": "titulo original", "passes": false },\n    { "id": "F2", "title": "feature que a MAIN criou", "passes": false }\n  ]\n}\n' > "$principal/$FEAT"
 # o README entra no mesmo commit de propósito: é o que faz o merge do caso E2E CONFLITAR,
 # e sem conflito o `git commit` não acontece e o pre-commit nunca é chamado.
@@ -192,7 +241,7 @@ assert_exit "$(exit_de "$r")" 0 "B: invariante que a main trouxe NÃO é acusado
 # CASO B+ · o MESMO merge, mas a branch edita o invariante por cima (a guarda real)
 bp="$TMP/bp"; preparar "$bp" "$principal" "$BASE_DA_BRANCH"
 git -C "$bp" merge --no-commit --no-ff origin/main >/dev/null 2>&1 || true
-printf 'test("reescrito pela SESSAO para passar", () => {});\n' > "$bp/$INV"
+printf 'it("MARCADOR-REESCRITO-PELA-SESSAO", () => {});\n' > "$bp/$INV"
 git -C "$bp" add "$INV"
 r=$(rodar "$bp" freeze-invariants.sh)
 assert_exit "$(exit_de "$r")" 1 "B+: edição PRÓPRIA escondida dentro do merge SEGUE bloqueada"
@@ -200,7 +249,7 @@ assert_contains "$(saida_de "$r")" "$INV" "B+: e a mensagem nomeia o invariante 
 
 # CASO A · edição genuína, fora de merge
 a="$TMP/a"; preparar "$a" "$principal" "$BASE_DA_BRANCH"
-printf 'test("reescrito pela SESSAO", () => {});\n' > "$a/$INV"; git -C "$a" add "$INV"
+printf 'it("MARCADOR-REESCRITO-PELA-SESSAO", () => {});\n' > "$a/$INV"; git -C "$a" add "$INV"
 r=$(rodar "$a" freeze-invariants.sh)
 assert_exit "$(exit_de "$r")" 1 "A: edição genuína fora de merge SEGUE bloqueada"
 
@@ -220,7 +269,7 @@ assert_exit "$(exit_de "$r")" 1 "D: deletar invariante que a main tem SEGUE bloq
 # NADA acusa a perda. Aqui os dois lados são vazios, comparariam IGUAIS, e o caminho
 # sairia da lista em silêncio — é o único caso que essa condição sustenta.
 d2="$TMP/d2"; preparar "$d2" "$principal" "$BASE_DA_BRANCH"
-printf 'test("invariante que a branch criou", () => {});\n' > "$d2/tests/invariants/so-da-branch.test.ts"
+inv "" "$MARCA_BRANCH" "" > "$d2/tests/invariants/so-da-branch.test.ts"
 commitar "$d2" "a branch cria um invariante proprio"
 if [ -z "$(git -C "$d2" rev-parse -q --verify 'origin/main:tests/invariants/so-da-branch.test.ts')" ]; then ok "D2: o invariante NÃO está na main (a premissa do caso)"
 else falha "D2: o invariante NÃO está na main" "a main o tem: o caso não mede o que devia"; fi
@@ -234,7 +283,7 @@ assert_exit "$(exit_de "$r")" 1 "D2: deletar invariante que a PRÓPRIA branch cr
 # fora de merge NÃO cobre isso: lá não há MERGE_HEAD e nada é excluído de qualquer jeito —
 # sabotar a condição 2 o deixa verde. Medido: é o único caso que fica vermelho.
 d2m="$TMP/d2m"; preparar "$d2m" "$principal" "$BASE_DA_BRANCH"
-printf 'test("invariante que a branch criou", () => {});\n' > "$d2m/tests/invariants/so-da-branch.test.ts"
+inv "" "$MARCA_BRANCH" "" > "$d2m/tests/invariants/so-da-branch.test.ts"
 printf 'ponta da BRANCH\n' > "$d2m/README.md"
 commitar "$d2m" "a branch cria invariante proprio e mexe no README"
 git -C "$d2m" merge --no-edit origin/main >/dev/null 2>&1 || true
@@ -252,7 +301,7 @@ assert_contains "$(saida_de "$r")" "tests/invariants/so-da-branch.test.ts" "D2-M
 
 # CASO ADD · invariante NOVO é permitido (regra declarada no cabeçalho do hook)
 add="$TMP/add"; preparar "$add" "$principal" "$BASE_DA_BRANCH"
-printf 'test("invariante novo", () => {});\n' > "$add/tests/invariants/novinho.test.ts"
+inv > "$add/tests/invariants/novinho.test.ts"
 git -C "$add" add tests/invariants/novinho.test.ts
 r=$(rodar "$add" freeze-invariants.sh)
 assert_exit "$(exit_de "$r")" 0 "ADD: acrescentar invariante novo segue liberado"
@@ -269,7 +318,7 @@ assert_exit "$(exit_de "$r")" 0 "ADD: acrescentar invariante novo segue liberado
 #   eixo de PROCEDÊNCIA          → git commit exit 1, e o HEAD segue com as DUAS
 # É por isso que o caso assere a CONSEQUÊNCIA (o conteúdo do HEAD) e não só o exit.
 r1="$TMP/r1"; preparar "$r1" "$principal" "$BASE_DA_BRANCH"
-printf 'test("invariante original", () => {});\ntest("asercao que a BRANCH acrescentou", () => {});\n' > "$r1/$INV"
+inv "" "$MARCA_BRANCH" "" > "$r1/$INV"
 git -C "$r1" add "$INV"
 saida=$( cd "$r1" && DESKCOMM_GOV_INVARIANTS_EDIT=1 git commit --no-edit -m "fortalece o invariante (ato legitimo)" 2>&1 ); rc=$?
 assert_exit "$rc" 0 "R1: fortalecer o invariante COM a válvula passa — é o ato que monta o estado"
@@ -277,7 +326,8 @@ assert_exit "$rc" 0 "R1: fortalecer o invariante COM a válvula passa — é o a
 # escolhido: com `grep -c 'test('` o caso passava sob sabotagem, porque a versão da main
 # TAMBÉM tem duas asserções. Contar prova que nada sumiu do total; só o marcador prova que
 # não sumiu a asserção DESTA branch.
-antes=$(grep -c 'BRANCH' "$r1/$INV")
+if tem_marcador "$r1" "$INV" BRANCH; then ok "R1: o MARCADOR-BRANCH está no HEAD antes do descarte (a premissa da consequência)"
+else falha "R1: o MARCADOR-BRANCH está no HEAD antes do descarte" "não está: a sonda da consequência mediria nada"; fi
 git -C "$r1" checkout origin/main -- "$INV"; git -C "$r1" add "$INV"
 if [ "$(git -C "$r1" rev-parse ":$INV")" = "$(git -C "$r1" rev-parse "origin/main:$INV")" ]; then ok "R1: o encenado é IDÊNTICO ao da main (a premissa — é o que enganava o eixo de conteúdo)"
 else falha "R1: o encenado é IDÊNTICO ao da main" "os blobs diferem: o caso não mede o que devia"; fi
@@ -285,9 +335,8 @@ if [ -z "$(git -C "$r1" rev-parse -q --verify MERGE_HEAD)" ]; then ok "R1: e nã
 else falha "R1: e não há merge em curso" "MERGE_HEAD existe"; fi
 r=$(commitar_pelo_dispatcher "$r1" "reverte o invariante para a versao da main")
 assert_exit "$(exit_de "$r")" 1 "R1: reverter para a versão da main fora de merge é ACUSADO (pelo dispatcher)"
-depois=$(git -C "$r1" show "HEAD:$INV" | grep -c 'BRANCH')
-if [ "$antes" = 1 ] && [ "$depois" = 1 ]; then ok "R1: e a asserção da branch SOBREVIVEU no HEAD — a consequência, não só o exit"
-else falha "R1: a asserção da branch sobreviveu no HEAD" "antes=$antes depois=$depois"; fi
+if tem_marcador "$r1" "$INV" BRANCH; then ok "R1: e o MARCADOR-BRANCH SOBREVIVEU no HEAD — a consequência, não só o exit"
+else falha "R1: o MARCADOR-BRANCH sobreviveu no HEAD" "foi apagado: o commit passou"; fi
 
 # CASO R1-LIMPO · a mesma perda, por uma rota que não pede válvula em PASSO NENHUM: mesclar
 # LIMPO a branch de um colega que fortaleceu o invariante (merge limpo não chama hook) e
@@ -295,28 +344,202 @@ else falha "R1: a asserção da branch sobreviveu no HEAD" "antes=$antes depois=
 r1l="$TMP/r1l"; preparar "$r1l" "$principal" "$BASE_DA_BRANCH"
 git -C "$r1l" merge --no-edit origin/colega >/dev/null 2>&1; rc=$?
 assert_exit "$rc" 0 "R1-LIMPO: o merge da branch do colega entra LIMPO — e nem passa por pre-commit"
-colega_antes=$(git -C "$r1l" show "HEAD:$INV" | grep -c 'COLEGA')
+if tem_marcador "$r1l" "$INV" COLEGA; then ok "R1-LIMPO: o MARCADOR-COLEGA entrou no HEAD pelo merge limpo (a premissa)"
+else falha "R1-LIMPO: o MARCADOR-COLEGA entrou no HEAD" "não entrou: o caso não mede o que devia"; fi
 git -C "$r1l" checkout origin/main -- "$INV"; git -C "$r1l" add "$INV"
 r=$(commitar_pelo_dispatcher "$r1l" "reverte o que o colega fortaleceu")
 assert_exit "$(exit_de "$r")" 1 "R1-LIMPO: apagar o fortalecimento do colega é ACUSADO"
-colega_depois=$(git -C "$r1l" show "HEAD:$INV" | grep -c 'COLEGA')
-if [ "$colega_antes" = 1 ] && [ "$colega_depois" = 1 ]; then ok "R1-LIMPO: e a asserção do colega SOBREVIVEU no HEAD"
-else falha "R1-LIMPO: a asserção do colega sobreviveu no HEAD" "antes=$colega_antes depois=$colega_depois"; fi
+if tem_marcador "$r1l" "$INV" COLEGA; then ok "R1-LIMPO: e o MARCADOR-COLEGA SOBREVIVEU no HEAD"
+else falha "R1-LIMPO: o MARCADOR-COLEGA sobreviveu no HEAD" "foi apagado: o commit passou"; fi
 
-# CASO SEM-REF · `origin/main` deixou de ser NECESSÁRIA, e isso é ganho, não relaxamento:
-# MERGE_HEAD e a merge-base são locais e existem em qualquer merge. Onde o eixo antigo
-# falhava fechado (fork, clone raso, CI com checkout sem a ref), o novo julga a procedência
-# do mesmo jeito. A expectativa deste caso virou 0 por causa disso — e o que sustenta a
-# falha fechada agora é o caso FECHADO-SEM-BASE, abaixo.
+# ── os DOIS FUROS que a terceira rodada fechou, e a raiz comum ──────────────────────
+#
+# Raiz: nenhuma das duas versões anteriores lia `HEAD:<path>` nem perguntava de ONDE vem
+# o outro lado. Medido em 18/09/2026 pelo caminho de produção, com MARCADOR único por
+# lado (contagem NÃO serve: a versão da main tem o mesmo número de asserções):
+#
+#   FURO A · as condições `:p == MERGE_HEAD:p` e `MERGE_HEAD:p != base:p` são TAMBÉM
+#            verdadeiras quando a branch tinha uma versão e a sessão a DESCARTA pegando a
+#            do outro lado. Fecha com `HEAD:p == base:p` (casos FURO-A e FURO-A-MH).
+#   FURO B · `MERGE_HEAD` é ref que a PRÓPRIA SESSÃO fabrica — `git stash` cria commit sem
+#            passar pelo pre-commit. Fecha com `is-ancestor MERGE_HEAD origin/main`, que o
+#            irmão `validate-features.sh` já carregava (casos FURO-B e COLEGA-DEL).
+#
+# A matriz das duas, por hook: main / 6ef3cf1fa / 5899e4ac2 / hoje
+#   FURO A     1 / 0 / 0 / 1        FURO B     1 / 1 / 0 / 1   ← o B era REGRESSÃO
+#
+# CASO FURO-A · a sessão mescla LIMPO a branch do colega (o invariante fica com o
+# MARCADOR-COLEGA no HEAD, e merge limpo não chama hook), depois mescla a main com
+# CONFLITO. O 3-way do git resolve o invariante SOZINHO, com as DUAS asserções no índice.
+# Aí a sessão roda o comando literal do R1, agora DENTRO do merge — e essa rota não pede
+# válvula em passo nenhum. Medido: hook anterior → exit 0, MARCADOR-COLEGA APAGADO.
+montar_furo_a() {   # $1 destino
+  preparar "$1" "$principal" "$BASE_DA_BRANCH"
+  git -C "$1" merge --no-edit origin/colega >/dev/null 2>&1 \
+    || falha "FURO-A: o merge do colega tinha de entrar LIMPO" "conflitou: o estado nao e o do caso"
+  printf 'ponta da BRANCH\n' > "$1/README.md"; commitar "$1" "a branch reescreve o README"
+  git -C "$1" merge --no-edit origin/main >/dev/null 2>&1 || true
+  printf 'resolvido\n' > "$1/README.md"; git -C "$1" add README.md
+}
+fa="$TMP/fa-furo"; montar_furo_a "$fa"
+if [ -n "$(git -C "$fa" rev-parse -q --verify MERGE_HEAD)" ]; then ok "FURO-A: o merge da main conflitou de verdade (MERGE_HEAD presente)"
+else falha "FURO-A: o merge da main conflitou de verdade" "sem MERGE_HEAD: não chamaria hook"; fi
+idx=$(git -C "$fa" show ":$INV")
+if grep -qF MARCADOR-COLEGA <<<"$idx" && grep -qF MARCADOR-MAIN <<<"$idx"; then
+  ok "FURO-A: o 3-way pôs as DUAS asserções no índice (a premissa — é o que o descarte joga fora)"
+else falha "FURO-A: o 3-way pôs as duas asserções no índice" "índice: $(head -c 300 <<<"$idx")"; fi
+base_fa=$(git -C "$fa" merge-base HEAD MERGE_HEAD)
+if [ "$(git -C "$fa" rev-parse "HEAD:$INV")" != "$(git -C "$fa" rev-parse "${base_fa}:$INV")" ]; then
+  ok "FURO-A: e HEAD difere da BASE neste invariante — a referência que as duas versões anteriores não liam"
+else falha "FURO-A: HEAD difere da BASE neste invariante" "são iguais: o caso não mede a condição 3"; fi
+git -C "$fa" checkout origin/main -- "$INV"; git -C "$fa" add -- "$INV"
+r=$(commitar_pelo_dispatcher "$fa" "merge da main, descartando a versao da branch")
+assert_exit "$(exit_de "$r")" 1 "FURO-A: descartar DENTRO do merge a versão da branch é ACUSADO"
+assert_contains "$(saida_de "$r")" "$INV" "FURO-A: e quem bloqueou foi o freeze (a mensagem nomeia o invariante)"
+if tem_marcador "$fa" "$INV" COLEGA; then ok "FURO-A: e o MARCADOR-COLEGA SOBREVIVEU no HEAD — a consequência, não só o exit"
+else falha "FURO-A: o MARCADOR-COLEGA sobreviveu no HEAD" "foi apagado: o commit passou"; fi
+
+# CASO FURO-A-MH · o MESMO estado, pegando a versão de `MERGE_HEAD` em vez de a de
+# `origin/main`. São blobs idênticos aqui, mas a rota é outra e um leitor tentaria as duas.
+fam="$TMP/fa-mh"; montar_furo_a "$fam"
+git -C "$fam" checkout MERGE_HEAD -- "$INV"; git -C "$fam" add -- "$INV"
+r=$(commitar_pelo_dispatcher "$fam" "merge da main, pegando a versao de MERGE_HEAD")
+assert_exit "$(exit_de "$r")" 1 "FURO-A-MH: checkout de MERGE_HEAD no mesmo estado é ACUSADO"
+if tem_marcador "$fam" "$INV" COLEGA; then ok "FURO-A-MH: e o MARCADOR-COLEGA SOBREVIVEU no HEAD"
+else falha "FURO-A-MH: o MARCADOR-COLEGA sobreviveu no HEAD" "foi apagado: o commit passou"; fi
+
+# CASO FURO-B · `MERGE_HEAD` fabricado por `git stash`. O stash cria um commit SEM passar
+# pelo pre-commit, e mesclá-lo com `--no-ff` dá um merge cujo "outro lado" é a própria
+# sessão. Medido: 5899e4ac2 → exit 0 e MARCADOR-BRANCH apagado; main e 6ef3cf1fa → 1.
+# É o caso que faz a condição 2 (`is-ancestor … origin/main`) existir.
+fb2="$TMP/fb-stash"; preparar "$fb2" "$principal" "$BASE_DA_BRANCH"
+inv "" "$MARCA_BRANCH" "" > "$fb2/$INV"; git -C "$fb2" add "$INV"
+saida=$( cd "$fb2" && DESKCOMM_GOV_INVARIANTS_EDIT=1 git commit --no-edit -m "fortalece o invariante (ato legitimo)" 2>&1 ); rc=$?
+assert_exit "$rc" 0 "FURO-B: fortalecer COM a válvula passa — é o ato que monta o estado"
+inv > "$fb2/$INV"                       # enfraquece no working tree (tira o MARCADOR-BRANCH)
+git -C "$fb2" stash push -q -m enfraquecimento
+fabricado=$(git -C "$fb2" rev-parse 'stash@{0}')
+if ! git -C "$fb2" show "$fabricado:$INV" | grep -qF MARCADOR-BRANCH; then ok "FURO-B: o commit que o stash fabricou tem a versão FRACA (a premissa)"
+else falha "FURO-B: o commit do stash tem a versão fraca" "tem o marcador: o caso não mede o que devia"; fi
+git -C "$fb2" merge --no-commit --no-ff "$fabricado" >/dev/null 2>&1 || true
+if [ -n "$(git -C "$fb2" rev-parse -q --verify MERGE_HEAD)" ]; then ok "FURO-B: e há MERGE_HEAD — a ref que a sessão fabricou para si mesma"
+else falha "FURO-B: há MERGE_HEAD" "sem MERGE_HEAD: o caso não mede o que devia"; fi
+if ! git -C "$fb2" merge-base --is-ancestor "$fabricado" origin/main 2>/dev/null; then ok "FURO-B: e o commit fabricado NÃO é alcançável por origin/main (o eixo da condição 2)"
+else falha "FURO-B: o commit fabricado não é alcançável por origin/main" "é alcançável: o caso não mede a condição 2"; fi
+git -C "$fb2" add -A
+r=$(commitar_pelo_dispatcher "$fb2" "merge do stash fabricado")
+assert_exit "$(exit_de "$r")" 1 "FURO-B: MERGE_HEAD fabricado por stash NÃO compra exclusão — é ACUSADO"
+assert_contains "$(saida_de "$r")" "$INV" "FURO-B: e quem bloqueou foi o freeze (a mensagem nomeia o invariante)"
+if tem_marcador "$fb2" "$INV" BRANCH; then ok "FURO-B: e o MARCADOR-BRANCH SOBREVIVEU no HEAD"
+else falha "FURO-B: o MARCADOR-BRANCH sobreviveu no HEAD" "foi apagado: o commit passou"; fi
+
+# CASO COLEGA-DEL · a forma MUNDANA do FURO B, sem stash: merge CONFLITADO da branch de um
+# COLEGA que apagou o invariante. O outro lado é real e alheio, mas não é trabalho ACEITO —
+# ninguém revisou. Medido: 5899e4ac2 → exit 0 e o invariante APAGADO do HEAD.
+cdel="$TMP/colega-del"; preparar "$cdel" "$principal" "$BASE_DA_BRANCH"
+printf 'ponta da BRANCH\n' > "$cdel/README.md"; commitar "$cdel" "a branch reescreve o README"
+git -C "$cdel" merge --no-edit origin/colega-del >/dev/null 2>&1 || true
+if [ -n "$(git -C "$cdel" rev-parse -q --verify MERGE_HEAD)" ]; then ok "COLEGA-DEL: o merge do colega conflitou de verdade (MERGE_HEAD presente)"
+else falha "COLEGA-DEL: o merge do colega conflitou de verdade" "sem MERGE_HEAD: não chamaria hook"; fi
+if ! git -C "$cdel" merge-base --is-ancestor MERGE_HEAD origin/main 2>/dev/null; then ok "COLEGA-DEL: e a branch do colega NÃO é alcançável por origin/main (a premissa)"
+else falha "COLEGA-DEL: a branch do colega não é alcançável por origin/main" "é: o caso não mede a condição 2"; fi
+printf 'resolvido\n' > "$cdel/README.md"; git -C "$cdel" add README.md
+r=$(commitar_pelo_dispatcher "$cdel" "merge da branch do colega que apagou o invariante")
+assert_exit "$(exit_de "$r")" 1 "COLEGA-DEL: deleção vinda de branch NÃO aceita é ACUSADA"
+assert_contains "$(saida_de "$r")" "$INV" "COLEGA-DEL: e quem bloqueou foi o freeze (a mensagem nomeia o invariante)"
+if [ -n "$(git -C "$cdel" rev-parse -q --verify "HEAD:$INV")" ]; then ok "COLEGA-DEL: e o invariante segue no HEAD — a consequência, não só o exit"
+else falha "COLEGA-DEL: o invariante segue no HEAD" "foi apagado: o commit passou"; fi
+
+# CASO MODO · o único caso que sustenta a CONDIÇÃO 5 depois que a 3 entrou. Estas
+# comparações são de BLOB, e o `rev-parse` é CEGO PARA MODO: num `chmod +x` os quatro OIDs
+# são IDÊNTICOS, então as condições 3 e 4 valem e só a 5 recusa a exclusão. O
+# `$principal_par` serve porque lá a main NÃO toca o invariante velho.
+# (Medido: sabotar a condição 5 deixa ESTE caso vermelho e mais nenhum — o D2-MERGE, que a
+# sustentava antes, passou a ser pego pela condição 3.)
+mod="$TMP/modo"; preparar "$mod" "$principal_par" "$BASE_PAR"
+printf 'ponta da BRANCH\n' > "$mod/README.md"; commitar "$mod" "a branch reescreve o README"
+git -C "$mod" merge --no-edit origin/main >/dev/null 2>&1 || true
+if [ "$(git -C "$mod" rev-parse "MERGE_HEAD:$VELHO")" = "$(git -C "$mod" rev-parse "HEAD:$VELHO")" ]; then ok "MODO: a main NÃO tocou o invariante velho (a premissa — é o que faz a condição 5 decidir)"
+else falha "MODO: a main não tocou o invariante velho" "tocou: a condição 5 seria satisfeita e o caso não mediria nada"; fi
+printf 'resolvido\n' > "$mod/README.md"; git -C "$mod" add README.md
+chmod +x "$mod/$VELHO"; git -C "$mod" add "$VELHO"
+if git -C "$mod" ls-files --stage "$VELHO" | grep -q '^100755'; then ok "MODO: o índice registrou o bit de execução (a premissa)"
+else falha "MODO: o índice registrou o bit de execução" "$(git -C "$mod" ls-files --stage "$VELHO")"; fi
+r=$(commitar_pelo_dispatcher "$mod" "merge da main, e a sessao troca o modo do invariante")
+assert_exit "$(exit_de "$r")" 1 "MODO: trocar o MODO do invariante dentro do merge é ACUSADO (os blobs são iguais)"
+assert_contains "$(saida_de "$r")" "$VELHO" "MODO: e quem bloqueou foi o freeze (a mensagem nomeia o invariante)"
+if ! git -C "$mod" ls-tree HEAD "$VELHO" | grep -q '^100755'; then ok "MODO: e o modo no HEAD segue 100644 — a consequência"
+else falha "MODO: o modo no HEAD segue 100644" "virou 100755: o commit passou"; fi
+
+# CASO CITADO · furo ABERTO, medido nesta versão e nas duas anteriores. O `--name-status`
+# CITA o caminho quando ele tem byte não-ASCII (com `core.quotepath`, que é o PADRÃO do
+# git) ou caracteres como aspas/barra-invertida (sempre). O campo passa a COMEÇAR com `"`,
+# a âncora `^tests/invariants/` não casa, e a linha NUNCA entra na lista: `git rm` desse
+# invariante saía exit 0 e o arquivo DESAPARECIA do HEAD. Fora de merge nenhum — é a
+# guarda mais crua que existe. Medido nas duas formas de citação e nos dois `quotepath`.
+for forma in CITADO ACENTO; do
+  for qp in true false; do
+    alvo=$INV_CITADO; [ "$forma" = ACENTO ] && alvo=$INV_ACENTO
+    cit="$TMP/cit-$forma-$qp"; preparar "$cit" "$principal" "$BASE_DA_BRANCH"
+    git -C "$cit" config core.quotepath "$qp"
+    git -C "$cit" rm -q -- "$alvo"
+    if [ -n "$(git -C "$cit" diff --cached --name-status -- "$alvo")" ]; then ok "$forma/$qp: o invariante entrou no diff encenado (a premissa)"
+    else falha "$forma/$qp: o invariante entrou no diff encenado" "diff vazio: o caso não mede nada"; fi
+    r=$(commitar_pelo_dispatcher "$cit" "apaga o invariante de nome citado")
+    assert_exit "$(exit_de "$r")" 1 "$forma/quotepath=$qp: apagar invariante de caminho CITADO é ACUSADO (era exit 0 e o arquivo sumia)"
+    assert_contains "$(saida_de "$r")" "congelado" "$forma/$qp: e quem bloqueou foi o freeze (a mensagem é a dele)"
+    if [ -n "$(git -C "$cit" rev-parse -q --verify "HEAD:$alvo")" ]; then ok "$forma/$qp: e o invariante segue no HEAD"
+    else falha "$forma/$qp: o invariante segue no HEAD" "foi apagado: o commit passou"; fi
+  done
+done
+
+# CASO ACENTO-LEGIT · o outro lado da mesma moeda, e é ele que sustenta o
+# `-c core.quotepath=false`: só o `"?` do regex fecharia o furo acima, mas então um
+# invariante ACENTUADO que a MAIN modificou passaria a ser FALSAMENTE acusado (o caminho
+# citado não resolve em `git rev-parse`, os quatro OIDs vêm vazios e a guarda falha
+# fechada). Medido: com o `-c` fora, este caso fica vermelho e o CITADO segue verde.
+al="$TMP/acento-legit"; preparar "$al" "$principal" "$BASE_DA_BRANCH"
+git -C "$al" config core.quotepath true
+printf 'ponta da BRANCH\n' > "$al/README.md"; commitar "$al" "a branch reescreve o README"
+git -C "$al" merge --no-edit origin/main >/dev/null 2>&1 || true
+if [ -n "$(git -C "$al" rev-parse -q --verify MERGE_HEAD)" ]; then ok "ACENTO-LEGIT: o merge conflitou de verdade (MERGE_HEAD presente)"
+else falha "ACENTO-LEGIT: o merge conflitou de verdade" "sem MERGE_HEAD: não chamaria hook"; fi
+if git -C "$al" diff --cached --name-status | grep -q '"tests/invariants/inv-acentua'; then ok "ACENTO-LEGIT: e o git CITOU o caminho acentuado no name-status (a premissa)"
+else falha "ACENTO-LEGIT: o git citou o caminho acentuado" "não citou: o caso não mede o que devia"; fi
+printf 'resolvido\n' > "$al/README.md"; git -C "$al" add README.md
+r=$(commitar_pelo_dispatcher "$al" "merge da main que modifica o invariante acentuado")
+assert_exit "$(exit_de "$r")" 0 "ACENTO-LEGIT: invariante ACENTUADO que a main modificou NÃO é acusado"
+if tem_marcador "$al" "$INV_ACENTO" MAIN; then ok "ACENTO-LEGIT: e a versão da main entrou no HEAD"
+else falha "ACENTO-LEGIT: a versão da main entrou no HEAD" "não entrou: o commit foi recusado"; fi
+
+# CASO SEM-REF · ⚠️ MUDANÇA DE COMPORTAMENTO DECLARADA contra a versão anterior deste
+# arquivo, e ela é o PREÇO da condição 2. Antes, `origin/main` tinha deixado de ser
+# necessária (MERGE_HEAD e a merge-base são locais), e o falso positivo do #1161 morria de
+# graça em fork e clone raso — a expectativa daqui era 0. Agora, sem a ref, o
+# `is-ancestor` falha, a exclusão não se aplica e o caso volta a ser ACUSADO: exatamente o
+# que a `main` faz. É o lado seguro e é a escolha certa — quem não tem a ref não tem como
+# provar que o outro lado é trabalho ACEITO, e tratar "não sei" como "pode" é o que abriu o
+# FURO B. A saída, nesse ambiente, é a válvula declarada.
+# Medido, mesmo estado: main 1 / 6ef3cf1fa 1 / 5899e4ac2 0 / hoje 1.
 semref="$TMP/semref"; preparar "$semref" "$principal" "$BASE_DA_BRANCH"
 git -C "$semref" merge --no-commit --no-ff origin/main >/dev/null 2>&1 || true
 git -C "$semref" remote remove origin
+# ⚠️ ISOLAMENTO, não conveniência: sem `origin/main` a condição (b) do IRMÃO
+# `validate-features.sh` também falha, e ele é o PRIMEIRO do dispatcher — ele bloqueava
+# antes, e sabotar a condição 2 do freeze deixava este caso VERDE. Tirar o plano da frente
+# (índice = HEAD ⇒ o irmão sai 0 na linha de entrada) devolve a medição ao hook certo.
+git -C "$semref" checkout HEAD -- "$FEAT"; git -C "$semref" add -- "$FEAT"
+if [ -z "$(git -C "$semref" diff --cached --name-only -- "$FEAT")" ]; then ok "SEM-REF: o plano saiu do diff encenado (isolamento: quem decide é o freeze, não o irmão)"
+else falha "SEM-REF: o plano saiu do diff encenado" "ainda está: o caso pode passar pelo motivo errado"; fi
 if [ -z "$(git -C "$semref" rev-parse -q --verify origin/main)" ]; then ok "SEM-REF: origin/main realmente não resolve mais (a premissa do caso)"
 else falha "SEM-REF: origin/main realmente não resolve mais" "a ref ainda resolve"; fi
 if [ -n "$(git -C "$semref" rev-parse -q --verify MERGE_HEAD)" ]; then ok "SEM-REF: e MERGE_HEAD segue de pé — é ref local, não depende de remoto"
 else falha "SEM-REF: MERGE_HEAD segue de pé" "MERGE_HEAD sumiu: o caso não mede o que devia"; fi
-r=$(rodar "$semref" freeze-invariants.sh)
-assert_exit "$(exit_de "$r")" 0 "SEM-REF: sem a ref do remoto o falso positivo MORRE igual (fork, clone raso)"
+r=$(commitar_pelo_dispatcher "$semref" "merge da main num clone sem a ref do remoto")
+assert_exit "$(exit_de "$r")" 1 "SEM-REF: sem a ref origin/main nada é excluído — falha FECHADA (mudança declarada)"
+assert_contains "$(saida_de "$r")" "$INV" "SEM-REF: e quem bloqueou foi o FREEZE (a mensagem nomeia o invariante), não um hook irmão"
+if ! tem_marcador "$semref" "$INV" MAIN; then ok "SEM-REF: e o merge NÃO foi concluído (a versão da main não entrou no HEAD)"
+else falha "SEM-REF: o merge não foi concluído" "a versão da main entrou: o commit passou"; fi
 
 # CASO FECHADO-SEM-BASE · merge de histórias SEM ancestral comum: `git merge-base` sai 1 e
 # a saída é vazia. Sem BASE não há como saber se o outro lado MEXEU no caminho, e o hook

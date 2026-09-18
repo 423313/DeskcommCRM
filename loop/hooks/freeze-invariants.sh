@@ -10,8 +10,26 @@ set -euo pipefail
 [ "${DESKCOMM_GOV_INVARIANTS_EDIT:-0}" = "1" ] && exit 0
 
 # Status M/D/R (rename = delete disfarçado) em tests/invariants/ bloqueia; A passa.
-violations=$(git diff --cached --name-status \
-  | awk '$1 ~ /^(M|D|R)/ && ($2 ~ /^tests\/invariants\// || $3 ~ /^tests\/invariants\//) { print $0 }')
+#
+# ⚠️ `-c core.quotepath=false` e o `"?` do regex NÃO são enfeite: eram um FURO
+# ABERTO, medido em 18/09/2026 nesta versão e nas duas anteriores. Com
+# `core.quotepath` no PADRÃO do git (true), um caminho com qualquer byte
+# não-ASCII sai citado e com escapes em octal —
+#   M	"tests/invariants/inv-acentua\303\247\303\243o.test.ts"
+# — e o campo passa a COMEÇAR com `"`, então a âncora `^tests/invariants/` não
+# casa e a linha nunca entra na lista. Medido pelo caminho de produção, FORA de
+# merge nenhum: `git rm` desse invariante saía exit 0 e o arquivo DESAPARECIA do
+# HEAD; editá-lo saía exit 0 com o enfraquecimento commitado. Silêncio total —
+# a pior classe para uma guarda, e invisível justo onde o projeto é em português.
+#
+# `-F'\t'` põe o path INTEIRO em `$2`/`$3` (o `--name-status` separa por TAB; com
+# o FS padrão um caminho com espaço era quebrado em vários campos), e o `"?`
+# mantém na lista o que o git cita mesmo com `quotepath=false` (aspas, barra
+# invertida ou newline no nome). Nesse resto o `rev-parse` de cada ref falha, os
+# quatro OIDs vêm vazios, a condição 5 recusa a exclusão e a guarda falha
+# FECHADA — que é o lado certo para um caminho que ela não sabe ler.
+violations=$(git -c core.quotepath=false diff --cached --name-status \
+  | awk -F'\t' '$1 ~ /^(M|D|R)/ && ($2 ~ /^"?tests\/invariants\// || $3 ~ /^"?tests\/invariants\//) { print $0 }')
 
 # ── O que o OUTRO LADO DO MERGE mudou não é edição desta branch ────────────
 #
@@ -52,26 +70,66 @@ violations=$(git diff --cached --name-status \
 #       últimos 300 commits sem-merge da main: 15 modificações de invariante —
 #       "HEAD tem o invariante diferente do da main" é rotina.
 #
-# O eixo certo é o que o outro lado do merge EFETIVAMENTE MUDOU, e isso exige
-# três referências, não duas:
+# O eixo certo é o que o outro lado do merge EFETIVAMENTE MUDOU **sem que esta
+# branch tenha tocado o arquivo**, e isso exige QUATRO referências:
 #
 #   ENCENADO    o índice                          (`:<path>`)
+#   NA_BRANCH   HEAD, a ponta desta branch        (`HEAD:<path>`)
 #   OUTRO_LADO  MERGE_HEAD (só existe DURANTE um merge)
 #   BASE        git merge-base HEAD MERGE_HEAD
 #
-# Um caminho sai da lista se, e só se, as DUAS condições valem:
-#   1. o ENCENADO é idêntico ao de MERGE_HEAD — inclusive "ausente nos dois",
-#      que é a deleção que o merge trouxe; E
-#   2. MERGE_HEAD DIFERE da BASE, isto é, o outro lado realmente mexeu ali.
+# Um caminho sai da lista se, e só se, TODAS as cinco condições valem:
 #
-# A condição 2 é o que mata a forma (b): fora de um merge não há MERGE_HEAD, e
-# então NADA é excluído — reverter para a main em commit normal volta a ser
-# acusado. E ela é o que mantém o caso D2 vermelho: a branch criou o invariante
-# e o apaga dentro do merge; ausente nos dois lados satisfaz a condição 1, mas a
-# BASE também não o tem, então o outro lado não mexeu em nada e a perda é
-# autoria da branch.
+#   1. MERGE_HEAD existe (há merge em curso) e tem EXATAMENTE UM lado;
+#   2. `git merge-base --is-ancestor MERGE_HEAD origin/main` — o outro lado é
+#      trabalho ACEITO, não branch de colega nem commit fabricado;
+#   3. NA_BRANCH == BASE — esta branch NUNCA tocou este invariante;
+#   4. ENCENADO == OUTRO_LADO — inclusive "ausente nos dois", que é a deleção
+#      que o merge trouxe; E
+#   5. OUTRO_LADO != BASE, isto é, o outro lado realmente mexeu ali.
 #
-# A condição 1 vale para TODOS os caminhos da linha. Numa linha `R` (rename) o
+# ── por que a 3 e a 5 (a raiz comum das duas refutações: não se olhava HEAD) ──
+#
+# As duas versões anteriores decidiam sem NENHUMA leitura de `HEAD:<path>`, e o
+# furo que sobrou tem essa raiz única: as condições 4 e 5 são **também**
+# verdadeiras quando a própria branch tinha uma versão do invariante e a sessão a
+# DESCARTA pegando a do outro lado. Medido pelo caminho de produção: num merge
+# CONFLITADO com a main, o 3-way do git já resolve o invariante sozinho com as
+# duas asserções no índice; a sessão então roda, DENTRO do merge,
+# `git checkout origin/main -- <inv> && git add` e commita — exit 0, e o
+# MARCADOR-COLEGA desaparece do HEAD. (`git checkout MERGE_HEAD -- <inv>` faz o
+# mesmo.) E a rota não pede válvula em passo nenhum: o fortalecimento do colega
+# chega por merge LIMPO, que não chama hook.
+#
+# `HEAD:<p>` == `BASE:<p>` é exatamente a referência que distingue o caso
+# legítimo, e é a que o relato do #1161 já media na mão:
+#   git log --oneline origin/main..HEAD -- <inv>   → VAZIO
+# Nenhum commit desta branch tocou o arquivo → a perda não é autoria dela.
+#
+# ⚠️ A condição 5 NÃO é redundante com a 3+4, e a razão é que estas comparações
+# são de BLOB — cegas para MODO. Num `chmod +x` de invariante dentro do merge os
+# quatro OIDs são idênticos (3 e 4 valem), e só a 5 recusa a exclusão.
+#
+# ── por que a 2 (e ela já existia no irmão) ──
+#
+# `MERGE_HEAD` é uma ref que a PRÓPRIA SESSÃO fabrica, e `git stash` cria commit
+# sem passar pelo pre-commit:
+#   git stash push -m enfraquecimento
+#   git merge --no-commit --no-ff "$(git rev-parse stash@{0})"
+#   git add -A && git commit
+# Medido: o hook anterior saía 0 e o MARCADOR-BRANCH era apagado do HEAD —
+# REGRESSÃO contra os dois antecessores, que saíam 1. A forma mundana é a mesma
+# sem stash: merge CONFLITADO da branch de um colega que apagou o invariante.
+#
+# `validate-features.sh` já carregava essa condição, com o motivo escrito: "o
+# outro lado já ser alcançável por `origin/main` — trabalho aceito, não branch de
+# colega — … é isso que impede o merge de virar lavanderia de edição".
+#
+# A condição 3 NÃO cobre esse caso (no stash a BASE é o próprio HEAD, então
+# NA_BRANCH == BASE é trivialmente verdade), e a 2 não cobre o da 3 (lá o outro
+# lado É a main). São dois furos com uma raiz e duas condições distintas.
+#
+# A condição 4 vale para TODOS os caminhos da linha. Numa linha `R` (rename) o
 # path VELHO é uma DELEÇÃO, e julgar só o novo (`$3`) deixava o invariante
 # antigo ser apagado em silêncio — medido com arquivos reais: `R058` de um
 # invariante para outro passava com exit 0 pelo dispatcher. O par `R` o git
@@ -79,7 +137,15 @@ violations=$(git diff --cached --name-status \
 #
 # ⚠️ Falhar FECHADO é o lado seguro aqui (bloquear pede uma válvula declarada;
 # liberar perde o eval em silêncio). Por isso: sem MERGE_HEAD, merge de mais de
-# um lado (octopus) ou `merge-base` sem ancestral comum → nenhuma exclusão.
+# um lado (octopus), `merge-base` sem ancestral comum, `is-ancestor` saindo
+# não-zero ou a ref `origin/main` ausente → nenhuma exclusão.
+#
+# ⚠️ E isto é MUDANÇA DE COMPORTAMENTO declarada contra a versão anterior: sem
+# `origin/main` (fork, clone raso) o falso positivo do #1161 volta a ser
+# ACUSADO — a versão anterior o resolvia de graça ali, e a condição 2 cobra a
+# ref de volta. É o lado seguro: quem não tem a ref não tem como provar que o
+# outro lado é trabalho aceito, e a saída é a válvula declarada (medido: caso
+# SEM-REF, exit 0 na versão anterior → exit 1 aqui, como na `main`).
 #
 # (E o `[ -f ... ] && lados=...` que pedia uma linha só aqui NÃO serve: sob
 # `set -e`, o compound inteiro sai 1 quando o arquivo não existe e mata o hook —
@@ -93,16 +159,26 @@ fi
 if [ -n "$violations" ] && [ "$lados" = "1" ]; then
   outro_lado=$(git rev-parse --quiet --verify MERGE_HEAD^0 2>/dev/null || true)
   base=$(git merge-base HEAD "$outro_lado" 2>/dev/null || true)
-  if [ -n "$outro_lado" ] && [ -n "$base" ]; then
+  # condição 2, na forma do irmão `validate-features.sh`: dentro de `if`, um
+  # `is-ancestor` não-zero (inclusive `origin/main` inexistente) não mata o hook
+  # sob `set -e` — só deixa `aceito=0`, e nada é excluído.
+  aceito=0
+  if [ -n "$outro_lado" ] && git merge-base --is-ancestor "$outro_lado" origin/main 2>/dev/null; then
+    aceito=1
+  fi
+  if [ -n "$outro_lado" ] && [ -n "$base" ] && [ "$aceito" = "1" ]; then
     violations=$(while IFS= read -r linha; do
       [ -z "$linha" ] && continue
       veio_do_merge=1
       while IFS= read -r caminho; do
         [ -z "$caminho" ] && continue
         encenado=$(git rev-parse --quiet --verify ":$caminho" 2>/dev/null || true)
+        na_branch=$(git rev-parse --quiet --verify "HEAD:$caminho" 2>/dev/null || true)
         no_outro=$(git rev-parse --quiet --verify "$outro_lado:$caminho" 2>/dev/null || true)
         na_base=$(git rev-parse --quiet --verify "$base:$caminho" 2>/dev/null || true)
-        if [ "$encenado" = "$no_outro" ] && [ "$no_outro" != "$na_base" ]; then continue; fi
+        if [ "$na_branch" = "$na_base" ] \
+          && [ "$encenado" = "$no_outro" ] \
+          && [ "$no_outro" != "$na_base" ]; then continue; fi
         veio_do_merge=0
         break
       done <<EOF
