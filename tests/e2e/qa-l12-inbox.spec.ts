@@ -238,12 +238,16 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     page,
   }) => {
     await login(page, c.users.manager!.email, c.password);
+    // ── L12.G2.1: a rota das tags responde 200, não 400 do PostgREST ───────
+    // A espera é registrada ANTES de abrir a conversa: a barra de filtros do
+    // Inbox (`InboxFilters`) pede esta rota na CARGA da página, e o editor de
+    // tags, que monta no clique, reaproveita o cache (mesma chave, 5 min de
+    // validade) sem pedir de novo. Registrada depois do clique, ela esperaria
+    // uma requisição que já aconteceu — até o timeout do describe.
+    const respostaTags = page.waitForResponse((r) => r.url().includes("/api/v1/contact-tags"));
     await abreConversa(page, conversaId);
     await expect(page.getByText(`Cliente L12 ${SUFIXO}`).first()).toBeVisible({ timeout: 60_000 });
 
-    // ── L12.G2.1: a rota das tags responde 200, não 400 do PostgREST ───────
-    // Ela só é pedida quando o editor de tags MONTA, e o editor monta no clique.
-    const respostaTags = page.waitForResponse((r) => r.url().includes("/api/v1/contact-tags"));
     await page.getByRole("button", { name: "Tags do contato", exact: true }).click();
     const rt = await respostaTags;
     const corpoTags = await rt.text();

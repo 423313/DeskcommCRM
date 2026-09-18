@@ -21,9 +21,10 @@ import { listConversationsHandler } from "@/app/api/v1/conversations/_handler";
  * FICA na lista — ou seja, o filtro não filtra, e um teste que só olhasse o
  * `contains` passaria com o defeito vivo.
  *
- * O `!inner` também não pode ser permanente: conversa de grupo não tem
- * `contact_id`, e junção interna sempre ligada as apagaria do Inbox inteiro. Por
- * isso o segundo caso prova que ele só entra quando há marcador no filtro.
+ * O `!inner` também não fica permanente: sem marcador, a consulta da lista
+ * continua a mesma de antes (`conversations.contact_id` é NOT NULL, então a
+ * junção interna não tiraria linha hoje — mas mudaria a consulta mais lida do
+ * Inbox sem necessidade). O segundo caso prova que ele só entra com marcador.
  */
 
 /** Registra a cadeia do PostgREST; resolve como lista vazia no `await`. */
@@ -74,7 +75,7 @@ describe("listConversationsHandler — filtro por marcador", () => {
     expect(selectDe(await rodar({ tag: "fidic" }))).toContain("contacts:contact_id!inner");
   });
 
-  it("sem marcador no filtro, a junção NÃO é interna — grupo não tem contato", async () => {
+  it("sem marcador no filtro, a junção NÃO é interna — a lista fica como era", async () => {
     const select = selectDe(await rodar({}));
     expect(select).toContain("contacts:contact_id (");
     expect(select).not.toContain("!inner");

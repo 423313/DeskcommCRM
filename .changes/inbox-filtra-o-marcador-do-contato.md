@@ -19,9 +19,9 @@ Agora as duas pontas leem a mesma tabela: o filtro casa com `contacts.tags` e a
 lista de opções vem dos marcadores em uso nos contatos da organização. Marcar
 uma pessoa e procurá-la pelo marcador passa a devolver as conversas dela.
 
-Os marcadores de conversa continuam existindo e continuam servindo ao que o
-atendimento automático aplica; o que mudou é só a pergunta que a barra de
-filtro faz. Conversa de grupo, que não tem contato, segue aparecendo
-normalmente quando nenhum marcador está filtrado.
+Os marcadores de conversa continuam existindo, editáveis em "Tags da conversa"
+e aplicados pelo atendimento automático — mas a barra de filtro deixa de
+procurar neles: filtrar por um marcador que só está na conversa não a encontra
+mais. Sem marcador filtrado, a lista é a mesma de antes.
 
 Nada muda para quem opera: nenhuma variável nova, nenhum passo na atualização.

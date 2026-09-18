@@ -99,9 +99,10 @@ const SELECT_COLS = `
  *
  * Entra SÓ quando o filtro de marcador está presente. Sem `!inner`, o PostgREST
  * aplica o filtro ao recurso EMBUTIDO: a conversa continua na lista, com
- * `contacts` nulo — ou seja, o filtro não filtra. Com a junção permanente, a
- * conversa de GRUPO (que não tem `contact_id`) sumiria da caixa inteira, e esse
- * é o preço que esta constante existe para não pagar.
+ * `contacts` nulo — ou seja, o filtro não filtra. Sem marcador, a consulta da
+ * lista fica exatamente como era: `conversations.contact_id` é NOT NULL, então
+ * a junção interna não tiraria linha nenhuma hoje, mas mudaria a consulta mais
+ * lida do Inbox sem que nada pedisse isso.
  */
 const SELECT_COLS_COM_CONTATO = SELECT_COLS.replace(
   "contacts:contact_id (",
