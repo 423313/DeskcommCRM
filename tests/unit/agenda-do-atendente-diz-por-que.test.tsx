@@ -171,6 +171,23 @@ describe("(b) folga e jornada inexistente pedem coisas diferentes", () => {
       "fora da jornada publicada",
     );
   });
+
+  it("a frase da folga sai LITERAL na tela — `t(variável)` escapava do guarda", () => {
+    // Achado da triagem do #1107 (item 5): o guarda de espanhol
+    // (`tests/unit/i18n-espanhol-cobre-a-tela.test.ts`) varre `t("literal")` e
+    // era CEGO para `t(mensagemDoDiaSemJanela(publicouHorarios))` — a frase
+    // ficava sem tradução com o guarda verde sobre a ausência. Na tela o texto
+    // agora é literal, e é esta a amarra que impede o literal e a função de
+    // divergirem em silêncio.
+    //
+    // O outro caso da função não tem literal no painel de propósito: só a folga
+    // alcança o bloco do encaixe (`encaixeLigado` exige jornada publicada), e
+    // "nunca publicou jornada" tem bloco próprio — este sim com o texto no
+    // dicionário ("A jornada de atendimento ainda não foi publicada").
+    const tela = fonte("components/agenda/PainelDeMarcacao.tsx");
+
+    expect(tela).toContain(`t(${JSON.stringify(mensagemDoDiaSemJanela(true))})`);
+  });
 });
 
 /**

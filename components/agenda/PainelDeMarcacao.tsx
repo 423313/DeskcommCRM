@@ -11,7 +11,6 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { instanteDe } from "@/lib/agenda/fuso";
-import { mensagemDoDiaSemJanela } from "@/lib/agenda/o-que-falta-no-dia";
 import { ApiError } from "@/lib/api/types";
 import { CaretLeft, CaretRight, CheckCircle, Clock, MapPin, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -390,7 +389,17 @@ export function PainelDeMarcacao({
             jornada", que é falso no segundo.
           */
           <p className="mb-2 text-xs text-text-muted">
-            {t(mensagemDoDiaSemJanela(publicouHorarios))}
+            {/*
+              LITERAL, e não `t(mensagemDoDiaSemJanela(publicouHorarios))`: o
+              guarda de espanhol (`tests/unit/i18n-espanhol-cobre-a-tela.test.ts`)
+              varre `t("literal")`, então `t(variável)` ESCAPA da cobrança — a
+              frase ficaria sem tradução com o guarda verde sobre a ausência
+              (achado da triagem do #1107, item 5). Aqui só a folga alcança (a
+              porta do encaixe exige jornada publicada) e o texto do outro caso
+              tem bloco próprio; o literal e `mensagemDoDiaSemJanela(true)` ficam
+              amarrados por teste em `agenda-do-atendente-diz-por-que.test.tsx`.
+            */}
+            {t("Este dia está fora da jornada publicada (folga ou dia sem expediente).")}
           </p>
         )}
         {/*
