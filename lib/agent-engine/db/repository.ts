@@ -72,6 +72,12 @@ export type InboxKind =
   // não distingue "tocou e ninguém pegou" de "o operador recusou", e para quem
   // lê a Central os dois pedem a mesma coisa: alguém precisa ligar de volta.
   | 'voice_call_missed'
+  // (migration 0305) O fluxo de follow-up PUBLICADO que nunca vai disparar:
+  // gatilho automático só enrolla se um agente publicado arma o ponteiro, e sem
+  // esse vínculo os produtores saem por `pointers_armados = 0` em silêncio —
+  // `active` na tela, morto no motor. Quem abre e quem FECHA é o mesmo cron
+  // (`followup-sem-agente`): o aviso some sozinho quando o vínculo aparece.
+  | 'followup_sem_agente'
   | 'other';
 
 export interface InboxItemRow {
