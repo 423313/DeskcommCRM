@@ -9225,8 +9225,6 @@ export const DICIONARIO: Traducoes = {
   "acompanha por": { es: "acompaña por" },
   "Dispara quando": { es: "Se dispara cuando" },
   "Etapa do funil que dispara": { es: "Etapa del embudo que dispara" },
-  "Carregando etapas…": { es: "Cargando etapas…" },
-  "Instalando…": { es: "Instalando…" },
   "Não consegui instalar o modelo. Tente de novo.": { es: "No pude instalar el modelo. Inténtalo de nuevo." },
   "Depois de instalar: revise os textos no construtor, clique em Publicar e ligue o fluxo no seu agente (Agentes › Follow-up). Sem um agente publicado armando o fluxo, o gatilho automático não dispara.": {
     es: "Después de instalar: revisa los textos en el constructor, haz clic en Publicar y conecta el flujo a tu agente (Agentes › Follow-up). Sin un agente publicado que arme el flujo, el disparador automático no funciona.",
