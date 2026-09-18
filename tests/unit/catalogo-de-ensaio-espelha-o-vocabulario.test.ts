@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -57,5 +59,72 @@ describe("o catálogo de ensaio espelha o vocabulário do host", () => {
     // A forma exata que travou o E2E: comparação com a lista literal de um elemento.
     expect(fonte).not.toContain('!= ["navigation.tasks"]');
     expect(fonte).not.toContain('!= "tasks.open"');
+  });
+
+  /**
+   * Os casos acima medem a FORMA — as listas batem, o texto proibido sumiu. Nenhum deles
+   * garante que a validação USE as listas: dá para manter as constantes em dia e validar
+   * contra outra coisa, e os três ficam verdes.
+   *
+   * Isto foi medido, não imaginado: uma sabotagem que trocou só a condição de validação,
+   * mantendo a constante intacta, derrubou 1 caso quando eu tinha previsto 2. A previsão
+   * errada é o que revelou o ponto cego.
+   *
+   * Este caso mede o EFEITO: roda a bancada de verdade contra um pacote de porta nova.
+   */
+  it("aceita, de fato, um pacote que usa porta nova — prova de efeito, não de forma", () => {
+    const pacote = {
+      format_version: 1,
+      profile: "declarative",
+      publisher: "laboratorio-local",
+      name: "porta-nova",
+      version: "1.0.0",
+      license: "MIT",
+      host_api: { min: 1, max: 2 },
+      permissions: ["navigation.inbox"],
+      dependencies: [],
+      data: { mode: "none" },
+      display: {
+        title: { "pt-BR": "Porta nova" },
+        summary: { "pt-BR": "Pacote de controle do invariante." },
+        category: "service",
+        icon: "ListChecks",
+      },
+      configuration: { density: "comfortable", show_description: true },
+      contributions: {
+        crm_cards: [
+          {
+            id: "cartao",
+            title: { "pt-BR": "Cartão" },
+            description: { "pt-BR": "Descrição do cartão de controle." },
+            icon: "ListChecks",
+            blocks: [{ heading: { "pt-BR": "Título" }, body: { "pt-BR": "Corpo." } }],
+            action: { label: { "pt-BR": "Abrir" }, capability: "inbox.open" },
+          },
+        ],
+      },
+    };
+    const arquivo = join(tmpdir(), `pacote-porta-nova-${process.pid}.json`);
+    writeFileSync(arquivo, JSON.stringify(pacote));
+    try {
+      // `catalog.py` não tem subcomando de validação isolada (quem valida é o `publish`, que
+      // exige banco). Chamamos a função real do módulo — é o mesmo código que o `publish` usa.
+      const script = [
+        "import importlib.util, json, sys, pathlib",
+        `spec = importlib.util.spec_from_file_location("catalogo", ${JSON.stringify(CATALOG_PY)})`,
+        "mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)",
+        `mod.validate_manifest(json.loads(pathlib.Path(${JSON.stringify(arquivo)}).read_text()))`,
+      ].join("\n");
+      const saida = spawnSync("python3", ["-c", script], { encoding: "utf8" });
+      // Controle positivo: se o comando nem existir, `status` é diferente de 0 por outro
+      // motivo, e um teste que só olhasse "status !== 0" leria isso como recusa legítima.
+      expect(saida.error, "python3 indisponível: o caso não mediu nada").toBeUndefined();
+      expect(
+        saida.status,
+        `bancada recusou porta nova:\n${saida.stdout}\n${saida.stderr}`,
+      ).toBe(0);
+    } finally {
+      rmSync(arquivo, { force: true });
+    }
   });
 });
