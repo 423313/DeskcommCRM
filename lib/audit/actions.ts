@@ -606,8 +606,8 @@ export const AUDIT_ACTIONS = [
   // responde — a coluna `updated_at` se move por qualquer motivo.
   "ai.credential_updated",
 
-  /** POST /api/v1/tenants/provision — tenant criado (ou replay idempotente) via integração Clinicfx. */
-  "tenant.created_by_clinicfx_provisioning",
+  /** POST /api/v1/tenants/provision — organização criada por um sistema externo (doc 38 b). */
+  "tenant.created_by_provisioning",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

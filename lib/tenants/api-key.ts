@@ -19,6 +19,8 @@ export async function rotateIntegrationApiKey(input: {
   createdBy: string;
   /** Escopo que marca a origem, ex.: `integration:clinicfx`. Também filtra revogação. */
   integrationScope: string;
+  /** Nome da chave na tela de chaves de API da organização. */
+  name: string;
   requestId?: string;
 }): Promise<string> {
   const admin = createAdminClient();
@@ -44,7 +46,7 @@ export async function rotateIntegrationApiKey(input: {
         resourceType: "api_token",
         resourceId: id,
         requestId: input.requestId,
-        metadata: { reason: "clinicfx_provisioning_replay" },
+        metadata: { reason: "provisioning_replay" },
       });
     }
   }
@@ -59,7 +61,7 @@ export async function rotateIntegrationApiKey(input: {
     .insert({
       organization_id: input.organizationId,
       created_by: input.createdBy,
-      name: "Clinicfx (integração)",
+      name: input.name,
       prefix,
       token_hash: `\\x${tokenHash.toString("hex")}`,
       scopes: ["role:agent", "actor:ai_agent", input.integrationScope],
@@ -78,7 +80,7 @@ export async function rotateIntegrationApiKey(input: {
     resourceType: "api_token",
     resourceId: created.id,
     requestId: input.requestId,
-    metadata: { name: "Clinicfx (integração)", prefix, scopes: ["role:agent", "actor:ai_agent", input.integrationScope] },
+    metadata: { name: input.name, prefix, scopes: ["role:agent", "actor:ai_agent", input.integrationScope] },
   });
 
   return plaintext;
