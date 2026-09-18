@@ -170,10 +170,11 @@ describe("o teto de tamanho do código", () => {
     `[dk1:${Buffer.from(JSON.stringify({ [chave]: valor }), "utf8").toString("base64url")}]`;
 
   it("o gerador recusa o que não caberia, em vez de emitir um link que não funciona", () => {
-    // As dez chaves no teto de valor, com texto de quatro bytes por caractere:
-    // 10868 caracteres de código, muito acima do teto. A página recebe `null` e
-    // sabe que não há link — melhor do que um link que a ingestão ignoraria
-    // calada.
+    // As dez chaves no teto de valor, com texto de quatro bytes por caractere.
+    // O gerador corta cada valor em 200 unidades UTF-16 antes de montar — cada
+    // 🚀 ocupa duas, então sobram 100 por chave —, e o código fica com 5535
+    // caracteres, muito acima do teto. A página recebe `null` e sabe que não há
+    // link — melhor do que um link que a ingestão ignoraria calada.
     const gigante = Object.fromEntries(
       CHAVES_DE_UTM.map((chave) => [chave, "🚀".repeat(200)]),
     );
