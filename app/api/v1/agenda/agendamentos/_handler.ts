@@ -157,29 +157,47 @@ const RECUSA_DO_COLEGA =
   "você mexe só nos compromissos de que é responsável. Peça a um gerente ou administrador.";
 
 /**
- * A DECISÃO, SEM I/O — só a régua. É o que sobra depois de ler a opção no banco.
+ * A PERGUNTA QUE VEM ANTES DA LEITURA — e ela é o que evita ler a opção à toa.
  *
- * Exportada porque é a régua que o teste fixa (`tests/unit/agenda-dos-colegas-e-
- * opcao-da-org.test.ts` prova a matriz inteira: as duas posições da opção, os
- * quatro papéis humanos e o compromisso sem dono), e porque as duas chamadas do
- * handler — a mudança e a criação — precisam responder IGUAL. Duas cópias da
- * mesma pergunta divergem no primeiro ajuste.
+ * As duas peças juntas são a régua, exportadas porque o teste as fixa
+ * (`tests/unit/agenda-dos-colegas-e-opcao-da-org.test.ts` prova a matriz
+ * inteira: as duas posições da opção, os quatro papéis humanos e o compromisso
+ * sem dono) e porque as duas chamadas do handler — a mudança e a criação —
+ * precisam responder IGUAL. Duas cópias da mesma pergunta divergem no primeiro
+ * ajuste.
+ *
+ * Duas das respostas são conhecidas sem banco nenhum: IA, token de servidor e
+ * webhook não são "um atendente" (o que os governa é o papel do token, cobrado
+ * na rota), e Gerente ou Administrador mexe em tudo. Só o Atendente de gente,
+ * mexendo no compromisso de OUTRA pessoa, depende do que está gravado na
+ * organização.
+ *
+ * Ler a opção quando a resposta já é conhecida custaria uma ida ao banco em TODO
+ * cancelamento, remarcação e marcação — inclusive nas da própria agenda — e
+ * faria a rota depender de uma função que pode não existir numa instalação
+ * antiga para deixar alguém escrever na agenda DELE. A régua continua UMA:
+ * `recusaMudancaNaAgendaAlheia` é esta função E a opção.
  */
-export function recusaMudancaNaAgendaAlheia(
-  actor: Actor,
-  opcaoLigada: boolean,
-  ehDono: boolean,
-): boolean {
+export function aOpcaoPodeRecortar(actor: Actor, ehDono: boolean): boolean {
   // IA e integração não são "um atendente" e não têm agenda própria: o que as
   // governa é o papel do token, cobrado na rota.
   if (actor.type !== "user") return false;
   // Gerente e Administrador seguem mexendo em tudo — a decisão diz os dois.
   if (roleAtLeast(actor.role, "manager")) return false;
-  // LIGADA é o padrão e o comportamento de sempre: nada muda.
-  if (opcaoLigada) return false;
-  // Desligada: o dono mexe no que é dele. Compromisso SEM dono (`ehDono` falso
-  // para todo mundo) fica com Gerente e Administrador, acima.
+  // O dono mexe no que é dele em QUALQUER posição da opção. Compromisso SEM dono
+  // (`ehDono` falso para todo mundo) fica com Gerente e Administrador, acima.
   return !ehDono;
+}
+
+export function recusaMudancaNaAgendaAlheia(
+  actor: Actor,
+  opcaoLigada: boolean,
+  ehDono: boolean,
+): boolean {
+  // LIGADA é o padrão e o comportamento de sempre: nada muda. É a última
+  // pergunta, e é por isso que a leitura da opção só acontece quando
+  // `aOpcaoPodeRecortar` já disse que ela pode mudar alguma coisa.
+  return aOpcaoPodeRecortar(actor, ehDono) && !opcaoLigada;
 }
 
 /**
@@ -194,8 +212,9 @@ async function exigeDonoDoCompromisso(
   ctx: HandlerCtx,
   atual: Record<string, unknown>,
 ): Promise<void> {
+  const ehDono = ctx.actor.type === "user" && atual.owner_user_id === ctx.actor.id;
+  if (!aOpcaoPodeRecortar(ctx.actor, ehDono)) return;
   const ligada = await colegasPodemMexerNaAgenda(supabase, ctx);
-  const ehDono = atual.owner_user_id === ctx.actor.id && ctx.actor.type === "user";
   if (!recusaMudancaNaAgendaAlheia(ctx.actor, ligada, ehDono)) return;
   throw new ApiError(403, "appointment_do_colega", undefined, ctx.requestId, RECUSA_DO_COLEGA);
 }
@@ -234,21 +253,30 @@ export async function marcarAgendamentoHandler(
     );
   }
 
-  // A MESMA REGRA DA MUDANÇA, AQUI NA CRIAÇÃO — e o caso que a torna necessária
-  // é o responsável PADRÃO DO TIPO: quando `owner_user_id` não vem no corpo,
-  // `donoId` sai de `calendar_event_types.default_owner_user_id`, então marcar
-  // um horário do tipo de outra pessoa seria um atalho para escrever na agenda
-  // dela com a opção desligada. Vale para os dois caminhos: o responsável veio
-  // do tipo ou veio explícito no corpo.
+  // ─── A CRIAÇÃO: O RESPONSÁVEL RESOLVIDO, E O ACHADO DO MANTENEDOR ─────────
   //
-  // ⚠️ Só a ROTA cobra isto na criação: o INSERT abaixo é direto na tabela
-  // (com service role), então não passa por `fn_appointment_change_core`, que é
-  // onde o banco cobra a mesma regra na alteração e no cancelamento. Está
-  // declarado no PR.
-  const agendaDosColegasLigada = await colegasPodemMexerNaAgenda(supabase, ctx);
-  const ehDonoDoQueVaiNascer = donoId === ctx.actor.id && ctx.actor.type === "user";
-  if (recusaMudancaNaAgendaAlheia(ctx.actor, agendaDosColegasLigada, ehDonoDoQueVaiNascer)) {
-    throw new ApiError(403, "appointment_do_colega", undefined, ctx.requestId, RECUSA_DO_COLEGA);
+  // A recusa existe só quando as TRÊS coisas valem juntas: (a) quem pede é
+  // pessoa e está abaixo de `manager` — a régua é `aOpcaoPodeRecortar` —, (b) o
+  // responsável resolvido NÃO é quem pede, e (c) a opção está DESLIGADA.
+  //
+  // ⚠️ A régua aqui é o `donoId` JÁ RESOLVIDO, e não só o que veio no corpo — é
+  // pedido textual do mantenedor no fio da issue #978 (16/09): "escolher o tipo
+  // de outra pessoa não pode virar atalho". `donoId` sai de `input.owner_user_id`
+  // quando o campo vem e do responsável PADRÃO DO TIPO
+  // (`calendar_event_types.default_owner_user_id`) quando não vem; com a opção
+  // desligada os DOIS caminhos escrevem na agenda de um colega, então os dois
+  // recusam. Sem esta simetria, bastaria escolher o tipo cujo responsável padrão
+  // é a outra pessoa para contornar a opção.
+  //
+  // ⚠️ Só a ROTA cobra isto na criação: o INSERT abaixo é direto na tabela (com
+  // service role), então não passa por `fn_appointment_change_core`, que é onde
+  // o banco cobra a mesma regra na alteração e no cancelamento.
+  const ehDonoDoQueVaiNascer = ctx.actor.type === "user" && donoId === ctx.actor.id;
+  if (aOpcaoPodeRecortar(ctx.actor, ehDonoDoQueVaiNascer)) {
+    const agendaDosColegasLigada = await colegasPodemMexerNaAgenda(supabase, ctx);
+    if (recusaMudancaNaAgendaAlheia(ctx.actor, agendaDosColegasLigada, ehDonoDoQueVaiNascer)) {
+      throw new ApiError(403, "appointment_do_colega", undefined, ctx.requestId, RECUSA_DO_COLEGA);
+    }
   }
 
   // O `contact_id` É INPUT EXTERNO E PRECISA SER RESOLVIDO, não repassado.

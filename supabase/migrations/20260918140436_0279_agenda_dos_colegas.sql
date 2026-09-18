@@ -92,15 +92,23 @@ comment on function public.fn_colegas_podem_mexer_na_agenda(uuid) is
 
 -- ---- 2. O NÚCLEO DA MUDANÇA, COM A REGRA NOVA -------------------------------
 --
--- Definição EM VIGOR copiada do baseline (é a que está rodando) com UM bloco
--- novo: a checagem de dono. Nada mais foi tocado — nem ordem de trava, nem
--- colunas do UPDATE, nem os desfechos.
+-- Definição EM VIGOR copiada do baseline — a que está RODANDO, com os portões
+-- que ela carrega — e com UM bloco novo: a checagem de dono. Nada mais mudou:
+-- nem ordem de trava, nem colunas do UPDATE, nem os desfechos, nem o portão de
+-- MFA (`appointment_mfa_required`, que a 0229 acrescentou a esta função).
+-- ⚠️ Recriar uma função a partir de uma cópia ANTIGA é exatamente como o portão
+-- some em silêncio — `create or replace` troca a definição inteira e não avisa o
+-- que sumiu. Quem vigia a classe inteira é
+-- `tests/unit/mfa-nao-some-em-funcao-recriada.test.ts`, e é por isso que a linha
+-- do MFA está aqui, na mesma posição da definição em vigor: quem reescrever este
+-- corpo de novo encontra o portão no lugar onde ele estava.
 create or replace function public.fn_appointment_change_core(p_org uuid,p_id uuid,p_revision bigint,p_patch jsonb,p_remote boolean,p_base jsonb)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare a public.calendar_appointments; contact uuid; origin jsonb; event_id uuid;
 begin
  if p_remote and (auth.uid() is not null or (p_patch-'starts_at'-'ends_at'-'time_zone'-'status'-'cancellation_reason')<>'{}'::jsonb or coalesce(p_patch->>'status','cancelled')<>'cancelled') then raise exception 'google_patch_forbidden' using errcode='42501';end if;
  if auth.uid() is not null and (not public.fn_role_at_least(p_org,'agent') or not public.fn_support_write_allowed(p_org)) then raise exception 'appointment_forbidden' using errcode='42501'; end if;
+ if auth.uid() is not null and not public.fn_session_mfa_proven() then raise exception 'appointment_mfa_required' using errcode='42501';end if;
  select contact_id into contact from public.calendar_appointments where organization_id=p_org and id=p_id;
  if not found then raise exception 'appointment_not_found' using errcode='P0002'; end if;
  if contact is not null then perform public.fn_service_lock(p_org,contact); end if;
