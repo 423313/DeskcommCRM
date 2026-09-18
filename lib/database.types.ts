@@ -343,7 +343,7 @@ export type Database = {
       }
       sale_items: {
         Row: {
-          attendant_user_id: string | null
+          professional_id: string | null
           commission_percent: number
           created_at: string
           description: string
@@ -357,7 +357,7 @@ export type Database = {
           unit_price_cents: number
         }
         Insert: {
-          attendant_user_id?: string | null
+          professional_id?: string | null
           commission_percent?: number
           created_at?: string
           description: string
@@ -371,7 +371,7 @@ export type Database = {
           unit_price_cents: number
         }
         Update: {
-          attendant_user_id?: string | null
+          professional_id?: string | null
           commission_percent?: number
           created_at?: string
           description?: string
@@ -398,6 +398,12 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "sale_items_professional_id_fkey"
+            columns: ["professional_id"]
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sale_items_sale_id_fkey"
             columns: ["sale_id"]
             referencedRelation: "sales"
@@ -407,7 +413,7 @@ export type Database = {
       }
       commission_rules: {
         Row: {
-          attendant_user_id: string | null
+          professional_id: string | null
           created_at: string
           event_type_id: string | null
           id: string
@@ -417,7 +423,7 @@ export type Database = {
           is_active: boolean
         }
         Insert: {
-          attendant_user_id?: string | null
+          professional_id?: string | null
           created_at?: string
           event_type_id?: string | null
           id?: string
@@ -427,7 +433,7 @@ export type Database = {
           is_active?: boolean
         }
         Update: {
-          attendant_user_id?: string | null
+          professional_id?: string | null
           created_at?: string
           event_type_id?: string | null
           id?: string
@@ -449,16 +455,23 @@ export type Database = {
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "commission_rules_professional_id_fkey"
+            columns: ["professional_id"]
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
         ]
       }
       commissions: {
         Row: {
           amount_cents: number
-          attendant_user_id: string
+          professional_id: string
           created_at: string
           id: string
           organization_id: string
           paid_at: string | null
+          paid_entry_id: string | null
           percent: number
           reversed_at: string | null
           sale_item_id: string
@@ -466,11 +479,12 @@ export type Database = {
         }
         Insert: {
           amount_cents: number
-          attendant_user_id: string
+          professional_id: string
           created_at?: string
           id?: string
           organization_id: string
           paid_at?: string | null
+          paid_entry_id?: string | null
           percent: number
           reversed_at?: string | null
           sale_item_id: string
@@ -478,11 +492,12 @@ export type Database = {
         }
         Update: {
           amount_cents?: number
-          attendant_user_id?: string
+          professional_id?: string
           created_at?: string
           id?: string
           organization_id?: string
           paid_at?: string | null
+          paid_entry_id?: string | null
           percent?: number
           reversed_at?: string | null
           sale_item_id?: string
@@ -493,6 +508,18 @@ export type Database = {
             foreignKeyName: "commissions_organization_id_fkey"
             columns: ["organization_id"]
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_paid_entry_id_fkey"
+            columns: ["paid_entry_id"]
+            referencedRelation: "financial_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_professional_id_fkey"
+            columns: ["professional_id"]
+            referencedRelation: "professionals"
             referencedColumns: ["id"]
           },
           {
@@ -598,6 +625,7 @@ export type Database = {
           created_by_user_id: string | null
           id: string
           idempotency_key: string | null
+          kind: string
           organization_id: string
           points: number
           reason: string
@@ -610,6 +638,7 @@ export type Database = {
           created_by_user_id?: string | null
           id?: string
           idempotency_key?: string | null
+          kind?: string
           organization_id: string
           points: number
           reason: string
@@ -622,6 +651,7 @@ export type Database = {
           created_by_user_id?: string | null
           id?: string
           idempotency_key?: string | null
+          kind?: string
           organization_id?: string
           points?: number
           reason?: string
@@ -645,6 +675,46 @@ export type Database = {
             foreignKeyName: "loyalty_ledger_sale_id_fkey"
             columns: ["sale_id"]
             referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      professionals: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          legacy_id: string | null
+          name: string
+          organization_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          legacy_id?: string | null
+          name: string
+          organization_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          legacy_id?: string | null
+          name?: string
+          organization_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professionals_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -3212,6 +3282,8 @@ export type Database = {
           reminder_minutes_before: number
           reminder_extra_offsets_minutes: number[]
           default_price_cents: number | null
+          fidelidade_pontua: boolean
+          fidelidade_premio_percentual: number | null
           reminder_template_name: string | null
           requires_confirmation: boolean
           slot_interval_minutes: number | null
@@ -3239,6 +3311,8 @@ export type Database = {
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
           default_price_cents?: number | null
+          fidelidade_pontua?: boolean
+          fidelidade_premio_percentual?: number | null
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
@@ -3266,6 +3340,8 @@ export type Database = {
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
           default_price_cents?: number | null
+          fidelidade_pontua?: boolean
+          fidelidade_premio_percentual?: number | null
           reminder_template_name?: string | null
           requires_confirmation?: boolean
           slot_interval_minutes?: number | null
@@ -8529,6 +8605,43 @@ export type Database = {
       }
     }
     Functions: {
+      fn_ajustar_fidelidade: {
+        Args: {
+          p_contact: string
+          p_motivo: string
+          p_org: string
+          p_selos: number
+        }
+        Returns: Json
+      }
+      fn_cartao_de_fidelidade: {
+        Args: { p_contact: string; p_org: string }
+        Returns: Json
+      }
+      fn_cliente_pela_comanda: {
+        Args: { p_contact: string; p_org: string }
+        Returns: string
+      }
+      fn_fechar_comissoes: {
+        Args: {
+          p_account: string
+          p_account_plan?: string
+          p_ate: string
+          p_de: string
+          p_org: string
+          p_professional: string
+        }
+        Returns: Json
+      }
+      fn_meta_de_fidelidade: { Args: { p_org: string }; Returns: number }
+      fn_resgatar_premio: {
+        Args: { p_org: string; p_sale_item: string }
+        Returns: Json
+      }
+      fn_resumo_do_cliente: {
+        Args: { p_contact: string; p_org: string }
+        Returns: Json
+      }
       fn_channel_routing_claim: {
         Args: {
           p_channel: string

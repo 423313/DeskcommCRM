@@ -55,6 +55,7 @@ export async function GET(
         "id, number, status, total_cents, finalized_at, reversed_at, notes, " +
           "sale_items(id, description, quantity, total_cents)",
       )
+      .eq("organization_id", authz.org.orgId)
       .eq("contact_id", contactId)
       .not("finalized_at", "is", null)
       .order("finalized_at", { ascending: false })
@@ -62,6 +63,7 @@ export async function GET(
     supabase
       .from("calendar_appointments")
       .select("id, title, starts_at, status")
+      .eq("organization_id", authz.org.orgId)
       .eq("contact_id", contactId)
       .gte("starts_at", new Date().toISOString())
       .not("status", "in", naoContam)
@@ -70,6 +72,7 @@ export async function GET(
     supabase
       .from("calendar_appointments")
       .select("id, title, starts_at, status")
+      .eq("organization_id", authz.org.orgId)
       .eq("contact_id", contactId)
       .lt("starts_at", new Date().toISOString())
       .order("starts_at", { ascending: false })

@@ -397,10 +397,10 @@ begin
   select coalesce(sum(amount_cents), 0), count(*) into v_pago, v_marcadas from pagas;
 
   if v_marcadas <> v_qtd or v_pago <> v_total then
-    raise exception 'fechamento_inconsistente'
-      using errcode = 'P0001',
-            message = format('O lançamento somaria %s em %s comissões, mas %s linhas de %s foram marcadas. Nada foi pago.',
-                             v_total, v_qtd, v_marcadas, v_pago);
+    -- Mesmo cuidado do 'cartao_incompleto': token dentro da mensagem.
+    raise exception using errcode = 'P0001',
+      message = format('fechamento_inconsistente: o lançamento somaria %s em %s comissões, mas %s linhas de %s foram marcadas. Nada foi pago.',
+                       v_total, v_qtd, v_marcadas, v_pago);
   end if;
 
   return jsonb_build_object('entry_id', v_entry, 'itens', v_qtd, 'total_cents', v_total);

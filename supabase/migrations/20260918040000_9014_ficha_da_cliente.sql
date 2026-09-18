@@ -80,10 +80,19 @@ begin
   v_primeira := least(v_primeira, coalesce(v_antes, v_primeira));
   if v_antes is not distinct from v_primeira then return 'igual'; end if;
 
+  -- ANUNCIA A ESCRITA AO GUARDA. `fn_colunas_de_cliente_sao_do_sistema` (0262)
+  -- recusa com 42501 qualquer sessão que mexa em `first_service_at`, e
+  -- `auth.uid()` continua preenchido dentro de uma `security definer` chamada
+  -- pela sessão — então esta função é barrada como se fosse mão humana sem a
+  -- chave. É de transação, e a mesma que a função da agenda usa.
+  perform set_config('deskcomm.cliente_pela_agenda', 'on', true);
+
   update public.contacts
      set first_service_at = v_primeira,
          client_recognized_at = coalesce(client_recognized_at, now())
    where id = p_contact;
+
+  perform set_config('deskcomm.cliente_pela_agenda', 'off', true);
 
   return 'carimbado';
 end $$;

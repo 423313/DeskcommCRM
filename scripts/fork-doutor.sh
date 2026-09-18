@@ -21,10 +21,18 @@ ok()    { c_grn "  ✓ $*"; }
 falha() { c_red "  ✗ $*"; FALHAS=$((FALHAS + 1)); }
 dica()  { printf '      → %s\n' "$*"; }
 
-# O namespace do FORK, literal: o doutor audita a árvore em que está, e essa
-# árvore pode ser a do upstream (é exatamente o caso em que ele precisa gritar).
-# Derivar de IMG_NS aqui faria o kit do upstream aprovar as imagens do upstream.
-NS_DO_FORK="ghcr.io/423313"
+# O namespace esperado sai do DONO DO REMOTE, não de um literal e não de
+# IMG_NS.
+#
+# Não de IMG_NS: o doutor audita a árvore em que está, e essa árvore pode ser a
+# do upstream — é exatamente o caso em que ele precisa gritar. Lendo IMG_NS, o
+# kit do upstream aprovaria as imagens do upstream.
+#
+# E não de um literal: o gate `namespace-das-imagens` cobra que ninguém repita
+# o namespace à mão, e ele está certo — duas fontes divergem. O remote é a
+# mesma coisa que a pergunta 1 já confere, então não há terceira verdade aqui.
+DONO_DO_REMOTE="$(git remote get-url origin 2>/dev/null | sed -E 's#.*[:/]([^/]+)/[^/]+(\.git)?$##')"
+NS_DO_FORK="ghcr.io/${DONO_DO_REMOTE:-desconhecido}"
 
 TABELAS_DO_FINANCEIRO="financial_accounts payment_methods account_plans sales sale_items commission_rules commissions financial_entries loyalty_ledger recurring_entries"
 DEFINERS_DO_FINANCEIRO="fn_finalizar_comanda fn_estornar_comanda fn_relatorio_financeiro fn_saldo_de_fidelidade"

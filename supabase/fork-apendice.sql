@@ -1380,10 +1380,10 @@ begin
   select coalesce(sum(amount_cents), 0), count(*) into v_pago, v_marcadas from pagas;
 
   if v_marcadas <> v_qtd or v_pago <> v_total then
-    raise exception 'fechamento_inconsistente'
-      using errcode = 'P0001',
-            message = format('O lançamento somaria %s em %s comissões, mas %s linhas de %s foram marcadas. Nada foi pago.',
-                             v_total, v_qtd, v_marcadas, v_pago);
+    -- Mesmo cuidado do 'cartao_incompleto': token dentro da mensagem.
+    raise exception using errcode = 'P0001',
+      message = format('fechamento_inconsistente: o lançamento somaria %s em %s comissões, mas %s linhas de %s foram marcadas. Nada foi pago.',
+                       v_total, v_qtd, v_marcadas, v_pago);
   end if;
 
   return jsonb_build_object('entry_id', v_entry, 'itens', v_qtd, 'total_cents', v_total);
@@ -1555,9 +1555,13 @@ begin
    where organization_id = p_org and contact_id = v_sale.contact_id;
 
   if v_selos < v_meta then
-    raise exception 'cartao_incompleto'
-      using errcode = 'P0001',
-            message = format('O cartão tem %s de %s selos.', v_selos, v_meta);
+    -- ⚠️ SEM mensagem no formato E em `message`: o PL/pgSQL recusa as duas
+    -- juntas com "RAISE option already specified: MESSAGE", e o erro de
+    -- sintaxe tomava o lugar da recusa de negócio — quem clicava em resgatar
+    -- com o cartão pela metade via erro de sistema em vez de "faltam 3 selos".
+    -- O token vai DENTRO da mensagem, que é o que a rota procura.
+    raise exception using errcode = 'P0001',
+      message = format('cartao_incompleto: o cartão tem %s de %s selos.', v_selos, v_meta);
   end if;
 
   -- O desconto é sobre o ITEM, nunca sobre `sales.discount_cents`: o gatilho
@@ -1712,10 +1716,19 @@ begin
   v_primeira := least(v_primeira, coalesce(v_antes, v_primeira));
   if v_antes is not distinct from v_primeira then return 'igual'; end if;
 
+  -- ANUNCIA A ESCRITA AO GUARDA. `fn_colunas_de_cliente_sao_do_sistema` (0262)
+  -- recusa com 42501 qualquer sessão que mexa em `first_service_at`, e
+  -- `auth.uid()` continua preenchido dentro de uma `security definer` chamada
+  -- pela sessão — então esta função é barrada como se fosse mão humana sem a
+  -- chave. É de transação, e a mesma que a função da agenda usa.
+  perform set_config('deskcomm.cliente_pela_agenda', 'on', true);
+
   update public.contacts
      set first_service_at = v_primeira,
          client_recognized_at = coalesce(client_recognized_at, now())
    where id = p_contact;
+
+  perform set_config('deskcomm.cliente_pela_agenda', 'off', true);
 
   return 'carimbado';
 end $$;

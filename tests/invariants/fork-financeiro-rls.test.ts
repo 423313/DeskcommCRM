@@ -368,3 +368,110 @@ describe("financeiro: a anonimização da LGPD alcança o texto livre da comanda
     ).toBe("Anotacao livre sobre a pessoa");
   });
 });
+
+/**
+ * O FECHAMENTO DE COMISSÃO (9012) — o ato de pagar.
+ *
+ * Não existe tabela de fechamento: o lançamento de saída É o fechamento, e as
+ * comissões apontam para ele. Isso põe todo o peso em UMA propriedade, e é ela
+ * que este bloco prende: **o mesmo período não pode ser pago duas vezes**.
+ */
+describe("financeiro: o fechamento de comissão", () => {
+  /** Monta comanda finalizada com comissão para a profissional do seed. */
+  function comComissao(numero: number, valor: number): void {
+    // ⚠️ TRÊS COMANDOS, e não um com CTEs. Uma CTE de escrita NÃO é visível
+    // para as outras partes do mesmo comando: a finalização rodava sem
+    // enxergar os itens que a CTE irmã acabara de inserir, fechava a comanda
+    // com total zero e não gerava comissão. Medido em 18/09 — o fechamento
+    // devolvia `itens: 1, total 500`, que era a comissão do SEED, não a deste
+    // caso, e o teste teria passado a medir outra coisa.
+    sql(
+      comoUsuario(USER_A, `
+        insert into public.sales (organization_id, number, created_by_user_id)
+        values ('${ORG_A}', ${numero}, '${USER_A}');
+
+        insert into public.sale_items
+          (organization_id, sale_id, description, unit_price_cents, total_cents,
+           professional_id, commission_percent)
+        select '${ORG_A}',
+               (select id from public.sales where organization_id='${ORG_A}' and number=${numero}),
+               'Item do fechamento', ${valor}, ${valor},
+               (select id from public.professionals where organization_id='${ORG_A}' limit 1), 10;
+
+        select public.fn_finalizar_comanda(
+          '${ORG_A}',
+          (select id from public.sales where organization_id='${ORG_A}' and number=${numero}),
+          (select id from public.payment_methods where organization_id='${ORG_A}' limit 1), 0
+        ) is not null;
+      `),
+    );
+  }
+
+  it("sem comissão pendente, recusa explicitamente em vez de fingir que fechou", () => {
+    const r = tentaComo(USER_A, `
+      select public.fn_fechar_comissoes('${ORG_A}',
+        (select id from public.professionals where organization_id='${ORG_A}' limit 1),
+        '2001-01-01', '2001-01-31',
+        (select id from public.financial_accounts where organization_id='${ORG_A}' limit 1))::text;
+    `);
+    // Devolver "ok, já estava fechado" mascararia quem achou que fechava
+    // comissão nova. O erro é a resposta certa.
+    expect(r.erro ?? "").toContain("NENHUM_ITEM_PENDENTE");
+  });
+
+  it("paga o período uma vez, e a SEGUNDA chamada não cria lançamento nenhum", () => {
+    comComissao(9101, 20000);
+    comComissao(9102, 30000);
+
+    const antes = Number(
+      ultimaLinha(sql(`select count(*) from public.financial_entries
+                        where organization_id='${ORG_A}' and origin='commission';`)),
+    );
+
+    const primeira = tentaComo(USER_A, `
+      select public.fn_fechar_comissoes('${ORG_A}',
+        (select id from public.professionals where organization_id='${ORG_A}' limit 1),
+        (current_date - 1)::date, (current_date + 1)::date,
+        (select id from public.financial_accounts where organization_id='${ORG_A}' limit 1))::text;
+    `);
+    expect(primeira.erro, `o fechamento falhou: ${primeira.erro}`).toBeUndefined();
+    // 10% de 200 + 10% de 300 = 50
+    expect(primeira.ok ?? "").toContain('"total_cents": 5000');
+
+    // ⚠️ A SEGUNDA CHAMADA, e o motivo de este caso existir: a primeira versão
+    // usava `create temp table … on commit drop`, e duas chamadas na mesma
+    // transação quebravam com "relation already exists" — um erro de
+    // infraestrutura no lugar da recusa correta.
+    const segunda = tentaComo(USER_A, `
+      select public.fn_fechar_comissoes('${ORG_A}',
+        (select id from public.professionals where organization_id='${ORG_A}' limit 1),
+        (current_date - 1)::date, (current_date + 1)::date,
+        (select id from public.financial_accounts where organization_id='${ORG_A}' limit 1))::text;
+    `);
+    expect(segunda.erro ?? "").toContain("NENHUM_ITEM_PENDENTE");
+
+    const depois = Number(
+      ultimaLinha(sql(`select count(*) from public.financial_entries
+                        where organization_id='${ORG_A}' and origin='commission';`)),
+    );
+    expect(depois, "a segunda chamada criou um segundo lançamento — pagou duas vezes").toBe(antes + 1);
+  });
+
+  it("as comissões pagas apontam para o lançamento que as pagou", () => {
+    const orfas = ultimaLinha(sql(`
+      select count(*) from public.commissions
+       where organization_id='${ORG_A}' and status='paid' and paid_entry_id is null;`));
+    expect(Number(orfas), "comissão paga sem lançamento é dinheiro que saiu sem registro").toBe(0);
+  });
+
+  it("recusa a organização do vizinho (definer com org por argumento)", () => {
+    const r = tentaComo(USER_A, `
+      select public.fn_fechar_comissoes('${ORG_B}',
+        (select id from public.professionals where organization_id='${ORG_B}' limit 1),
+        (current_date - 1)::date, (current_date + 1)::date,
+        (select id from public.financial_accounts where organization_id='${ORG_B}' limit 1))::text;
+    `);
+    expect(r.ok, "fechou comissão de outra organização").toBeUndefined();
+    expect(r.erro ?? "").toMatch(/comissao_forbidden|42501/);
+  });
+});

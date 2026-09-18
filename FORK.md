@@ -149,6 +149,15 @@ merge fica verde e o código fica errado.
 Quem pega isso é `pnpm test:db` — o único gate que aplica o `baseline.sql` num
 Postgres real. Rode-o em todo sync, não só quando mexer em schema.
 
+**Uma dívida que este fork assumiu de propósito:** a migration 9014 dá
+`grant execute` em `fn_situacao_conta_como_atendimento(text)` para
+`authenticated`, que o upstream revogou. A alternativa era copiar a régua de
+"conta como atendimento" para dentro do fork, criando a segunda cópia que a
+0262 existe para evitar. O risco não é o privilégio — a função é `immutable` e
+pura —, é o dia em que o upstream escrever um invariante afirmando que ela NÃO
+é executável por `authenticated`: o `test:db` fica vermelho por um motivo que
+ninguém associa a esta linha. Está escrito aqui para esse dia.
+
 **Depois de todo sync, rode `pnpm install` antes dos gates.** O upstream adiciona
 dependência sem avisar, e o sintoma engana: em 17/09 o `jsonc-parser` novo fez o
 typecheck falhar e dez arquivos de teste ficarem vermelhos, o que lê como "o
@@ -178,7 +187,7 @@ O que vale hoje, e é preciso ler na fonte antes de agir:
   criadas por uma função `fn_<modulo>_provisionar()`, `security definer`, só
   `service_role`, disparada ao instalar o módulo. A própria ADR diz que **o
   primeiro módulo a usá-la é a comanda** — este aqui.
-- **A ADR resolve tabelas, não o resto.** As ~20 rotas, as 3 telas e o cron
+- **A ADR resolve tabelas, não o resto.** As rotas, as telas e o cron
   continuam sendo código do produto, revisado PR a PR. Mesmo depois dela, o fork
   não desaparece sozinho.
 

@@ -156,9 +156,13 @@ begin
    where organization_id = p_org and contact_id = v_sale.contact_id;
 
   if v_selos < v_meta then
-    raise exception 'cartao_incompleto'
-      using errcode = 'P0001',
-            message = format('O cartão tem %s de %s selos.', v_selos, v_meta);
+    -- ⚠️ SEM mensagem no formato E em `message`: o PL/pgSQL recusa as duas
+    -- juntas com "RAISE option already specified: MESSAGE", e o erro de
+    -- sintaxe tomava o lugar da recusa de negócio — quem clicava em resgatar
+    -- com o cartão pela metade via erro de sistema em vez de "faltam 3 selos".
+    -- O token vai DENTRO da mensagem, que é o que a rota procura.
+    raise exception using errcode = 'P0001',
+      message = format('cartao_incompleto: o cartão tem %s de %s selos.', v_selos, v_meta);
   end if;
 
   -- O desconto é sobre o ITEM, nunca sobre `sales.discount_cents`: o gatilho

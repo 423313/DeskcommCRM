@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/hooks/i18n/useT";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { apiClient } from "@/lib/api/client";
 import { formatCents } from "@/lib/money";
 
@@ -61,6 +62,10 @@ const COR_DA_CLASSIFICACAO: Record<Resumo["classificacao"], "success" | "warning
 
 export function FichaDaCliente({ contactId }: { contactId: string }) {
   const t = useT();
+  // A data segue o idioma de quem lê, não um literal: é o que o gate
+  // `i18n-a-data-segue-o-idioma` cobra, e o motivo é que 09/12 e 12/09 são o
+  // mesmo dia escrito de dois jeitos.
+  const tagDoIdioma = useTagDeIdioma();
 
   const ROTULO_DA_CLASSIFICACAO: Record<Resumo["classificacao"], string> = {
     ativa: t("Ativa"),
@@ -85,7 +90,7 @@ export function FichaDaCliente({ contactId }: { contactId: string }) {
 
   const r = ficha.data.resumo;
   const data = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—";
+    iso ? new Date(iso).toLocaleDateString(tagDoIdioma, { timeZone: "America/Sao_Paulo" }) : "—";
 
   if (!r || r.classificacao === "sem_compra") {
     return (

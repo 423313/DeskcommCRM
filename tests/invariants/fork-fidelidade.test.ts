@@ -88,8 +88,8 @@ beforeAll(() => {
         v_user    := case when v_org = '${ORG_A}'::uuid then '${USER_A}'::uuid else '${USER_B}'::uuid end;
         v_contato := case when v_org = '${ORG_A}'::uuid then '${CONTATO_A}'::uuid else '${CONTATO_B}'::uuid end;
 
-        insert into public.organizations (id, name, slug)
-          values (v_org, 'Org fidelidade ' || right(v_org::text, 1), 'fide-' || right(v_org::text, 1))
+        insert into public.organizations (id, slug, legal_name)
+          values (v_org, 'fide-' || right(v_org::text, 1), 'Org fidelidade ' || right(v_org::text, 1))
           on conflict (id) do nothing;
 
         insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
@@ -148,17 +148,22 @@ function ids(org: string): { forma: string; pontua: string; premio: string } {
 
 /** Abre uma comanda com um item do serviço dado e a finaliza. Devolve o id. */
 function comandaFinalizada(org: string, user: string, contato: string, tipo: string, numero: number): string {
+  // ⚠️ COMANDOS SEPARADOS. Uma CTE de escrita não é visível para o resto do
+  // mesmo comando, então a finalização não enxergaria o item e o selo nunca
+  // nasceria — o teste passaria a medir o nada.
   const saida = sql(
     comoUsuario(user, `
-      with v as (
-        insert into public.sales (organization_id, number, contact_id, created_by_user_id)
-        values ('${org}', ${numero}, '${contato}', '${user}') returning id
-      ), i as (
-        insert into public.sale_items
-          (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
-        select '${org}', v.id, '${tipo}', 'Item', 10000, 10000 from v returning sale_id
-      )
-      select public.fn_finalizar_comanda('${org}', (select id from v), '${ids(org).forma}', 0)->>'sale_id';
+      insert into public.sales (organization_id, number, contact_id, created_by_user_id)
+      values ('${org}', ${numero}, '${contato}', '${user}');
+
+      insert into public.sale_items
+        (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
+      select '${org}', (select id from public.sales where organization_id='${org}' and number=${numero}),
+             '${tipo}', 'Item', 10000, 10000;
+
+      select public.fn_finalizar_comanda('${org}',
+        (select id from public.sales where organization_id='${org}' and number=${numero}),
+        '${ids(org).forma}', 0)->>'sale_id';
     `),
   );
   return ultimaLinha(saida);
@@ -189,16 +194,17 @@ describe("o selo nasce da regra, não do que alguém digita", () => {
     const tipo = ids(ORG_A).pontua;
     sql(
       comoUsuario(USER_A, `
-        with v as (
-          insert into public.sales (organization_id, number, contact_id, created_by_user_id)
-          values ('${ORG_A}', 70003, '${CONTATO_A}', '${USER_A}') returning id
-        ), i as (
-          insert into public.sale_items
-            (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
-          select '${ORG_A}', v.id, '${tipo}', 'Item ' || g, 10000, 10000
-            from v, generate_series(1, 2) g returning sale_id
-        )
-        select public.fn_finalizar_comanda('${ORG_A}', (select id from v), '${ids(ORG_A).forma}', 0) is not null;
+        insert into public.sales (organization_id, number, contact_id, created_by_user_id)
+        values ('${ORG_A}', 70003, '${CONTATO_A}', '${USER_A}');
+
+        insert into public.sale_items
+          (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
+        select '${ORG_A}', (select id from public.sales where organization_id='${ORG_A}' and number=70003),
+               '${tipo}', 'Item ' || g, 10000, 10000 from generate_series(1, 2) g;
+
+        select public.fn_finalizar_comanda('${ORG_A}',
+          (select id from public.sales where organization_id='${ORG_A}' and number=70003),
+          '${ids(ORG_A).forma}', 0) is not null;
       `),
     );
     expect(selos(ORG_A, USER_A, CONTATO_A)).toBe(antes + 1);
@@ -209,15 +215,17 @@ describe("o resgate", () => {
   it("recusa cartão incompleto, e não desconta nada", () => {
     const tipo = ids(ORG_B).premio;
     const r = tentaComo(USER_B, `
-      with v as (
-        insert into public.sales (organization_id, number, contact_id, created_by_user_id)
-        values ('${ORG_B}', 70010, '${CONTATO_B}', '${USER_B}') returning id
-      ), i as (
-        insert into public.sale_items
-          (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
-        select '${ORG_B}', v.id, '${tipo}', 'Premiado', 10000, 10000 from v returning id
-      )
-      select public.fn_resgatar_premio('${ORG_B}', (select id from i))::text;
+      insert into public.sales (organization_id, number, contact_id, created_by_user_id)
+      values ('${ORG_B}', 70010, '${CONTATO_B}', '${USER_B}');
+
+      insert into public.sale_items
+        (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
+      select '${ORG_B}', (select id from public.sales where organization_id='${ORG_B}' and number=70010),
+             '${tipo}', 'Premiado', 10000, 10000;
+
+      select public.fn_resgatar_premio('${ORG_B}',
+        (select si.id from public.sale_items si join public.sales s on s.id=si.sale_id
+          where s.organization_id='${ORG_B}' and s.number=70010 limit 1))::text;
     `);
     expect(r.erro ?? "").toMatch(/cartao_incompleto|selos/i);
   });
@@ -232,19 +240,22 @@ describe("o resgate", () => {
     const tipo = ids(ORG_B).premio;
     const saida = sql(
       comoUsuario(USER_B, `
-        with v as (
-          insert into public.sales (organization_id, number, contact_id, created_by_user_id)
-          values ('${ORG_B}', 70200, '${CONTATO_B}', '${USER_B}') returning id
-        ), i as (
-          insert into public.sale_items
-            (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
-          select '${ORG_B}', v.id, '${tipo}', 'Premiado', 10000, 10000 from v returning id, sale_id
-        ), r as (
-          select public.fn_resgatar_premio('${ORG_B}', (select id from i)) as res
-        )
-        select (select res->>'desconto_cents' from r) || '|' ||
-               (select total_cents from public.sale_items where id = (select id from i)) || '|' ||
-               (select id from v);
+        insert into public.sales (organization_id, number, contact_id, created_by_user_id)
+        values ('${ORG_B}', 70200, '${CONTATO_B}', '${USER_B}');
+
+        insert into public.sale_items
+          (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
+        select '${ORG_B}', (select id from public.sales where organization_id='${ORG_B}' and number=70200),
+               '${tipo}', 'Premiado', 10000, 10000;
+
+        select public.fn_resgatar_premio('${ORG_B}',
+                 (select si.id from public.sale_items si join public.sales s on s.id=si.sale_id
+                   where s.organization_id='${ORG_B}' and s.number=70200 limit 1))->>'desconto_cents'
+               || '|' ||
+               (select si.total_cents from public.sale_items si join public.sales s on s.id=si.sale_id
+                 where s.organization_id='${ORG_B}' and s.number=70200 limit 1)
+               || '|' ||
+               (select id from public.sales where organization_id='${ORG_B}' and number=70200);
       `),
     );
     const [desconto, totalItem, vendaId] = ultimaLinha(saida).split("|");

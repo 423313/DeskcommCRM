@@ -62,6 +62,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       "id, professional_id, percent, amount_cents, status, paid_at, reversed_at, paid_entry_id, created_at, " +
         "sale_items!inner(description, total_cents, sales!inner(number, finalized_at, reversed_at))",
     )
+    // Explícito, ainda que a RLS cubra: é o padrão da rota irmã de catálogo, e
+    // divergir dentro do mesmo módulo é como a regra deixa de ser regra.
+    .eq("organization_id", authz.org.orgId)
     .gte("sale_items.sales.finalized_at", `${lido.data.de}T00:00:00Z`)
     .lte("sale_items.sales.finalized_at", `${lido.data.ate}T23:59:59Z`)
     .order("created_at", { ascending: false })

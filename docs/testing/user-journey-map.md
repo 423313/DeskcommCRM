@@ -2513,3 +2513,39 @@ grupo trouxe.
 
 **A seção "Lote 12 · G2" acima deixa de estar PENDENTE POR EXECUÇÃO**: os três
 casos dela (L12.G2.1, G2.2 e G2.3) estão provados nas linhas acima.
+
+## J20 — A ficha da cliente, a comissão e o cartão `[P1]` (fork financeiro)
+
+Contexto: módulo financeiro do fork (migrations 9011–9014). Prova em
+`.superpowers/evidence/prova-ficha-e-comissoes.mjs`, contra o Supabase local com um
+`pg_dump` da produção do Studio — 4.771 comandas reais, não seed sintético.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J20.1 | Aba **Ficha** no contato com mais comandas | abre e mostra visitas, total gasto, classificação, cartão e histórico | PASS |
+| J20.2 | O número da tela contra o banco | `99 visitas` e `R$ 11.029,00` **iguais** a `count(*)`/`sum(total_cents)` das comandas finalizadas não estornadas | PASS |
+| J20.3 | Tela de **Comissões** sem nenhuma comissão | estado vazio que ENSINA: manda cadastrar regras em Configurações › Financeiro e explica que falta profissional no item | PASS |
+| J20.4 | Cadastrar profissional em Configurações › Financeiro | "Scarlet" aparece na lista logo depois | PASS |
+| J20.5 | Seletor de profissional no item da comanda | "Scarlet" entre as opções, ao lado de "Sem comissão" | PASS |
+
+Evidência: `.superpowers/evidence/{ficha-01,comissoes-01,profissionais-01,comanda-profissional-01}.png`.
+
+**Dois defeitos que esta jornada pegou antes da produção**, os dois no caminho do balcão:
+
+- **BUG-F1 — o cartão incompleto respondia erro de sistema.** `fn_resgatar_premio` usava
+  `raise exception 'cartao_incompleto' using message = format(...)`, e o PL/pgSQL recusa
+  mensagem no formato **e** em `message` juntas: o retorno era
+  `42601 RAISE option already specified: MESSAGE`, que a rota não reconhecia e virava 500.
+  Quem clicasse em resgatar com o cartão pela metade veria "erro interno" em vez de
+  "o cartão tem 3 de 10 selos". Corrigido pondo o token dentro da mensagem.
+- **BUG-F2 — a comanda não reconhecia a cliente como cliente.** `fn_cliente_pela_comanda`
+  gravava `first_service_at` sem se anunciar ao guarda `fn_colunas_de_cliente_sao_do_sistema`
+  (0262), que recusa escrita de sessão nessa coluna com 42501. A finalização teria falhado
+  na primeira comanda em produção. Corrigido com a mesma chave de transação que a função
+  da agenda usa.
+
+**O que esta jornada NÃO cobre, e é preciso dizer:** o ciclo de comissão de ponta a ponta
+pela TELA (criar comanda com profissional → finalizar → fechar → ver o lançamento de saída)
+foi provado em SQL, não em navegador — a base local não tinha regra de comissão cadastrada
+no momento da prova. O invariante `fork-financeiro-rls.test.ts` cobre o comportamento; a
+tela do fechamento continua sem prova visual.
