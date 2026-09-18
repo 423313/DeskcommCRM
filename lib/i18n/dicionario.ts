@@ -5099,6 +5099,12 @@ export const DICIONARIO: Traducoes = {
     es: "ni registrada aquí, ni proveniente de la instalación. Pega la clave en el campo de arriba («su cerebro») y crea el agente de nuevo — o regístrala en",
   },
   "IA › Credenciais": { es: "IA › Credenciales" },
+  "A chave que você colou ainda não foi confirmada pelo provedor.": {
+    es: "La clave que pegaste todavía no fue confirmada por el proveedor.",
+  },
+  "Assim que ela for confirmada, publique de novo — não precisa colar outra.": {
+    es: "Cuando esté confirmada, publica de nuevo — no hace falta pegar otra.",
+  },
   "Continuar sem publicar": { es: "Continuar sin publicar" },
   "— e rascunho não responde mensagem.": { es: "— y un borrador no responde mensajes." },
   "Os modelos": { es: "Los modelos" },
@@ -5129,9 +5135,18 @@ export const DICIONARIO: Traducoes = {
     es: "Tu empleado piensa con la inteligencia artificial que contrates. La instalación no trajo ninguna clave — pega la tuya aquí y nace funcionando.",
   },
   "Qual você contratou": { es: "Cuál contrataste" },
+  "Esta escolha passa a valer para a empresa inteira: é esta inteligência que atende seus clientes.": {
+    es: "Esta elección pasa a valer para toda la empresa: es esta inteligencia la que atiende a tus clientes.",
+  },
   "A chave": { es: "La clave" },
   "Cole aqui a chave que a empresa de IA te deu": { es: "Pega aquí la clave que te dio la empresa de IA" },
   "Chave guardada. Agora ele pode pensar.": { es: "Clave guardada. Ahora puede pensar." },
+  "A chave foi guardada. A lista de modelos desta empresa de IA ainda não chegou nesta instalação — por enquanto a IA da empresa continua a anterior. Não precisa colar a chave de novo.": {
+    es: "La clave fue guardada. La lista de modelos de esta empresa de IA todavía no llegó a esta instalación — por ahora la IA de la empresa sigue siendo la anterior. No hace falta pegar la clave de nuevo.",
+  },
+  "A chave foi guardada, mas não consegui mudar a IA da empresa agora. Dá para trocar em IA › Provedores.": {
+    es: "La clave fue guardada, pero no pude cambiar la IA de la empresa ahora. Se puede cambiar en IA › Proveedores.",
+  },
   "Guardando...": { es: "Guardando..." },
   "Guardar a chave": { es: "Guardar la clave" },
   "Ela é guardada cifrada — nem nós conseguimos lê-la depois.": {
