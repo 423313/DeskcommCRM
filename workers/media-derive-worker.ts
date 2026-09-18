@@ -12,6 +12,7 @@ import { visaoEmVigor } from "@/lib/ai/pontos/capacidade-em-vigor";
 import { resolveOrgLlmConfig, type LlmEdgeConfig } from "@/lib/agent-engine/edge/llm/credentials";
 import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
 import { createPool } from "@/lib/agent-engine/db/pool";
+import { env } from "@/lib/env";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { deriveMediaText, type DeriveDeps } from "@/lib/messaging/media/derive";
 import { TIPOS_DERIVAVEIS } from "@/lib/messaging/media/derivable";
@@ -87,8 +88,23 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       string
     >)[msg.type] ?? "mídia";
 
+  // Grava o MARCADOR junto do `failed`, e é o que separa "o agente não sabe que
+  // existe arquivo" de "o agente sabe que não conseguiu ler".
+  //
+  // Sem ele, `get-lead-context` cai no marcador de tipo — `[documento]` — que
+  // diz que veio um arquivo e não diz que a leitura falhou. Medido numa VPS em
+  // produção (17/09): um PDF de catálogo, sem camada de texto, falhou no
+  // extrator; o agente recebeu `[documento]` e respondeu ao cliente que o
+  // material "parece ser de distribuidora/promocional" — uma afirmação sobre um
+  // conteúdo que ele nunca leu. As RECUSAS já entregavam este marcador há
+  // tempos (`MARCADOR_NAO_LIDA`, seis caminhos); só a falha permanente não
+  // entregava, e é justamente a que erra por invenção em vez de silêncio.
+  //
+  // O turno que já rodou não volta atrás — o dreno tem teto de espera. O que
+  // isto conserta é todo turno seguinte da conversa, que lê o histórico.
   const markFailed = async () => {
-    await admin.from("messages").update({ media_derived_status: "failed" })
+    await admin.from("messages")
+      .update({ media_derived_text: MARCADOR_NAO_LIDA, media_derived_status: "failed" })
       .eq("id", msg.id).eq("organization_id", msg.organization_id);
   };
 
@@ -233,10 +249,11 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       // parou; este diz o que fazer (a orientação da política aponta
       // Provedores de IA).
       //
-      // ⚠️ Aqui o agente NÃO recebeu o marcador de "não consegui interpretar":
-      // a exceção não grava `media_derived_text`, e o turno já seguiu sem o
-      // texto no teto de espera do dreno do agent-engine. Por isso a
-      // consequência é outra que a das recusas, e vai explícita.
+      // O marcador de "não consegui interpretar" agora É gravado por
+      // `markFailed` — a consequência é a mesma das recusas dali em diante. O
+      // que continua valendo é o turno que já correu: ele seguiu sem o texto,
+      // dentro do teto de espera do dreno do agent-engine, e por isso a frase
+      // fala do PRÓXIMO turno, não do que passou.
       //
       // O `detail` entra porque é a frase do PROVEDOR, e é ela que distingue
       // "chave errada" de "modelo que sua conta não assina" — duas ações
@@ -246,7 +263,7 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
         msg.organization_id,
         rotuloDoTipo,
         "a leitura deu erro em todas as tentativas, ao abrir o arquivo ou ao chamar o provedor de IA",
-        "O conteúdo do arquivo não chegou ao agente.",
+        "O conteúdo do arquivo não chegou ao agente. Da próxima mensagem em diante ele sabe que houve um arquivo que não deu para ler, e responde avisando em vez de supor o que estava nele.",
         detail.slice(0, 200),
       );
     }
@@ -442,7 +459,7 @@ function buildDeriveDeps(
     servico: NonNullable<DeriveDeps["transcriber"]>,
   ): DeriveDeps["transcriber"] => ({
     transcribe: async (audio, mime) => {
-      const enderecoDoServico = process.env.TRANSCRIPTION_BASE_URL;
+      const enderecoDoServico = env.TRANSCRIPTION_BASE_URL;
       const recusa = enderecoDoServico
         ? await motivoDaRecusaDeDestino(enderecoDoServico)
         : null;
@@ -459,13 +476,19 @@ function buildDeriveDeps(
       return servico.transcribe(audio, mime);
     },
   });
-  const chaveDeTranscricao = process.env.TRANSCRIPTION_API_KEY;
+  // As três chaves da transcrição vêm do `env` — a MESMA régua do app
+  // (`lib/env.ts`), não do `process.env` cru: o schema é quem dá o default e
+  // quem recusa valor malformado, e uma leitura paralela aqui divergiria no dia
+  // em que a régua mudasse — sem ninguém ver, porque este arquivo roda no
+  // worker, não no Next. Não é dependência nova: o worker já carrega o módulo
+  // por `lib/supabase/admin`.
+  const chaveDeTranscricao = env.TRANSCRIPTION_API_KEY;
   const transcriber: DeriveDeps["transcriber"] = chaveDeTranscricao
     ? transcriberDeServico(
         apiTranscriptionProvider({
           apiKey: chaveDeTranscricao,
-          baseUrl: process.env.TRANSCRIPTION_BASE_URL || undefined,
-          model: process.env.TRANSCRIPTION_MODEL || undefined,
+          baseUrl: env.TRANSCRIPTION_BASE_URL || undefined,
+          model: env.TRANSCRIPTION_MODEL || undefined,
         }),
       )
     : transcricaoPadrao;
