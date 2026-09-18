@@ -172,3 +172,93 @@ export function sucessoJaInstalado(
   // seguro é o que NÃO volta a oferecer a versão já instalada.
   return gravado <= terminou;
 }
+
+/**
+ * O que aconteceu com o banco na rodada de atualização — o pedaço que até
+ * agora só existia no log do servidor. Quando o baseline é reaplicado com o
+ * sistema no ar, a primeira passada pode não fechar e o kit tenta de novo; sem
+ * estes três números, uma rodada que precisou de três passadas fica idêntica a
+ * uma que fechou de primeira, e quem operou não sabe que o banco estava em uso.
+ */
+export type RodadaDoBanco = {
+  /** Houve disputa de lock com o sistema no ar em alguma passada. */
+  disputa: boolean;
+  /** Quantas retentativas a rodada gastou depois da primeira passada. */
+  retentativas: number;
+  /** Em qual passada a rodada fechou (1 = primeira). */
+  passada: number;
+};
+
+/**
+ * Lê a rodada de banco da linha de `system_update_runs`. Devolve `null` quando
+ * ela não foi medida por inteiro — coluna nula é "não medido", e nulo é o que
+ * a tela precisa para ficar calada em vez de inventar um zero.
+ */
+export function rodadaDoBancoDaLinha(
+  linha:
+    | {
+        disputa_de_banco?: boolean | null;
+        retentativas_do_banco?: number | null;
+        passada_do_banco?: number | null;
+      }
+    | null
+    | undefined,
+): RodadaDoBanco | null {
+  if (!linha) return null;
+  if (typeof linha.disputa_de_banco !== "boolean") return null;
+  if (typeof linha.retentativas_do_banco !== "number") return null;
+  if (typeof linha.passada_do_banco !== "number") return null;
+  return {
+    disputa: linha.disputa_de_banco,
+    retentativas: linha.retentativas_do_banco,
+    passada: linha.passada_do_banco,
+  };
+}
+
+function passadasPorExtenso(passada: number): string {
+  return passada === 2 ? "duas passadas" : `${passada} passadas`;
+}
+
+function retentativasPorExtenso(retentativas: number): string {
+  return retentativas === 1 ? "uma retentativa" : `${retentativas} retentativas`;
+}
+
+/**
+ * Conta o que aconteceu com o banco quando a atualização terminou — em
+ * português de gente, para a tela de atualização mostrar. Devolve `null` quando
+ * não há o que contar (ninguém mediu, ou os números não fazem sentido): a tela
+ * fica silenciosa em vez de afirmar uma passada que não aconteceu.
+ */
+export function textoDaRodadaDoBanco(
+  rodada: RodadaDoBanco | null | undefined,
+): string | null {
+  if (!rodada) return null;
+
+  const { disputa, retentativas, passada } = rodada;
+  if (typeof disputa !== "boolean") return null;
+  if (!Number.isInteger(retentativas) || retentativas < 0) return null;
+  if (!Number.isInteger(passada) || passada < 1) return null;
+  // Uma passada por tentativa: sem isto, { retentativas: 5, passada: 2 } viraria
+  // uma frase que contradiz a si mesma.
+  if (passada < retentativas + 1) return null;
+
+  if (retentativas === 0) {
+    return disputa
+      ? "Houve disputa com o sistema usando o banco, mas a primeira passada fechou."
+      : "O banco atualizou de uma vez, na primeira passada, sem disputa com o sistema no ar.";
+  }
+
+  if (disputa) {
+    return `O banco estava em disputa com o sistema no ar: foram ${passadasPorExtenso(
+      passada,
+    )} e ${retentativasPorExtenso(retentativas)} até a atualização do banco fechar.`;
+  }
+
+  // `retentativas >= 1` com `disputa: false` é um estado que NINGUÉM produz: quem
+  // grava tira os dois do MESMO contador de passadas (`disputa = passadas > 1`,
+  // `retentativas = passadas - 1`), então retentativa implica disputa por
+  // construção. A frase que existia aqui dava à tela a impressão de cobrir um
+  // caso que não existe — e o caso de teste, a de que estava coberto. Silêncio é
+  // o degrau certo, o mesmo de todo número impossível.
+  return null;
+}

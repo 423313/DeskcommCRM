@@ -1,4 +1,4 @@
--- 0275 — a espera longa dorme: status `dormente` para o nó `wait` imune à resposta
+-- 0308 — a espera longa dorme: status `dormente` para o nó `wait` imune à resposta
 --
 -- ═══ O QUE ISTO DESTRAVA ═══
 --
