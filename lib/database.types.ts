@@ -5107,8 +5107,8 @@ export type Database = {
           key: string
           organization_id: string
           request_hash: string
-          response_body: Json
-          status_code: number
+          response_body: Json | null
+          status_code: number | null
         }
         Insert: {
           tenant_creation_trusted?: boolean
@@ -5119,8 +5119,8 @@ export type Database = {
           key: string
           organization_id: string
           request_hash: string
-          response_body: Json
-          status_code: number
+          response_body?: Json | null
+          status_code?: number | null
         }
         Update: {
           tenant_creation_trusted?: boolean
@@ -5131,8 +5131,8 @@ export type Database = {
           key?: string
           organization_id?: string
           request_hash?: string
-          response_body?: Json
-          status_code?: number
+          response_body?: Json | null
+          status_code?: number | null
         }
         Relationships: [
           {
