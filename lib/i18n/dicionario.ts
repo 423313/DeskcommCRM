@@ -9240,6 +9240,41 @@ export const DICIONARIO: Traducoes = {
     { es: "Hiciste demasiadas preguntas seguidas. Inténtalo de nuevo en un minuto." },
   "As perguntas dos colegas aparecem aqui em alguns segundos.":
     { es: "Las preguntas de tus colegas aparecen aquí en unos segundos." },
+  // lib/escalacao/passagem.ts (migration 0291) — por que a conversa saiu do
+  // automático, e por que o cliente não foi avisado. A frase existe para a
+  // TELA: `requested_human` é vocabulário de constraint, não texto para uma
+  // pessoa ler. Acrescentadas no fim do bloco, nunca reordenando o arquivo (ele
+  // é disputado por quatro ondas e cinco PRs abertos).
+  "O cliente pediu para falar com uma pessoa":
+    { es: "El cliente pidió hablar con una persona" },
+  "O cliente parece ter pedido para não receber mais mensagens":
+    { es: "El cliente parece haber pedido no recibir más mensajes" },
+  "O limite de gasto com IA foi atingido — o cliente não pediu uma pessoa":
+    { es: "Se alcanzó el límite de gasto con IA — el cliente no pidió una persona" },
+  "O cliente demonstrou irritação na conversa":
+    { es: "El cliente mostró molestia en la conversación" },
+  "O assistente não teve confiança suficiente para responder":
+    { es: "El asistente no tuvo confianza suficiente para responder" },
+  "O negócio chegou a uma etapa que pede uma pessoa":
+    { es: "El negocio llegó a una etapa que pide una persona" },
+  "A conversa tocou em assunto jurídico":
+    { es: "La conversación tocó un asunto jurídico" },
+  "A conversa tocou em reembolso":
+    { es: "La conversación tocó un reembolso" },
+  "Uma pessoa da equipe escalou um atendimento":
+    { es: "Alguien del equipo escaló una atención" },
+  "A mensagem ficou na fila porque o canal está fora do ar":
+    { es: "El mensaje quedó en la cola porque el canal está fuera de servicio" },
+  "O canal recusou a mensagem de aviso":
+    { es: "El canal rechazó el mensaje de aviso" },
+  "O contato não tem telefone cadastrado":
+    { es: "El contacto no tiene teléfono registrado" },
+  "O número ainda está em aquecimento e não envia mensagens":
+    { es: "El número aún está en calentamiento y no envía mensajes" },
+  "O canal desta conversa foi arquivado":
+    { es: "El canal de esta conversación fue archivado" },
+  "Estamos fora do horário em que este canal envia mensagens":
+    { es: "Estamos fuera del horario en que este canal envía mensajes" },
 };
 
 /**

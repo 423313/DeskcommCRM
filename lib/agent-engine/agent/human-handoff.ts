@@ -24,13 +24,14 @@ import { z } from 'zod';
 import type pg from 'pg';
 
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
+import { montarBriefingDaPassagem } from '@/lib/escalacao/briefing-da-passagem';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 
 import type { Logger } from '../obs/logger';
 import { cancelPendingCronsForLead } from '../cron/scheduler';
 import { findForbiddenKey, zodIssuesSummary } from './lead-state';
-import { renderDeclaracaoParaHumano, type DeclaracaoDoTurno } from './declaracao';
+import type { DeclaracaoDoTurno } from './declaracao';
 
 /** Postgres `infinity`: o bot nunca reassume após handoff. */
 const SILENCE_INFINITY = 'infinity';
@@ -311,6 +312,18 @@ export async function applyRequestHumanHandoff(
 /**
  * Resumo curto da conversa para o inbox de escalação — a partir do checkpoint durável
  * (compromissos/objeções/próxima ação/resumo). Vai ao inbox (PARA o humano), nunca a log.
+ *
+ * ⚠️ ESTA FUNÇÃO NÃO MONTA MAIS NADA: ela é um ADAPTADOR FINO de
+ * `montarBriefingDaPassagem` (`lib/escalacao/briefing-da-passagem.ts`, migration
+ * 0291), chamado com SÓ o checkpoint. A assinatura fica porque quatro call sites
+ * e `tests/unit/declaracao-do-turno.test.ts` apontam para ela; o texto que sai é
+ * BYTE A BYTE o de antes, porque a montagem só acrescenta blocos quando recebe o
+ * que só a passagem enriquecida tem (motivo, tentativas, fala pendente, caso).
+ *
+ * Por que adaptador e não duas funções: enquanto havia duas montagens, o motor A
+ * produzia este texto e o motor B não produzia texto nenhum — quem assumia a
+ * conversa recebia coisas diferentes conforme o caminho, e ninguém media a
+ * diferença. Uma montagem só é o que impede a divergência de voltar.
  */
 export function buildHandoffSummary(
   previous: {
@@ -326,21 +339,5 @@ export function buildHandoffSummary(
     declaracao?: DeclaracaoDoTurno | null;
   } | null,
 ): string {
-  if (previous === null) {
-    return 'Sem resumo acumulado ainda (conversa recente) — abra a conversa no CRM para o contexto completo.';
-  }
-  const parts: string[] = [];
-  if (previous.rolling_summary.trim() !== '') parts.push(previous.rolling_summary.trim());
-  // A declaração vem ANTES dos campos antigos de propósito: quem assume uma
-  // conversa no meio precisa primeiro do que a pessoa quer e do que foi
-  // prometido a ela — é o que decide a próxima frase que ele vai digitar.
-  // Compromissos e objeções acumulados são contexto, não ação imediata.
-  const declarado = renderDeclaracaoParaHumano(previous.declaracao ?? null);
-  if (declarado !== '') parts.push(declarado);
-  if (previous.commitments.length > 0) parts.push(`Compromissos: ${previous.commitments.join('; ')}`);
-  if (previous.objections.length > 0) parts.push(`Objeções: ${previous.objections.join('; ')}`);
-  if (previous.next_action) parts.push(`Próxima ação: ${previous.next_action}`);
-  return parts.length === 0
-    ? 'Sem resumo acumulado ainda (conversa recente) — abra a conversa no CRM para o contexto completo.'
-    : parts.join('\n');
+  return montarBriefingDaPassagem({ checkpoint: previous }).body;
 }

@@ -59,6 +59,9 @@ const TABELAS_NA_CASCATA = [
   "demandas", //           0280 — o assunto do pedido
   "messages", //           0019 — corpo, mídia e metadata
   "orders", //             0019 — dados pessoais dentro do payload do pedido
+  // 0291 — o briefing da passagem: title/body/notes/content e as tentativas.
+  // `body` é `not null` e recebe o RÓTULO, não `null`.
+  "passagens_de_atendimento",
   "voice_calls", //        0235 — o telefone de quem falou ao telefone
 ] as const;
 

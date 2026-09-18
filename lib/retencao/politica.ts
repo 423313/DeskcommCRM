@@ -108,6 +108,33 @@ export const RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO = 365;
  */
 export const RETENCAO_CONVERSA_DO_CASO_DIAS_PISO = 90;
 
+/**
+ * 1825 dias (5 anos) para a PASSAGEM para uma pessoa
+ * (`passagens_de_atendimento`, migration 0291).
+ *
+ * O mesmo horizonte da auditoria, e pela mesma razão: a passagem é rastro de
+ * ATENDIMENTO — quem assumiu a conversa de quem, quando, por quê e quanto tempo
+ * a pessoa esperou. É a linha que responde a uma reclamação de dois anos atrás,
+ * e é de onde sai a medida de repetição que diz se o briefing serviu para
+ * alguma coisa.
+ */
+export const RETENCAO_PASSAGEM_DIAS_PADRAO = 1825;
+/**
+ * Piso da passagem: 90 dias, o mesmo da auditoria.
+ *
+ * O knob nunca vira apagador de rastro recente. O piso mora DENTRO de
+ * `fn_expurgar_passagens_vencidas` (`greatest(...)` no corpo), o que o faz valer
+ * para qualquer chamador, inclusive um `psql` na mão; a cópia aqui serve para o
+ * operador ver no log que o valor dele foi elevado, em vez de descobrir pela
+ * ausência de efeito.
+ *
+ * ⚠️ O piso NÃO é a única proteção desta tabela, e a outra é mais forte: a
+ * função só apaga linha com `reconhecido_em is not null`. Passagem aberta é
+ * demanda viva — alguém do outro lado está esperando e ninguém assumiu — e
+ * apagá-la por idade seria o expurgo virando esquecedor de pendência.
+ */
+export const RETENCAO_PASSAGEM_DIAS_PISO = 90;
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;

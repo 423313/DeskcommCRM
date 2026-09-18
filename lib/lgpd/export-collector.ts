@@ -250,6 +250,37 @@ export interface CaseChatMessageRow {
   created_at: string;
 }
 
+/**
+ * Uma passagem do atendimento automático para uma pessoa (migration 0291).
+ *
+ * O que se apaga a pedido do titular é o que se entrega a pedido dele: as quatro
+ * colunas de texto estão na cascata de redação, logo a tabela tem de ser
+ * visitada aqui — é o que `tests/unit/lgpd-exporta-o-que-redige.test.ts` cobra,
+ * derivando as duas pontas da fonte.
+ *
+ * O vínculo é a FK DIRETA `contact_id`. As colunas de OPERAÇÃO entram junto
+ * (`motor`, `origem`, `motivo_codigo`, o par do aviso e o do reconhecimento):
+ * o titular tem direito de saber não só o que escreveram sobre ele, mas que a
+ * conversa dele foi passada a uma pessoa, por quê, e quando alguém assumiu.
+ */
+export interface PassagemDeAtendimentoRow {
+  id: string;
+  conversation_id: string;
+  caso_id: string | null;
+  motor: string;
+  origem: string;
+  motivo_codigo: string;
+  title: string | null;
+  body: string;
+  notes: string | null;
+  content: string | null;
+  tentativas: unknown;
+  cliente_avisado: boolean | null;
+  aviso_motivo_codigo: string | null;
+  criado_em: string;
+  reconhecido_em: string | null;
+}
+
 /** Uma demanda do titular — o pedido, seu dono e seu desfecho. */
 export interface DemandaRow {
   id: string;
@@ -336,6 +367,13 @@ export interface ExportPayload {
    * depende de memória humana.
    */
   case_chat_messages: CaseChatMessageRow[];
+  /**
+   * As passagens do atendimento dele para uma pessoa. Obrigatório, não
+   * opcional, pela mesma razão do campo acima: campo obrigatório faz um caminho
+   * de export novo NÃO COMPILAR se esquecer, que é a única sincronia que não
+   * depende de memória humana.
+   */
+  passagens: PassagemDeAtendimentoRow[];
   reply_drafts?: Array<{
     id: string;
     status: string;
@@ -798,6 +836,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   const case_events: CaseEventRow[] = [];
   let demandas: DemandaRow[] = [];
   const case_chat_messages: CaseChatMessageRow[] = [];
+  const passagens: PassagemDeAtendimentoRow[] = [];
   if (contactId) {
     const pageSize = 500;
     const refBatchSize = 100; // Mantém o filtro IN abaixo dos limites de URL dos proxies.
@@ -904,6 +943,31 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         break;
       }
       case_chat_messages.push(...(pagina ?? []));
+      if (!pagina || pagina.length < pageSize) break;
+    }
+    // As passagens para uma pessoa (migration 0291). FK direta para o contato,
+    // como a de cima, e paginada pela mesma razão: um titular de dois anos pode
+    // ter dezenas, e um `limit` faria as mais antigas sumirem do relatório sem
+    // ninguém saber que sumiram.
+    for (let offset = 0; ; offset += pageSize) {
+      const { data: pagina, error: erro } = await admin
+        .from("passagens_de_atendimento")
+        // UM literal, sem concatenação: o supabase-js lê a lista de colunas do
+        // TIPO da string para inferir a linha, e `"a" + "b"` vira `string` —
+        // a linha volta como `GenericStringError` e o `push` não compila.
+        .select("id, conversation_id, caso_id, motor, origem, motivo_codigo, title, body, notes, content, tentativas, cliente_avisado, aviso_motivo_codigo, criado_em, reconhecido_em")
+        .eq("organization_id", organizationId)
+        .eq("contact_id", contactId)
+        .order("id")
+        .range(offset, offset + pageSize - 1);
+      if (erro) {
+        logger.warn("[lgpd-export-worker] passagens load failed", {
+          request_id: requestId,
+          error: erro.message,
+        });
+        break;
+      }
+      passagens.push(...(pagina ?? []));
       if (!pagina || pagina.length < pageSize) break;
     }
   }
@@ -1020,6 +1084,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     case_events,
     demandas,
     case_chat_messages,
+    passagens,
   };
 }
 
@@ -1055,5 +1120,6 @@ function emptyPayload(
     case_events: [],
     demandas: [],
     case_chat_messages: [],
+    passagens: [],
   };
 }

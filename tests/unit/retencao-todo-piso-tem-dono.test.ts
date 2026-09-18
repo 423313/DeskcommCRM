@@ -48,6 +48,11 @@ const DONO_NO_SQL: Record<string, string> = {
   // aqui no MESMO commit da migration, que é a lição desta lista: todo par que
   // divergiu divergiu por ter nascido sozinho.
   CONVERSA_DO_CASO: "fn_expurgar_conversa_do_caso_vencida",
+  // migration 0291 — a passagem do atendimento para uma pessoa. Mesma lição:
+  // entra aqui no MESMO commit da migration. O piso não é a única proteção
+  // desta função (ela só apaga passagem JÁ reconhecida), mas ele é o que esta
+  // lista sabe medir — o resto é `tests/invariants/passagem-retencao.test.ts`.
+  PASSAGEM: "fn_expurgar_passagens_vencidas",
 };
 
 /**
