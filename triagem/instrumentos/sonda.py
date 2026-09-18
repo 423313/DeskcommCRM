@@ -110,8 +110,12 @@ class FonteGitHub:
         """O workflow como a main estava QUANDO o run nasceu — não como está hoje.
 
         O teto muda (o #1184 sobe verify 15→25): lido da main de hoje, um cancelamento
-        aos 15m15s de ontem viraria "cancelado antes do teto" e mentiria. PR que muda o
-        próprio workflow roda a versão dele, e isto não a vê.
+        aos 15m15s de ontem viraria "cancelado antes do teto" e mentiria.
+
+        Ponto cego, com sintoma: PR que muda o próprio workflow roda a versão DELE. Se o
+        PR toca .github/workflows/ (o #1183 e o #1184), o teto medido aqui pode não ser o
+        teto que rodou — um `teto` ou `cancelado` nesse PR se confere pelo teto na branch
+        do PR (`git show <head>:.github/workflows/<arquivo>`), não na main.
         """
         ref = "origin/main"
         if quando:
