@@ -42,6 +42,29 @@ import { describe, expect, it } from "vitest";
  *   uma imagem renomeada só no kit    → 3 ✗  (compose, .env e a matriz do CI)
  *   literal de volta num teste        → 1 ✗  (só a catraca)
  *
+ * ── A deferência ao fork, medida nos dois sentidos (18/09/2026) ────────────
+ *
+ * Rodando este arquivo MAIS o do #1117 (17 casos), com a troca de `IMG_NS` feita
+ * de forma coerente — kit + compose + `.env` de exemplo — onde há troca:
+ *
+ *   ACTIONS, dono=outrodono, IMG_NS dele   → 0 ✗ 1 ↓   corrida de fork: não cobra
+ *   ACTIONS, dono=melgarafael, NS alheio   → 2 ✗       contra nós, cobra como antes
+ *   fora do Actions, IMG_NS com typo       → 1 ✗       o erro de digitação segue pego
+ *   só NAMESPACE_DESTE_REPO trocado, p/ cá → 1 ✗       na URL derivada, não na âncora
+ *   …o mesmo, com a URL fixa como antes    → 0 ✗ 1 ↓   ← é por isso que ela DERIVA
+ *   ACTIONS, dono=outrodono, nada trocado  → 1 ✗       no #1117, não aqui
+ *
+ * As duas últimas linhas são as que mais ensinam. A penúltima é a contraprova do
+ * desenho: se a URL do repositório voltasse a ser literal, um PR que editasse SÓ
+ * `NAMESPACE_DESTE_REPO` — que é, medido, o que o #1130 fez — ligaria a deferência
+ * sozinho e ficaria VERDE contra o upstream.
+ *
+ * A última é a metade que este arquivo NÃO resolve: quem forka só para contribuir,
+ * sem publicar imagem nenhuma, continua vermelho — e esse vermelho é do gate do
+ * #1117, que compara `IMG_NS` com o dono do runner e não tem como saber que a
+ * corrida é interna sem gravar o dono deste repositório dentro dele, que é
+ * exatamente o que o desenho dele recusa. Aplicar a decisão (a) lá é outra frente.
+ *
  * Roda em `verify` (check obrigatório), sem shell, sem docker.
  */
 
