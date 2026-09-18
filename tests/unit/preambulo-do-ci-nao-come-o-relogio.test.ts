@@ -80,7 +80,11 @@ const TETOS: Record<string, { minutos: number; razao: string }> = {
       "13 de 39 rodadas morriam no teto de 15 (mediana 15,2; melhor sucesso 14,9 — 0,1 de folga), " +
       "e chegavam como `cancelled`, indistinguível de cancelamento humano. O 25 é guarda de " +
       "travamento; quem denuncia crescimento é o passo `Orçamento de tempo do verify` (16 min). " +
-      "Desce quando o #1185 repartir `test:unit`, que é 78% do job",
+      "Desce quando o #1185 repartir `test:unit`, que é 78% do job. " +
+      "⚠️ O orçamento companheiro subiu 16→19 em 18/09: o 16 saiu de distribuição CENSURADA " +
+      "pelo teto de 15 (quem passava de 15 morria e virava `cancelled`, não `success`), e com " +
+      "a censura removida o máximo real é 16,0 — o orçamento reprovava um verde. Teto e " +
+      "orçamento censuram a medição que os calibra: recalibre DEPOIS de mexer, nunca antes",
   },
   // O agregado `invariants` NÃO tem teto de propósito: ele não roda a suíte, só
   // lê o desfecho de `needs`. O teto que denuncia a suíte crescendo vive na perna
@@ -92,6 +96,37 @@ const TETOS: Record<string, { minutos: number; razao: string }> = {
       "Postgres e aplica o baseline (p90 medido de uma passada: 325s). O 30 é DECLARADO, não " +
       "medido — não há Docker onde esta matriz foi escrita; mantido em 20, a perna morreria por " +
       "relógio no meio da segunda passada",
+  },
+};
+
+/**
+ * O ORÇAMENTO de cada job que roda a suíte — o número que DENUNCIA crescimento.
+ *
+ * Existe separado de `TETOS` porque os dois papéis são distintos e foi a confusão
+ * entre eles que produziu o defeito de 18/09: o teto é GUARDA DE TRAVAMENTO (mata
+ * job pendurado, e o valor quase não importa); o orçamento é DETECTOR (reprova com
+ * mensagem legível quando a suíte engorda).
+ *
+ * ⚠️ POR QUE ESTE MAPA NASCEU: medido em 18/09, o orçamento do `verify` NÃO tinha
+ * catraca nenhuma. Sabotei-o de 19 para 30 e a suíte seguiu 5/5 verde — ou seja,
+ * qualquer um podia subir o orçamento acima do teto e o detector viraria enfeite,
+ * em silêncio, restaurando exatamente o problema que ele foi criado para resolver.
+ * O teto tinha catraca; o companheiro dele, não.
+ */
+const ORCAMENTOS: Record<string, { minutos: number; razao: string }> = {
+  "ci.yml::verify": {
+    minutos: 19,
+    razao:
+      "distribuição NÃO censurada (20 sucessos do `verify` posteriores ao merge de 18:32:12Z, " +
+      "quando o teto subiu para 25): mediana 14,9 · p90 15,8 · p95 15,9 · MÁX 16,0. O 19 é " +
+      "máx+3,0, com 6 min até o teto — então o detector dispara ANTES do corte, que é o que " +
+      "faz o erro legível chegar em vez do `cancelled`. " +
+      "⚠️ O valor anterior (16) veio de distribuição CENSURADA: foi calibrado sobre `máx " +
+      "sucesso 14,9` medido sob o teto de 15, e sob aquele teto todo job que passaria de 15 " +
+      "morria e entrava em `cancelled`, não em `success` — eu medi os SOBREVIVENTES e tratei " +
+      "como a distribuição dos jobs. Com a censura removida, 10 de 31 jobs passam de 15 e o 16 " +
+      "já reprovava 1 verde. LIÇÃO DE MÉTODO: teto e orçamento censuram a medição que os " +
+      "calibra — recalibre DEPOIS de mexer, nunca antes",
   },
 };
 
@@ -191,6 +226,44 @@ describe("o preâmbulo do CI não come o orçamento dos testes", () => {
         achados[chave],
         `${chave}: o teto mudou. Subir troca vermelho honesto por CI que engorda em silêncio — razão em vigor: ${razao}`,
       ).toBe(minutos);
+    }
+  });
+
+  it("o orçamento declarado no ci.yml é o do mapa (catraca anti-deriva)", () => {
+    const texto = readFileSync(join(DIR_WORKFLOWS, "ci.yml"), "utf8");
+    const achados: Record<string, number> = {};
+    // O orçamento vive no `env:` do passo, então a âncora é o nome do passo.
+    const re = /name: Orçamento de tempo do (\w+)\n(?:.*\n)*?\s+ORCAMENTO_MIN: "(\d+)"/g;
+    for (const m of texto.matchAll(re)) achados[`ci.yml::${m[1]!}`] = Number(m[2]!);
+
+    // Controle de VIVACIDADE: sem ele, um regex que deixasse de casar daria verde
+    // por vacuidade — é o modo de falha que derrubou duas entregas em 18/09.
+    expect(
+      Object.keys(achados).sort(),
+      "nenhum ORCAMENTO_MIN encontrado no ci.yml — o passo mudou de nome e esta catraca cegou",
+    ).toEqual(Object.keys(ORCAMENTOS).sort());
+
+    for (const [chave, { minutos, razao }] of Object.entries(ORCAMENTOS)) {
+      expect(
+        achados[chave],
+        `${chave}: o orçamento mudou. Ele é o DETECTOR de crescimento — razão em vigor: ${razao}`,
+      ).toBe(minutos);
+    }
+  });
+
+  it("o orçamento é MENOR que o teto — senão o detector nunca dispara", () => {
+    // O invariante que importa mais que os dois números: se o orçamento passar do
+    // teto, o job morre de relógio ANTES de o passo de orçamento rodar, e o sinal
+    // volta a ser `cancelled` — indistinguível de cancelamento humano. O detector
+    // existiria e nunca falaria.
+    for (const [chave, { minutos }] of Object.entries(ORCAMENTOS)) {
+      const teto = TETOS[chave]?.minutos;
+      expect(teto, `${chave}: há orçamento declarado e nenhum teto para comparar`).toBeDefined();
+      expect(
+        minutos,
+        `${chave}: orçamento ${minutos} >= teto ${teto}. O job morre no teto antes de o ` +
+          "orçamento rodar, e o vermelho volta a chegar como `cancelled`.",
+      ).toBeLessThan(teto!);
     }
   });
 

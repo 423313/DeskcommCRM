@@ -89,10 +89,33 @@ jobs:
       - name: Orçamento de tempo do verify
         if: always()
         env:
-          # Orçamento em MINUTOS. O pior sucesso medido é 14,9; 16 não nasce
-          # vermelho e ainda denuncia o próximo crescimento antes de ele virar
-          # `cancelled`. Gate que nasce vermelho não é gate: é dívida com alarme.
-          ORCAMENTO_MIN: "16"
+          # Orçamento em MINUTOS.
+          #
+          # ── ERA 16, E O 16 VEIO DE DISTRIBUIÇÃO CENSURADA ────────────────
+          #
+          # O 16 foi calibrado sobre "o pior sucesso medido é 14,9". Esse número
+          # estava CENSURADO pelo teto de 15 que vigorava quando ele foi medido:
+          # todo job que passaria de 15 morria de relógio e entrava na coluna
+          # `cancelled`, não na de sucesso. Eu medi a distribuição dos
+          # SOBREVIVENTES e a tratei como a distribuição dos jobs.
+          #
+          # Medido depois de o teto subir para 25, com a censura removida
+          # (20 sucessos do `verify`, todos posteriores ao merge de 18:32:12Z):
+          #
+          #     mediana 14,9 · p90 15,8 · p95 15,9 · MÁX 16,0
+          #     10 de 31 jobs passam de 15   ← todos morreriam no teto antigo
+          #      1 de 20 sucessos passa de 16 ← o orçamento JÁ reprovava um verde
+          #
+          # O 19 é max + 3,0 min, com 6 min até o teto — então o orçamento
+          # dispara bem ANTES do corte, que é a propriedade que faz o erro
+          # legível chegar em vez do `cancelled`.
+          #
+          # ⚠️ A LIÇÃO DE MÉTODO, que vale mais que o número: **teto e orçamento
+          # censuram a própria medição que os calibra.** Nunca derive um destes
+          # dois da distribuição medida sob o valor anterior — a cauda que
+          # interessa é exatamente a que foi cortada. Depois de mexer em
+          # qualquer um dos dois, ESPERE a distribuição nova e recalibre.
+          ORCAMENTO_MIN: "19"
         run: |
           set -euo pipefail
           if [ -z "${VERIFY_INICIO:-}" ]; then
