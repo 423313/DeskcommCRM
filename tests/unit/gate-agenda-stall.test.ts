@@ -340,3 +340,74 @@ describe("#1019 — a promessa de agenda que o padrão deixava passar", () => {
     }
   });
 });
+
+/**
+ * ─── #1038 (item A): o recorte ESTREITADO — a tabela medida ──────────────────
+ *
+ * O recorte da #1019 (substantivo do serviço com a MESMA folga de 80 chars dos
+ * substantivos de agenda) vetava DEMAIS. Medido extraindo o literal do regex e
+ * rodando contra nove frases: SEIS casavam no head e não casavam na main, e o que
+ * elas têm em comum é o substantivo do serviço como ASSUNTO (plano, valor,
+ * resultado, histórico, status, informações) — longe do verbo, sem ser seu objeto.
+ *
+ * As SEIS entram aqui como CONTROLE NEGATIVO: com a agenda armada e sem ferramenta
+ * chamada no turno, elas têm de PASSAR. Sem esta guarda, o merge leva para a main
+ * uma classe de veto indevido JÁ MEDIDA — e ela cai em dois dos nichos centrais do
+ * produto (clínica: "o plano cobre a consulta"; suporte: "o status do seu pedido").
+ *
+ * Os controles que NÃO podem mudar ficam na mesma tabela, para o estreitamento não
+ * passar do ponto: os dois CONTROLE+ continuam VETANDO (a promessa vazia segue
+ * pega) e o CONTROLE- continua PASSANDO ("verificar" fora de contexto de agenda).
+ */
+describe("#1038 — serviço colado ao verbo, nunca o assunto da frase", () => {
+  const armado = { active: true, ferramentas: TODAS, toolCalledThisTurn: false };
+
+  /**
+   * As SEIS frases medidas — uma por caso, para o nome do teste dizer QUAL frase
+   * regrediu. No head (literal da #1019) o gate vetava todas; na main passavam.
+   */
+  const CONTROLE_NEGATIVO = [
+    "Vou confirmar se o plano cobre a consulta",
+    "Vou verificar o valor da sessão de fisioterapia",
+    "Vou consultar o resultado da sua consulta com o médico",
+    "Estou verificando o histórico do seu atendimento anterior",
+    "Vou verificar o status do seu pedido e já retorno sobre o atendimento",
+    "Vou organizar as informações do seu atendimento",
+  ] as const;
+
+  it.each(CONTROLE_NEGATIVO)("CONTROLE- passa — o serviço é assunto, não objeto: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(true);
+  });
+
+  it("CONTROLE+ continua VETANDO — a promessa vazia do relato #1019, com substantivo de agenda e de serviço", () => {
+    for (const body of [
+      "Vou verificar as opções de horário e te passo assim que tiver",
+      "Vou verificar seu atendimento e já te retorno",
+    ]) {
+      const v = agendaStallGate.evaluate(baseCtx({ agenda: armado, body }));
+      expect(v.pass).toBe(false);
+      if (v.pass) throw new Error("inalcançável");
+      expect(v.code).toBe("agenda_stall_sem_ferramenta");
+    }
+  });
+
+  it("CONTROLE- continua passando — 'verificar' fora de contexto de agenda", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({ agenda: armado, body: "Vou verificar o seu endereço de entrega" }),
+    );
+    expect(v.pass).toBe(true);
+  });
+
+  it("o 'colado' admite artigo e possessivo — 'o seu atendimento' casa como 'seu atendimento'", () => {
+    // Fronteira do recorte: quem mexer no padrão não pode apertá-lo a ponto de exigir
+    // o substantivo SEM determinante. A promessa do relato ("vou verificar/organizar
+    // seu atendimento") é a mesma com ou sem artigo, e é ela que continua vetada.
+    for (const body of [
+      "Vou verificar o seu atendimento e já te retorno.",
+      "Vou organizar o atendimento dela e já te aviso.",
+      "Vou verificar a consulta marcada para amanhã.",
+    ]) {
+      expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
+    }
+  });
+});
