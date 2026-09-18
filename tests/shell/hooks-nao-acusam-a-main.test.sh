@@ -67,8 +67,22 @@
 #        validar NADA. Este caso é o que impede o conserto de trocar um defeito por outro.
 #
 # Controle de vivacidade: os casos 2, 3, 4, 5, 6 e 7 são as asserções POSITIVAS (A, B+, D,
-# D2, R1, R1-LIMPO, R-VELHO, FECHADO-SEM-BASE, F-A, F-B+, F-CRIA-PRÓPRIA, F-BIG+). Um hook
-# substituído por `exit 0` os deixa vermelhos — é o que prova que este arquivo mede algo.
+# D2, R1, R1-LIMPO, R-VELHO, FECHADO-SEM-BASE, FURO-A, FURO-A-MH, FURO-B, COLEGA-DEL, MODO,
+# CITADO, SEM-REF, F-A, F-B+, F-CRIA-PRÓPRIA, F-BIG+). Um hook substituído por `exit 0` os
+# deixa vermelhos — é o que prova que este arquivo mede algo.
+#
+# ⚠️ Nenhum número de casos escrito aqui, de propósito: contagem em prosa envelhece a cada
+# caso novo e ninguém a revisa. Quem precisa do número RODA o arquivo — o rodapé o imprime.
+# Para medir a vivacidade contra uma versão antiga do hook, sem tocar no seu clone:
+#
+#   t=$(mktemp -d); mkdir -p "$t/loop/hooks" "$t/tests/shell"
+#   for f in $(git ls-tree --name-only <SHA> loop/hooks/); do
+#     git show "<SHA>:$f" > "$t/loop/hooks/$(basename "$f")"; done
+#   chmod +x "$t"/loop/hooks/*
+#   cp tests/shell/hooks-nao-acusam-a-main.test.sh "$t/tests/shell/"
+#   bash "$t/tests/shell/hooks-nao-acusam-a-main.test.sh"; echo "exit=$?"
+#
+# (exit SEM pipe; um `| tail` devolve o código do tail e imprime sucesso sobre uma recusa.)
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
