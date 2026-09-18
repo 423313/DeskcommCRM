@@ -865,7 +865,7 @@ function agendaSystemBlock(toolIds: readonly string[]): string {
     'Checar e marcar horário com as ferramentas de agenda está SEMPRE dentro da sua ' +
     'autonomia quando essas ferramentas estão disponíveis para você — mesmo que as instruções da empresa ' +
     'peçam para encaminhar decisões fora da sua autonomia a um gerente/responsável nomeado (ex.: "fale com o ' +
-    'Fernando"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
+    'Fulano"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
     'cobre) — nunca para simplesmente consultar ou marcar um horário que a ferramenta resolve sozinha. NÃO ' +
     'diga "vou confirmar/verificar com [nome de pessoa/equipe]" para justificar não ter chamado a ferramenta: ' +
     'chame primeiro, e só fale de encaminhar a alguém se a ferramenta genuinamente não resolver.'
