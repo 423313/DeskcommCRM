@@ -301,6 +301,7 @@ describe("zero lisonjeiro — ausência de dado é null, nunca 0", () => {
       ...RAW.empresa,
       envios_por_ia: 0,
       envios_por_automacao: 0,
+  envios_por_integracao: 0,
       envios_humano_no_sistema: 0,
       envios_humano_fora: 0,
     };
