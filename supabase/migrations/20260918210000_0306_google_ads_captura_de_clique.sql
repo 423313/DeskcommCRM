@@ -1,4 +1,4 @@
--- 0295 · O `gclid` nunca chegava ao WhatsApp — e sem clique capturado não há
+-- 0306 · O `gclid` nunca chegava ao WhatsApp — e sem clique capturado não há
 -- o que reportar de volta pro Google.
 --
 -- ─── O buraco que isto fecha ────────────────────────────────────────────────

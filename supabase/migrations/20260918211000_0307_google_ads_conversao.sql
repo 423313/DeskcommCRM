@@ -1,4 +1,4 @@
--- 0296 · A credencial que FALTAVA em `ad_platform_connections` para o Google
+-- 0307 · A credencial que FALTAVA em `ad_platform_connections` para o Google
 -- Ads: refresh token OAuth (não um token longo-vivo como o da Meta) mais os
 -- três identificadores que dizem PARA ONDE reportar dentro da conta.
 --

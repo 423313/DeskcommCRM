@@ -321,7 +321,7 @@ const schema = z.object({
   GOOGLE_CALENDAR_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CALENDAR_CLIENT_SECRET: z.string().optional().default(""),
 
-  // Google Ads — credencial da INSTALAÇÃO, não da organização (migration 0296).
+  // Google Ads — credencial da INSTALAÇÃO, não da organização (migration 0307).
   // O developer token pertence a quem construiu o software, não à conta de
   // anúncios de cada cliente: uma instalação usa o MESMO token pra reportar
   // conversão em contas diferentes, cada uma com seu próprio refresh token

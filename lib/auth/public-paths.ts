@@ -15,7 +15,7 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/health$/,
   /^\/api\/v1\/webhooks\//,
   /^\/api\/v1\/cron\//,
-  // Landing page de captura de clique do Google Ads (migration 0295). Quem
+  // Landing page de captura de clique do Google Ads (migration 0306). Quem
   // chega aqui é o NAVEGADOR de quem clicou no anúncio — nunca tem, e não
   // pode ter, cookie de sessão nossa. Sem esta linha o proxy devolve 401
   // antes de a rota existir, e todo clique pago vira um erro em vez de um

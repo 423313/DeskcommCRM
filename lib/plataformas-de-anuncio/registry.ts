@@ -5,12 +5,12 @@
  * pelo SLUG DA PLATAFORMA que já está gravado na atribuição do contato, e recebe
  * um transporte ou um "não existe". Ela nunca importa `./meta/conversions`.
  *
- * ─── O Google Ads agora tem transporte (migration 0296) ─────────────────────
+ * ─── O Google Ads agora tem transporte (migration 0307) ─────────────────────
  *
  * `google_ads` ficou sem transporte desde a 0164 porque faltava a metade que
- * captura o clique — sem `gclid` não havia o que reportar. A migration 0295
+ * captura o clique — sem `gclid` não havia o que reportar. A migration 0306
  * fechou isso (landing page + extrator, `lib/plataformas-de-anuncio/google/atribuicao.ts`)
- * e a 0296 fecha a outra ponta: a credencial (refresh token OAuth + os três
+ * e a 0307 fecha a outra ponta: a credencial (refresh token OAuth + os três
  * identificadores de para onde reportar). `transporteGoogle` (`./google/conversions.ts`)
  * é a segunda metade da ponte.
  *

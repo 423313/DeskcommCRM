@@ -111,7 +111,7 @@ export type ResultadoDeEnvio =
  * token, pelo PRÓPRIO transporte (`google/conversions.ts`), não por
  * `credenciais.ts`, que é agnóstico e não sabe fazer essa troca. `google`
  * carrega o que falta: o refresh token decifrado e os três identificadores
- * de para onde reportar (migration 0296). `undefined` para quem não é Google.
+ * de para onde reportar (migration 0307). `undefined` para quem não é Google.
  */
 export interface CredencialDeConversao {
   datasetId: string;

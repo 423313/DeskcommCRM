@@ -81,7 +81,7 @@ export async function lerCredencial(
 
   // O que conta como "completo" varia por plataforma: a Meta guarda token
   // direto em `dataset_id`/`access_token_encrypted`; o Google guarda refresh
-  // token + os três identificadores nas colunas `google_*` (migration 0296).
+  // token + os três identificadores nas colunas `google_*` (migration 0307).
   // Um `if` por linha, não um schema comum, porque forçar as duas formas no
   // mesmo par de colunas é o que produziria a "correção" errada no dia em que
   // uma terceira plataforma chegasse com uma forma diferente das duas.

@@ -3,7 +3,7 @@
  * com qual texto pré-preenchido ela redireciona, por organização.
  *
  * Irmã de `../credenciais.ts`, e separada dela pelo mesmo motivo do
- * cabeçalho da migration 0295: esta configuração não exige a organização ter
+ * cabeçalho da migration 0306: esta configuração não exige a organização ter
  * conectado nada na API do Google Ads — é o eixo de CAPTURA, que nasce e
  * funciona sozinho, antes e independente do eixo de CONVERSÃO.
  */

@@ -27,7 +27,7 @@ import { join } from "node:path";
 
 import { motivoDoErro, sql } from "./psql-transporte";
 
-/** As duas tabelas da migration 0295. */
+/** As duas tabelas da migration 0306. */
 const TABELAS = ["google_ads_landing_pages", "google_ads_click_refs"] as const;
 
 function erroSob(papel: string, comando: string): string | null {

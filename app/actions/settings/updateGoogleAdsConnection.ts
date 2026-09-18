@@ -17,7 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * refresh token não entra aqui: ele chega pelo fluxo OAuth
  * (`/api/v1/plataformas-de-anuncio/google/connect` → `.../callback`), que é a
  * ÚNICA porta de escrita dele. Esta action só grava os três identificadores
- * que o OAuth não descobre sozinho — ver o cabeçalho da migration 0296 — e o
+ * que o OAuth não descobre sozinho — ver o cabeçalho da migration 0307 — e o
  * interruptor de habilitado, mesmo par admin+MFA da irmã.
  */
 export type UpdateGoogleAdsConnectionResult =

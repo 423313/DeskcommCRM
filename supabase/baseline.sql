@@ -27462,7 +27462,7 @@ end $f$;
 revoke execute on function public.fn_aplicar_travas_de_suporte() from public, anon, authenticated, service_role;
 
 
--- ---- Google Ads: landing page de captura de gclid (migration 0295) ----
+-- ---- Google Ads: landing page de captura de gclid (migration 0306) ----
 -- `lib/plataformas-de-anuncio/registry.ts` (0213) já declarava por que `google_ads`
 -- não tem transporte de conversão: sem extrator de gclid não há o que reportar.
 -- Faltava a LANDING PAGE que captura o clique e o carrega para dentro da
@@ -27523,10 +27523,10 @@ alter table public.google_ads_click_refs enable row level security;
 revoke all on public.google_ads_click_refs from anon, authenticated;
 grant select, insert, update, delete on public.google_ads_click_refs to service_role;
 
--- ---- Google Ads: credencial de conversão (migration 0296) ----
+-- ---- Google Ads: credencial de conversão (migration 0307) ----
 -- Refresh token OAuth (não access token longo-vivo) + os três identificadores
 -- que dizem para onde reportar dentro da conta. Mesmo desenho server-side-only
--- de ad_platform_connections (0213); ver o cabeçalho da migration 0296 para o
+-- de ad_platform_connections (0213); ver o cabeçalho da migration 0307 para o
 -- racional completo.
 
 alter table public.ad_platform_connections

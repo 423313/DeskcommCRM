@@ -348,8 +348,8 @@ describe("a matriz de plataformas é exaustiva", () => {
     for (const p of PLATAFORMAS) expect(transporteDe(p)).not.toBeUndefined();
   });
 
-  it("google_ads TEM transporte desde a migration 0296 — a ausência era do gclid, não do Google", async () => {
-    // Migration 0295 fechou a captura (landing page + extrator); 0296 fechou a
+  it("google_ads TEM transporte desde a migration 0307 — a ausência era do gclid, não do Google", async () => {
+    // Migration 0306 fechou a captura (landing page + extrator); 0307 fechou a
     // credencial. `transporteDe("google_ads")` deixou de ser o `null`
     // declarado — ver `lib/plataformas-de-anuncio/registry.ts`.
     expect(transporteDe("google_ads")).not.toBeNull();
