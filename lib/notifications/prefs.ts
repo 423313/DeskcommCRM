@@ -97,6 +97,10 @@ export function getPrefsSnapshot(): NotifyPrefs {
 
 const PREFS_DO_SERVIDOR: NotifyPrefs = {
   message: { in_app: true, push: true },
+  // Ligação chegando (módulo de telefonia, #677). Entra aqui porque
+  // `NotifyPrefs` exige uma linha por tipo: sem ela o tipo não fecha, e o
+  // servidor decidiria por ausência em vez de por declaração.
+  call_inbound: { in_app: true, push: true },
   lead_assigned: { in_app: true, push: true },
   lead_won: { in_app: true, push: true },
   lead_lost: { in_app: true, push: true },

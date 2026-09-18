@@ -8931,7 +8931,6 @@ export const DICIONARIO: Traducoes = {
   "Chamando": { es: "Llamando" },
   "Não atendida": { es: "No atendida" },
   "Ocupado": { es: "Ocupado" },
-  "Falhou": { es: "Falló" },
   // ─── app/app/team/_components/TeamInvitesClient.tsx (lista de convites) ───
   "Convites": { es: "Invitaciones" },
   "Convites enviados e seu status. Um convite aceito vira membro na lista acima.": {
