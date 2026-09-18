@@ -252,7 +252,12 @@ describe("o resgate", () => {
     expect(selos(ORG_B, USER_B, CONTATO_B)).toBeGreaterThanOrEqual(10);
 
     const tipo = ids(ORG_B).premio;
-    const saida = sql(
+    const tipo = ids(ORG_B).premio;
+    // ⚠️ LER DEPOIS, EM OUTRO COMANDO. A função faz UPDATE no item, e um
+    // subselect no MESMO comando lê o snapshot anterior — devolvia o valor
+    // cheio (10000) e o teste acusava que o desconto não fora aplicado, quando
+    // ele fora. Mesma armadilha de visibilidade das CTEs de escrita.
+    sql(
       comoUsuario(USER_B, `
         insert into public.sales (organization_id, number, contact_id, created_by_user_id)
         values ('${ORG_B}', 70200, '${CONTATO_B}', '${USER_B}');
@@ -261,18 +266,27 @@ describe("o resgate", () => {
           (organization_id, sale_id, event_type_id, description, unit_price_cents, total_cents)
         select '${ORG_B}', (select id from public.sales where organization_id='${ORG_B}' and number=70200),
                '${tipo}', 'Premiado', 10000, 10000;
-
-        select public.fn_resgatar_premio('${ORG_B}',
-                 (select si.id from public.sale_items si join public.sales s on s.id=si.sale_id
-                   where s.organization_id='${ORG_B}' and s.number=70200 limit 1))->>'desconto_cents'
-               || '|' ||
-               (select si.total_cents from public.sale_items si join public.sales s on s.id=si.sale_id
-                 where s.organization_id='${ORG_B}' and s.number=70200 limit 1)
-               || '|' ||
-               (select id from public.sales where organization_id='${ORG_B}' and number=70200);
       `),
     );
-    const [desconto, totalItem, vendaId] = ultimaLinha(saida).split("|");
+
+    const desconto = ultimaLinha(
+      sql(
+        comoUsuario(USER_B, `
+          select public.fn_resgatar_premio('${ORG_B}',
+            (select si.id from public.sale_items si join public.sales s on s.id=si.sale_id
+              where s.organization_id='${ORG_B}' and s.number=70200 limit 1))->>'desconto_cents';
+        `),
+      ),
+    );
+
+    const totalItem = ultimaLinha(
+      sql(`select si.total_cents from public.sale_items si join public.sales s on s.id=si.sale_id
+            where s.organization_id='${ORG_B}' and s.number=70200 limit 1;`),
+    );
+    const vendaId = ultimaLinha(
+      sql(`select id from public.sales where organization_id='${ORG_B}' and number=70200;`),
+    );
+
     // 50% de R$ 100,00
     expect(Number(desconto)).toBe(5000);
     expect(Number(totalItem)).toBe(5000);
