@@ -57,7 +57,17 @@ async function main(): Promise<void> {
   console.info(`✅ Sessões de canal E2E removidas: ${resultado.removidas}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// `require.main === module` e nao `import.meta.url`: este arquivo deixou de ser
+// so um CLI — o `tests/e2e/global-teardown.ts` o IMPORTA, e o Playwright transpila
+// o teardown para CommonJS, onde `import.meta` e erro de SINTAXE. O sintoma não é
+// o teardown falhar: os 134 testes passam, o teardown estoura depois deles, e a
+// rodada inteira sai com exit 1 sob a linha "1 error was not a part of any test".
+//
+// A forma escolhida tem precedente medido no repo: `scripts/cortar-release.ts` usa
+// a mesma guarda e é invocado por `tsx` em `release:conferir`, que roda no CI.
+// Controle rodado nos dois ramos: sob `tsx`, executar o arquivo direto entra no
+// if, e importá-lo não entra.
+if (require.main === module) {
   main().catch((err) => {
     console.error("❌ Limpeza de sessões E2E falhou:", err);
     process.exit(1);
