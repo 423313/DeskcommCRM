@@ -101,7 +101,13 @@ describe("as colunas da rodada existem nos três lugares", () => {
     );
     expect(migrations).toHaveLength(1);
 
-    const migration = readFileSync(join(raiz, "supabase", "migrations", migrations[0]), "utf8");
+    const [arquivo] = migrations;
+    expect(arquivo).toBeTruthy();
+
+    const migration = readFileSync(
+      join(raiz, "supabase", "migrations", arquivo ?? ""),
+      "utf8",
+    );
     const baseline = readFileSync(join(raiz, "supabase", "baseline.sql"), "utf8");
     const tipos = readFileSync(join(raiz, "lib", "database.types.ts"), "utf8");
 
