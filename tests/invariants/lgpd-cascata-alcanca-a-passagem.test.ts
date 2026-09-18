@@ -184,7 +184,9 @@ describe("0291 — a cascata de LGPD alcança a passagem para humano", () => {
     expect(campo(PASSAGEM_ALVO, "motor")).toBe("engine");
     expect(campo(PASSAGEM_ALVO, "origem")).toBe("ferramenta_do_modelo");
     expect(campo(PASSAGEM_ALVO, "motivo_codigo")).toBe("requested_human");
-    expect(campo(PASSAGEM_ALVO, "cliente_avisado")).toBe("f");
+    // `campo()` concatena com texto, e a concatenação converte booleano por
+    // TEXT: sai `false`, não o `f` de uma coluna booleana impressa pelo psql.
+    expect(campo(PASSAGEM_ALVO, "cliente_avisado")).toBe("false");
     expect(campo(PASSAGEM_ALVO, "aviso_motivo_codigo")).toBe("falhou_no_envio");
     expect(campo(PASSAGEM_ALVO, "criado_em")).not.toBe("<null>");
   });

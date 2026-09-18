@@ -95,11 +95,15 @@ describe("0281 — fn_expurgar_conversa_do_caso_vencida", () => {
     expect(quantasRestam()).toBe(1);
   });
 
-  it("O PISO VALE PARA QUEM CHAMA: pedir 1 dia não apaga o que tem 100", () => {
-    semear(2, 100);
-    // 100 dias já passou de 1 e não passou de 90+ — com o piso ignorado, as
-    // duas sairiam. É a única medição que distingue "o piso está escrito" de "o
-    // piso está em vigor".
+  it("O PISO VALE PARA QUEM CHAMA: pedir 1 dia não apaga o que tem 30", () => {
+    // ⚠️ A idade da fixture é o que este caso mede, e a primeira versão errava a
+    // conta: ela semeava 30 dias? NÃO — semeava 100, que JÁ passou do piso de
+    // 90, e então o expurgo apagava as duas CORRETAMENTE enquanto o teste lia
+    // aquilo como "o piso foi ignorado". A linha tem de ser mais nova que o
+    // piso: 30 dias passou de 1 (o que o chamador pediu) e não passou de 90 (o
+    // que o piso impõe). É a única medição que distingue "o piso está escrito"
+    // de "o piso está em vigor".
+    semear(2, 30);
     expect(
       valor(`select public.fn_expurgar_conversa_do_caso_vencida(1, 1000)`),
       "o piso de 90 dias foi ignorado — o knob do operador virou apagador de rastro recente",
