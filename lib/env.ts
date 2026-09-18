@@ -446,10 +446,20 @@ if (env.NODE_ENV === "production") {
 // `OPENROUTER_API_KEY` entra na condição porque `isAiGatewayConfigured()`
 // (lib/ai/gateway.ts) e `resolveLanguageModel` a tratam como configuração
 // válida no ambiente, assim como gateway e Anthropic.
-if (!env.AI_GATEWAY_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENROUTER_API_KEY) {
+// `OPENAI_API_KEY` entra pelo mesmo motivo, com a diferença que o aviso não
+// precisa esconder: ela atende os pontos do provedor que a ORGANIZAÇÃO escolheu
+// (é o último degrau de `resolverModeloDoPonto`, lib/ai/gateway-binding.ts).
+// Sem esta linha, uma instalação que responde pelo OpenAI lia no boot que
+// "nenhuma chave de IA" estava configurada — issue #1181.
+if (
+  !env.AI_GATEWAY_API_KEY &&
+  !env.ANTHROPIC_API_KEY &&
+  !env.OPENROUTER_API_KEY &&
+  !env.OPENAI_API_KEY
+) {
   console.warn(
     "[env] Nenhuma chave de IA configurada no ambiente " +
-      "(AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY ou OPENROUTER_API_KEY). " +
+      "(AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY ou OPENAI_API_KEY). " +
       "Isto não prova que o agente está sem credencial: cada organização pode ter uma chave " +
       "cadastrada em IA › Credenciais. A falta real só é conhecida quando a resolução completa " +
       "do turno não encontra chave em nenhum degrau.",
