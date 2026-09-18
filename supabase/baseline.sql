@@ -27576,6 +27576,80 @@ grant execute on function public.fn_mark_conversation_message(uuid,text,text,tim
 notify pgrst, 'reload schema';
 
 
+-- ---- proteções de tabela de organização: o laço vira função (migration 0295) ----
+--
+-- ADR-0002, D5: "Essas rotinas saem do laço do baseline para funções sem
+-- parâmetro, chamadas pelo baseline e pela provisionadora." É a irmã da 0274 —
+-- lá foram as travas do suporte, aqui são RLS ligada, `revoke all … from anon` e
+-- o isolamento por organização.
+--
+-- A RÉGUA É `not relrowsecurity`, e não "toda tabela com organization_id".
+-- Medido no baseline de ed42ad119 (pg17 descartável, ON_ERROR_STOP=1): das 119
+-- tabelas de organização, 0 estão sem RLS — então esta varredura é no-op aqui —,
+-- mas 49 ainda têm privilégio de `anon`, 8 são server-only (RLS ligada e ZERO
+-- policies, de propósito) e 66 não têm a policy ampla. Varrer as 119 abriria as
+-- 8 e atropelaria as policies por papel das 66. Já uma tabela recém-criada — o
+-- que a provisionadora de um módulo produz — nasce com RLS desligada, e é
+-- exatamente ela que esta régua pega. O racional inteiro está no cabeçalho da
+-- migration 20260918090000_0295_*.sql.
+--
+-- Idempotente: `drop policy if exists` antes do `create policy`; reaplicar
+-- converge. A definição fica AQUI, antes da varredura de anon (que é, de
+-- propósito, quem cura o `anon` de toda função nova); a CHAMADA fica no fim do
+-- arquivo, junto com a da 0274.
+
+create or replace function public.fn_proteger_tabelas_de_organizacao()
+returns void
+language plpgsql
+set search_path = public
+as $f$
+declare r record;
+begin
+ for r in
+   select c.relname
+     from pg_class c
+     join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and not c.relrowsecurity
+      and exists (
+        select 1 from pg_attribute a
+         where a.attrelid = c.oid
+           and a.attname = 'organization_id'
+           and a.attnum > 0
+           and not a.attisdropped)
+    order by c.relname
+ loop
+   execute format('alter table public.%I enable row level security', r.relname);
+   execute format('revoke all on public.%I from anon', r.relname);
+   execute format('drop policy if exists tenant_isolation_%s_all on public.%I', r.relname, r.relname);
+   execute format(
+     'create policy tenant_isolation_%s_all on public.%I for all
+        using (organization_id in (select * from public.fn_user_org_ids()))
+        with check (organization_id in (select * from public.fn_user_org_ids()))',
+     r.relname, r.relname);
+ end loop;
+end $f$;
+
+-- O ponto de entrada que a provisionadora de um módulo chama no FIM do corpo,
+-- na MESMA transação em que criou as tabelas. A ORDEM importa: as travas do
+-- suporte (0274) leem o privilégio de `authenticated` de cada tabela para
+-- decidir entre as três policies restritivas e o contrato server-only, então
+-- vêm DEPOIS de a RLS e o isolamento estarem no lugar.
+create or replace function public.fn_proteger_modulo_provisionado()
+returns void
+language plpgsql
+set search_path = public
+as $f$
+begin
+  perform public.fn_proteger_tabelas_de_organizacao();
+  perform public.fn_aplicar_travas_de_suporte();
+end $f$;
+
+revoke execute on function public.fn_proteger_tabelas_de_organizacao() from public, anon, authenticated, service_role;
+revoke execute on function public.fn_proteger_modulo_provisionado() from public, anon, authenticated, service_role;
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -27766,6 +27840,19 @@ alter table public.ai_reply_drafts
   foreign key (message_id) references public.messages(id) on delete set null;
 
 notify pgrst, 'reload schema';
+
+-- ---- proteção de tabela de organização, depois de toda tabela (migration 0295) ----
+--
+-- Auto-curativa e no-op hoje (as 119 tabelas de organização deste baseline já
+-- têm RLS ligada — medido, e cobrado por
+-- tests/invariants/rls-completude-varredura.test.ts). Ela existe para o dia em
+-- que um apêndice novo, ou a provisionadora de um módulo, criar tabela de
+-- organização sem as proteções: a cura acontece no MESMO run em que o defeito
+-- nasceria. Vem ANTES da chamada da 0274 de propósito — as travas do suporte
+-- leem o privilégio de `authenticated` de cada tabela, então precisam ver a
+-- tabela já com RLS e isolamento.
+do $f$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $f$;
+
 
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
 --
