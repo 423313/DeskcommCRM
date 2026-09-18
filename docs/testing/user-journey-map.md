@@ -2524,10 +2524,11 @@ alguma coisa e digitando a primeira frase — e é essa frase que o cliente rece
 
 ### O que a onda entregou, e o que ela NÃO provou
 
-Esta onda é de MOTOR: ela faz as treze passagens gravarem o contexto, corrige a verdade
-do "cliente já foi avisado", troca o dedup do aviso por adendo e faz o aviso se resolver
-sozinho quando alguém assume. **O cartão na conversa é da onda seguinte** — então a
-jornada em tela ainda não existe, e dizer que ela passou seria afirmar o que não se mediu.
+A onda de MOTOR fez as treze passagens gravarem o contexto, corrigiu a verdade do
+"cliente já foi avisado", trocou o dedup do aviso por adendo e fez o aviso se resolver
+sozinho quando alguém assume. **A onda seguinte trouxe o cartão, a rota, o cobrador e o
+laço de retorno** — e mesmo assim a jornada EM TELA ainda não existe: nada aqui foi
+dirigido por um browser, e dizer que passou seria afirmar o que não se mediu.
 
 | caso | estado |
 |---|---|
@@ -2535,8 +2536,35 @@ jornada em tela ainda não existe, e dizer que ela passou seria afirmar o que n�
 | J27.2 · a segunda passagem da mesma conversa vira ADENDO, não descarte | **PASS por unidade** — mesmo arquivo, nos dois motores |
 | J27.3 · "o cliente JÁ FOI avisado" só quando a mensagem saiu | **PASS por unidade** — `tests/unit/passagem-verdade-do-aviso.test.ts`, nos dois emissores |
 | J27.4 · assumir a conversa fecha a passagem e resolve o aviso | **PENDENTE POR EXECUÇÃO** — `tests/invariants/passagem-se-reconhece-sozinha.test.ts` existe e precisa de `pnpm test:db` |
-| J27.5 · **pela TELA**, quem assume lê o porquê, o que a IA tentou e a fala do cliente | **NÃO COBERTO** — o cartão é da onda seguinte; o e2e `passagem-com-contexto.spec.ts` nasce com ele |
-| J27.6 · **pela TELA**, o aviso da Central leva a "Abrir conversa" e some ao assumir | **NÃO COBERTO** — mesma onda |
+| J27.5 · **pela TELA**, quem assume lê o porquê, o que a IA tentou e a fala do cliente | **NÃO COBERTO** — o cartão JÁ EXISTE (`components/inbox/PassagemCard.tsx`), mas ninguém o dirigiu por um browser; o e2e `passagem-com-contexto.spec.ts` é da onda da prova em tela |
+| J27.6 · **pela TELA**, o aviso da Central leva a "Abrir conversa" e some ao assumir | **NÃO COBERTO** — a projeção e o rótulo existem (`lib/ai/inbox-destino.ts`); o que falta é a prova em tela |
+| J27.7 · o cartão decide os SETE estados (nova, reconhecida, devolvida, recolhida, sem resumo, opt-out, anonimizada) | **PASS por unidade** — `tests/unit/cartao-da-passagem.test.ts` (25 casos), sobre a função pura que o JSX consome |
+| J27.8 · a rota das passagens lê com o client da SESSÃO, e não com o admin | **PASS por unidade** — `tests/unit/passagens-da-conversa-rota.test.ts`; a RLS em si é do `test:db` |
+| J27.9 · a passagem que ninguém assumiu volta a pedir, e para no terceiro aviso | **PASS por unidade** — `tests/unit/cobrador-de-passagem-nao-reconhecida.test.ts` (10 casos) |
+| J27.10 · o laço de retorno: o cliente repetiu depois da passagem? | **PENDENTE POR EXECUÇÃO** — `tests/invariants/atrito-repeticao-pos-passagem.test.ts` existe e precisa de `pnpm test:db` |
+
+### O que a onda do CARTÃO entregou — e a linha que continua NÃO COBERTA
+
+O cartão existe, dentro do fio da conversa, e a decisão dos sete estados está provada por
+unidade. **J27.5 e J27.6 continuam NÃO COBERTOS**, e a distinção importa: o que foi provado
+é que a função decide certo e que a rota entrega a leitura ao client que tem RLS. Que a
+TELA renderiza aquilo, que o botão "Assumir e responder" muda o estado do cartão e que o
+aviso sai da lista de abertos é jornada em tela — DoD 12 —, e é da onda 12. Declarar PASS
+aqui seria inventar uma medição.
+
+**Por que o cartão mora no fio, e não no cabeçalho:** o `ConversationHeader.tsx` carrega um
+comentário de 11 linhas contando que ele já travou a largura da tela inteira em 707px e
+empurrou o painel de CRM 311px para fora da viewport em 1280px. Um cartão de seis linhas
+ali reintroduz o defeito que o `flex-wrap` acabou de consertar. O fio já intercala
+mensagens e notas por timestamp e o auto-scroll traz o fim para a viewport — e como a
+passagem CALA a IA, ela é quase sempre o último evento quando a pessoa chega.
+
+**Achado desta onda, e não é do produto:** `docs/architecture/escalacao-ciclo-humano.architecture.json`
+estava na `main` da branch **com marcadores de conflito de merge commitados** (`<<<<<<< HEAD`
+nas linhas 422 e 910, do merge `f7523adc5`). O arquivo não era JSON válido e
+`tests/unit/mapas-de-arquitetura.test.ts` estava **vermelho em 5 casos** desde então.
+Resolvido pela UNIÃO dos dois lados, com as arestas do lado `feat/casos-vivos` renumeradas
+(`e75`–`e83` → `e81`–`e89`) porque os ids colidiam. 121/121 depois.
 
 ### O achado que mudou o desenho, e que a tela não teria encontrado
 

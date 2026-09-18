@@ -9501,6 +9501,58 @@ export const DICIONARIO: Traducoes = {
   "O cliente NÃO foi avisado": { es: "El cliente NO fue avisado" },
   "ele está esperando sem saber.": { es: "está esperando sin saberlo." },
   "motivo desconhecido": { es: "motivo desconocido" },
+  // O CARTÃO da passagem, dentro da conversa (`components/inbox/PassagemCard.tsx`).
+  // Os dois títulos são resolvidos por `montarCartoesDaPassagem` e chegam à tela
+  // como variável — o gate de i18n só enxerga literal, então quem os cobra é
+  // `tests/unit/cartao-da-passagem.test.ts`. Acrescentadas no FIM do bloco.
+  "Por que a IA passou para você": { es: "Por qué la IA te pasó la conversación" },
+  "O cliente pode ter pedido para parar de receber mensagens":
+    { es: "El cliente puede haber pedido dejar de recibir mensajes" },
+  "Este contato foi anonimizado a pedido dele. O contexto desta passagem foi apagado.":
+    { es: "Este contacto fue anonimizado a pedido suyo. El contexto de este traspaso fue borrado." },
+  "O cliente quer": { es: "El cliente quiere" },
+  "A IA já tentou": { es: "La IA ya intentó" },
+  "Últimas palavras do cliente": { es: "Últimas palabras del cliente" },
+  "Resumo da IA (confira)": { es: "Resumen de la IA (verifique)" },
+  "Escrito por quem passou": { es: "Escrito por quien la pasó" },
+  "Sem resumo acumulado ainda — a conversa é recente. Role para cima para ver tudo o que foi dito.":
+    { es: "Aún no hay resumen acumulado — la conversación es reciente. Desplácese hacia arriba para ver todo lo que se dijo." },
+  "O cliente já foi avisado de que uma pessoa vai assumir.":
+    { es: "El cliente ya fue avisado de que una persona va a asumir." },
+  "O cliente NÃO foi avisado — ele está esperando sem saber.":
+    { es: "El cliente NO fue avisado — está esperando sin saberlo." },
+  "Alguém da equipe já assumiu este atendimento.":
+    { es: "Alguien del equipo ya asumió esta atención." },
+  "Assumida por": { es: "Asumida por" },
+  "Atendimento devolvido ao automático — ninguém assumiu.":
+    { es: "Atención devuelta al automático — nadie la asumió." },
+  "Assumindo...": { es: "Asumiendo..." },
+  "Assumir e responder": { es: "Asumir y responder" },
+  "Abrir o contato para confirmar o bloqueio":
+    { es: "Abrir el contacto para confirmar el bloqueo" },
+  "Confirme na ficha do contato se ele pediu para não receber mais mensagens.":
+    { es: "Confirme en la ficha del contacto si pidió no recibir más mensajes." },
+  "Outra pessoa está atendendo. Se precisar assumir, use Transferir no topo da conversa.":
+    { es: "Otra persona está atendiendo. Si necesita asumir, use Transferir en la parte superior de la conversación." },
+  "está atendendo. Se precisar assumir, use Transferir no topo da conversa.":
+    { es: "está atendiendo. Si necesita asumir, use Transferir en la parte superior de la conversación." },
+  // A cobrança da passagem esquecida (`app/api/v1/cron/case-stale-watcher`).
+  // Traduzida no SERVIDOR, no insert, pela mesma razão do corpo do aviso acima.
+  "Alguém pediu atendimento e ninguém assumiu":
+    { es: "Alguien pidió atención y nadie la asumió" },
+  "A IA passou esta conversa para uma pessoa e ninguém assumiu desde então. Abra a conversa: o contexto do que já foi dito está lá.":
+    { es: "La IA pasó esta conversación a una persona y nadie la asumió desde entonces. Abra la conversación: el contexto de lo que ya se dijo está allí." },
+  "Este é o último aviso automático sobre esta conversa.":
+    { es: "Este es el último aviso automático sobre esta conversación." },
+  "Clientes que repetiram depois da passagem":
+    { es: "Clientes que repitieron después del traspaso" },
+  "passagens em que o cliente voltou a falar: ele teve de repetir o que já tinha dito.":
+    { es: "traspasos en que el cliente volvió a hablar: tuvo que repetir lo que ya había dicho." },
+  hora: { es: "hora" },
+  "Abra a conversa: o cartão no fim do fio diz por que a IA passou, o que ela já tentou e se o cliente foi avisado.":
+    { es: "Abre la conversación: la tarjeta al final del hilo dice por qué la IA la pasó, qué ya intentó y si el cliente fue avisado." },
+  "Limiar de 0,7 e janela de 24h. Quem atende em `visibility_mode='own'` vê só as conversas dele.":
+    { es: "Umbral de 0,7 y ventana de 24h. Quien atiende en `visibility_mode='own'` ve solo sus conversaciones." },
 };
 
 /**

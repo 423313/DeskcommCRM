@@ -70,6 +70,11 @@ const VAZIO: Omit<AtritoRaw, "escopo"> = {
     esperas_caladas: 0,
     esperas_medidas: 0,
     espera_resposta_p90_s: null,
+    // Zero nos DOIS: a razão é calculada em `montarPares`, e denominador zero
+    // devolve `null` lá. Pôr `null` aqui seria a segunda representação da mesma
+    // ausência, e a primeira a divergir.
+    repeticao_pos_passagem: 0,
+    passagens_medidas: 0,
   },
   empresa: {
     intervencoes_por_demanda: null,

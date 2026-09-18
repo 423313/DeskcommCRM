@@ -419,7 +419,6 @@
       "sublabel": "o número do plantão não vira contato, conversa nem despacho"
     },
     {
-<<<<<<< HEAD
       "id": "avisoSuporteTela",
       "lane": "humano",
       "col": 5,
@@ -434,7 +433,8 @@
       "type": "route",
       "label": "/api/v1/ai/cases/alerta (+ /teste)",
       "sublabel": "escreve só pelo RPC; o teste manda de verdade e paga no pacing_ledger"
-=======
+    },
+    {
       "id": "passagemMontagem",
       "lane": "regra",
       "col": 3,
@@ -457,7 +457,38 @@
       "type": "db",
       "label": "trg_passagem_reconhecida + fn_passagem_devolvida (0293)",
       "sublabel": "assumir fecha a passagem e resolve o aviso; devolver ao automático fecha sem dono"
->>>>>>> feat/casos-vivos
+    },
+    {
+      "id": "passagemCartao",
+      "lane": "humano",
+      "col": 6,
+      "type": "ui",
+      "label": "components/inbox/PassagemCard.tsx",
+      "sublabel": "o cartao DENTRO do fio, acima do composer: motivo em portugues, o que a IA tentou, a fala LITERAL do cliente e se ele foi avisado"
+    },
+    {
+      "id": "passagemRota",
+      "lane": "borda",
+      "col": 6,
+      "type": "route",
+      "label": "/api/v1/conversations/[id]/passagens",
+      "sublabel": "client de SESSAO, nunca admin — e o que faz visibility_mode valer para o TEXTO, e nao so para o link"
+    },
+    {
+      "id": "passagemCobranca",
+      "lane": "motor",
+      "col": 6,
+      "type": "worker",
+      "label": "cron case-stale-watcher (2o braco)",
+      "sublabel": "a passagem que ninguem assumiu reabre o aviso; teto de 3 em passagens_de_atendimento.cobrancas"
+    },
+    {
+      "id": "passagemLaco",
+      "lane": "dados",
+      "col": 6,
+      "type": "db",
+      "label": "fn_atrito_metrics: repeticao_pos_passagem (0294)",
+      "sublabel": "o cliente repetiu depois da passagem? limiar 0,7 e janela de 24h — se o briefing chegou, a repeticao cai"
     }
   ],
   "edges": [
@@ -907,7 +938,6 @@
     },
     {
       "id": "e75",
-<<<<<<< HEAD
       "from": "avisoSuporteTela",
       "to": "avisoSuporteRota",
       "label": "a tela nunca escreve no banco: ela fala com a rota"
@@ -941,59 +971,114 @@
       "from": "numeroInterno",
       "to": "avisoSuporteTela",
       "label": "os contadores do descarte viram a frase que impede o silêncio de parecer defeito"
-=======
+    },
+    {
+      "id": "e81",
       "from": "passagemMontagem",
       "to": "passagemRegistro",
       "label": "body/title/notes/content + tentativas — as quatro colunas saem da montagem única"
     },
     {
-      "id": "e76",
+      "id": "e82",
       "from": "checkpoints",
       "to": "passagemMontagem",
       "label": "o resumo acumulado e a declaração do turno entram no briefing"
     },
     {
-      "id": "e77",
+      "id": "e83",
       "from": "avisoMotor",
       "to": "passagemMontagem",
       "label": "o desfecho do aviso vira cliente_avisado + aviso_motivo_codigo — 'queued' deixou de contar como entrega"
     },
     {
-      "id": "e78",
+      "id": "e84",
       "from": "orquestrador",
       "to": "passagemRegistro",
       "label": "Step 5.5 — o motor do CRM passou a gravar o que nunca gravou"
     },
     {
-      "id": "e79",
+      "id": "e85",
       "from": "passagemRegistro",
       "to": "central",
       "label": "o corpo do aviso é CURTO e sem conversa: a Central entrega body a qualquer agent"
     },
     {
-      "id": "e80",
+      "id": "e86",
       "from": "atribuir",
       "to": "passagemReconhece",
       "label": "o INSERT em conversation_assignment_events dispara o gatilho na MESMA transação"
     },
     {
-      "id": "e81",
+      "id": "e87",
       "from": "passagemReconhece",
       "to": "passagemRegistro",
       "label": "reconhecido_por/reconhecido_em — só quando a conversa está MESMO com aquele dono"
     },
     {
-      "id": "e82",
+      "id": "e88",
       "from": "passagemReconhece",
       "to": "central",
       "label": "resolve o aviso handoff; sem isto o dedup impede a PRÓXIMA passagem de nascer"
     },
     {
-      "id": "e83",
+      "id": "e89",
       "from": "retomada",
       "to": "passagemReconhece",
       "label": "fn_passagem_devolvida: episódio fechado sem ninguém ter assumido"
->>>>>>> feat/casos-vivos
+    },
+    {
+      "id": "e90",
+      "from": "passagemRegistro",
+      "to": "passagemRota",
+      "label": "a policy de tres condicoes e lida pelo client da sessao: organizacao + papel agent + fn_can_view_conversation"
+    },
+    {
+      "id": "e91",
+      "from": "passagemRota",
+      "to": "passagemCartao",
+      "label": "o hook usePassagensDaConversa; sem realtime proprio — a tabela nao esta na publicacao, e canal fora dela assina e nao recebe"
+    },
+    {
+      "id": "e92",
+      "from": "passagemCartao",
+      "to": "chatthread",
+      "label": "terceiro tipo de item do fio, irmao do NoteCard: o cabecalho nao ganha texto e o painel lateral nao ganha bloco"
+    },
+    {
+      "id": "e93",
+      "from": "passagemCartao",
+      "to": "atribuir",
+      "label": "o convite Assumir e responder chama o MESMO claim do cabecalho — uma rota, um efeito"
+    },
+    {
+      "id": "e94",
+      "from": "passagemCobranca",
+      "to": "passagemRegistro",
+      "label": "varre reconhecido_em is null com mais de 24h e sobe cobrancas; passagem aberta e demanda viva"
+    },
+    {
+      "id": "e95",
+      "from": "passagemCobranca",
+      "to": "central",
+      "label": "reabre o aviso handoff resolvido sem ninguem ter assumido — marcar como resolvido nao e assumir"
+    },
+    {
+      "id": "e96",
+      "from": "passagemRegistro",
+      "to": "passagemLaco",
+      "label": "o denominador sao as passagens em que o cliente VOLTOU a falar; sem fala nova nao ha repeticao a medir"
+    },
+    {
+      "id": "e97",
+      "from": "passagemLaco",
+      "to": "casos",
+      "label": "o laco de retorno publicado no par Automacao, encostado em Passagens para humano"
+    },
+    {
+      "id": "e98",
+      "from": "passagemReconhece",
+      "to": "passagemCartao",
+      "label": "reconhecido_por/em viram o rodape Assumida por, e o convite some"
     }
   ],
   "cards": [
