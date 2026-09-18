@@ -27,13 +27,18 @@
  * morava: a decisão existia (`!== "user"`), só respondia à pergunta errada.
  * Aqui o fake é o banco: o INSERT passa por ele e é o valor persistido que a
  * asserção lê.
+ *
+ * O banco falso é o COMPARTILHADO (`tests/helpers/duble-do-handler.ts`), e não
+ * um `makeSupabase` local: um dublê por arquivo mede o dublê, não o handler — e
+ * a catraca `tests/unit/send-message-handler-nao-ganha-novo-duble.test.ts`
+ * existe justamente porque a lista de legados só encolhe.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import type { SendMessageInput } from "@/lib/schemas";
+import { criarDubleDoHandler } from "../helpers/duble-do-handler";
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ storage: { from: () => ({ createSignedUrl: vi.fn() }) } }),
@@ -49,111 +54,11 @@ const USER = "55555555-5555-4555-8555-555555555555";
 /** O que o WAHA devolve no envio: o id BARE, sem o chat. */
 const BARE = "3EB0ABCDEF0123456789";
 
-type Row = Record<string, unknown>;
-
-/**
- * Fake de `SupabaseClient`. Genericamente permissivo nas tabelas que o caminho
- * de envio só LÊ (devolve `null`/vazio, como um banco sem a linha), e com estado
- * onde importa: `messages.insert` guarda a linha, que é o dado sob teste.
- */
-function makeSupabase() {
-  const mensagens: Row[] = [];
-
-  const conversa: Row = {
-    id: CONV,
-    organization_id: ORG,
-    contact_id: CONTACT,
-    channel_session_id: SESSION,
-    is_group: false,
-    group_chat_id: null,
-    contacts: { phone_number: "+5531999998888", wa_identity: null, wa_lid: null, is_blocked: false },
-    channel_sessions: {
-      provider: "waha",
-      waha_session_name: "default",
-      status: "WORKING",
-      archived_at: null,
-      metadata: {},
-    },
-  };
-
-  /** Encadeável que sempre resolve o mesmo valor — para as tabelas de leitura. */
-  const encadeavel = (valor: unknown) => {
-    const q: Record<string, unknown> = {};
-    const mesmo = () => q;
-    for (const m of ["select", "eq", "neq", "in", "is", "gte", "lte", "lt", "or", "order", "limit"]) {
-      q[m] = mesmo;
-    }
-    q.maybeSingle = async () => ({ data: valor, error: null });
-    q.single = async () => ({ data: valor, error: null });
-    q.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: valor, error: null }).then(ok);
-    return q;
-  };
-
-  const from = (tabela: string) => {
-    if (tabela === "conversations") return { select: () => encadeavel(conversa), update: () => encadeavel(null) };
-    // `channel_sessions.metadata` é lido pelo gate de pré-go-live quando o ator
-    // não é pessoa: metadata vazio = canal aberto, o gate não bloqueia.
-    if (tabela === "channel_sessions") return { select: () => encadeavel({ metadata: {} }) };
-    if (tabela !== "messages") return { select: () => encadeavel(null), update: () => encadeavel(null) };
-
-    return {
-      insert: (linha: Row) => {
-        const nova: Row = { id: `msg-${mensagens.length + 1}`, ...linha };
-        mensagens.push(nova);
-        const devolver = () => ({ data: { ...nova }, error: null });
-        return { select: () => ({ single: async () => devolver(), maybeSingle: async () => devolver() }) };
-      },
-      update: (patch: Row) => {
-        const filtros: Array<(r: Row) => boolean> = [];
-        const q: Record<string, unknown> = {
-          eq(coluna: string, valor: unknown) {
-            filtros.push((r) => r[coluna] === valor);
-            return q;
-          },
-          select: () => ({
-            single: async () => aplicar(),
-            maybeSingle: async () => aplicar(),
-          }),
-        };
-        const aplicar = () => {
-          const alvos = mensagens.filter((r) => filtros.every((f) => f(r)));
-          alvos.forEach((r) => Object.assign(r, patch));
-          return { data: alvos[0] ? { ...alvos[0] } : null, error: null };
-        };
-        return q;
-      },
-      delete: () => {
-        const filtros: Array<(r: Row) => boolean> = [];
-        const q: Record<string, unknown> = {
-          eq(coluna: string, valor: unknown) {
-            filtros.push((r) => r[coluna] === valor);
-            return q;
-          },
-          neq(coluna: string, valor: unknown) {
-            filtros.push((r) => r[coluna] !== valor);
-            return q;
-          },
-          in(coluna: string, valores: unknown[]) {
-            filtros.push((r) => valores.includes(r[coluna]));
-            return q;
-          },
-          then(ok: (v: { error: null }) => unknown) {
-            for (const alvo of mensagens.filter((r) => filtros.every((f) => f(r)))) {
-              mensagens.splice(mensagens.indexOf(alvo), 1);
-            }
-            return Promise.resolve({ error: null }).then(ok);
-          },
-        };
-        return q;
-      },
-    };
-  };
-
-  const client = { from, rpc: async () => ({ data: null, error: null }) };
-  return { supabase: client as unknown as SupabaseClient, mensagens };
-}
-
-const input = { conversation_id: CONV, type: "text", body: "Thiago, consigo te colocar amanhã às 15h." } as SendMessageInput;
+const input = {
+  conversation_id: CONV,
+  type: "text",
+  body: "Thiago, consigo te colocar amanhã às 15h.",
+} as SendMessageInput;
 
 function ctxComAtor(actor: HandlerCtx["actor"]): HandlerCtx {
   return { organization_id: ORG, actor, requestId: "req-652" };
@@ -168,6 +73,33 @@ function wahaRespondendo() {
   );
 }
 
+/**
+ * O dublê compartilhado, com a conversa que o caminho de envio lê.
+ *
+ * `channel_sessions.metadata` vazio = canal aberto: o gate de pré-go-live não
+ * bloqueia quando o ator não é pessoa, que é o caso dos dois primeiros testes.
+ */
+function duble() {
+  return criarDubleDoHandler({
+    conversation: {
+      id: CONV,
+      organization_id: ORG,
+      contact_id: CONTACT,
+      channel_session_id: SESSION,
+      is_group: false,
+      group_chat_id: null,
+      contacts: { phone_number: "+553****8888", wa_identity: null, wa_lid: null, is_blocked: false },
+      channel_sessions: {
+        provider: "waha",
+        waha_session_name: "default",
+        status: "WORKING",
+        archived_at: null,
+        metadata: {},
+      },
+    },
+  });
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -178,35 +110,37 @@ describe("o carimbo de origem da linha enviada", () => {
     // O template fixo de uma regra não passa por IA nenhuma. Com o carimbo
     // 'ai', o balão mostrado ao dono atribuía à IA um texto que a regra montou.
     wahaRespondendo();
-    const { supabase, mensagens } = makeSupabase();
+    const { supabase, capturas } = duble();
 
     await sendMessageHandler(supabase, ctxComAtor({ type: "webhook_source", id: "regra-1" }), input);
 
+    const linha = capturas.inserts.messages?.at(-1);
     expect(
-      mensagens[0]?.sent_via,
+      linha?.sent_via,
       "a mensagem da automação se apresentou como IA — é o defeito da #652",
     ).toBe("automation");
     expect(
-      mensagens[0]?.sent_by_user_id,
+      linha?.sent_by_user_id,
       "linha de automação não tem pessoa: `sent_by_user_id` é null",
     ).toBeNull();
   });
 
   it("CONTROLE: a pessoa pelo CRM continua 'user' — e com autoria", async () => {
     wahaRespondendo();
-    const { supabase, mensagens } = makeSupabase();
+    const { supabase, capturas } = duble();
 
     await sendMessageHandler(supabase, ctxComAtor({ type: "user", id: USER }), input);
 
-    expect(mensagens[0]?.sent_via).toBe("user");
-    expect(mensagens[0]?.sent_by_user_id).toBe(USER);
+    const linha = capturas.inserts.messages?.at(-1);
+    expect(linha?.sent_via).toBe("user");
+    expect(linha?.sent_by_user_id).toBe(USER);
   });
 
   it("CONTROLE: o agente de IA continua 'ai' — a categoria nova não engoliu a dele", async () => {
     // Sem este caso, carimbar TUDO que não é pessoa 'automation' ficaria verde —
     // e a IA deixaria de ter rótulo próprio, que é o defeito na direção oposta.
     wahaRespondendo();
-    const { supabase, mensagens } = makeSupabase();
+    const { supabase, capturas } = duble();
 
     await sendMessageHandler(
       supabase,
@@ -214,6 +148,6 @@ describe("o carimbo de origem da linha enviada", () => {
       input,
     );
 
-    expect(mensagens[0]?.sent_via).toBe("ai");
+    expect(capturas.inserts.messages?.at(-1)?.sent_via).toBe("ai");
   });
 });
