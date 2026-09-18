@@ -150,6 +150,12 @@ export function alvosDeEscritaNoCorpo(corpo: string): string[] {
     new RegExp(`\\btruncate\\s+(?:table\\s+)?(?:only\\s+)?${PUB}${ID}`, "gi"),
     new RegExp(`\\balter\\s+table\\s+(?:if\\s+exists\\s+)?(?:only\\s+)?${PUB}${ID}`, "gi"),
     new RegExp(`\\bdrop\\s+table\\s+(?:if\\s+exists\\s+)?${PUB}${ID}`, "gi"),
+    // `create table` também entra: um `create table if not exists
+    // public.organizations (…)` seria no-op no banco e MENTIRA no corpo — a
+    // provisionadora estaria declarando o núcleo como se fosse dela. A tabela
+    // do próprio módulo não é pega por isto: na varredura ela ainda não existe
+    // no catálogo, e no molde ela está em `tabelasDoModulo`.
+    new RegExp(`\\bcreate\\s+(?:unlogged\\s+)?table\\s+(?:if\\s+not\\s+exists\\s+)?${PUB}${ID}`, "gi"),
     new RegExp(
       `\\bcreate\\s+(?:unique\\s+)?index\\s+(?:concurrently\\s+)?(?:if\\s+not\\s+exists\\s+)?\\S+\\s+on\\s+(?:only\\s+)?${PUB}${ID}`,
       "gi",

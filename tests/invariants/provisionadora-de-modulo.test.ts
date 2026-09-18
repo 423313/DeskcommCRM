@@ -87,9 +87,29 @@ function criarProvisionadora(opts: {
   `);
 }
 
-function removerProvisionadora(nome: string, parametros = ""): void {
-  sql(`drop function if exists public.${nome}(${parametros.replace(/\w+\s+/g, "")}) cascade;
-       drop table if exists public.sonda_modulo_comanda cascade;`);
+/**
+ * Limpa TUDO que os casos criam, numa chamada só.
+ *
+ * Uma chamada por sonda seria mais legível e custa caro onde importa: cada
+ * `sql()` é um processo `psql` novo, e oito por caso × nove casos são 72
+ * processos só de faxina — numa máquina carregada isso é a maior parte do
+ * tempo do arquivo. O `drop function` aqui não enumera argumentos: varre o
+ * catálogo, para alcançar tanto a sonda sem parâmetro quanto a com.
+ */
+function limparSondas(): void {
+  sql(`
+    do $limpa$
+    declare f record;
+    begin
+      for f in select p.oid::regprocedure as assinatura
+                 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname like 'fn\\_sonda%\\_provisionar'
+      loop
+        execute format('drop function if exists %s cascade', f.assinatura);
+      end loop;
+    end $limpa$;
+    drop table if exists public.sonda_modulo_comanda cascade;
+  `);
 }
 
 /** As violações que a varredura enxerga AGORA, em todo o catálogo. */
@@ -98,23 +118,10 @@ function violacoesDoCatalogo() {
 }
 
 describe("varredura: provisionadora de módulo respeita a forma da ADR-0002 (D4)", () => {
-  afterEach(() => {
-    // Cada caso limpa o que criou, senão o "conjunto real está limpo" abaixo
-    // mediria a sujeira do caso anterior — e passaria ou reprovaria por ordem
-    // de execução, não por defeito.
-    for (const n of [
-      "fn_sondamod_provisionar",
-      "fn_sondaparam_provisionar",
-      "fn_sondaexposta_provisionar",
-      "fn_sondaauth_provisionar",
-      "fn_sondapublic_provisionar",
-      "fn_sondanucleo_provisionar",
-      "fn_sondamuda_provisionar",
-    ]) {
-      removerProvisionadora(n);
-    }
-    removerProvisionadora("fn_sondaparam_provisionar", "p_org uuid");
-  });
+  // Cada caso limpa o que criou, senão o "conjunto real está limpo" abaixo
+  // mediria a sujeira do caso anterior — e passaria ou reprovaria por ordem de
+  // execução, não por defeito.
+  afterEach(limparSondas);
 
   it("o conjunto real do catálogo está limpo", () => {
     // Hoje ele é VAZIO (nenhum módulo com tabelas está na main). O caso existe
