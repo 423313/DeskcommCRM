@@ -262,3 +262,71 @@ export function textoDaRodadaDoBanco(
   // o degrau certo, o mesmo de todo número impossível.
   return null;
 }
+
+/**
+ * A versão que o PRÓPRIO app está rodando, lida da imagem do contêiner.
+ *
+ * `APP_IMAGE` é o pino que o `update.sh` escreve no `.env` e que o compose usa
+ * para subir este contêiner — `ghcr.io/…/deskcommcrm:1.33.0`. Quem responde a
+ * esta requisição é o processo que subiu dessa imagem, então a tag é a única
+ * afirmação sobre a versão no ar que não depende de ninguém contar: nem do
+ * `git describe` do host (que descreve o CÓDIGO em disco, trocado ANTES de o
+ * contêiner subir), nem do run (que descreve o que foi PEDIDO).
+ *
+ * `null` quando não dá para saber — variável ausente, ou pino por digest
+ * (`…@sha256:…`), que não carrega versão nenhuma. Nunca chuta: sem tag legível,
+ * quem decide continua sendo quem decidia antes.
+ */
+export function versaoDaImagemDoApp(appImage: string | null | undefined): string | null {
+  const valor = (appImage ?? "").trim();
+  if (valor === "" || valor.includes("@")) return null;
+  const barra = valor.lastIndexOf("/");
+  const doisPontos = valor.lastIndexOf(":");
+  // `:` antes da última `/` é porta de registry (`registry:5000/img`), não tag.
+  if (doisPontos <= barra) return null;
+  const tag = valor.slice(doisPontos + 1).trim();
+  if (tag === "" || tag === "latest") return null;
+  return tag;
+}
+
+/** `v1.33.0` e `1.33.0` são a mesma versão — a tag da imagem não leva o `v`. */
+function semPrefixoV(versao: string): string {
+  return versao.trim().replace(/^v/i, "");
+}
+
+/**
+ * O app EM EXECUÇÃO desmente o rollback deste run?
+ *
+ * ## O caso que `rollbackFoiSuperado` não alcança, medido em produção
+ *
+ * Aquela função separa os dois mundos pela versão que o host REPORTA: o run só
+ * é superado quando o host nomeia uma versão que o run não descreve. O caso que
+ * sobra está escrito lá como falha conservadora: reinstalar À MÃO exatamente a
+ * versão que falhou e dessa vez funcionar. O host volta a reportar
+ * `to_version`, que é uma das duas do run, e o rollback segue de pé.
+ *
+ * Aconteceu numa VPS em 18/09, e não por acaso: a 1.33.0 falhou porque as
+ * imagens ainda não estavam publicadas no registry (o `update.sh` avisa
+ * `not found` e recua). Meia hora depois elas existiam, o mesmo `update.sh
+ * --force` subiu a MESMA 1.33.0 e o app voltou saudável nela. A tela seguiu
+ * anunciando a falha — e, sem botão, bloqueou a 1.35.0 que já havia saído.
+ * "Falhou porque ainda não dava para instalar" é o modo de falha em que
+ * reinstalar a mesma versão é a AÇÃO CORRETA, então o buraco não é raro.
+ *
+ * ## Por que a imagem decide, e decide sozinha
+ *
+ * No rollback de verdade, o contêiner volta para a imagem ANTERIOR: quem
+ * responde é `from_version`. Se quem responde é `to_version`, a imagem nova
+ * subiu — e ninguém precisa contar isso, porque é o próprio processo que está
+ * respondendo. Não há relógio aqui, e é de propósito: a imagem não envelhece
+ * como um heartbeat, então este degrau não precisa de fim de validade.
+ */
+export function rollbackDesmentidoPeloApp(
+  run: { status?: string | null; to_version?: string | null } | null | undefined,
+  versaoDaImagem: string | null | undefined,
+): boolean {
+  if (run?.status !== "failed_rolled_back" && run?.status !== "failed") return false;
+  const alvo = run?.to_version;
+  if (!alvo || !versaoDaImagem) return false;
+  return semPrefixoV(alvo) === semPrefixoV(versaoDaImagem);
+}

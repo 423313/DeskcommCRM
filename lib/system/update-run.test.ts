@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   canTransition,
   isRunStale,
+  rollbackDesmentidoPeloApp,
   rollbackFoiSuperado,
   sucessoJaInstalado,
+  versaoDaImagemDoApp,
   RUN_STALE_AFTER_MS,
 } from "./update-run";
 
@@ -174,5 +176,56 @@ describe("sucessoJaInstalado", () => {
     // conservador é o comportamento de antes desta função existir.
     expect(sucessoJaInstalado("2026-09-11T13:55:00.000Z", null, RUN, DENTRO)).toBe(false);
     expect(sucessoJaInstalado("2026-09-11T13:55:00.000Z", "isso não é data", RUN, DENTRO)).toBe(false);
+  });
+});
+
+describe("versaoDaImagemDoApp", () => {
+  it("lê a tag da imagem que este contêiner subiu", () => {
+    expect(versaoDaImagemDoApp("ghcr.io/melgarafael/deskcommcrm:1.33.0")).toBe("1.33.0");
+    expect(versaoDaImagemDoApp("  ghcr.io/org/app:v2.0.1  ")).toBe("v2.0.1");
+  });
+
+  it("devolve null quando a tag não afirma versão nenhuma", () => {
+    // Pino por digest, `latest`, variável ausente: nenhum deles carrega versão,
+    // e chutar aqui seria trocar "não sei" por uma afirmação.
+    expect(versaoDaImagemDoApp("ghcr.io/org/app@sha256:abc")).toBeNull();
+    expect(versaoDaImagemDoApp("ghcr.io/org/app:latest")).toBeNull();
+    expect(versaoDaImagemDoApp("ghcr.io/org/app")).toBeNull();
+    expect(versaoDaImagemDoApp("")).toBeNull();
+    expect(versaoDaImagemDoApp(undefined)).toBeNull();
+  });
+
+  it("`:` de porta de registry não é tag", () => {
+    expect(versaoDaImagemDoApp("registry:5000/deskcommcrm")).toBeNull();
+    expect(versaoDaImagemDoApp("registry:5000/deskcommcrm:1.33.0")).toBe("1.33.0");
+  });
+});
+
+describe("rollbackDesmentidoPeloApp", () => {
+  const ROLLBACK = { status: "failed_rolled_back", to_version: "v1.33.0" };
+
+  it("o app respondendo NA versão que o run diz ter falhado desmente o rollback", () => {
+    // Medido em produção (18/09): a 1.33.0 falhou porque as imagens ainda não
+    // estavam publicadas; meia hora depois o mesmo `update.sh --force` subiu a
+    // MESMA 1.33.0, e a tela seguia anunciando a falha — sem botão, bloqueando
+    // a 1.35.0. O host reporta `to_version`, então a prova temporal não separa;
+    // a imagem separa.
+    expect(rollbackDesmentidoPeloApp(ROLLBACK, "1.33.0")).toBe(true);
+    // O `v` da tag do run não existe na tag da imagem — mesma versão.
+    expect(rollbackDesmentidoPeloApp(ROLLBACK, "v1.33.0")).toBe(true);
+    expect(rollbackDesmentidoPeloApp({ status: "failed", to_version: "1.33.0" }, "1.33.0")).toBe(true);
+  });
+
+  it("rollback de verdade: quem responde é a versão anterior", () => {
+    // O contêiner voltou para `from_version` — é disso que o rollback trata, e
+    // aqui o aviso da tela está CERTO.
+    expect(rollbackDesmentidoPeloApp(ROLLBACK, "1.32.1")).toBe(false);
+  });
+
+  it("sem imagem legível, ou run que não falhou, não afirma nada", () => {
+    expect(rollbackDesmentidoPeloApp(ROLLBACK, null)).toBe(false);
+    expect(rollbackDesmentidoPeloApp({ status: "success", to_version: "1.33.0" }, "1.33.0")).toBe(false);
+    expect(rollbackDesmentidoPeloApp({ status: "failed_rolled_back" }, "1.33.0")).toBe(false);
+    expect(rollbackDesmentidoPeloApp(null, "1.33.0")).toBe(false);
   });
 });
