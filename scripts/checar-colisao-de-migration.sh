@@ -55,6 +55,23 @@
 # é DECLARADA num `::warning`; no CI ela não aparece (a base é pai do merge ref, e o clone
 # raso nem history tem para julgar).
 #
+# ## O universo medido (issue #1155)
+#
+# "Próximo livre" medido só em BASE ∪ HEAD engana: branch local de outra sessão e head de
+# outro PR aberto ocupam número e ficavam invisíveis — num único dia, a 0275 nasceu em
+# dois PRs e numa branch local, e cada um perguntou a uma ferramenta que só via as duas
+# árvores (três renumerações: 0265 → 0275 → 0283). Agora mede-se também refs/heads e
+# refs/remotes do clone. Duas exclusões para o alvo não medir a si mesmo: refs que
+# resolvem para o MESMO commit da base (já medida) ou do HEAD (este PR) saem da conta —
+# a armadilha registrada na issue é a varredura apontar "tomada" para a própria branch.
+# Quando outra ref levanta o teto, a saída NOMEIA quem tem o número; renumerar a própria
+# branch é decisão do dono dela, não conselho cego daqui.
+#
+# Onde não há outras refs para medir (o clone raso do CI, por exemplo), o comportamento
+# degrada para o de antes E a saída DECLARA o limite: "branches locais e outros PRs
+# abertos NÃO foram medidos". Número sem régua declarada é o defeito que este repo já
+# paga em outros lugares.
+#
 # ## Não medir não é passar
 #
 # Sem base resolvida, este passo REPROVA (exit 2) declarando o NÃO MEDIDO e o comando do
@@ -115,11 +132,63 @@ adicionadas_nomes="$(xargs -n1 basename <<<"$adicionadas" | sed '/^$/d')"
 base_arvore="$(git ls-tree -r --name-only "$BASE" -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
 head_arvore="$(git ls-tree -r --name-only HEAD -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
 
-# Próximo livre medido nas DUAS árvores: olhar só a listagem local é o erro que a
-# complemento-do-ci.md §1 aponta no hook — "compare contra o remoto".
-ultimo="$(printf '%s\n%s\n' "$base_arvore" "$head_arvore" | grep -oE '_[0-9]{4}_' | tr -d _ | sort -n | tail -1)"
+# ── as outras refs da máquina (issue #1155) ────────────────────────────────────────────
+base_commit="$(git rev-parse "$BASE^{commit}" 2>/dev/null || true)"
+head_commit="$(git rev-parse HEAD^{commit} 2>/dev/null || true)"
+todos_refs="$(git for-each-ref --format='%(refname)' refs/heads refs/remotes 2>/dev/null \
+  | sed '/^refs\/remotes\/origin\/HEAD$/d' || true)"
+
+# true (exit 0) quando a ref NÃO é a base nem o HEAD: só essas entram na conta de
+# "outras" — a base já foi medida e o HEAD é este PR (o alvo não mede a si mesmo).
+ref_e_de_outrem() {
+  local rc
+  rc="$(git rev-parse "$1^{commit}" 2>/dev/null || true)"
+  [ -n "$rc" ] && [ "$rc" != "$base_commit" ] && [ "$rc" != "$head_commit" ]
+}
+
+outras_medidas=0
+outras_arvores=""
+while IFS= read -r ref; do
+  [ -z "$ref" ] && continue
+  if ref_e_de_outrem "$ref"; then
+    outras_arvores="${outras_arvores}${outras_arvores:+$'\n'}$(git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
+    outras_medidas=$((outras_medidas + 1))
+  fi
+done <<<"$todos_refs"
+
+# Próximo livre medido no UNIVERSO das três partes: as duas árvores e as outras refs do
+# clone. Olhar só a listagem local é o erro que a complemento-do-ci.md §1 aponta no hook
+# — "compare contra o remoto"; olhar só base+HEAD é o cego da #1155.
+ultimo_base_head="$(printf '%s\n%s\n' "$base_arvore" "$head_arvore" | grep -oE '_[0-9]{4}_' | tr -d _ | sort -n | tail -1)"
+ultimo="$(printf '%s\n%s\n%s\n' "$base_arvore" "$head_arvore" "$outras_arvores" | grep -oE '_[0-9]{4}_' | tr -d _ | sort -n | tail -1)"
 proximo_livre=""
 [ -n "$ultimo" ] && proximo_livre="$(printf '%04d' $((10#$ultimo + 1)))"
+
+# Declara SEMPRE a régua do conselho — número sem escopo declarado é o defeito da #1155.
+escopo_do_proximo_livre() {
+  if [ "$outras_medidas" -gt 0 ]; then
+    echo "Próximo livre medido em '$BASE' ∪ HEAD ∪ $outras_medidas outra(s) ref(s) deste clone: NNNN=${proximo_livre:-?}"
+  else
+    echo "Próximo livre medido em '$BASE' ∪ HEAD: NNNN=${proximo_livre:-?}"
+    echo "::warning::branches locais e outros PRs abertos NÃO foram medidos — confira com a triagem antes de renomear."
+  fi
+}
+
+# Se outra ref levantou o teto, NOMEAR quem tem o número: "declarar tomado" sem o dono é
+# a armadilha que a #1155 registra ("a resposta vem 'tomada' apontando para você mesmo").
+# O dono da branch decide renumerá-la ou ceder; aqui só se mede quem é.
+if [ "$outras_medidas" -gt 0 ] && [ -n "$ultimo" ] && [ -n "$ultimo_base_head" ] \
+   && [ "$ultimo" -gt "$ultimo_base_head" ]; then
+  donos="$(while IFS= read -r ref; do
+    [ -z "$ref" ] && continue
+    if ref_e_de_outrem "$ref" \
+       && git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null \
+          | sed 's#^supabase/migrations/##' | grep -qE "_${ultimo}_"; then
+      echo "$ref"
+    fi
+  done <<<"$todos_refs" | tr '\n' ' ' | sed 's/ *$//')"
+  echo "::notice::NNNN=${ultimo} (o teto medido) existe em: ${donos:-?} — não é colisão sua; se for branch sua descartável, apagá-la libera o número."
+fi
 
 falhou=0
 while IFS= read -r nome; do
@@ -141,7 +210,7 @@ while IFS= read -r nome; do
     lista="$(tr '\n' ' ' <<<"$colisao_n" | sed 's/ *$//')"
     echo "::error file=$caminho::NNNN=$nnnn já existe em '$BASE': $lista"
     echo "CI REPROVADO: NNNN=$nnnn de '$nome' já existe em '$BASE': $lista"
-    echo "  Próximo livre medido em '$BASE' ∪ HEAD: NNNN=${proximo_livre:-?}"
+    escopo_do_proximo_livre | sed 's/^/  /'
     echo "  Troque o TIMESTAMP junto (date -u +%Y%m%d%H%M%S) — renumerar só o NNNN é o que fabrica colisão de timestamp."
     falhou=1
   fi
@@ -160,7 +229,7 @@ while IFS= read -r nome; do
     lista="$(grep -E "^[0-9]{14}_${nnnn}_.+\.sql$" <<<"$adicionadas_nomes" | tr '\n' ' ' | sed 's/ *$//')"
     echo "::error file=$caminho::NNNN=$nnnn repetido entre os arquivos deste PR: $lista"
     echo "CI REPROVADO: NNNN=$nnnn aparece em $gemeas_n arquivos deste PR: $lista"
-    echo "  Próximo livre medido em '$BASE' ∪ HEAD: NNNN=${proximo_livre:-?}"
+    escopo_do_proximo_livre | sed 's/^/  /'
     falhou=1
   fi
   gemeas_t="$(grep -cE "^${ts}_[0-9]{4}_.+\.sql$" <<<"$adicionadas_nomes" || true)"
@@ -180,4 +249,5 @@ if [ "$falhou" = 1 ]; then
   exit 1
 fi
 echo "OK — $(grep -c . <<<"$adicionadas_nomes") migration(ões) nova(s) com NNNN/timestamp livres contra '$BASE'."
+escopo_do_proximo_livre
 exit 0
