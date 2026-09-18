@@ -428,20 +428,19 @@ if (env.NODE_ENV === "production") {
   }
 }
 
-// Soft warning for env-gated AI keys (worker degrades gracefully but operators
-// should know when the bot is silent for config reasons).
+// Este processo só conhece as chaves do AMBIENTE. As credenciais cadastradas em
+// IA › Credenciais moram no banco e são resolvidas mais tarde, no contexto da
+// organização; por isso ausência aqui nunca pode virar diagnóstico de "IA muda".
 // `OPENROUTER_API_KEY` entra na condição porque `isAiGatewayConfigured()`
 // (lib/ai/gateway.ts) e `resolveLanguageModel` a tratam como configuração
-// VÁLIDA. Sem ela aqui, a instalação que escolhe OpenRouter — a primeira opção
-// que o `install.sh` oferece — gritava no primeiro boot que a IA ia ficar muda,
-// e ela não ia. O operador ia atrás de um problema que não existe, ou pior:
-// cadastrava uma chave da Anthropic que não precisava, só para calar o aviso.
-// O texto era verdadeiro enquanto a Anthropic era a única chave que o
-// instalador pedia; o menu novo o tornou falso.
+// válida no ambiente, assim como gateway e Anthropic.
 if (!env.AI_GATEWAY_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENROUTER_API_KEY) {
   console.warn(
-    "[env] Nenhuma chave de IA configurada (AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY ou OPENROUTER_API_KEY) — " +
-      "o agente vai pular toda resposta com reason='ai_gateway_key_missing'.",
+    "[env] Nenhuma chave de IA configurada no ambiente " +
+      "(AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY ou OPENROUTER_API_KEY). " +
+      "Isto não prova que o agente está sem credencial: cada organização pode ter uma chave " +
+      "cadastrada em IA › Credenciais. A falta real só é conhecida quando a resolução completa " +
+      "do turno não encontra chave em nenhum degrau.",
   );
 }
 // Este aviso ANUNCIAVA UM DESFECHO que o boot não tem como saber, e a correção
