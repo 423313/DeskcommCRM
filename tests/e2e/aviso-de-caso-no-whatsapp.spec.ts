@@ -326,11 +326,30 @@ test.describe("aviso de caso no WhatsApp", () => {
      * `pendente/canal_desconectado` e a spec acusaria o endereço de não ter sido
      * cobrado, quando o produto nunca chegou lá.
      */
+    /**
+     * ⚠️ O canal que precisa estar no ar é O QUE A CONFIGURAÇÃO APONTA, e não
+     * "o primeiro da organização".
+     *
+     * Medido no CI (run 35351866228): a suíte da parte 2 roda dezenas de specs
+     * na MESMA organização, e mais de uma conexão existe quando esta spec
+     * chega. O `.limit(1)` pegava uma sessão qualquer, a configuração apontava
+     * para outra, e o motor parava na guarda de canal — a entrega nascia
+     * `pendente/canal_desconectado` e a spec acusava o endereço público de não
+     * ter sido cobrado, quando o produto nunca chegou lá. Localmente, com uma
+     * conexão só, as duas eram a mesma e o teste passava: o defeito só aparece
+     * onde há vizinhos.
+     */
+    const { data: configuracao } = await admin
+      .from("config_aviso_de_caso")
+      .select("channel_session_id")
+      .eq("organization_id", creds.org_id)
+      .single();
+    const canalId = (configuracao as { channel_session_id: string | null } | null)?.channel_session_id;
+    expect(canalId, "a configuração salva pela tela não tem conexão — o passo anterior não pegou").toBeTruthy();
     const { data: canalAntes } = await admin
       .from("channel_sessions")
       .select("id, status")
-      .eq("organization_id", creds.org_id)
-      .limit(1)
+      .eq("id", canalId!)
       .single();
     const canal = canalAntes as { id: string; status: string };
     await admin.from("channel_sessions").update({ status: "WORKING" }).eq("id", canal.id);
