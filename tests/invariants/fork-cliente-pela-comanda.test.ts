@@ -48,7 +48,15 @@ function comoUsuario(userId: string, corpo: string): string {
 }
 
 function ultimaLinha(saida: string): string {
-  const linhas = saida.split("\n");
+  // O psql ecoa a TAG do comando depois de um `insert ... returning`: a saída
+  // termina em "INSERT 0 1", não no uuid. Lido assim, esse texto ia inteiro
+  // para o comando seguinte e o banco reclamava de "invalid input syntax for
+  // type uuid: INSERT 0 1" — que parece defeito da migration e é defeito da
+  // sonda.
+  const linhas = saida
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !/^(INSERT|UPDATE|DELETE|SELECT|SET|COPY)\b/.test(l));
   const ultima = linhas[linhas.length - 1];
   if (ultima === undefined) throw new Error("saída vazia do psql");
   return ultima;
@@ -133,7 +141,11 @@ function estado(contato: string): { data: boolean; etiqueta: boolean; dono: stri
     `),
   );
   const [data, etiqueta, dono] = linha.split("|");
-  return { data: data === "t", etiqueta: etiqueta === "t", dono: dono ?? "nulo" };
+  // "true", e não "t": `boolean || text` passa pela representação de SAÍDA do
+  // tipo, que é a palavra inteira — o "t" é o que o psql imprime quando a
+  // COLUNA é booleana. Comparar com "t" dava `false` para tudo, e o teste
+  // acusava a migration de não carimbar o que ela tinha carimbado.
+  return { data: data === "true", etiqueta: etiqueta === "true", dono: dono ?? "nulo" };
 }
 
 describe("a comanda reconhece a cliente", () => {

@@ -252,7 +252,6 @@ describe("o resgate", () => {
     expect(selos(ORG_B, USER_B, CONTATO_B)).toBeGreaterThanOrEqual(10);
 
     const tipo = ids(ORG_B).premio;
-    const tipo = ids(ORG_B).premio;
     // ⚠️ LER DEPOIS, EM OUTRO COMANDO. A função faz UPDATE no item, e um
     // subselect no MESMO comando lê o snapshot anterior — devolvia o valor
     // cheio (10000) e o teste acusava que o desconto não fora aplicado, quando
