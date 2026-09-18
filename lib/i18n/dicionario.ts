@@ -8899,6 +8899,11 @@ export const DICIONARIO: Traducoes = {
   "Rótulo (opcional)": { es: "Etiqueta (opcional)" },
   "Ex.: Linha principal": { es: "Ej.: Línea principal" },
   "Modo de atendimento": { es: "Modo de atención" },
+  // Os três valores de ROUTING_LABELS (components/connections/TelefoniaClient.tsx):
+  // a chave chega por índice, então cada valor possível precisa da própria linha.
+  "IA responde": { es: "La IA responde" },
+  "Time humano": { es: "Equipo humano" },
+  "IA, depois time humano": { es: "La IA y después el equipo humano" },
   "Agente de voz": { es: "Agente de voz" },
   "Nenhum agente": { es: "Ningún agente" },
   "Nenhum agente de voz publicado ainda — crie um em IA › Agentes.": {
