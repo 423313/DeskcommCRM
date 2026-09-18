@@ -22,35 +22,47 @@ on:
 permissions:
   contents: read
 
-# ── Uma rodada por PR: o push novo cancela a antiga ──────────────────────────
+# ── Uma rodada por PR: o push novo cancela a antiga — POR JOB, nunca por workflow
 #
 # Medido em 18/09/2026, com a fila do Actions estrangulada: `ci/rebalancear-
-# partes-do-e2e` tinha **8 runs ativos em 2 heads distintos**, e
-# `feat/marketplace-de-extensoes`, 7 em 2. Cada push deixava a rodada anterior
-# queimando runner até o fim, competindo com trabalho vivo — e o efeito que
-# chega ao contribuidor é o PR parado, porque o job dele espera atrás de uma
-# medição de um commit que já não existe.
+# partes-do-e2e` tinha 8 runs ativos em 2 heads distintos. Cada push deixava a
+# rodada anterior queimando runner até o fim, e o job do contribuidor esperava
+# atrás da medição de um commit que já não existe.
 #
-# `cancel-in-progress` é CONDICIONAL de propósito, e a condição é a parte que
-# importa:
+# O `concurrency:` mora em cada job PESADO (verify, invariants-majors, e2e-parte,
+# build-and-size, builds de imagem) e NUNCA no workflow nem nos agregadores
+# (`invariants`, `e2e`, `imagens-ok`). A primeira versão (PR #1183) pôs no
+# workflow, e o efeito medido foi o contrário do pretendido: o agregador roda com
+# `if: always()` — e `always()` roda MESMO na rodada cancelada —, então ele ficou
+# na fila esperando vaga e SEGURANDO O GRUPO. A rodada nova ficou `pending` por
+# 53 min (#1190: nasceu 16:28Z, o agregador da rodada velha fechou 17:21Z). No
+# nível de job, o agregador velho não pertence a grupo nenhum: roda em segundos,
+# lê `cancelled` e reprova o head superado, sem bloquear ninguém.
 #
-#   pull_request        → cancela. A medição de um head superado não vale nada.
-#   push (main) e tag   → NUNCA cancela. A rodada da `main` é a ÚNICA medição da
-#                         árvore integrada; matá-la deixa o repositório sem saber
-#                         se o conjunto passa, que é pior que a fila cheia. E o
-#                         run de publicação de tag reporta `headBranch` de tag,
-#                         não `main` — cancelá-lo publicaria versão sem registro.
+# Por que NÃO `if: ${{ !cancelled() }}` nos agregadores, que também destrava:
+# ele pula o agregador quando a rodada é cancelada, e `skipped` é check
+# SATISFEITO para a branch protection. Um cancelamento manual da rodada do head
+# ATUAL deixaria `invariants`/`e2e`/`imagens-ok` verdes sem ter medido nada.
 #
-# O grupo é por PR (e não por branch) para que reabrir um PR não colida com o
-# run de outro que aponte para a mesma ref.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+#   pull_request   → cancela o job superado. Medição de head velho não vale nada.
+#   push na main   → não cancela (a rodada da main é a medição da árvore
+#                    integrada). Com grupo, um job PENDENTE da main é substituído
+#                    pelo mais novo — que roda e mede um superconjunto.
+#   tag            → nunca. É a publicação da versão.
+#
+# Exceção: publish-image também cancela no push da main (lá o produto é
+# `latest`, que a rodada seguinte sobrescreve) — o porquê está no arquivo dele.
+# O grupo é por PR (e não por branch) para reabrir um PR não colidir com o run
+# de outro que aponte para a mesma ref. Vigiado por
+# tests/unit/concorrencia-so-nos-jobs-pesados.test.ts.
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: ${{ github.workflow }}-verify-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -141,6 +153,9 @@ jobs:
     # vermelho continuar falando de schema: mantido em 20, a perna morreria por
     # relógio no meio da segunda passada.
     timeout-minutes: 30
+    concurrency:
+      group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       # `false` e não o padrão (`true`): com `fail-fast`, a primeira major que
       # reprovasse CANCELARIA a outra e o relatório diria "cancelled" em vez de
