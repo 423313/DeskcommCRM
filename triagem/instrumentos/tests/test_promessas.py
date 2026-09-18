@@ -112,6 +112,58 @@ class Controles(unittest.TestCase):
         self.assertIn("triagem/1058-comportamento", res[0]["represadas_nao_medidas"])
 
 
+class RepresadaNoGitDeVerdade(unittest.TestCase):
+    """A conta de "commit nosso só no disco" roda no git — a fixture só repete o número.
+
+    Repositório descartável, sem rede: `origin` tem URL https (é publicação), `local`
+    tem URL de caminho (não é), e os refs remotos são criados com update-ref.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import subprocess
+        import tempfile
+        cls.dir = tempfile.mkdtemp(prefix="promessas-")
+        env = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null")
+
+        def git(*a, quem="nos@triagem"):
+            e = dict(env, GIT_AUTHOR_NAME="x", GIT_AUTHOR_EMAIL=quem, GIT_COMMITTER_NAME="x",
+                     GIT_COMMITTER_EMAIL=quem)
+            r = subprocess.run(["git", "-C", cls.dir, *a], capture_output=True, text=True, env=e)
+            assert r.returncode == 0, r.stderr
+            return r.stdout.strip()
+
+        def commit(branch, msg, quem="nos@triagem", de="main"):
+            git("checkout", "-q", "-B", branch, de)
+            git("commit", "-q", "--allow-empty", "-m", msg, quem=quem)
+
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "nos@triagem")
+        git("commit", "-q", "--allow-empty", "-m", "base")
+        git("remote", "add", "origin", "https://example.invalid/repo.git")
+        git("remote", "add", "local", "/caminho/do/checkout/principal")
+        git("update-ref", "refs/remotes/origin/main", "main")
+        commit("nossa", "a"); commit("nossa", "b", de="nossa")                       # 2 nossos
+        commit("do-autor", "c", quem="autor@fork")                                     # commitado pelo autor
+        commit("publicada", "d"); git("update-ref", "refs/remotes/origin/triagem/pub", "publicada")
+        commit("so-no-local", "e"); git("update-ref", "refs/remotes/local/so-no-local", "so-no-local")
+        commit("no-head", "f"); cls.head = git("rev-parse", "no-head")
+        cls.fonte = promessas.FonteGitHub("x/y", cls.dir)
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls.dir, ignore_errors=True)
+
+    def test_contagens(self):
+        casos = {("nossa", None): 2, ("do-autor", None): 0, ("publicada", None): 0,
+                 ("so-no-local", None): 1, ("no-head", None): 1, ("no-head", "HEAD_DO_PR"): 0}
+        for (b, h), esperado in casos.items():
+            with self.subTest(branch=b, head=h):
+                head = self.head if h else None
+                self.assertEqual(self.fonte.a_frente_da_main(b, head), esperado)
+
+
 class Frases(unittest.TestCase):
     def casos(self, texto):
         return promessas.achar_promessas(texto)
