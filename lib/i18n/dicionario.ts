@@ -4029,6 +4029,11 @@ export const DICIONARIO: Traducoes = {
   "De plantão": { es: "De guardia" },
   "Fora do horário": { es: "Fuera del horario" },
   "Desligado": { es: "Apagado" },
+  // ── Presença do navegador (issue #996): o segundo selo da mesma célula, o
+  //    que responde "tem alguém aí?" sem tocar na decisão de plantão.
+  "Com a tela aberta": { es: "Con la pantalla abierta" },
+  "Sem sinal de tela": { es: "Sin señal de pantalla" },
+  "último sinal às": { es: "última señal a las" },
   "Atualizando para a versão": { es: "Actualizando a la versión" },
   // ── A espera antes de o servidor pegar o pedido, e o fim reconhecido na hora.
   //    Os dois estados que a tela ganhou quando parou de fingir que a conversa

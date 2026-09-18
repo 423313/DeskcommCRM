@@ -143,6 +143,22 @@ if ! git checkout --quiet "$TARGET_TAG" 2>&1; then
   die "Não consegui trocar para a versão $TARGET_TAG (parece haver mudanças locais que divergem).
      Rode 'git status' pra ver, ou peça ajuda. NÃO mexi no banco — está tudo como estava."
 fi
+
+# As funções do kit são carregadas na linha 16, ANTES deste checkout — então,
+# sem esta releitura, o resto desta atualização roda com as funções da versão
+# ANTIGA, e todo conserto que viva numa função do kit só chega na atualização
+# SEGUINTE. Foi medido numa VPS de produção em 17/09/2026: depois de atualizar
+# para a versão que conserta a linha do cron (que deixava um segredo escrito no
+# crontab, e portanto no syslog), a linha antiga continuava lá — o conserto
+# existia no disco e não tinha rodado. Duas passadas para aplicar um conserto é
+# o mesmo que exigir passo manual de quem opera a VPS, e a doutrina de
+# packaging proíbe.
+#
+# `_common.sh` só define funções e constantes no topo (`set -euo pipefail`,
+# COMPOSE, cores, REFUSED_RC), então reler é idempotente: nada é reexecutado
+# com efeito. O que muda é de onde vêm as funções daqui para baixo.
+source "$KIT_DIR/_common.sh"
+
 [ -n "${DESKCOMM_AGENT_REPORT:-}" ] && eval "${DESKCOMM_AGENT_REPORT_CMD}" codigo
 
 # ── 4. Banco: schema + correções de dados (schema ANTES do app) ──────────────
