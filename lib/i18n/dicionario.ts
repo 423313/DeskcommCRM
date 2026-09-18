@@ -619,13 +619,6 @@ export const DICIONARIO: Traducoes = {
   "DPO email": { es: "Email del DPO" },
   "Retenção de mídia (dias)": { es: "Retención de medios (días)" },
   "URL política de privacidade": { es: "URL de la política de privacidad" },
-  "Motivos de perda extras (separados por vírgula)": {
-    es: "Motivos de pérdida adicionales (separados por coma)",
-  },
-  "ex: Sem orçamento, Concorrente": { es: "ej.: Sin presupuesto, Competencia" },
-  "Adicionados ao set padrão. Cada pipeline pode ter seus próprios motivos.": {
-    es: "Se agregan al conjunto predeterminado. Cada pipeline puede tener sus propios motivos.",
-  },
   "Informações pessoais. Email só pode ser trocado em breve.": {
     es: "Información personal. El email solo se puede cambiar próximamente.",
   },
