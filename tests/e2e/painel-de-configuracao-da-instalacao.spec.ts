@@ -171,9 +171,20 @@ test.describe("Painel de configuração da instalação", () => {
     await expect(voltar, "sem valor definido na tela não há o que reverter").toBeVisible();
     await voltar.click();
 
-    await expect(page.getByText(/voltou para o valor do arquivo de instalação/i)).toBeVisible({
-      timeout: 15_000,
-    });
+    // ⚠️ Verifica o EFEITO, não a mensagem. A primeira versão esperava o texto
+    // do aviso de sucesso e reprovou por tempo esgotado — um aviso é efêmero
+    // (some sozinho) e a tela recarrega logo depois, então a janela para vê-lo é
+    // estreita e depende de corrida. O que o operador precisa que seja verdade
+    // não é "apareceu um aviso": é que o valor VOLTOU a vir do arquivo de
+    // instalação. É isso que se mede aqui.
+    await expect(
+      page.locator("#config-RESEND_API_KEY"),
+      "a tela não recarregou depois de voltar ao padrão",
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText(/definido aqui nesta tela/i),
+      "a origem continuou dizendo que o valor foi definido na tela",
+    ).toHaveCount(0, { timeout: 15_000 });
   });
 
   test("a tela é usável: sem rolagem lateral, sem botão fora da vista", async ({ page }) => {

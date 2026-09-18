@@ -176,7 +176,13 @@ function CampoDeDiagnostico({ linha, idioma }: { linha: LinhaDaTela; idioma: Idi
         type="button"
         onClick={() => setAberto((v) => !v)}
         aria-expanded={aberto}
-        className="text-xs font-medium text-text-muted underline underline-offset-2 hover:text-foreground"
+        // `py-1.5` não é estética: sem ele o alvo de toque fica abaixo de 24px de
+        // altura e vira difícil de acertar no celular. Medido pela própria
+        // bateria E2E (`getBoundingClientRect`), que reprovou 9 destes botões.
+        // `inline-flex` porque um `<button>` inline não aplica padding vertical
+        // na caixa — o padding sai, a ALTURA não muda, e a medição continua
+        // reprovando com o CSS "corrigido".
+        className="inline-flex items-center py-1.5 text-xs font-medium text-text-muted underline underline-offset-2 hover:text-foreground"
       >
         {definicao.motivo ? t(MOTIVO_CURTO[definicao.motivo]) : t("Não se troca por aqui")}
         {" · "}
