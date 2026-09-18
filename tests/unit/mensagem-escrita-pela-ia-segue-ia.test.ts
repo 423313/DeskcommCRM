@@ -87,6 +87,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 
+import { criarDubleDoHandler } from "../helpers/duble-do-handler";
 import { getAction } from "@/lib/automation/actions";
 import "@/lib/automation/actions/send-ai-message";
 import "@/lib/automation/actions/send-whatsapp";
@@ -94,65 +95,33 @@ import "@/lib/automation/actions/send-whatsapp";
 type Row = Record<string, unknown>;
 
 /** Fake do banco no molde de `automacao-carimbo-de-origem.test.ts`: o INSERT guarda a linha. */
-function makeSupabase() {
-  const mensagens: Row[] = [];
-  const conversa: Row = {
-    id: CONV,
-    organization_id: ORG,
-    contact_id: CONTACT,
-    channel_session_id: SESSION,
-    is_group: false,
-    group_chat_id: null,
-    contacts: { phone_number: "+5531999998888", wa_identity: null, wa_lid: null, is_blocked: false },
-    channel_sessions: { provider: "waha", waha_session_name: "default", status: "WORKING", archived_at: null, metadata: {} },
-  };
-  const encadeavel = (valor: unknown) => {
-    const q: Record<string, unknown> = {};
-    const mesmo = () => q;
-    for (const m of ["select", "eq", "neq", "in", "is", "gte", "lte", "lt", "or", "order", "limit"]) q[m] = mesmo;
-    q.maybeSingle = async () => ({ data: valor, error: null });
-    q.single = async () => ({ data: valor, error: null });
-    q.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: valor, error: null }).then(ok);
-    return q;
-  };
-  const filtravel = (aplicar: (filtros: Array<(r: Row) => boolean>) => unknown) => {
-    const filtros: Array<(r: Row) => boolean> = [];
-    const q: Record<string, unknown> = {
-      eq(c: string, v: unknown) { filtros.push((r) => r[c] === v); return q; },
-      neq(c: string, v: unknown) { filtros.push((r) => r[c] !== v); return q; },
-      in(c: string, vs: unknown[]) { filtros.push((r) => vs.includes(r[c])); return q; },
-      select: () => ({ single: async () => aplicar(filtros), maybeSingle: async () => aplicar(filtros) }),
-      then: (ok: (v: unknown) => unknown) => Promise.resolve(aplicar(filtros)).then(ok),
-    };
-    return q;
-  };
-  const from = (tabela: string) => {
-    if (tabela === "conversations") return { select: () => encadeavel(conversa), update: () => encadeavel(null) };
-    if (tabela === "channel_sessions") return { select: () => encadeavel({ metadata: {} }) };
-    if (tabela !== "messages") return { select: () => encadeavel(null), update: () => encadeavel(null) };
-    return {
-      insert: (linha: Row) => {
-        const nova: Row = { id: `msg-${mensagens.length + 1}`, ...linha };
-        mensagens.push(nova);
-        const devolver = () => ({ data: { ...nova }, error: null });
-        return { select: () => ({ single: async () => devolver(), maybeSingle: async () => devolver() }) };
+/**
+ * O banco falso é o COMPARTILHADO (`tests/helpers/duble-do-handler.ts`). Um dublê
+ * local a mais faria `send-message-handler-nao-ganha-novo-duble` reprovar — e com
+ * razão: cada cópia é um lugar onde o contrato do handler pode divergir do real
+ * sem ninguém ver.
+ */
+function duble() {
+  return criarDubleDoHandler({
+    conversation: {
+      id: CONV,
+      organization_id: ORG,
+      contact_id: CONTACT,
+      channel_session_id: SESSION,
+      is_group: false,
+      group_chat_id: null,
+      contacts: { phone_number: "+5531999998888", wa_identity: null, wa_lid: null, is_blocked: false },
+      channel_sessions: {
+        provider: "waha",
+        waha_session_name: "default",
+        status: "WORKING",
+        archived_at: null,
+        metadata: {},
       },
-      update: (patch: Row) =>
-        filtravel((filtros) => {
-          const alvos = mensagens.filter((r) => filtros.every((f) => f(r)));
-          alvos.forEach((r) => Object.assign(r, patch));
-          return { data: alvos[0] ? { ...alvos[0] } : null, error: null };
-        }),
-      delete: () =>
-        filtravel((filtros) => {
-          for (const alvo of mensagens.filter((r) => filtros.every((f) => f(r)))) mensagens.splice(mensagens.indexOf(alvo), 1);
-          return { error: null };
-        }),
-    };
-  };
-  const client = { from, rpc: async () => ({ data: null, error: null }) };
-  return { supabase: client as unknown as SupabaseClient, mensagens };
+    },
+  });
 }
+
 
 function ctxDaRegra(admin: SupabaseClient): ActionCtx {
   return {
@@ -180,7 +149,7 @@ afterEach(() => {
 describe("a mensagem escrita pela IA numa regra de automação", () => {
   it("⭐ send_ai_message grava sent_via='ai' — a autoria é da IA, não da regra", async () => {
     wahaRespondendo();
-    const { supabase, mensagens } = makeSupabase();
+    const { supabase, capturas } = duble();
 
     const resultado = await getAction("send_ai_message")!.execute(ctxDaRegra(supabase), {
       channel_session_id: SESSION,
@@ -188,24 +157,24 @@ describe("a mensagem escrita pela IA numa regra de automação", () => {
       instruction: "Cumprimente o lead pelo nome.",
     });
 
-    expect(mensagens, `a ação não chegou ao INSERT: ${JSON.stringify(resultado)}`).toHaveLength(1);
-    expect(mensagens[0]?.body).toBe("Oi Thiago, vi seu formulário.");
+    expect(capturas.inserts.messages ?? [], `a ação não chegou ao INSERT: ${JSON.stringify(resultado)}`).toHaveLength(1);
+    expect(capturas.inserts.messages?.at(-1)?.body).toBe("Oi Thiago, vi seu formulário.");
     expect(
-      mensagens[0]?.sent_via,
+      capturas.inserts.messages?.at(-1)?.sent_via,
       "a mensagem ESCRITA PELA IA foi carimbada como automação — a decisão da #652 é por autoria",
     ).toBe("ai");
   });
 
   it("CONTROLE: send_whatsapp_message (template da regra) chega ao mesmo INSERT", async () => {
     wahaRespondendo();
-    const { supabase, mensagens } = makeSupabase();
+    const { supabase, capturas } = duble();
 
     const resultado = await getAction("send_whatsapp_message")!.execute(ctxDaRegra(supabase), {
       channel_session_id: SESSION,
       template: "Oi, recebemos seu formulário.",
     });
 
-    expect(mensagens, `o controle não chegou ao INSERT: ${JSON.stringify(resultado)}`).toHaveLength(1);
-    expect(mensagens[0]?.sent_via).not.toBeUndefined();
+    expect(capturas.inserts.messages ?? [], `o controle não chegou ao INSERT: ${JSON.stringify(resultado)}`).toHaveLength(1);
+    expect(capturas.inserts.messages?.at(-1)?.sent_via).not.toBeUndefined();
   });
 });

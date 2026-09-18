@@ -153,7 +153,17 @@ export function origemDaMensagem(actor: Actor): "user" | "ai" | "automation" {
   // manda texto de um agente publicado com este mesmo ator, e a decisão da #652
   // é por AUTORIA: ali a linha é da IA. Decidir só pelo tipo do ator carimbaria
   // "Automação" no balão e tiraria a mensagem de `envios_por_ia`.
-  if (actor.type === "webhook_source") return actor.textoEscritoPelaIA ? "ai" : "automation";
+  if (actor.type === "webhook_source") {
+    // Os dois retornos são LITERAIS de propósito: `rotulo-de-origem-tem-emissor`
+    // lê o corpo desta função e conta como emissor cada literal devolvido, para
+    // saber quais rótulos o motor de fato produz. Escrito como ternário, o gate
+    // deixa de enxergar `automation` e acusa a tela de prometer uma distinção
+    // que ninguém grava — foi o que aconteceu na primeira versão deste conserto.
+    // (E o comentário não pode conter a forma que o extrator procura: a segunda
+    // versão trazia um exemplo literal aqui, e o gate o leu como emissor real.)
+    if (actor.textoEscritoPelaIA) return "ai";
+    return "automation";
+  }
   return "ai";
 }
 
