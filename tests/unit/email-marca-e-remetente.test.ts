@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NEUTROS_DE_SAIDA, type MarcaDeSaida } from "@/lib/branding/saida";
+import type { SmtpConfig } from "@/lib/email/config";
 import { buildInviteEmail } from "@/lib/email/templates/invite";
 
 const MARCA: MarcaDeSaida = {
@@ -302,21 +303,26 @@ describe("remetente — SMTP", () => {
  * sucesso emprestado.
  */
 describe("roteador de e-mail", () => {
-  const BASE = {
+  // Tipadas pelo CONTRATO (`SmtpConfig`), não pela forma que a fixture tem hoje:
+  // com `typeof BASE`, o `source: "none"` da primeira fixture virava o tipo do
+  // parâmetro e a segunda (`"environment"`) deixava de caber — `pnpm typecheck`
+  // reprovava em TS2345 nas duas chamadas. Amarrar ao tipo do módulo também faz
+  // o teste reprovar no dia em que a fixture divergir do contrato.
+  const BASE: SmtpConfig = {
     host: "",
     port: 587,
-    security: "starttls" as const,
+    security: "starttls",
     username: "",
     password: "",
     fromEmail: "",
     fromName: "",
-    source: "none" as const,
+    source: "none",
   };
-  const COM_SMTP = {
+  const COM_SMTP: SmtpConfig = {
     ...BASE,
     host: "smtp.revenda.com.br",
     fromEmail: "nao-responda@revenda.com.br",
-    source: "environment" as const,
+    source: "environment",
   };
 
   /**
@@ -324,7 +330,7 @@ describe("roteador de e-mail", () => {
    * `isSmtpConfigured` continua sendo o do produto. Mockar a regra de
    * "configurado" faria o teste medir o próprio mock.
    */
-  async function rotear(config: typeof BASE) {
+  async function rotear(config: SmtpConfig) {
     vi.resetModules();
     const porSmtp = vi.fn(async () => ({ ok: true, id: "id-smtp" }));
     const pelaResend = vi.fn(async () => ({ ok: true, id: "id-resend" }));
