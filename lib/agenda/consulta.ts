@@ -121,7 +121,7 @@ export interface ParametrosDaConsulta {
    * de si mesma (#1084). Quem remarca diz quem remarcar; quem só OFERECE horário
    * (rota, ferramenta MCP) não passa nada, e a grade segue contando tudo.
    */
-  ignorarAgendamentoId?: string | null;
+  ignorarAgendamentoId?: string;
 }
 
 export type ResultadoDaConsulta =
