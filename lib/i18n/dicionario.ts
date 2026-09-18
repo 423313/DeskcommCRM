@@ -9381,6 +9381,12 @@ export const DICIONARIO: Traducoes = {
   "o compromisso": { es: "la cita" },
   "Entendi": { es: "Entendido" },
   "e-mail do convidado inválido": { es: "correo del invitado no válido" },
+  "Webhook registrado pela instalação": { es: "Webhook registrado por la instalación" },
+  "O CRM apontou o webhook deste número para cá — não é preciso colar nada no painel da Meta. Os valores abaixo ficam para conferência.": {
+    es: "El CRM apuntó el webhook de este número hacia acá — no hace falta pegar nada en el panel de Meta. Los valores de abajo quedan para verificación.",
+  },
+  "Webhook pendente": { es: "Webhook pendiente" },
+  "o registro ainda não foi feito": { es: "el registro todavía no se hizo" },
 
   // ─── issue #924 — a origem de quem chega pelo site ───
   // app/app/settings/conversoes/page.tsx (a explicação do link) e
