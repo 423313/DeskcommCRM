@@ -54,13 +54,19 @@ describe("o namespace das imagens é ancorado fora do diff do PR", () => {
     const donoDoRunner = donoConfiavelDoRunner();
     if (donoDoRunner === null) return;
 
+    // Minúsculas nos DOIS lados: o namespace de GHCR é obrigatoriamente minúsculo, e
+    // `GITHUB_REPOSITORY_OWNER` devolve o login com a caixa original do dono. Sem isto, um
+    // fork de dono `Founders-BR` que publique CORRETAMENTE em `ghcr.io/founders-br` fica
+    // vermelho estando certo — e o gate passaria a reprovar fork legítimo, justamente o que
+    // o #397 consertou de propósito.
     expect(
-      donoDoNamespace(imgNs()),
+      donoDoNamespace(imgNs()).toLowerCase(),
       [
         `IMG_NS=${imgNs()} não pertence ao dono confiável deste workflow (${donoDoRunner}).`,
         "Num PR para o DeskcommCRM upstream, não troque o namespace das imagens do projeto.",
         "Num fork que publica imagens próprias, rode o CI no fork e aponte IMG_NS para o dono desse fork.",
+        "E num fork que NÃO publica imagens, rodando o CI dele mesmo: este vermelho não pede troca de IMG_NS — é o gate medindo um cenário que não é o seu.",
       ].join(" "),
-    ).toBe(donoDoRunner);
+    ).toBe(donoDoRunner.toLowerCase());
   });
 });
