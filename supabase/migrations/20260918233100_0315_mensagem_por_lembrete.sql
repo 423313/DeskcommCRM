@@ -1,4 +1,4 @@
--- 0266 — CADA LEMBRETE TEM O PRÓPRIO TEXTO, E A LISTA DEIXA DE TER TETO DE 3
+-- 0315 — CADA LEMBRETE TEM O PRÓPRIO TEXTO, E A LISTA DEIXA DE TER TETO DE 3
 --
 -- Até aqui o tipo tinha um texto só (`reminder_body`) para todos os degraus, e
 -- `fn_degraus_de_lembrete_validos` recusava mais de 3 extras. A tela pedia

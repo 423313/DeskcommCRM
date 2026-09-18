@@ -123,7 +123,7 @@ describe("o teto do TypeScript é o teto do CHECK", () => {
     // Se alguém subir o teto num lado só, o PATCH aceita o que o CHECK recusa
     // (500) ou o CHECK aceita o que a rota recusa — as duas mentiras.
     const sql = readFileSync(
-      join(process.cwd(), "supabase/migrations/20260917140000_0266_mensagem_por_lembrete.sql"),
+      join(process.cwd(), "supabase/migrations/20260918233100_0315_mensagem_por_lembrete.sql"),
       "utf8",
     );
     expect(sql).toContain(`<= ${TETO_DE_LEMBRETES_EXTRAS}`);

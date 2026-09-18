@@ -1,4 +1,4 @@
--- 0265 — A MENSAGEM DO LEMBRETE MORA NO TIPO, NÃO SÓ NO CÓDIGO
+-- 0314 — A MENSAGEM DO LEMBRETE MORA NO TIPO, NÃO SÓ NO CÓDIGO
 --
 -- O cron `agenda-reminder` monta "Oi, Fulano! Passando pra lembrar do seu
 -- compromisso: …" no TypeScript, e a tela do tipo só deixava ligar o aviso e

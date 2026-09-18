@@ -207,31 +207,6 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "(`vars.RELOGIO_LIGADO`), não uma adaptação de fork — mas ela fica no mapa para " +
       "que trocar a variável por outra coisa continue passando por revisão.",
   },
-
-  // --- canal móvel deste fork (não sobe para o upstream) ---------------------
-  // Os três jobs pulam em qualquer outro repositório. Isso é deliberado: sem o
-  // `if`, um PR deste arquivo para o upstream publicaria `:develop` no GHCR
-  // oficial e tentaria SSH numa VPS que não é dele. `skipped` aqui NÃO é check
-  // obrigatório da main — o mapa existe para a condição não ganhar um `&& false`
-  // colado sem ninguém ver.
-  "deploy-vps-develop.yml::build-and-push": {
-    condicao: "github.repository == 'IanCouto/DeskcommCRM' && github.ref == 'refs/heads/develop'",
-    efeito:
-      "Este job PUBLICA as três imagens :develop no GHCR deste fork. Desligá-lo faz o " +
-      "push na develop não gerar artefato, e o deploy da VPS não tem o que puxar.",
-  },
-  "deploy-vps-develop.yml::imagem-do-app-sobe": {
-    condicao: "github.repository == 'IanCouto/DeskcommCRM' && github.ref == 'refs/heads/develop'",
-    efeito:
-      "Este job prova que a imagem :develop BOOTA antes de ir para a VPS. Desligá-lo " +
-      "devolve o defeito de publicar uma imagem que morre no docker compose up.",
-  },
-  "deploy-vps-develop.yml::deploy-vps": {
-    condicao: "github.repository == 'IanCouto/DeskcommCRM' && github.ref == 'refs/heads/develop'",
-    efeito:
-      "Este job é quem SSH na VPS e troca as imagens. Desligá-lo faz o GitHub buildar " +
-      "e publicar, e o servidor continuar na versão antiga sem erro em lugar nenhum.",
-  },
 };
 
 interface JobLido {
