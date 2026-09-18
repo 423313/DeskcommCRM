@@ -544,8 +544,48 @@ Quatro cuidados, cada um com a sonda:
    fragmento declara `impacto: capacidade_nova` ou `exige_acao` **não recebe `--auto`**, e o que já
    tinha recebido é desligado até o corte (`gh pr merge <n> --disable-auto`). O merge automático não
    olha o calendário: entrando no meio da janela, ele converte o patch anunciado numa minor — foi o
-   ponto levantado em 18/09, com a 1.35.1 esperando o #1196. PR `nada_mudou` segue normal. Sonda:
-   `git diff --name-only origin/main...refs/tri/<n> -- .changes/ | xargs -r grep -h '^impacto:'`.
+   ponto levantado em 18/09, com a 1.35.1 esperando o #1196. PR `nada_mudou` segue normal.
+
+   **Ausência de fragmento não é `nada_mudou`.** PR que toca `app/`, `lib/`, `components/`,
+   `workers/`, `hooks/` ou `supabase/` e não traz fragmento com `impacto:` é **NÃO CLASSIFICADO**:
+   não recebe `--auto` na janela de corte até alguém escrever o fragmento — o triador escreve,
+   creditando o autor (§12). A sonda anterior
+   (`git diff --name-only origin/main...refs/tri/<n> -- .changes/ | xargs -r grep -h '^impacto:'`)
+   devolvia **vazio** nesse caso, e o vazio foi lido como "não é `capacidade_nova`": o #1211
+   (`utm_adset`/`utm_ad`/`utm_placement`, capacidade nova) entrou assim, sem nota, no meio da janela
+   da 1.35.1. Ela tinha um segundo ponto cego: o `grep` lia o fragmento na árvore de quem roda a
+   sonda, onde o arquivo do PR não existe. A sonda que distingue os três desfechos:
+
+   ```bash
+   sonda_da_janela() {  # uso: sonda_da_janela origin/main refs/tri/<n>
+     local base=$1 head=$2 arquivos fragmentos toca impactos
+     arquivos=$(git diff --name-only "$base...$head")
+     toca=$(printf '%s\n' "$arquivos" | grep -cE '^(app|lib|components|workers|hooks|supabase)/')
+     fragmentos=$(git diff --name-only --diff-filter=AM "$base...$head" -- '.changes/*.md')
+     # O fragmento é lido do PR (git show), nunca da árvore de quem roda a sonda.
+     impactos=$(printf '%s\n' "$fragmentos" | while read -r f; do
+       [ -n "$f" ] && git show "$head:$f" | grep -h '^impacto:'; done)
+     if [ -n "$impactos" ]; then
+       printf '%s\n' "$impactos" | sort -u
+     elif [ "$toca" -gt 0 ]; then
+       echo "NÃO CLASSIFICADO: toca $toca arquivo(s) do produto e não traz fragmento com impacto"
+     else
+       echo "sem fragmento; não toca o produto"
+     fi
+   }
+   ```
+
+   Controle positivo, medido em 18/09 — a sonda tem de acusar o #1211 antes de ser usada:
+
+   ```console
+   $ sonda_da_janela 976707c3a 1594de0d6      # o #1211, sem fragmento
+   NÃO CLASSIFICADO: toca 3 arquivo(s) do produto e não traz fragmento com impacto
+   $ sonda_da_janela origin/main refs/tri/1202  # fragmento nada_mudou
+   impacto: nada_mudou
+   ```
+
+   Só `impacto: nada_mudou` libera o `--auto` na janela. `capacidade_nova`, `exige_acao` e
+   **NÃO CLASSIFICADO** esperam o corte.
 
 ### ⚠️ O gate que o lote esconde: `build`
 
