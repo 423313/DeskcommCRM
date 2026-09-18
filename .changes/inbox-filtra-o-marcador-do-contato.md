@@ -1,27 +1,24 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: O filtro por marcador do Inbox procura onde você marca
+titulo: O filtro por marcador do Inbox procura nas duas caixas onde você marca
 ---
 
-O Inbox tem uma caixa de marcadores para a pessoa do outro lado — a mesma da
-ficha do contato e a mesma que a campanha lê. O filtro da lista de conversas,
-porém, procurava numa segunda caixa, a da conversa, que quase ninguém usa à
-mão: ela é onde o atendimento automático encosta os próprios marcadores.
+O Inbox tem duas caixas de marcadores no mesmo painel: a do contato — a mesma
+da ficha e a mesma que a campanha lê — e a da conversa, onde o atendimento
+automático também encosta os próprios marcadores. O filtro da lista de
+conversas procurava só na caixa da conversa.
 
 O efeito era marcar um cliente, filtrar por esse marcador e receber "nenhuma
 conversa". Sem erro, sem aviso — a leitura natural é que o CRM perdeu o
 marcador. E a lista de opções do filtro sofria do mesmo desencontro: oferecia
-os marcadores da conversa, então o que você acabara de escrever no contato nem
-aparecia para ser escolhido.
+só os marcadores da conversa, então o que você acabara de escrever no contato
+nem aparecia para ser escolhido.
 
-Agora as duas pontas leem a mesma tabela: o filtro casa com `contacts.tags` e a
-lista de opções vem dos marcadores em uso nos contatos da organização. Marcar
-uma pessoa e procurá-la pelo marcador passa a devolver as conversas dela.
-
-Os marcadores de conversa continuam existindo, editáveis em "Tags da conversa"
-e aplicados pelo atendimento automático — mas a barra de filtro deixa de
-procurar neles: filtrar por um marcador que só está na conversa não a encontra
-mais. Sem marcador filtrado, a lista é a mesma de antes.
+Agora o filtro encontra a conversa quando o marcador está em qualquer uma das
+duas caixas, e a lista de opções junta os marcadores das duas, sem repetir.
+Quem já filtrava por marcador de conversa continua achando o mesmo. Sem
+marcador filtrado, a lista é a mesma de antes.
 
 Nada muda para quem opera: nenhuma variável nova, nenhum passo na atualização.
+A atualização aplica sozinha a função nova do banco que o filtro usa.

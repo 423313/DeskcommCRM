@@ -95,19 +95,20 @@ const SELECT_COLS = `
 `;
 
 /**
- * As MESMAS colunas, com o contato em junção INTERNA.
+ * `{valor}` como operando de `cs` DENTRO de um `or=` do PostgREST.
  *
- * Entra SÓ quando o filtro de marcador está presente. Sem `!inner`, o PostgREST
- * aplica o filtro ao recurso EMBUTIDO: a conversa continua na lista, com
- * `contacts` nulo — ou seja, o filtro não filtra. Sem marcador, a consulta da
- * lista fica exatamente como era: `conversations.contact_id` é NOT NULL, então
- * a junção interna não tiraria linha nenhuma hoje, mas mudaria a consulta mais
- * lida do Inbox sem que nada pedisse isso.
+ * Duas gramáticas, uma dentro da outra: o literal de array do Postgres
+ * (`{"vip"}`, com `"` e `\` escapados por barra) e, por fora, o valor entre
+ * aspas do `or=` (mesmo escape). Sem as aspas de fora, marcador com `,` ou `)`
+ * quebra a árvore lógica, e com `{`/`}` o PostgREST nem reconhece o array —
+ * `pLogicSingleVal` só aceita `{…}` sem chave dentro. O `termoSeguroParaOr` da
+ * busca não serve aqui: ele troca esses caracteres por curinga, e marcador é
+ * igualdade exata.
  */
-const SELECT_COLS_COM_CONTATO = SELECT_COLS.replace(
-  "contacts:contact_id (",
-  "contacts:contact_id!inner (",
-);
+function arrayDeUmValorParaOr(valor: string): string {
+  const escapa = (t: string) => t.replace(/[\\"]/g, (c) => `\\${c}`);
+  return `"${escapa(`{"${escapa(valor)}"}`)}"`;
+}
 
 interface CursorPayload {
   sort: string | null;
@@ -187,7 +188,7 @@ export async function listConversationsHandler(
 
   let query = supabase
     .from("conversations")
-    .select(q.tag ? SELECT_COLS_COM_CONTATO : SELECT_COLS)
+    .select(SELECT_COLS)
     .eq("organization_id", ctx.organization_id)
     .order(sortCol, ordem)
     .order("id", { ascending: asc })
@@ -211,17 +212,24 @@ export async function listConversationsHandler(
     query = query.not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
   }
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
-  // ⚠️ O MARCADOR FILTRADO É O DO CONTATO (`contacts.tags`), não o da conversa.
+  // ⚠️ O MARCADOR FILTRADO É O DA CONVERSA **OU** O DO CONTATO.
   //
-  // Era `conversations.tags`, e o relato mede o buraco: *"adicionei a tag nele
-  // para testar e ele n aparece no filtro"*. O Inbox tem UMA caixa de marcador
-  // para a pessoa — a do contato, em `ContactTagsEditor`, a mesma da ficha e a
-  // mesma que a campanha lê. Com o filtro consultando a outra tabela, marcar um
-  // cliente e depois procurá-lo pelo marcador devolvia "nenhuma conversa".
+  // Era só `conversations.tags`, e o relato mede o buraco: *"adicionei a tag nele
+  // para testar e ele n aparece no filtro"* — o marcador fora posto no CONTATO
+  // (`ContactTagsEditor`, a mesma caixa da ficha e da campanha). Trocar a fonte
+  // pelo contato consertaria o relato e tiraria o filtro de quem marca a
+  // CONVERSA (`ConversationTagsEditor`, e a IA por `crm_manage_tags`): o marcador
+  // continuaria editável e deixaria de ser filtrável. As duas caixas, então.
   //
-  // `conversations.tags` continua existindo e servindo ao que a IA aplica na
-  // conversa; o que esta linha decide é só o que a barra de filtro pergunta.
-  if (q.tag) query = query.contains("contacts.tags", [q.tag]);
+  // O lado do contato é o campo calculado `tags_do_contato` (migration 0323), e
+  // não um `contact_id.in.(…)`: a lista de ids viaja na URL e tem teto (ver
+  // `idsQueCabemNaURL`) — numa org com mais contatos marcados que isso, conversas
+  // sumiriam do filtro sem aviso. Este `or=` compõe por AND com o da busca e o do
+  // cursor: o PostgREST junta os parâmetros repetidos com E.
+  if (q.tag) {
+    const marcador = arrayDeUmValorParaOr(q.tag);
+    query = query.or(`tags.cs.${marcador},tags_do_contato.cs.${marcador}`);
+  }
 
   // No BANCO, e não em memória: filtrar depois de paginar devolveria páginas curtas —
   // e, quando a página inteira estivesse lida, uma lista vazia que a tela apresentava

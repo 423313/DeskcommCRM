@@ -1,6 +1,6 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MagnifyingGlass } from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,6 +15,7 @@ import {
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
+import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
 
@@ -93,14 +94,26 @@ export function InboxFilters({ value, onChange }: Props) {
   const { data: channels } = useChannelSessions({ refetchInterval: 30_000 });
   const { activeOrg } = useAuth();
   /**
-   * As opções vêm de `contacts.tags` — a MESMA fonte que o filtro consulta.
+   * As opções são a UNIÃO das duas caixas — as mesmas que o filtro consulta
+   * (`conversations.tags` ou `contacts.tags`, no handler da lista).
    *
-   * Vinham do vocabulário de CONVERSA, enquanto o filtro passou a ler o
-   * marcador do CONTATO. Quem oferece e quem filtra lendo tabelas diferentes é
-   * o defeito espelhado: ou a opção existe e devolve vazio, ou o marcador que
-   * funciona nunca chega a ser oferecido.
+   * Vinham só do vocabulário de CONVERSA: o marcador escrito no contato nem
+   * aparecia para ser escolhido. Quem oferece e quem filtra lendo fontes
+   * diferentes é o defeito espelhado — ou a opção existe e devolve vazio, ou o
+   * marcador que funciona nunca é oferecido.
    */
-  const { data: tagVocabulary } = useContactTagVocabulary(activeOrg?.orgId ?? null);
+  const orgId = activeOrg?.orgId ?? null;
+  const { data: tagsDeConversa } = useConversationTagVocabulary(orgId);
+  const { data: tagsDeContato } = useContactTagVocabulary(orgId);
+  const tagVocabulary = useMemo(
+    () =>
+      tagsDeConversa == null && tagsDeContato == null
+        ? undefined
+        : [...new Set([...(tagsDeConversa ?? []), ...(tagsDeContato ?? [])])].sort((a, b) =>
+            a.localeCompare(b),
+          ),
+    [tagsDeConversa, tagsDeContato],
+  );
   // Os MESMOS filtros que a lista aplicou. Badge que conta o que a aba não mostra
   // manda o atendente procurar trabalho que não existe — a regra já estava escrita
   // na rota; faltava alcançar os filtros ao lado da aba.
