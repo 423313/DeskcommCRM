@@ -4614,6 +4614,7 @@ export const DICIONARIO: Traducoes = {
   "Posição": { es: "Posición" },
   "na fila": { es: "en la cola" },
   "Última mensagem do cliente": { es: "Último mensaje del cliente" },
+  "Desde quando o cliente espera resposta": { es: "Desde cuándo el cliente espera respuesta" },
   Arquivada: { es: "Archivada" },
   "Aguardando o cliente": { es: "Esperando al cliente" },
 

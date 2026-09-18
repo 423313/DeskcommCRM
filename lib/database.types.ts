@@ -3419,6 +3419,7 @@ export type Database = {
           assigned_to_user_id: string | null
           assigned_to_user_name: string | null
           assignee_kind: string | null
+          awaiting_since: string | null
           bot_silenced_until: string | null
           channel: string
           channel_session_id: string
@@ -3462,6 +3463,7 @@ export type Database = {
           assigned_to_user_id?: string | null
           assigned_to_user_name?: string | null
           assignee_kind?: string | null
+          awaiting_since?: string | null
           bot_silenced_until?: string | null
           channel?: string
           channel_session_id: string
@@ -3505,6 +3507,7 @@ export type Database = {
           assigned_to_user_id?: string | null
           assigned_to_user_name?: string | null
           assignee_kind?: string | null
+          awaiting_since?: string | null
           bot_silenced_until?: string | null
           channel?: string
           channel_session_id?: string
@@ -8196,6 +8199,7 @@ export type Database = {
           assigned_to_user_id: string | null
           assigned_to_user_name: string | null
           assignee_kind: string | null
+          awaiting_since: string | null
           bot_silenced_until: string | null
           channel: string
           channel_session_id: string
@@ -8394,6 +8398,7 @@ export type Database = {
           assigned_to_user_id: string | null
           assigned_to_user_name: string | null
           assignee_kind: string | null
+          awaiting_since: string | null
           bot_silenced_until: string | null
           channel: string
           channel_session_id: string
