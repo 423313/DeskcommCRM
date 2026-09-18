@@ -175,10 +175,23 @@ export async function drainEventLog(
   // educadamente.
   //
   // Um evento que ficou `processing` além da janela é uma tentativa que não
-  // voltou. Conta como as outras: mesmo `attempts + 1`, mesmo backoff, mesmo
-  // `dead` no limite, mesmo aviso na Central. O backoff importa tanto quanto a
-  // contagem — sem ele, o evento reclamado é o primeiro da fila do próximo
-  // tique, e o worker recém-reiniciado morre no mesmo minuto.
+  // voltou. Conta como as outras: mesmo `attempts + 1`, mesmo `dead` no limite,
+  // mesmo aviso na Central. O backoff importa tanto quanto a contagem — sem ele,
+  // o evento reclamado é o primeiro da fila do próximo tique, e o worker
+  // recém-reiniciado morre no mesmo minuto.
+  //
+  // MAS ele entra a partir da SEGUNDA volta, e a exceção tem dono: o invariante
+  // `tests/invariants/event-log-drain.test.ts`, caso 9, afirma que o órfão volta
+  // para a fila E É PROCESSADO NO MESMO TIQUE, com a razão escrita lá — o órfão
+  // legítimo (um deploy que reiniciou o worker no meio de um evento sadio) não
+  // deve pagar espera nenhuma, porque a espera é o defeito que aquele caso veio
+  // impedir. Cobrar backoff já na primeira volta trocaria o laço do evento
+  // envenenado por uma lentidão em todo deploy.
+  //
+  // O laço quebra igual: o envenenado volta UMA vez de graça, derruba o processo
+  // de novo, e da segunda em diante paga 2, 4, 8… minutos até `MAX_ATTEMPTS`.
+  // Uma tentativa a mais por evento envenenado é o preço de não tirar do órfão
+  // legítimo a volta imediata que ele sempre teve.
   //
   // Um por um, com o guarda `status = 'processing'`: duas instâncias do dreno
   // (o laço do worker e o cron do app) podem ler a mesma linha presa, e só a
@@ -187,6 +200,9 @@ export async function drainEventLog(
   for (const preso of presos ?? []) {
     const attempts = preso.attempts + 1;
     const dead = attempts >= MAX_ATTEMPTS;
+    // `preso.attempts === 0` é a PRIMEIRA volta deste evento — ninguém o
+    // reclamou antes. Ele volta pronto para o mesmo tique (ver acima).
+    const primeiraVolta = preso.attempts === 0;
     const motivo = `tentativa não voltou em ${PROCESSING_STALE_MS / 60_000} min (processo derrubado?)`;
     const { data: tocado } = await admin
       .from("event_log")
@@ -194,7 +210,7 @@ export async function drainEventLog(
         status: dead ? "dead" : "pending",
         attempts,
         last_error: motivo,
-        next_attempt_at: dead ? null : backoffAt(attempts),
+        next_attempt_at: dead || primeiraVolta ? null : backoffAt(attempts),
         updated_at: nowIso,
       })
       .eq("id", preso.id)

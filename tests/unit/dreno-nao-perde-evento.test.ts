@@ -201,10 +201,17 @@ describe("drainEventLog — evento preso volta para a fila, e a volta conta", ()
     expect(volta!.filtros).toContainEqual(["eq", "id", "p1"]);
   });
 
-  it("a volta CONTA como tentativa, com backoff e motivo", async () => {
+  it("a volta CONTA como tentativa — e a PRIMEIRA volta fica pronta para o mesmo tique", async () => {
     // Era o laço dos 313 reinícios: o processo morria antes de o handler
     // devolver erro, e só handler que devolve erro incrementava `attempts`. O
     // evento voltava com `attempts=0`, era reclamado de novo, matava de novo.
+    //
+    // A contagem conserta o laço. O BACKOFF, porém, não pode entrar já aqui: o
+    // invariante `event-log-drain` caso 9 afirma que o órfão volta e é
+    // processado NO MESMO TIQUE, porque o órfão legítimo (deploy que reiniciou
+    // o worker no meio) não deve pagar espera. Por isso `next_attempt_at` é
+    // nulo na primeira volta — e nulo é elegível agora (`next_attempt_at.is.null`
+    // no filtro da seleção).
     dispatch.mockResolvedValue([{ consumer_key: "k", status: "ok" }]);
     const { admin, chamadas } = dublarAdmin([], null, [PRESO]);
 
@@ -213,10 +220,28 @@ describe("drainEventLog — evento preso volta para a fila, e a volta conta", ()
     const [volta] = reclamacoes(chamadas);
     expect(volta!.payload?.attempts, "voltou para a fila com as tentativas intactas").toBe(1);
     expect(String(volta!.payload?.last_error)).toMatch(/não voltou/);
-    // Sem backoff, o evento reclamado é o primeiro da fila do próximo tique e o
-    // worker recém-reiniciado morre no mesmo minuto.
-    expect(volta!.payload?.next_attempt_at, "voltou sem backoff").toBeTruthy();
-    expect(new Date(String(volta!.payload?.next_attempt_at)).getTime()).toBeGreaterThan(Date.now() + 60_000);
+    expect(
+      volta!.payload?.next_attempt_at,
+      "primeira volta com backoff: o órfão de deploy passaria a esperar, e a espera é o defeito do caso 9",
+    ).toBeNull();
+  });
+
+  it("da SEGUNDA volta em diante o backoff entra — é ele que quebra o laço do evento envenenado", async () => {
+    // O par do caso acima: sem esta asserção, trocar `primeiraVolta` por `true`
+    // (backoff nunca) passaria verde, e o evento que derruba o processo voltaria
+    // a ser o primeiro da fila de todo tique — os 313 reinícios de volta.
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "ok" }]);
+    const { admin, chamadas } = dublarAdmin([], null, [{ ...PRESO, attempts: 1 }]);
+
+    await drainEventLog(admin as never);
+
+    const [volta] = reclamacoes(chamadas);
+    expect(volta!.payload?.attempts).toBe(2);
+    expect(volta!.payload?.next_attempt_at, "segunda volta sem backoff").toBeTruthy();
+    expect(
+      new Date(String(volta!.payload?.next_attempt_at)).getTime(),
+      "o backoff da segunda volta é 2^2 = 4 min",
+    ).toBeGreaterThan(Date.now() + 60_000);
   });
 
   it("na quinta volta o evento morre e avisa a Central — igual à quinta falha", async () => {
