@@ -237,13 +237,46 @@ test("uma extensão de duas portas: a tela diz quais são, e cada botão leva à
   await page.goto("/app/extensions");
 
   // ── 1. Admitir o catálogo ────────────────────────────────────────────────
-  await page
-    .getByTestId("extension-catalog-file")
-    .setInputFiles(b.arquivoDoCatalogo);
+  // Caminho COPIADO da spec irmã, passo a passo, depois de quatro rodadas vermelhas.
+  // Cada `expect` daqui é um passo confirmado antes do seguinte — é o que transforma
+  // "o cartão não apareceu" em "a admissão não confirmou", que são investigações diferentes.
+  await expect(page.getByTestId("extension-catalog-admission")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("extension-catalog-file").setInputFiles(b.arquivoDoCatalogo);
+  await expect(page.getByTestId("extension-catalog-submit")).toBeVisible();
   await page.getByTestId("extension-catalog-submit").click();
 
+  // A confirmação da ADMISSÃO, antes de procurar qualquer cartão. Sem ela, uma recusa vira
+  // "cartão ausente" vinte segundos depois, longe da causa.
+  await expect(page.getByText("Catálogo admitido e disponível para instalação.")).toBeVisible();
+
+  // A ABA. Esta linha é a quarta causa das quatro rodadas vermelhas: os cartões do catálogo
+  // vivem numa aba que não é a inicial, e eu procurava o cartão com ela fechada. O elemento
+  // existia; a tela é que não o estava mostrando. A irmã já clicava aqui — mais um detalhe
+  // que teria vindo de graça se eu tivesse partido dela em vez de escrever do zero.
+  await page.getByRole("tab", { name: "Catálogo" }).click();
+
   const cartao = page.getByTestId(`extension-catalog-${b.publisher}-${b.name}-${b.version}`);
-  await expect(cartao).toBeVisible();
+
+  // Diagnóstico antes da asserção. "Cartão não encontrado em 20 s" foi o MESMO sintoma de três
+  // causas diferentes nesta spec, e cada volta custou 20 minutos de fila para descobrir qual.
+  // Daqui em diante a falha traz o que a tela diz: o aviso, os cartões presentes e o bloco de
+  // admissão. O próximo vermelho nasce com a causa em vez de com um tempo esgotado.
+  try {
+    await expect(cartao).toBeVisible({ timeout: 30_000 });
+  } catch (erro) {
+    const aviso = (await page.getByRole("alert").allInnerTexts()).join(" | ").trim();
+    const listados = await page
+      .locator('[data-testid^="extension-catalog-"]')
+      .evaluateAll((nos) => nos.map((n) => n.getAttribute("data-testid")).filter(Boolean) as string[]);
+    await page.screenshot({ path: `${EVIDENCE}/0-cartao-ausente.png`, fullPage: true });
+    throw new Error(
+      `O cartão de ${b.publisher}/${b.name}@${b.version} não apareceu.\n` +
+        `Aviso na tela: ${aviso || "(nenhum)"}\n` +
+        `Cartões presentes: ${listados.length > 0 ? listados.join(", ") : "(nenhum)"}\n` +
+        `Catálogo enviado: ${b.arquivoDoCatalogo}\n` +
+        `Causa original: ${(erro as Error).message}`,
+    );
+  }
 
   // ── 2. A pergunta que importa: a tela diz o que a extensão abre? ──────────
   // Antes desta entrega, este texto era fixo: "Abre Tarefas" aparecia para TODO pacote.
