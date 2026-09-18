@@ -191,7 +191,7 @@ export function InstalledExtensionCard({
         </div>
         <div className="sm:col-span-2">
           <dt className="text-muted-foreground">{t("Permissão")}</dt>
-          <dd className="mt-0.5">{t(portasLegiveis(extension.permissions))}</dd>
+          <dd className="mt-0.5">{portasLegiveis(extension.permissions, t)}</dd>
         </div>
       </dl>
 

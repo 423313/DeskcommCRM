@@ -207,9 +207,9 @@ export function NavHub({
                             </p>
                           ) : null}
                           <p className="mt-2 text-[11px] text-text-subtle">
-                            {traduzir(
-                              portasLegiveis([permissaoDaCapacidade(contribution.action.capability)]),
-                              locale,
+                            {portasLegiveis(
+                              [permissaoDaCapacidade(contribution.action.capability)],
+                              (texto) => traduzir(texto, locale),
                             )}
                           </p>
                         </div>

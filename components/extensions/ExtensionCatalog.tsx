@@ -341,7 +341,7 @@ export function CatalogExtensionCard({
               string fixa — "Abre Tarefas" aparecia para qualquer extensão, inclusive as que
               não abrem Tarefas. Agora sai das permissões do próprio pacote. */}
           <dt className="text-muted-foreground">{t("O que ela abre")}</dt>
-          <dd className="text-right">{t(portasLegiveis(entry.permissions))}</dd>
+          <dd className="text-right">{portasLegiveis(entry.permissions, t)}</dd>
         </div>
       </dl>
       {entry.tags && entry.tags.length > 0 ? (

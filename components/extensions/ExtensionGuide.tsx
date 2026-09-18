@@ -248,7 +248,7 @@ export function ExtensionGuide({
           {displayTitle.fallback || displaySummary.fallback ? <FallbackNotice /> : null}
           <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
             <ListChecks size={16} weight="duotone" aria-hidden className="text-accent" />
-            {t(portasLegiveis(guide.manifest.permissions))}
+            {portasLegiveis(guide.manifest.permissions, t)}
           </div>
         </div>
       </header>

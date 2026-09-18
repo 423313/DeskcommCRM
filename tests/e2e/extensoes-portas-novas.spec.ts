@@ -61,8 +61,23 @@ async function montarBancada(): Promise<Bancada> {
   const banco = path.join(dir, "catalog.sqlite");
   const manifesto = path.join(dir, "pacote.json");
   const arquivoDoCatalogo = path.join(dir, "catalogo.json");
-  const porta = 55080 + (process.pid % 300);
-  const origem = `http://127.0.0.1:${porta}`;
+  // A ORIGEM NÃO PODE SER INVENTADA — e foi assim que esta spec reprovou no primeiro
+  // veredito em tela. Eu calculava uma porta a partir do PID, e o produto RECUSOU baixar
+  // dali, corretamente: `isAllowedLocalOrigin` (lib/extensions/download.ts:59-66) só admite
+  // a origem que é EXATAMENTE igual a `EXTENSIONS_LOCAL_CATALOG_ORIGIN`. O sintoma foi o
+  // cartão nunca aparecer no catálogo, e as três specs irmãs passando ao lado.
+  //
+  // Ou seja: o vermelho mediu a guarda de origem funcionando em ambiente real, e o defeito
+  // era meu. Lê-se do ambiente, em vez de repetir o literal, para acompanhar quando a porta
+  // canônica mudar. Com `workers: 1` no playwright.config, os arquivos rodam em sequência e
+  // não há disputa por esta porta.
+  const origem = process.env.EXTENSIONS_LOCAL_CATALOG_ORIGIN;
+  if (!origem) {
+    throw new Error(
+      "EXTENSIONS_LOCAL_CATALOG_ORIGIN ausente: o runner E2E não publicou o ambiente canônico.",
+    );
+  }
+  const porta = Number(new URL(origem).port);
 
   await cli(["init", "--db", banco, "--origin", origem]);
   await cli(["make-example", "--output", manifesto]);

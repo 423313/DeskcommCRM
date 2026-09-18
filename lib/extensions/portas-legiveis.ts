@@ -30,16 +30,26 @@ export function nomeDaPorta(permissao: ExtensionPermission): string {
 /**
  * A frase que a tela mostra. Lista TODAS as portas, em ordem estável, e termina com o limite —
  * porque "abre" e "lê" são coisas diferentes, e é a segunda que as pessoas temem.
+ *
+ * Recebe o tradutor em vez de devolver português cru, e a razão é um defeito que o gate NÃO
+ * pega: `tests/unit/i18n-espanhol-cobre-a-tela.test.ts` varre chamadas `t("literal")` no
+ * código. Uma frase MONTADA em tempo de execução nunca é um literal, então ela passaria pelo
+ * gate e cairia em português na tela de quem escolheu espanhol — sem nada reprovar.
+ * Traduzindo o MOLDE e cada NOME separadamente, as peças voltam a ser literais que o
+ * dicionário cobre.
  */
-export function portasLegiveis(permissoes: readonly ExtensionPermission[]): string {
+export function portasLegiveis(
+  permissoes: readonly ExtensionPermission[],
+  t: (texto: string) => string = (texto) => texto,
+): string {
   const nomes = [...permissoes]
     .filter((p) => p in NOME_DA_PORTA)
     .sort((a, b) => NOME_DA_PORTA[a].localeCompare(NOME_DA_PORTA[b], "pt-BR"))
-    .map(nomeDaPorta);
-  if (nomes.length === 0) return "Não abre nenhuma tela e não lê seus dados.";
+    .map((p) => t(nomeDaPorta(p)));
+  if (nomes.length === 0) return t("Não abre nenhuma tela e não lê seus dados.");
   const lista =
-    nomes.length === 1 ? nomes[0]! : `${nomes.slice(0, -1).join(", ")} e ${nomes.at(-1)!}`;
-  return `Abre ${lista}; não lê seus dados.`;
+    nomes.length === 1 ? nomes[0]! : `${nomes.slice(0, -1).join(", ")} ${t("e")} ${nomes.at(-1)!}`;
+  return t("Abre {portas}; não lê seus dados.").replace("{portas}", lista);
 }
 
 /** Os destinos correspondentes, para quem quiser conferir para onde cada porta leva. */
