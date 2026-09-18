@@ -26,13 +26,13 @@
  * ── Como a corrida é fechada ─────────────────────────────────────────────────
  * A reserva é a própria linha de `public.idempotency_keys`, gravada antes do
  * efeito com `status_code` e `response_body` NULOS
- * (`supabase/migrations/20260919120000_0314_recibo_de_idempotencia_em_curso.sql`).
+ * (`supabase/migrations/20260919120000_0321_recibo_de_idempotencia_em_curso.sql`).
  * O índice único `idempotency_keys_organization_id_key_endpoint_key` decide
  * quem executa: o segundo INSERT leva 23505 e não executa nada. Depois do
  * efeito, a MESMA linha recebe `status_code` + `response_body` e passa a valer
  * 24h — o recibo terminal, que é o que o replay lê.
  *
- * Antes da 0314 as duas colunas eram `NOT NULL` e a tabela só sabia
+ * Antes da 0321 as duas colunas eram `NOT NULL` e a tabela só sabia
  * representar recibo terminal: entre a leitura e a gravação não havia onde
  * gravar "esta chave está em curso", então duas requisições simultâneas liam
  * vazio as duas e o efeito acontecia duas vezes.
@@ -72,6 +72,10 @@
  * é, portanto, best-effort, e quem chama pode registrar o aviso. O mesmo vale
  * para a reserva: erro que não seja 23505 não impede o efeito — nesse ponto o
  * comportamento é o de antes desta mudança, sem piora.
+ *
+ * O caso inverso — o EFEITO lança — libera a reserva e propaga o erro: não há
+ * recibo de operação que falhou, e a retentativa com a mesma chave executa em
+ * vez de receber `em_curso` de algo que já não está acontecendo.
  */
 
 import { createHash } from "node:crypto";
@@ -264,7 +268,25 @@ export async function comIdempotencia<T>(
     if (!tomouPosse) return { tipo: "em_curso" };
   }
 
-  const { resposta, status } = await executar();
+  let efeito: { resposta: T; status: number };
+  try {
+    efeito = await executar();
+  } catch (erro) {
+    // O efeito falhou: a reserva é LIBERADA (vence agora) antes de propagar.
+    // Viva, ela responderia "em curso" por 60s a uma retentativa de algo que
+    // não está acontecendo — e o contrato de quem chama é que falha propaga
+    // sem deixar rastro. Vencida, a próxima requisição com esta chave a
+    // retoma pelo caminho da linha vencida, acima.
+    await db
+      .from("idempotency_keys")
+      .update({ expires_at: agora().toISOString() })
+      .eq("organization_id", organizationId)
+      .eq("key", chave)
+      .eq("endpoint", endpoint)
+      .eq("request_hash", hashDaColuna(hash));
+    throw erro;
+  }
+  const { resposta, status } = efeito;
 
   // Recibo terminal NA MESMA linha da reserva: é ele que a próxima requisição
   // com esta chave vai ler (por 24h) em vez de reexecutar. O filtro por

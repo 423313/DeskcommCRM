@@ -138,7 +138,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
 
     // Mesma chave, MESMO corpo, e a primeira execução ainda está em curso: a
-    // chave está reservada (migration 0314) e a resposta ainda não existe —
+    // chave está reservada (migration 0321) e a resposta ainda não existe —
     // não há o que devolver, e reexecutar duplicaria a criação. Código próprio
     // e não `idempotency_conflict`: aqui a chave está CERTA, o pedido é o
     // mesmo, e retentar depois resolve.

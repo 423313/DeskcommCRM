@@ -434,6 +434,34 @@ describe("comIdempotencia", () => {
     );
     expect(desfecho).toEqual({ tipo: "executou", resposta: { id: "t1" }, status: 201 });
   });
+
+  it("(12) efeito que LANÇA libera a chave: o erro propaga e a retentativa executa", async () => {
+    // O contrato de quem chama (`message-templates/route.ts`) é que falha
+    // propaga sem deixar rastro. Com a reserva viva, a retentativa com a
+    // mesma chave receberia `em_curso` por 60s de algo que já não acontece.
+    const d = duble();
+    const falha = new Error("Erro ao criar template.");
+
+    await expect(
+      comIdempotencia(entrada(d, async () => { throw falha; })),
+    ).rejects.toBe(falha);
+
+    // A reserva vence AGORA, filtrada pela mesma trava do recibo terminal.
+    expect(d.atualizacoes).toHaveLength(1);
+    expect(d.atualizacoes[0]!.patch).toEqual({ expires_at: RELOGIO().toISOString() });
+    expect(d.atualizacoes[0]!.filtros).toEqual([
+      ["organization_id", ORG],
+      ["key", CHAVE],
+      ["endpoint", ENDPOINT],
+      ["request_hash", hashDaColuna(hashDoCorpoPadrao)],
+    ]);
+
+    const executar = vi.fn(async () => ({ resposta: { id: "t1" }, status: 201 }));
+    const retentativa = await comIdempotencia(entrada(d, executar));
+
+    expect(retentativa).toEqual({ tipo: "executou", resposta: { id: "t1" }, status: 201 });
+    expect(executar).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("a fronteira da coluna `bytea` (request_hash)", () => {

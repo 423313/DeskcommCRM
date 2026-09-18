@@ -57,7 +57,7 @@ export const ApiErrorCodes = {
   // 409 — conflito
   idempotency_conflict: "idempotency_conflict",
   // Mesma chave, MESMO corpo, e a primeira execução ainda está em curso: o
-  // recibo/encurso está gravado (reserva, migration 0314) mas o efeito não
+  // recibo/encurso está gravado (reserva, migration 0321) mas o efeito não
   // terminou. Código próprio e não o `idempotency_conflict` acima porque a ação
   // de quem recebe é outra: aqui a chave está CERTA e o pedido é o mesmo —
   // retentar depois resolve, enquanto conflito manda trocar a chave.
