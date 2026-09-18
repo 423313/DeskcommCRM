@@ -24,13 +24,13 @@ function blocoDoJob(texto: string, job: string): string {
 }
 
 const PESADOS: Record<string, string[]> = {
-  "ci.yml": ["verify", "invariants-majors"],
+  "ci.yml": ["verify-parte", "invariants-majors"],
   "e2e.yml": ["e2e-parte"],
   "perf.yml": ["build-and-size"],
   "publish-image.yml": ["build-and-push", "imagem-do-app-sobe", "imagens-de-fundo-sobem"],
 };
 const SEM_GRUPO: Record<string, string[]> = {
-  "ci.yml": ["invariants"],
+  "ci.yml": ["verify", "invariants"],
   "e2e.yml": ["e2e"],
   "publish-image.yml": ["imagens-ok", "promover-stable", "a-tag-veio-da-main"],
 };

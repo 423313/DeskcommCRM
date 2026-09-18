@@ -148,9 +148,18 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
   // --- os outros checks obrigatórios ------------------------------------------
   // Mesmo mecanismo, mesmo desfecho: `skipped` conta como check satisfeito.
   // Desligar qualquer um destes faz o PR entrar sem ter sido testado.
-  "ci.yml::verify": {
+  "ci.yml::verify-parte": {
     condicao: null,
-    efeito: "Este é o check obrigatório `verify` (typecheck + lint + test:unit).",
+    efeito: "São as duas partes da suíte (typecheck + lint + test:unit); sem elas o `verify` não tem o que ler.",
+  },
+  // A suíte foi dividida em partes (tempo medido, ver ci.yml); o nome que a
+  // branch protection exige continua sendo `verify`, agora o agregado.
+  "ci.yml::verify": {
+    condicao: "always()",
+    efeito:
+      "Este é o check obrigatório `verify` — o agregado que LÊ `verify-parte` e reprova " +
+      "qualquer desfecho que não seja `success`. Precisa de `always()` para ler `skipped`; " +
+      "desligá-lo (`always() && false`) o torna `skipped`, que a branch protection lê como satisfeito.",
   },
   // A matriz das duas majors roda no job `invariants-majors`; quem a branch
   // protection exige continua sendo ESTE nome — a lista dos cinco checks

@@ -48,9 +48,14 @@ const ACTION = join(process.cwd(), ".github/actions/preparar-node/action.yml");
  * quem o sobe tem de dizer por que o trabalho real (não o preâmbulo) cresceu.
  */
 const TETOS: Record<string, { minutos: number; razao: string }> = {
-  "ci.yml::verify": {
+  // O agregado `verify` também não tem teto (mesma razão do `invariants`); o teto
+  // vive nas partes. Antes da divisão: 866 s num verde do #1190, 34 s de folga, e
+  // 13 de 40 rodadas mortas no teto. Cada parte roda metade dos arquivos.
+  "ci.yml::verify-parte": {
     minutos: 15,
-    razao: "trabalho real medido: p90 594s, máximo 609s em 51 verdes — folga de ~4m45",
+    razao:
+      "trabalho real medido antes da divisão em partes: 866s num verde (d8af02fee), 13 de 40 " +
+      "rodadas mortas aos 900s; cada parte roda metade da suíte de unit",
   },
   // O agregado `invariants` NÃO tem teto de propósito: ele não roda a suíte, só
   // lê o desfecho de `needs`. O teto que denuncia a suíte crescendo vive na perna

@@ -57,12 +57,30 @@ permissions:
 # tests/unit/concorrencia-so-nos-jobs-pesados.test.ts.
 
 jobs:
-  verify:
+  # A suíte de unit em DUAS partes paralelas, e o check obrigatório `verify` é o
+  # agregador lá embaixo — mesmo padrão do `invariants`.
+  #
+  # Medido em 18/09/2026: o `verify` inteiro levava 712 s de mediana nos verdes e
+  # 13 de 40 rodadas morreram no teto de 15 min (`cancelled`, 915 s). No #1190,
+  # com as cercas já separadas, ainda 866 s — 34 s de folga. O tempo NÃO é teste
+  # lento: `tests` somava 229 s, `environment` (jsdom montado por arquivo) 910 s
+  # e `import` 415 s (run do head d8af02fee). Custo por arquivo se divide por
+  # arquivo: cada parte roda metade (`--shard`) e paga metade do jsdom.
+  #
+  # Os passos de arquivo inteiro (cercas, typecheck, lint e as três auditorias)
+  # rodam só na parte 1; o kit bash, na parte 2 — é o que equilibra as duas. O
+  # teto de 15 min FICA: ele denuncia a suíte crescendo.
+  verify-parte:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
-      group: ${{ github.workflow }}-verify-${{ github.event.pull_request.number || github.ref }}
+      group: ${{ github.workflow }}-verify-parte${{ matrix.parte }}-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      # Sem fail-fast: um vermelho numa parte não esconde o da outra.
+      fail-fast: false
+      matrix:
+        parte: [1, 2]
     steps:
       - uses: actions/checkout@v7
 
@@ -78,12 +96,15 @@ jobs:
       # minutos. Rodam UMA vez: o passo de unit abaixo pula o projeto `cercas`.
       # Seleção e medições: o bloco `projects` de vitest.config.ts.
       - name: Cercas estruturais
+        if: matrix.parte == 1
         run: pnpm cercas
 
       - name: Typecheck
+        if: matrix.parte == 1
         run: pnpm typecheck
 
       - name: Lint
+        if: matrix.parte == 1
         run: pnpm lint
 
       # Invariante 1 de docs/doctrine/restricao-de-canal.md: nenhuma feature
@@ -91,11 +112,13 @@ jobs:
       # porque é o CI que gateia PR — `gov:verify` não é invocado por nenhum
       # workflow, e mecanismo que não roda no gate não protege nada.
       - name: Channel provider leak
+        if: matrix.parte == 1
         run: pnpm lint:channels
 
       # Auditoria de autorização e papel: impede comparações diretas de papel
       # fora de lib/auth/ que contornem o gate de MFA e requireRole().
       - name: Role rank audit
+        if: matrix.parte == 1
         run: pnpm lint:role-rank
 
       # O merge LIMPO não chama hook nenhum: dois PRs com migrations de nomes
@@ -107,13 +130,15 @@ jobs:
       # não é invocado por workflow nenhum. Mesma régua do hook do contribuidor,
       # contra o REMOTO (e o script busca a base: o checkout daqui não traz origin/main).
       - name: Colisão de número de migration
+        if: matrix.parte == 1
         run: pnpm checar:colisao-de-migration
 
       # `--project produto` é o `pnpm test:unit` MENOS as cercas, que já
-      # rodaram acima: os dois passos juntos são a suíte inteira, uma vez só.
-      # Localmente o comando continua sendo `pnpm test:unit`, sem recorte.
-      - name: Unit tests
-        run: pnpm test:unit --project produto
+      # rodaram acima; `--shard` divide os arquivos entre as duas partes. Juntos
+      # são a suíte inteira, uma vez só. Localmente o comando continua sendo
+      # `pnpm test:unit`, sem recorte.
+      - name: Unit tests (parte ${{ matrix.parte }}/2)
+        run: pnpm test:unit --project produto --shard=${{ matrix.parte }}/2
 
 
       # Scripts do kit self-host num repo git descartável (docker/crontab
@@ -126,7 +151,25 @@ jobs:
       # escolher OpenRouter travava o instalador num laço, escolher OpenAI
       # deixava o .env pela metade — passaram por todos os checks verdes. 15s.
       - name: Kit self-host (bash)
+        if: matrix.parte == 2
         run: pnpm test:shell
+
+  # O NOME DESTE JOB É O CHECK OBRIGATÓRIO `verify` — o agregado das partes,
+  # mesmo padrão do `invariants` abaixo (a razão do nome está lá). Sem grupo de
+  # concurrency, de propósito: ver o cabeçalho deste arquivo.
+  verify:
+    if: always()
+    needs: [verify-parte]
+    runs-on: ubuntu-latest
+    # Nenhuma permissão: este job só lê o resultado de `needs`.
+    permissions: {}
+    steps:
+      - name: Falhar se qualquer parte não passou
+        run: |
+          echo "verify-parte: ${{ needs.verify-parte.result }}"
+          # `success` só com AS DUAS partes verdes; `skipped` e `cancelled`
+          # reprovam — parte que não rodou não mediu nada.
+          [ "${{ needs.verify-parte.result }}" = "success" ]
 
   # Gate de isolamento multi-tenant + invariantes de governança.
   # Job separado de propósito: roda em paralelo ao verify (não atrasa o feedback
