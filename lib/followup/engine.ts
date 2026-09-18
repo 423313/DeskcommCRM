@@ -27,6 +27,7 @@ import {
   ehConfirmacao,
   latestRepeatIndex,
   occupancyEventCount,
+  rechecksOciososDaAcao,
   actionTurnCompleted,
   processNode,
   repeatTakenFromEvents,
@@ -650,7 +651,10 @@ async function processEnrollment(
     }
     if (node.type === "action") {
       actionEnqueued = waitElapsed;
-      actionRecheckCount = occupancyEventCount(events, node.id);
+      // NÃO é `occupancyEventCount`: o dead-man mede ociosidade DESDE A ÚLTIMA
+      // prova de vida do turno, e um adiamento de janela é prova de vida. Ver
+      // `rechecksOciososDaAcao` / `EVENTO_ACAO_ADIADA` em node-handlers.ts.
+      actionRecheckCount = rechecksOciososDaAcao(events, node.id);
       actionCompleted = actionTurnCompleted(events, node.id);
     }
   }
