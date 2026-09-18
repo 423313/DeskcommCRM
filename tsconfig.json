@@ -44,8 +44,6 @@
     "scripts/**",
     "**/*.test.ts",
     "**/*.test.tsx",
-    "tests/**",
-    "vitest.config.ts",
-    "vitest.*.config.ts"
+    "tests/**"
   ]
 }
