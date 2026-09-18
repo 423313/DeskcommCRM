@@ -428,21 +428,34 @@ describe("GET /api/v1/system/version", () => {
     expect(body.data.run.superseded).toBe(false);
   });
 
-  it("terminou BEM e o host ainda não bateu: a tela já sabe, e o botão some", async () => {
+  it("terminou BEM e o host ainda não bateu: a tela diz que o pedido terminou — sem afirmar a versão nova", async () => {
     // O defeito: `run_result` com sucesso fecha o run e NÃO toca
     // `current_version` — quem escreve essa coluna é o heartbeat do host, de 5
     // em 5 minutos. Nessa janela `latest !== current` continuava verdadeiro e a
     // tela voltava do reinício oferecendo "Atualizar agora" para a versão que
-    // acabou de ser instalada. Quem clicou fazia tudo de novo.
+    // acabou de ser instalada. Para tapar isso a rota PROMOVIA o `to_version` do
+    // run a versão em execução — e é essa promoção que a issue 1101 mediu: com
+    // o host calado (agente morto, cron removido, token vencido), a tela
+    // anunciava `1.32.0` indefinidamente com o container rodando `1.23.0`.
+    //
+    // Agora a rota conta o que sabe: o pedido terminou (`just_updated`), a
+    // versão em execução continua sendo a última que o HOST confirmou, e o alvo
+    // viaja no run para a tela nomeá-lo como pedido. O botão continua escondido
+    // enquanto a janela vale — reoferecer era o outro defeito.
+    //
+    // Datas relativas ao relógio de parede desta suíte: o caso é "o host está
+    // calado desde antes do fim do run", e a janela de `sucessoJaInstalado` tem
+    // prazo — data fixa viraria caso vencido sozinha, com o tempo real.
+    const agora = Date.now();
     versionRow.current_version = "1.0.0";
     versionRow.latest_version = "1.1.0";
-    versionRow.updated_at = "2026-09-11T13:55:00.000Z";
+    versionRow.updated_at = new Date(agora - 6 * 60 * 1000).toISOString();
     runRow = {
       id: "77777777-7777-4777-8777-777777777777",
       status: "success",
       last_step: "banco",
-      dispatched_at: "2026-09-11T13:58:00.000Z",
-      finished_at: "2026-09-11T14:00:00.000Z",
+      dispatched_at: new Date(agora - 7 * 60 * 1000).toISOString(),
+      finished_at: new Date(agora - 5 * 60 * 1000).toISOString(),
       from_version: "1.0.0",
       to_version: "1.1.0",
       log_tail: "",
@@ -450,12 +463,46 @@ describe("GET /api/v1/system/version", () => {
     vi.mocked(loadAuthUser).mockResolvedValue(OWNER as never);
     const { GET } = await import("../version/route");
     const body = await (await GET(get())).json();
-    expect(body.data.current_version).toBe("1.1.0");
+    expect(
+      body.data.current_version,
+      "versão que o host não confirmou não vira versão instalada",
+    ).toBe("1.0.0");
+    expect(
+      body.data.run.to_version,
+      "o alvo continua viajando no run — é assim que a tela nomeia o pedido",
+    ).toBe("1.1.0");
     expect(
       body.data.update_available,
       "a tela voltaria oferecendo a versão que acabou de ser instalada",
     ).toBe(false);
     expect(body.data.just_updated).toBe(true);
+  });
+
+  it("passado o prazo da janela, o host calado volta a falar pela versão em execução", async () => {
+    // O outro lado da mesma regra, e o fim do defeito: a assunção da janela
+    // NÃO é eterna. Depois de `RUN_STALE_AFTER_MS` do fim do run sem nenhuma
+    // batida, quem afirma a versão instalada é a última que o host confirmou —
+    // e a versão-alvo volta a ser um pedido em aberto, com o botão de volta.
+    const agora = Date.now();
+    versionRow.current_version = "1.0.0";
+    versionRow.latest_version = "1.1.0";
+    versionRow.updated_at = new Date(agora - 40 * 60 * 1000).toISOString();
+    runRow = {
+      id: "77777777-7777-4777-8777-777777777777",
+      status: "success",
+      last_step: "banco",
+      dispatched_at: new Date(agora - 20 * 60 * 1000).toISOString(),
+      finished_at: new Date(agora - 16 * 60 * 1000).toISOString(),
+      from_version: "1.0.0",
+      to_version: "1.1.0",
+      log_tail: "",
+    };
+    vi.mocked(loadAuthUser).mockResolvedValue(OWNER as never);
+    const { GET } = await import("../version/route");
+    const body = await (await GET(get())).json();
+    expect(body.data.just_updated).toBe(false);
+    expect(body.data.current_version).toBe("1.0.0");
+    expect(body.data.update_available).toBe(true);
   });
 
   it("o host confirmou: a janela se fecha sozinha, sem ninguém limpar nada", async () => {
