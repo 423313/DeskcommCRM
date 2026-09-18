@@ -90,6 +90,14 @@ async function moverNo(page: Page, nodeId: string, x: number, y: number): Promis
   await page.mouse.move(x, y, { steps: 10 });
   await page.mouse.up();
   await page.waitForTimeout(150);
+  // O arrasto que não pega o nó não falha — só deixa o nó onde estava, e o
+  // defeito aparecia três passos depois, como "Fluxo publicado." ausente. Aqui
+  // ele aparece onde acontece.
+  const depois = await card.boundingBox();
+  expect(
+    depois && Math.abs(depois.x + depois.width / 2 - x) < 40 && Math.abs(depois.y + 12 - y) < 40,
+    `o nó ${nodeId} não chegou a (${x}, ${y}): está em ${JSON.stringify(depois)}`,
+  ).toBe(true);
 }
 
 async function ligar(page: Page, origem: string, destino: string, ramo?: string): Promise<void> {
