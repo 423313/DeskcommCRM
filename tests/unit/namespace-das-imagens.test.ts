@@ -56,6 +56,73 @@ const ENV_EXEMPLO = fs.readFileSync(path.join(RAIZ, ".env.hostgator.example"), "
 const NAMESPACE_DESTE_REPO = "ghcr.io/melgarafael";
 
 /**
+ * O dono de uma referência `<registry>/<dono>`.
+ *
+ * Nunca minusculiza: quem compara é que decide a caixa. O GHCR exige namespace
+ * minúsculo, e `GITHUB_REPOSITORY_OWNER` devolve o login com a caixa que o dono
+ * escolheu — um fork `Founders-BR` publicando CORRETAMENTE em `founders-br`
+ * precisa dos dois lados em minúsculas para não ficar vermelho estando certo.
+ */
+function donoDo(namespace: string): string {
+  const partes = namespace.split("/");
+  if (partes.length !== 2 || !partes[1]) {
+    throw new Error(`namespace precisa ter a forma <registry>/<dono>; recebido: ${namespace}`);
+  }
+  return partes[1];
+}
+
+/** O dono deste repositório, derivado da âncora — ele não é escrito duas vezes aqui. */
+const DONO_DESTE_REPO = donoDo(NAMESPACE_DESTE_REPO);
+
+/**
+ * A deferência à âncora EXTERNA: numa corrida interna a um fork, este arquivo
+ * não cobra o namespace. Decisão do dono do produto em 18/09/2026, opção (a) de
+ * `Decisão PRs - rafael/30 — O gate que reprova um fork correto (PR 1117).md`.
+ *
+ * O caso que ela conserta: quem forka e publica as PRÓPRIAS imagens tem `IMG_NS`
+ * apontando para o registro dele, e a âncora acima reprovava o CI desse fork
+ * pelo trabalho legítimo de apontar para o próprio registro. Medido: o PR #1130
+ * trocou `NAMESPACE_DESTE_REPO` para o dono do fork — num PR para CÁ — exatamente
+ * para o CI do fork passar. Um gate que empurra quem contribui a editar a própria
+ * guarda está cobrando a coisa errada.
+ *
+ * `GITHUB_REPOSITORY_OWNER` é a única referência que NÃO vem do checkout do PR; o
+ * raciocínio inteiro está em `namespace-das-imagens-runtime-owner.test.ts` (#1117),
+ * e é dele que este arquivo passa a depender em vez de decidir sozinho. Num PR
+ * para o upstream ela vale o dono DESTE repositório — inclusive quando o PR vem de
+ * um fork, porque o workflow roda no repositório de destino —, então contra nós o
+ * gate continua cobrando exatamente como antes.
+ *
+ * ── FORA do GitHub Actions ele CONTINUA cobrando, e isso foi medido ────────
+ *
+ * Lá não existe âncora externa. Um gate que vira no-op no laptop de todo mundo
+ * deixa de pegar o erro de digitação em `IMG_NS` — o outro defeito que este caso
+ * previne, e o mais provável dos dois. O custo dessa escolha para quem forka é
+ * ZERO, e não é opinião: um fork que publica imagens próprias segue o `RECADO_AO_FORK`
+ * abaixo, fica com os dois literais no mesmo dono, e `pnpm test:unit` na máquina
+ * dele passa. Vermelho local só sobra para quem trocou um dos dois e esqueceu o
+ * outro — e para esse a mensagem de falha diz, em três linhas, o que fazer.
+ */
+function donoConfiavelDoRunner(): string | null {
+  if (process.env.GITHUB_ACTIONS !== "true") return null;
+  const dono = process.env.GITHUB_REPOSITORY_OWNER?.trim();
+  if (!dono) {
+    // Falhar fechado na AÇÃO: sem a âncora externa não dá para dizer de quem é a
+    // corrida, e deferir por falta de medição seria desarmar o gate no escuro.
+    throw new Error(
+      "GITHUB_ACTIONS=true sem GITHUB_REPOSITORY_OWNER: sumiu a âncora externa do runner",
+    );
+  }
+  return dono;
+}
+
+function corridaInternaDeFork(): boolean {
+  const dono = donoConfiavelDoRunner();
+  if (dono === null) return false;
+  return dono.toLowerCase() !== DONO_DESTE_REPO.toLowerCase();
+}
+
+/**
  * Um fork que publica as próprias imagens muda `IMG_NS` — e precisa mudar junto
  * os outros dois arquivos que não têm de onde derivar. Esta frase é a que ele lê
  * quando a âncora fica vermelha, para não procurar defeito onde não há: ela diz
@@ -67,7 +134,8 @@ const RECADO_AO_FORK =
   "docker-compose.prod.yml, e as três *_IMAGE de .env.hostgator.example. Depois " +
   "atualize NAMESPACE_DESTE_REPO neste arquivo, e a URL do repositório em " +
   "install.sh, comecar.sh, _common.sh e nos três Dockerfiles (os casos abaixo " +
-  "prendem os seis). Todo o resto deriva de IMG_NS.";
+  "prendem os seis). Todo o resto deriva de IMG_NS. Se você está lendo isto no CI " +
+  "do seu próprio fork, houve engano nosso: lá este caso não cobra nada.";
 
 /*
  * ⚠️ ESTA FRASE JÁ FOI FALSA, e a falsidade custava caro a quem a seguia.
@@ -109,7 +177,15 @@ function reposDoKit(): string[] {
 }
 
 describe("o namespace das imagens tem uma âncora, e uma só", () => {
-  it("IMG_NS é o valor literal que este repositório publica", () => {
+  it("IMG_NS é o valor literal que este repositório publica", (ctx) => {
+    // `ctx.skip` e não um `return` silencioso: quem lê o resumo precisa ver que o
+    // caso NÃO foi medido nesta corrida. Um deferimento que se reporta como
+    // "passou" é a mesma família de erro que o arquivo inteiro combate.
+    ctx.skip(
+      corridaInternaDeFork(),
+      `corrida interna do fork de ${process.env.GITHUB_REPOSITORY_OWNER}: ` +
+        "o namespace das imagens é dele, não nosso",
+    );
     expect(imgNs(), RECADO_AO_FORK).toBe(NAMESPACE_DESTE_REPO);
   });
 
@@ -160,7 +236,13 @@ describe("o default do compose diz o mesmo que o kit", () => {
 
 describe("o kit aponta para o que o CI realmente publica", () => {
   it("os defaults de código e os labels de origem apontam para este repositório", () => {
-    const repo = "https://github.com/melgarafael/DeskcommCRM";
+    // A URL DERIVA do namespace, e não é economia de digitação: é o que prende a
+    // deferência lá de cima. Quem decide se a corrida é de um fork compara o dono
+    // do runner com o dono de `NAMESPACE_DESTE_REPO` — logo, um PR que editasse
+    // SÓ aquele literal faria a âncora se calar contra o upstream. Derivando, o
+    // mesmo commit fica vermelho AQUI, contra seis arquivos que ele não tocou.
+    // Medido nos dois sentidos, com a URL fixa e com ela derivada (ver cabeçalho).
+    const repo = `https://github.com/${DONO_DESTE_REPO}/DeskcommCRM`;
     for (const script of ["install.sh", "comecar.sh"]) {
       const texto = fs.readFileSync(path.join(RAIZ, "hostgator-setup-kit", script), "utf8");
       expect(texto).toContain(`REPO_URL="\${REPO_URL:-${repo}.git}"`);
