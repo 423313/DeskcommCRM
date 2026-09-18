@@ -300,8 +300,36 @@ jobs:
     # nomeava) e `navegacao` (239,2 s) vão as duas para a PARTE_2. Medido nos
     # logs deste run: a parte 1 gastou 978 s de Playwright em 138 casos
     # concluídos; tirar 438 s devolve ~7,3 min e põe o job perto de 22 min, com
-    # a parte 2 em ~23 min. Subir `timeout-minutes` não entra: o teto é o que
-    # denuncia o crescimento, e calá-lo devolveria o problema maior mais tarde.
+    # a parte 2 em ~23 min.
+    #
+    # ── ONDE A REGRA DO TETO MORA (correção de 18/09/2026) ─────────────────
+    #
+    # Esta linha dizia, por meses: "subir `timeout-minutes` não entra: o teto é
+    # o que denuncia o crescimento". A INTENÇÃO está certa e segue valendo. A
+    # FORMULAÇÃO estava errada, e ela **contradizia um mecanismo do próprio
+    # repositório** — o que é pior que não dizer nada, porque manda quem lê
+    # obedecer a prosa e desobedecer o gate.
+    #
+    # `tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts` guarda os tetos
+    # num mapa `TETOS` de `{minutos, razao}`: o teto **pode** subir, desde que a
+    # razão seja escrita e versionada ali. Catraca com justificativa, não
+    # proibição. E é o único lugar do repo onde essa decisão fica auditável.
+    #
+    # Então a regra em vigor é a do portão, e esta prosa só aponta para ele:
+    # quem mexer num teto troca o `razao` junto, com a medição nova, ou o portão
+    # reprova — que é exatamente o que ele deve fazer.
+    #
+    # Por que a distinção não é acadêmica: a razão em vigor para o `verify`
+    # ("p90 594s, máximo 609s em 51 verdes — folga de ~4m45") estava CERTA quando
+    # escrita e VENCEU. Medido em 18/09 sobre 39 rodadas, a folga de 4m45 virou
+    # 0,1 min e 13 rodadas morriam no teto. Uma regra que proíbe mexer no número
+    # também proíbe CORRIGIR a razão vencida — e aí o repo fica com uma
+    # afirmação de estado errada que ninguém tem autorização para consertar.
+    #
+    # Aqui, no `e2e`, o teto continua em 30 e a decisão é a mesma de sempre: o
+    # caminho é repartir (foi o que se fez), não afrouxar. A diferença é que
+    # agora isso está escrito como CONCLUSÃO desta medição, e não como proibição
+    # geral que o mecanismo do repo desmente.
 
     # ── A próxima alavanca, quando esta acabar ──────────────────────────────
     #
