@@ -259,6 +259,11 @@ export const AUDIT_ACTIONS = [
   "demanda.encerrada",
   "routing.worker_run",
   "attendant.heartbeat_swept",
+  // A PRIMEIRA batida de presença de um atendente: é ela que insere a linha e
+  // acorda o roteamento (`trg_routing_availability_changed`), efeito que outra
+  // pessoa sente. As batidas seguintes não auditam, pela mesma régua do cron
+  // que não faz nada (CLAUDE.md, Audit log).
+  "attendant.presence_started",
   "webhook.source_created",
   "webhook.source_updated",
   "webhook.source_deleted",
