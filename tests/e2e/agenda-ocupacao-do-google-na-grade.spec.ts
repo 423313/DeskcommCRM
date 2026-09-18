@@ -26,6 +26,22 @@ import { irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
 const blocoDoGoogle = (page: Page) => page.locator('[data-origem="google_sync"]');
 
 /**
+ * O mesmo bloco na visão MÊS, que é outro elemento — o chip, não o card.
+ *
+ * O chip também se chamava pelo id do evento (`chip-mes-<id>`), e pelo mesmo
+ * motivo deixou de existir: o `id` que ele carrega é DERIVADO (dono + fatia
+ * visível), não o do compromisso. A saída pela ORIGEM precisou de um atributo
+ * no chip — ele não a carregava, só o card da semana.
+ *
+ * O que NÃO serve aqui, e é o caminho tentador: apontar o chip pelo texto
+ * "Ocupado". É exatamente o que o `toContainText(/ocupado/i)` logo abaixo
+ * AFIRMA — selecionar por ele faria a asserção provar o próprio seletor, e o
+ * rótulo poderia sumir da tela com a spec verde.
+ */
+const chipDoGoogleNoMes = (page: Page) =>
+  page.locator('[data-testid^="chip-mes-"][data-origem="google_sync"]');
+
+/**
  * A OCUPAÇÃO QUE VEM DO GOOGLE APARECE NA GRADE — e continua lá depois do
  * refetch.
  *
@@ -290,10 +306,10 @@ test.describe("a ocupação do Google na grade da agenda", () => {
     // chegava, porque `naJanelaDoServidor` vira falso.
     await page.getByTestId("visao-mes").click();
     await expect(
-      page.getByTestId(`chip-mes-${eventoId}`),
+      chipDoGoogleNoMes(page),
       "a ocupação do Google não aparece na visão Mês",
     ).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId(`chip-mes-${eventoId}`)).toContainText(/ocupado/i);
+    await expect(chipDoGoogleNoMes(page)).toContainText(/ocupado/i);
     expect(
       await page.content(),
       "o título do evento do Google VAZOU na visão Mês",
@@ -335,7 +351,10 @@ test.describe("a ocupação do Google na grade da agenda", () => {
       } as never)
       .select("id")
       .single();
-    const eventoId = (evento as { id: string }).id;
+    // A sanidade da fixture, como nos dois casos irmãos: sem ela um insert que
+    // falhou em silêncio chega ao fim como "elemento não encontrado", que
+    // aponta para a tela em vez de apontar para o seed.
+    expect((evento as { id: string } | null)?.id, "o evento externo não ganhou id").toBeTruthy();
 
     await db
       .from("calendar_appointments")
@@ -364,7 +383,9 @@ test.describe("a ocupação do Google na grade da agenda", () => {
     await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 25_000 });
     await irParaASemanaSeguinte(page);
 
-    const doGoogle = page.getByTestId(`agendamento-${eventoId}`);
+    // A ocupação do Google pela ORIGEM; o NOSSO agendamento pelo id, que ele
+    // tem de verdade — e é esse contraste que o caso mede.
+    const doGoogle = blocoDoGoogle(page);
     const meu = page.getByTestId(`agendamento-${nossoId}`);
     await expect(doGoogle).toBeVisible({ timeout: 20_000 });
     await expect(meu, "o nosso agendamento sumiu da grade").toBeVisible({ timeout: 20_000 });
