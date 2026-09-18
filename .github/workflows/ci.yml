@@ -22,14 +22,72 @@ on:
 permissions:
   contents: read
 
+# ── Uma rodada por PR: o push novo cancela a antiga — POR JOB, nunca por workflow
+#
+# Medido em 18/09/2026, com a fila do Actions estrangulada: `ci/rebalancear-
+# partes-do-e2e` tinha 8 runs ativos em 2 heads distintos. Cada push deixava a
+# rodada anterior queimando runner até o fim, e o job do contribuidor esperava
+# atrás da medição de um commit que já não existe.
+#
+# O `concurrency:` mora em cada job PESADO (verify, invariants-majors, e2e-parte,
+# build-and-size, builds de imagem) e NUNCA no workflow nem nos agregadores
+# (`invariants`, `e2e`, `imagens-ok`). A primeira versão (PR #1183) pôs no
+# workflow, e o efeito medido foi o contrário do pretendido: o agregador roda com
+# `if: always()` — e `always()` roda MESMO na rodada cancelada —, então ele ficou
+# na fila esperando vaga e SEGURANDO O GRUPO. A rodada nova ficou `pending` por
+# 53 min (#1190: nasceu 16:28Z, o agregador da rodada velha fechou 17:21Z). No
+# nível de job, o agregador velho não pertence a grupo nenhum: roda em segundos,
+# lê `cancelled` e reprova o head superado, sem bloquear ninguém.
+#
+# Por que NÃO `if: ${{ !cancelled() }}` nos agregadores, que também destrava:
+# ele pula o agregador quando a rodada é cancelada, e `skipped` é check
+# SATISFEITO para a branch protection. Um cancelamento manual da rodada do head
+# ATUAL deixaria `invariants`/`e2e`/`imagens-ok` verdes sem ter medido nada.
+#
+#   pull_request   → cancela o job superado. Medição de head velho não vale nada.
+#   push na main   → não cancela (a rodada da main é a medição da árvore
+#                    integrada). Com grupo, um job PENDENTE da main é substituído
+#                    pelo mais novo — que roda e mede um superconjunto.
+#   tag            → nunca. É a publicação da versão.
+#
+# Exceção: publish-image também cancela no push da main (lá o produto é
+# `latest`, que a rodada seguinte sobrescreve) — o porquê está no arquivo dele.
+# O grupo é por PR (e não por branch) para reabrir um PR não colidir com o run
+# de outro que aponte para a mesma ref. Vigiado por
+# tests/unit/concorrencia-so-nos-jobs-pesados.test.ts.
+
 jobs:
-  verify:
-    runs-on: ubuntu-latest
+  # A suíte de unit em DUAS partes paralelas, e o check obrigatório `verify` é o
+  # agregador lá embaixo — mesmo padrão do `invariants`.
+  #
+  # Medido em 18/09/2026: o `verify` inteiro levava 712 s de mediana nos verdes e
+  # 13 de 40 rodadas morreram no teto de 15 min (`cancelled`, 915 s). No #1190,
+  # com as cercas já separadas, ainda 866 s — 34 s de folga. O tempo NÃO é teste
+  # lento: `tests` somava 229 s, `environment` (jsdom montado por arquivo) 910 s
+  # e `import` 415 s (run do head d8af02fee). Custo por arquivo se divide por
+  # arquivo: cada parte roda metade (`--shard`) e paga metade do jsdom.
+  #
+  # Os passos de arquivo inteiro (cercas, typecheck, lint e as três auditorias)
+  # rodam só na parte 1; o kit bash, na parte 2 — é o que equilibra as duas.
+  # É o conserto estrutural da issue #1185, que o #1184 deixou anotado: com ele,
+  # o teto volta de 25 para 15 (guarda de travamento) e o orçamento desce de 16
+  # para 12 — quem denuncia a suíte crescendo é o orçamento, por parte.
+  verify-parte:
     # Guarda de travamento. O DETECTOR de crescimento é o passo `Orçamento de
-    # tempo` no fim deste job; a medição que justifica o 25 está em `TETOS`, em
-    # tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts — que é quem cobra
-    # razão escrita, e é lá que ela não se perde.
-    timeout-minutes: 25
+    # tempo` no fim de cada parte; a medição que justifica o número está em
+    # `TETOS`, em tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts.
+    timeout-minutes: 15
+    # Executor próprio para trabalho nosso quando EXECUTOR_PROPRIO=ligado; o
+    # porquê e a guarda contra fork: comentário do e2e-parte no e2e.yml.
+    runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
+    concurrency:
+      group: ${{ github.workflow }}-verify-parte${{ matrix.parte }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      # Sem fail-fast: um vermelho numa parte não esconde o da outra.
+      fail-fast: false
+      matrix:
+        parte: [1, 2]
     steps:
       - uses: actions/checkout@v7
 
@@ -41,10 +99,22 @@ jobs:
         # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
         timeout-minutes: 5
 
+      # As guardas estruturais antes de tudo, no MESMO job (job novo disputaria
+      # vaga numa fila que já é o gargalo). Elas só leem arquivo — baseline ×
+      # cadeia, MANIFEST, varredura de anon, docs, workflows — e rodam sem jsdom
+      # em segundos; dentro da suíte longa, o mesmo vermelho chegava aos 7–12
+      # minutos. Rodam UMA vez: o passo de unit abaixo pula o projeto `cercas`.
+      # Seleção e medições: o bloco `projects` de vitest.config.ts.
+      - name: Cercas estruturais
+        if: matrix.parte == 1
+        run: pnpm cercas
+
       - name: Typecheck
+        if: matrix.parte == 1
         run: pnpm typecheck
 
       - name: Lint
+        if: matrix.parte == 1
         run: pnpm lint
 
       # Invariante 1 de docs/doctrine/restricao-de-canal.md: nenhuma feature
@@ -52,11 +122,13 @@ jobs:
       # porque é o CI que gateia PR — `gov:verify` não é invocado por nenhum
       # workflow, e mecanismo que não roda no gate não protege nada.
       - name: Channel provider leak
+        if: matrix.parte == 1
         run: pnpm lint:channels
 
       # Auditoria de autorização e papel: impede comparações diretas de papel
       # fora de lib/auth/ que contornem o gate de MFA e requireRole().
       - name: Role rank audit
+        if: matrix.parte == 1
         run: pnpm lint:role-rank
 
       # O merge LIMPO não chama hook nenhum: dois PRs com migrations de nomes
@@ -68,10 +140,15 @@ jobs:
       # não é invocado por workflow nenhum. Mesma régua do hook do contribuidor,
       # contra o REMOTO (e o script busca a base: o checkout daqui não traz origin/main).
       - name: Colisão de número de migration
+        if: matrix.parte == 1
         run: pnpm checar:colisao-de-migration
 
-      - name: Unit tests
-        run: pnpm test:unit
+      # `--project produto` é o `pnpm test:unit` MENOS as cercas, que já
+      # rodaram acima; `--shard` divide os arquivos entre as duas partes. Juntos
+      # são a suíte inteira, uma vez só. Localmente o comando continua sendo
+      # `pnpm test:unit`, sem recorte.
+      - name: Unit tests (parte ${{ matrix.parte }}/2)
+        run: pnpm test:unit --project produto --shard=${{ matrix.parte }}/2
 
 
       # Scripts do kit self-host num repo git descartável (docker/crontab
@@ -84,15 +161,19 @@ jobs:
       # escolher OpenRouter travava o instalador num laço, escolher OpenAI
       # deixava o .env pela metade — passaram por todos os checks verdes. 15s.
       - name: Kit self-host (bash)
+        if: matrix.parte == 2
         run: pnpm test:shell
 
       - name: Orçamento de tempo do verify
         if: always()
         env:
-          # Orçamento em MINUTOS. O pior sucesso medido é 14,9; 16 não nasce
-          # vermelho e ainda denuncia o próximo crescimento antes de ele virar
-          # `cancelled`. Gate que nasce vermelho não é gate: é dívida com alarme.
-          ORCAMENTO_MIN: "16"
+          # Orçamento em MINUTOS, POR PARTE. Era 16 com a suíte num job só
+          # (pior sucesso 14,9); a issue #1185 manda ele descer junto com a
+          # divisão — gate que não aperta depois do conserto fica cego. 12 é a
+          # estimativa de ~8,5 min da parte mais pesada (metade de 649 s de
+          # unit + typecheck + lint + cercas) com folga; NÃO MEDIDO até a
+          # primeira rodada das partes, e desce de novo quando for medido.
+          ORCAMENTO_MIN: "12"
         run: |
           set -euo pipefail
           if [ -z "${VERIFY_INICIO:-}" ]; then
@@ -100,14 +181,31 @@ jobs:
             exit 0
           fi
           decorrido=$(( ($(date +%s) - VERIFY_INICIO) / 60 ))
-          echo "verify: ${decorrido} min (orçamento ${ORCAMENTO_MIN} min, teto de travamento 25 min)"
+          echo "verify parte ${{ matrix.parte }}/2: ${decorrido} min (orçamento ${ORCAMENTO_MIN} min, teto de travamento 15 min)"
           if [ "$decorrido" -le "${ORCAMENTO_MIN}" ]; then
             exit 0
           fi
-          echo "::error::O verify levou ${decorrido} min contra um orçamento de ${ORCAMENTO_MIN} min."
+          echo "::error::A parte ${{ matrix.parte }}/2 do verify levou ${decorrido} min contra um orçamento de ${ORCAMENTO_MIN} min."
           echo "::error::Isto NÃO é defeito do seu PR: a suíte unitária cresceu. Em 18/09/2026, \`Unit tests\` já era 10,3 dos 13,2 min do job."
-          echo "::error::O conserto é repartir \`pnpm test:unit\`, não subir este número."
+          echo "::error::O conserto é mais uma parte em \`verify-parte\` (matrix + --shard), não subir este número."
           exit 1
+
+  # O NOME DESTE JOB É O CHECK OBRIGATÓRIO `verify` — o agregado das partes,
+  # mesmo padrão do `invariants` abaixo (a razão do nome está lá). Sem grupo de
+  # concurrency, de propósito: ver o cabeçalho deste arquivo.
+  verify:
+    if: always()
+    needs: [verify-parte]
+    runs-on: ubuntu-latest
+    # Nenhuma permissão: este job só lê o resultado de `needs`.
+    permissions: {}
+    steps:
+      - name: Falhar se qualquer parte não passou
+        run: |
+          echo "verify-parte: ${{ needs.verify-parte.result }}"
+          # `success` só com AS DUAS partes verdes; `skipped` e `cancelled`
+          # reprovam — parte que não rodou não mediu nada.
+          [ "${{ needs.verify-parte.result }}" = "success" ]
 
   # Gate de isolamento multi-tenant + invariantes de governança.
   # Job separado de propósito: roda em paralelo ao verify (não atrasa o feedback
@@ -127,13 +225,18 @@ jobs:
   # sendo o piso (`scripts/test-db.sh`) — quem guarda isso é
   # tests/unit/baseline-no-piso-do-postgres.test.ts.
   invariants-majors:
-    runs-on: ubuntu-latest
     # Eram 20 min quando a perna tinha UMA passada; agora ela tem duas
     # (`test:db` + `test:db:update`) e o teto acompanha. O 30 é DECLARADO, não
     # medido — não há Docker onde esta matriz foi escrita —, e existe para o
     # vermelho continuar falando de schema: mantido em 20, a perna morreria por
     # relógio no meio da segunda passada.
     timeout-minutes: 30
+    # Executor próprio para trabalho nosso quando EXECUTOR_PROPRIO=ligado; o
+    # porquê e a guarda contra fork: comentário do e2e-parte no e2e.yml.
+    runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
+    concurrency:
+      group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       # `false` e não o padrão (`true`): com `fail-fast`, a primeira major que
       # reprovasse CANCELARIA a outra e o relatório diria "cancelled" em vez de

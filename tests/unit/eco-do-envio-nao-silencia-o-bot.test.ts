@@ -300,3 +300,58 @@ describe("eco do próprio envio — a IA não se cala por ter falado", () => {
     expect(conversa.bot_silenced_until, "encurtou um handoff formal").toBe("infinity");
   });
 });
+
+/**
+ * O ECO DO ENVIO DA AUTOMAÇÃO (#652).
+ *
+ * Depois de o carimbo da automação virar `'automation'`, a linha do envio deixa
+ * de casar com o filtro de `sent_via` desta checagem — e o eco do próprio envio
+ * da regra passa a ser lido como "o atendente respondeu pelo celular". O
+ * desfecho é a IA pausada na conversa (a tela mostra "Automático pausado", um
+ * estado legítimo que ninguém investiga), causado por uma mensagem que o CRM
+ * mandou sozinho.
+ *
+ * A checagem e o carimbo são duas pontas do MESMO vocabulário: quem mexer numa
+ * sem a outra reabre `lib/waha/ingest-celular.test.ts:315` (a janela conhecida
+ * em que o eco duplica) do lado de dentro da regra.
+ */
+describe("eco do envio da automação — reconhecido como nosso (#652)", () => {
+  it("⭐ envio da AUTOMAÇÃO em voo + eco com o MESMO texto: o bot NÃO é pausado", async () => {
+    const { admin, conversa } = banco([emVoo({ sent_via: "automation" })]);
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(eco(TEXTO)), "req-652-1");
+
+    expect(
+      conversa.bot_silenced_until,
+      "a regra mandou uma mensagem e a IA ficou pausada por causa do eco dela mesma",
+    ).toBeNull();
+  });
+
+  it("o envio da automação já CONFIRMADO não vira uma segunda linha na conversa", async () => {
+    // O eco depois do ack: a linha do envio já tem `external_id`, o dedup por id
+    // casa e nada é inserido. É o caso normal (o eco chega segundos depois do
+    // envio voltar), e ele não pode depender do valor de `sent_via`.
+    const { admin, messages } = banco([
+      emVoo({ sent_via: "automation", external_id: eco(TEXTO).id, status: "sent" }),
+    ]);
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(eco(TEXTO)), "req-652-2");
+
+    expect(
+      messages.length,
+      "a frase da automação apareceu duas vezes na conversa",
+    ).toBe(1);
+  });
+
+  it("o eco da automação continua GRAVANDO a linha — o gate barra o silêncio, nunca o insert", async () => {
+    // A direção oposta, e ela é o desenho do #108: gravar é tolerante (perder
+    // mensagem é pior que duplicar), silenciar é estrito. O caso roda para a
+    // automação pela mesma razão que roda para a IA e para o composer.
+    const { admin, messages } = banco([emVoo({ sent_via: "automation" })]);
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(eco(TEXTO)), "req-652-3");
+
+    expect(messages.length).toBe(2);
+  });
+});
+
