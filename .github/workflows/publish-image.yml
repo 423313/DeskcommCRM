@@ -13,8 +13,9 @@ name: Publicar imagem Docker (GHCR)
 # invariante 1.
 #
 # `deskcomm-voice-agent` (módulo de voz SIP, #677) entrou pelo MESMO motivo,
-# antes mesmo de existir produção: docker-compose.voip.yml nasceu com o mesmo
-# `build:` sozinho que o worker teve — publicar a imagem aqui evita repetir o
+# antes mesmo de existir produção: o compose de voz nasceu com o mesmo
+# `build:` sozinho que o worker teve (hoje ele é o serviço `voice-agent`, profile
+# `telefonia`, em docker-compose.prod.yml) — publicar a imagem aqui evita repetir o
 # defeito no dia em que o módulo for instalado por um self-hoster de verdade.
 
 on:
