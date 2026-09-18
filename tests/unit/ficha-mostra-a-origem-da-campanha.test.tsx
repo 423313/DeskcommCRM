@@ -27,9 +27,16 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/hooks/contacts/useContact", () => ({
-  useContact: () => ({ isLoading: false, isError: false, data: { data: contato }, refetch: vi.fn() }),
+  useContact: () => ({
+    isLoading: false,
+    isError: false,
+    data: { data: contato },
+    refetch: vi.fn(),
+  }),
 }));
-vi.mock("@/hooks/pipelines/useDefaultPipeline", () => ({ useDefaultPipeline: () => ({ data: null }) }));
+vi.mock("@/hooks/pipelines/useDefaultPipeline", () => ({
+  useDefaultPipeline: () => ({ data: null }),
+}));
 vi.mock("@/components/contacts/TimelineView", () => ({ TimelineView: () => null }));
 vi.mock("@/components/contacts/EditContactDialog", () => ({ EditContactDialog: () => null }));
 vi.mock("@/components/contacts/AnonymizeDialog", () => ({ AnonymizeDialog: () => null }));
@@ -68,8 +75,13 @@ let contato: Contact = BASE;
 
 const FRASE = "A plataforma não informa o posicionamento de cada clique em anúncio.";
 
-function abrirFicha(sourceMetadata: Record<string, unknown>) {
-  contato = { ...BASE, source_metadata: sourceMetadata };
+/**
+ * `source` acompanha o caminho de entrada como a produção grava:
+ * `fn_estampar_atribuicao_de_anuncio` faz `source = p_platform` — `site` no
+ * link do site, o nome da plataforma no clique em anúncio.
+ */
+function abrirFicha(sourceMetadata: Record<string, unknown>, source = BASE.source) {
+  contato = { ...BASE, source, source_metadata: sourceMetadata };
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const comQuery = (ui: ReactNode) => <QueryClientProvider client={qc}>{ui}</QueryClientProvider>;
   render(comQuery(<ContactDetailClient contactId="c-1" />));
@@ -86,15 +98,18 @@ function valorDe(rotulo: string): string | null {
 
 describe("a ficha do contato mostra a origem da campanha", () => {
   it("link do site: a origem é a fonte da campanha, e os quatro níveis aparecem", () => {
-    abrirFicha({
-      ad_platform: "site",
-      origem: "site",
-      utm_source: "instagram",
-      utm_campaign: "black-friday",
-      utm_adset: "publico-quente",
-      utm_ad: "video-01",
-      utm_placement: "stories",
-    });
+    abrirFicha(
+      {
+        ad_platform: "site",
+        origem: "site",
+        utm_source: "instagram",
+        utm_campaign: "black-friday",
+        utm_adset: "publico-quente",
+        utm_ad: "video-01",
+        utm_placement: "stories",
+      },
+      "site",
+    );
 
     expect(valorDe("Origem")).toBe("instagram");
     expect(valorDe("Campanha")).toBe("black-friday");
@@ -105,7 +120,7 @@ describe("a ficha do contato mostra a origem da campanha", () => {
   });
 
   it("clique em anúncio sem posicionamento: a ficha diz que a plataforma não informa", () => {
-    abrirFicha({ ad_platform: "meta_ads", ad_title: "Promoção de verão" });
+    abrirFicha({ ad_platform: "meta_ads", ad_title: "Promoção de verão" }, "meta_ads");
 
     expect(valorDe("Anúncio")).toBe("Promoção de verão");
     expect(screen.getByText(FRASE)).toBeInTheDocument();

@@ -184,9 +184,9 @@ export function ContactDetailClient({ contactId }: Props) {
               {/*
                 A origem sai do `source_metadata` quando ele tem algo melhor a
                 dizer, e cai na coluna `source` quando não tem. Antes esta linha
-                lia só a coluna, e "whatsapp" era a resposta para todo mundo que
-                chegou pelo WhatsApp — inclusive para quem chegou por uma
-                campanha cujo `utm_source` já estava gravado ao lado.
+                lia só a coluna, e a resposta era `site` para quem chegou pelo
+                link do site, ou o nome da plataforma para quem clicou num
+                anúncio — mesmo com o `utm_source` da campanha gravado ao lado.
               */}
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Origem")}</dt>
