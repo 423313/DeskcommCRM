@@ -20,9 +20,7 @@ import { deriveVideoText } from "@/lib/messaging/media/video-derive";
 import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { donoDaInstalacaoAutorizou } from "@/lib/automation/destinos-internos-autorizados";
-import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
-import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
+import { motivoDaRecusaDeDestino } from "@/lib/automation/destinos-internos-autorizados";
 import { DETALHE_TECNICO } from "@/lib/event-log/aviso-de-evento-morto";
 
 export const MEDIA_DERIVE_CONSUMER_KEY = "media_derive_v1";
@@ -399,12 +397,12 @@ function buildDeriveDeps(
       return MARCADOR_NAO_LIDA;
     }
     if (baseUrlDaVisao) {
-      const recusa = await motivoDaRecusaDeDestino(baseUrlDaVisao);
+      const recusa = await motivoDaRecusaDeDestino(baseUrlDaVisao, "organizacao");
       if (recusa) {
         await avisarMidiaNaoLida(
           orgId,
           "imagem",
-          "o endereço configurado para a visão não foi aceito como destino, então não enviei a imagem nem a chave para lá — confira o endereço do provedor em Agente de IA e Provedores; se o serviço roda na rede interna, quem opera o servidor libera o endereço em IA_DESTINOS_INTERNOS_PERMITIDOS",
+          "o endereço configurado para a visão não foi aceito como destino, então não enviei a imagem nem a chave para lá — confira o endereço do provedor em Agente de IA e Provedores; endereço escolhido pela empresa não pode apontar para a rede interna do servidor",
           undefined,
           recusa,
         );
@@ -462,13 +460,13 @@ function buildDeriveDeps(
     transcribe: async (audio, mime) => {
       const enderecoDoServico = env.TRANSCRIPTION_BASE_URL;
       const recusa = enderecoDoServico
-        ? await motivoDaRecusaDeDestino(enderecoDoServico)
+        ? await motivoDaRecusaDeDestino(enderecoDoServico, "instalacao")
         : null;
       if (recusa) {
         await avisarMidiaNaoLida(
           orgId,
           "áudio",
-          "o endereço configurado para a transcrição não foi aceito como destino, então não enviei o áudio nem a chave para lá — confira TRANSCRIPTION_BASE_URL; se o serviço roda na rede interna, quem opera o servidor libera o endereço em IA_DESTINOS_INTERNOS_PERMITIDOS",
+          "o endereço configurado para a transcrição não foi aceito como destino, então não enviei o áudio nem a chave para lá — confira TRANSCRIPTION_BASE_URL; se o serviço roda na rede interna, quem administra a instalação libera o endereço em Administração › Destinos internos",
           undefined,
           recusa,
         );
@@ -541,38 +539,6 @@ export function textoDoAvisoDeMidiaNaoLida(aviso: {
       `Para resolver, ajuste o modelo desse ponto em Agente de IA → Provedores, ou cadastre a chave necessária em Credenciais.` +
       (aviso.detalheTecnico ? ` ${DETALHE_TECNICO} ${aviso.detalheTecnico}` : ""),
   };
-}
-
-/**
- * O motivo pelo qual um endereço configurado pela instalação não pode receber
- * a mídia — e a credencial da instalação que a acompanha —, ou null quando
- * pode.
- *
- * São os MESMOS dois guardas que as saídas de webhook já aplicam, na mesma
- * ordem: o textual julga de graça o que dá para julgar sem rede, e o de DNS
- * paga a resolução para julgar o IP por trás do nome.
- *
- * ═══ A lista do dono da instalação vem ANTES dos dois (decisão 22-d, #1004) ═══
- *
- * Quem paga a máquina pode declarar os endereços internos dele em
- * `IA_DESTINOS_INTERNOS_PERMITIDOS`; o que ele declarou não é recusa. A
- * consulta tem de ser aqui, e não dentro de cada guarda: o caso que criou a
- * válvula é um NOME interno, que o guarda textual deixa passar e o de DNS
- * recusaria depois de resolver — deixá-la depois de um deles não a alcançaria.
- *
- * ⚠️ Ela autoriza ENDEREÇO, nunca credencial. O degrau de quem é a chave
- * continua acima, em `chaveEhDaInstalacao`: endereço escolhido pela
- * ORGANIZAÇÃO com a chave da instalação segue recusado, declarado ou não.
- */
-async function motivoDaRecusaDeDestino(endereco: string): Promise<string | null> {
-  if (await donoDaInstalacaoAutorizou(endereco)) return null;
-  try {
-    assertSafeOutboundUrl(endereco);
-    await assertDestinoResolvidoSeguro(new URL(endereco).hostname);
-    return null;
-  } catch (err) {
-    return err instanceof Error ? err.message : String(err);
-  }
 }
 
 async function avisarMidiaNaoLida(

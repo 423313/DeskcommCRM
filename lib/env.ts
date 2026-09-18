@@ -203,12 +203,12 @@ const schema = z.object({
   TRANSCRIPTION_BASE_URL: z.string().optional().default(""),
   TRANSCRIPTION_MODEL: z.string().optional().default(""),
   // Destinos internos que o DONO DA INSTALAÇÃO autoriza (decisão 22-d, #1004):
-  // a lista de hosts e faixas CIDR que a saída pode alcançar mesmo estando na
-  // rede de dentro — `localhost`, `10.`, `192.168.`, `172.16/12` continuam
-  // recusados para quem não está aqui. É a alavanca de quem opera o servidor,
-  // o mesmo nível de confiança de configurar banco e chaves; a organização,
-  // sozinha, continua sem poder, porque não escreve neste arquivo. Vazio é
-  // ausente, como no resto do arquivo: sem a variável, nada passa. Quem lê é
+  // IPv4 e faixas CIDR IPv4 que a saída pode alcançar mesmo sendo rede interna,
+  // e só para destinos que a própria INSTALAÇÃO configura (nunca o endereço que
+  // uma organização escolhe). O BANCO ESTÁ ACIMA DISTO: a lista vive em
+  // `platform_settings.internal_destinations`, editada em
+  // `/admin/destinos-internos`; esta variável é só o PISO, que vale enquanto a
+  // tela nunca foi usada. Vazio é ausente: sem ela, nada passa. Quem lê é
   // `lib/automation/destinos-internos-autorizados.ts`.
   IA_DESTINOS_INTERNOS_PERMITIDOS: z.string().optional().default(""),
 

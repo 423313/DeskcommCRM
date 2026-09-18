@@ -1,9 +1,14 @@
 import { lookup } from "node:dns/promises";
+import { isIPv4, isIPv6 } from "node:net";
 
+import { assertDestinoResolvidoSeguro, ipEhEspecial } from "@/lib/automation/outbound-ip";
+import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * A LISTA DE DESTINOS INTERNOS DO DONO DA INSTALAÇÃO — decisão 22-d, #1004.
+ * OS DESTINOS INTERNOS QUE O DONO DA INSTALAÇÃO AUTORIZA — decisão 22-d, #1004.
  *
  * ═══ Por que ela existe ═══
  *
@@ -11,35 +16,37 @@ import { env } from "@/lib/env";
  * (`outbound-url.ts`) recusa `localhost`, `127.`, `10.`, `192.168.`, `169.254.`
  * e `172.16/12` pelo TEXTO da URL, e `assertDestinoResolvidoSeguro`
  * (`outbound-ip.ts`) recusa o mesmo pelo IP que o nome resolve. A proteção
- * continua de pé — o que faltava era a válvula de quem PAGA a máquina. Quem
- * roda um Whisper ou um gateway compatível na própria rede não tinha como
- * apontar a instalação para ele, e a tela de Provedores prometia o contrário
- * sem ressalva.
+ * continua de pé — o que faltava era a válvula de quem PAGA a máquina.
  *
- * Quem edita esta lista é quem opera o servidor: o `.env` é o mesmo lugar — e
- * o mesmo nível de confiança — do banco e das chaves. A ORGANIZAÇÃO, sozinha,
- * continua sem poder: ela não escreve neste arquivo, e o degrau que impede a
- * chave da INSTALAÇÃO de sair para um endereço escolhido por ela continua de
- * pé em `workers/media-derive-worker.ts`.
+ * ═══ As quatro regras da decisão, e onde cada uma mora ═══
+ *
+ * 1. **Onde a lista mora:** `platform_settings.internal_destinations`, editada
+ *    em `/admin/destinos-internos`. O `.env` (`IA_DESTINOS_INTERNOS_PERMITIDOS`)
+ *    é só o PISO — ver `destinosInternosAutorizados()`.
+ * 2. **Para quem ela vale:** só para destino configurado pela INSTALAÇÃO. Um
+ *    endereço escolhido por uma ORGANIZAÇÃO passa pela régua de sempre, esteja
+ *    ou não na lista — ver o parâmetro `origem` de `motivoDaRecusaDeDestino`.
+ * 3. **O que ela dispensa, e só isso:** a recusa por endereço interno. Esquema,
+ *    `https` em produção e literal IPv6 continuam sendo julgados pelo guarda de
+ *    sempre.
+ * 4. **Por endereço resolvido:** o que se compara com a lista é o IP que o
+ *    nome resolve. Por isso a lista só aceita IPv4 e faixa CIDR — um NOME na
+ *    lista não autorizaria nada, e só daria a impressão de que autoriza.
  *
  * ═══ Formato ═══
  *
- * Vírgula separa as entradas; espaço em volta é ignorado. Cada entrada é um
- * nome ou IPv4 exato (`coletor.interno.exemplo`, `10.1.2.7`) ou uma faixa CIDR
- * IPv4 (`10.1.0.0/16`). Não há curinga — `*` não casa nada —, e porta não
- * entra na entrada: quem recusa é o HOST, então a autorização também é por
- * host. Entrada que não seja uma dessas duas formas é IGNORADA, e ignorar é
- * RECUSAR (fail-closed): erro de digitação no `.env` não abre a rede por
- * acidente, só deixa de liberar o que o operador queria. Literal IPv6 fica de
- * fora, como já fica no guarda de URL (o ponytail de `outbound-url.ts` explica
- * por quê). Vazio é ausente, como no resto do `.env`: sem a variável, nada
- * passa.
+ * Cada entrada é um IPv4 exato (`10.1.2.7`) ou uma faixa CIDR IPv4
+ * (`10.1.0.0/16`). Entrada fora desse formato é IGNORADA na leitura, e ignorar
+ * é RECUSAR (fail-closed): erro de digitação no `.env` não abre a rede por
+ * acidente. A tela recusa a entrada inválida antes de gravar
+ * (`entradaDeDestinoValida`), então pelo banco ela não chega.
  */
 
-/** Uma entrada já validada da lista: um endereço exato ou uma faixa IPv4. */
-type Autorizacao =
-  | { tipo: "endereco"; endereco: string }
-  | { tipo: "faixa"; base: number; mascara: number };
+/** Quem escolheu o endereço — é isso que decide se a lista vale (regra 2). */
+export type OrigemDoDestino = "instalacao" | "organizacao";
+
+/** Uma entrada já validada da lista: uma faixa IPv4 (IP exato é `/32`). */
+type Faixa = { base: number; mascara: number };
 
 /** O IPv4 como inteiro sem sinal, ou null quando o texto não é um IPv4. */
 function ipv4ParaInteiro(texto: string): number | null {
@@ -55,104 +62,271 @@ function ipv4ParaInteiro(texto: string): number | null {
   return valor;
 }
 
-/** O host como o guarda o vê: minúsculo, sem ponto final. Null = não é host. */
-function normalizarHost(texto: string): string | null {
-  const cru = texto.trim().toLowerCase().replace(/\.$/, "");
-  if (!cru) return null;
-  if (cru.includes(":") || cru.includes("/") || cru.includes("*") || cru.includes(" ")) return null;
-  return cru;
+function faixaDaEntrada(entrada: string): Faixa | null {
+  const texto = entrada.trim();
+  const [rede, bits, ...resto] = texto.split("/");
+  if (resto.length > 0) return null;
+  const base = ipv4ParaInteiro(rede ?? "");
+  if (base === null) return null;
+  if (bits === undefined) return { base, mascara: 0xffffffff };
+  if (!/^\d{1,2}$/.test(bits) || Number(bits) > 32) return null;
+  const prefixo = Number(bits);
+  return { base, mascara: prefixo === 0 ? 0 : (0xffffffff << (32 - prefixo)) >>> 0 };
 }
 
-function dentroDaFaixa(ip: number, base: number, mascara: number): boolean {
-  return ((ip & mascara) >>> 0) === ((base & mascara) >>> 0);
+/** A tela usa isto para recusar a entrada ANTES de gravar. */
+export function entradaDeDestinoValida(entrada: string): boolean {
+  return faixaDaEntrada(entrada) !== null;
 }
 
-/**
- * As entradas que o `.env` declarou, já validadas — o que não passa no formato
- * simplesmente não entra. Lê o `env` a cada chamada de propósito: quem opera o
- * servidor muda a lista e reinicia o processo, e um cache aqui faria a válvula
- * mentir entre o reinício e a primeira leitura.
- */
-export function autorizacoesDeclaradas(
-  bruto: string = env.IA_DESTINOS_INTERNOS_PERMITIDOS,
-): Autorizacao[] {
-  const saida: Autorizacao[] = [];
-  for (const item of bruto.split(",")) {
-    const entrada = item.trim().toLowerCase();
-    if (!entrada) continue;
-
-    if (entrada.includes("/")) {
-      const [rede, bits] = entrada.split("/");
-      const base = ipv4ParaInteiro(rede ?? "");
-      const prefixo = Number(bits);
-      if (base === null || !/^\d{1,2}$/.test(bits ?? "") || prefixo > 32) continue;
-      saida.push({ tipo: "faixa", base, mascara: (0xffffffff << (32 - prefixo)) >>> 0 });
-      continue;
-    }
-
-    const endereco = normalizarHost(entrada);
-    if (endereco) saida.push({ tipo: "endereco", endereco });
+/** As entradas já validadas — o que não passa no formato simplesmente não entra. */
+export function faixasDeclaradas(entradas: readonly string[]): Faixa[] {
+  const saida: Faixa[] = [];
+  for (const entrada of entradas) {
+    const faixa = faixaDaEntrada(entrada);
+    if (faixa) saida.push(faixa);
   }
   return saida;
 }
 
-/**
- * A lista cobre este host/IP literal? É o passo de graça — não resolve nada.
- * Um literal IPv4 na lista é julgado contra as faixas também, porque é assim
- * que o operador lê `10.1.0.0/16`: "tudo o que está aí dentro, inclusive o IP
- * que eu escrever no endereço".
- */
-export function listaCobreHost(host: string, autorizacoes: Autorizacao[]): boolean {
-  const alvo = normalizarHost(host);
-  if (!alvo) return false;
-  const ipDoAlvo = ipv4ParaInteiro(alvo);
-  return autorizacoes.some((a) => {
-    if (a.tipo === "endereco") return a.endereco === alvo;
-    return ipDoAlvo !== null && dentroDaFaixa(ipDoAlvo, a.base, a.mascara);
-  });
+/** A lista cobre este IP? Só IPv4: a lista não tem forma de declarar IPv6. */
+export function listaCobreIp(ip: string, faixas: readonly Faixa[]): boolean {
+  const alvo = ipv4ParaInteiro(ip);
+  if (alvo === null) return false;
+  return faixas.some((f) => ((alvo & f.mascara) >>> 0) === ((f.base & f.mascara) >>> 0));
+}
+
+/** O `.env` como lista: vírgula separa, espaço em volta não conta, vazio é ausente. */
+export function entradasDoPiso(bruto: string = env.IA_DESTINOS_INTERNOS_PERMITIDOS): string[] {
+  return bruto
+    .split(",")
+    .map((e) => e.trim())
+    .filter((e) => e !== "");
+}
+
+// ─── Leitura: o banco é a fonte, o `.env` é o piso ──────────────────────────
+//
+// Mesmo desenho de `lib/auth/politica-de-cadastro.ts`, e pelos mesmos motivos:
+// o memo mora em `globalThis` (o Next instancia o módulo mais de uma vez no
+// mesmo processo), a leitura NUNCA lança, e quando o banco não responde vale o
+// último valor lido com sucesso — só sem ele é que o piso entra. Uma lista que
+// o dono ESVAZIOU pela tela não pode voltar a valer o `.env` durante um soluço
+// do banco.
+
+const TTL_MS = 30_000;
+
+type Memoria = { readonly lista: readonly string[]; readonly expiraEm: number };
+
+declare global {
+  var __memoDosDestinosInternos: Memoria | undefined;
+  var __ultimosDestinosInternosConhecidos: readonly string[] | undefined;
+  var __geracaoDosDestinosInternos: number | undefined;
+}
+
+/** Chamada por quem ESCREVE a lista. */
+export function invalidarDestinosInternos(): void {
+  globalThis.__geracaoDosDestinosInternos = (globalThis.__geracaoDosDestinosInternos ?? 0) + 1;
+  globalThis.__memoDosDestinosInternos = undefined;
+}
+
+/** Só para os testes: devolve o processo ao estado de quem nunca leu nada. */
+export function esquecerDestinosInternos(): void {
+  globalThis.__memoDosDestinosInternos = undefined;
+  globalThis.__ultimosDestinosInternosConhecidos = undefined;
+  globalThis.__geracaoDosDestinosInternos = undefined;
+}
+
+const avisado = new Set<string>();
+
+function avisarUmaVez(chave: string, contexto: Record<string, unknown>): void {
+  if (avisado.has(chave)) return;
+  avisado.add(chave);
+  logger.warn(
+    "destinos internos: não deu para ler do banco; vale o último valor conhecido ou o .env",
+    contexto,
+  );
 }
 
 /**
- * O DONO DA INSTALAÇÃO autorizou este endereço? Quando sim, a recusa de
- * destino não se aplica — a lista dele vem ANTES dos dois guardas, senão ela
- * não existiria para o caso que a criou: um NOME interno, que o guarda textual
- * deixa passar e o de DNS recusa depois de resolver.
- *
- * ═══ O que a lista autoriza — e o que ela NÃO autoriza ═══
- *
- * Autoriza ENDEREÇO, nunca credencial: quem chama continua obrigado a manter o
- * degrau de quem é a chave. Endereço que não dá para ler como URL, ou que não
- * casa entrada nenhuma, devolve `false` — e `false` é o caminho de sempre,
- * com a recusa de sempre.
- *
- * Faixa declarada + nome no endereço: só autoriza quando TODOS os IPs que o
- * nome resolve caem dentro de alguma faixa declarada. Um nome que resolve para
- * dentro e para fora ao mesmo tempo não passa — meia autorização num destino
- * é o jeito mais barato de furar uma autorização. Sem faixa na lista não há o
- * que resolver, e este passo não paga DNS nenhum.
+ * A lista em vigor, como o dono a escreveu. NUNCA LANÇA: é lida no caminho de
+ * uma saída de rede, e uma exceção aqui viraria mídia não lida sem motivo.
  */
-export async function donoDaInstalacaoAutorizou(endereco: string): Promise<boolean> {
-  const autorizacoes = autorizacoesDeclaradas();
-  if (autorizacoes.length === 0) return false;
+export async function destinosInternosAutorizados(): Promise<readonly string[]> {
+  const memoria = globalThis.__memoDosDestinosInternos;
+  if (memoria && memoria.expiraEm > Date.now()) return memoria.lista;
 
-  let host: string;
+  // Lida ANTES do await e conferida depois: sem isto, uma leitura em voo antes
+  // de `invalidarDestinosInternos()` reinstalaria o valor pré-escrita.
+  const geracao = globalThis.__geracaoDosDestinosInternos ?? 0;
+  const lido = await lerDoBanco();
+
+  if (lido !== null) globalThis.__ultimosDestinosInternosConhecidos = lido;
+  const valor = lido ?? globalThis.__ultimosDestinosInternosConhecidos ?? entradasDoPiso();
+
+  if ((globalThis.__geracaoDosDestinosInternos ?? 0) === geracao) {
+    globalThis.__memoDosDestinosInternos = { lista: valor, expiraEm: Date.now() + TTL_MS };
+  }
+  return valor;
+}
+
+/**
+ * `null` = o banco não falou. Linha ausente, ou coluna `null`, NÃO é isso: é
+ * "a tela nunca foi usada", e a resposta é o piso do `.env`, com sucesso.
+ */
+async function lerDoBanco(): Promise<readonly string[] | null> {
   try {
-    host = new URL(endereco).hostname;
+    const { data, error } = await createAdminClient()
+      .from("platform_settings")
+      .select("internal_destinations")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) {
+      avisarUmaVez(`leitura|${error.code ?? "?"}`, { codigo: error.code, detalhe: error.message });
+      return null;
+    }
+    const bruto = (data as { internal_destinations?: unknown } | null)?.internal_destinations;
+    if (bruto === null || bruto === undefined) return entradasDoPiso();
+    if (!Array.isArray(bruto) || !bruto.every((e) => typeof e === "string")) return null;
+    return bruto as string[];
+  } catch (erro) {
+    avisarUmaVez("leitura|excecao", { detalhe: erro instanceof Error ? erro.message : String(erro) });
+    return null;
+  }
+}
+
+/**
+ * O que a TELA precisa saber, e que `destinosInternosAutorizados()` não tem
+ * como dizer: a lista veio do banco, ou é o piso do `.env`?
+ *
+ * Os dois estados renderizam a mesma lista e significam coisas opostas — "o
+ * dono escreveu isto aqui" e "ninguém nunca abriu esta tela, e o que vale é o
+ * arquivo do servidor". Sem a distinção, o dono abre a tela, vê o conteúdo do
+ * `.env` e salva sem mudar nada, achando que confirmou; o que ele fez foi
+ * congelar o piso no banco e desligar o `.env` para sempre. É a mesma
+ * precedência que `/admin/google` explica com todas as letras na tela.
+ *
+ * `null` do banco não vira `null` aqui: leitura que FALHOU e leitura que
+ * respondeu "nunca configurado" são indistinguíveis para quem edita, e a tela
+ * de edição não é lugar de adivinhar — ela mostra o que vale agora.
+ */
+export async function estadoDosDestinosInternos(): Promise<{
+  readonly lista: readonly string[];
+  readonly vemDoPiso: boolean;
+  readonly piso: readonly string[];
+}> {
+  const piso = entradasDoPiso();
+  const doBanco = await lerListaGravada();
+  return doBanco === null
+    ? { lista: piso, vemDoPiso: true, piso }
+    : { lista: doBanco, vemDoPiso: false, piso };
+}
+
+/** `null` = não há lista gravada pela tela (coluna nula, linha ausente, ou banco mudo). */
+async function lerListaGravada(): Promise<readonly string[] | null> {
+  try {
+    const { data, error } = await createAdminClient()
+      .from("platform_settings")
+      .select("internal_destinations")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error) return null;
+    const bruto = (data as { internal_destinations?: unknown } | null)?.internal_destinations;
+    if (!Array.isArray(bruto) || !bruto.every((e) => typeof e === "string")) return null;
+    return bruto as string[];
   } catch {
+    return null;
+  }
+}
+
+/**
+ * Grava a lista. Devolve `false` quando o banco recusou — quem chama transforma
+ * isso em mensagem na tela, nunca em silêncio. Quem valida as entradas é quem
+ * chama; aqui só entra o que já passou por `entradaDeDestinoValida`.
+ */
+export async function gravarDestinosInternos(
+  lista: readonly string[],
+  atorUserId: string,
+): Promise<boolean> {
+  try {
+    const { error } = await createAdminClient()
+      .from("platform_settings")
+      .upsert(
+        { id: 1, internal_destinations: [...lista], updated_by: atorUserId },
+        { onConflict: "id" },
+      );
+    if (error) {
+      logger.error("destinos internos: não deu para gravar", {
+        codigo: error.code,
+        detalhe: error.message,
+      });
+      return false;
+    }
+    invalidarDestinosInternos();
+    return true;
+  } catch (erro) {
+    logger.error("destinos internos: gravação falhou", {
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
     return false;
   }
+}
 
-  if (listaCobreHost(host, autorizacoes)) return true;
+// ─── A régua de destino ─────────────────────────────────────────────────────
 
-  const faixas = autorizacoes.filter((a) => a.tipo === "faixa");
-  if (faixas.length === 0) return false;
-  // Literal já foi julgado acima: só nome tem o que resolver.
-  if (ipv4ParaInteiro(normalizarHost(host) ?? "") !== null) return false;
+/**
+ * Por que este endereço não pode ser destino — ou `null` quando pode.
+ *
+ * Sem lista, ou com endereço escolhido por uma ORGANIZAÇÃO, é exatamente a
+ * régua de antes: o guarda textual julga de graça o que dá para julgar sem
+ * rede, e o de DNS paga a resolução para julgar o IP por trás do nome.
+ *
+ * Com a lista e endereço da INSTALAÇÃO, muda uma coisa só: o IP interno que a
+ * lista cobre deixa de ser recusa. Tudo o mais continua como estava:
+ *
+ *   - o guarda textual roda inteiro, e só a recusa `private_host` é dispensada
+ *     — esquema, `https` em produção e literal IPv6 seguem recusando;
+ *   - TODO IP que o nome resolve é julgado. Interno e fora da lista é recusa,
+ *     mesmo que outro IP do mesmo nome esteja dentro: meia autorização num
+ *     destino é o jeito mais barato de furar uma autorização.
+ */
+export async function motivoDaRecusaDeDestino(
+  endereco: string,
+  origem: OrigemDoDestino,
+): Promise<string | null> {
+  const faixas = origem === "instalacao" ? faixasDeclaradas(await destinosInternosAutorizados()) : [];
 
-  const resolvidos = await lookup(host, { all: true }).catch(() => []);
-  if (resolvidos.length === 0) return false;
-  return resolvidos.every((r) => {
-    const ip = ipv4ParaInteiro(r.address);
-    return ip !== null && faixas.some((f) => dentroDaFaixa(ip, f.base, f.mascara));
-  });
+  try {
+    assertSafeOutboundUrl(endereco);
+  } catch (erro) {
+    const codigo = erro instanceof Error ? erro.message : String(erro);
+    if (!(faixas.length > 0 && codigo === "unsafe_url:private_host")) return codigo;
+  }
+
+  const host = new URL(endereco).hostname;
+  if (faixas.length === 0) {
+    try {
+      await assertDestinoResolvidoSeguro(host);
+      return null;
+    } catch (erro) {
+      return erro instanceof Error ? erro.message : String(erro);
+    }
+  }
+
+  let ips: string[];
+  if (isIPv4(host) || isIPv6(host)) {
+    ips = [host];
+  } else {
+    try {
+      ips = (await lookup(host, { all: true })).map((r) => r.address);
+    } catch {
+      return "unsafe_url:dns_failed";
+    }
+    if (ips.length === 0) return "unsafe_url:dns_empty";
+  }
+
+  for (const ip of ips) {
+    if (ipEhEspecial(ip) && !listaCobreIp(ip, faixas)) return "unsafe_url:private_ip";
+  }
+  return null;
 }
