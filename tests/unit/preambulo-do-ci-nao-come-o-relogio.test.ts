@@ -49,8 +49,38 @@ const ACTION = join(process.cwd(), ".github/actions/preparar-node/action.yml");
  */
 const TETOS: Record<string, { minutos: number; razao: string }> = {
   "ci.yml::verify": {
-    minutos: 15,
-    razao: "trabalho real medido: p90 594s, máximo 609s em 51 verdes — folga de ~4m45",
+    minutos: 25,
+    // A razão anterior era "p90 594s, máximo 609s em 51 verdes — folga de ~4m45",
+    // e ela VENCEU: a folga de 4m45 não existe mais. Medido em 18/09/2026 sobre
+    // 39 rodadas, o quadro é outro e o teto passou a ser o principal reprovador
+    // do repositório:
+    //
+    //     success     n=19   mediana 11,9 min   MÁX 14,9   ← 0,1 min de folga
+    //     cancelled   n=13   mediana 15,2 min   máx 15,3   ← TODAS no teto
+    //     failure     n= 7   mediana 10,2 min
+    //
+    // UM TERÇO das rodadas morria de relógio, e o desvio entre as 13 é de
+    // SEGUNDOS — variância zero não é humano cancelando, é o teto. Mas o GitHub
+    // entrega isso como `conclusion: cancelled`, idêntico a `gh run cancel`, e
+    // duas sessões gastaram horas caçando um cancelador que não existia.
+    //
+    // O tempo tem dono medido (12 rodadas verdes, passo a passo): `Unit tests`
+    // 10,3 dos 13,2 min — 78% do job. Typecheck 0,9 · lint 0,8 · kit 0,7.
+    //
+    // ⚠️ E SUBIR O TETO **NÃO** É O CONSERTO — é o torniquete. O conserto é
+    // repartir `pnpm test:unit` (issue #1185, com a régua escrita). O que impede
+    // este 25 de virar "CI que engorda em silêncio", que é o risco que esta
+    // catraca existe para barrar, é o passo `Orçamento de tempo do verify`, que
+    // reprova aos 16 min com `::error::` em português. O teto guarda travamento;
+    // o orçamento é que denuncia crescimento.
+    //
+    // QUANDO O #1185 ENTRAR, ESTE NÚMERO DESCE. Teto que sobe e não volta é
+    // exatamente o que a razão anterior protegia.
+    razao:
+      "13 de 39 rodadas morriam no teto de 15 (mediana 15,2; melhor sucesso 14,9 — 0,1 de folga), " +
+      "e chegavam como `cancelled`, indistinguível de cancelamento humano. O 25 é guarda de " +
+      "travamento; quem denuncia crescimento é o passo `Orçamento de tempo do verify` (16 min). " +
+      "Desce quando o #1185 repartir `test:unit`, que é 78% do job",
   },
   // O agregado `invariants` NÃO tem teto de propósito: ele não roda a suíte, só
   // lê o desfecho de `needs`. O teto que denuncia a suíte crescendo vive na perna
