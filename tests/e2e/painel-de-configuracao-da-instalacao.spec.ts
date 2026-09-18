@@ -1,0 +1,171 @@
+/**
+ * O PAINEL DE CONFIGURAÇÃO DA INSTALAÇÃO, PELA TELA — como o dono da VPS usa.
+ *
+ * O produto deste repositório é a experiência de quem instala numa VPS. Até a
+ * migration 0290, trocar a chave do serviço de e-mail exigia SSH no servidor,
+ * editar o `.env` e recriar os contêineres — o que, para o público do kit, é o
+ * mesmo que não ser configurável. Esta bateria prova a jornada inteira pela
+ * tela, na ordem em que a pessoa a vive.
+ *
+ * O QUE ELA PROVA:
+ *
+ *  1. **A porta existe e é ACHÁVEL.** Antes desta mudança só se chegava ao
+ *     painel digitando `/admin`, ou por um item chamado "Gerenciar organizações"
+ *     escondido no seletor de organização — que leva a UMA tela e não anuncia
+ *     que existe um painel. O caso 1 clica pelo caminho do usuário, sem navegar
+ *     por URL, porque "a tela existe" e "alguém chega nela" são coisas
+ *     diferentes, e a segunda é o produto.
+ *  2. **Sem a chave, a tela DIZ.** É o estado de TODA instalação nova: a
+ *     doutrina de QA do repo manda testar com os envs opcionais AUSENTES, "o
+ *     estado real de um primeiro deploy, e é onde moram os piores bugs de
+ *     primeira impressão".
+ *  3. **Configurar pela tela vale NA HORA**, sem reiniciar nada.
+ *  4. **O segredo NÃO volta ao navegador.** Só `••••` + 4 caracteres. Este caso
+ *     varre o HTML servido inteiro, não só o campo — um segredo vazado numa
+ *     propriedade de componente não aparece na tela e aparece no código-fonte.
+ *  5. **O que não dá para editar não finge que dá.** Nenhum campo de texto para
+ *     chave de partida; no lugar, o motivo em português. Controle decorativo é
+ *     pior que ausência, e este projeto já pagou isso (PR #295, cinco deles).
+ *  6. **Voltar ao padrão devolve a palavra ao arquivo de instalação.**
+ *  7. **A tela é usável de verdade:** sem rolagem horizontal, sem botão fora da
+ *     área visível, alvos de toque com tamanho mínimo. Medido por ferramenta
+ *     (`getBoundingClientRect`), nunca a olho — a olho tudo parece bem.
+ *
+ * O QUE ELA **NÃO** PROVA:
+ *
+ *  - Que o `worker` (o segundo processo) enxerga a troca. Ele lê do banco no
+ *    momento do uso (`lib/instalacao/config.ts`, sem memo, de propósito), mas
+ *    provar isso pela tela exigiria disparar um envio real e observar o
+ *    processo de segundo plano — fica para a bateria do worker.
+ *  - Que o e-mail chega. A chave gravada aqui é de teste; provar entrega exigiria
+ *    credencial real de provedor, que não vive em repositório público.
+ */
+import { expect, test } from "@playwright/test";
+
+import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+
+const CHAVE_DE_TESTE = "re_teste_do_painel_9f3a2b";
+
+test.describe("Painel de configuração da instalação", () => {
+  test("a porta do modo administrador é achável sem digitar URL", async ({ page }) => {
+    const creds = lerCreds();
+    await loginComoAdmin(page, creds);
+
+    // Caminho do usuário: menu do próprio usuário, no canto. Nada de goto().
+    await page.getByRole("button", { name: /menu do usuário/i }).click();
+
+    const porta = page.getByTestId("porta-modo-administrador");
+    await expect(porta, "a porta do modo administrador não aparece no menu").toBeVisible();
+    // O rótulo tem de ANUNCIAR o que é. "Gerenciar organizações" era o defeito.
+    await expect(porta).toContainText(/modo administrador/i);
+    await expect(porta).toContainText(/configurar este servidor/i);
+
+    await porta.click();
+    await expect(page).toHaveURL(/\/admin/);
+  });
+
+  test("a tela diz o que falta em vez de fingir que está pronto", async ({ page }) => {
+    const creds = lerCreds();
+    await loginComoAdmin(page, creds);
+    await page.goto("/admin/configuracao");
+
+    await expect(page.getByRole("heading", { name: /configuração da instalação/i })).toBeVisible();
+
+    // O grupo de e-mail vem PRIMEIRO: é o que falta em toda instalação nova.
+    const primeiroGrupo = page.getByRole("heading", { level: 2 }).first();
+    await expect(primeiroGrupo).toHaveText(/e-mail/i);
+
+    // A chave do serviço de e-mail existe na tela e declara a origem.
+    const campo = page.locator("#config-RESEND_API_KEY");
+    await expect(campo).toBeVisible();
+  });
+
+  test("configurar pela tela vale na hora, e o segredo não volta ao navegador", async ({ page }) => {
+    const creds = lerCreds();
+    await loginComoAdmin(page, creds);
+    await page.goto("/admin/configuracao");
+
+    const campo = page.locator("#config-RESEND_API_KEY");
+    await campo.fill(CHAVE_DE_TESTE);
+    await page.getByRole("button", { name: /^salvar$/i }).first().click();
+
+    // A confirmação é em português de gente, não "operação concluída".
+    await expect(page.getByText(/já está valendo/i)).toBeVisible({ timeout: 15_000 });
+
+    // Depois de salvar, a origem passa a dizer que foi definido AQUI.
+    await expect(
+      page.getByText(/definido aqui nesta tela/i).first(),
+      "a tela não passou a declarar a nova origem do valor",
+    ).toBeVisible();
+
+    // Os 4 últimos identificam a chave sem revelá-la.
+    await expect(page.getByText(new RegExp(`••••${CHAVE_DE_TESTE.slice(-4)}`))).toBeVisible();
+
+    // ⚠️ O CASO QUE MAIS IMPORTA: o segredo inteiro NÃO pode estar no documento.
+    // Varre o HTML servido, não o campo — um vazamento por propriedade de
+    // componente não aparece na tela e aparece no código-fonte da página.
+    const html = await page.content();
+    expect(
+      html.includes(CHAVE_DE_TESTE),
+      "o segredo inteiro apareceu no HTML da página — ele nunca deve voltar ao navegador",
+    ).toBe(false);
+  });
+
+  test("o que não dá para editar não oferece campo — mostra o motivo", async ({ page }) => {
+    const creds = lerCreds();
+    await loginComoAdmin(page, creds);
+    await page.goto("/admin/configuracao");
+
+    // Chave de partida: aparece (a pessoa precisa saber que existe), mas sem
+    // campo de texto. Campo que aceita e ignora é pior que campo ausente.
+    await expect(page.getByText(/endereço do banco de dados/i)).toBeVisible();
+    await expect(
+      page.locator("#config-NEXT_PUBLIC_SUPABASE_URL"),
+      "chave de partida não pode ter campo editável",
+    ).toHaveCount(0);
+
+    // E o porquê está a um clique, em português.
+    await page.getByRole("button", { name: /necessária para o sistema ligar/i }).first().click();
+    await expect(page.getByText(/trancar a chave dentro do cofre/i)).toBeVisible();
+  });
+
+  test("voltar ao padrão devolve a palavra ao arquivo de instalação", async ({ page }) => {
+    const creds = lerCreds();
+    await loginComoAdmin(page, creds);
+    await page.goto("/admin/configuracao");
+
+    const voltar = page.getByRole("button", { name: /voltar ao padrão/i }).first();
+    await expect(voltar, "sem valor definido na tela não há o que reverter").toBeVisible();
+    await voltar.click();
+
+    await expect(page.getByText(/voltou para o valor do arquivo de instalação/i)).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  test("a tela é usável: sem rolagem lateral, sem botão fora da vista", async ({ page }) => {
+    const creds = lerCreds();
+    await loginComoAdmin(page, creds);
+    await page.goto("/admin/configuracao");
+    await page.setViewportSize({ width: 390, height: 844 }); // celular comum
+
+    // Medido por ferramenta, nunca a olho: a olho tudo parece bem.
+    const rolagemLateral = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(rolagemLateral, "a tela força rolagem horizontal no celular").toBeLessThanOrEqual(1);
+
+    // Todo botão precisa caber na largura da tela e ter alvo de toque decente.
+    const problemas = await page.evaluate(() => {
+      const ruins: string[] = [];
+      for (const b of Array.from(document.querySelectorAll("button, a[href]"))) {
+        const r = b.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue; // fora do fluxo, não conta
+        if (r.right > window.innerWidth + 1) ruins.push(`fora da vista: ${b.textContent?.trim()}`);
+        if (r.height > 0 && r.height < 24) ruins.push(`alvo pequeno: ${b.textContent?.trim()}`);
+      }
+      return ruins;
+    });
+    expect(problemas, `controles com problema de layout: ${problemas.join(" | ")}`).toEqual([]);
+  });
+});
