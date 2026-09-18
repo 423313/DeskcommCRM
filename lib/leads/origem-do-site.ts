@@ -59,6 +59,13 @@ export const CHAVES_DE_UTM = [
   "utm_campaign",
   "utm_term",
   "utm_content",
+  // Os três níveis abaixo da campanha. Quem opera tráfego lê "de onde veio" em
+  // quatro níveis (campanha, conjunto, anúncio, posicionamento), e até aqui só o
+  // primeiro atravessava — os outros três caíam na mesma peneira que um valor
+  // colado à toa. Na Meta eles saem das macros dinâmicas de URL do anúncio.
+  "utm_adset",
+  "utm_ad",
+  "utm_placement",
   "gclid",
   "fbclid",
 ] as const;
@@ -74,10 +81,14 @@ const TAMANHO_MAXIMO_DO_VALOR = 200;
  * podia montar um link que a ingestão descartava em silêncio — um defeito que
  * não dói em teste nem em log, dói na atribuição de quem confiou no link.
  *
- * O número: o pior caso plausível são as sete chaves de campanha no teto de
- * valor (200 caracteres cada), que dão 2007 caracteres de base64url em ASCII e
+ * O número: o pior caso plausível são as dez chaves de campanha no teto de
+ * valor (200 caracteres cada), que dão 2868 caracteres de base64url em ASCII e
  * cabem aqui dentro. O que passar do teto é RECUSADO, nunca truncado — cortar a
  * UTM no meio gravaria uma campanha que ninguém montou.
+ *
+ * O teto NÃO subiu quando `utm_adset`, `utm_ad` e `utm_placement` entraram: as
+ * três chaves novas custam 861 caracteres, e a folga de 3000 já as cobria. Subir
+ * o número junto teria escondido que a folga existia.
  */
 export const TAMANHO_MAXIMO_DO_CODIGO = 3000;
 

@@ -14,10 +14,16 @@ on:
 permissions:
   contents: read
 
+# Cancelamento da rodada superada: por JOB (os pesados), nunca no workflow nem
+# no agregador — razão medida e a tabela por evento no cabeçalho do ci.yml.
+
 jobs:
   build-and-size:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: ${{ github.workflow }}-build-and-size-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
 

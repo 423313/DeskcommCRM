@@ -453,7 +453,8 @@ if [ ! -f "$EXEMPLO" ]; then
   # pulo silencioso é indistinguível de teste que passou.
   printf '  — pulado: %s não existe (kit fora do repositório)\n' "$EXEMPLO"
 else
-  GRAVA="$(grep -oE '^[[:space:]]*envq [A-Z_0-9]+' install.sh | awk '{print $2}' | sort -u)"
+  regua_quebrou=0
+  GRAVA="$(grep -oE '^[[:space:]]*envq [A-Z_0-9]+' install.sh | awk '{print $2}' | sort -u)" || regua_quebrou=1
   # VACUIDADE — a lista de escrita é a régua deste caso, e uma régua CURTA acusa
   # o inocente. `$GRAVA` sai de um pipeline de três estágios; quando a máquina
   # está saturada ele às vezes volta truncado, e o efeito não é um teste que
@@ -466,13 +467,20 @@ else
   # rodadas seguintes verdes. Conjuntos diferentes a cada vez é a assinatura de
   # régua truncada, não de defeito.
   #
-  # O piso não precisa acompanhar o crescimento do install.sh: ele separa
-  # "pipeline morreu no meio" de "lista completa", e qualquer valor bem abaixo do
-  # real serve. Para ver quantas há hoje:
+  # O piso fixo de 30 não pegava isso: 30 é menos da metade da régua real, e a
+  # truncagem parcial (67 → 40, digamos) passava por baixo da guarda e saía como
+  # acusação. Piso escolhido à mão ainda encolhe de valor relativo a cada chave
+  # nova, sem avisar. O que separa "régua truncada" de "chave faltando" é contar
+  # a MESMA régua duas vezes, por caminhos independentes: a lista acima e uma
+  # contagem direta no install.sh, de um processo só — sem pipeline, logo sem
+  # leitura parcial. Batendo, a régua está inteira e as acusações abaixo têm
+  # chão; divergindo, ou voltando o pipeline acima com status ≠ 0, o desfecho é
+  # INCONCLUSIVO — nunca "chave faltando". Para ver quantas há hoje:
   #   grep -cE '^[[:space:]]*envq [A-Z_0-9]+' hostgator-setup-kit/install.sh
   n_grava="$(printf '%s\n' "$GRAVA" | grep -c . || true)"
-  if [ "${n_grava:-0}" -lt 30 ]; then
-    printf '  ✗ a lista de escrita voltou com %s chave(s) — a régua está truncada, não o install.sh\n' "${n_grava:-0}"
+  n_real="$(grep -cE '^[[:space:]]*envq [A-Z_0-9]+' install.sh || true)"
+  if [ "${regua_quebrou:-0}" -ne 0 ] || [ "${n_grava:-0}" -ne "${n_real:-0}" ]; then
+    printf '  ✗ a lista de escrita voltou com %s chave(s) contra %s na contagem direta — a régua está truncada, não o install.sh\n' "${n_grava:-0}" "${n_real:-0}"
     printf '     (cenário INCONCLUSIVO: sem régua inteira, toda acusação abaixo seria falsa)\n'
     fail=1
     GRAVA=""

@@ -48,9 +48,25 @@ const ACTION = join(process.cwd(), ".github/actions/preparar-node/action.yml");
  * quem o sobe tem de dizer por que o trabalho real (não o preâmbulo) cresceu.
  */
 const TETOS: Record<string, { minutos: number; razao: string }> = {
-  "ci.yml::verify": {
+  // A suíte foi repartida (issue #1185): o teto vive nas PARTES, e o agregado
+  // `verify` não tem teto (mesma razão do `invariants`).
+  //
+  // A história do número, para ninguém subir de novo sem ler:
+  //   - 15 min com a suíte num job só: 13 de 39 rodadas morriam no teto
+  //     (mediana 15,2 · melhor sucesso 14,9), chegando como `cancelled`,
+  //     indistinguível de cancelamento humano.
+  //   - #1184 subiu para 25 como TORNIQUETE (guarda de travamento) e pôs o passo
+  //     `Orçamento de tempo do verify` a 16 min para denunciar crescimento — e
+  //     escreveu aqui: "QUANDO O #1185 ENTRAR, ESTE NÚMERO DESCE".
+  //   - #1190 repartiu (`verify-parte`, `--shard`): o número desceu para 15, e o
+  //     orçamento para 12. Medido antes da divisão, num verde do #1190: job
+  //     866 s, `Unit tests` 649 s — cada parte roda metade.
+  "ci.yml::verify-parte": {
     minutos: 15,
-    razao: "trabalho real medido: p90 594s, máximo 609s em 51 verdes — folga de ~4m45",
+    razao:
+      "a suíte foi repartida em partes (#1185 via #1190); cada parte roda metade de uma suíte " +
+      "que custava 649s de unit num verde. 15 é guarda de travamento; quem denuncia crescimento " +
+      "é o passo `Orçamento de tempo do verify` (12 min por parte)",
   },
   // O agregado `invariants` NÃO tem teto de propósito: ele não roda a suíte, só
   // lê o desfecho de `needs`. O teto que denuncia a suíte crescendo vive na perna
