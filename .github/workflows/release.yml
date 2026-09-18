@@ -231,44 +231,52 @@ jobs:
           # todo corte legítimo (o ato 1 sempre empurra `release/<versão>` deste
           # repositório). Derrubar aqui barraria release legítimo — o defeito da
           # #472 pelo outro lado.
-          if [ -n "${APP_SLUG}" ]; then
-            esperado="${APP_SLUG}[bot]"
-          else
-            esperado=""
-            echo "::warning::app-slug vazio: a guarda não pôde conferir o login do App e decide pelo head release/* do PR de origem."
-          fi
-
-          prs=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
-              --jq '.[] | "\(.user.login)\t\(.user.type)\t\(.head.ref)\t\(.head.repo.full_name // "-")\t\(.number)"' 2>/dev/null) || {
-            echo "::error::A guarda não conseguiu perguntar à API quem abriu o PR de origem de ${GITHUB_SHA:0:8} — sem prova de identidade a tag NÃO é criada."
-            exit 1
-          }
-
+          #
+          # Só pergunta quando há fragmento apagado. Num push comum para a main
+          # (zero removidos) a resposta não decide nada — o `elif` de baixo já
+          # sai com "não é corte" —, e perguntar mesmo assim fazia um soluço da
+          # API pintar de vermelho o workflow num merge que não corta nada.
           corte_do_app=nao
-          quem_abriu="(nenhum PR de origem: o commit foi empurrado direto para a main)"
-          primeiro=""
-          while IFS="$(printf '\t')" read -r login tipo ref repo numero; do
-            [ -n "${numero:-}" ] || continue
-            descricao="${login} (${tipo}) — PR #${numero}, head ${ref} em ${repo}"
-            [ -n "${primeiro}" ] || primeiro="${descricao}"
-            if [ -n "${esperado}" ] && [ "${login}" = "${esperado}" ] && [ "${tipo}" = "Bot" ]; then
-              # Prova 1: o PR de origem foi aberto pelo bot do App que este
-              # workflow usa. Só quem tem a chave do App se apresenta assim.
-              corte_do_app=sim
-              quem_abriu="${descricao}"
-            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-              case "${ref}" in
-                # Prova 2 (a alternativa da issue #478): head `release/*` do
-                # PRÓPRIO repositório de cima — o caminho que o ato 1 daqui
-                # abre. Fork não vale: aí `repo` seria o fork.
-                release/*)
-                  corte_do_app=sim
-                  quem_abriu="${descricao}"
-                  ;;
-              esac
+          quem_abriu="(não consultado: este push não apagou fragmento)"
+          if [ "${removidos}" -gt 0 ]; then
+            if [ -n "${APP_SLUG}" ]; then
+              esperado="${APP_SLUG}[bot]"
+            else
+              esperado=""
+              echo "::warning::app-slug vazio: a guarda não pôde conferir o login do App e decide pelo head release/* do PR de origem."
             fi
-          done <<< "${prs}"
-          [ "${corte_do_app}" = "sim" ] || quem_abriu="${primeiro:-${quem_abriu}}"
+
+            prs=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+                --jq '.[] | "\(.user.login)\t\(.user.type)\t\(.head.ref)\t\(.head.repo.full_name // "-")\t\(.number)"' 2>/dev/null) || {
+              echo "::error::A guarda não conseguiu perguntar à API quem abriu o PR de origem de ${GITHUB_SHA:0:8} — sem prova de identidade a tag NÃO é criada."
+              exit 1
+            }
+
+            quem_abriu="(nenhum PR de origem: o commit foi empurrado direto para a main)"
+            primeiro=""
+            while IFS="$(printf '\t')" read -r login tipo ref repo numero; do
+              [ -n "${numero:-}" ] || continue
+              descricao="${login} (${tipo}) — PR #${numero}, head ${ref} em ${repo}"
+              [ -n "${primeiro}" ] || primeiro="${descricao}"
+              if [ -n "${esperado}" ] && [ "${login}" = "${esperado}" ] && [ "${tipo}" = "Bot" ]; then
+                # Prova 1: o PR de origem foi aberto pelo bot do App que este
+                # workflow usa. Só quem tem a chave do App se apresenta assim.
+                corte_do_app=sim
+                quem_abriu="${descricao}"
+              elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+                case "${ref}" in
+                  # Prova 2 (a alternativa da issue #478): head `release/*` do
+                  # PRÓPRIO repositório de cima — o caminho que o ato 1 daqui
+                  # abre. Fork não vale: aí `repo` seria o fork.
+                  release/*)
+                    corte_do_app=sim
+                    quem_abriu="${descricao}"
+                    ;;
+                esac
+              fi
+            done <<< "${prs}"
+            [ "${corte_do_app}" = "sim" ] || quem_abriu="${primeiro:-${quem_abriu}}"
+          fi
 
           # ─── O QUE SOBROU, E POR QUE ISSO IMPORTA ─────────────────────────
           #

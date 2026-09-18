@@ -134,7 +134,13 @@ function montarStub(dir: string) {
   const caminho = join(dir, "gh");
   writeFileSync(
     caminho,
-    ['#!/usr/bin/env bash', '[ -n "${GH_RESPOSTA}" ] && printf \'%s\\n\' "${GH_RESPOSTA}"', "exit 0", ""].join("\n"),
+    [
+      '#!/usr/bin/env bash',
+      '[ -n "${GH_FALHA}" ] && exit 1',
+      '[ -n "${GH_RESPOSTA}" ] && printf \'%s\\n\' "${GH_RESPOSTA}"',
+      "exit 0",
+      "",
+    ].join("\n"),
   );
   chmodSync(caminho, 0o755);
 }
@@ -210,7 +216,7 @@ interface Resultado {
  * recusa passaria a valer pelo motivo errado. Aqui o `status` é afirmado, e a
  * saída é lida.
  */
-function rodarGuarda(sha: string, respostaDaApi: string): Resultado {
+function rodarGuarda(sha: string, respostaDaApi: string, opts: { apiFalha?: boolean } = {}): Resultado {
   const original = bashDaGuarda();
 
   // A versão vem do CHANGELOG por um script de TS que não existe no repo
@@ -235,6 +241,7 @@ function rodarGuarda(sha: string, respostaDaApi: string): Resultado {
     ...process.env,
     PATH: `${stub}:${process.env.PATH}`,
     GH_RESPOSTA: respostaDaApi,
+    GH_FALHA: opts.apiFalha ? "1" : "",
     GITHUB_OUTPUT: saidaDoGithub,
     GITHUB_REPOSITORY: REPO_DE_CIMA,
     GITHUB_SHA: sha,
@@ -355,5 +362,24 @@ describe("a borda do --diff-filter=D: renomear fragmento não é consumir fragme
     const r = rodarGuarda(renomeado, RESPOSTA_DE_GENTE);
     expect(r.status, `a guarda derrubou o passo: ${r.saida}`).toBe(0);
     expect(r.decisao).toBe("nao");
+  });
+});
+
+describe("a API só é consultada quando há fragmento apagado", () => {
+  it("push comum (zero removidos) com a API fora do ar NÃO pinta o workflow de vermelho", () => {
+    // Antes, a pergunta à API rodava em todo push para a main e saía `exit 1`
+    // quando a API soluçava — num merge que não corta nada.
+    fragmento("a.md");
+    const comum = commit("feat: um PR comum, com o seu fragmento");
+    const r = rodarGuarda(comum, "", { apiFalha: true });
+    expect(r.status, `a guarda derrubou o passo: ${r.saida}`).toBe(0);
+    expect(r.decisao).toBe("nao");
+  });
+
+  it("com fragmento apagado e a API fora do ar, a guarda RECUSA (controle: a falha ainda fecha)", () => {
+    const corte = corteDeMentira("release/9.9.9", "Fulano de Tal");
+    const r = rodarGuarda(corte, RESPOSTA_DO_APP, { apiFalha: true });
+    expect(r.status, "a guarda tem de sair com 1, e não morrer por outro motivo").toBe(1);
+    expect(r.saida).toMatch(/não conseguiu perguntar à API/);
   });
 });
