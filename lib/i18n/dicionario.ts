@@ -4663,6 +4663,12 @@ export const DICIONARIO: Traducoes = {
   "Ficha do contato": { es: "Ficha del contacto" },
   Hoje: { es: "Hoy" },
   Ontem: { es: "Ayer" },
+  // A semana em lista e a barra de atalhos do celular.
+  livre: { es: "libre" },
+  "1 agendamento": { es: "1 cita" },
+  agendamentos: { es: "citas" },
+  Atalhos: { es: "Atajos" },
+  "Menu": { es: "Menú" },
   "Erro ao carregar mensagens.": { es: "Error al cargar los mensajes." },
   "Nenhuma mensagem nesta conversa.": { es: "No hay mensajes en esta conversación." },
   "Carregar mais antigas": { es: "Cargar más antiguas" },

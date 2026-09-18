@@ -34,6 +34,7 @@ import {
   useRemarcarAgendamento,
 } from "@/hooks/agenda/useRemarcarAgendamento";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
+import { usePublicarAcoesDaBarra } from "@/components/shell/acoes-da-barra-inferior";
 import { CalendarPlus, CaretLeft, CaretRight } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +70,8 @@ const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
  * imports sem querer.
  */
 export function AgendaClient({
+  visaoInicial,
+  dataInicial,
   fusoDeApresentacao,
   googleConfigurado,
   contaConectada,
@@ -79,6 +82,10 @@ export function AgendaClient({
   agendamentosIniciais,
   podeMarcar,
 }: {
+  /** Da URL (`?visao=`). `null` = não pediram nada, e a largura decide. */
+  visaoInicial: VisaoDaAgenda | null;
+  /** Da URL (`?data=`), no formato `yyyy-MM-dd`. */
+  dataInicial: string | null;
   fusoDeApresentacao: string | null;
   googleConfigurado: boolean;
   contaConectada?: string | null;
@@ -184,29 +191,54 @@ export function AgendaClient({
   // uma. Achado escrevendo a spec de marcar, não lendo o código.
   const [tipoId, setTipoId] = React.useState<string | null>(() => tiposIniciais[0]?.id ?? null);
   const tipo = tiposIniciais.find((t) => t.id === tipoId) ?? tiposIniciais[0] ?? null;
-  const [visao, setVisao] = React.useState<VisaoDaAgenda>("semana");
+  const [visao, setVisao] = React.useState<VisaoDaAgenda>(visaoInicial ?? "semana");
   /**
    * No CELULAR a agenda abre no DIA, não na semana.
    *
-   * Duas razões, e a segunda é consequência da primeira. A semana em 360px é
-   * ilegível — por isso a grade esconde as outras colunas abaixo de `md`. Mas o
-   * passo de navegação da semana é de SETE dias: quem visse um dia só e tocasse
-   * em avançar pularia a semana inteira, sem alcançar os outros seis. Abrindo no
-   * dia, o passo é 1 e cada toque anda um dia.
+   * A semana em 360px é ilegível, e o passo de navegação da semana é de SETE
+   * dias: quem visse um dia só e tocasse em avançar pularia a semana inteira.
+   * Abrindo no dia, cada toque anda um dia.
    *
    * Em `useEffect`, e não no estado inicial, porque `window` não existe no
    * servidor: decidir a visão na primeira renderização faria o HTML do servidor
-   * discordar do cliente. Roda uma vez, na montagem, então não desfaz escolha
-   * de quem trocou a visão depois.
+   * discordar do cliente.
+   *
+   * ⚠️ E só quando a URL NÃO PEDIU nada. Desde que a visão vive em `?visao=`,
+   * um link de semana mandado para o celular era desfeito pela largura antes de
+   * a pessoa ver a semana — o link parecia quebrado, e o defeito seria mudo.
    */
   React.useEffect(() => {
+    if (visaoInicial) return;
     // O aviso da regra é justo em geral; aqui trocar a visão É o ponto do efeito.
     // A largura só existe no cliente, e decidir antes divergiria da hidratação.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (window.matchMedia("(max-width: 767px)").matches) setVisao("dia");
-  }, []);
+  }, [visaoInicial]);
   const [isolada, setIsolada] = React.useState<string | null>(null);
-  const [ancora, setAncora] = React.useState(() => new Date());
+  const [ancora, setAncora] = React.useState(() =>
+    dataInicial ? new Date(`${dataInicial}T12:00:00`) : new Date(),
+  );
+
+  /**
+   * ESPELHA visão e âncora na URL, sem recarregar a rota.
+   *
+   * `replace` e não `push`: quem anda cinco dias não quer cinco toques de
+   * voltar para sair da agenda. O que a URL compra é o RECARREGAR não perder o
+   * lugar e o link de um dia ser compartilhável — e, no celular, o gesto de
+   * voltar desfazer a última troca em vez de sair da tela.
+   *
+   * `window.history.replaceState` em vez de `router.replace`: o `replace` do
+   * Next refaz o RSC a cada tecla de navegação de data, e a grade piscaria a
+   * cada toque na seta. A URL aqui é registro do estado, não pedido de dado —
+   * quem busca agendamento é o React Query, pela janela que já muda com a
+   * âncora.
+   */
+  React.useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("visao", visao);
+    url.searchParams.set("data", format(ancora, "yyyy-MM-dd"));
+    window.history.replaceState(null, "", url.toString());
+  }, [visao, ancora]);
 
   // AS PESSOAS SÃO REAIS: vêm de `/api/v1/team`, com a trilha de cor derivada do
   // `user_id`. Até esta linha o filtro por pessoa era invisível na tela do
@@ -353,12 +385,51 @@ export function AgendaClient({
         ? `${format(startOfWeek(ancora, { weekStartsOn: 0 }), t("d 'de' MMM"), { locale: localeDaData })} — ${format(addDays(startOfWeek(ancora, { weekStartsOn: 0 }), 6), t("d 'de' MMM"), { locale: localeDaData })}`
         : format(ancora, t("EEEE, d 'de' MMMM"), { locale: localeDaData });
 
+  /**
+   * AS AÇÕES DA TELA NA BARRA DE ATALHOS DO CELULAR.
+   *
+   * No sistema anterior a fileira de baixo em `/agenda` era Menu · Mês · Criar,
+   * e é o que se reproduz aqui: no celular a barra superior fica com o filtro e
+   * a data, e o que a pessoa faz o tempo todo — voltar para hoje, trocar de
+   * visão, marcar — desce para onde o polegar alcança.
+   *
+   * "Visão" cicla dia › semana › mês em vez de abrir menu: são três estados, e
+   * um menu para três opções custa dois toques onde um basta.
+   */
+  const proximaVisao: VisaoDaAgenda =
+    visao === "dia" ? "semana" : visao === "semana" ? "mes" : "dia";
+  usePublicarAcoesDaBarra([
+    { id: "hoje", rotulo: "Hoje", icone: "CalendarDots", aoTocar: () => setAncora(new Date()) },
+    {
+      id: "visao",
+      // O rótulo é o DESTINO, não o estado atual: um botão que diz "Dia" quando
+      // já se está no dia parece marcador de posição, e ninguém o toca.
+      rotulo: proximaVisao === "dia" ? "Dia" : proximaVisao === "semana" ? "Semana" : "Mês",
+      icone: "CalendarBlank",
+      aoTocar: () => setVisao(proximaVisao),
+    },
+    ...(podeMarcar && tipo
+      ? [
+          {
+            id: "novo",
+            rotulo: "Novo",
+            icone: "Plus",
+            tom: "acao" as const,
+            aoTocar: abrirMarcacao,
+          },
+        ]
+      : []),
+  ]);
+
   return (
     <div
       data-testid="tela-agenda"
       data-fonte={agendamentosIniciais.length > 0 ? "api" : "api-sem-dado"}
       data-fuso={fusoDeApresentacao ?? "organizacao"}
-      className="flex h-full flex-col gap-4 p-6"
+      // Sem padding próprio: o `<main>` do shell já dá o dele (`p-4` no celular,
+      // `p-6` no desktop). Os dois somados tiravam 48px de cada lado numa tela
+      // de 390px — quase um quarto da largura, gasto em margem.
+      className="flex h-full flex-col gap-4"
     >
       {/*
         Em Suspense porque `useSearchParams` obriga: sem a fronteira, o Next
@@ -370,13 +441,20 @@ export function AgendaClient({
         <EntradaDaAgenda onContext={onContext} />
       </React.Suspense>
 
-      <CartaoDaConexaoGoogle
-        configurado={googleConfigurado}
-        falta={faltaNoGoogle}
-        linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
-        contaConectada={contaConectada}
-        enderecoDeRetorno={enderecoDeRetorno}
-      />
+      {/*
+        O aviso de conexão do Google desce para o FIM no celular. Ele é
+        configuração — importante uma vez, e ocupava um terço da primeira tela
+        todos os dias, empurrando a agenda para baixo da dobra.
+      */}
+      <div className="max-md:order-3">
+        <CartaoDaConexaoGoogle
+          configurado={googleConfigurado}
+          falta={faltaNoGoogle}
+          linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
+          contaConectada={contaConectada}
+          enderecoDeRetorno={enderecoDeRetorno}
+        />
+      </div>
 
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
@@ -904,7 +982,9 @@ export function AgendaClient({
         agendamentos={agendamentosAcionaveis}
         pessoas={pessoas}
         agora={new Date()}
-        className="max-h-[320px]"
+        // No celular o histórico vai para DEPOIS da agenda (`order`): ele é
+        // consulta, e a agenda é o que a pessoa abriu a tela para ver.
+        className="max-h-[320px] max-md:order-2 max-md:max-h-[220px]"
         // ⚠️ ESTAS DUAS PROPS FALTAVAM, e a ausência tinha cara de permissão.
         // `HistoricoDaAgenda` usa `disabled={!onRemarcar}`; sem elas os botões
         // nasciam cinzas em toda linha, de toda organização — e o `title` dizia
@@ -986,6 +1066,12 @@ export function AgendaClient({
         tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin } : null}
         onEscolherTipo={setTipoId}
+        // No celular a semana é uma lista de dias, e tocar no dia abre a grade
+        // dele — o gesto que todo calendário de celular ensina.
+        onEscolherDia={(d) => {
+          setAncora(d);
+          setVisao("dia");
+        }}
         // SEGUNDA PORTA: o clique num bloco livre da grade. Sem `onMarcarEm`, a
         // `AgendaInterativa` não monta a interação, e a grade volta a ser o que
         // ela é para quem só lê — uma leitura, sem bloco clicável.
@@ -1007,7 +1093,7 @@ export function AgendaClient({
            não `replace`, porque é o que o Histórico faz com `<Link>` e é o que faz
            o botão voltar do celular fechar o detalhe. */
         onAbrirAgendamento={(id) => router.push(`/app/agenda?compromisso=${id}`)}
-        className="min-h-0 flex-1"
+        className="min-h-0 flex-1 max-md:order-1"
       />
     </div>
   );

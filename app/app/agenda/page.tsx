@@ -1,7 +1,11 @@
 import { addDays, startOfWeek } from "date-fns";
 import { redirect } from "next/navigation";
 
-import { enderecoDeRetorno, faltaParaConectarOGoogle, googleEstaConfigurado } from "@/lib/agenda/google/config";
+import {
+  enderecoDeRetorno,
+  faltaParaConectarOGoogle,
+  googleEstaConfigurado,
+} from "@/lib/agenda/google/config";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -39,13 +43,40 @@ export const dynamic = "force-dynamic";
  * embed. A cadeia estava remontada aqui, sem a guarda de identificador
  * técnico, e punha `Contato 543134@lid` no card da grade.
  */
-function contatoDoEmbed(
-  c: ContatoNomeavel | ContatoNomeavel[] | null,
-): string | undefined {
+function contatoDoEmbed(c: ContatoNomeavel | ContatoNomeavel[] | null): string | undefined {
   return nomeDoContato(Array.isArray(c) ? (c[0] ?? null) : c) ?? undefined;
 }
 
-export default async function AgendaPage() {
+/**
+ * A VISÃO e a DATA moram na URL, e são lidas AQUI em vez de `useSearchParams`.
+ *
+ * Num aplicativo de celular o gesto de voltar é o principal, e até aqui ele
+ * saía da agenda em vez de desfazer a troca de visão — visão e âncora eram
+ * `useState` puro. Lendo no servidor, a primeira pintura já vem na visão certa
+ * (o cliente não pisca da semana para o dia) e o link de um dia passa a ser
+ * algo que se manda pelo WhatsApp.
+ */
+function visaoDaUrl(v: string | undefined): "dia" | "semana" | "mes" | null {
+  return v === "dia" || v === "semana" || v === "mes" ? v : null;
+}
+
+function dataDaUrl(d: string | undefined): string | null {
+  // Só a FORMA é conferida aqui, e ainda assim é preciso: `new Date` de uma
+  // data impossível devolve `Invalid Date`, que atravessa a tela inteira em
+  // silêncio e só aparece como "NaN" no rótulo do período.
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  return Number.isNaN(new Date(`${d}T12:00:00`).getTime()) ? null : d;
+}
+
+export default async function AgendaPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const query = (await searchParams) ?? {};
+  const umValor = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const visaoInicial = visaoDaUrl(umValor(query.visao));
+  const dataInicial = dataDaUrl(umValor(query.data));
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
@@ -97,7 +128,9 @@ export default async function AgendaPage() {
   const [{ data: tipos }, { data: linhas }] = await Promise.all([
     supabase
       .from("calendar_event_types")
-      .select("id, name, duration_minutes, location_kind, location_details, is_active, default_owner_user_id")
+      .select(
+        "id, name, duration_minutes, location_kind, location_details, is_active, default_owner_user_id",
+      )
       .eq("organization_id", activeOrg.orgId)
       .eq("is_active", true)
       .order("name"),
@@ -200,15 +233,19 @@ export default async function AgendaPage() {
 
   return (
     <AgendaClient
+      visaoInicial={visaoInicial}
+      dataInicial={dataInicial}
       fusoDeApresentacao={fusoDeApresentacao}
       googleConfigurado={googleConfigurado}
-      contaConectada={conexoes?.map(c => c.account_email).join(", ") || null}
+      contaConectada={conexoes?.map((c) => c.account_email).join(", ") || null}
       enderecoDeRetorno={enderecoDeRetorno()}
       faltaNoGoogle={faltaNoGoogle}
       // SÓ para quem administra a INSTALAÇÃO. A tela do app OAuth vive em
       // `/admin` e faz `notFound()` para o resto — oferecer o link a quem não
       // pode entrar seria trocar um beco por outro.
-      linkDeConfiguracaoDoGoogle={(user.is_platform_admin && !user.support) ? "/admin/google" : undefined}
+      linkDeConfiguracaoDoGoogle={
+        user.is_platform_admin && !user.support ? "/admin/google" : undefined
+      }
       // O piso da rota de marcar é `agent`; `viewer` — e o acompanhamento só de
       // leitura, que `resolveActiveOrg` resolve como `viewer` — levaria 403. A
       // tela esconder é cortesia: quem decide segue sendo a rota.
@@ -228,28 +265,30 @@ export default async function AgendaPage() {
         localKind: t.location_kind ?? null,
         localDetalhes: t.location_details ?? null,
       }))}
-      agendamentosIniciais={((linhas ?? []).map((a) => ({
-        id: a.id,
-        revision: a.revision,
-        titulo: a.title ?? "Agendamento",
-        responsavelId: a.owner_user_id ?? "",
-        comeca: a.starts_at,
-        termina: a.ends_at,
-        origem: "ui" as const,
-        situacao: a.status as "confirmed",
-        // "com quem" é a promessa do subtítulo desta tela, e era a única parte
-        // dela que o servidor não entregava: `contact_id` vinha no select e
-        // morria aqui. `dados-de-mentira.ts` preenche este campo nos 11 cards,
-        // então a tela pareceu pronta o tempo todo — e o `?? a.titulo` do
-        // histórico transformou a ausência em silêncio, não em erro.
-        // A ordem entre `name` e `display_name` não se decide aqui: vem de
-        // `lib/contacts/rotulo-do-contato.ts`. Este comentário apontava para
-        // `PreviewPanel.tsx` como precedente, e aquele arquivo deixou de remontar
-        // a cadeia — precedente por cópia envelhece; módulo, não. As duas colunas
-        // são reescritas pelo cascade de LGPD, então nenhuma vaza titular
-        // anonimizado.
-        quemSeraAtendido: contatoDoEmbed(a.contacts),
-      })) as AgendamentoDaTela[]).concat(
+      agendamentosIniciais={(
+        (linhas ?? []).map((a) => ({
+          id: a.id,
+          revision: a.revision,
+          titulo: a.title ?? "Agendamento",
+          responsavelId: a.owner_user_id ?? "",
+          comeca: a.starts_at,
+          termina: a.ends_at,
+          origem: "ui" as const,
+          situacao: a.status as "confirmed",
+          // "com quem" é a promessa do subtítulo desta tela, e era a única parte
+          // dela que o servidor não entregava: `contact_id` vinha no select e
+          // morria aqui. `dados-de-mentira.ts` preenche este campo nos 11 cards,
+          // então a tela pareceu pronta o tempo todo — e o `?? a.titulo` do
+          // histórico transformou a ausência em silêncio, não em erro.
+          // A ordem entre `name` e `display_name` não se decide aqui: vem de
+          // `lib/contacts/rotulo-do-contato.ts`. Este comentário apontava para
+          // `PreviewPanel.tsx` como precedente, e aquele arquivo deixou de remontar
+          // a cadeia — precedente por cópia envelhece; módulo, não. As duas colunas
+          // são reescritas pelo cascade de LGPD, então nenhuma vaza titular
+          // anonimizado.
+          quemSeraAtendido: contatoDoEmbed(a.contacts),
+        })) as AgendamentoDaTela[]
+      ).concat(
         /**
          * A ocupação do Google entra na MESMA lista, com `origem: "google_sync"`.
          *

@@ -4,7 +4,6 @@ import * as React from "react";
 
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
-
 import {
   addDays,
   differenceInMinutes,
@@ -43,14 +42,69 @@ import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
  */
 const ALTURA_DA_HORA = 48;
 
-/** A janela que a grade desenha. Fora dela, rola. */
+/** A janela que a grade desenha por padrão. Fora dela, rola. */
 const PRIMEIRA_HORA = 7;
 const ULTIMA_HORA = 21;
 
-const HORAS = Array.from(
-  { length: ULTIMA_HORA - PRIMEIRA_HORA + 1 },
-  (_, i) => PRIMEIRA_HORA + i,
-);
+/**
+ * A JANELA DEIXOU DE SER CONSTANTE, e o motivo é perda de dado.
+ *
+ * Com 07h–21h fixos, um agendamento às 06:30 não era desenhado — a régua do
+ * "agora" e o bloco devolviam `null` para minuto fora da faixa. Não havia
+ * rolagem que o alcançasse, nem aviso: o compromisso existia no banco, contava
+ * no histórico, e simplesmente não estava na tela.
+ *
+ * A elasticidade é a do sistema anterior: a faixa padrão vale para o dia
+ * comum, e estica com uma hora de folga quando há algo fora dela. Dia sem
+ * nada fora da faixa desenha exatamente o que desenhava antes.
+ *
+ * `altura` entra na mesma estrutura porque é a outra metade da régua: no
+ * celular a hora vale 64px (meia hora = 32px de alvo, contra 24px), e no
+ * desktop segue 48px, onde 12 horas ainda cabem em 1080p.
+ */
+export interface JanelaDaGrade {
+  primeira: number;
+  ultima: number;
+  altura: number;
+}
+
+const JANELA_PADRAO: JanelaDaGrade = {
+  primeira: PRIMEIRA_HORA,
+  ultima: ULTIMA_HORA,
+  altura: ALTURA_DA_HORA,
+};
+
+/**
+ * Contexto e não prop: a janela é lida por seis componentes deste arquivo, dois
+ * deles a três níveis de profundidade. Descer seis props por seis assinaturas
+ * para uma medida que é a MESMA em toda a grade é ruído que esconde as props
+ * que de fato variam por coluna.
+ */
+const JanelaCtx = React.createContext<JanelaDaGrade>(JANELA_PADRAO);
+const useJanela = () => React.useContext(JanelaCtx);
+
+function horasDe(j: JanelaDaGrade): number[] {
+  return Array.from({ length: j.ultima - j.primeira + 1 }, (_, i) => j.primeira + i);
+}
+
+/** A janela que cabe estes agendamentos, com uma hora de folga de cada lado. */
+function janelaQueCabe(
+  agendamentos: { comeca: string; termina: string }[],
+  altura: number,
+): JanelaDaGrade {
+  let primeira = PRIMEIRA_HORA;
+  let ultima = ULTIMA_HORA;
+  for (const a of agendamentos) {
+    const inicio = new Date(a.comeca);
+    const fim = new Date(a.termina);
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) continue;
+    primeira = Math.min(primeira, Math.max(0, inicio.getHours() - 1));
+    // `+ 1` a mais quando o fim cai em minuto quebrado: terminar 21:30 precisa
+    // da faixa das 21, e a faixa das 21 é desenhada por `ultima >= 21`.
+    ultima = Math.max(ultima, Math.min(23, fim.getHours() + (fim.getMinutes() > 0 ? 1 : 0)));
+  }
+  return { primeira, ultima, altura };
+}
 
 /**
  * O que transforma a grade de DESENHO em AGENDA.
@@ -105,12 +159,12 @@ interface PropostaDeRemarcacao {
   razao: string;
 }
 
-function minutosDesdeOTopo(d: Date): number {
-  return (d.getHours() - PRIMEIRA_HORA) * 60 + d.getMinutes();
+function minutosDesdeOTopo(d: Date, primeira: number): number {
+  return (d.getHours() - primeira) * 60 + d.getMinutes();
 }
 
-function pixelsDe(minutos: number): number {
-  return (minutos / 60) * ALTURA_DA_HORA;
+function pixelsDe(minutos: number, altura: number): number {
+  return (minutos / 60) * altura;
 }
 
 /** A chave do dia — o mesmo formato que `horariosPorDia` usa. */
@@ -133,10 +187,12 @@ function instanteDoMinuto(dia: Date, minuto: number): Date {
 }
 
 /** Os começos de célula que a camada de marcação desenha, em minutos do dia. */
-const CELULAS = Array.from(
-  { length: ((ULTIMA_HORA - PRIMEIRA_HORA + 1) * 60) / PASSO_DA_CELULA_MIN },
-  (_, i) => PRIMEIRA_HORA * 60 + i * PASSO_DA_CELULA_MIN,
-);
+function celulasDe(j: JanelaDaGrade): number[] {
+  return Array.from(
+    { length: ((j.ultima - j.primeira + 1) * 60) / PASSO_DA_CELULA_MIN },
+    (_, i) => j.primeira * 60 + i * PASSO_DA_CELULA_MIN,
+  );
+}
 
 function diasDaSemanaDe(ancora: Date): Date[] {
   const inicio = startOfWeek(ancora, { weekStartsOn: 0 });
@@ -183,9 +239,7 @@ function repartirSobrepostos(agendamentos: Agendamento[]): Posicionado[] {
     if (grupo.length > 0 && comeca >= fimDoGrupo) fecharGrupo();
 
     const ocupadas = new Set(
-      grupo
-        .filter((g) => new Date(g.agendamento.termina).getTime() > comeca)
-        .map((g) => g.coluna),
+      grupo.filter((g) => new Date(g.agendamento.termina).getTime() > comeca).map((g) => g.coluna),
     );
     let coluna = 0;
     while (ocupadas.has(coluna)) coluna += 1;
@@ -228,20 +282,19 @@ function CamadaDeMarcacao({
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
+  const janela = useJanela();
   const chave = chaveDoDia(dia);
   const publicados = interacao.horariosPorDia[chave] ?? [];
 
   return (
     <>
-      {CELULAS.map((minuto) => {
+      {celulasDe(janela).map((minuto) => {
         const livre = horarioNaCelula(publicados, minuto);
         const inicio = instanteDoMinuto(dia, minuto);
         const fim = instanteDoMinuto(dia, minuto + PASSO_DA_CELULA_MIN);
         const ocupado = agendamentosDoDia.some(
           (a) =>
-            a.situacao !== "cancelled" &&
-            new Date(a.comeca) < fim &&
-            new Date(a.termina) > inicio,
+            a.situacao !== "cancelled" && new Date(a.comeca) < fim && new Date(a.termina) > inicio,
         );
         const passado = fim.getTime() <= agora.getTime();
         const rotulo = format(inicio, "HH:mm");
@@ -277,7 +330,10 @@ function CamadaDeMarcacao({
                   // mouse, no cursor e no motivo escrito.
                   "cursor-default",
             )}
-            style={{ top: pixelsDe(minuto - PRIMEIRA_HORA * 60), height: pixelsDe(PASSO_DA_CELULA_MIN) }}
+            style={{
+              top: pixelsDe(minuto - janela.primeira * 60, janela.altura),
+              height: pixelsDe(PASSO_DA_CELULA_MIN, janela.altura),
+            }}
           />
         );
       })}
@@ -325,6 +381,7 @@ function BlocoDeAgendamento({
   };
 }) {
   const t = useT();
+  const janela = useJanela();
   const comeca = new Date(agendamento.comeca);
   const termina = new Date(agendamento.termina);
   const duracao = Math.max(differenceInMinutes(termina, comeca), 15);
@@ -353,7 +410,13 @@ function BlocoDeAgendamento({
       // arrastar um card para outro horário abriria o painel de remarcação por
       // cima da confirmação que o arraste acabou de pedir — duas perguntas na
       // tela ao mesmo tempo, e a de baixo é a que o usuário pediu.
-      onClick={doGoogle ? undefined : () => { if (!arraste?.moveu()) onAbrir?.(agendamento.id); }}
+      onClick={
+        doGoogle
+          ? undefined
+          : () => {
+              if (!arraste?.moveu()) onAbrir?.(agendamento.id);
+            }
+      }
       onPointerDown={
         arraste && !doGoogle && !cancelado ? (e) => arraste.aoApontar(e, agendamento) : undefined
       }
@@ -380,7 +443,7 @@ function BlocoDeAgendamento({
         // `grab` só quando remarcar é possível: o cursor é a única pista de que
         // o card se move, e prometê-la num card que não se move (ocupação do
         // Google, compromisso cancelado) é o controle decorativo de novo.
-        arraste && !doGoogle && !cancelado && "cursor-grab active:cursor-grabbing touch-none",
+        arraste && !doGoogle && !cancelado && "cursor-grab touch-none active:cursor-grabbing",
         // ⚠️ CANCELADO NÃO INTERCEPTA O PONTEIRO — e isto é conserto de produto,
         // achado pela spec em tela.
         //
@@ -403,8 +466,8 @@ function BlocoDeAgendamento({
         arraste?.ativo && "opacity-40",
       )}
       style={{
-        top: pixelsDe(minutosDesdeOTopo(comeca)),
-        height: Math.max(pixelsDe(duracao) - 2, 18),
+        top: pixelsDe(minutosDesdeOTopo(comeca, janela.primeira), janela.altura),
+        height: Math.max(pixelsDe(duracao, janela.altura) - 2, 18),
         // `calc` em vez de porcentagem crua para os 2px de respiro entre
         // colunas vizinhas não saírem da largura útil de cada bloco.
         left: `calc(${(coluna / colunas) * 100}% + 2px)`,
@@ -424,11 +487,11 @@ function BlocoDeAgendamento({
         className="absolute inset-y-0 left-0 w-[3px] rounded-l-sm"
         style={{ backgroundColor: doGoogle ? "var(--color-border-strong)" : corDaTrilha(trilha) }}
       />
-      <span className="ml-1 truncate text-[11px] font-semibold leading-4 text-text">
+      <span className="ml-1 truncate text-[11px] leading-4 font-semibold text-text">
         {agendamento.titulo}
       </span>
       {duracao >= 45 && (
-        <span className="ml-1 truncate text-[10px] leading-3 tabular-nums text-text-muted">
+        <span className="ml-1 truncate text-[10px] leading-3 text-text-muted tabular-nums">
           {format(comeca, "HH:mm")}
           {agendamento.quemSeraAtendido ? ` · ${agendamento.quemSeraAtendido}` : ""}
         </span>
@@ -439,14 +502,15 @@ function BlocoDeAgendamento({
 
 /** A régua do agora — a linha que faz a tela parecer viva em vez de impressa. */
 function ReguaDoAgora({ agora }: { agora: Date }) {
-  const minutos = minutosDesdeOTopo(agora);
-  if (minutos < 0 || minutos > (ULTIMA_HORA - PRIMEIRA_HORA + 1) * 60) return null;
+  const janela = useJanela();
+  const minutos = minutosDesdeOTopo(agora, janela.primeira);
+  if (minutos < 0 || minutos > (janela.ultima - janela.primeira + 1) * 60) return null;
   return (
     <div
       data-testid="regua-do-agora"
       aria-hidden
       className="pointer-events-none absolute inset-x-0 z-10 flex items-center"
-      style={{ top: pixelsDe(minutos) }}
+      style={{ top: pixelsDe(minutos, janela.altura) }}
     >
       {/* Vermelho, e não a accent: a accent é trocável pelo revendedor e além
           disso é a cor de "nosso", não de "agora". Vermelho para a linha do
@@ -459,16 +523,17 @@ function ReguaDoAgora({ agora }: { agora: Date }) {
 }
 
 function ColunaDeHoras() {
+  const janela = useJanela();
   return (
-    <div className="w-12 shrink-0 select-none border-r border-border" aria-hidden>
+    <div className="w-12 shrink-0 border-r border-border select-none" aria-hidden>
       <div className="h-8 border-b border-border" />
-      {HORAS.map((h) => (
+      {horasDe(janela).map((h) => (
         <div
           key={h}
           className="relative border-b border-border/50 text-right"
-          style={{ height: ALTURA_DA_HORA }}
+          style={{ height: janela.altura }}
         >
-          <span className="absolute -top-1.5 right-1 text-[10px] tabular-nums text-text-subtle">
+          <span className="absolute -top-1.5 right-1 text-[10px] text-text-subtle tabular-nums">
             {String(h).padStart(2, "0")}h
           </span>
         </div>
@@ -498,6 +563,7 @@ function FantasmaDoArraste({
   duracaoMin: number;
 }) {
   const t = useT();
+  const janela = useJanela();
   const localeDaData = useLocaleDeData();
   const valido = proposta.instante !== null;
   return (
@@ -511,11 +577,11 @@ function FantasmaDoArraste({
         valido ? "border-accent bg-accent-soft" : "border-error bg-error-bg",
       )}
       style={{
-        top: pixelsDe(proposta.minuto - PRIMEIRA_HORA * 60),
-        height: Math.max(pixelsDe(duracaoMin) - 2, 18),
+        top: pixelsDe(proposta.minuto - janela.primeira * 60, janela.altura),
+        height: Math.max(pixelsDe(duracaoMin, janela.altura) - 2, 18),
       }}
     >
-      <span className="truncate text-[10px] font-semibold leading-4 text-text">
+      <span className="truncate text-[10px] leading-4 font-semibold text-text">
         {valido
           ? format(new Date(proposta.instante!), "HH:mm", { locale: localeDaData })
           : t(proposta.razao)}
@@ -531,7 +597,6 @@ function ColunaDeDia({
   pessoas,
   onAbrir,
   destacado,
-  soNoDesktop,
   interacao,
   proposta,
   arrasteDoCard,
@@ -542,13 +607,6 @@ function ColunaDeDia({
   pessoas: Pessoa[];
   onAbrir?: (id: string) => void;
   destacado: boolean;
-  /**
-   * Some abaixo de `md`. Na semana, o celular mostra UM dia por vez: sete
-   * colunas em 360px dão ~44px cada, e a célula de meia hora vira um alvo de
-   * ~44x24 — errar o toque passa a ser o caso comum, não a exceção. Com uma
-   * coluna só, o mesmo alvo fica com a largura inteira da tela.
-   */
-  soNoDesktop?: boolean;
   interacao?: InteracaoDaGrade;
   proposta?: PropostaDeRemarcacao | null;
   arrasteDoCard?: {
@@ -558,6 +616,7 @@ function ColunaDeDia({
   };
 }) {
   const localeDaData = useLocaleDeData();
+  const janela = useJanela();
   const doDia = agendamentos.filter((c) => isSameDay(new Date(c.comeca), dia));
   const ehHoje = isSameDay(dia, agora);
 
@@ -566,7 +625,6 @@ function ColunaDeDia({
       data-testid={`coluna-dia-${format(dia, "yyyy-MM-dd")}`}
       className={cn(
         "relative min-w-0 flex-1 border-r border-border last:border-r-0",
-        soNoDesktop && "max-md:hidden",
         destacado && "bg-surface-elevated/40",
       )}
     >
@@ -575,13 +633,13 @@ function ColunaDeDia({
           "sticky top-0 z-20 flex h-8 items-center justify-center gap-1.5 border-b border-border bg-surface px-2",
         )}
       >
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+        <span className="truncate text-[11px] font-semibold tracking-wide text-text-muted uppercase">
           {format(dia, "EEE", { locale: localeDaData }).replace(".", "")}
         </span>
         <span
           className={cn(
             "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
-            ehHoje ? "bg-accent text-accent-foreground font-semibold" : "text-text",
+            ehHoje ? "bg-accent font-semibold text-accent-foreground" : "text-text",
           )}
         >
           {format(dia, "d")}
@@ -598,14 +656,10 @@ function ColunaDeDia({
         // corpo de dia é determinístico e independe do que está desenhado por
         // cima — que é exatamente o que muda durante um arraste.
         data-corpo-do-dia={chaveDoDia(dia)}
-        style={{ height: HORAS.length * ALTURA_DA_HORA }}
+        style={{ height: horasDe(janela).length * janela.altura }}
       >
-        {HORAS.map((h) => (
-          <div
-            key={h}
-            className="border-b border-border/50"
-            style={{ height: ALTURA_DA_HORA }}
-          />
+        {horasDe(janela).map((h) => (
+          <div key={h} className="border-b border-border/50" style={{ height: janela.altura }} />
         ))}
         {interacao && (
           <CamadaDeMarcacao
@@ -639,16 +693,121 @@ function ColunaDeDia({
   );
 }
 
+/**
+ * A SEMANA NO CELULAR: sete cartões empilhados, um por dia.
+ *
+ * Até aqui a semana no celular era a grade com seis das sete colunas escondidas
+ * — ou seja, gastava a tela inteira de uma grade para mostrar UM dia, e o botão
+ * de avançar pulava sete. É o desenho do sistema anterior que resolve isto: no
+ * celular a semana responde "o que tem em cada dia", que é uma pergunta de
+ * lista, e a grade de horas fica para o dia, que é onde a posição na hora
+ * importa.
+ */
+function SemanaEmLista({
+  dias,
+  agora,
+  agendamentos,
+  pessoas,
+  onAbrirAgendamento,
+  onEscolherDia,
+}: {
+  dias: Date[];
+  agora: Date;
+  agendamentos: Agendamento[];
+  pessoas: Pessoa[];
+  onAbrirAgendamento?: (id: string) => void;
+  onEscolherDia?: (dia: Date) => void;
+}) {
+  const t = useT();
+  const localeDaData = useLocaleDeData();
+
+  return (
+    <div
+      data-testid="semana-em-lista"
+      className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2 md:hidden"
+    >
+      {dias.map((dia) => {
+        const doDia = agendamentos
+          .filter((c) => isSameDay(new Date(c.comeca), dia))
+          .sort((a, b) => new Date(a.comeca).getTime() - new Date(b.comeca).getTime());
+        const ehHoje = isSameDay(dia, agora);
+        return (
+          <section
+            key={dia.toISOString()}
+            data-testid={`cartao-dia-${format(dia, "yyyy-MM-dd")}`}
+            className={cn(
+              "rounded-lg border p-2",
+              ehHoje ? "border-accent bg-accent-soft/40" : "border-border bg-surface",
+            )}
+          >
+            <button
+              type="button"
+              // O cabeçalho é a porta para a grade daquele dia — é o gesto que
+              // o calendário de celular ensina, e sem ele a lista seria um beco.
+              className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
+              onClick={() => onEscolherDia?.(dia)}
+            >
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="text-sm font-semibold capitalize">
+                  {format(dia, "EEEE", { locale: localeDaData }).replace(".", "")}
+                </span>
+                <span className="text-sm text-text-muted tabular-nums">{format(dia, "d/MM")}</span>
+              </span>
+              <span className="shrink-0 text-xs text-text-muted tabular-nums">
+                {doDia.length === 0
+                  ? t("livre")
+                  : doDia.length === 1
+                    ? t("1 agendamento")
+                    : `${doDia.length} ${t("agendamentos")}`}
+              </span>
+            </button>
+
+            {doDia.length > 0 && (
+              <ul className="mt-1 space-y-0.5">
+                {doDia.map((c) => {
+                  const trilha = pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1;
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        data-testid={`linha-semana-${c.id}`}
+                        className="flex min-h-11 w-full items-center gap-2 rounded-md px-1 text-left hover:bg-surface-elevated"
+                        onClick={() => onAbrirAgendamento?.(c.id)}
+                      >
+                        <span
+                          aria-hidden
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: corDaTrilha(trilha) }}
+                        />
+                        <span className="shrink-0 text-xs font-medium tabular-nums">
+                          {format(new Date(c.comeca), "HH:mm")}
+                        </span>
+                        <span className="truncate text-xs text-text">{c.titulo}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function VisaoDeMes({
   ancora,
   agora,
   agendamentos,
   pessoas,
+  onEscolherDia,
 }: {
   ancora: Date;
   agora: Date;
   agendamentos: Agendamento[];
   pessoas: Pessoa[];
+  onEscolherDia?: (dia: Date) => void;
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
@@ -669,7 +828,7 @@ function VisaoDeMes({
         {semanas[0]?.map((d) => (
           <div
             key={`cab-${d.toISOString()}`}
-            className="px-2 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+            className="px-2 py-1.5 text-center text-[11px] font-semibold tracking-wide text-text-muted uppercase"
           >
             {format(d, "EEEEEE", { locale: localeDaData }).replace(".", "")}
           </div>
@@ -683,9 +842,27 @@ function VisaoDeMes({
             <div
               key={d.toISOString()}
               data-testid={`celula-mes-${format(d, "yyyy-MM-dd")}`}
+              // O dia do mês ABRE o dia. É o gesto que todo calendário ensina,
+              // e sem ele o mês vira só um cartaz: quem vê "4" numa terça não
+              // tem como descobrir o que são os quatro sem trocar de visão e
+              // navegar até lá na mão.
+              role={onEscolherDia ? "button" : undefined}
+              tabIndex={onEscolherDia ? 0 : undefined}
+              onClick={onEscolherDia ? () => onEscolherDia(d) : undefined}
+              onKeyDown={
+                onEscolherDia
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onEscolherDia(d);
+                      }
+                    }
+                  : undefined
+              }
               className={cn(
-                "min-h-20 border-b border-r border-border p-1",
+                "min-h-20 border-r border-b border-border p-1",
                 !doMes && "bg-surface-elevated/30",
+                onEscolherDia && "cursor-pointer hover:bg-surface-elevated",
               )}
             >
               <div className="mb-1 flex items-center justify-between px-0.5">
@@ -702,12 +879,29 @@ function VisaoDeMes({
                   {format(d, "d")}
                 </span>
                 {doDia.length > 2 && (
-                  <span className="text-[10px] tabular-nums text-text-subtle">
+                  <span className="hidden text-[10px] text-text-subtle tabular-nums md:inline">
                     +{doDia.length - 2}
                   </span>
                 )}
               </div>
-              <div className="space-y-0.5">
+              {/*
+                NO CELULAR a célula do mês é o DIA e a CONTAGEM, nada mais.
+                Sete colunas em 390px dão ~50px de largura: o chip de evento
+                entra com duas ou três letras visíveis ("09:0…"), que não
+                informa nada e ainda disputa o alvo de toque do dia. O sistema
+                anterior resolvia assim, e é o desenho de calendário de celular
+                em geral — o mês responde "que dias têm movimento", e o dia
+                responde o resto.
+              */}
+              {doDia.length > 0 && (
+                <span
+                  data-testid={`contagem-mes-${format(d, "yyyy-MM-dd")}`}
+                  className="block text-center text-[10px] font-medium text-accent tabular-nums md:hidden"
+                >
+                  {doDia.length}
+                </span>
+              )}
+              <div className="hidden space-y-0.5 md:block">
                 {doDia.slice(0, 2).map((c) => {
                   const trilha = pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1;
                   return (
@@ -744,6 +938,7 @@ export function GradeDaAgenda({
   pessoas,
   agendamentos,
   onAbrirAgendamento,
+  onEscolherDia,
   interacao,
   className,
 }: {
@@ -761,13 +956,77 @@ export function GradeDaAgenda({
   pessoas: Pessoa[];
   agendamentos: Agendamento[];
   onAbrirAgendamento?: (id: string) => void;
+  /**
+   * Tocar no cabeçalho de um dia da lista da semana (celular). Ausente, o
+   * cabeçalho vira texto — a lista continua legível, só não leva a lugar nenhum.
+   */
+  onEscolherDia?: (dia: Date) => void;
   /** Ausente = grade só de leitura, como a vitrine a monta. Ver `InteracaoDaGrade`. */
   interacao?: InteracaoDaGrade;
   className?: string;
 }) {
   const dias = visao === "dia" ? [ancora] : diasDaSemanaDe(ancora);
 
+  /**
+   * A HORA MAIS ALTA NO CELULAR. 48px de hora deixam a meia hora com 24px de
+   * alvo — metade do piso de toque que o resto do app respeita. 64px levam a
+   * meia hora a 32px, e no desktop nada muda: lá 48 é o que faz 12 horas
+   * caberem numa tela de notebook.
+   *
+   * Em `useState` + `useEffect` pela mesma razão que a visão inicial: `window`
+   * não existe no servidor, e medir a largura durante o render faria o HTML do
+   * servidor discordar do cliente.
+   */
+  const [alturaDaHora, setAlturaDaHora] = React.useState(ALTURA_DA_HORA);
+  React.useEffect(() => {
+    // O jsdom não implementa `matchMedia`: sem esta guarda, todo teste de
+    // unidade que monte a grade morre num efeito de layout que não tem nada a
+    // ver com o que ele mede. Sem consulta, vale a altura de desktop — que é o
+    // padrão declarado logo acima.
+    if (typeof window.matchMedia !== "function") return;
+    const consulta = window.matchMedia("(max-width: 767px)");
+    const aplicar = () => setAlturaDaHora(consulta.matches ? 64 : ALTURA_DA_HORA);
+    aplicar();
+    consulta.addEventListener("change", aplicar);
+    return () => consulta.removeEventListener("change", aplicar);
+  }, []);
+
+  // A janela do que está DESENHADO, não do que existe: são os agendamentos
+  // desta grade que decidem se a faixa estica.
+  const janela = React.useMemo(
+    () => janelaQueCabe(agendamentos, alturaDaHora),
+    [agendamentos, alturaDaHora],
+  );
+
   const gradeRef = React.useRef<HTMLDivElement>(null);
+
+  /**
+   * A GRADE ABRE NO MOVIMENTO, não no topo da janela.
+   *
+   * Medido em 390px num dia real do Studio: a faixa começa às 07h e o primeiro
+   * atendimento era às 11h — quatro horas de grade vazia ocupando a tela
+   * inteira, e o dia parecia livre até a pessoa rolar. Numa tela de notebook
+   * isso não aparece porque 12 horas cabem de uma vez; no celular cabem três.
+   *
+   * A régua é o primeiro compromisso do período (meia hora acima, para ele não
+   * nascer colado na borda). Sem compromisso nenhum, não rola: a grade vazia
+   * no topo é a leitura certa de um dia livre.
+   */
+  const primeiroMinuto = React.useMemo(() => {
+    const inicios = agendamentos
+      .map((a) => new Date(a.comeca))
+      .filter((d) => !Number.isNaN(d.getTime()))
+      .map((d) => d.getHours() * 60 + d.getMinutes());
+    return inicios.length > 0 ? Math.min(...inicios) : null;
+  }, [agendamentos]);
+
+  React.useEffect(() => {
+    const caixa = gradeRef.current;
+    if (!caixa || primeiroMinuto === null || visao === "mes") return;
+    const alvo = pixelsDe(primeiroMinuto - janela.primeira * 60 - 30, janela.altura);
+    caixa.scrollTop = Math.max(0, alvo);
+  }, [primeiroMinuto, janela.primeira, janela.altura, visao]);
+
   const [proposta, setProposta] = React.useState<PropostaDeRemarcacao | null>(null);
   /**
    * O gesto em curso vive numa REF, não no estado.
@@ -786,7 +1045,7 @@ export function GradeDaAgenda({
     moveu: boolean;
   } | null>(null);
 
-  const limites = { primeiro: PRIMEIRA_HORA * 60, ultimo: (ULTIMA_HORA + 1) * 60 };
+  const limites = { primeiro: janela.primeira * 60, ultimo: (janela.ultima + 1) * 60 };
 
   /** A proposta para um instante — a mesma conta para o ponteiro e para o teclado. */
   const montarProposta = React.useCallback(
@@ -839,7 +1098,8 @@ export function GradeDaAgenda({
           return clientX >= r.left && clientX <= r.right;
         }) ??
         corpos.reduce((melhor, el) => {
-          const d = (r: DOMRect) => Math.min(Math.abs(clientX - r.left), Math.abs(clientX - r.right));
+          const d = (r: DOMRect) =>
+            Math.min(Math.abs(clientX - r.left), Math.abs(clientX - r.right));
           return d(el.getBoundingClientRect()) < d(melhor.getBoundingClientRect()) ? el : melhor;
         });
       const chave = escolhido.dataset.corpoDoDia;
@@ -847,8 +1107,8 @@ export function GradeDaAgenda({
       const r = escolhido.getBoundingClientRect();
       const bruto = minutoSobY({
         y: clientYDoTopo - r.top,
-        alturaDaHoraPx: ALTURA_DA_HORA,
-        primeiraHora: PRIMEIRA_HORA,
+        alturaDaHoraPx: janela.altura,
+        primeiraHora: janela.primeira,
       });
       return montarProposta(
         id,
@@ -885,7 +1145,9 @@ export function GradeDaAgenda({
         window.removeEventListener("pointerup", soltar);
         window.removeEventListener("pointercancel", soltar);
         const houve = g.moveu;
-        const p = houve ? propostaSobPonto(g.id, ev.clientX, ev.clientY - g.deslocamentoNoCard) : null;
+        const p = houve
+          ? propostaSobPonto(g.id, ev.clientX, ev.clientY - g.deslocamentoNoCard)
+          : null;
         setProposta(null);
         // A ref só zera no tique seguinte: o `click` que o `pointerup` dispara
         // ainda não aconteceu, e é ele que precisa consultar `moveu()`.
@@ -942,7 +1204,11 @@ export function GradeDaAgenda({
         const base = atual ? atual.minutoBruto : comeca.getHours() * 60 + comeca.getMinutes();
         const diaAtual = new Date(`${atual?.dia ?? chaveDoDia(comeca)}T12:00:00`);
         setProposta(
-          montarProposta(a.id, chaveDoDia(addDays(diaAtual, e.key === "ArrowRight" ? 1 : -1)), base),
+          montarProposta(
+            a.id,
+            chaveDoDia(addDays(diaAtual, e.key === "ArrowRight" ? 1 : -1)),
+            base,
+          ),
         );
         return;
       }
@@ -967,44 +1233,85 @@ export function GradeDaAgenda({
     : undefined;
 
   return (
-    <div
-      data-testid="grade-da-agenda"
-      data-visao={visao}
-      className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface",
-        className,
-      )}
-    >
-      {visao === "mes" ? (
-        <VisaoDeMes ancora={ancora} agora={agora} agendamentos={agendamentos} pessoas={pessoas} />
-      ) : (
-        // A rolagem mora AQUI dentro, e não na página: `html, body` têm
-        // `overflow-x: hidden` no globals.css, então uma grade que estourasse a
-        // largura simplesmente sumiria pela direita, sem barra para trazê-la de volta.
-        <div ref={gradeRef} className="flex min-h-0 flex-1 overflow-auto">
-          <ColunaDeHoras />
-          <div className="flex min-w-0 flex-1">
-            {dias.map((d) => (
-              <ColunaDeDia
-                key={d.toISOString()}
-                dia={d}
+    <JanelaCtx.Provider value={janela}>
+      <div
+        data-testid="grade-da-agenda"
+        data-visao={visao}
+        data-janela={`${janela.primeira}-${janela.ultima}`}
+        className={cn(
+          "flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface",
+          className,
+        )}
+      >
+        {visao === "mes" ? (
+          <VisaoDeMes
+            ancora={ancora}
+            agora={agora}
+            agendamentos={agendamentos}
+            pessoas={pessoas}
+            onEscolherDia={onEscolherDia}
+          />
+        ) : (
+          <>
+            {visao === "semana" && (
+              <SemanaEmLista
+                dias={dias}
                 agora={agora}
                 agendamentos={agendamentos}
                 pessoas={pessoas}
-                onAbrir={onAbrirAgendamento}
-                destacado={visao === "semana" && isSameDay(d, agora)}
-                soNoDesktop={visao === "semana" && !isSameDay(d, ancora)}
-                interacao={interacao}
-                proposta={proposta}
-                arrasteDoCard={arrasteDoCard}
+                onAbrirAgendamento={onAbrirAgendamento}
+                onEscolherDia={onEscolherDia}
               />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+            )}
+            {/*
+            A rolagem mora AQUI dentro, e não na página: `html, body` têm
+            `overflow-x: hidden` no globals.css, então uma grade que estourasse
+            a largura sumiria pela direita, sem barra para trazê-la de volta.
+
+            `max-md:hidden` na SEMANA inteira, e não mais em seis das sete
+            colunas: no celular quem responde pela semana é a lista acima. A
+            visão DIA continua sendo grade em toda largura — é onde a posição
+            na hora é a informação.
+          */}
+            <div
+              ref={gradeRef}
+              className={cn(
+                // `max-h` no celular, e é ela que faz a rolagem ser DESTA
+                // CAIXA. Sem altura máxima o contêiner cresce até caber as 14
+                // horas e quem rola passa a ser a página — a grade não tem
+                // para onde rolar por dentro, e o efeito que a abre no
+                // primeiro compromisso não tem efeito nenhum. Medido em 390px:
+                // a grade abria às 07h num dia cujo primeiro atendimento era
+                // 11h, e o dia parecia livre.
+                "flex min-h-0 flex-1 overflow-auto max-md:max-h-[62vh]",
+                visao === "semana" && "max-md:hidden",
+              )}
+            >
+              <ColunaDeHoras />
+              <div className="flex min-w-0 flex-1">
+                {dias.map((d) => (
+                  <ColunaDeDia
+                    key={d.toISOString()}
+                    dia={d}
+                    agora={agora}
+                    agendamentos={agendamentos}
+                    pessoas={pessoas}
+                    onAbrir={onAbrirAgendamento}
+                    destacado={visao === "semana" && isSameDay(d, agora)}
+                    interacao={interacao}
+                    proposta={proposta}
+                    arrasteDoCard={arrasteDoCard}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </JanelaCtx.Provider>
   );
 }
 
 export const ALTURA_DA_HORA_PX = ALTURA_DA_HORA;
+/** A janela PADRÃO. A desenhada estica com os agendamentos — ver `janelaQueCabe`. */
 export const JANELA_DA_GRADE = { primeira: PRIMEIRA_HORA, ultima: ULTIMA_HORA };

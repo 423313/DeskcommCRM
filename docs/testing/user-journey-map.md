@@ -2559,3 +2559,40 @@ pendência, não foi feito.
 **O que esta jornada ainda NÃO cobre:** o resgate de prêmio pela tela. Exige dez selos, e
 enchê-los na cópia local sujaria o histórico real da cliente. O comportamento está coberto
 por `tests/invariants/fork-fidelidade.test.ts`.
+
+---
+
+## J28 — A agenda como aplicativo no celular `[P1]` (fork)
+
+**Por que P1:** o Studio opera do celular. A agenda é a tela mais aberta do dia, e até
+esta entrega a semana no celular era a grade de horas com seis dos sete dias escondidos
+por CSS — a tela inteira gasta para mostrar um dia, com o botão de avançar pulando sete.
+
+Ambiente: build de produção em `localhost:3001` contra a cópia local, viewport 390x844
+(iPhone 14). Roteiro executável em `.superpowers/evidence/prova-agenda-mobile.mjs`;
+imagens em `.superpowers/evidence/agenda-mobile-*.png`.
+
+| Caso | O que se espera | Estado |
+|---|---|---|
+| J28.1 | `?visao=dia` abre no dia, e recarregar mantém a visão | PASS |
+| J28.2 | A barra de atalhos aparece no celular, com Menu + Hoje + Visão + Novo | PASS |
+| J28.3 | A barra flutua dentro da tela (x=12, largura=366 em 390px) | PASS |
+| J28.4 | O Menu da barra abre a MESMA gaveta de navegação do cabeçalho | PASS |
+| J28.5 | A semana no celular é uma lista de sete cartões de dia | PASS |
+| J28.6 | Na semana, a grade de horas não aparece no celular | PASS |
+| J28.7 | O mês mostra a contagem por dia e nenhum chip de evento | PASS |
+| J28.8 | Tocar num dia do mês abre a grade daquele dia, e a data vai para a URL | PASS |
+| J28.9 | A grade de um dia com movimento abre no primeiro compromisso | PASS |
+| J28.10 | Zero estouro horizontal nas três visões | PASS |
+| J28.11 | No desktop a barra some e a semana continua sendo a grade de sete colunas | PASS |
+
+**Achados durante a execução, todos consertados na mesma entrega:** a lista da semana
+nascia abaixo da dobra (o aviso do Google e o histórico vinham antes — hoje a agenda é o
+primeiro bloco no celular); os 14 tipos de agendamento geravam dez linhas de chips (hoje
+rolam numa linha só); e a rolagem automática até o primeiro compromisso não tinha efeito
+nenhum porque a caixa da grade não tinha altura máxima — quem rolava era a página.
+
+**O que esta jornada ainda NÃO cobre:** a tela num aparelho real (é emulação de viewport,
+não de toque), e o comportamento com a barra de gestos do iPhone — `viewportFit: "cover"`
+e `env(safe-area-inset-bottom)` estão declarados, mas em navegador de mesa o inset é zero
+e a medida não prova nada.

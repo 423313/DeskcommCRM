@@ -1,5 +1,8 @@
 "use client";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { BarraInferior } from "@/components/shell/BarraInferior";
+import { ProvedorDeAcoesDaBarra } from "@/components/shell/acoes-da-barra-inferior";
+import { GavetaDeNavegacao } from "@/components/shell/MobileSidebar";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { BarraDeProgressoNavegacao } from "@/components/shell/BarraDeProgressoNavegacao";
@@ -31,13 +34,15 @@ export function AppShell({ sidebarCollapsed, podeAtender, children }: AppShellPr
   // no Inbox e na Agenda; um emissor amarrado à tela de gestão diria que só o
   // gerente está presente.
   useSinalDePresenca(podeAtender);
+  const [menuAberto, setMenuAberto] = useState(false);
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      <BarraDeProgressoNavegacao />
-      <div className="hidden md:block">
-        <Sidebar collapsed={sidebarCollapsed} />
-      </div>
-      {/*
+    <ProvedorDeAcoesDaBarra>
+      <div className="flex min-h-screen w-full bg-background">
+        <BarraDeProgressoNavegacao />
+        <div className="hidden md:block">
+          <Sidebar collapsed={sidebarCollapsed} />
+        </div>
+        {/*
         `min-w-0` é o que permite a coluna de conteúdo ENCOLHER. Um flex item
         nasce com `min-width: auto`, ou seja, nunca fica menor que o conteúdo —
         então qualquer bloco largo (uma fila de abas, uma tabela) empurrava a
@@ -49,17 +54,28 @@ export function AppShell({ sidebarCollapsed, podeAtender, children }: AppShellPr
         cabeçalho, presente também em telas que não têm abas (a lista de agentes
         estoura 236px). Isolado ancestral por ancestral: é este o que decide.
       */}
-      {/*
+        {/*
         Sem `md:ml-*`: a barra voltou a ocupar lugar na linha (ver o comentário
         em `Sidebar.tsx`), então o que sobra para esta coluna é exatamente o que
         ela não usou. A margem existia para compensar uma barra `fixed`, e era a
         SEGUNDA medida da mesma coisa — a que discordava e deixava a barra por
         cima da lista.
       */}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <TopBar />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+          <TopBar />
+          {/*
+          `pb-28` no celular é a folga que a barra de atalhos flutuante exige:
+          sem ela a barra fica POR CIMA do fim de toda lista, e o último item de
+          qualquer tela é inalcançável — o pior tipo de defeito de layout,
+          porque a tela parece inteira. `p-4` em vez de `p-6` pelo mesmo motivo
+          de tela pequena: 24px de cada lado somados ao respiro dos cartões não
+          deixam largura para conteúdo em 390px.
+        */}
+          <main className="flex-1 overflow-auto p-4 pb-28 md:p-6 md:pb-10">{children}</main>
+        </div>
+        <BarraInferior aoAbrirMenu={() => setMenuAberto(true)} />
+        <GavetaDeNavegacao aberta={menuAberto} onAbertaChange={setMenuAberto} />
       </div>
-    </div>
+    </ProvedorDeAcoesDaBarra>
   );
 }

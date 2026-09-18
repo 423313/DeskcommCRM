@@ -2,12 +2,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useT } from "@/hooks/i18n/useT";
 import { SidebarContent } from "@/components/shell/Sidebar";
 import { List } from "@/lib/ui/icons";
@@ -36,17 +31,41 @@ export function MobileSidebar() {
           <List size={22} aria-hidden />
         </Button>
       </SheetTrigger>
-      <SheetContent
-        side="left"
-        className="flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-0 p-0 sm:max-w-xs"
-      >
-        <SheetTitle className="sr-only">{t("Navegação principal")}</SheetTitle>
-        <SidebarContent
-          collapsed={false}
-          showCollapseControl={false}
-          onNavigate={() => setOpen(false)}
-        />
-      </SheetContent>
+      <ConteudoDaGaveta aoNavegar={() => setOpen(false)} />
     </Sheet>
+  );
+}
+
+/**
+ * A mesma gaveta, sem gatilho próprio — para quem já tem o botão.
+ *
+ * A barra de atalhos inferior abre ESTA gaveta. Um segundo `SidebarContent`
+ * dentro de outro Sheet seria uma segunda lista de destinos, e as duas
+ * envelheceriam em ritmos diferentes.
+ */
+export function GavetaDeNavegacao({
+  aberta,
+  onAbertaChange,
+}: {
+  aberta: boolean;
+  onAbertaChange: (aberta: boolean) => void;
+}) {
+  return (
+    <Sheet open={aberta} onOpenChange={onAbertaChange}>
+      <ConteudoDaGaveta aoNavegar={() => onAbertaChange(false)} />
+    </Sheet>
+  );
+}
+
+function ConteudoDaGaveta({ aoNavegar }: { aoNavegar: () => void }) {
+  const t = useT();
+  return (
+    <SheetContent
+      side="left"
+      className="flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-0 p-0 sm:max-w-xs"
+    >
+      <SheetTitle className="sr-only">{t("Navegação principal")}</SheetTitle>
+      <SidebarContent collapsed={false} showCollapseControl={false} onNavigate={aoNavegar} />
+    </SheetContent>
   );
 }

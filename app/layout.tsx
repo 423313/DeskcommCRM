@@ -115,6 +115,18 @@ export async function generateMetadata(): Promise<Metadata> {
  */
 export const viewport: Viewport = {
   themeColor: coresDaBarraDoNavegador(REGUA_DO_PRODUTO),
+  width: "device-width",
+  initialScale: 1,
+  /**
+   * `cover` é o que faz `env(safe-area-inset-*)` deixar de valer zero.
+   *
+   * Sem ele o iPhone mantém a faixa da barra de gestos fora da viewport, todo
+   * `env()` responde 0, e a barra de atalhos inferior fica exatamente sob a
+   * barra do sistema: o último item deixa de ser tocável e nada na tela explica
+   * por quê. Os outros dois campos eram o default implícito do Next — escritos
+   * porque, declarado o `viewportFit`, o objeto passa a ser a fonte inteira.
+   */
+  viewportFit: "cover",
 };
 
 // Inline FOUC-prevention. Conteúdo é string literal estática (zero input do usuário),
