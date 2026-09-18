@@ -245,6 +245,49 @@ async function withScores(
  * Ordena por `last_message_at` e fica com a primeira de cada contato — as
  * conversas já vêm ordenadas, então o primeiro visto é o mais recente.
  */
+async function withConversas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  leads: Lead[],
+): Promise<{ leads: Lead[]; error: string | null }> {
+  const contactIds = [...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c))];
+  if (contactIds.length === 0) return { leads, error: null };
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("id, contact_id, last_message_preview, last_message_at, unread_count_for_assignee")
+    .eq("organization_id", organizationId)
+    .in("contact_id", contactIds)
+    .order("last_message_at", { ascending: false, nullsFirst: false });
+  if (error) return { leads, error: error.message };
+
+  const porContato = new Map<string, NonNullable<Lead["conversa"]>>();
+  for (const row of (data ?? []) as Array<{
+    id: string;
+    contact_id: string;
+    last_message_preview: string | null;
+    last_message_at: string | null;
+    unread_count_for_assignee: number | null;
+  }>) {
+    // Primeira vista vence: a consulta já veio ordenada por atividade.
+    if (porContato.has(row.contact_id)) continue;
+    porContato.set(row.contact_id, {
+      id: row.id,
+      preview: row.last_message_preview,
+      last_message_at: row.last_message_at,
+      unread: row.unread_count_for_assignee ?? 0,
+    });
+  }
+
+  return {
+    leads: leads.map((lead) => {
+      const conversa = lead.contact_id ? porContato.get(lead.contact_id) : undefined;
+      return conversa ? { ...lead, conversa } : lead;
+    }),
+    error: null,
+  };
+}
+
 /**
  * Anexa os marcadores do CONTATO — a outra caixa de marcador do produto.
  *
@@ -285,49 +328,6 @@ async function withMarcadoresDoContato(
     leads: leads.map((lead) => {
       const contact_tags = lead.contact_id ? porContato.get(lead.contact_id) : undefined;
       return contact_tags ? { ...lead, contact_tags } : lead;
-    }),
-    error: null,
-  };
-}
-
-async function withConversas(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  organizationId: string,
-  leads: Lead[],
-): Promise<{ leads: Lead[]; error: string | null }> {
-  const contactIds = [...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c))];
-  if (contactIds.length === 0) return { leads, error: null };
-
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("id, contact_id, last_message_preview, last_message_at, unread_count_for_assignee")
-    .eq("organization_id", organizationId)
-    .in("contact_id", contactIds)
-    .order("last_message_at", { ascending: false, nullsFirst: false });
-  if (error) return { leads, error: error.message };
-
-  const porContato = new Map<string, NonNullable<Lead["conversa"]>>();
-  for (const row of (data ?? []) as Array<{
-    id: string;
-    contact_id: string;
-    last_message_preview: string | null;
-    last_message_at: string | null;
-    unread_count_for_assignee: number | null;
-  }>) {
-    // Primeira vista vence: a consulta já veio ordenada por atividade.
-    if (porContato.has(row.contact_id)) continue;
-    porContato.set(row.contact_id, {
-      id: row.id,
-      preview: row.last_message_preview,
-      last_message_at: row.last_message_at,
-      unread: row.unread_count_for_assignee ?? 0,
-    });
-  }
-
-  return {
-    leads: leads.map((lead) => {
-      const conversa = lead.contact_id ? porContato.get(lead.contact_id) : undefined;
-      return conversa ? { ...lead, conversa } : lead;
     }),
     error: null,
   };

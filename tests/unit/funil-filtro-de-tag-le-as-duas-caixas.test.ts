@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { applyFilters } from "@/lib/kanban/filters";
@@ -74,7 +76,7 @@ describe("marcadoresDoCard — as duas caixas numa lista só", () => {
 
 describe("applyFilters — filtro por marcador", () => {
   const filtrar = (leads: Lead[], tag: string) =>
-    applyFilters(leads, { tag } as never).map((l) => l.id);
+    applyFilters(leads, { tag }).map((l) => l.id);
 
   it("acha o card pelo marcador do CONTATO — o defeito relatado", () => {
     const leads = [
@@ -93,5 +95,35 @@ describe("applyFilters — filtro por marcador", () => {
     const leads = [card({ id: "a", tags: ["recompra"], contact_tags: ["vip"] })];
     expect(filtrar(leads, "inexistente")).toEqual([]);
     expect(cardTemMarcador(leads[0]!, "inexistente")).toBe(false);
+  });
+});
+
+describe("os pontos de chamada — a regra só vale se quem a usa a chama", () => {
+  // `marcadoresDoCard`/`cardTemMarcador` podem estar certas e nunca rodar: o
+  // defeito original morava justamente num ponto de chamada (o filtro lia
+  // `l.tags`). Cada caso abaixo prende UM elo, para a sabotagem de um só
+  // reprovar exatamente o dele.
+  it("a rota do quadro anexa os marcadores do contato e os devolve", () => {
+    const fonte = readFileSync("app/api/v1/pipelines/[id]/board/route.ts", "utf8");
+    expect(fonte, "withMarcadoresDoContato não é chamada na rota").toMatch(
+      /leadsComMarcadores\s*=\s*await withMarcadoresDoContato\(/,
+    );
+    expect(fonte, "o resultado de withMarcadoresDoContato não chega à resposta").toMatch(
+      /leads:\s*leadsComMarcadores\.leads/,
+    );
+  });
+
+  it("o seletor OFERECE os marcadores pela mesma regra", () => {
+    const fonte = readFileSync("components/kanban/FilterBar.tsx", "utf8");
+    expect(fonte, "FilterBar não monta as opções com marcadoresDoCard(l)").toContain(
+      "marcadoresDoCard(l)",
+    );
+  });
+
+  it("o filtro CASA pela mesma regra", () => {
+    const fonte = readFileSync("lib/kanban/filters.ts", "utf8");
+    expect(fonte, "applyFilters não filtra com cardTemMarcador(l, f.tag)").toContain(
+      "cardTemMarcador(l, f.tag)",
+    );
   });
 });
