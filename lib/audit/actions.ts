@@ -605,6 +605,9 @@ export const AUDIT_ACTIONS = [
   // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
   // responde — a coluna `updated_at` se move por qualquer motivo.
   "ai.credential_updated",
+
+  /** POST /api/v1/tenants/provision — tenant criado (ou replay idempotente) via integração Clinicfx. */
+  "tenant.created_by_clinicfx_provisioning",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
