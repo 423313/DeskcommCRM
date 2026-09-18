@@ -590,6 +590,10 @@ export const AUDIT_ACTIONS = [
   // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
   // responde — a coluna `updated_at` se move por qualquer motivo.
   "ai.credential_updated",
+  // Ajustes determinísticos de estilo da ORGANIZAÇÃO ligados, desligados ou com
+  // item trocado (PATCH /ai/style-adjustments). O `metadata.ajuste` nomeia o
+  // item; a linha registra a decisão sem expor o prompt do agente.
+  "ai.style_adjustment_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
