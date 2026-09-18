@@ -419,6 +419,7 @@
       "sublabel": "o número do plantão não vira contato, conversa nem despacho"
     },
     {
+<<<<<<< HEAD
       "id": "avisoSuporteTela",
       "lane": "humano",
       "col": 5,
@@ -433,6 +434,30 @@
       "type": "route",
       "label": "/api/v1/ai/cases/alerta (+ /teste)",
       "sublabel": "escreve só pelo RPC; o teste manda de verdade e paga no pacing_ledger"
+=======
+      "id": "passagemMontagem",
+      "lane": "regra",
+      "col": 3,
+      "type": "lib",
+      "label": "lib/escalacao/briefing-da-passagem.ts",
+      "sublabel": "um texto, dois motores: o porquê, o que a IA tentou e a fala LITERAL do cliente (entre aspas, rotulada)"
+    },
+    {
+      "id": "passagemRegistro",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "passagens_de_atendimento",
+      "sublabel": "uma linha por passagem, SEM dedup — lida sob fn_can_view_conversation; o aviso da Central só REMETE a ela"
+    },
+    {
+      "id": "passagemReconhece",
+      "lane": "dados",
+      "col": 5,
+      "type": "db",
+      "label": "trg_passagem_reconhecida + fn_passagem_devolvida (0293)",
+      "sublabel": "assumir fecha a passagem e resolve o aviso; devolver ao automático fecha sem dono"
+>>>>>>> feat/casos-vivos
     }
   ],
   "edges": [
@@ -882,6 +907,7 @@
     },
     {
       "id": "e75",
+<<<<<<< HEAD
       "from": "avisoSuporteTela",
       "to": "avisoSuporteRota",
       "label": "a tela nunca escreve no banco: ela fala com a rota"
@@ -915,6 +941,59 @@
       "from": "numeroInterno",
       "to": "avisoSuporteTela",
       "label": "os contadores do descarte viram a frase que impede o silêncio de parecer defeito"
+=======
+      "from": "passagemMontagem",
+      "to": "passagemRegistro",
+      "label": "body/title/notes/content + tentativas — as quatro colunas saem da montagem única"
+    },
+    {
+      "id": "e76",
+      "from": "checkpoints",
+      "to": "passagemMontagem",
+      "label": "o resumo acumulado e a declaração do turno entram no briefing"
+    },
+    {
+      "id": "e77",
+      "from": "avisoMotor",
+      "to": "passagemMontagem",
+      "label": "o desfecho do aviso vira cliente_avisado + aviso_motivo_codigo — 'queued' deixou de contar como entrega"
+    },
+    {
+      "id": "e78",
+      "from": "orquestrador",
+      "to": "passagemRegistro",
+      "label": "Step 5.5 — o motor do CRM passou a gravar o que nunca gravou"
+    },
+    {
+      "id": "e79",
+      "from": "passagemRegistro",
+      "to": "central",
+      "label": "o corpo do aviso é CURTO e sem conversa: a Central entrega body a qualquer agent"
+    },
+    {
+      "id": "e80",
+      "from": "atribuir",
+      "to": "passagemReconhece",
+      "label": "o INSERT em conversation_assignment_events dispara o gatilho na MESMA transação"
+    },
+    {
+      "id": "e81",
+      "from": "passagemReconhece",
+      "to": "passagemRegistro",
+      "label": "reconhecido_por/reconhecido_em — só quando a conversa está MESMO com aquele dono"
+    },
+    {
+      "id": "e82",
+      "from": "passagemReconhece",
+      "to": "central",
+      "label": "resolve o aviso handoff; sem isto o dedup impede a PRÓXIMA passagem de nascer"
+    },
+    {
+      "id": "e83",
+      "from": "retomada",
+      "to": "passagemReconhece",
+      "label": "fn_passagem_devolvida: episódio fechado sem ninguém ter assumido"
+>>>>>>> feat/casos-vivos
     }
   ],
   "cards": [

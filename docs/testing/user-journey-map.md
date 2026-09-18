@@ -2513,3 +2513,61 @@ grupo trouxe.
 
 **A seção "Lote 12 · G2" acima deixa de estar PENDENTE POR EXECUÇÃO**: os três
 casos dela (L12.G2.1, G2.2 e G2.3) estão provados nas linhas acima.
+
+---
+
+## J27 — Uma pessoa assume uma conversa que a IA passou `[P0]` (2026-09-18)
+
+**Por que P0:** é a jornada em que o cliente mais sente a diferença entre um CRM com IA e
+um robô que abandona a conversa. Toda passagem para humano termina com uma pessoa lendo
+alguma coisa e digitando a primeira frase — e é essa frase que o cliente recebe.
+
+### O que a onda entregou, e o que ela NÃO provou
+
+Esta onda é de MOTOR: ela faz as treze passagens gravarem o contexto, corrige a verdade
+do "cliente já foi avisado", troca o dedup do aviso por adendo e faz o aviso se resolver
+sozinho quando alguém assume. **O cartão na conversa é da onda seguinte** — então a
+jornada em tela ainda não existe, e dizer que ela passou seria afirmar o que não se mediu.
+
+| caso | estado |
+|---|---|
+| J27.1 · a passagem vira linha nos DOIS motores, com origem declarada | **PASS por unidade** — `tests/unit/passagem-registro-e-dedup.test.ts`, com pool falso (motor A) e client falso (motor B) |
+| J27.2 · a segunda passagem da mesma conversa vira ADENDO, não descarte | **PASS por unidade** — mesmo arquivo, nos dois motores |
+| J27.3 · "o cliente JÁ FOI avisado" só quando a mensagem saiu | **PASS por unidade** — `tests/unit/passagem-verdade-do-aviso.test.ts`, nos dois emissores |
+| J27.4 · assumir a conversa fecha a passagem e resolve o aviso | **PENDENTE POR EXECUÇÃO** — `tests/invariants/passagem-se-reconhece-sozinha.test.ts` existe e precisa de `pnpm test:db` |
+| J27.5 · **pela TELA**, quem assume lê o porquê, o que a IA tentou e a fala do cliente | **NÃO COBERTO** — o cartão é da onda seguinte; o e2e `passagem-com-contexto.spec.ts` nasce com ele |
+| J27.6 · **pela TELA**, o aviso da Central leva a "Abrir conversa" e some ao assumir | **NÃO COBERTO** — mesma onda |
+
+### O achado que mudou o desenho, e que a tela não teria encontrado
+
+**`queued` contava como "cliente avisado", nos dois motores.** `sendMessageHandler` não
+lança em falha de canal: modo de teste, canal arquivado, contato sem telefone e recusa do
+transporte viram `status='failed'` na linha da mensagem, e canal fora do ar vira `queued`.
+Os dois emissores liam só a ausência de exceção. O resultado é a Central afirmando "O
+cliente JÁ FOI avisado de que uma pessoa vai assumir" para quem não recebeu nada — e o
+atendente abrindo a conversa respondendo a alguém que não sabia que ele vinha.
+
+Não é achado de tela: pela tela o texto está lá e parece certo. É achado de ler o que a
+função devolve.
+
+### A evidência da tela do chat do caso, e o que ela não prova (2026-09-18)
+
+Três imagens da tela do caso estavam versionadas **sem nenhum documento que as citasse**
+— `tests/unit/evidencia-citada.test.ts` reprovava a branch por isso, e o segundo lado da
+regra existe exatamente para impedir que imagem entre antes do documento que a justifica.
+Elas ficam citadas aqui, com o que EU vi ao abri-las (olhei as três, uma a uma):
+
+| imagem | o que ela mostra |
+|---|---|
+| `evidence/casos-vivos/chat/01-entrou.png` | a tela de **login em branco**, antes de entrar. O nome diz "entrou"; a imagem diz o contrário |
+| `evidence/casos-vivos/chat/02-lista-de-casos.png` | **a única que prova o que o nome diz**: `/app/ai/cases` com a aba "Abertos (1)" e o caso "Desconto acima da alça… · Aguardando você", mais o painel vazio à direita ("Selecione um caso à esquerda") |
+| `evidence/casos-vivos/chat/03-detalhe-do-caso.png` | a tela de **Contatos** em estado de esqueleto (blocos cinza carregando). Não é o detalhe de caso nenhum |
+
+**O que estas três imagens provam, e o que provou a jornada.** Duas das três não mostram o
+passo que o nome delas promete, e a terceira prova só que a LISTA renderiza. Elas ficam
+aqui como o registro do que a primeira tentativa alcançou — e não como prova da jornada.
+
+A prova da jornada veio depois, em outra captura: `evidence/casos-vivos/README.md`, com o
+caso aberto e a resposta da IA na tela. **É aquele README que responde "o chat do caso
+funciona?"**, não estas três imagens; esta tabela existe para que ninguém as tome por
+prova ao encontrá-las soltas no diretório.
