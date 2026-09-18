@@ -438,7 +438,8 @@ junto com o disco do 12-bis: são os dois instrumentos da triagem que falham em 
 ## 3-quinquies. Fila grande — a integração em lote, e o gate que ela esconde
 
 **Gatilho: mais de ~10 PRs abertos.** Abaixo disso, trie e mergeie um a um. Acima, um a um é a
-decisão errada, e a razão se mede antes de começar:
+decisão errada **para a faixa completa**, e a razão se mede antes de começar (a faixa leve tem regra
+própria logo abaixo):
 
 ```bash
 git fetch origin --force $(for n in $(gh pr list --state open --limit 100 --json number \
@@ -510,6 +511,35 @@ isso funcionar, e cada uma já falhou quando ausente:
    duplicado. **E PR em rascunho não entra no lote.** Rascunho é o autor dizendo "não terminei";
    mede-se e comenta-se (a revisão de segurança vale como comentário antecipado), mas integrá-lo
    tira dele o rebase que ele mesmo anunciou.
+
+### A faixa leve não espera o lote — merge automático no próprio PR
+
+**Decisão do dono, 18/09/2026.** PR da faixa leve (pequeno, checks obrigatórios verdes, teste que
+cobre o comportamento alterado, nada em schema, permissões, segurança, dinheiro, instalação ou
+efeito externo) **não entra em lote**. Aprovado na leitura, ele recebe o merge automático e entra
+sozinho quando os checks ficarem verdes:
+
+```bash
+gh pr merge <n> --auto --merge      # merge de verdade, nunca squash — mesma razão do item 1 acima
+```
+
+**Por quê, medido (15–18/09/2026, 249 PRs mergeados):** o PR esperava o merge **depois** de verde
+3,7 h na mediana e 28,7 h no p90 — mais do que todo o ciclo de CI (0,7 h na mediana). A espera era
+pelo lote, não pelo CI. O lote continua sendo a ferramenta certa onde ele protege algo: arquivo
+de apêndice (`baseline.sql`, `MANIFEST.md`), migration e interação entre PRs da faixa completa. A
+fila de merge (merge queue) do GitHub, que faria isso por nós, **não está disponível** neste
+repositório (conta pessoal; a regra é recusada com 422).
+
+Três cuidados, cada um com a sonda:
+
+1. **Dependência entre PRs.** Se o PR depende de outro ainda aberto, ele vai com o lote. Confira
+   antes de ligar: o corpo do PR e `git diff --name-only origin/main...refs/tri/<n>` contra os
+   arquivos dos outros candidatos.
+2. **O teto do CHANGELOG** (seção abaixo). Os fragmentos do merge automático ficam na `main`
+   esperando o próximo corte. Antes de montar um lote, conte `ls .changes/*.md | wc -l`: se a
+   faixa leve já encheu o teto, **corte a versão antes do lote**.
+3. **A rede é o CI da `main`**, que roda depois de cada merge. `main` vermelha por causa de um
+   merge automático é a primeira coisa que a rodada conserta, antes de qualquer lote.
 
 ### ⚠️ O gate que o lote esconde: `build`
 
