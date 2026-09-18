@@ -92,6 +92,70 @@ jobs:
       - name: Marcar o início (o orçamento de tempo mede no fim do job)
         run: echo "VERIFY_INICIO=$(date +%s)" >> "$GITHUB_ENV"
 
+      # ── O VERDE DESTE PR É DE QUAL ÁRVORE? ────────────────────────────────
+      #
+      # Em `pull_request`, o CI mede a PRÉVIA do merge — base + head no instante
+      # do evento — e essa prévia NÃO se atualiza sozinha quando a `main` anda.
+      # Medido em 18/09/2026: três PRs "mergeable e verdes" tinham prévia
+      # atrasada em 29, 52 e 35 commits; e o PR de release #1229 foi mesclado
+      # contra uma base 5 commits velha, com um fragmento de `.changes/` que a
+      # prévia não continha — a versão teria saído com um conserto dentro e sem
+      # nota.
+      #
+      # Avisar só "atrasada em N commits" seria RUÍDO: a `main` recebeu ~40
+      # merges neste único dia, então quase todo PR está atrasado e o aviso
+      # perderia o sentido em uma semana. O aviso aqui é o CRUZAMENTO: a `main`
+      # andou em arquivos que ESTE PR também toca. É o caso em que o verde
+      # mediu uma árvore que não existe mais — e é exatamente a forma dos dois
+      # defeitos de hoje (fragmento órfão e `modify/delete` em `.changes/`).
+      #
+      # Nunca reprova: um PR não pode ficar vermelho porque outra pessoa
+      # mesclou algo enquanto ele esperava vaga na fila. Quem decide o rebase é
+      # quem vai mesclar — este passo só tira a decisão do escuro.
+      - name: A prévia deste PR mediu a main de agora?
+        if: github.event_name == 'pull_request' && matrix.parte == 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          # `base.sha` é a base da PRÓPRIA prévia que este run está medindo.
+          comp=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${GITHUB_BASE_REF:-main}" 2>/dev/null) || {
+            echo "::warning::não consegui comparar a base da prévia com a ${GITHUB_BASE_REF:-main} — NÃO MEDIDO"; exit 0; }
+          atraso=$(printf '%s' "$comp" | jq -r '.ahead_by // 0')
+          printf '%s' "$comp" | jq -r '.files[]?.filename' | sort -u > /tmp/main-andou.txt
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[].filename' 2>/dev/null | sort -u > /tmp/pr-toca.txt
+          cruzamento=$(comm -12 /tmp/main-andou.txt /tmp/pr-toca.txt)
+          n=$(printf '%s' "$cruzamento" | grep -c . || true)
+          {
+            echo "## A prévia deste PR"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| base medida por este run | \`${BASE:0:9}\` |"
+            echo "| commits que a \`${GITHUB_BASE_REF:-main}\` andou desde então | ${atraso} |"
+            echo "| desses, arquivos que este PR TAMBÉM toca | ${n} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "::warning title=O verde deste PR mediu uma árvore que já não existe::a ${GITHUB_BASE_REF:-main} andou ${atraso} commits desde a base desta prévia, e ${n} arquivo(s) do seu PR mudaram lá. Rebase/merge antes de mesclar — o verde atual não mediu o que seria mesclado."
+            printf '%s\n' "$cruzamento" | head -10 | sed "s|^|::warning::também mudou na ${GITHUB_BASE_REF:-main}: |"
+            {
+              echo ""
+              echo "Arquivos em comum (até 10):"
+              echo ""
+              printf '%s\n' "$cruzamento" | head -10 | sed "s|^|- \`|; s|$|\`|"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "prévia com base ${BASE:0:9}; a ${GITHUB_BASE_REF:-main} andou ${atraso} commits, nenhum nos arquivos deste PR"
+          fi
+          # A lista de arquivos da comparação vem truncada acima de 300 arquivos
+          # (limite da API): cruzamento vazio num intervalo enorme é NÃO MEDIDO,
+          # não "não houve".
+          if [ "$atraso" -gt 250 ]; then
+            echo "::warning::a comparação pode ter vindo truncada (${atraso} commits) — cruzamento vazio aqui é NÃO MEDIDO"
+          fi
+
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
         # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
