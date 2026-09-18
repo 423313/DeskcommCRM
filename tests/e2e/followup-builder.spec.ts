@@ -58,6 +58,24 @@ test.beforeAll(async () => {
   await afirmarAdminDeTenantPuro(creds.users.admin!.email);
 });
 
+/**
+ * Reduz o zoom até a escala ALVO, medindo — nunca contando cliques. Ver o
+ * mesmo utilitário em followup-ramos.spec.ts: contar cliques só funcionava
+ * enquanto o canvas de um fluxo vazio saltava para 200% no primeiro nó.
+ */
+async function zoomAte(page: Page, alvo: number): Promise<void> {
+  const escala = async (): Promise<number> =>
+    page.locator(".react-flow__viewport").evaluate((el) => {
+      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      return m.a || 1;
+    });
+  const zoomOut = page.locator(".react-flow__controls-zoomout");
+  for (let i = 0; i < 10 && (await escala()) > alvo + 0.01; i++) {
+    await zoomOut.click();
+    await page.waitForTimeout(80);
+  }
+}
+
 async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
   await page.locator("#email").fill(email);
@@ -261,8 +279,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
 
     // fitView pode chegar ao maxZoom (2x) com poucos nós — zoom out garante
     // que todos os handles fiquem dentro do viewport pros drags de conexão.
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -305,8 +322,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     await page.getByTestId("palette-add-action").click();
     await page.getByTestId("palette-add-end").click();
 
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -434,8 +450,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     await page.getByTestId("palette-add-action").click();
     await page.getByTestId("palette-add-end").click();
 
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -591,8 +606,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
 
     await page.getByTestId("palette-add-trigger").click();
     await page.getByTestId("palette-add-end").click();
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
       .getAttribute("data-id");
@@ -726,8 +740,7 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     // finishes its first measurement — settle it to a known, stable zoom BEFORE doing
     // any screen-space math below, or the 6 sequential palette adds keep moving the
     // goalposts mid-repositioning (see the 6.2 canvas test for the same caveat).
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 6; i++) await zoomOut.click();
+    await zoomAte(page, 0.7);
     await page.waitForTimeout(300);
 
     // 1b. Spread the 6 nodes into a real branching layout (source above target, siblings

@@ -98,6 +98,29 @@ async function moverNo(page: Page, nodeId: string, x: number, y: number): Promis
   await page.waitForTimeout(150);
 }
 
+/**
+ * Reduz o zoom até a escala ALVO, medindo — nunca contando cliques.
+ *
+ * As duas specs do canvas clicavam N vezes em "reduzir zoom" para compensar o
+ * salto para 200% que o enquadramento automático dava no primeiro nó de um
+ * fluxo vazio. Com esse salto consertado (FlowCanvas: fitView só quando o fluxo
+ * abre com nós), o mesmo número de cliques leva a escalas pequenas demais — os
+ * cartões e as bolinhas de saída encolhem, e o arrasto passa a mirar alvos de
+ * poucos pixels. Medir a escala e parar no alvo vale nos dois mundos.
+ */
+async function zoomAte(page: Page, alvo: number): Promise<void> {
+  const escala = async (): Promise<number> =>
+    page.locator(".react-flow__viewport").evaluate((el) => {
+      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      return m.a || 1;
+    });
+  const zoomOut = page.locator(".react-flow__controls-zoomout");
+  for (let i = 0; i < 10 && (await escala()) > alvo + 0.01; i++) {
+    await zoomOut.click();
+    await page.waitForTimeout(80);
+  }
+}
+
 async function idPorPrefixo(page: Page, prefixo: string): Promise<string[]> {
   const els = await page.locator(`.react-flow__node[data-id^="${prefixo}-"]`).all();
   const ids: string[] = [];
@@ -155,8 +178,7 @@ test.describe("condição com várias regras — uma bolinha por regra", () => {
 
     // Estabiliza o zoom antes de qualquer conta em pixels: o fitView re-ajusta a
     // cada nó medido pela primeira vez e move o alvo no meio do caminho.
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
     await page.waitForTimeout(300);
 
     const canvas = await page.getByTestId("flow-canvas").boundingBox();
