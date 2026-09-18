@@ -2081,9 +2081,6 @@ export const DICIONARIO: Traducoes = {
   "Só avisa, nunca para a IA": {
     es: "Solo avisa, nunca detiene la IA",
   },
-  "Desligada": {
-    es: "Apagada",
-  },
   "Exigir assinatura nas entregas do canal": {
     es: "Exigir firma en las entregas del canal",
   },

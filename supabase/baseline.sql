@@ -27694,18 +27694,6 @@ comment on table public.platform_settings is
 comment on column public.platform_settings.signup_mode is
   'aberto = qualquer pessoa cria conta em /signup (comportamento histórico). so_convite = só quem chega com convite válido; sem convite, /signup recusa com tela e /auth/confirm NÃO provisiona organização.';
 
-comment on column public.platform_settings.orcamento_de_ia is
-  'on = a IA respeita o teto de gasto que cada organização escolheu (default do produto, e o que o .env declara). avisar = a IA responde e apenas avisa quem opera. off = sem proteção de gasto. null = a instalação não opinou; vale AI_BUDGET_ENFORCEMENT do arquivo de ambiente. Só AFROUXA o que a organização escolheu: nunca liga proteção que a empresa não pediu.';
-
-comment on column public.platform_settings.exigir_assinatura_no_webhook is
-  'true = toda entrega de webhook do canal precisa vir assinada com o segredo da sessão; sem assinatura (ou com assinatura errada) a entrega é recusada. null = a instalação não opinou; vale WAHA_WEBHOOK_REQUIRE_SIGNATURE do arquivo de ambiente (default do produto: false).';
-
-comment on column public.platform_settings.divulgacao_de_pagamento is
-  'inject = o texto de divulgação de pagamento entra na primeira mensagem. veto = o envio sem esse texto é bloqueado e devolvido ao modelo com a razão, para ele reescrever. null = a instalação não opinou; vale DISCLOSURE_MODE do arquivo de ambiente (default do produto: inject).';
-
-comment on column public.platform_settings.promessa_semantica is
-  'true = cada envio passa por uma conferência de modelo antes de sair, para não prometer o que a empresa não cumpre (custa uma chamada de modelo por envio). null = a instalação não opinou; vale PROMISE_SEMANTIC_ENABLED do arquivo de ambiente (default do produto: true).';
-
 alter table public.platform_settings enable row level security;
 
 -- ZERO POLICIES, DE PROPÓSITO. Mesma decisão de `platform_branding`: esta linha
@@ -27719,6 +27707,46 @@ drop trigger if exists trg_platform_settings_touch on public.platform_settings;
 create trigger trg_platform_settings_touch
   before update on public.platform_settings
   for each row execute function public.fn_touch_updated_at();
+
+notify pgrst, 'reload schema';
+
+-- ---- comportamento da instalação (migration 0265) ----
+-- O `create table if not exists` acima só age em instalação NOVA: quem já tem
+-- `platform_settings` (desde a 0253, v1.25.0) passa por ele sem efeito no
+-- `update.sh`, e as quatro colunas nunca nasceriam. Este bloco é o espelho da
+-- migration 0265 e é o que as leva a quem ATUALIZA. NULAS e sem default, de
+-- propósito: null = "a instalação não opinou", e quem responde é o `.env`.
+-- Sem dado a corrigir antes das CHECKs: as colunas nascem nulas, e as CHECKs
+-- aceitam null.
+alter table public.platform_settings
+  add column if not exists orcamento_de_ia              text,
+  add column if not exists exigir_assinatura_no_webhook boolean,
+  add column if not exists divulgacao_de_pagamento      text,
+  add column if not exists promessa_semantica           boolean;
+
+alter table public.platform_settings
+  drop constraint if exists platform_settings_orcamento_de_ia;
+alter table public.platform_settings
+  add constraint platform_settings_orcamento_de_ia
+  check (orcamento_de_ia is null or orcamento_de_ia in ('on', 'avisar', 'off'));
+
+alter table public.platform_settings
+  drop constraint if exists platform_settings_divulgacao_de_pagamento;
+alter table public.platform_settings
+  add constraint platform_settings_divulgacao_de_pagamento
+  check (divulgacao_de_pagamento is null or divulgacao_de_pagamento in ('inject', 'veto'));
+
+comment on column public.platform_settings.orcamento_de_ia is
+  'on = a IA respeita o teto de gasto que cada organização escolheu (default do produto, e o que o .env declara). avisar = a IA responde e apenas avisa quem opera. off = sem proteção de gasto. null = a instalação não opinou; vale AI_BUDGET_ENFORCEMENT do arquivo de ambiente. Só AFROUXA o que a organização escolheu: nunca liga proteção que a empresa não pediu.';
+
+comment on column public.platform_settings.exigir_assinatura_no_webhook is
+  'true = toda entrega de webhook do canal precisa vir assinada com o segredo da sessão; sem assinatura (ou com assinatura errada) a entrega é recusada. null = a instalação não opinou; vale WAHA_WEBHOOK_REQUIRE_SIGNATURE do arquivo de ambiente (default do produto: false).';
+
+comment on column public.platform_settings.divulgacao_de_pagamento is
+  'inject = o texto de divulgação de pagamento entra na primeira mensagem. veto = o envio sem esse texto é bloqueado e devolvido ao modelo com a razão, para ele reescrever. null = a instalação não opinou; vale DISCLOSURE_MODE do arquivo de ambiente (default do produto: inject).';
+
+comment on column public.platform_settings.promessa_semantica is
+  'true = cada envio passa por uma conferência de modelo antes de sair, para não prometer o que a empresa não cumpre (custa uma chamada de modelo por envio). null = a instalação não opinou; vale PROMISE_SEMANTIC_ENABLED do arquivo de ambiente (default do produto: true).';
 
 notify pgrst, 'reload schema';
 
