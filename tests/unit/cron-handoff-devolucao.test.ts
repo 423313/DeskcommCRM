@@ -65,7 +65,20 @@ function navegarJsonb(coluna: string, linha: Record<string, unknown>): unknown {
     if (atual === null || typeof atual !== "object") return SQL_NULL;
     const proximo = (atual as Record<string, unknown>)[chave];
     if (proximo === undefined) return SQL_NULL;
-    if (seta === "->>") return proximo === null ? SQL_NULL : String(proximo);
+    if (seta === "->>") {
+      // `->>` extrai TEXTO e ENCERRA o caminho. Encadear depois dele
+      // (`a->>b->c`) é erro de tipo no Postgres — `operator does not exist:
+      // text -> unknown` —, então o PostgREST devolveria erro e a rodada
+      // viraria 500, não "algumas linhas a menos". Estourar aqui em vez de
+      // seguir avaliando impede este avaliador de inventar uma resposta
+      // plausível para uma consulta que nem roda.
+      if (i + 2 < partes.length) throw new Error(`caminho jsonb inválido: ${coluna}`);
+      return proximo === null
+        ? SQL_NULL
+        : typeof proximo === "string"
+          ? proximo
+          : JSON.stringify(proximo);
+    }
     atual = proximo;
   }
   return atual;
