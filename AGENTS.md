@@ -400,9 +400,10 @@ itens envelhecem em ritmos diferentes, e o cabeçalho passava a mentir por todos
   implementações com recibo (`lgpd/requests/[id]/approve` e `admin/tenants`) e, desde este
   commit, uma reutilizável em `lib/api/idempotency.ts`, aplicada em `message-templates`.
   Reconte antes de citar: `grep -rln 'Idempotency-Key' app/api/v1 --include='route.ts'`.
-  **A corrida entre duas requisições simultâneas com a mesma chave segue aberta** —
-  `idempotency_keys.status_code` e `.response_body` são `NOT NULL`, então não há onde gravar
-  "em curso"; fechar exige mudança de schema. Ver issue #778.
+  No helper reutilizável, **a corrida entre duas requisições simultâneas com a mesma chave
+  está fechada** (issue #778, migration 0321): a chave é reservada ANTES do efeito e quem
+  perde recebe 409 `idempotency_in_progress`. Isso vale para quem usa `comIdempotencia` —
+  hoje só `message-templates`; as outras rotas mantêm o recibo delas.
 - **`.env.example` está completo** — medido em 2026-08-14: das 45 chaves de `lib/env.ts`, a
   única ausente é `NODE_ENV`, que não é configuração do operador. Esta linha dizia que faltavam
   6, "incluindo 3 secrets"; os três (`IMPERSONATE_COOKIE_SECRET`, `INTERNAL_CRON_SECRET`,
