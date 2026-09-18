@@ -49,8 +49,15 @@ security definer
 set search_path = public
 as $$
 declare
-  v_antes timestamptz;
-  v_primeira timestamptz;
+  c_etiqueta constant text := 'cliente';
+  v_antes      timestamptz;
+  v_primeira   timestamptz;
+  v_tags       text[];
+  v_novas      text[];
+  v_reconhecido timestamptz;
+  v_dono       text;
+  v_tem        boolean;
+  v_resultado  text := 'carimbado';
 begin
   if p_contact is null then return 'sem_contato'; end if;
 
@@ -59,7 +66,8 @@ begin
   -- cima do certo. `for no key update` (e não `for update`) para não brigar
   -- com o `for key share` que a FK de toda tabela que aponta para `contacts`
   -- toma num INSERT — com `for update` aquilo fechava deadlock.
-  select first_service_at into v_antes
+  select first_service_at, coalesce(tags, '{}'::text[]), client_recognized_at, client_tag_by_system
+    into v_antes, v_tags, v_reconhecido, v_dono
     from public.contacts
    where id = p_contact and organization_id = p_org
      and not coalesce(is_anonymized, false)
@@ -78,23 +86,65 @@ begin
   -- cliente desde 2021 não vira "cliente desde 2026" por causa da ordem em que
   -- as duas fontes chegaram.
   v_primeira := least(v_primeira, coalesce(v_antes, v_primeira));
-  if v_antes is not distinct from v_primeira then return 'igual'; end if;
+
+  -- ⚠️ NÃO sair aqui só porque a data não mudou. Data certa com etiqueta
+  -- faltando é um estado real — foi o que sobrou do primeiro backfill, medido
+  -- em 18/09: 536 com data, 0 com etiqueta. A saída antecipada por data
+  -- pulava justamente o conserto. Quem decide a saída é o fim da função,
+  -- quando as DUAS coisas já foram avaliadas.
+
+  -- A ETIQUETA, com a MESMA regra da 0262 — replicada e não chamada, porque
+  -- `fn_recalcular_cliente_do_contato` recalcula a data pela AGENDA e apagaria
+  -- o carimbo que veio da comanda.
+  --
+  -- Quem decide é a coluna; a etiqueta serve para filtrar a listagem, alimentar
+  -- automação e o agente ler. E ela respeita a mão humana: entra só na primeira
+  -- vez (ou se foi o sistema que a tirou), nunca por cima de quem a removeu de
+  -- propósito.
+  v_tem := c_etiqueta = any(v_tags);
+
+  -- Rede para banco restaurado com trigger desligada, onde a etiqueta pode ter
+  -- mudado de mão sem a guarda ver.
+  if (v_dono = 'added' and not v_tem) or (v_dono = 'removed' and v_tem) then
+    v_dono := null;
+  end if;
+
+  v_novas := v_tags;
+  -- `v_antes is null` era a condição da 0262, onde só há uma fonte. Aqui a data
+  -- pode já ter vindo do backfill anterior, então a pergunta certa é "já foi
+  -- reconhecido alguma vez?" — quem nunca foi ganha a etiqueta.
+  if not v_tem and (v_reconhecido is null or v_dono = 'removed') then
+    -- `array_append` e não `||`: sem cast o `||` lê o literal como ARRAY e
+    -- morre em `malformed array literal`.
+    v_novas := array_append(v_tags, c_etiqueta);
+    v_dono := 'added';
+    v_resultado := 'etiquetado';
+  end if;
 
   -- ANUNCIA A ESCRITA AO GUARDA. `fn_colunas_de_cliente_sao_do_sistema` (0262)
   -- recusa com 42501 qualquer sessão que mexa em `first_service_at`, e
   -- `auth.uid()` continua preenchido dentro de uma `security definer` chamada
   -- pela sessão — então esta função é barrada como se fosse mão humana sem a
   -- chave. É de transação, e a mesma que a função da agenda usa.
+  -- Nada a fazer: nem a data mudou, nem a etiqueta. Não escrever é o que
+  -- impede o contato de virar ruído de realtime e `updated_at` de se mexer
+  -- por nada — o mesmo cuidado da 0262.
+  if v_antes is not distinct from v_primeira and v_novas = v_tags then
+    return 'igual';
+  end if;
+
   perform set_config('deskcomm.cliente_pela_agenda', 'on', true);
 
   update public.contacts
      set first_service_at = v_primeira,
-         client_recognized_at = coalesce(client_recognized_at, now())
+         client_recognized_at = coalesce(client_recognized_at, now()),
+         tags = v_novas,
+         client_tag_by_system = v_dono
    where id = p_contact;
 
   perform set_config('deskcomm.cliente_pela_agenda', 'off', true);
 
-  return 'carimbado';
+  return v_resultado;
 end $$;
 
 revoke execute on function public.fn_cliente_pela_comanda(uuid, uuid) from public, anon, authenticated;
@@ -106,9 +156,35 @@ comment on function public.fn_cliente_pela_comanda(uuid, uuid) is
 -- Sem isto, as 536 clientes do sistema anterior continuariam sem selo até
 -- comprarem de novo. Idempotente: quem já tem o carimbo certo não é tocado.
 do $$
-declare v_linha record; v_n integer := 0;
+declare v_linha record; v_n integer := 0; v_curados integer := 0;
 begin
   if to_regclass('public.sales') is null then return; end if;
+
+  -- AUTO-CURA de uma versão anterior DESTA migration.
+  --
+  -- A primeira versão gravava `client_recognized_at` e NÃO punha a etiqueta.
+  -- Como `client_recognized_at` significa "já reconheci uma vez, não reponho a
+  -- etiqueta", ela queimava o reconhecimento à toa: na passada seguinte a
+  -- regra entendia que a equipe tinha removido a tag de propósito e a deixava
+  -- de fora para sempre. Medido em 18/09: 536 com data, 0 com etiqueta.
+  --
+  -- O estado é reconhecível sem ambiguidade: tem `client_recognized_at`, NÃO
+  -- tem a etiqueta e `client_tag_by_system` é nulo — ou seja, o sistema nunca
+  -- pôs nem tirou nada. Devolver ao "nunca reconhecido" faz a função tratá-lo
+  -- como primeira vez, que é o que ele de fato é.
+  --
+  -- Não alcança quem a equipe desetiquetou de verdade: naquele caso o sistema
+  -- pôs antes, e `client_tag_by_system` seria 'removed'.
+  update public.contacts
+     set client_recognized_at = null
+   where client_recognized_at is not null
+     and client_tag_by_system is null
+     and not (coalesce(tags, '{}'::text[]) @> array['cliente'])
+     and first_service_at is not null;
+  get diagnostics v_curados = row_count;
+  if v_curados > 0 then
+    raise notice '9014: % contato(s) curados de uma versão anterior desta migration', v_curados;
+  end if;
 
   for v_linha in
     select s.organization_id, s.contact_id, min(s.finalized_at) as primeira
@@ -118,15 +194,11 @@ begin
        and s.status = 'finalized' and s.finalized_at is not null and s.reversed_at is null
        and not coalesce(c.is_anonymized, false) and c.is_merged_into is null
      group by 1, 2
-    having min(s.finalized_at) is distinct from
-           (select first_service_at from public.contacts where id = s.contact_id)
   loop
-    update public.contacts
-       set first_service_at = least(v_linha.primeira, coalesce(first_service_at, v_linha.primeira)),
-           client_recognized_at = coalesce(client_recognized_at, now())
-     where id = v_linha.contact_id
-       and first_service_at is distinct from
-           least(v_linha.primeira, coalesce(first_service_at, v_linha.primeira));
+    -- Pela função, e não por UPDATE solto: é ela que sabe a regra da etiqueta
+    -- e que se anuncia ao guarda. Duplicar a lógica aqui criaria a segunda
+    -- versão que diverge no primeiro conserto.
+    perform public.fn_cliente_pela_comanda(v_linha.organization_id, v_linha.contact_id);
     v_n := v_n + 1;
   end loop;
 

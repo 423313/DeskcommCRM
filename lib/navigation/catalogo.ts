@@ -520,10 +520,13 @@ export const NAV_CATALOG = [
     // para onde o dinheiro vai, CRM › Comandas é onde o dia acontece, e aqui se
     // responde a pergunta do fim do mês.
     //
-    // Fora do sidebar de propósito: é consulta periódica, não uso diário, e o
-    // hub de Análise é onde ela se encontra sem disputar pixel com o que se abre
-    // toda hora.
+    // NO SIDEBAR, por decisão do dono do produto (18/09/2026). A regra do
+    // arquivo é cadência, e a cadência aqui foi medida errada de longe: num
+    // estúdio com duas profissionais, conferir o caixa e o que cada uma tem a
+    // receber é semanal, não de fim de mês. Quem opera é quem sabe com que
+    // frequência abre a tela.
     href: "/app/faturamento",
+    sidebar: true,
     // A promessa "quanto cada pessoa tem a receber" saiu daqui: ela era feita e
     // não cumprida (mostrava o número, não deixava pagar). Agora é da tela de
     // Comissões, logo abaixo.
@@ -544,8 +547,7 @@ export const NAV_CATALOG = [
     // `viewer` para ver, pelo mesmo motivo do Faturamento: conferir não é
     // privilégio de quem paga. Fechar exige `manager`, e quem barra é o banco.
     minRole: "viewer",
-    // Fora do sidebar: é pergunta de quinzena ou de mês, não de balcão. Quem
-    // precisa acha pelo hub de Análise ou pelo ⌘K.
+    sidebar: true,
   },
   {
     href: "/app/metrics",

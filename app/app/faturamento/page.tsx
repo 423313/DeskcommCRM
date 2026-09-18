@@ -13,8 +13,11 @@ export const dynamic = "force-dynamic";
  *
  * Configurações › Financeiro descreve para onde o dinheiro vai. CRM › Comandas é
  * onde o dia acontece. Esta tela responde "quanto entrou, de que forma, e quanto
- * cada pessoa tem a receber" — a pergunta que se faz no fim do mês, e a razão de
- * ela ficar em Análise.
+ * saiu do caixa" — a pergunta que se faz no fim do mês.
+ *
+ * "Quanto cada pessoa tem a receber" saiu daqui: era promessa feita e não
+ * cumprida (mostrava o número, não deixava pagar). Agora é da tela de
+ * Comissões, que fecha o período e gera o lançamento.
  *
  * `viewer` porque conferir o faturamento não é privilégio de quem lança. O que a
  * RLS impede é ele ver o de outra organização.
@@ -36,7 +39,7 @@ export default async function Page() {
       <div>
         <h1 className="text-xl font-semibold">{t("Faturamento")}</h1>
         <p className="text-sm text-text-muted">
-          {t("Quanto entrou, de que forma, e quanto cada pessoa tem a receber.")}
+          {t("Quanto entrou, de que forma, e o que saiu do caixa.")}
         </p>
       </div>
       <Faturamento podeLancar={ROLE_RANK[org.role] >= ROLE_RANK.agent} />

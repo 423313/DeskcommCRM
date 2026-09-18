@@ -23,7 +23,15 @@ import { formatCents } from "@/lib/money";
 import { ListaDeLancamentos, type Conta, type Lancamento } from "./_lancamentos";
 
 type Forma = { nome: string; quantidade: number; total_cents: number };
-type Profissional = { professional_id: string | null; itens: number; comissao_cents: number };
+type Profissional = {
+  professional_id: string | null;
+  /** Resolvido no banco: a profissional não é usuária e não está em rota de equipe. */
+  nome: string;
+  itens: number;
+  comissao_cents: number;
+  pendente_cents: number;
+  pago_cents: number;
+};
 type Servico = { nome: string; quantidade: number; total_cents: number };
 type Cliente = { contact_id: string; comandas: number; total_cents: number };
 
@@ -64,19 +72,14 @@ export function Faturamento({ podeLancar }: { podeLancar: boolean }) {
       ).data,
   });
 
-  // Os nomes de quem atendeu não vêm do relatório: ele devolve o id, e juntar
-  // aqui evita que a função no banco precise conhecer a tabela de equipe.
-  const equipe = useQuery({
-    queryKey: ["team", "assignable"],
-    queryFn: async () => (await apiClient.get<{ data: Pessoa[] }>("/api/v1/team/assignable")).data,
-  });
-
-  const nomeDe = (id: string | null) => {
-    if (!id) return t("Sem responsável");
-    const p = (equipe.data ?? []).find((x) => x.user_id === id);
-    return p?.name ?? p?.email ?? t("Sem responsável");
-  };
-
+  // ⚠️ O NOME DA PROFISSIONAL VEM DO RELATÓRIO, e não de uma busca aqui.
+  //
+  // Até a 9012 este arquivo procurava o nome em `/api/v1/team/assignable`,
+  // porque quem atendia era um usuário do sistema. Não é mais: quem executa o
+  // serviço é uma profissional cadastrada, que não tem login e portanto nunca
+  // aparece naquela rota — a busca devolveria "Sem responsável" em TODA linha
+  // de comissão, sem erro nenhum para investigar. `fn_relatorio_financeiro`
+  // resolve o nome no banco, onde a tabela vive.
   // Os nomes dos clientes, pelo mesmo motivo dos da equipe: o relatório devolve
   // id, e resolver aqui evita que a função no banco precise conhecer contatos.
   const contatos = useQuery({
@@ -251,7 +254,7 @@ export function Faturamento({ podeLancar }: { podeLancar: boolean }) {
           <Tabela titulo={t("Comissão por pessoa")} vazio={t("Nenhuma comissão no período.")}>
             {r.por_profissional.map((p) => (
               <tr key={p.professional_id ?? "sem"} className="border-b border-border/60">
-                <td className="py-1">{nomeDe(p.professional_id)}</td>
+                <td className="py-1">{p.nome}</td>
                 <td className="py-1 text-right text-text-muted">{p.itens}</td>
                 <td className="py-1 text-right tabular-nums" colSpan={2}>
                   {formatCents(p.comissao_cents, "BRL")}

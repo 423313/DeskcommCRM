@@ -435,8 +435,11 @@ describe("financeiro: o fechamento de comissão", () => {
         (select id from public.financial_accounts where organization_id='${ORG_A}' limit 1))::text;
     `);
     expect(primeira.erro, `o fechamento falhou: ${primeira.erro}`).toBeUndefined();
-    // 10% de 200 + 10% de 300 = 50
-    expect(primeira.ok ?? "").toContain('"total_cents": 5000');
+    // 10% de 200 + 10% de 300 = R$ 50, MAIS a comissão de R$ 5 que o seed do
+    // arquivo já deixa pendente (item de R$ 50 a 10%). O fechamento é por
+    // PERÍODO e profissional, e leva tudo o que está em aberto — somar só o
+    // que este caso criou seria fingir que o resto não existe.
+    expect(primeira.ok ?? "").toContain('"total_cents": 5500');
 
     // ⚠️ A SEGUNDA CHAMADA, e o motivo de este caso existir: a primeira versão
     // usava `create temp table … on commit drop`, e duas chamadas na mesma

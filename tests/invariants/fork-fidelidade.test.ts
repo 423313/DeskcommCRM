@@ -88,8 +88,10 @@ beforeAll(() => {
         v_user    := case when v_org = '${ORG_A}'::uuid then '${USER_A}'::uuid else '${USER_B}'::uuid end;
         v_contato := case when v_org = '${ORG_A}'::uuid then '${CONTATO_A}'::uuid else '${CONTATO_B}'::uuid end;
 
-        insert into public.organizations (id, slug, legal_name)
-          values (v_org, 'fide-' || right(v_org::text, 1), 'Org fidelidade ' || right(v_org::text, 1))
+        insert into public.organizations (id, slug, legal_name, display_name)
+          values (v_org, 'fide-' || right(v_org::text, 1),
+                  'Org fidelidade ' || right(v_org::text, 1),
+                  'Org fidelidade ' || right(v_org::text, 1))
           on conflict (id) do nothing;
 
         insert into auth.users (id, instance_id, aud, role, email, encrypted_password,

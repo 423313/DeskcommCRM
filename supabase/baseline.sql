@@ -28681,8 +28681,15 @@ security definer
 set search_path = public
 as $$
 declare
-  v_antes timestamptz;
-  v_primeira timestamptz;
+  c_etiqueta constant text := 'cliente';
+  v_antes      timestamptz;
+  v_primeira   timestamptz;
+  v_tags       text[];
+  v_novas      text[];
+  v_reconhecido timestamptz;
+  v_dono       text;
+  v_tem        boolean;
+  v_resultado  text := 'carimbado';
 begin
   if p_contact is null then return 'sem_contato'; end if;
 
@@ -28691,7 +28698,8 @@ begin
   -- cima do certo. `for no key update` (e não `for update`) para não brigar
   -- com o `for key share` que a FK de toda tabela que aponta para `contacts`
   -- toma num INSERT — com `for update` aquilo fechava deadlock.
-  select first_service_at into v_antes
+  select first_service_at, coalesce(tags, '{}'::text[]), client_recognized_at, client_tag_by_system
+    into v_antes, v_tags, v_reconhecido, v_dono
     from public.contacts
    where id = p_contact and organization_id = p_org
      and not coalesce(is_anonymized, false)
@@ -28710,23 +28718,65 @@ begin
   -- cliente desde 2021 não vira "cliente desde 2026" por causa da ordem em que
   -- as duas fontes chegaram.
   v_primeira := least(v_primeira, coalesce(v_antes, v_primeira));
-  if v_antes is not distinct from v_primeira then return 'igual'; end if;
+
+  -- ⚠️ NÃO sair aqui só porque a data não mudou. Data certa com etiqueta
+  -- faltando é um estado real — foi o que sobrou do primeiro backfill, medido
+  -- em 18/09: 536 com data, 0 com etiqueta. A saída antecipada por data
+  -- pulava justamente o conserto. Quem decide a saída é o fim da função,
+  -- quando as DUAS coisas já foram avaliadas.
+
+  -- A ETIQUETA, com a MESMA regra da 0262 — replicada e não chamada, porque
+  -- `fn_recalcular_cliente_do_contato` recalcula a data pela AGENDA e apagaria
+  -- o carimbo que veio da comanda.
+  --
+  -- Quem decide é a coluna; a etiqueta serve para filtrar a listagem, alimentar
+  -- automação e o agente ler. E ela respeita a mão humana: entra só na primeira
+  -- vez (ou se foi o sistema que a tirou), nunca por cima de quem a removeu de
+  -- propósito.
+  v_tem := c_etiqueta = any(v_tags);
+
+  -- Rede para banco restaurado com trigger desligada, onde a etiqueta pode ter
+  -- mudado de mão sem a guarda ver.
+  if (v_dono = 'added' and not v_tem) or (v_dono = 'removed' and v_tem) then
+    v_dono := null;
+  end if;
+
+  v_novas := v_tags;
+  -- `v_antes is null` era a condição da 0262, onde só há uma fonte. Aqui a data
+  -- pode já ter vindo do backfill anterior, então a pergunta certa é "já foi
+  -- reconhecido alguma vez?" — quem nunca foi ganha a etiqueta.
+  if not v_tem and (v_reconhecido is null or v_dono = 'removed') then
+    -- `array_append` e não `||`: sem cast o `||` lê o literal como ARRAY e
+    -- morre em `malformed array literal`.
+    v_novas := array_append(v_tags, c_etiqueta);
+    v_dono := 'added';
+    v_resultado := 'etiquetado';
+  end if;
 
   -- ANUNCIA A ESCRITA AO GUARDA. `fn_colunas_de_cliente_sao_do_sistema` (0262)
   -- recusa com 42501 qualquer sessão que mexa em `first_service_at`, e
   -- `auth.uid()` continua preenchido dentro de uma `security definer` chamada
   -- pela sessão — então esta função é barrada como se fosse mão humana sem a
   -- chave. É de transação, e a mesma que a função da agenda usa.
+  -- Nada a fazer: nem a data mudou, nem a etiqueta. Não escrever é o que
+  -- impede o contato de virar ruído de realtime e `updated_at` de se mexer
+  -- por nada — o mesmo cuidado da 0262.
+  if v_antes is not distinct from v_primeira and v_novas = v_tags then
+    return 'igual';
+  end if;
+
   perform set_config('deskcomm.cliente_pela_agenda', 'on', true);
 
   update public.contacts
      set first_service_at = v_primeira,
-         client_recognized_at = coalesce(client_recognized_at, now())
+         client_recognized_at = coalesce(client_recognized_at, now()),
+         tags = v_novas,
+         client_tag_by_system = v_dono
    where id = p_contact;
 
   perform set_config('deskcomm.cliente_pela_agenda', 'off', true);
 
-  return 'carimbado';
+  return v_resultado;
 end $$;
 
 revoke execute on function public.fn_cliente_pela_comanda(uuid, uuid) from public, anon, authenticated;
