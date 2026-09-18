@@ -91,6 +91,23 @@ case " $* " in
       printf '%s' "$n" > "$BASELINE_ROTEIRO/n"
       [ -f "$BASELINE_ROTEIRO/passada.$n" ] && cat "$BASELINE_ROTEIRO/passada.$n"
     fi ;;
+  # VPS cuja arquitetura não é a das imagens publicadas (issue 1060): o registro
+  # responde que não tem manifest para ela, então o `pull` não traz nada e o
+  # `up -d` seguinte morre junto. Só vale com ARQ_DIFERENTE=1 — o gatilho do
+  # caso 12; fora dele o dublê é tão transparente quanto sempre foi.
+  *" pull "*)
+    if [ "${ARQ_DIFERENTE:-0}" = "1" ] && [ ! -f "${DOCKER_BUILD_FEITO:-/nao-existe}" ]; then
+      printf 'no matching manifest for linux/arm64/v8 in the manifest list entries\n' >&2
+      exit 1
+    fi ;;
+  *" up "*)
+    if [ "${ARQ_DIFERENTE:-0}" = "1" ] && [ ! -f "${DOCKER_BUILD_FEITO:-/nao-existe}" ]; then
+      exit 1
+    fi ;;
+  # O build local é o que destrava os dois acima: a partir dele as imagens
+  # existem no disco e o `up` sobe, como numa VPS de verdade depois do build.
+  *" build "*)
+    [ -n "${DOCKER_BUILD_FEITO:-}" ] && : > "$DOCKER_BUILD_FEITO" ;;
 esac
 exit 0
 STUB
@@ -159,6 +176,10 @@ touch "$BACKUP_MARK"
 STUB
 # shellcheck disable=SC2016  # o ${APP_IMAGE} é literal DENTRO do compose
 printf 'services:\n  app:\n    image: \${APP_IMAGE:-x}\n' > "$PROJ/docker-compose.prod.yml"
+# O overlay de build local existe no repo de verdade e o caminho de recuperação
+# do caso 12 o referencia por nome: sem ele aqui, o caso acusaria um arquivo que
+# existe na máquina do cliente.
+printf 'services:\n  app:\n    pull_policy: never\n    build:\n      context: .\n' > "$PROJ/docker-compose.build.yml"
 printf 'select 1;\n' > "$PROJ/supabase/baseline.sql"
 cat > "$PROJ/.env" <<ENV
 APP_IMAGE=${NS}/deskcommcrm:latest
@@ -182,8 +203,13 @@ echo topo > topo.txt; git add -A; git commit --quiet -m "topo da main"
 OUTFILE="$WORK/saida.txt"
 run_update() {  # run_update <args...> → saída em $OUTFILE, status em $RC
   rm -f "$BACKUP_MARK"
-  bash hostgator-setup-kit/update.sh "$@" > "$OUTFILE" 2>&1
-  RC=$?
+  # `|| RC=$?` em vez de `RC=$?` na linha seguinte: o caso 10 carrega o
+  # _common.sh do kit, que traz `set -e` junto com as funções. Sem este guarda,
+  # um caminho que o teste ESPERA que falhe (o "antes" da issue 1060) derrubava
+  # o harness no meio do caso — a suíte saía 1 sem imprimir QUAL prova falhou,
+  # que é justamente o silêncio que este arquivo existe para caçar.
+  RC=0
+  bash hostgator-setup-kit/update.sh "$@" > "$OUTFILE" 2>&1 || RC=$?
 }
 
 echo "── 1. Alvo anterior ao instalado é recusado antes do backup"
@@ -568,6 +594,56 @@ R="$( printf "APP_IMAGE=${NS}/deskcommcrm:1.3.0\n" > "$PIN_DIR/.env"
       cd "$PIN_DIR" && PATH="$PIN_DIR/bin:$PATH" DUBLE_VERSION="<no value>" bash -c \
         ". '$KIT_DIR_TESTE/_common.sh'; completar_pin_ausente .env" 2>/dev/null || true )"
 check "imagem sem label de versão → não inventa pin" test -z "$R"
+
+echo "── 12. VPS de outra arquitetura: atualizar se recupera sozinho (issue 1060)"
+# O defeito: o registro responde "no matching manifest for linux/arm64/v8", o
+# `pull` não traz imagem nenhuma e o `up -d` morre junto — o `app` não tem
+# `build:` ao lado do `image:`, então o Compose não tem o que subir. Antes da
+# guarda o script terminava como se tivesse dado certo: o CRM ficava na versão
+# velha e o dono não era avisado. Pelo botão "Atualizar" nem isso, porque o
+# agente roda sozinho no cron. O desfecho certo é construir aqui a MESMA versão
+# alvo e dizer, em português, o que aconteceu.
+cd "$PROJ" || exit 1
+export DOCKER_BUILD_FEITO="$WORK/build-feito"
+rm -f "$DOCKER_BUILD_FEITO"
+# Instalado numa versão anterior à alvo: sem isto a guarda de retrocesso
+# recusaria antes de chegar ao `up -d`.
+sed -i "s|^APP_IMAGE=.*|APP_IMAGE=${NS}/deskcommcrm:0.9.0|" .env
+: > "$DOCKER_LOG"
+export ARQ_DIFERENTE=1
+run_update --to v1.1.0
+unset ARQ_DIFERENTE
+check "termina com sucesso, sem intervenção manual" test "$RC" -eq 0
+check "o pull falhou de verdade no meio do caminho" \
+  grep -q "no matching manifest for linux/arm64/v8" "$OUTFILE"
+check "caiu para o build local do overlay de build" \
+  grep -q -- "-f docker-compose.build.yml build" "$DOCKER_LOG"
+check "subiu pelo override (pull_policy: never), sem voltar ao registro" \
+  grep -q -- "-f docker-compose.build.yml up -d" "$DOCKER_LOG"
+check "explica em português o que aconteceu" grep -q "não servem para esta VPS" "$OUTFILE"
+# O que sobra na tela do site é o rabo da saída (agent.sh: tail -40). Explicação
+# que fica só lá em cima não chega a quem clicou em "Atualizar".
+fim_tem() { tail -40 "$OUTFILE" | grep -q "$1"; }
+check "e diz no FIM, que é o que o agente manda para a tela" \
+  fim_tem "construídas aqui nesta VPS"
+
+# O caminho feliz NÃO muda de comportamento: imagem disponível, nada de build
+# local e nenhuma menção a arquitetura.
+sed -i "s|^APP_IMAGE=.*|APP_IMAGE=${NS}/deskcommcrm:0.9.0|" .env
+: > "$DOCKER_LOG"
+run_update --to v1.1.0
+check "caminho feliz: conclui normalmente" test "$RC" -eq 0
+check "caminho feliz: não constrói nada aqui (não paga o build à toa)" \
+  bash -c "! grep -q 'docker-compose.build.yml' '$DOCKER_LOG'"
+check "caminho feliz: a saída não fala em arquitetura nem em construção local" \
+  bash -c "! grep -qiE 'arquitetura|construídas aqui nesta VPS' '$OUTFILE'"
+
+# O passo 9 do install.sh tinha o MESMO buraco do `up -d` sem guarda, e a saída
+# dele também. A recuperação é a MESMA função de _common.sh, exercitada acima de
+# ponta a ponta pelo update.sh; aqui se prova que o install.sh a chama — e logo
+# depois do `up -d` que pode falhar, não em outro lugar qualquer.
+check "install.sh chama a recuperação depois de um up -d que pode falhar" \
+  bash -c "grep -A1 'if ! dc up -d; then' '$REPO_ROOT/hostgator-setup-kit/install.sh' | grep -q 'construir_aqui_e_subir'"
 
 if [ "$FAILS" -eq 0 ]; then echo "OK — todas as provas passaram."; else echo "FALHOU — $FAILS prova(s)."; fi
 exit $((FAILS > 0))
