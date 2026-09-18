@@ -1,4 +1,4 @@
--- 0278 — o recibo de idempotência ganha o estado "em curso" (issue #778)
+-- 0314 — o recibo de idempotência ganha o estado "em curso" (issue #778)
 --
 -- O PROBLEMA. `lib/api/idempotency.ts` lê o recibo, e SÓ DEPOIS deixa o efeito
 -- acontecer. Entre a leitura e a gravação existe uma janela em que a chave não
@@ -45,7 +45,7 @@
 --
 -- Derivada em `supabase/baseline.sql`: as colunas já nascem nuláveis no `create
 -- table` do modo install, e o apêndice "o recibo de idempotência ganha o estado
--- em curso (migration 0278)" reconverge banco já instalado. Os dois são o mesmo
+-- em curso (migration 0314)" reconverge banco já instalado. Os dois são o mesmo
 -- SQL idempotente que está aqui, para instalação nova e segunda passada
 -- chegarem ao mesmo conjunto.
 

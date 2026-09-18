@@ -26,13 +26,13 @@
  * ── Como a corrida é fechada ─────────────────────────────────────────────────
  * A reserva é a própria linha de `public.idempotency_keys`, gravada antes do
  * efeito com `status_code` e `response_body` NULOS
- * (`supabase/migrations/20260918120000_0278_recibo_de_idempotencia_em_curso.sql`).
+ * (`supabase/migrations/20260919120000_0314_recibo_de_idempotencia_em_curso.sql`).
  * O índice único `idempotency_keys_organization_id_key_endpoint_key` decide
  * quem executa: o segundo INSERT leva 23505 e não executa nada. Depois do
  * efeito, a MESMA linha recebe `status_code` + `response_body` e passa a valer
  * 24h — o recibo terminal, que é o que o replay lê.
  *
- * Antes da 0278 as duas colunas eram `NOT NULL` e a tabela só sabia
+ * Antes da 0314 as duas colunas eram `NOT NULL` e a tabela só sabia
  * representar recibo terminal: entre a leitura e a gravação não havia onde
  * gravar "esta chave está em curso", então duas requisições simultâneas liam
  * vazio as duas e o efeito acontecia duas vezes.

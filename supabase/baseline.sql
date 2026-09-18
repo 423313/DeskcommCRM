@@ -1562,7 +1562,7 @@ CREATE TABLE IF NOT EXISTS "public"."idempotency_keys" (
 ALTER TABLE "public"."idempotency_keys" OWNER TO "postgres";
 
 
--- migration 0278 (issue #778): o recibo tem DOIS estados. Terminal = `status_code`
+-- migration 0314 (issue #778): o recibo tem DOIS estados. Terminal = `status_code`
 -- e `response_body` gravados. Reserva = os DOIS nulos, gravados ANTES do efeito.
 -- O CHECK fecha o meio-termo (um gravado e o outro não), que nenhum leitor sabe
 -- interpretar e que só apareceria por bug de escrita.
