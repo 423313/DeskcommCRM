@@ -20,6 +20,11 @@
 #   7. nome fora de <14 dígitos>_<NNNN>_<slug>.sql reprova: sem NNNN não há o que medir.
 #   8. sem ref da base, o gate busca a base sozinho (o clone raso do CI); e quando não
 #      consegue medir, REPROVA (exit 2) declarando o NÃO MEDIDO — nunca verde silencioso.
+#   9. outra ref do clone (branch local de resgate) levanta o teto do conselho: o número
+#      salta e a saída nomeia QUEM tem (issue #1155).
+#  10. clone sem outras refs (o raso do CI) declara na própria saída que NÃO as mediu.
+#  11. ref que resolve para o próprio HEAD não vira "quem tem" — o alvo não mede a si
+#      mesmo (a armadilha da #1155).
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -181,6 +186,44 @@ saida="$(gate "$c" "origin/nao-existe")"; code=$?
 assert_exit "$code" 2 "base imensurável reprova com exit 2 (distinto de colisão)"
 assert_contains "$saida" "NÃO MEDIDO" "declara o não medido em vez de passar em silêncio"
 assert_contains "$saida" "git fetch origin origin/nao-existe" "diz o comando do conserto"
+
+# O commit() varre o gate copiado para dentro da árvore; o switch de branch seguinte o
+# remove (ficou tracked na branch que ficou para trás). Re-arma a cópia antes de medir.
+rearmar_gate() { rm -rf "$1/scripts"; mkdir -p "$1/scripts"; cp "$GATE_ORIGEM" "$1/scripts/"; }
+
+echo "13. outra ref do clone levanta o teto: o conselho salta e nomeia QUEM tem"
+c="$TMP/c13"; clonar "$c"
+git -C "$c" switch -q -c outra/resgate
+migrar "$c" "20260916230000_0275_resgate.sql"; commit "$c" "branch local de resgate com 0275"
+git -C "$c" switch -q -c fix/do-pr origin/main
+migrar "$c" "20260916233000_0274_do_pr.sql"; commit "$c" "PR com 0274"
+rearmar_gate "$c"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "outra ref não reprova o PR — empurra o próximo livre"
+assert_contains "$saida" "NNNN=0276" "o conselho pula o número que a outra ref tomou"
+assert_contains "$saida" "refs/heads/outra/resgate" "nomeia QUEM tem o número que forçou o salto"
+assert_contains "$saida" "1 outra(s) ref(s)" "declara a régua ampliada na própria saída"
+
+echo "14. clone sem outras refs declara que NÃO as mediu (o raso do CI degrada limpo)"
+c="$TMP/c14"; clonar "$c"; git -C "$c" switch -q -c fix/sozinho
+migrar "$c" "20260916234000_0274_livre.sql"; commit "$c" "migration livre"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "sem outras refs o gate segue medindo (degradação limpa)"
+assert_contains "$saida" "NÃO foram medidos" "declara o limite do conselho na própria saída"
+assert_contains "$saida" "confira com a triagem antes de renomear" "diz o que fazer antes de confiar no número"
+
+echo "15. ref que resolve para o próprio HEAD não vira 'quem tem' (o alvo não mede a si mesmo)"
+c="$TMP/c15"; clonar "$c"
+git -C "$c" switch -q -c outra/resgate
+migrar "$c" "20260916235000_0275_resgate.sql"; commit "$c" "branch local de resgate com 0275"
+git -C "$c" switch -q -c fix/do-pr origin/main
+migrar "$c" "20260916235500_0274_do_pr.sql"; commit "$c" "PR com 0274"
+git -C "$c" branch espelho-do-head fix/do-pr
+rearmar_gate "$c"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "espelho do HEAD não interfere na medição"
+assert_not_contains "$saida" "espelho-do-head" "não nomeia ref que é o próprio HEAD"
+assert_contains "$saida" "refs/heads/outra/resgate" "só o dono de verdade é nomeado"
 
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0

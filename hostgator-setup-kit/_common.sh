@@ -5,6 +5,49 @@ set -euo pipefail
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
 COMPOSE_NPM="docker-compose.npm.yml"
+# Overlay que constrói as imagens no lugar de puxá-las. Existe no repo com
+# `pull_policy: never` nas três imagens e sai do MESMO commit que o `git
+# checkout` deixou no disco — é o caminho de quem não consegue usar as imagens
+# publicadas (ver construir_aqui_e_subir, abaixo).
+COMPOSE_BUILD="docker-compose.build.yml"
+
+# ── Arquitetura das imagens publicadas ───────────────────────────────────────
+# O registry publica hoje somente linux/amd64. Sem esta guarda, ARM64 chega até
+# o pull e morre com "no matching manifest"; o update.sh traduzia isso como
+# pacote ainda publicando/privado, um diagnóstico que manda repetir algo que
+# nunca vai funcionar nessa máquina.
+#
+# A decisão fica pura no argumento para os testes simularem a arquitetura sem
+# depender do runner. A leitura de `uname -m` é o único ponto ligado ao host.
+arquitetura_suportada_pelo_kit() {
+  case "${1:-}" in
+    x86_64|amd64) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+verificar_arquitetura_do_kit() {
+  local arch
+  arch="$(uname -m 2>/dev/null || printf 'desconhecida')"
+  arquitetura_suportada_pelo_kit "$arch" && return 0
+
+  printf '%s\n' \
+    "✖ Este servidor usa arquitetura '$arch', mas as imagens publicadas do DeskcommCRM hoje são linux/amd64." \
+    "  Use uma VPS x86_64/amd64. Repetir o download não resolve; ARM64 só será suportado quando houver imagens multi-arquitetura." >&2
+  return 1
+}
+
+# Este arquivo é compartilhado por várias ferramentas. A limitação de imagem só
+# deve bloquear os dois caminhos que realmente instalam/atualizam contêineres.
+# update.sh sourceia aqui antes de qualquer trabalho; install.sh sourceia depois
+# de localizar/clonar o repo, mas ainda antes de consultar ou baixar imagens do
+# DeskcommCRM.
+_deskcomm_chamador="${BASH_SOURCE[1]:-}"
+_deskcomm_chamador="${_deskcomm_chamador##*/}"
+case "$_deskcomm_chamador" in
+  install.sh|update.sh) verificar_arquitetura_do_kit || exit 1 ;;
+esac
+unset _deskcomm_chamador
 
 # Proxy reverso desta instalação. Vem do .env (load_env), com default 'caddy' —
 # ou seja, toda instalação que já existe continua exatamente como está.
@@ -37,6 +80,49 @@ dc_files() {
   npm)     printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_NPM" ;;
   *)       printf -- '-f %s' "$COMPOSE" ;;
   esac
+}
+
+# ── Imagem pronta que não serve para esta VPS: constrói a versão aqui ────────
+# Uma VPS cuja arquitetura não é a das imagens publicadas (Oracle Ampere, por
+# exemplo) recebe "no matching manifest for linux/arm64/v8" ao puxá-las. O
+# `up -d` seguinte morre junto: sem imagem no disco e sem `build:` ao lado do
+# `image:` do app, o Compose não tem o que subir. O desfecho visível era o pior
+# possível — a atualização não acontecia, o script terminava como se tivesse
+# dado certo e o dono só descobria pelo CRM velho. Pelo botão "Atualizar" do
+# site, nem isso: o agente roda sozinho no cron e não há ninguém lendo a tela.
+#
+# A saída já existe no repo e é o docker-compose.build.yml: `pull_policy: never`
+# nas três imagens e o build saindo do MESMO commit que o `git checkout` deixou
+# no disco. A imagem construída aqui é a versão alvo, não sobra de build antigo
+# — e o `up` por este overlay também não volta ao registro para reclamar.
+#
+# O gatilho é o CÓDIGO DE SAÍDA de quem falhou, nunca o texto do erro:
+# arquitetura da VPS, tag que ainda está publicando, pacote que nasceu privado
+# no registro e registro fora do ar caem todos no mesmo caminho, sem depender de
+# casar em inglês uma frase que o Docker escreve como quer.
+construir_aqui_e_subir() {  # construir_aqui_e_subir [versão alvo] → 0 se subiu
+  local versao="${1:-}"
+  # A imagem construída aqui responde /api/v1/health com a versão de verdade —
+  # o código no disco É a versão alvo. Sem isto ela responderia "local".
+  [ -n "$versao" ] && export APP_VERSION="$versao"
+  # O aviso vem ANTES da construção, e não depois: são 15 a 25 minutos de tela
+  # parada, e sem ele o dono conclui que travou e mata o script no meio.
+  c_ylw "⚠ As imagens prontas desta versão não servem para esta VPS."
+  c_ylw "  O motivo mais comum é a arquitetura dela ser diferente da das imagens"
+  c_ylw "  publicadas: o registro responde que não tem manifest para a arquitetura"
+  c_ylw "  daqui. Não é problema da sua VPS nem do seu acesso."
+  c_ylw "  Vou construir as três imagens aqui, do código desta versão."
+  c_ylw "  Leva de 15 a 25 minutos e a tela fica sem novidade nesse tempo —"
+  c_ylw "  não é travamento, pode deixar rodando."
+  if ! dc -f "$COMPOSE_BUILD" build; then
+    c_red "✖ A construção das imagens aqui falhou (o erro está logo acima)."
+    return 1
+  fi
+  if ! dc -f "$COMPOSE_BUILD" up -d; then
+    c_red "✖ As imagens foram construídas, mas os serviços não subiram."
+    return 1
+  fi
+  return 0
 }
 
 # ── A rede externa por onde o proxy de fora alcança o app ────────────────────
@@ -521,14 +607,77 @@ reaplicar_baseline() {
       BASELINE_INESPERADO="$(printf '%s\n' "$BASELINE_INESPERADO" \
         "a aplicação não chegou ao fim do arquivo (o psql saiu com código $rc): $causa" | sed '/^$/d')"
     fi
-    [ -n "$BASELINE_INESPERADO" ] || return 0
-    [ "$BASELINE_PASSADAS" -lt "$tentativas" ] || return 1
-    grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BASELINE_INESPERADO" || return 1
+    if [ -z "$BASELINE_INESPERADO" ]; then
+      # Fechou: em qual passada, e quantas retentativas custou até aqui.
+      registrar_rodada_do_banco "$([ "$BASELINE_PASSADAS" -gt 1 ] && printf 1 || printf 0)" \
+        "$((BASELINE_PASSADAS - 1))" "$BASELINE_PASSADAS"
+      return 0
+    fi
+    if [ "$BASELINE_PASSADAS" -ge "$tentativas" ]; then
+      # Esgotou as passadas SEM fechar o banco. Não se registra nada: as frases
+      # da tela são todas escritas como "…até a atualização do banco fechar", e
+      # esta rodada não fechou — gravar aqui faria a tela afirmar um fechamento
+      # que não houve, na rodada em que ela mais precisa calar. (Antes, este
+      # ponto gravava os MESMOS três números do sucesso, e os dois desfechos
+      # ficavam indistinguíveis no registro.) O desfecho da rodada vive no log
+      # do kit e no `status` do run.
+      return 1
+    fi
+    if ! grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BASELINE_INESPERADO"; then
+      # Erro que retentativa não cura — e a rodada NÃO fechou. O `0 0 1` que
+      # este ponto gravava era literal, não medido: se a passada 1 teve disputa
+      # de lock e a passada 2 morreu num erro fatal, ele afirmava "primeira
+      # passada, sem disputa" em cima de duas coisas que ninguém mediu. Silêncio.
+      return 1
+    fi
     c_ylw "• parte do banco não aplicou (disputa com o app no ar ou conexão instável) — aplicando de novo, é seguro (passada $((BASELINE_PASSADAS + 1)) de $tentativas). O que não aplicou:"
     listar_erros_do_banco "$BASELINE_INESPERADO" 10 "    "
     sleep "$((espera * BASELINE_PASSADAS))"
     BASELINE_PASSADAS=$((BASELINE_PASSADAS + 1))
   done
+}
+
+# ---------------------------------------------------------------------------
+# O que a rodada do banco conta de si mesma.
+#
+# Achado do PR #997: o baseline reaplicado sobrevive a uma disputa com o sistema
+# no ar — o kit tenta de novo e fecha. Até aqui essa parte da história morria no
+# log do servidor: quem clicou via "terminou" sem saber que a base estava
+# ocupada, nem quanto custou. Estas duas funções passam a rodada ADIANTE, por um
+# arquivo simples, porque o kit e o reporte do agente são passos separados.
+# ---------------------------------------------------------------------------
+# O caminho pode vir do processo que chamou (agent.sh exporta antes de rodar o
+# update.sh): o kit e o reporte são processos diferentes, e os dois precisam
+# apontar para o MESMO arquivo — é ele que carrega a história da rodada.
+RODADA_DO_BANCO_ARQUIVO="${RODADA_DO_BANCO_ARQUIVO:-${TMPDIR:-/tmp}/deskcomm-rodada-do-banco.$$}"
+
+registrar_rodada_do_banco() {
+  # $1 disputa (1|0), $2 retentativas, $3 passada em que fechou.
+  printf 'disputa=%s\nretentativas=%s\npassada=%s\n' "$1" "$2" "$3" \
+    >"$RODADA_DO_BANCO_ARQUIVO" 2>/dev/null || true
+}
+
+ler_rodada_do_banco() {
+  # Sem medição, silêncio: nada é impresso e o campo chega ausente — a tela
+  # ignora. Número impossível (negativo, fracionado, passada 0) também é
+  # silêncio, nunca uma afirmação torta.
+  [ -s "$RODADA_DO_BANCO_ARQUIVO" ] || return 0
+  local disputa retentativas passada
+  disputa="$(sed -n 's/^disputa=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  retentativas="$(sed -n 's/^retentativas=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  passada="$(sed -n 's/^passada=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  case "$disputa" in 0|1) ;; *) return 0 ;; esac
+  case "$retentativas" in ''|*[!0-9]*) return 0 ;; esac
+  case "$passada" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$passada" -ge 1 ] || return 0
+  # As três chaves saem PLANAS e com os nomes da rota (`disputa_de_banco`,
+  # `retentativas_do_banco`, `passada_do_banco`), prontas para entrarem no corpo
+  # do `run_result`: é o contrato de `app/api/v1/system/agent/route.ts`. O
+  # arquivo desta função fala a língua do kit; a fronteira fala a da API — e
+  # era aqui que as duas se confundiam, com o `z.object` da rota descartando em
+  # SILÊNCIO o objeto aninhado e gravando as três colunas nulas em toda rodada.
+  printf '"disputa_de_banco":%s,"retentativas_do_banco":%s,"passada_do_banco":%s\n' \
+    "$([ "$disputa" = "1" ] && printf true || printf false)" "$retentativas" "$passada"
 }
 
 # ── As três imagens que NÓS publicamos ───────────────────────────────────────
@@ -817,7 +966,7 @@ set_env_var() {
 # instalação sem SMTP, que é o estado normal de um self-host, e o mesmo comando
 # que o CLAUDE.md do kit manda usar quando a pessoa se tranca fora.
 #
-# ── Por que o casamento tem de ser EXATO aqui ───────────────────────────────
+# ── Por que o casamento tem de ser EXATO aqui ────────────────────────────────
 # Justamente por ser substring, `ana@empresa.com` casa também
 # `mariana@empresa.com`. Um `head -1` cego devolveria o UUID da outra pessoa
 # numa função cujo único consumidor TROCA SENHA. O padrão abaixo ancora no
