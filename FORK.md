@@ -89,6 +89,39 @@ estavam no banco; a imagem que os lia, não.
   como linter dos fragmentos em `.changes/`, que continuam sendo escritos: são o
   material do dia em que o módulo voltar ao upstream.
 
+## Atualizar o Studio (o runbook inteiro)
+
+Atualizar é raro e acontece em sessão. Quatro passos, nesta ordem; se um
+falhar, não passe ao seguinte.
+
+```bash
+# 1. aqui, no worktree do fork — trazer o upstream e provar
+bash scripts/fork-sync.sh && pnpm install && pnpm typecheck && pnpm test:unit && pnpm test:db
+
+# 2. aqui — publicar (a main do repo 423313 É o fork; a tag é CalVer)
+git push fork fork/financeiro:main
+git tag -a v2026.M.N -m "base upstream: vX.Y.Z" && git push fork v2026.M.N
+
+# 3. aqui — esperar o CI e conferir que as três imagens existem e são públicas
+source hostgator-setup-kit/_common.sh
+ghcr_status deskcommcrm 2026.M.N; ghcr_status deskcomm-worker 2026.M.N; ghcr_status deskcomm-scheduler 2026.M.N   # quer 200 ×3
+
+# 4. na VPS — atualizar, conferir, guardar o resgate
+bash hostgator-setup-kit/update.sh
+bash scripts/fork-doutor.sh
+cp supabase/fork-apendice.sql /root/fork-apendice.sql
+```
+
+**Se o financeiro sumir depois de um update** (`/app/comandas` responde 404), o
+resgate é uma linha: as três `*_IMAGE` do `.env` de volta para
+`ghcr.io/423313/...:2026.M.N` e `docker compose ... up -d`. Depois confira o
+`origin` do clone e apague qualquer tag `v1.*` que tenha voltado. Os dados nunca
+saem do lugar: estão no Supabase, e nenhum caminho do update os toca.
+
+**Quando a issue #1114 do upstream fechar**, o caminho muda: consolidar no PR
+#819 com os seis incorporados, no formato que o mantenedor pediu. Aí este fork
+deixa de ser residência.
+
 ## O que NÃO vale a pena consertar
 
 Medido em 17/09/2026, para você não gastar uma tarde onde não dói:
