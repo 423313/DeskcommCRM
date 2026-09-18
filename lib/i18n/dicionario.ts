@@ -9334,8 +9334,10 @@ export const DICIONARIO: Traducoes = {
     es: "Cambia el número por el WhatsApp de la empresa y el texto por el tuyo, manteniendo el código al final:",
   },
   "Olá! Vim pelo site.": { es: "¡Hola! Vengo del sitio." },
-  "Este exemplo foi gerado por esta tela. Os campos que o código aceita são utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid e fbclid.": {
-    es: "Este ejemplo fue generado por esta pantalla. Los campos que el código acepta son utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid y fbclid.",
+  // Os NOMES das chaves saíram da frase: a tela os lê de `CHAVES_DE_UTM` e os
+  // imprime fora do `t()`. Uma chave nova não mexe mais em tradução nenhuma.
+  "Este exemplo foi gerado por esta tela. Os campos que o código aceita são:": {
+    es: "Este ejemplo fue generado por esta pantalla. Los campos que el código acepta son:",
   },
   "O código vale só na primeira mensagem do contato: quem recebe um link encaminhado não ganha a origem de quem encaminhou.": {
     es: "El código vale solo en el primer mensaje del contacto: quien recibe un enlace reenviado no hereda el origen de quien lo reenvió.",
