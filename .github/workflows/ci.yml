@@ -68,10 +68,15 @@ jobs:
   # arquivo: cada parte roda metade (`--shard`) e paga metade do jsdom.
   #
   # Os passos de arquivo inteiro (cercas, typecheck, lint e as três auditorias)
-  # rodam só na parte 1; o kit bash, na parte 2 — é o que equilibra as duas. O
-  # teto de 15 min FICA: ele denuncia a suíte crescendo.
+  # rodam só na parte 1; o kit bash, na parte 2 — é o que equilibra as duas.
+  # É o conserto estrutural da issue #1185, que o #1184 deixou anotado: com ele,
+  # o teto volta de 25 para 15 (guarda de travamento) e o orçamento desce de 16
+  # para 12 — quem denuncia a suíte crescendo é o orçamento, por parte.
   verify-parte:
     runs-on: ubuntu-latest
+    # Guarda de travamento. O DETECTOR de crescimento é o passo `Orçamento de
+    # tempo` no fim de cada parte; a medição que justifica o número está em
+    # `TETOS`, em tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts.
     timeout-minutes: 15
     concurrency:
       group: ${{ github.workflow }}-verify-parte${{ matrix.parte }}-${{ github.event.pull_request.number || github.ref }}
@@ -83,6 +88,9 @@ jobs:
         parte: [1, 2]
     steps:
       - uses: actions/checkout@v7
+
+      - name: Marcar o início (o orçamento de tempo mede no fim do job)
+        run: echo "VERIFY_INICIO=$(date +%s)" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
@@ -153,6 +161,32 @@ jobs:
       - name: Kit self-host (bash)
         if: matrix.parte == 2
         run: pnpm test:shell
+
+      - name: Orçamento de tempo do verify
+        if: always()
+        env:
+          # Orçamento em MINUTOS, POR PARTE. Era 16 com a suíte num job só
+          # (pior sucesso 14,9); a issue #1185 manda ele descer junto com a
+          # divisão — gate que não aperta depois do conserto fica cego. 12 é a
+          # estimativa de ~8,5 min da parte mais pesada (metade de 649 s de
+          # unit + typecheck + lint + cercas) com folga; NÃO MEDIDO até a
+          # primeira rodada das partes, e desce de novo quando for medido.
+          ORCAMENTO_MIN: "12"
+        run: |
+          set -euo pipefail
+          if [ -z "${VERIFY_INICIO:-}" ]; then
+            echo "::warning::NÃO MEDIDO — o job não chegou a registrar o início."
+            exit 0
+          fi
+          decorrido=$(( ($(date +%s) - VERIFY_INICIO) / 60 ))
+          echo "verify parte ${{ matrix.parte }}/2: ${decorrido} min (orçamento ${ORCAMENTO_MIN} min, teto de travamento 15 min)"
+          if [ "$decorrido" -le "${ORCAMENTO_MIN}" ]; then
+            exit 0
+          fi
+          echo "::error::A parte ${{ matrix.parte }}/2 do verify levou ${decorrido} min contra um orçamento de ${ORCAMENTO_MIN} min."
+          echo "::error::Isto NÃO é defeito do seu PR: a suíte unitária cresceu. Em 18/09/2026, \`Unit tests\` já era 10,3 dos 13,2 min do job."
+          echo "::error::O conserto é mais uma parte em \`verify-parte\` (matrix + --shard), não subir este número."
+          exit 1
 
   # O NOME DESTE JOB É O CHECK OBRIGATÓRIO `verify` — o agregado das partes,
   # mesmo padrão do `invariants` abaixo (a razão do nome está lá). Sem grupo de
