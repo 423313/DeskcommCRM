@@ -40,6 +40,19 @@ describe("o código que a página embute", () => {
     expect(extrairOrigemDaPagina(codigo)?.utm).toEqual(utm);
   });
 
+  it("carrega os quatro níveis: campanha, conjunto, anúncio e posicionamento", () => {
+    // O que quem opera tráfego pede da ficha do contato. Antes só a campanha
+    // atravessava: conjunto, anúncio e posicionamento morriam no filtro da lista
+    // fechada, e a tela não tinha o que mostrar porque o dado nunca chegava.
+    const utm = {
+      utm_campaign: "black-friday",
+      utm_adset: "mulheres-25-34",
+      utm_ad: "video-depoimento-v3",
+      utm_placement: "instagram_stories",
+    };
+    expect(extrairOrigemDaPagina(montarCodigoDeOrigemDoSite(utm))?.utm).toEqual(utm);
+  });
+
   it("sobrevive ao texto pré-preenchido do wa.me, que vai URL-encoded", () => {
     const codigo = montarCodigoDeOrigemDoSite({ utm_source: "google", gclid: "abc" });
     const link = `https://wa.me/5511999999999?text=${encodeURIComponent(`ola, vi o site ${codigo}`)}`;
@@ -157,17 +170,18 @@ describe("o teto de tamanho do código", () => {
     `[dk1:${Buffer.from(JSON.stringify({ [chave]: valor }), "utf8").toString("base64url")}]`;
 
   it("o gerador recusa o que não caberia, em vez de emitir um link que não funciona", () => {
-    // As sete chaves no teto de valor, com texto de quatro bytes por caractere:
-    // 3874 caracteres de código, acima do teto. A página recebe `null` e sabe
-    // que não há link — melhor do que um link que a ingestão ignoraria calada.
+    // As dez chaves no teto de valor, com texto de quatro bytes por caractere:
+    // 10868 caracteres de código, muito acima do teto. A página recebe `null` e
+    // sabe que não há link — melhor do que um link que a ingestão ignoraria
+    // calada.
     const gigante = Object.fromEntries(
       CHAVES_DE_UTM.map((chave) => [chave, "🚀".repeat(200)]),
     );
     expect(montarCodigoDeOrigemDoSite(gigante)).toBeNull();
   });
 
-  it("o pior caso plausível CABE: as sete chaves no teto de valor", () => {
-    // 2007 caracteres de base64url — o motivo de o teto ser o número que é. Se
+  it("o pior caso plausível CABE: as dez chaves no teto de valor", () => {
+    // 2868 caracteres de base64url — o motivo de o teto ser o número que é. Se
     // este caso passasse a ser recusado, a página perderia link de campanha de
     // verdade, e não de colagem aleatória.
     const noLimite = Object.fromEntries(CHAVES_DE_UTM.map((chave) => [chave, "x".repeat(200)]));
