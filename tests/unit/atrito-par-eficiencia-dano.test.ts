@@ -66,6 +66,7 @@ const RAW: AtritoRaw = {
     execucoes_medidas: 120,
     envios_por_ia: 600,
     envios_por_automacao: 150,
+    envios_por_integracao: 75,
     envios_humano_no_sistema: 300,
     envios_humano_fora: 100,
     demandas_sem_proximo_passo: 6,
@@ -301,7 +302,7 @@ describe("zero lisonjeiro — ausência de dado é null, nunca 0", () => {
       ...RAW.empresa,
       envios_por_ia: 0,
       envios_por_automacao: 0,
-  envios_por_integracao: 0,
+      envios_por_integracao: 0,
       envios_humano_no_sistema: 0,
       envios_humano_fora: 0,
     };
@@ -385,6 +386,21 @@ describe("o número próprio da automação (#652)", () => {
     expect(medida!.valor).toBe(150);
     expect(medida!.unidade).toBe("contagem");
     expect(formatarMedida(medida!)).toContain("150");
+  });
+
+  it("`envios_por_integracao` é publicado no painel, em Contenção", () => {
+    // Gêmeo do caso acima, e pelo mesmo motivo: sem ele o contador novo existe
+    // no payload, na função do banco e no tipo — e não aparece em tela nenhuma.
+    // Controle que não é lido é decoração, e decoração passa em typecheck.
+    const contencao = montarPares(RAW).find((p) => p.chave === "contencao");
+    const medida = contencao!.danos.find((d) => d.chave === "envios_por_integracao");
+    expect(
+      medida,
+      "o payload traz `envios_por_integracao` e o painel não mostra: a org com integração vê o 'por IA' cair sem explicação na tela",
+    ).toBeDefined();
+    expect(medida!.valor).toBe(75);
+    expect(medida!.unidade).toBe("contagem");
+    expect(formatarMedida(medida!)).toContain("75");
   });
 
   it("o número do agente não é inflado pela automação", () => {
