@@ -34,11 +34,13 @@ const estado = vi.hoisted(() => ({
   binding: null as Record<string, unknown> | null,
   credencial: null as Record<string, unknown> | null,
   settings: null as unknown,
+  leiturasDeOrganizacao: 0,
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (tabela: string) => {
+      if (tabela === "organizations") estado.leiturasDeOrganizacao += 1;
       const chain = {
         select: () => chain,
         eq: () => chain,
@@ -74,6 +76,7 @@ beforeEach(() => {
   estado.binding = null;
   estado.credencial = null;
   estado.settings = { llm: { provider: "openai" } };
+  estado.leiturasDeOrganizacao = 0;
 });
 
 describe("o worker responde com a chave da instalação", () => {
@@ -137,5 +140,22 @@ describe("o worker responde com a chave da instalação", () => {
 
     expect(resolvido).not.toBeNull();
     expect(resolvido?.modelId).toBe("openai/gpt-5.6-terra");
+  });
+
+  it("id prefixado não paga a leitura do provedor da organização", async () => {
+    // O caminho da instalação padrão (chave Anthropic, sem credencial
+    // cadastrada) roda a cada evento do worker de sentimento. A única leitura
+    // de `organizations` que lhe cabe é a da procura por credencial; a do
+    // provedor só serve a id BARE e seria descartada aqui.
+    envMock.ANTHROPIC_API_KEY = "sk-ant";
+
+    const resolvido = await resolverModeloDoPonto(
+      "sentiment_classify",
+      ORG,
+      "anthropic/claude-haiku-4-5",
+    );
+
+    expect(resolvido).not.toBeNull();
+    expect(estado.leiturasDeOrganizacao).toBe(1);
   });
 });

@@ -75,9 +75,13 @@ export async function resolverModeloDoPonto(
       }
     }
     // Sem credencial cadastrada sobra a chave da INSTALAÇÃO, e quem diz de QUEM
-    // é essa chave é o provedor que a organização escolheu (issue #1181).
-    const provider = daOrg?.provider ?? (await providerDaOrganizacao(organizationId));
-    const model = padraoDaInstalacao(provider, padrao);
+    // é essa chave é o provedor que a organização escolheu (issue #1181). A
+    // leitura desse provedor é preguiçosa: id que já traz rota resolve sem ela,
+    // e é esse o caminho de toda instalação padrão.
+    const model = await padraoDaInstalacao(
+      () => (daOrg !== null ? Promise.resolve(daOrg.provider) : providerDaOrganizacao(organizationId)),
+      padrao,
+    );
     return model === null ? null : { model, modelId: String(padrao), origem: "padrao" };
   }
 
@@ -90,7 +94,7 @@ export async function resolverModeloDoPonto(
       organization_id: organizationId,
       purpose,
     });
-    const model = padraoDaInstalacao(binding.provider, padrao);
+    const model = await padraoDaInstalacao(() => Promise.resolve(binding.provider), padrao);
     return model === null ? null : { model, modelId: String(padrao), origem: "padrao" };
   }
 
@@ -101,7 +105,7 @@ export async function resolverModeloDoPonto(
       purpose,
       provider: binding.provider,
     });
-    const fallback = padraoDaInstalacao(binding.provider, padrao);
+    const fallback = await padraoDaInstalacao(() => Promise.resolve(binding.provider), padrao);
     return fallback === null ? null : { model: fallback, modelId: String(padrao), origem: "padrao" };
   }
 
@@ -183,15 +187,23 @@ function idParaOProvider(provider: string, id: string): string | null {
  * mesmo freio do PR #151, que impede id de outro provedor de virar chamada com
  * a chave desta organização.
  *
+ * O provedor chega como função e só é lido quando o id é BARE: no caminho sem
+ * binding ele custa uma consulta a `organizations`, e o id prefixado — o de
+ * toda instalação padrão — resolve sem ela.
+ *
  * Devolve `null` quando não há chave nenhuma para o provedor — o chamador PULA
  * com motivo claro, em vez de inventar provedor.
  */
-function padraoDaInstalacao(provider: string | null, padrao: ModelId): LanguageModel | null {
+async function padraoDaInstalacao(
+  providerDaConfiguracao: () => Promise<string | null>,
+  padrao: ModelId,
+): Promise<LanguageModel | null> {
   const peloId = resolveLanguageModel(padrao);
   if (peloId !== null) return peloId;
-  if (provider === null || provider === "openrouter") return null;
   const id = String(padrao);
   if (id.includes("/")) return null;
+  const provider = await providerDaConfiguracao();
+  if (provider === null || provider === "openrouter") return null;
   return resolveLanguageModel(`${provider}/${id}`);
 }
 
