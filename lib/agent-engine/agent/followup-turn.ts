@@ -292,6 +292,12 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
         const fuso = await fusoDaOrganizacao(pool, tenantId, runLog);
         const proximaAbertura = proximaAberturaDoFollowup(followup, fuso, agora);
         if (proximaAbertura !== null) {
+          const complete = deps.completeFollowupTurn;
+          if (!complete || payload.node_id === undefined) {
+            throw new Error(
+              'follow-up adiado pela janela própria sem completeFollowupTurn/node_id — o enrollment não saberia do adiamento',
+            );
+          }
           await rescheduleReentry(pool, {
             tenantId,
             leadId,
@@ -302,6 +308,19 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
           runLog.info('follow-up adiado pela janela própria do agente', {
             next_run_at: proximaAbertura.toISOString(),
             timezone: fuso,
+          });
+          // O adiamento VOLTA para o enrollment, como o da janela anti-ban em
+          // `runFlowDrivenTurn`. Sem isto o motor lê a espera como worker morto:
+          // o dead-man da ação esgota ~11h e marca `dead` um enrollment cujo
+          // envio ia sair na abertura — e o padrão desta faixa (sexta 18h →
+          // segunda 9h) já espera 63h.
+          await complete(pool, {
+            jobId: job.id,
+            jobClaim: claimOfJob(job),
+            organizationId: tenantId,
+            enrollmentId: payload.followup_enrollment_id,
+            nodeId: payload.node_id,
+            result: { kind: 'deferred', until: proximaAbertura, reason: 'followup_send_window' },
           });
           return;
         }
