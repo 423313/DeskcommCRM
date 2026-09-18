@@ -333,8 +333,10 @@ def classificar_perna(fonte, n: int, perna: dict, run: Optional[dict],
         return c
 
     # Fora do diff: a árvore testada ainda existe? O relógio é o `created_at` do run —
-    # um RE-RUN reusa a prévia de merge original, então `run_started_at` mente
-    # (medido no #865: attempt 2 começou 7 min DEPOIS do conserto e falhou igual).
+    # um RE-RUN reexecuta o mesmo evento (o mesmo GITHUB_SHA da prévia de merge),
+    # então `run_started_at` não diz qual main foi testada. (Comportamento do GitHub,
+    # não medido aqui: o attempt 2 do #865 falhou depois do #1107, mas num teste do
+    # próprio diff — não prova nada sobre a base.)
     if run is None or not run.get("created_at"):
         c.update(classe="real", motivo="fora do diff; instante do run NÃO MEDIDO")
         return c
