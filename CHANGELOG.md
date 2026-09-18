@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.32.1] — 2026-09-17
+
+### Corrigido
+
+- **A senha das rotinas automáticas deixa de ser gravada no log do servidor** A rotina que processa a fila de eventos a cada minuto levava a senha interna escrita na própria linha do agendamento, e o servidor anota cada execução no log do sistema: a senha ia parar lá uma vez por minuto. Agora ela fica num arquivo que só o administrador do servidor lê, e a linha do agendamento só aponta para ele. Instalações novas já nascem assim; nas existentes, a troca acontece sozinha a partir da atualização SEGUINTE a esta, porque a atualização em curso ainda roda o instalador da versão anterior. Crédito: @rafaeskytrabalho.
+
 ## [1.32.0] — 2026-09-17
 
 ### Adicionado
@@ -5129,7 +5135,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.32.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.32.1...HEAD
+[1.32.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.32.0...v1.32.1
 [1.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.31.1...v1.32.0
 [1.31.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.31.0...v1.31.1
 [1.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...v1.31.0

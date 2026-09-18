@@ -8053,8 +8053,25 @@ export const DICIONARIO: Traducoes = {
   "Body inválido.": { es: "Body inválido." },
   "Cole o conteúdo do material antes de criar.": { es: "Pega el contenido del material antes de crear." },
   "Consulta inválida.": { es: "Consulta inválida." },
-  "Credential referenciada (FK ON DELETE RESTRICT). Remova as versões antes.": { es: "Credential referenciada (FK ON DELETE RESTRICT). Elimina las versiones antes." },
-  "Credential é usada por uma versão publicada de agent. Despublique antes de deletar.": { es: "La credential es usada por una versión publicada de agent. Despublica antes de eliminar." },
+  // Tela de credentials — editar/rotacionar a chave (PATCH). O texto da RECUSA
+  // do DELETE não entra aqui: ele interpola a contagem e os nomes dos agentes,
+  // então é montado em runtime e não tem chave fixa para traduzir.
+  "Editar credencial": { es: "Editar credencial" },
+  "Nova chave (opcional)": { es: "Clave nueva (opcional)" },
+  "Em branco mantém a chave atual": { es: "En blanco mantiene la clave actual" },
+  "Chave salva. Validando…": { es: "Clave guardada. Validando…" },
+  "Chave trocada. A validação segue em segundo plano.": {
+    es: "Clave cambiada. La validación sigue en segundo plano.",
+  },
+  "Credencial atualizada.": { es: "Credencial actualizada." },
+  "Trocar a chave aqui mantém os agentes ligados nela: no próximo atendimento eles já usam a chave nova. Deixe a chave em branco para mudar só o nome.": {
+    es: "Cambiar la clave aquí mantiene los agentes conectados a ella: en la próxima atención ya usan la clave nueva. Deja la clave en blanco para cambiar solo el nombre.",
+  },
+  "versão(ões) de agente": { es: "versión(es) de agente" },
+  "Para trocar a chave, use editar; para excluir, aponte essas versões para outra chave.": {
+    es: "Para cambiar la clave, usa editar; para eliminar, apunta esas versiones a otra clave.",
+  },
+  "Esta ação não pode ser desfeita.": { es: "Esta acción no se puede deshacer." },
   "Cursor inválido.": { es: "Cursor inválido." },
   "Dê um nome ao material (2 a 120 caracteres).": { es: "Ponle un nombre al material (2 a 120 caracteres)." },
   "Erro ao ativar a versão da memória.": { es: "Error al activar la versión de la memoria." },
@@ -9184,6 +9201,22 @@ export const DICIONARIO: Traducoes = {
   'A origem aparece na ficha do contato e no filtro "Site (landing page)" da lista de contatos.': {
     es: 'El origen aparece en la ficha del contacto y en el filtro "Sitio (landing page)" de la lista de contactos.',
   },
+  // Do PR #773 (@xxjjjj): o aria-label do alternador de tema e as frases da
+  // agenda que passaram a sair por t(). As três de "este horário…" são as
+  // razões dinâmicas de `razaoDoBloco` — o gate de espanhol não as enxerga.
+  "Tema: light. Cmd+Shift+L para alternar.": { es: "Tema: claro. Cmd+Shift+L para cambiar." },
+  "Tema: dark. Cmd+Shift+L para alternar.": { es: "Tema: oscuro. Cmd+Shift+L para cambiar." },
+  "Tema: system. Cmd+Shift+L para alternar.": { es: "Tema: sistema. Cmd+Shift+L para cambiar." },
+  "este horário já passou": { es: "esta hora ya pasó" },
+  "já há um compromisso neste horário": { es: "ya hay una cita en este horario" },
+  "fora dos horários que você publicou": { es: "fuera de los horarios que publicaste" },
+  "Marcar às {hora} de {data}": { es: "Agendar a las {hora} del {data}" },
+  "{data} às {hora} — {motivo}": { es: "{data} a las {hora} — {motivo}" },
+  "A remarcação não foi aceita — o compromisso voltou para {data}.": { es: "No se aceptó el cambio de horario — la cita volvió al {data}." },
+  "Não dá para remarcar para esse horário — {motivo}.": { es: "No se puede reprogramar para ese horario — {motivo}." },
+  "o compromisso": { es: "la cita" },
+  "Entendi": { es: "Entendido" },
+  "e-mail do convidado inválido": { es: "correo del invitado no válido" },
 };
 
 /**
