@@ -27,7 +27,9 @@ function guarda(evento: string, payload: unknown, repo = REPO): number {
   writeFileSync(caminho, typeof payload === "string" ? payload : JSON.stringify(payload));
   try {
     execFileSync("bash", [GUARDA], {
-      env: { PATH: process.env.PATH ?? "", GITHUB_REPOSITORY: repo, GITHUB_EVENT_NAME: evento, GITHUB_EVENT_PATH: caminho },
+      // Herda o ambiente (ProcessEnv exige NODE_ENV) e SOBRESCREVE as três que a
+      // guarda lê — no CI elas existem e descreveriam o job de verdade.
+      env: { ...process.env, GITHUB_REPOSITORY: repo, GITHUB_EVENT_NAME: evento, GITHUB_EVENT_PATH: caminho },
       stdio: "pipe",
     });
     return 0;
