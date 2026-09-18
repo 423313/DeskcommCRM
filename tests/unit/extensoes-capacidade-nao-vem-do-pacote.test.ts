@@ -62,9 +62,26 @@ function origemDaRota(): ts.SourceFile {
   );
 }
 
-/** Todo valor atribuído à propriedade `href` na rota, seja ele qual for. */
+/**
+ * Todo valor atribuído à propriedade `href` na rota, seja ele qual for.
+ *
+ * Cobre as DUAS formas, e a segunda me pegou: `ok({ href })` é abreviação e não é um
+ * `PropertyAssignment` — a primeira versão desta função devolvia lista vazia para a rota
+ * já consertada, e a guarda teria ficado cega justamente na forma que ESCONDE a origem do
+ * valor. Na abreviação, seguimos até a declaração da variável e medimos o inicializador dela.
+ */
 function valoresDeHref(origem: ts.SourceFile): ts.Expression[] {
   const achados: ts.Expression[] = [];
+  const declaracoes = new Map<string, ts.Expression>();
+
+  const coletarDeclaracoes = (no: ts.Node) => {
+    if (ts.isVariableDeclaration(no) && ts.isIdentifier(no.name) && no.initializer) {
+      declaracoes.set(no.name.text, no.initializer);
+    }
+    ts.forEachChild(no, coletarDeclaracoes);
+  };
+  ts.forEachChild(origem, coletarDeclaracoes);
+
   const visitar = (no: ts.Node) => {
     if (
       ts.isPropertyAssignment(no) &&
@@ -73,6 +90,12 @@ function valoresDeHref(origem: ts.SourceFile): ts.Expression[] {
       no.initializer
     ) {
       achados.push(no.initializer);
+    }
+    if (ts.isShorthandPropertyAssignment(no) && no.name.text === "href") {
+      const declarado = declaracoes.get("href");
+      // Abreviação sem declaração visível no arquivo: não dá para afirmar a origem, então
+      // conta como inaceitável em vez de sumir da medição.
+      achados.push(declarado ?? no.name);
     }
     ts.forEachChild(no, visitar);
   };
