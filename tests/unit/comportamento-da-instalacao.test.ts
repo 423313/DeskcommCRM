@@ -41,8 +41,8 @@ import {
   modoDeDivulgacaoDaInstalacao,
   promessaSemanticaDaInstalacao,
   type ComportamentoDaInstalacao,
-} from "./comportamento";
-import { carregarComportamentoPorPool, pisoDoComportamentoDoMotor } from "./comportamento-sql";
+} from "@/lib/instalacao/comportamento";
+import { carregarComportamentoPorPool, pisoDoComportamentoDoMotor } from "@/lib/instalacao/comportamento-sql";
 
 /** A linha como ela sai do banco: snake_case, colunas NOT NULL. */
 const LINHA = {

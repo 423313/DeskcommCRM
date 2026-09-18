@@ -11,6 +11,7 @@
  * (ou pela sessão do Server Component): a linha é da INSTALAÇÃO, não de um
  * tenant, e não existe policy de RLS que a isole — ver a migration 0317.
  */
+import { pisoDeExigenciaDeAssinaturaNoWebhook } from "@/lib/channels/exigencia-de-assinatura";
 import { normalizarChaveDeOrcamento } from "@/lib/agent-engine/edge/llm/orcamento";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
@@ -40,7 +41,7 @@ const COLUNAS =
 export function pisoDaInstalacao(): ComportamentoDaInstalacao {
   return {
     orcamento_de_ia: normalizarChaveDeOrcamento(env.AI_BUDGET_ENFORCEMENT),
-    exigir_assinatura_no_webhook: env.WAHA_WEBHOOK_REQUIRE_SIGNATURE === "true",
+    exigir_assinatura_no_webhook: pisoDeExigenciaDeAssinaturaNoWebhook(),
     divulgacao_de_pagamento: modoDeDivulgacaoDoEnv(env.DISCLOSURE_MODE),
     promessa_semantica: env.PROMISE_SEMANTIC_ENABLED !== "false",
   };
