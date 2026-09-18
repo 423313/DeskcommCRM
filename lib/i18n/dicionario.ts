@@ -1435,8 +1435,10 @@ export const DICIONARIO: Traducoes = {
   "Início do fluxo": { es: "Inicio del flujo" },
   min: { es: "min" },
   adaptativo: { es: "adaptativo" },
+  "regra · uma saída por regra": { es: "regla · una salida por regla" },
   "regras · uma saída por regra": { es: "reglas · una salida por regla" },
-  "condição(ões)": { es: "condición(es)" },
+  "condição": { es: "condición" },
+  "condições": { es: "condiciones" },
   E: { es: "Y" },
   OU: { es: "O" },
   classes: { es: "clases" },
@@ -1572,6 +1574,24 @@ export const DICIONARIO: Traducoes = {
   "Etapa que dispara o fluxo": { es: "Etapa que dispara el flujo" },
   "Carregando etapas…": { es: "Cargando etapas…" },
   "Escolha a etapa": { es: "Elige la etapa" },
+  "Nenhuma etapa ativa encontrada — crie o funil antes de usar esta regra.": {
+    es: "No se encontró ninguna etapa activa — crea el embudo antes de usar esta regla.",
+  },
+  "A etapa escolhida não está mais na lista de etapas ativas — foi arquivada ou apagada. Escolha outra.": {
+    es: "La etapa elegida ya no está en la lista de etapas activas — fue archivada o eliminada. Elige otra.",
+  },
+  "Esta regra vale para todo contato. A saída dela leva todo mundo, e as saídas seguintes nunca são usadas.": {
+    es: "Esta regla vale para todo contacto. Su salida se lleva a todos, y las salidas siguientes nunca se usan.",
+  },
+  "Não consegui carregar as etapas agora. O que estava escolhido continua salvo — recarregue a página para escolher outra.": {
+    es: "No pude cargar las etapas ahora. Lo que estaba elegido sigue guardado — recarga la página para elegir otra.",
+  },
+  "foi digitado à mão e não é uma etapa do funil. Escolha a etapa na lista — do jeito que está, esta regra nunca decide nada.": {
+    es: "se escribió a mano y no es una etapa del embudo. Elige la etapa en la lista — tal como está, esta regla nunca decide nada.",
+  },
+  "Esta regra não aponta para uma etapa ativa do funil. Abra o nó e escolha a etapa na lista.": {
+    es: "Esta regla no apunta a una etapa activa del embudo. Abre el nodo y elige la etapa en la lista.",
+  },
   "Nenhuma etapa ativa encontrada — crie o funil antes de armar este gatilho.": {
     es: "No se encontró ninguna etapa activa — crea el embudo antes de configurar este disparador.",
   },
@@ -1672,7 +1692,12 @@ export const DICIONARIO: Traducoes = {
   "Não": { es: "No" },
   Sempre: { es: "Siempre" },
   "Nenhuma delas": { es: "Ninguna de ellas" },
+  "Outros casos": { es: "Otros casos" },
   "Sem resposta": { es: "Sin respuesta" },
+  // Rótulos das saídas do nó de repetição: chegaram por outra branch e nunca
+  // entraram aqui, então o card do repeat aparecia meio em português no espanhol.
+  "Próxima volta": { es: "Siguiente vuelta" },
+  Acabou: { es: "Terminó" },
   Salvo: { es: "Guardado" },
   "Reindexação enfileirada — atualizando em segundo plano.": {
     es: "Reindexación en cola — actualizando en segundo plano.",
@@ -6709,8 +6734,11 @@ export const DICIONARIO: Traducoes = {
   "No máximo quantas voltas": { es: "Como máximo cuántas vueltas" },
   "A última resposta vira o número de voltas (ex.: 4 filhos). O teto evita um loop sem fim.": { es: "La última respuesta se vuelve el número de vueltas (ej.: 4 hijos). El tope evita un bucle sin fin." },
   "(adaptativo)": { es: "(adaptativo)" },
-  "classes · grace": { es: "clases · grace" },
-  "regras · grace": { es: "reglas · grace" },
+  "classe · espera": { es: "clase · espera" },
+  "classes · espera": { es: "clases · espera" },
+  "regra · espera": { es: "regla · espera" },
+  "regras · espera": { es: "reglas · espera" },
+  volta: { es: "vuelta" },
   "grava resposta": { es: "guarda la respuesta" },
   "pula se já existir": { es: "salta si ya existe" },
   "confirma se já existir": { es: "confirma si ya existe" },

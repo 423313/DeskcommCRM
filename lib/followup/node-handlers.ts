@@ -292,6 +292,19 @@ export function resolveWaitPhase(events: EnrollmentEventRef[], nodeId: string, s
 }
 
 /**
+ * Passos é número, mas o formulário gravou por meses o que se DIGITAVA — texto.
+ * Com `"3"`, `gte` nunca era verdadeiro e `neq` sempre era: a regra aparecia
+ * pronta no card e decidia sozinha. Lê o número que a pessoa escreveu; texto que
+ * não é número segue como está (e o publish o recusa).
+ */
+function valorDePassos(value: string | number): string | number {
+  if (typeof value === "number") return value;
+  const limpo = value.trim();
+  const n = Number(limpo);
+  return limpo !== "" && Number.isFinite(n) ? n : value;
+}
+
+/**
  * O evento que registra a classe que o `ai_classify` escolheu — a fonte do
  * "Desfecho do passo anterior" (é o mesmo evento que a tela de histórico lê).
  */
@@ -353,18 +366,18 @@ function evaluateCheck(
   // porta que a ausência de dado abre. Ausência não prova a negativa: um lead
   // sem classificação não é um lead "que não foi hot".
   if (actual === null) return false;
-
+  const expected = check.field === "steps_taken" ? valorDePassos(check.value) : check.value;
   switch (check.op) {
     case "eq":
-      return actual === check.value;
+      return actual === expected;
     case "neq":
-      return actual !== check.value;
+      return actual !== expected;
     case "gte":
-      return typeof actual === "number" && typeof check.value === "number" && actual >= check.value;
+      return typeof actual === "number" && typeof expected === "number" && actual >= expected;
     case "lte":
-      return typeof actual === "number" && typeof check.value === "number" && actual <= check.value;
+      return typeof actual === "number" && typeof expected === "number" && actual <= expected;
     case "contains":
-      return typeof actual === "string" && typeof check.value === "string" && actual.includes(check.value);
+      return typeof actual === "string" && typeof expected === "string" && actual.includes(expected);
   }
 }
 
