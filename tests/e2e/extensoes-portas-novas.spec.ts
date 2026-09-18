@@ -294,8 +294,19 @@ test("uma extensão de duas portas: a tela diz quais são, e cada botão leva à
 
   // O id da instalação é UUID, então ele vem do banco — a tela o usa nos data-testid.
   const instalacaoId = await esperarInstalacao(b.publisher, b.name);
+
+  // DE VOLTA PARA A ABA "INSTALADAS". Esta é a quinta causa: para instalar eu precisei ir à aba
+  // "Catálogo", e o cartão de gestão da extensão instalada vive na OUTRA aba. A instalação já
+  // existia no banco — `esperarInstalacao` devolveu o id — e mesmo assim o cartão "não aparecia",
+  // porque eu continuava olhando a aba errada. Mesmo modo de falha da quarta causa, um passo
+  // adiante: elemento presente, aba fechada.
+  await page.getByRole("tab", { name: "Instaladas" }).click();
+
   const instalada = page.getByTestId(`extension-installed-${instalacaoId}`);
-  await expect(instalada).toBeVisible();
+  await expect(instalada).toBeVisible({ timeout: 30_000 });
+  // A irmã rola até o cartão antes de mexer nos controles dele: a lista cresce com o número de
+  // extensões, e um clique em elemento fora da viewport falha por motivo que não é o do teste.
+  await instalada.scrollIntoViewIfNeeded();
   // A lista de portas também aparece DEPOIS de instalada, no cartão de gestão.
   await expect(instalada).toContainText("Conversas");
   await expect(instalada).toContainText("Funil");
