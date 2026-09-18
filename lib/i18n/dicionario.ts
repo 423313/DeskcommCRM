@@ -3547,6 +3547,19 @@ export const DICIONARIO: Traducoes = {
   "Nome do lead": { es: "Nombre del lead" },
   "Tags do lead": { es: "Etiquetas del lead" },
   "Origem (utm_source)": { es: "Origen (utm_source)" },
+  // Os quatro níveis abaixo da origem, nas duas telas que os nomeiam: a ficha do
+  // contato e o editor de regra. As MESMAS palavras nas duas, de propósito.
+  Campanha: { es: "Campaña" },
+  Conjunto: { es: "Conjunto" },
+  "Anúncio": { es: "Anuncio" },
+  Posicionamento: { es: "Emplazamiento" },
+  "Campanha (utm_campaign)": { es: "Campaña (utm_campaign)" },
+  "Conjunto (utm_adset)": { es: "Conjunto (utm_adset)" },
+  "Anúncio (utm_ad)": { es: "Anuncio (utm_ad)" },
+  "Posicionamento (utm_placement)": { es: "Emplazamiento (utm_placement)" },
+  "A plataforma não informa o posicionamento de cada clique em anúncio.": {
+    es: "La plataforma no informa el emplazamiento de cada clic en anuncio.",
+  },
   "Etapa de destino": { es: "Etapa de destino" },
   "Texto da mensagem": { es: "Texto del mensaje" },
   "Tags do contato": { es: "Etiquetas del contacto" },
