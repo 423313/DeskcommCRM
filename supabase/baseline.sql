@@ -27576,7 +27576,7 @@ grant execute on function public.fn_mark_conversation_message(uuid,text,text,tim
 notify pgrst, 'reload schema';
 
 
--- ---- transporte SMTP da instalação: a segunda opção de e-mail (migration 0277) ----
+-- ---- transporte SMTP da instalação: a segunda opção de e-mail (migration 0309) ----
 --
 -- Singleton de escopo de INSTALAÇÃO, no mesmo desenho de `platform_meta_app`
 -- (0257) e `platform_google_oauth` (0201): um servidor SMTP atende os e-mails de
