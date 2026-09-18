@@ -86,28 +86,22 @@ jobs:
   # mês sem ninguém perceber.
   e2e-parte:
     runs-on: ubuntu-latest
-    # ── O TETO É GUARDA DE TRAVAMENTO, NÃO DETECTOR DE CRESCIMENTO ──────────
+    # O teto FICA EM 30, e essa foi uma correção de rumo desta branch.
     #
-    # Ele acumulava os dois papéis, e eles brigam:
+    # Eu tinha subido para 45, com o argumento de que o teto acumula dois papéis
+    # que brigam (guarda de travamento × detector de crescimento) e de que só o
+    # primeiro depende do valor. O argumento continua certo para o `verify`.
     #
-    #   como GUARDA de travamento → o valor não importa. Job travado consome
-    #       qualquer teto, e 45 min mata tão bem quanto 30.
-    #   como DETECTOR de crescimento → só funciona se alguém DECODIFICAR o
-    #       sinal. E medido em 18/09/2026: ninguém decodifica. A batida chega
-    #       como `cancelled`, que é EXATAMENTE o que `gh run cancel` produz — o
-    #       contribuidor lê "cancelaram meu CI" e a triagem procura um
-    #       cancelador humano. Duas sessões gastaram horas caçando uma terceira
-    #       mão que não existia.
+    # Aqui ele é FALSO, e quem mostrou foi o @webtecnica no #1056: com o corte
+    # legível dele em TETO − MARGEM, o `timeout-minutes` vira inalcançável, e o
+    # portão real passa a ser TETO_SEGUNDOS. Subir os dois juntos não separa
+    # papel nenhum — move o portão de 28 para 43 min. É exatamente o
+    # afrouxamento contra o qual ele escreveu uma catraca, e ela me reprovou.
     #
-    # O detector dispara numa língua que produz o diagnóstico errado. Por isso
-    # os papéis se separam: o teto sobe para 45 min e passa a guardar só
-    # travamento; quem denuncia crescimento é o passo `Orçamento de tempo`, no
-    # fim deste job, que reprova em português e diz o que fazer.
-    #
-    # Isto NÃO é "subir o teto para calar o problema" — a linha que este arquivo
-    # já trazia contra isso continua valendo, e é por causa dela que o detector
-    # não some: ele fica mais alto e mais legível.
-    timeout-minutes: 45
+    # O conserto certo não é afrouxar: é repartir. Por isso esta branch traz o
+    # rebalanceamento junto (o #1174), e com as partes em ~18 min o portão de 28
+    # deixa de ser apertado sem que ninguém precise ceder.
+    timeout-minutes: 30
     strategy:
       # Sem fail-fast: se a parte 1 quebrar, ainda quero saber se a 2 também.
       # Com ele ligado, o primeiro vermelho esconde o outro e o conserto vira
@@ -681,6 +675,46 @@ jobs:
         inbox-tempo-real.spec.ts
         cadastro-sem-confirmacao-de-email.spec.ts
     steps:
+      # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
+      #
+      # O `timeout-minutes` do job conta do INÍCIO DO JOB, então é do
+      # início do job que o aviso tem de medir. Medir só o relógio do
+      # Playwright deixaria de fora o que o preparo já gastou — e o preparo é
+      # pago por parte (checkout, `preparar-node`, stack do Supabase, baseline,
+      # build, env): no run 35160549180 a parte 1 gastou 978 s de Playwright,
+      # mas o relógio do JOB cravou os 30 min e o caso **141 de 156 estava
+      # VERDE** quando o cancelamento chegou. Sem este T0, a parte que cresce
+      # chega a quem olha o run como "a rodada caiu" — ou seja, como problema
+      # de infraestrutura — e o log precisa ser contado caso a caso para
+      # descobrir que o problema era o TAMANHO da parte.
+      #
+      # Este passo é o PRIMEIRO do job, de propósito: tudo depois dele entra no
+      # DECORRIDO. Se ele descer na ordem, a medição volta a mentir por baixo.
+      - name: Marcar o relógio da parte (orçamento × teto)
+        run: |
+          set -euo pipefail
+          {
+            echo "T0_JOB=$(date -u +%s)"
+            # Orçamento declarado: é aqui que a parte deveria caber, com o
+            # relógio do job inteiro. 24 min < teto de propósito — o aviso vem
+            # ANTES do corte, não no lugar dele.
+            echo "ORCAMENTO_SEGUNDOS=1440"
+            # O MESMO teto do `timeout-minutes` do job (30 min). Dois números
+            # medindo o mesmo relógio divergem: a catraca é
+            # tests/unit/e2e-avisa-antes-do-teto.test.ts, que reprova se este
+            # valor e o `timeout-minutes` deixarem de concordar.
+            echo "TETO_SEGUNDOS=1800"
+            # Corte antecipado, 2 min antes do teto. A margem paga o que o
+            # relógio de passo NÃO vê: o `Initialize containers` dos services
+            # roda antes do primeiro passo (~51 s por perna, medido no #983) e
+            # o envio de artefato/resumo precisa de tempo depois da suíte.
+            echo "MARGEM_SEGUNDOS=120"
+            # Piso para a suíte sequer começar: com menos que isto, rodar a
+            # suíte é gastar o que resta para ver um cancelamento no meio.
+            echo "PISO_SEGUNDOS=120"
+          } >> "$GITHUB_ENV"
+          echo "parte ${{ matrix.parte }}: relógio do job iniciado em $(date -u +%H:%M:%S) UTC"
+
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/preparar-node
@@ -956,11 +990,44 @@ jobs:
           # (`✓ 12 [chromium] › tests/e2e/x.spec.ts:9:5 › título (3.4s)`), e a
           # soma por arquivo sai de um `gh run view <id> --log`. Custo medido:
           # ~240 linhas a mais de log, zero segundo de execução.
-          # O instante vai para o ambiente ANTES da suíte: se ela reprovar, o
-          # `set -e` aborta o passo, e o passo de orçamento (que é `always()`)
-          # ainda precisa do início para medir.
-          echo "E2E_INICIO=$(date +%s)" >> "$GITHUB_ENV"
-          pnpm exec playwright test --workers=1 $LISTA --reporter=list
+          # ── O AVISO, ANTES DO CORTE ───────────────────────────────────────
+          # Daqui para baixo o relógio que decide é o do JOB, não o da suíte.
+          # A conta é medida, não estimada: DECORRIDO é o que esta parte já
+          # gastou desde o T0 (checkout, node, stack do Supabase, baseline,
+          # build), e é ele que come a folga do teto de 30 min.
+          #
+          # O `timeout` abaixo é o AVISO ANTES DO CORTE. Sem ele, quem corta é
+          # o `timeout-minutes` do job — que cancela sem dizer do que se
+          # tratava, com a suíte ainda verde no caso 141 de 156 (run
+          # 35160549180). Com ele, a suíte é interrompida MARGEM_SEGUNDOS antes
+          # do teto e o erro nomeia a parte com os números na mão.
+          PARTE="${{ matrix.parte }}"
+          AGORA=$(date -u +%s)
+          DECORRIDO=$(( AGORA - T0_JOB ))
+          FOLGA=$(( TETO_SEGUNDOS - MARGEM_SEGUNDOS - (AGORA - T0_JOB) ))
+          if [ "$FOLGA" -lt "$PISO_SEGUNDOS" ]; then
+            echo "::error title=A parte ${PARTE} chegou à suíte sem folga até o teto::o preparo custou ${DECORRIDO}s e sobravam ${FOLGA}s para uma suíte de centenas de casos, num teto de $(( TETO_SEGUNDOS / 60 )) min. Não é infraestrutura: a parte cresceu além do orçamento de $(( ORCAMENTO_SEGUNDOS / 60 )) min — rebalanceie as listas ou reparta em mais uma parte."
+            exit 1
+          fi
+          echo "::notice title=A parte ${PARTE} entrou na suíte com ${FOLGA}s de folga::preparo de ${DECORRIDO}s; teto do job de $(( TETO_SEGUNDOS / 60 )) min"
+          INICIO_SUITE=$(date -u +%s)
+          # `-k 30` manda SIGKILL 30 s depois do TERM: o TERM deixa o Playwright
+          # escrever o relatório, o KILL garante que o job não pare no meio de um
+          # spec que ignorou o sinal.
+          set +e
+          timeout -k 30 --signal=TERM "${FOLGA}s" pnpm exec playwright test --workers=1 $LISTA --reporter=list
+          CODIGO=$?
+          set -e
+          SUITE=$(( $(date -u +%s) - INICIO_SUITE ))
+          {
+            echo "SUITE_SEGUNDOS=${SUITE}"
+            echo "CUSTO_FIXO_SEGUNDOS=${DECORRIDO}"
+          } >> "$GITHUB_ENV"
+          # 124 = o `timeout` cortou; 137 = o KILL da carência chegou antes.
+          if [ "$CODIGO" -eq 124 ] || [ "$CODIGO" -eq 137 ]; then
+            echo "::error title=A parte ${PARTE} estourou o relógio do e2e::a suíte rodou ${SUITE}s e foi interrompida ${FOLGA}s depois de entrar, o job já tinha ${DECORRIDO}s de preparo e o teto é de $(( TETO_SEGUNDOS / 60 )) min (orçamento: $(( ORCAMENTO_SEGUNDOS / 60 )) min). Não é infraestrutura: a parte cresceu."
+          fi
+          exit "$CODIGO"
         env:
           # Só o que NÃO vem do `.env.e2e`: isto é ajuste de CI, não config do
           # produto. CI = 1 IP para todos os specs, e o teto de produção
@@ -970,41 +1037,6 @@ jobs:
           # ver o comentário do passo de build: vazio NÃO desliga.
           SENTRY_DSN: "off"
 
-      - name: Orçamento de tempo da parte ${{ matrix.parte }}
-        if: always()
-        env:
-          # Orçamento em MINUTOS, por parte. Medido em 21 jobs de 20 runs
-          # (18/09/2026): parte 1 mediana 14,7 / máx 24,1 · parte 2 mediana 28,0
-          # / máx 29,2 · parte 3 mediana 26,9 / máx 30,3 com dois cancelamentos.
-          #
-          # 32 não nasce vermelho — passa folgado pelo pior caso medido —, e
-          # denuncia o próximo crescimento ANTES de ele virar cancelamento.
-          # Gate que nasce vermelho não é gate: é dívida com alarme.
-          #
-          # ⚠️ ESTE NÚMERO TEM DESTINO: quando o #1174 (rebalanceamento das três
-          # partes) entrar, o ponto de equilíbrio medido é 18,4 min por parte, e
-          # o orçamento desce para 24. Sem essa descida, o detector fica cego
-          # justamente depois do conserto que o tornaria sensível.
-          ORCAMENTO_MIN: "32"
-        run: |
-          set -euo pipefail
-          if [ -z "${E2E_INICIO:-}" ]; then
-            echo "::warning::NÃO MEDIDO — o passo da suíte não chegou a registrar o início."
-            exit 0
-          fi
-          decorrido=$(( ($(date +%s) - E2E_INICIO) / 60 ))
-          echo "parte ${{ matrix.parte }}: ${decorrido} min (orçamento ${ORCAMENTO_MIN} min, teto de travamento 45 min)"
-          if [ "$decorrido" -le "${ORCAMENTO_MIN}" ]; then
-            exit 0
-          fi
-          # Mensagem em português e com o próximo passo escrito: o ponto inteiro
-          # desta separação é o sinal deixar de chegar como `cancelled`, que não
-          # diz de quem é a culpa nem o que fazer.
-          echo "::error::A parte ${{ matrix.parte }} levou ${decorrido} min contra um orçamento de ${ORCAMENTO_MIN} min."
-          echo "::error::Isto NÃO é defeito do seu PR: a suíte cresceu e as três partes precisam ser reparticionadas."
-          echo "::error::Como medir e repartir: o cabeçalho de SPECS_PARTE_1 neste arquivo explica, e o reporter \`list\` já dá o custo por spec em \`gh run view <id> --log\`."
-          exit 1
-
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
@@ -1013,6 +1045,50 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+      # ── ONDE A MEDIÇÃO FICA ───────────────────────────────────────────────
+      # A medição que só existe no log se perde: quem decide repartir as listas
+      # é quem olha o resumo do job, e o resumo é este. Os três relógios saem
+      # por parte, com o teto ao lado para o número ser lido contra alguma coisa.
+      #
+      # `if: always()` de propósito: o caso que interessa é justamente o da
+      # parte que falhou ou que foi cortada pelo `timeout` — sem o `always`, o
+      # resumo apareceria só nas rodadas em que nada aconteceu.
+      - name: Publicar o relógio da parte ${{ matrix.parte }} (preparo × suíte × teto)
+        if: always()
+        run: |
+          set -euo pipefail
+          PARTE="${{ matrix.parte }}"
+          # `não medido` quando o passo da suíte não chegou a publicar (parte
+          # que entrou sem folga até o teto): zero ali seria um número falso.
+          SUITE="${SUITE_SEGUNDOS:-não medido}"
+          FIXO="${CUSTO_FIXO_SEGUNDOS:-não medido}"
+          if [ -n "${T0_JOB:-}" ]; then
+            TOTAL=$(( $(date -u +%s) - T0_JOB ))
+          else
+            TOTAL=0
+          fi
+          # Aviso ANTES do corte: a parte que passou do orçamento mas ainda não
+          # estourou o teto. É esta a linha que evita o próximo "cancelado com
+          # 141 de 156 verde" — o orçamento estourado aparece numa rodada ainda
+          # verde, não na rodada em que o teto já cortou tudo.
+          if [ "$TOTAL" -gt "$ORCAMENTO_SEGUNDOS" ]; then
+            echo "::warning title=A parte ${PARTE} passou do orçamento do e2e::${TOTAL}s de relógio do job contra o orçamento de $(( ORCAMENTO_SEGUNDOS / 60 )) min (teto de $(( TETO_SEGUNDOS / 60 )) min). Ainda não estourou, mas a partição está desbalanceada: o bloco de partição das listas, no cabeçalho deste workflow, diz onde mexer."
+          fi
+          {
+            echo "## E2E parte ${PARTE} — o relógio da rodada"
+            echo ""
+            echo "| relógio | medido | referência |"
+            echo "| --- | --- | --- |"
+            echo "| preparo (primeiro passo → suíte) | ${FIXO}s | — |"
+            echo "| suíte (Playwright) | ${SUITE}s | — |"
+            echo "| **total da parte** | **${TOTAL}s** | orçamento $(( ORCAMENTO_SEGUNDOS / 60 )) min · teto $(( TETO_SEGUNDOS / 60 )) min |"
+            echo ""
+            echo "O teto continua sendo o \`timeout-minutes: $(( TETO_SEGUNDOS / 60 ))\` do job — é ele que"
+            echo "denuncia a parte crescendo. Quem corta primeiro é o \`timeout\` que dá"
+            echo "$(( MARGEM_SEGUNDOS / 60 )) min de folga à suíte, para o vermelho dizer o NOME do problema"
+            echo "(qual parte, com quantos segundos medidos) em vez de cancelar em silêncio."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # O NOME DESTE JOB É O CHECK OBRIGATÓRIO, e é por isso que ele existe.
   #
