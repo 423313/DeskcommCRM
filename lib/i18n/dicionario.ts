@@ -69,6 +69,45 @@ export const DICIONARIO: Traducoes = {
   // PACOTES (lib/mcp/tools/pacotes.ts) — rótulo/explicação dos pacotes de
   // capacidade na tela de criar/editar agente (ToolPicker.tsx).
   "Atender e responder": { es: "Atender y responder" },
+
+  // Painel de configuração da instalação (migration 0290) — os motivos pelos
+  // quais uma chave NÃO é editável pela tela. São valores de uma tabela de
+  // rótulo (`MOTIVO_CURTO`), então o teste de cobertura exige TODOS os valores
+  // que a expressão pode assumir, não só os que aparecem hoje.
+  "Necessária para o sistema ligar": { es: "Necesaria para que el sistema arranque" },
+  "É a chave que protege as outras": { es: "Es la clave que protege a las demás" },
+  "Gravada quando o programa foi montado": { es: "Grabada cuando se compiló el programa" },
+  "Tem um par em outro programa do servidor": {
+    es: "Tiene un par en otro programa del servidor",
+  },
+  "Lida por outro programa ao ligar": { es: "La lee otro programa al arrancar" },
+
+  // Painel de configuração da instalação — a tela, o formulário e a porta do
+  // modo administrador no menu do usuário.
+  "Configuração da instalação": { es: "Configuración de la instalación" },
+  "O que este servidor precisa saber para funcionar. O que dá para trocar aqui, você troca e vale na hora — sem mexer no servidor.":
+    {
+      es: "Lo que este servidor necesita saber para funcionar. Lo que se puede cambiar aquí, lo cambias y vale al instante — sin tocar el servidor.",
+    },
+  "Modo administrador": { es: "Modo administrador" },
+  "Configurar este servidor": { es: "Configurar este servidor" },
+  "Não configurado": { es: "Sin configurar" },
+  "Definido aqui nesta tela": { es: "Definido aquí, en esta pantalla" },
+  "Vem do arquivo de instalação do servidor": {
+    es: "Viene del archivo de instalación del servidor",
+  },
+  "Pronto, já está valendo.": { es: "Listo, ya está en vigor." },
+  "Voltou para o valor do arquivo de instalação.": {
+    es: "Volvió al valor del archivo de instalación.",
+  },
+  "Guardado, terminando em": { es: "Guardado, termina en" },
+  "Agora:": { es: "Ahora:" },
+  "Escreva para substituir": { es: "Escribe para reemplazar" },
+  "Escreva para configurar": { es: "Escribe para configurar" },
+  "Voltar ao padrão": { es: "Volver al valor por defecto" },
+  "Não se troca por aqui": { es: "No se cambia por aquí" },
+  "ocultar": { es: "ocultar" },
+  "por quê?": { es: "¿por qué?" },
   "O agente lê a conversa, entende o histórico e responde ao cliente sem pedir que ele repita o que já disse.": {
     es: "El agente lee la conversación, entiende el historial y responde al cliente sin pedirle que repita lo que ya dijo.",
   },

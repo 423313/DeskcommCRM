@@ -7,7 +7,6 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { valorDaInstalacao } from "@/lib/instalacao/config";
 import { citacaoDaLei, perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import { logger } from "@/lib/logger";
 import type { Json } from "@/lib/database.types";
@@ -285,6 +284,18 @@ interface CollectArgs {
   requestId: string;
   contactId: string | null;
   externalCustomerId: string | null;
+  /**
+   * O encarregado de dados da INSTALAÇÃO — o piso do da organização, já
+   * RESOLVIDO por quem chama.
+   *
+   * Injetado, e não lido aqui, porque o coletor de LGPD tem de tocar o mínimo:
+   * `tests/invariants/agenda-meet-export.test.ts` exige que a coleta sem
+   * identificador visite APENAS `organizations`, e consultar a configuração da
+   * instalação acrescentaria uma tabela a toda coleta — inclusive à que não vai
+   * usar o valor. Quem chama já é assíncrono e já resolve outras coisas da
+   * instalação; resolver mais esta ali não custa visita nenhuma aqui.
+   */
+  dpoDaInstalacao?: string | null;
 }
 
 const RECENT_MESSAGES_LIMIT = 100;
@@ -315,11 +326,8 @@ async function lerControlador(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
   requestId: string,
+  dpoDaInstalacao: string | null,
 ): Promise<Controlador> {
-  // O encarregado da INSTALAÇÃO é o piso do da organização — a mesma ordem que
-  // `resolverOperador` usa. Resolvido aqui, e não no renderizador do PDF, porque
-  // um componente de desenho não deve consultar configuração no meio da página.
-  const dpoDaInstalacao = (await valorDaInstalacao("LGPD_DPO_EMAIL")).valor?.trim() || null;
   const vazio: Controlador = {
     legal_name: "",
     display_name: "",
@@ -351,7 +359,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   const { organizationId, requestId, externalCustomerId } = args;
   // ANTES do primeiro `return`: o caminho "nenhum dado localizado" também gera
   // um relatório entregue ao titular, e ele precisa nomear o controlador igual.
-  const controlador = await lerControlador(admin, organizationId, requestId);
+  const controlador = await lerControlador(admin, organizationId, requestId, args.dpoDaInstalacao ?? null);
   let contactId = args.contactId;
 
   // Resolve contact_id when only external customer id is provided.

@@ -38,7 +38,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { precisaSemear, resolver, type EstadoDaLinha, type Fonte } from "./config-resolve";
 
-const TABELA = "platform_config";
+// ⚠️ O nome da tabela é escrito por EXTENSO em cada `.from()`, e não numa
+// constante, de propósito. `tests/invariants/on-conflict-aponta-para-constraint-real.test.ts`
+// varre cada `onConflict` e resolve a tabela pelo `.from("<literal>")` mais
+// próximo acima — `.from(variavel)` fica NÃO-RESOLVIDO e reprova. A varredura
+// existe para garantir que todo `onConflict` aponte para uma constraint que
+// existe de verdade; uma constante aqui a cega, e o custo de cegá-la é maior que
+// o de repetir a string três vezes.
 
 /** O que a linha traz do banco. O envelope só é aberto aqui dentro. */
 interface LinhaCrua {
@@ -122,7 +128,7 @@ function emClaro(linha: LinhaCrua): EstadoDaLinha {
 async function lerLinha(chave: string): Promise<LinhaCrua | null | "erro"> {
   try {
     const { data, error } = await createAdminClient()
-      .from(TABELA)
+      .from("platform_config")
       .select("chave, valor, ciphertext, iv, tag, last4, eh_segredo, semeado_do_env")
       .eq("chave", chave)
       .maybeSingle();
@@ -224,7 +230,7 @@ export async function gravarPelaTela(
     // `upsert` e nunca `update`: a linha pode não existir ainda, e um `update`
     // que casa zero linhas devolve sucesso sem ter escrito nada — armadilha que
     // este projeto já pagou em `organizations`.
-    const { error } = await createAdminClient().from(TABELA).upsert(linha, { onConflict: "chave" });
+    const { error } = await createAdminClient().from("platform_config").upsert(linha, { onConflict: "chave" });
     if (error) return { ok: false, motivo: "banco_recusou", detalhe: error.message };
     return { ok: true };
   } catch (erro) {
@@ -242,7 +248,7 @@ export async function gravarPelaTela(
  */
 export async function voltarAoAmbiente(chave: string): Promise<ResultadoDaEscrita> {
   try {
-    const { error } = await createAdminClient().from(TABELA).delete().eq("chave", chave);
+    const { error } = await createAdminClient().from("platform_config").delete().eq("chave", chave);
     if (error) return { ok: false, motivo: "banco_recusou", detalhe: error.message };
     return { ok: true };
   } catch (erro) {

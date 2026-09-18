@@ -21,6 +21,8 @@
  * reprova quem adicionar `edita` sem trocar o call site.
  */
 
+import { CHAVES_DE_CANAL_DA_INSTALACAO } from "@/lib/channels/chaves-da-instalacao";
+
 export type GrupoDaInstalacao =
   | "email"
   | "ia"
@@ -78,7 +80,25 @@ export interface ChaveDaInstalacao {
  * ORGANIZAÇÃO, com escada de resolução). Duplicá-las aqui criaria duas respostas
  * para "qual chave vale", que é como se cria um bug que ninguém consegue depurar.
  */
+/**
+ * As chaves de CANAL vêm de `lib/channels/`, e não estão escritas aqui de
+ * propósito: o nome delas é o nome do provider, e a doutrina `restricao-de-canal`
+ * (vigiada por `pnpm lint:channels`) proíbe nomeá-lo fora daquela fronteira.
+ * Este arquivo as consome como DADOS — continua sem nomear ninguém.
+ */
+const DE_CANAL: readonly ChaveDaInstalacao[] = CHAVES_DE_CANAL_DA_INSTALACAO.map((c) => ({
+  chave: c.chave,
+  rotulo: c.rotulo,
+  explicacao: c.explicacao,
+  grupo: "whatsapp" as const,
+  natureza: "segredo" as const,
+  controle: "diagnostico" as const,
+  motivo: "pareada_com_conteiner" as const,
+  comoTrocar: c.comoTrocar,
+}));
+
 export const CATALOGO_DA_INSTALACAO: readonly ChaveDaInstalacao[] = [
+  ...DE_CANAL,
   {
     chave: "RESEND_API_KEY",
     rotulo: "Chave do serviço de e-mail",
@@ -140,29 +160,6 @@ export const CATALOGO_DA_INSTALACAO: readonly ChaveDaInstalacao[] = [
   },
 
   // ── DIAGNÓSTICO: pareada com outro contêiner ──────────────────────────────
-  {
-    chave: "WAHA_API_KEY",
-    rotulo: "Senha de acesso ao WhatsApp",
-    explicacao: "A senha que o sistema usa para falar com o programa que conecta o WhatsApp.",
-    grupo: "whatsapp",
-    natureza: "segredo",
-    controle: "diagnostico",
-    motivo: "pareada_com_conteiner",
-    comoTrocar:
-      "Esta senha tem um par do outro lado: o programa do WhatsApp guarda a versão embaralhada dela. Trocar só aqui deixaria os dois falando senhas diferentes e o WhatsApp cairia. A troca é no arquivo de instalação, seguida de reinício dos dois programas.",
-  },
-  {
-    chave: "WAHA_HMAC_SECRET",
-    rotulo: "Senha de conferência das mensagens recebidas",
-    explicacao:
-      "Garante que as mensagens que chegam vieram mesmo do WhatsApp, e não de um impostor.",
-    grupo: "whatsapp",
-    natureza: "segredo",
-    controle: "diagnostico",
-    motivo: "pareada_com_conteiner",
-    comoTrocar:
-      "Mesma situação da senha de acesso: o programa do WhatsApp guarda a outra metade. Os dois trocam juntos, no arquivo de instalação.",
-  },
   {
     chave: "UPSTASH_REDIS_REST_TOKEN",
     rotulo: "Senha da fila de tarefas",
