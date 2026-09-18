@@ -370,6 +370,17 @@ export function descreveEvento(
         ...motor,
       };
     }
+    case "action_deferred": {
+      // Adiar NÃO é falhar, e o dossiê tem de dizer isso com todas as letras:
+      // sem esta linha o operador vê o passo parado por horas e lê defeito onde
+      // há obediência à janela que ele mesmo configurou.
+      const ate = quandoLegivel(p.until, idioma);
+      return {
+        titulo: "Segurou o envio até o horário permitido",
+        detalhe: ate ? `a janela estava fechada; envia em ${ate}` : "a janela estava fechada",
+        ...motor,
+      };
+    }
     case "action_sent":
       return { titulo: "Mensagem enviada", detalhe: null, ...motor };
     case "ai_classified":
