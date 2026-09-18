@@ -9342,6 +9342,7 @@ export const DICIONARIO: Traducoes = {
   "Comissões do período": { es: "Comisiones del período" },
   "Conta de saída": { es: "Cuenta de salida" },
   "De qual conta?": { es: "¿De qué cuenta?" },
+  "Nenhuma conta ativa para pagar — ative uma em Configurações › Financeiro.": { es: "Ninguna cuenta activa para pagar — active una en Configuración › Financiero." },
   "desde": { es: "desde" },
   "Em risco": { es: "En riesgo" },
   "Estornada": { es: "Anulada" },

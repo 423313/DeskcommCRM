@@ -162,19 +162,33 @@ export function Comissoes({ podeFechar }: { podeFechar: boolean }) {
                   <td className="py-1 text-right">
                     {podeFechar && p.professional_id && p.pendente_cents > 0 ? (
                       <div className="flex items-center justify-end gap-2">
-                        <select
-                          aria-label={t("Conta de saída")}
-                          className="min-h-9 rounded-md border p-1 text-xs"
-                          value={contaId}
-                          onChange={(e) => setContaId(e.target.value)}
-                        >
-                          <option value="">{t("De qual conta?")}</option>
-                          {(contas.data ?? []).map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
+                        {(contas.data ?? []).length === 0 ? (
+                          /*
+                            SEM CONTA ATIVA NÃO HÁ COMO PAGAR, e um seletor
+                            vazio não diz isso — só não oferece opção, e quem
+                            está na tela conclui que o botão está quebrado.
+                            Medido na cópia local: as duas contas estavam
+                            inativas e o fechamento ficava impossível em
+                            silêncio.
+                          */
+                          <span className="text-xs text-warning" data-testid="sem-conta-ativa">
+                            {t("Nenhuma conta ativa para pagar — ative uma em Configurações › Financeiro.")}
+                          </span>
+                        ) : (
+                          <select
+                            aria-label={t("Conta de saída")}
+                            className="min-h-9 rounded-md border p-1 text-xs"
+                            value={contaId}
+                            onChange={(e) => setContaId(e.target.value)}
+                          >
+                            <option value="">{t("De qual conta?")}</option>
+                            {(contas.data ?? []).map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         <Button
                           data-testid="fechar-comissao"
                           disabled={!contaId || fechar.isPending}

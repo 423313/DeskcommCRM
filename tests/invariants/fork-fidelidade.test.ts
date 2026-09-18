@@ -94,10 +94,12 @@ beforeAll(() => {
                   'Org fidelidade ' || right(v_org::text, 1))
           on conflict (id) do nothing;
 
-        insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
-                                email_confirmed_at, created_at, updated_at)
-          values (v_user, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
-                  'fide-' || right(v_user::text, 1) || '@local', 'x', now(), now(), now())
+        -- O auth.users do banco de teste tem só o essencial (id, email): o
+        -- prelúdio do scripts/test-db.sh recria o schema, não o GoTrue inteiro.
+        -- Repetir as colunas do Supabase real aqui quebra com "column
+        -- instance_id does not exist". Mesmo formato do fork-financeiro-rls.
+        insert into auth.users (id, email)
+          values (v_user, 'fide-' || right(v_user::text, 1) || '@invariant.test')
           on conflict (id) do nothing;
 
         -- ADMIN da própria organização, e NADA além disso: nenhum dos dois é
@@ -126,26 +128,36 @@ beforeAll(() => {
           values (v_org, 'Servico premiado', 'premio-' || right(v_org::text, 1), 60, 50)
           returning id into v_premio;
 
-        -- Guarda os ids para os casos, sem depender de nome.
-        insert into public.org_memory_entries (organization_id, kind, content)
-          select v_org, 'teste_fidelidade',
-                 jsonb_build_object('forma', v_forma, 'pontua', v_pontua, 'premio', v_premio)::text
-          where not exists (
-            select 1 from public.org_memory_entries
-             where organization_id = v_org and kind = 'teste_fidelidade'
-          );
       end loop;
     end $$;
   `);
 });
 
-/** Lê os ids que o seed guardou, sem depender da ordem das linhas. */
+/**
+ * Os ids do seed, lidos das PRÓPRIAS tabelas.
+ *
+ * A primeira versão guardava isto em `org_memory_entries` — uma tabela de
+ * outro módulo, usada como bloco de notas. Quebrou duas vezes por coluna que
+ * eu supus e não conferi (`kind` não existe lá). O seed cria linhas com nome
+ * determinístico; ler por esse nome não depende de tabela alheia nenhuma.
+ */
 function ids(org: string): { forma: string; pontua: string; premio: string } {
-  const bruto = sql(`
-    select content from public.org_memory_entries
-     where organization_id = '${org}' and kind = 'teste_fidelidade' limit 1;
-  `);
-  return JSON.parse(ultimaLinha(bruto)) as { forma: string; pontua: string; premio: string };
+  const linha = ultimaLinha(
+    sql(`
+      select
+        (select id from public.payment_methods
+          where organization_id = '${org}' and name = 'Dinheiro fidelidade' limit 1) || '|' ||
+        (select id from public.calendar_event_types
+          where organization_id = '${org}' and name = 'Servico que pontua' limit 1) || '|' ||
+        (select id from public.calendar_event_types
+          where organization_id = '${org}' and name = 'Servico premiado' limit 1);
+    `),
+  );
+  const [forma, pontua, premio] = linha.split("|");
+  if (!forma || !pontua || !premio) {
+    throw new Error(`o seed da fidelidade não deixou os ids esperados: ${linha}`);
+  }
+  return { forma, pontua, premio };
 }
 
 /** Abre uma comanda com um item do serviço dado e a finaliza. Devolve o id. */
