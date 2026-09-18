@@ -56,6 +56,12 @@ export const ApiErrorCodes = {
 
   // 409 — conflito
   idempotency_conflict: "idempotency_conflict",
+  // Mesma chave, MESMO corpo, e a primeira execução ainda está em curso: o
+  // recibo/encurso está gravado (reserva, migration 0321) mas o efeito não
+  // terminou. Código próprio e não o `idempotency_conflict` acima porque a ação
+  // de quem recebe é outra: aqui a chave está CERTA e o pedido é o mesmo —
+  // retentar depois resolve, enquanto conflito manda trocar a chave.
+  idempotency_in_progress: "idempotency_in_progress",
   state_conflict: "state_conflict",
   invalid_state: "invalid_state", // resposta a um agent_case que saiu de awaiting_human (spec 15 §7)
   tenant_already_exists: "tenant_already_exists",

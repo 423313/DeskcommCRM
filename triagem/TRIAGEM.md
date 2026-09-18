@@ -544,8 +544,64 @@ Quatro cuidados, cada um com a sonda:
    fragmento declara `impacto: capacidade_nova` ou `exige_acao` **não recebe `--auto`**, e o que já
    tinha recebido é desligado até o corte (`gh pr merge <n> --disable-auto`). O merge automático não
    olha o calendário: entrando no meio da janela, ele converte o patch anunciado numa minor — foi o
-   ponto levantado em 18/09, com a 1.35.1 esperando o #1196. PR `nada_mudou` segue normal. Sonda:
-   `git diff --name-only origin/main...refs/tri/<n> -- .changes/ | xargs -r grep -h '^impacto:'`.
+   ponto levantado em 18/09, com a 1.35.1 esperando o #1196. PR `nada_mudou` segue normal.
+
+   **Ausência de fragmento não é `nada_mudou`.** PR que toca `app/`, `lib/`, `components/`,
+   `workers/`, `hooks/` ou `supabase/` e não traz fragmento com `impacto:` é **NÃO CLASSIFICADO**:
+   não recebe `--auto` na janela de corte até alguém escrever o fragmento — o triador escreve,
+   creditando o autor (§12). A sonda anterior
+   (`git diff --name-only origin/main...refs/tri/<n> -- .changes/ | xargs -r grep -h '^impacto:'`)
+   devolvia **vazio** nesse caso, e o vazio foi lido como "não é `capacidade_nova`": o #1211
+   (`utm_adset`/`utm_ad`/`utm_placement`, capacidade nova) entrou assim, sem nota, no meio da janela
+   da 1.35.1. Ela tinha um segundo ponto cego: o `grep` lia o fragmento na árvore de quem roda a
+   sonda, onde o arquivo do PR não existe. A sonda que distingue os três desfechos:
+
+   Um segundo sinal, barato e complementar ao diff (ideia da sessão Maestro PRs): PR cujo **título**
+   começa com `feat` ou traz "capacidade" e não tem fragmento é NÃO CLASSIFICADO mesmo que o diff pareça
+   pequeno ou fique fora das pastas do produto. Título que não se consegue ler conta como NÃO
+   CLASSIFICADO — a sonda falha fechada. A sonda que distingue os desfechos:
+
+   ```bash
+   sonda_da_janela() {  # uso: sonda_da_janela origin/main refs/tri/<n> <n>
+     local base=$1 head=$2 n=${3:-} arquivos fragmentos toca impactos titulo motivos=""
+     arquivos=$(git diff --name-only "$base...$head")
+     toca=$(printf '%s\n' "$arquivos" | grep -cE '^(app|lib|components|workers|hooks|supabase)/')
+     fragmentos=$(git diff --name-only --diff-filter=AM "$base...$head" -- '.changes/*.md')
+     # O fragmento é lido do PR (git show), nunca da árvore de quem roda a sonda.
+     impactos=$(printf '%s\n' "$fragmentos" | while read -r f; do
+       [ -n "$f" ] && git show "$head:$f" | grep -h '^impacto:'; done)
+     if [ -n "$impactos" ]; then
+       printf '%s\n' "$impactos" | sort -u
+       return
+     fi
+     [ "$toca" -gt 0 ] && motivos="toca $toca arquivo(s) do produto"
+     if [ -n "$n" ]; then
+       if titulo=$(gh pr view "$n" --json title --jq .title 2>/dev/null) && [ -n "$titulo" ]; then
+         printf '%s' "$titulo" | grep -qiE '^feat|capacidade' &&
+           motivos="${motivos:+$motivos; }o título diz \"$titulo\""
+       else
+         motivos="${motivos:+$motivos; }título do #$n não lido"
+       fi
+     fi
+     if [ -n "$motivos" ]; then
+       echo "NÃO CLASSIFICADO: $motivos — e não traz fragmento com impacto"
+     else
+       echo "sem fragmento; não toca o produto; título sem sinal de capacidade"
+     fi
+   }
+   ```
+
+   Controle positivo, medido em 18/09 — a sonda tem de acusar o #1211 antes de ser usada:
+
+   ```console
+   $ sonda_da_janela 976707c3a 1594de0d6 1211      # o #1211, sem fragmento
+   NÃO CLASSIFICADO: toca 3 arquivo(s) do produto; o título diz "feat(atribuicao): conjunto, anúncio e posicionamento atravessam o link do site" — e não traz fragmento com impacto
+   $ sonda_da_janela origin/main refs/tri/1202 1202  # fragmento nada_mudou
+   impacto: nada_mudou
+   ```
+
+   Só `impacto: nada_mudou` libera o `--auto` na janela. `capacidade_nova`, `exige_acao` e
+   **NÃO CLASSIFICADO** esperam o corte.
 
 ### ⚠️ O gate que o lote esconde: `build`
 

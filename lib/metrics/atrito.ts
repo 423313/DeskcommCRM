@@ -55,6 +55,12 @@ export interface AtritoRaw {
     vetos: number;
     execucoes_medidas: number;
     envios_por_ia: number;
+    /**
+     * Envios de REGRA (automação, follow-up fixo, lembrete de agenda): saíram
+     * sozinhos, mas ninguém os escreveu. É o número que a #652 acrescentou ao
+     * painel para a queda do "por IA" não ser lida como o agente encolhendo.
+     */
+    envios_por_automacao: number;
     envios_humano_no_sistema: number;
     envios_humano_fora: number;
     demandas_sem_proximo_passo: number;
@@ -116,10 +122,15 @@ export function razao(numerador: number, denominador: number): number | null {
 }
 
 /**
- * Quanto das respostas saiu do agente, sobre TODAS as saídas (IA + humano no
- * sistema + humano fora dele). Incluir o `external_device` no denominador é o
- * que impede a automação de parecer alta numa org onde o time responde pelo
- * celular: ali a IA não absorveu, ela apenas não foi usada.
+ * Quanto das respostas saiu do agente, sobre as saídas que TÊM dono entre o
+ * agente e uma pessoa (IA + humano no sistema + humano fora). Incluir o
+ * `external_device` no denominador é o que impede a automação de parecer alta
+ * numa org onde o time responde pelo celular: ali a IA não absorveu, ela apenas
+ * não foi usada.
+ *
+ * As linhas de AUTOMAÇÃO (#652) ficam de fora das duas pontas: nem o agente nem
+ * uma pessoa as escreveu, e misturá-las aqui faria o número do agente subir por
+ * mensagem que ele não escreveu. Elas aparecem no número próprio, no painel.
  */
 export function taxaDeAutomacao(e: AtritoRaw["empresa"]): number | null {
   return razao(e.envios_por_ia, e.envios_por_ia + e.envios_humano_no_sistema + e.envios_humano_fora);
@@ -368,6 +379,18 @@ export function montarPares(
           valor: vetosPorExecucao(empresa),
           unidade: "media",
           nota: t("Quanto o sistema precisou ser contido de si mesmo antes de falar."),
+        },
+        // O número da #652. Ele existe porque o contrário dele mente: quando o
+        // carimbo da automação saiu de `'ai'`, o "por IA" CAIU para quem usa
+        // regra — sem este número, a queda apareceria como o agente encolhendo.
+        {
+          chave: "envios_por_automacao",
+          rotulo: t("Mensagens enviadas por automação"),
+          valor: empresa.envios_por_automacao,
+          unidade: "contagem",
+          nota: t(
+            "Regra de automação, texto fixo do follow-up e lembrete de agenda: saiu sozinho e ninguém escreveu. Não entra no número do agente — é por isso que ele cai onde há automação.",
+          ),
         },
       ],
     },
