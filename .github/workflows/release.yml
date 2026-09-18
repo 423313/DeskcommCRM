@@ -91,6 +91,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # A guarda pergunta à API quem abriu o PR de origem do merge
+      # (`commits/{sha}/pulls`, issue #478) e esse endpoint é de pull request:
+      # sem esta linha a resposta é 403 e a guarda recusaria corte legítimo.
+      # Leitura só — quem escreve continua sendo o token do App.
+      pull-requests: read
     steps:
       - uses: actions/create-github-app-token@v3
         id: token
@@ -110,6 +115,15 @@ jobs:
 
       - name: Este push foi um corte de release?
         id: pendente
+        env:
+          # Token de leitura para perguntar à API do GitHub quem abriu o PR de
+          # origem do merge (issue #478). É o token do próprio workflow, e não
+          # o do App: a guarda pergunta, ela não escreve nada.
+          GH_TOKEN: ${{ github.token }}
+          # `app-slug` é o slug do App que emitiu o token do passo anterior; o
+          # login do bot é `<slug>[bot]` — a MESMA montagem que o passo da tag
+          # usa no e-mail do commit, no `git config user.email` lá embaixo.
+          APP_SLUG: ${{ steps.token.outputs.app-slug }}
         run: |
           set -euo pipefail
 
@@ -144,36 +158,117 @@ jobs:
           # falhou (f6f91377): a guarda antiga via depois=1 e recusava; a
           # nova vê 3 removidos e corta.
           #
-          # ⚠️ A TERCEIRA CONDIÇÃO É CINTO DE SEGURANÇA CONTRA ENGANO, NÃO
-          # CONTRA FORJA — e a distinção precisa estar escrita aqui, porque a
-          # versão anterior deste comentário dizia que a identidade do App
-          # "vive em secrets", e isso é FALSO.
+          # ⚠️ A TERCEIRA CONDIÇÃO É IDENTIDADE, NÃO NOME — issue #478.
           #
-          # `%an` é o NOME DO AUTOR: campo de texto que qualquer um define.
+          # A versão anterior desta guarda procurava `%an` igual a
+          # `deskcomm-release[bot]`, e isso não é identidade: `%an` é o NOME DO
+          # AUTOR, campo de texto que qualquer um define.
           # `git -c user.name='deskcomm-release[bot]' commit` devolve exatamente
-          # a string que a comparação abaixo procura. Medido.
+          # a string procurada. A versão anterior deste comentário ainda dizia
+          # que a identidade do App "vive em secrets" — isso também é FALSO.
           #
           # Nem adianta trocar por conferência criptográfica: os cinco cortes
           # reais desta main têm `%G? = N` — não há assinatura para conferir.
           #
-          # O que ela pega é o caso COMUM: alguém apaga um fragmento sem querer
-          # e a tag nasceria sozinha. Contra isso ela faz barulho em vez de
-          # silêncio, e é por isso que fica. Contra forja deliberada ela não
-          # protege, e a proteção de verdade — conferir pela API que o PR de
-          # origem foi aberto pelo App — está na issue #478.
+          # Então a pergunta saiu do git e foi para a API, que sabe qual PR deu
+          # origem a este commit e quem o abriu. Medido em 2026-09-18 nos dois
+          # cortes reais mais recentes da main: o PR #1160 (`release/1.34.0`,
+          # commit 3a4df3cb) e o PR #1136 (`release/1.33.0`, 577c46e9) respondem
+          # `login=deskcommcrm-release[bot]`, `user.type=Bot`, head `release/*`
+          # no próprio repositório. É o App — e o autor do commit não escolhe
+          # esse dado. (O `user.name` que o ato 1 grava no git é
+          # `deskcomm-release[bot]`, sem o "crm": nome de exibição e login vivem
+          # separados, e é o login que a API devolve.)
+          #
+          # A guarda aceita duas provas, as duas fora do git: (1) o PR de origem
+          # foi aberto pelo bot do App que este workflow usa, ou (2) o head do PR
+          # é um branch `release/*` do PRÓPRIO repositório de cima — o caminho
+          # que o ato 1 abre, e o que a issue #478 dá como alternativa. Fork não
+          # conta: quem não tem escrita no repositório de cima não cria branch
+          # por lá nem mergeia um PR dele.
+          #
+          # A forja que cai: nome de autor igual ao do bot num PR aberto por
+          # outra pessoa — coberto em
+          # tests/unit/guarda-da-release-confere-identidade.test.ts.
+          #
+          # E o caso comum — alguém apaga fragmento de `.changes/` sem querer num
+          # PR que não é corte: não passa por nenhuma das duas provas, e a guarda
+          # faz barulho (`::error::`, passo vermelho) em vez de silêncio. É por
+          # isso que a condição fica.
           versao=$(pnpm exec tsx scripts/cortar-release.ts --versao-do-changelog)
 
           # `--diff-filter=D` conta o que este commit APAGOU de `.changes/`.
           # `|| true` porque `grep -c` sai 1 quando não casa nada, e `set -e`
           # mataria o passo justamente no caso normal (PR comum, zero removidos).
-          removidos=$(git diff --diff-filter=D --name-only HEAD^ HEAD -- .changes/ | grep -c '\.md$' || true)
+          # `--find-renames` fecha a borda: esta máquina roda o git com a
+          # configuração dela, e com `diff.renames=false` um fragmento
+          # RENOMEADO (mesmo commit, `a.md` → `b.md`) entra na lista como D —
+          # o caminho antigo contaria como "fragmento consumido" sem ninguém
+          # ter consumido nada. Medido em 2026-09-18 (git 2.43.0):
+          #   sem a flag, diff.renames=false  → `.changes/a.md` aparece
+          #   com --find-renames              → nada aparece
+          removidos=$(git diff --find-renames --diff-filter=D --name-only HEAD^ HEAD -- .changes/ | grep -c '\.md$' || true)
 
-          # Num merge commit, `HEAD^2` é a ponta do branch de release — o
-          # commit que o App assinou. Se o merge for squash não há segundo pai,
-          # e aí o autor do próprio HEAD é quem responde. O `|| true` evita que
-          # a ausência de `HEAD^2` derrube o passo.
-          assinante=$(git log -1 --format='%an' 'HEAD^2' 2>/dev/null || true)
-          [ -n "${assinante}" ] || assinante=$(git log -1 --format='%an' HEAD)
+          # ─── QUEM ABRIU O PR DE ORIGEM (fora do git) ──────────────────────
+          #
+          # Num merge commit, `HEAD^2` é a ponta do branch de release; num
+          # squash não há segundo pai. Nos dois casos a pergunta é a mesma, e a
+          # resposta não está no git: a API sabe qual PR deu origem a este
+          # commit e quem o abriu — dado que o autor do commit não escolhe.
+          #
+          # `|| true` para capturar a falha (rede, 403, commit sem PR) em vez
+          # de deixar o `set -e` derrubar o passo: quem decide o que fazer com
+          # a falha é o `if` lá embaixo, e ele RECUSA.
+          # O login com que a API apresenta o App é `<slug>[bot]`, e o slug é o
+          # mesmo dado que o passo do token já usa no e-mail do commit lá
+          # embaixo. Medido em 2026-09-18 nos dois cortes reais da main: o `%an`
+          # do git diz `deskcomm-release[bot]` e a API diz
+          # `deskcommcrm-release[bot]` — o nome que a guarda antiga procurava nem
+          # é o login da identidade. (O e-mail do commit confirma o slug:
+          # `deskcommcrm-release[bot]@users.noreply.github.com`.)
+          #
+          # Slug vazio NÃO derruba a guarda: ela segue com a Prova 2, que cobre
+          # todo corte legítimo (o ato 1 sempre empurra `release/<versão>` deste
+          # repositório). Derrubar aqui barraria release legítimo — o defeito da
+          # #472 pelo outro lado.
+          if [ -n "${APP_SLUG}" ]; then
+            esperado="${APP_SLUG}[bot]"
+          else
+            esperado=""
+            echo "::warning::app-slug vazio: a guarda não pôde conferir o login do App e decide pelo head release/* do PR de origem."
+          fi
+
+          prs=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+              --jq '.[] | "\(.user.login)\t\(.user.type)\t\(.head.ref)\t\(.head.repo.full_name // "-")\t\(.number)"' 2>/dev/null) || {
+            echo "::error::A guarda não conseguiu perguntar à API quem abriu o PR de origem de ${GITHUB_SHA:0:8} — sem prova de identidade a tag NÃO é criada."
+            exit 1
+          }
+
+          corte_do_app=nao
+          quem_abriu="(nenhum PR de origem: o commit foi empurrado direto para a main)"
+          primeiro=""
+          while IFS="$(printf '\t')" read -r login tipo ref repo numero; do
+            [ -n "${numero:-}" ] || continue
+            descricao="${login} (${tipo}) — PR #${numero}, head ${ref} em ${repo}"
+            [ -n "${primeiro}" ] || primeiro="${descricao}"
+            if [ -n "${esperado}" ] && [ "${login}" = "${esperado}" ] && [ "${tipo}" = "Bot" ]; then
+              # Prova 1: o PR de origem foi aberto pelo bot do App que este
+              # workflow usa. Só quem tem a chave do App se apresenta assim.
+              corte_do_app=sim
+              quem_abriu="${descricao}"
+            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+              case "${ref}" in
+                # Prova 2 (a alternativa da issue #478): head `release/*` do
+                # PRÓPRIO repositório de cima — o caminho que o ato 1 daqui
+                # abre. Fork não vale: aí `repo` seria o fork.
+                release/*)
+                  corte_do_app=sim
+                  quem_abriu="${descricao}"
+                  ;;
+              esac
+            fi
+          done <<< "${prs}"
+          [ "${corte_do_app}" = "sim" ] || quem_abriu="${primeiro:-${quem_abriu}}"
 
           # ─── O QUE SOBROU, E POR QUE ISSO IMPORTA ─────────────────────────
           #
@@ -192,7 +287,9 @@ jobs:
           # `nada_mudou` e `capacidade_nova` sobrevivendo são inofensivos: entram
           # na versão seguinte e ninguém quebra no meio. `exige_acao` não é.
           exigem_acao=$(
-            git diff --diff-filter=D --name-only HEAD^ HEAD -- .changes/ > /tmp/removidos.txt || true
+            # Mesma borda da contagem de removidos lá em cima, pelo mesmo
+            # motivo: renomear fragmento não é consumir fragmento.
+            git diff --find-renames --diff-filter=D --name-only HEAD^ HEAD -- .changes/ > /tmp/removidos.txt || true
             for f in $(git ls-tree -r --name-only HEAD -- .changes/ | grep '\.md$' || true); do
               if git show "HEAD:${f}" | head -20 | grep -q '^impacto:[[:space:]]*exige_acao'; then
                 echo "${f}"
@@ -204,7 +301,7 @@ jobs:
           )
 
           echo "fragmentos removidos por este commit: ${removidos}"
-          echo "assinante do corte: ${assinante}"
+          echo "quem abriu o PR de origem: ${quem_abriu}"
           echo "fragmentos vivos que exigem ação: ${exigem_acao:-nenhum}"
 
           if git rev-parse -q --verify "refs/tags/v${versao}" >/dev/null; then
@@ -214,13 +311,13 @@ jobs:
             echo "::notice::O CHANGELOG anuncia ${versao} sem tag, mas este push não apagou fragmento nenhum."
             echo "::notice::Tag não criada. Uma release sai do workflow 'release' (Run workflow), nunca de um merge comum."
             echo "cortar=nao" >> "$GITHUB_OUTPUT"
-          elif [ "${assinante}" != "deskcomm-release[bot]" ]; then
+          elif [ "${corte_do_app}" != "sim" ]; then
             # Alto, e não `notice`: alguém apagou fragmento de `.changes/` num
-            # commit que não veio do workflow de release. Ou é forja, ou é
-            # engano — e o silêncio é exatamente o que fez a #472 passar dias
-            # sem ninguém ver.
-            echo "::error::Este commit apagou ${removidos} fragmento(s) de .changes/ mas não foi assinado pelo App da release (assinante: ${assinante})."
-            echo "::error::A tag v${versao} NÃO foi criada. Se isto foi um corte legítimo, ele não saiu do workflow 'release'."
+            # commit cujo PR de origem a API não reconhece como corte. Ou é
+            # forja, ou é engano — e o silêncio é exatamente o que fez a #472
+            # passar dias sem ninguém ver.
+            echo "::error::Este commit apagou ${removidos} fragmento(s) de .changes/ mas o PR de origem não foi aberto pelo App da release — o GitHub diz: ${quem_abriu}."
+            echo "::error::A tag v${versao} NÃO foi criada. Um corte legítimo sai do workflow 'release' (Run workflow), com o PR aberto pelo App e head release/<versão> deste repositório."
             exit 1
           elif [ -n "${exigem_acao}" ]; then
             # Alto, e de novo não `notice`: este é o único caso em que NÃO cortar
