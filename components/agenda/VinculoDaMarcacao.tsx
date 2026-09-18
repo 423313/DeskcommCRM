@@ -105,10 +105,9 @@ export function VinculoDaMarcacao({
   return (
     <div className="space-y-3">
       <div>
-        <label className="block" htmlFor="quem-sera-atendido">
+        <label className="block">
           {t("Quem será atendido")}
-        </label>
-        <div className="relative">
+          <div className="relative">
           <input
             id="quem-sera-atendido"
             data-testid="quem-sera-atendido"
@@ -165,7 +164,8 @@ export function VinculoDaMarcacao({
               ) : null}
             </ul>
           ) : null}
-        </div>
+          </div>
+        </label>
       </div>
       {contactId ? (
         <label className="block">

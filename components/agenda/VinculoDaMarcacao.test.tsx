@@ -107,6 +107,12 @@ describe("VinculoDaMarcacao", () => {
     expect(screen.queryByLabelText(/Buscar cliente/i)).not.toBeInTheDocument();
   });
 
+  it("o rótulo aponta para o input que carrega o id do contato", () => {
+    responderCom([]);
+    envolver(<VinculoDaMarcacao contactId="c-1" conversationId="" onChange={vi.fn()} />);
+    expect(screen.getByLabelText(/Quem será atendido/i)).toHaveAttribute("data-contact-id", "c-1");
+  });
+
   it("escolher na lista vincula o contato", async () => {
     responderCom([{ id: "c-1", name: "Joana Prado" }]);
     const onChange = vi.fn();

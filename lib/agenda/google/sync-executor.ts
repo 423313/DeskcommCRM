@@ -67,23 +67,35 @@ export function mensagemDaRecusaDePublicacao(
     : "Não foi possível sincronizar. Confira a conexão e tente novamente.";
 }
 
-async function emailDoContato(
+/**
+ * E-mail da ficha do contato, para o convite do Google.
+ *
+ * A falta do e-mail (contato sem ficha, stub de teste sem `.from`, falha de
+ * leitura, titular anonimizado) NÃO é falha de sincronização: o compromisso
+ * continua indo para a agenda do atendente. Quem não tem e-mail é o caso
+ * comum — lead que chegou pelo WhatsApp.
+ */
+export async function emailDoContato(
   db: SupabaseClient,
   org: string,
   contactId: string | null,
 ): Promise<{ email: string; nome: string | null } | null> {
   if (!contactId) return null;
-  const { data, error } = await db
-    .from("contacts")
-    .select("email,name,display_name,is_anonymized")
-    .eq("organization_id", org)
-    .eq("id", contactId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data || data.is_anonymized) return null;
-  const email = typeof data.email === "string" ? data.email.trim() : "";
-  if (!email) return null;
-  return { email, nome: nomeDoContato(data) };
+  if (typeof db.from !== "function") return null;
+  try {
+    const { data, error } = await db
+      .from("contacts")
+      .select("email,name,display_name,is_anonymized")
+      .eq("organization_id", org)
+      .eq("id", contactId)
+      .maybeSingle();
+    if (error || !data || data.is_anonymized) return null;
+    const email = typeof data.email === "string" ? data.email.trim() : "";
+    if (!email) return null;
+    return { email, nome: nomeDoContato(data) };
+  } catch {
+    return null;
+  }
 }
 
 function eventoTemEmail(event: EventoDoGoogle | null | undefined, email: string): boolean {
@@ -153,11 +165,11 @@ export async function reconcileAppointment(
   // `apagar` e em `criar`).
   let metodoEmVoo: PendingWrite["method"] = "PATCH";
   try {
-    const contato = await emailDoContato(db, org, a.contact_id);
     if (!a.google_event_id && a.status === "cancelled") {
       await commit({ ack: true });
       return "processed";
     }
+    const contato = await emailDoContato(db, org, a.contact_id);
     if (!a.google_connection_id || !a.google_calendar_id || !a.google_event_id)
       throw new Error("Publicação antiga sem identidade completa. Revise a conexão.");
     const api = googleTransport(

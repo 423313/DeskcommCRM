@@ -113,23 +113,26 @@ type CartaoDeLembrete = {
 function LembreteDoCompromisso({ tipo }: { tipo: TipoRow }) {
   const t = useT();
   const [ligado, setLigado] = React.useState(tipo.reminder_enabled);
-  const seq = React.useRef(0);
   const [cartoes, setCartoes] = React.useState<CartaoDeLembrete[]>(() =>
     desempacotarLembretes({
       reminder_minutes_before: tipo.reminder_minutes_before,
       reminder_extra_offsets_minutes: tipo.reminder_extra_offsets_minutes,
       reminder_body: tipo.reminder_body,
       reminder_bodies: tipo.reminder_bodies,
-    }).map((p) => {
+    }).map((p, i) => {
       const u = deMinutos(p.minutes);
       return {
-        id: `r${++seq.current}`,
+        id: `r${i + 1}`,
         quantidade: u.quantidade,
         unidade: u.unidade,
         body: p.body,
       };
     }),
   );
+  // Semente = quantos cartões já nasceram. Passar o valor inicial não lê
+  // `.current` no render — é o que o lint recusa em `++seq.current` no
+  // inicializador do `useState`.
+  const seq = React.useRef(cartoes.length);
 
   function minutosDe(c: CartaoDeLembrete) {
     return paraMinutos(c.quantidade, c.unidade);

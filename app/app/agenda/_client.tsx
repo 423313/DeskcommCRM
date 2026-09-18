@@ -619,16 +619,18 @@ export function AgendaClient({
               {remarcandoId ? t("Remarcar agendamento") : t("Novo agendamento")}
             </SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 rounded-lg border p-3">
+          <div className="grid shrink-0 gap-3 rounded-lg border p-3 lg:grid-cols-2">
             {!remarcandoId ? (
+              <div className="lg:col-span-2">
               <VinculoDaMarcacao
                 contactId={contactId}
                 conversationId={conversationId}
                 onChange={(contact, conversation) => escolherVinculo({ contact, conversation })}
               />
+              </div>
             ) : null}
             {tiposIniciais.length > 1 && (
-              <div data-testid="tipos-de-agendamento">
+              <div className="lg:col-span-2" data-testid="tipos-de-agendamento">
                 <p className="mb-2 text-sm font-medium">{t("Tipo de agendamento")}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {tiposIniciais.map((opcao) => (
@@ -715,7 +717,7 @@ export function AgendaClient({
                   <textarea
                     id="observacao-do-compromisso"
                     data-testid="observacao-do-compromisso"
-                    rows={2}
+                    rows={1}
                     value={observacao}
                     onChange={(e) => setObservacao(e.target.value)}
                     className="mt-1 w-full resize-none rounded-md border bg-surface p-2 outline-hidden"
