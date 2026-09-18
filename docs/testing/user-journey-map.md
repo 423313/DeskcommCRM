@@ -2516,7 +2516,7 @@ casos dela (L12.G2.1, G2.2 e G2.3) estão provados nas linhas acima.
 
 ---
 
-## J25 — O construtor de fluxos diz a verdade sobre a regra `[P1]` (2026-09-17)
+## J27 — O construtor de fluxos diz a verdade sobre a regra `[P1]` (2026-09-17)
 
 Origem: um print do dono do produto, do construtor aberto, com a frase "Corrija
 por favor". O que o cartão mostrava e o que o motor fazia eram coisas
@@ -2536,17 +2536,17 @@ um primeiro deploy. Cron drenado pelo endpoint, como em produção.
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J25.1 | A regra de etapa é escolhida numa lista, agrupada por funil | grava o `stage_id`; a saída do cartão lê «O lead está na etapa “Etapa · Funil”» | PASS |
-| J25.2 | O cartão não mostra identificador interno | nenhum uuid no texto do cartão | PASS |
-| J25.3 | Nada de texto cortado no cartão | `scrollWidth ≤ clientWidth` e `scrollHeight ≤ clientHeight` em todo subtítulo e toda saída | PASS — medido, não olhado |
-| J25.4 | O passo de classificar fala português | "2 classes · espera 15 min"; saídas "Interessado", "Sem interesse", "Sem resposta", "Outros casos"; nenhum cartão com a palavra "grace" | PASS |
-| J25.5 | A saída de escape de um nó ramificado | "Outros casos", nunca "Sempre" (que prometia o que o motor não faz) | PASS |
-| J25.6 | A linha entre dois passos é visível no tema claro | `stroke` sai de token do tema, não do cinza `#b1b1b7` da biblioteca | PASS |
-| J25.7 | Publicar com regra sem valor | recusado, com o aviso ancorado no nó dizendo QUAL regra | PASS |
-| J25.8 | **A consequência**: dois leads, duas saídas | o lead NA etapa escolhida sai pela saída daquela regra; o de outra etapa sai por "Nenhuma delas" | PASS — antes do conserto os dois terminavam no mesmo nó |
-| J25.9 | Leitura de etapas que falha (500) | o construtor diz que não deu para carregar; NÃO acusa a regra de apontar para etapa inexistente | PASS — provado em unit (`EtapasDoFluxo.test.tsx`, `NodeCard.test.tsx`); visto na tela por acaso, quando a RPC de sessão administrativa falhou sob carga |
-| J25.10 | Nó solto não se acusa antes de Publicar | — | **NÃO CONSERTADO** — item separado: o aviso existe, mas só depois do clique em Publicar |
-| J25.11 | O 422 do publish mostra id interno e jargão dentro do cartão | `Nó "ai_classify-2" não tem edge class_match…` | **NÃO CONSERTADO** — anterior a este trabalho; vale um item próprio, porque é o cartão falando a língua do banco |
+| J27.1 | A regra de etapa é escolhida numa lista, agrupada por funil | grava o `stage_id`; a saída do cartão lê «O lead está na etapa “Etapa · Funil”» | PASS |
+| J27.2 | O cartão não mostra identificador interno | nenhum uuid no texto do cartão | PASS |
+| J27.3 | Nada de texto cortado no cartão | `scrollWidth ≤ clientWidth` e `scrollHeight ≤ clientHeight` em todo subtítulo e toda saída | PASS — medido, não olhado |
+| J27.4 | O passo de classificar fala português | "2 classes · espera 15 min"; saídas "Interessado", "Sem interesse", "Sem resposta", "Outros casos"; nenhum cartão com a palavra "grace" | PASS |
+| J27.5 | A saída de escape de um nó ramificado | "Outros casos", nunca "Sempre" (que prometia o que o motor não faz) | PASS |
+| J27.6 | A linha entre dois passos é visível no tema claro | `stroke` sai de token do tema, não do cinza `#b1b1b7` da biblioteca | PASS |
+| J27.7 | Publicar com regra sem valor | recusado, com o aviso ancorado no nó dizendo QUAL regra | PASS |
+| J27.8 | **A consequência**: dois leads, duas saídas | o lead NA etapa escolhida sai pela saída daquela regra; o de outra etapa sai por "Nenhuma delas" | PASS — antes do conserto os dois terminavam no mesmo nó |
+| J27.9 | Leitura de etapas que falha (500) | o construtor diz que não deu para carregar; NÃO acusa a regra de apontar para etapa inexistente | PASS — provado em unit (`EtapasDoFluxo.test.tsx`, `NodeCard.test.tsx`); visto na tela por acaso, quando a RPC de sessão administrativa falhou sob carga |
+| J27.10 | Nó solto não se acusa antes de Publicar | — | **NÃO CONSERTADO** — item separado: o aviso existe, mas só depois do clique em Publicar |
+| J27.11 | O 422 do publish mostra id interno e jargão dentro do cartão | `Nó "ai_classify-2" não tem edge class_match…` | **NÃO CONSERTADO** — anterior a este trabalho; vale um item próprio, porque é o cartão falando a língua do banco |
 
 Evidência: `evidence/followup-cartoes/cartoes-01-regra-de-etapa-pelo-nome.png` ·
 `evidence/followup-cartoes/cartoes-02-regra-sem-valor-nao-publica.png` ·
