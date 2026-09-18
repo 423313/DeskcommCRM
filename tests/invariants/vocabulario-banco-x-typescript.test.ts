@@ -276,6 +276,23 @@ const PARES: Array<{
     simbolo: "SITUACOES_DA_TAREFA",
   },
   {
+    tabela: "agent_case_chat_messages",
+    coluna: "author_kind",
+    // lib/ai/conversa-do-caso/vocabulario.ts → CASE_CHAT_AUTHOR_KINDS (tupla
+    // `as const`). O par aponta para a TUPLA e não para o type alias
+    // `CaseChatAuthorKind`, que é derivado dela e não carrega literal nenhum no
+    // fonte — mesma escolha de `FOLLOWUP_FLOW_SURFACES`.
+    //
+    // Nasce no MESMO commit da migration 0281, que é a lição desta lista: todo
+    // par que divergiu divergiu por ter nascido sozinho. Um `author_kind` novo
+    // só no CHECK viraria linha que o motor não sabe renderizar; só no
+    // TypeScript viraria `23514` num INSERT dentro da rota do chat — e ali a
+    // linha da pergunta é gravada ANTES da chamada ao modelo, então o sintoma
+    // seria a pergunta sumir em vez de a resposta falhar.
+    arquivo: "lib/ai/conversa-do-caso/vocabulario.ts",
+    simbolo: "CASE_CHAT_AUTHOR_KINDS",
+  },
+  {
     tabela: "team_invites",
     coluna: "role",
     // lib/schemas/team.ts → ROLES (tupla `as const`). O `z.enum(ROLES)` das

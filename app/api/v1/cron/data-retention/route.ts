@@ -58,6 +58,8 @@ import { logger } from "@/lib/logger";
 import {
   RETENCAO_AUDITORIA_DIAS_PADRAO,
   RETENCAO_AUDITORIA_DIAS_PISO,
+  RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO,
+  RETENCAO_CONVERSA_DO_CASO_DIAS_PISO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PADRAO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
   RETENCAO_FILA_DIAS_PADRAO,
@@ -102,9 +104,14 @@ export interface ResultadoDaRetencao {
   espelho_apagado: number;
   lotes_espelho: number;
   espelho_tem_resto: boolean;
+  /** A conversa da equipe com a IA sobre um caso (migration 0281). */
+  conversa_do_caso_apagada: number;
+  lotes_conversa_do_caso: number;
+  conversa_do_caso_tem_resto: boolean;
   retencao_fila_dias: number;
   retencao_auditoria_dias: number;
   retencao_espelho_dias: number;
+  retencao_conversa_do_caso_dias: number;
   /** Avisos de configuração — nunca ausentes em silêncio quando existem. */
   avisos: string[];
 }
@@ -112,14 +119,14 @@ export interface ResultadoDaRetencao {
 /** Só a superfície que este cron usa — o teste injeta uma implementação. */
 export interface PodaDb {
   rpc(
-    nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth",
+    nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth" | "fn_expurgar_conversa_do_caso_vencida",
     args: { p_retencao_dias: number; p_limite: number },
   ): Promise<{ data: number | null; error: { message: string } | null }>;
 }
 
 async function drenar(
   db: PodaDb,
-  nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth",
+  nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth" | "fn_expurgar_conversa_do_caso_vencida",
   dias: number,
 ): Promise<{ apagadas: number; lotes: number; temResto: boolean }> {
   let apagadas = 0;
@@ -151,6 +158,7 @@ export async function podarHistorico(
     JOB_QUEUE_RETENTION_DAYS?: string;
     AUDIT_LOG_RETENTION_DAYS?: string;
     CALENDAR_MIRROR_RETENTION_DAYS?: string;
+    CASE_CHAT_RETENTION_DAYS?: string;
   },
 ): Promise<ResultadoDaRetencao> {
   const fila = interpretarRetencao(ambiente.JOB_QUEUE_RETENTION_DAYS, {
@@ -170,6 +178,12 @@ export async function podarHistorico(
     piso: RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
   });
 
+  const conversaDoCaso = interpretarRetencao(ambiente.CASE_CHAT_RETENTION_DAYS, {
+    chave: "CASE_CHAT_RETENTION_DAYS",
+    padrao: RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO,
+    piso: RETENCAO_CONVERSA_DO_CASO_DIAS_PISO,
+  });
+
   const jobs = await drenar(db, "fn_podar_fila_de_jobs", fila.dias);
   const linhas = await drenar(db, "fn_expurgar_auditoria_vencida", auditoria.dias);
   const eventos = await drenar(db, "fn_expurgar_espelho_da_agenda", espelho.dias);
@@ -178,22 +192,30 @@ export async function podarHistorico(
   // cresceria para sempre, uma linha por conexão tentada, num produto que se
   // instala e ninguém monitora.
   const nonces = await drenar(db, "fn_expurgar_nonces_de_oauth", 1);
+  // Quinta poda: a conversa da equipe com a IA sobre um caso (migration 0281).
+  // O piso de 90 dias mora no CORPO da função; o número daqui é o que o
+  // operador pediu, já elevado, e é ele que aparece no relatório da rodada.
+  const conversas = await drenar(db, "fn_expurgar_conversa_do_caso_vencida", conversaDoCaso.dias);
 
   return {
     jobs_apagados: jobs.apagadas,
     auditoria_apagada: linhas.apagadas,
     espelho_apagado: eventos.apagadas,
     nonces_apagados: nonces.apagadas,
+    conversa_do_caso_apagada: conversas.apagadas,
     lotes_fila: jobs.lotes,
     lotes_auditoria: linhas.lotes,
     lotes_espelho: eventos.lotes,
+    lotes_conversa_do_caso: conversas.lotes,
     fila_tem_resto: jobs.temResto,
     auditoria_tem_resto: linhas.temResto,
     espelho_tem_resto: eventos.temResto,
+    conversa_do_caso_tem_resto: conversas.temResto,
     retencao_fila_dias: fila.dias,
     retencao_auditoria_dias: auditoria.dias,
     retencao_espelho_dias: espelho.dias,
-    avisos: [fila.aviso, auditoria.aviso, espelho.aviso].filter(
+    retencao_conversa_do_caso_dias: conversaDoCaso.dias,
+    avisos: [fila.aviso, auditoria.aviso, espelho.aviso, conversaDoCaso.aviso].filter(
       (a): a is string => a !== null,
     ),
   };
@@ -215,7 +237,11 @@ export function houveEfeito(resultado: ResultadoDaRetencao): boolean {
     // A quarta, pela MESMA razão, e ela quase entrou sem: acrescentei a poda de
     // nonces ao laço e ao retorno e esqueci desta linha. O comentário acima
     // descrevia exatamente o defeito que eu estava criando um parágrafo abaixo.
-    resultado.nonces_apagados > 0
+    resultado.nonces_apagados > 0 ||
+    // A quinta, pela MESMA razão das duas acima: uma rodada que só apagou
+    // conversa de caso vencida apagaria linhas e não deixaria registro — e o
+    // CLAUDE.md manda auditar QUANDO HÁ EFEITO, nunca parar de auditar.
+    resultado.conversa_do_caso_apagada > 0
   );
 }
 
@@ -248,6 +274,7 @@ async function handle(req: NextRequest): Promise<Response> {
     resultado = await podarHistorico(db, {
       JOB_QUEUE_RETENTION_DAYS: env.JOB_QUEUE_RETENTION_DAYS,
       AUDIT_LOG_RETENTION_DAYS: env.AUDIT_LOG_RETENTION_DAYS,
+      CASE_CHAT_RETENTION_DAYS: env.CASE_CHAT_RETENTION_DAYS,
     });
     // ── A cascata de anonimização que ficou pela metade ──────────────────
     //

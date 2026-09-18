@@ -44,6 +44,10 @@ const DONO_NO_SQL: Record<string, string> = {
   FILA: "fn_podar_fila_de_jobs",
   AUDITORIA: "fn_expurgar_auditoria_vencida",
   ESPELHO_AGENDA: "fn_expurgar_espelho_da_agenda",
+  // migration 0281 — a conversa interna da equipe com a IA sobre um caso. Entra
+  // aqui no MESMO commit da migration, que é a lição desta lista: todo par que
+  // divergiu divergiu por ter nascido sozinho.
+  CONVERSA_DO_CASO: "fn_expurgar_conversa_do_caso_vencida",
 };
 
 /**

@@ -9166,6 +9166,38 @@ export const DICIONARIO: Traducoes = {
   "o compromisso": { es: "la cita" },
   "Entendi": { es: "Entendido" },
   "e-mail do convidado inválido": { es: "correo del invitado no válido" },
+
+  // ── Conversar com o caso (migration 0281) ────────────────────────────────
+  //
+  // As três primeiras são do registro de pontos de IA. NENHUM gate as cobra: os
+  // textos chegam à tela por variável (`t(info.rotulo)`), e `chavesUsadas()` só
+  // resolve chave literal ou tabela do mesmo arquivo. A prova de que o buraco
+  // já deixou passar é `agent_preview`, que até hoje não tem `es`.
+  "Conversar sobre o caso com a equipe": { es: "Conversar sobre el caso con el equipo" },
+  "Responde às perguntas de quem vai decidir um caso: lê o caso, o que a equipe já decidiu e a conversa com o cliente, e explica em português. Nunca fala com o cliente nem mexe no caso.":
+    { es: "Responde las preguntas de quien va a decidir un caso: lee el caso, lo que el equipo ya decidió y la conversación con el cliente, y lo explica en español. Nunca habla con el cliente ni toca el caso." },
+  "Quem vai decidir o caso pergunta e não recebe resposta — decide sem o contexto, ou larga o caso na fila.":
+    { es: "Quien va a decidir el caso pregunta y no recibe respuesta — decide sin el contexto, o deja el caso en la fila." },
+
+  // As de baixo são mensagens de ERRO DE ROTA, e `PASTAS_IGNORADAS` do gate de
+  // espanhol inclui `api`: elas ficam FORA da catraca e entram aqui por
+  // disciplina. Escrito para que a próxima pessoa saiba que a ausência de um
+  // gate aqui não é aprovação.
+  "Não deu para abrir a conversa do caso agora.": { es: "No se pudo abrir la conversación del caso ahora." },
+  "Conversa do caso indisponível (configuração).": { es: "Conversación del caso no disponible (configuración)." },
+  "Muitas perguntas seguidas. Tente em um minuto.": { es: "Demasiadas preguntas seguidas. Inténtalo en un minuto." },
+  "Este caso já recebeu muitas perguntas hoje.": { es: "Este caso ya recibió demasiadas preguntas hoy." },
+  "Filtro inválido.": { es: "Filtro no válido." },
+  "Este contato foi anonimizado a pedido dele. A IA não responde sobre casos de contato anonimizado.":
+    { es: "Este contacto fue anonimizado a pedido suyo. La IA no responde sobre casos de contacto anonimizado." },
+  "Nenhum provedor de IA está configurado. Peça a quem administra para configurar em IA › Provedores.":
+    { es: "No hay ningún proveedor de IA configurado. Pide a quien administra que lo configure en IA › Proveedores." },
+  "A IA parou porque o gasto do mês atingiu o limite definido. Ajuste em Uso de IA › Orçamento.":
+    { es: "La IA se detuvo porque el gasto del mes alcanzó el límite definido. Ajústalo en Uso de IA › Presupuesto." },
+  "O modelo escolhido para este uso não está disponível. Reveja a escolha em IA › Provedores.":
+    { es: "El modelo elegido para este uso no está disponible. Revisa la elección en IA › Proveedores." },
+  "Não deu para responder agora. Tente de novo; se continuar, mande este código para quem instalou o sistema.":
+    { es: "No se pudo responder ahora. Inténtalo de nuevo; si continúa, envía este código a quien instaló el sistema." },
 };
 
 /**

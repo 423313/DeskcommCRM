@@ -12,6 +12,7 @@ import {
 import {
   RETENCAO_AUDITORIA_DIAS_PADRAO,
   RETENCAO_AUDITORIA_DIAS_PISO,
+  RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PADRAO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
   RETENCAO_FILA_DIAS_PADRAO,
@@ -208,6 +209,11 @@ describe("houveEfeito — as duas direções", () => {
     retencao_fila_dias: RETENCAO_FILA_DIAS_PADRAO,
     retencao_auditoria_dias: RETENCAO_AUDITORIA_DIAS_PADRAO,
     retencao_espelho_dias: RETENCAO_ESPELHO_AGENDA_DIAS_PADRAO,
+    // Quinta poda (migration 0281): a conversa da equipe com a IA sobre um caso.
+    conversa_do_caso_apagada: 0,
+    lotes_conversa_do_caso: 0,
+    conversa_do_caso_tem_resto: false,
+    retencao_conversa_do_caso_dias: RETENCAO_CONVERSA_DO_CASO_DIAS_PADRAO,
     avisos: [] as string[],
   };
 
@@ -228,6 +234,13 @@ describe("houveEfeito — as duas direções", () => {
     // deixar rastro em vez de encolher a trilha em silêncio.
     expect(houveEfeito({ ...base, jobs_apagados: 1 })).toBe(true);
     expect(houveEfeito({ ...base, auditoria_apagada: 1 })).toBe(true);
+  });
+
+  it("...e apagou conversa do caso → TAMBÉM audita (migration 0281)", () => {
+    // A quinta poda entra em `houveEfeito` no MESMO commit em que entra no
+    // laço: as quatro anteriores mostram que esquecer o predicado é o modo de
+    // falha natural aqui, e ele é mudo — a rodada apaga e não deixa registro.
+    expect(houveEfeito({ ...base, conversa_do_caso_apagada: 1 })).toBe(true);
   });
 
   it("...e apagou espelho da agenda → TAMBÉM audita (migration 0187)", () => {
