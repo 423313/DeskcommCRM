@@ -419,7 +419,6 @@
       "sublabel": "o número do plantão não vira contato, conversa nem despacho"
     },
     {
-<<<<<<< HEAD
       "id": "avisoSuporteTela",
       "lane": "humano",
       "col": 5,
@@ -434,7 +433,8 @@
       "type": "route",
       "label": "/api/v1/ai/cases/alerta (+ /teste)",
       "sublabel": "escreve só pelo RPC; o teste manda de verdade e paga no pacing_ledger"
-=======
+    },
+    {
       "id": "passagemMontagem",
       "lane": "regra",
       "col": 3,
@@ -457,7 +457,6 @@
       "type": "db",
       "label": "trg_passagem_reconhecida + fn_passagem_devolvida (0293)",
       "sublabel": "assumir fecha a passagem e resolve o aviso; devolver ao automático fecha sem dono"
->>>>>>> feat/casos-vivos
     }
   ],
   "edges": [
@@ -907,7 +906,6 @@
     },
     {
       "id": "e75",
-<<<<<<< HEAD
       "from": "avisoSuporteTela",
       "to": "avisoSuporteRota",
       "label": "a tela nunca escreve no banco: ela fala com a rota"
@@ -941,7 +939,8 @@
       "from": "numeroInterno",
       "to": "avisoSuporteTela",
       "label": "os contadores do descarte viram a frase que impede o silêncio de parecer defeito"
-=======
+    },
+    {
       "from": "passagemMontagem",
       "to": "passagemRegistro",
       "label": "body/title/notes/content + tentativas — as quatro colunas saem da montagem única"
@@ -993,7 +992,6 @@
       "from": "retomada",
       "to": "passagemReconhece",
       "label": "fn_passagem_devolvida: episódio fechado sem ninguém ter assumido"
->>>>>>> feat/casos-vivos
     }
   ],
   "cards": [
