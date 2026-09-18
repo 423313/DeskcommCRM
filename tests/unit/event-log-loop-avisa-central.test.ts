@@ -109,4 +109,21 @@ describe("laço rápido do event_log — feedback visível", () => {
       ["status", "open"],
     ]);
   });
+
+  it("Central fora do ar vira `warn`, nunca `error` — o gate da #604 exige zero error com as deps carregadas", async () => {
+    const semBanco = {
+      from() {
+        throw new Error("fetch failed");
+      },
+    } as unknown as SupabaseClient;
+    const l = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    await sincronizarAvisoDoLacoDeEventLog(semBanco, "saudavel", l as unknown as typeof log);
+
+    expect(l.error).not.toHaveBeenCalled();
+    expect(l.warn).toHaveBeenCalledWith(
+      expect.stringContaining("falhei ao sincronizar o aviso"),
+      expect.objectContaining({ error: "fetch failed" }),
+    );
+  });
 });

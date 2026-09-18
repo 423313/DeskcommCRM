@@ -84,7 +84,11 @@ export async function sincronizarAvisoDoLacoDeEventLog(
     );
     if (erroInsert) throw new Error(`abrir aviso: ${erroInsert.message}`);
   } catch (err) {
-    log.error("event-log drain: falhei ao sincronizar o aviso de degradação na Central", {
+    // `warn`, e não `error`: o aviso na Central é acessório. O incidente do
+    // laço já tem o seu `log.error` em `carregarDepsDoLaco`, e o gate da #604
+    // exige zero `log.error` quando as deps carregaram — um Supabase lento no
+    // boot não pode se passar por laço quebrado.
+    log.warn("event-log drain: falhei ao sincronizar o aviso de degradação na Central", {
       error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
     });
   }

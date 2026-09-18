@@ -78,4 +78,16 @@ describe("boot do laço rápido do event_log", () => {
     expect(prontidaoDoLacoDeEventLog()).toEqual({ carregado: true, motivo: null });
     expect(controle.sincronizar).toHaveBeenCalledWith(expect.anything(), "saudavel", l.log);
   });
+
+  it("a prontidão sai ANTES do round-trip à Central, não depois", async () => {
+    const l = logger();
+    let prontidaoDuranteASincronizacao: unknown = null;
+    controle.sincronizar.mockImplementationOnce(async () => {
+      prontidaoDuranteASincronizacao = prontidaoDoLacoDeEventLog();
+    });
+
+    await carregarDepsDoLaco(l.log);
+
+    expect(prontidaoDuranteASincronizacao).toEqual({ carregado: true, motivo: null });
+  });
 });

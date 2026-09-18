@@ -138,9 +138,12 @@ export async function carregarDepsDoLaco(log: Logger): Promise<Deps | null> {
     ensureHandlersRegistered();
 
     const deps: Deps = { drainEventLog, admin: adminParaAviso };
-    await sincronizarAvisoDoLacoDeEventLog(adminParaAviso, 'saudavel', log);
+    // A prontidão sai ANTES de resolver o aviso antigo: ela depende só das deps,
+    // e o round-trip até a Central não pode deixar o /healthz dizendo
+    // `carregado:false` com o laço já montado.
     prontidao = { carregado: true, motivo: null };
     log.info(MARCA_LACO_CARREGADO, { carregado: true });
+    await sincronizarAvisoDoLacoDeEventLog(adminParaAviso, 'saudavel', log);
     return deps;
   } catch (err) {
     const motivo = (err instanceof Error ? err.message : String(err)).slice(0, 300);
@@ -158,21 +161,11 @@ export async function carregarDepsDoLaco(log: Logger): Promise<Deps | null> {
       { error: motivo },
     );
 
+    // Sem o admin client não há por onde avisar a Central: tentar de novo
+    // falharia pelo mesmo motivo. O /healthz e o log.error acima seguem sendo
+    // o sinal.
     if (adminParaAviso) {
       await sincronizarAvisoDoLacoDeEventLog(adminParaAviso, 'degradado', log);
-    } else {
-      // Se a falha aconteceu ANTES de termos o client (inclusive no próprio
-      // import dele), ainda tentamos uma vez. Nunca propagamos esse segundo
-      // erro: perder a superfície de aviso não pode derrubar o worker.
-      try {
-        const { createAdminClient } = await import('@/lib/supabase/admin');
-        adminParaAviso = createAdminClient();
-        await sincronizarAvisoDoLacoDeEventLog(adminParaAviso, 'degradado', log);
-      } catch (avisoErr) {
-        log.error('event-log drain: a Central também ficou indisponível para registrar a degradação', {
-          error: (avisoErr instanceof Error ? avisoErr.message : String(avisoErr)).slice(0, 300),
-        });
-      }
     }
     return null;
   }
