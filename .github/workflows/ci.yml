@@ -25,9 +25,31 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # ── GUARDA DE TRAVAMENTO. O detector é o passo `Orçamento de tempo`. ─────
+    #
+    # Eram 15 min, e 15 era o valor errado pelo motivo errado. Medido em 39
+    # rodadas deste job (18/09/2026):
+    #
+    #     success     n=19   mediana 11,9 min   máx 14,9   ← 0,1 min de margem
+    #     cancelled   n=13   mediana 15,2 min   máx 15,3   ← TODAS no teto
+    #     failure     n= 7   mediana 10,2 min
+    #
+    # Um TERÇO das rodadas morria de relógio, e cada uma chegava como
+    # `conclusion: cancelled` — o mesmo que `gh run cancel` produz. O autor do
+    # PR lia "cancelaram meu CI"; a triagem saía procurando um cancelador
+    # humano que não existia.
+    #
+    # O tempo tem dono medido, e não é o preâmbulo: `Unit tests` come 10,3 min
+    # de um total de 13,2 (typecheck 0,9 · lint 0,8 · kit 0,7 · node 0,3). O
+    # conserto ESTRUTURAL é repartir a suíte unitária; ele não cabe aqui porque
+    # `verify` é status check obrigatório na branch protection e renomear o job
+    # derruba o gate de todos os PRs abertos. Fica como issue.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+
+      - name: Marcar o início (o orçamento de tempo mede no fim do job)
+        run: echo "VERIFY_INICIO=$(date +%s)" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
@@ -78,6 +100,29 @@ jobs:
       # deixava o .env pela metade — passaram por todos os checks verdes. 15s.
       - name: Kit self-host (bash)
         run: pnpm test:shell
+
+      - name: Orçamento de tempo do verify
+        if: always()
+        env:
+          # Orçamento em MINUTOS. O pior sucesso medido é 14,9; 16 não nasce
+          # vermelho e ainda denuncia o próximo crescimento antes de ele virar
+          # `cancelled`. Gate que nasce vermelho não é gate: é dívida com alarme.
+          ORCAMENTO_MIN: "16"
+        run: |
+          set -euo pipefail
+          if [ -z "${VERIFY_INICIO:-}" ]; then
+            echo "::warning::NÃO MEDIDO — o job não chegou a registrar o início."
+            exit 0
+          fi
+          decorrido=$(( ($(date +%s) - VERIFY_INICIO) / 60 ))
+          echo "verify: ${decorrido} min (orçamento ${ORCAMENTO_MIN} min, teto de travamento 25 min)"
+          if [ "$decorrido" -le "${ORCAMENTO_MIN}" ]; then
+            exit 0
+          fi
+          echo "::error::O verify levou ${decorrido} min contra um orçamento de ${ORCAMENTO_MIN} min."
+          echo "::error::Isto NÃO é defeito do seu PR: a suíte unitária cresceu. Em 18/09/2026, \`Unit tests\` já era 10,3 dos 13,2 min do job."
+          echo "::error::O conserto é repartir \`pnpm test:unit\`, não subir este número."
+          exit 1
 
   # Gate de isolamento multi-tenant + invariantes de governança.
   # Job separado de propósito: roda em paralelo ao verify (não atrasa o feedback
