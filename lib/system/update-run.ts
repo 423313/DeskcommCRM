@@ -110,32 +110,60 @@ export function rollbackFoiSuperado(
  * oferecendo o botão "Atualizar agora" para a versão que **acabou de ser
  * instalada**. Quem clicou faz tudo de novo, ou conclui que não funcionou.
  *
- * ## Por que assumir o `to_version` é seguro aqui
+ * ## Por que a assunção do `to_version` é defensável
  *
  * `success` é o agente do host dizendo que o `update.sh` foi até o fim — a
  * troca de imagem incluída. Diferente do caso de rollback (onde o host reporta
  * a versão que QUEBROU e o run precisa contradizê-lo), aqui os dois concordam;
- * o host só ainda não falou.
+ * o host só ainda não falou. É por isso que a janela NÃO volta a oferecer
+ * "Atualizar agora" para a versão que acabou de ser instalada.
  *
  * E é auto-corrigível por construção: assim que a batida chega,
  * `system_version.updated_at` passa a ser posterior ao `finished_at` e esta
  * função devolve `false` — o host volta a mandar, sem exceção nenhuma. É o
  * mesmo desempate temporal de `rollbackFoiSuperado`, na direção contrária.
  *
+ * ## O que a assunção NÃO pode fazer: durar para sempre
+ *
+ * A auto-correção acima depende de a batida CHEGAR. Se o agente do host parou
+ * (serviço morto, cron removido, token vencido) ela nunca chega, e a assunção
+ * deixa de ser uma aposta de minutos para virar AFIRMAÇÃO eterna: medido em
+ * produção, a tela anunciava `1.32.0` com o container rodando `1.23.0` — o
+ * `update.sh` trocou o código, o app não subiu na imagem nova, e nada nunca
+ * mais desmentiu o run.
+ *
+ * Por isso a assunção tem FIM DE VALIDADE, com um relógio só e o mesmo de
+ * `isRunStale`: passados `RUN_STALE_AFTER_MS` do `finished_at` sem confirmação
+ * do host, o run para de falar. Quem volta a mandar é a última versão que o
+ * host CONFIRMOU — não a que o run pediu. O erro que sobra cai para o lado que
+ * empurra para atualizar (a tela volta a oferecer a versão do run, que pode já
+ * estar no ar): é o lado que a issue do defeito prefere, e o outro é o defeito
+ * — prometer instalação que ninguém confirmou, por tempo indeterminado.
+ *
+ * A ORDEM importa: o corte de validade vem ANTES do degrau "host nunca
+ * reportou nada" (`!versionUpdatedAt` → `true`). Invertida, a instalação que
+ * nunca reportou nada seria justamente a única a afirmar para sempre.
+ *
  * Sem `finished_at` (run antigo, agente velho) devolve `false`: sem a data não
- * há como saber se o host já falou depois, e o degrau conservador é o de antes.
- * Sem `versionUpdatedAt` devolve `true` — o host nunca reportou coisa alguma, e
- * o run é a única notícia que existe.
+ * há como saber se o host já falou depois, nem validade a medir — o degrau
+ * conservador é o de antes.
+ *
+ * `true` quer dizer UMA coisa: "não reofereça a atualização agora". NÃO quer
+ * dizer "a `to_version` está no ar" — quem nomeia versão na tela é a última que
+ * o host confirmou (`current_version`), e é assim que a rota usa este campo.
  */
 export function sucessoJaInstalado(
   versionUpdatedAt: string | null | undefined,
   runFinishedAt: string | null | undefined,
   run?: { status?: string | null; to_version?: string | null } | null,
+  now?: Date,
 ): boolean {
   if (run?.status !== "success" || !run.to_version) return false;
   if (!runFinishedAt) return false;
   const terminou = Date.parse(runFinishedAt);
   if (Number.isNaN(terminou)) return false;
+  const agora = now ?? new Date();
+  if (agora.getTime() - terminou > RUN_STALE_AFTER_MS) return false;
   if (!versionUpdatedAt) return true;
   const gravado = Date.parse(versionUpdatedAt);
   if (Number.isNaN(gravado)) return true;

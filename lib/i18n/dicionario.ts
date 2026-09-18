@@ -428,6 +428,18 @@ export const DICIONARIO: Traducoes = {
   "Feriado, férias, viagem. Nesses dias o sistema deixa de oferecer horários — e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.": { es: "Feriado, vacaciones, viaje. En esos días el sistema deja de ofrecer horarios — y lo que ya estaba agendado sigue agendado, para que decidas qué hacer con cada uno." },
   "Ex.: feriado": { es: "Ej.: feriado" },
   "Fechar este dia": { es: "Cerrar este día" },
+  "Dias fora da rotina": { es: "Días fuera de la rutina" },
+  "Feche um dia (feriado, férias, viagem) ou abra um dia que a sua jornada semanal não cobre. Em dia fechado o sistema deixa de oferecer horários, e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.": { es: "Cierra un día (feriado, vacaciones, viaje) o abre un día que tu jornada semanal no cubre. En día cerrado el sistema deja de ofrecer horarios, y lo que ya estaba agendado sigue agendado, para que decidas qué hacer con cada uno." },
+  "O que fazer": { es: "Qué hacer" },
+  "Fechar o dia": { es: "Cerrar el día" },
+  "Abrir para atendimento": { es: "Abrir para atención" },
+  "Das": { es: "Desde" },
+  "Abrir este dia": { es: "Abrir este día" },
+  "Repetir toda semana até (opcional)": { es: "Repetir cada semana hasta (opcional)" },
+  "dia(s) gravado(s)": { es: "día(s) guardado(s)" },
+  "já existia(m)": { es: "ya existía(n)" },
+  "A hora final precisa ser maior que a inicial.": { es: "La hora final debe ser mayor que la inicial." },
+  "Nenhum dia fora da rotina daqui para a frente.": { es: "Ningún día fuera de la rutina de aquí en adelante." },
   "Nenhum dia fechado daqui para a frente.": { es: "Ningún día cerrado de aquí en adelante." },
   "aberto excepcionalmente": { es: "abierto excepcionalmente" },
   "Abrir atendimento": { es: "Abrir atención" },
@@ -4029,6 +4041,11 @@ export const DICIONARIO: Traducoes = {
   "De plantão": { es: "De guardia" },
   "Fora do horário": { es: "Fuera del horario" },
   "Desligado": { es: "Apagado" },
+  // ── Presença do navegador (issue #996): o segundo selo da mesma célula, o
+  //    que responde "tem alguém aí?" sem tocar na decisão de plantão.
+  "Com a tela aberta": { es: "Con la pantalla abierta" },
+  "Sem sinal de tela": { es: "Sin señal de pantalla" },
+  "último sinal às": { es: "última señal a las" },
   "Atualizando para a versão": { es: "Actualizando a la versión" },
   // ── A espera antes de o servidor pegar o pedido, e o fim reconhecido na hora.
   //    Os dois estados que a tela ganhou quando parou de fingir que a conversa
@@ -4052,12 +4069,16 @@ export const DICIONARIO: Traducoes = {
   "Pode fechar esta página: o pedido já está registrado e não se perde.": {
     es: "Puedes cerrar esta página: el pedido ya está registrado y no se pierde.",
   },
-  "Pronto — você está na versão": { es: "Listo — estás en la versión" },
-  "A atualização terminou e o sistema já está no ar na versão": {
-    es: "La actualización terminó y el sistema ya está en línea en la versión",
+  // As três frases que a janela do `just_updated` usava saíram junto com a
+  // promoção da versão do run a "instalada" (issue 1101): elas afirmavam uma
+  // versão que o host não confirmou. No lugar delas, o que a tela pode dizer é
+  // que o PEDIDO terminou e qual é a última versão que o host confirmou.
+  "terminou": { es: "terminó" },
+  "O servidor ainda não me confirmou em que versão ele voltou ao ar — a última versão que ele confirmou é a": {
+    es: "El servidor todavía no me confirmó en qué versión volvió a estar en línea — la última versión que él confirmó es la",
   },
-  "O servidor confirma isso na próxima vez que falar comigo, daqui a alguns minutos — até lá, esta tela já sabe.": {
-    es: "El servidor lo confirma la próxima vez que hable conmigo, en unos minutos — hasta entonces, esta pantalla ya lo sabe.",
+  "Assim que ele falar comigo, daqui a alguns minutos, esta tela se atualiza sozinha. Não ofereço atualizar de novo: o pedido já foi atendido.": {
+    es: "En cuanto hable conmigo, dentro de unos minutos, esta pantalla se actualiza sola. No te ofrezco actualizar otra vez: el pedido ya fue atendido.",
   },
   "O sistema sai do ar por alguns instantes e volta sozinho. Pode deixar esta página aberta.": {
     es: "El sistema se apaga por unos instantes y vuelve solo. Puedes dejar esta página abierta.",
@@ -7723,6 +7744,14 @@ export const DICIONARIO: Traducoes = {
   CTR: { es: "CTR" },
   Frequência: { es: "Frecuencia" },
   CPC: { es: "CPC" },
+  // Coluna derivada nova (issue #920). O rótulo fica em inglês, como "Hook
+  // Rate", "CPC" e "CTR": é o nome que o operador vê no Gerenciador de
+  // Anúncios, e traduzir só aqui faria a mesma coluna ter dois nomes entre a
+  // tela e o print que ele manda para o cliente. A fórmula vai no `title`.
+  "Connect rate": { es: "Connect rate" },
+  "Visualizações da página ÷ cliques no link": {
+    es: "Visualizaciones de la página ÷ clics en el enlace",
+  },
   "Hook Rate": { es: "Hook Rate" },
   "(reproduções)": { es: "(reproducciones)" },
   "Reproduções de vídeo ÷ impressões": { es: "Reproducciones de video ÷ impresiones" },
