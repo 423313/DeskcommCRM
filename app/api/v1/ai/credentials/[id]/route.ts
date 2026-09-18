@@ -107,7 +107,7 @@ function descreverBloqueio(versoes: VersaoQueBloqueia[]): string {
   const quantas =
     congeladas.length === 1
       ? n === 1
-        ? "ela já saiu do rascunho"
+        ? "Ela já saiu do rascunho"
         : "1 delas já saiu do rascunho"
       : `${congeladas.length} delas já saíram do rascunho`;
   const recorte = congeladas.length < n ? ` (${onde})` : "";
