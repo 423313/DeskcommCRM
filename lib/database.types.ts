@@ -2033,6 +2033,7 @@ export type Database = {
           name: string
           organization_id: string
           run_count: number
+          trigger_config: Json
           trigger_event: string
           updated_at: string
         }
@@ -2049,6 +2050,7 @@ export type Database = {
           name: string
           organization_id: string
           run_count?: number
+          trigger_config?: Json
           trigger_event: string
           updated_at?: string
         }
@@ -2065,6 +2067,7 @@ export type Database = {
           name?: string
           organization_id?: string
           run_count?: number
+          trigger_config?: Json
           trigger_event?: string
           updated_at?: string
         }
@@ -3457,6 +3460,7 @@ export type Database = {
           assigned_to_user_id: string | null
           assigned_to_user_name: string | null
           assignee_kind: string | null
+          awaiting_since: string | null
           bot_silenced_until: string | null
           channel: string
           channel_session_id: string
@@ -3500,6 +3504,7 @@ export type Database = {
           assigned_to_user_id?: string | null
           assigned_to_user_name?: string | null
           assignee_kind?: string | null
+          awaiting_since?: string | null
           bot_silenced_until?: string | null
           channel?: string
           channel_session_id: string
@@ -3543,6 +3548,7 @@ export type Database = {
           assigned_to_user_id?: string | null
           assigned_to_user_name?: string | null
           assignee_kind?: string | null
+          awaiting_since?: string | null
           bot_silenced_until?: string | null
           channel?: string
           channel_session_id?: string
@@ -7338,34 +7344,43 @@ export type Database = {
       system_update_runs: {
         Row: {
           dispatched_at: string
+          disputa_de_banco: boolean | null
           finished_at: string | null
           from_version: string
           id: string
           last_step: string | null
           log_tail: string
+          passada_do_banco: number | null
           requested_by: string | null
+          retentativas_do_banco: number | null
           status: string
           to_version: string
         }
         Insert: {
           dispatched_at?: string
+          disputa_de_banco?: boolean | null
           finished_at?: string | null
           from_version?: string
           id?: string
           last_step?: string | null
           log_tail?: string
+          passada_do_banco?: number | null
           requested_by?: string | null
+          retentativas_do_banco?: number | null
           status?: string
           to_version?: string
         }
         Update: {
           dispatched_at?: string
+          disputa_de_banco?: boolean | null
           finished_at?: string | null
           from_version?: string
           id?: string
           last_step?: string | null
           log_tail?: string
+          passada_do_banco?: number | null
           requested_by?: string | null
+          retentativas_do_banco?: number | null
           status?: string
           to_version?: string
         }
@@ -8225,6 +8240,7 @@ export type Database = {
           assigned_to_user_id: string | null
           assigned_to_user_name: string | null
           assignee_kind: string | null
+          awaiting_since: string | null
           bot_silenced_until: string | null
           channel: string
           channel_session_id: string
@@ -8423,6 +8439,7 @@ export type Database = {
           assigned_to_user_id: string | null
           assigned_to_user_name: string | null
           assignee_kind: string | null
+          awaiting_since: string | null
           bot_silenced_until: string | null
           channel: string
           channel_session_id: string
