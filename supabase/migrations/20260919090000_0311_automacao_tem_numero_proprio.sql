@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- 0272_automacao_tem_numero_proprio — a mensagem que a automação manda tem NÚMERO PRÓPRIO (#652)
+-- 0311_automacao_tem_numero_proprio — a mensagem que a automação manda tem NÚMERO PRÓPRIO (#652)
 --
 -- Decisão do mantenedor (16/09/2026, issue #652): "mensagem que não foi escrita
 -- nem por pessoa nem pela IA ganha categoria própria. O painel de atrito passa a
@@ -18,6 +18,17 @@
 -- Aditivo: nenhuma chave atual muda de nome. O que muda é que as linhas de
 -- automação deixam de somar em `envios_por_ia` — elas foram carimbadas `'ai'`
 -- até este conserto — e passam a ter `envios_por_automacao`.
+--
+-- ⚠️ CORPO DERIVADO DA DEFINIÇÃO EM VIGOR, e não da anterior. A versão original
+-- desta migration partia da definição de antes da 0266 (#1057), que acrescentou
+-- `coalesce(lost_reason,'') <> 'moved_to_another_pipeline'` — o motivo próprio da
+-- troca de funil. Recriar a função sem esse filtro APAGARIA a correção do #1057
+-- em silêncio, porque esta migration roda depois. Medido na árvore integrada: o
+-- baseline ficava com dois blocos da mesma função, e o último vencia — nos dois
+-- caminhos de instalação alguma coisa se perdia.
+--
+-- Renumerada de 0272 para 0311 (max+1 na main) COM timestamp novo: renumerar só
+-- o NNNN já fabricou 12 colisões de timestamp neste repositório.
 -- ---------------------------------------------------------------------------
 
 drop function if exists public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int);
@@ -182,7 +193,11 @@ as $$
   ),
   eficiencia as (
     select count(*) filter (where status = 'won')  as ganhos,
-           count(*) filter (where status = 'lost') as perdidos
+           count(*) filter (
+             where status = 'lost'
+               -- A transferência entre funis não é perda comercial (migration 0266).
+               and coalesce(lost_reason, '') <> 'moved_to_another_pipeline'
+           ) as perdidos
       from public.crm_leads
      where organization_id = p_org and status in ('won', 'lost')
        and closed_at >= p_from and closed_at < p_to

@@ -149,7 +149,11 @@ async function removerEcoDoProprioEnvio(
  */
 export function origemDaMensagem(actor: Actor): "user" | "ai" | "automation" {
   if (actor.type === "user") return "user";
-  if (actor.type === "webhook_source") return "automation";
+  // A regra dispara, mas nem sempre ESCREVE. A ação "Mensagem escrita pela IA"
+  // manda texto de um agente publicado com este mesmo ator, e a decisão da #652
+  // é por AUTORIA: ali a linha é da IA. Decidir só pelo tipo do ator carimbaria
+  // "Automação" no balão e tiraria a mensagem de `envios_por_ia`.
+  if (actor.type === "webhook_source") return actor.textoEscritoPelaIA ? "ai" : "automation";
   return "ai";
 }
 
