@@ -2,7 +2,7 @@
 
 O parser recusa **o pacote inteiro** e não diz qual campo errou — de propósito: a mensagem pública
 nunca incorpora bytes nem texto do pacote. Então a depuração é por eliminação, e o
-`scripts/validar-pacote.sh` é o caminho curto: ele roda o mesmo schema, do seu lado, antes de
+`.agents/skills/deskcomm-extensao/scripts/validar-pacote.sh` é o caminho curto: ele roda o mesmo schema, do seu lado, antes de
 qualquer envio.
 
 ## `extension_invalid_package` — o schema recusou

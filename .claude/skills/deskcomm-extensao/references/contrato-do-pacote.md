@@ -135,7 +135,7 @@ JSON do pacote depois de publicar (um espaço, uma quebra de linha) muda o `sha2
 recusado com `extension_digest_mismatch`. Publicar a mesma versão com bytes diferentes é
 `extension_version_conflict` — versão nova pede número novo.
 
-`scripts/validar-pacote.sh` imprime a entrada pronta, com o digest e o tamanho calculados dos bytes
+`.agents/skills/deskcomm-extensao/scripts/validar-pacote.sh` imprime a entrada pronta, com o digest e o tamanho calculados dos bytes
 que você acabou de validar.
 
 ## Tetos que não estão em `EXTENSION_LIMITS`

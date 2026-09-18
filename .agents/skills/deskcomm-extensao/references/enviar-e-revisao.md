@@ -32,7 +32,7 @@ O que é específico de um pacote:
 
 1. **O arquivo do pacote**, exatamente como validado. Não reformate depois de calcular o digest.
 2. **No corpo do PR**: o que a extensão faz, em duas frases, na voz de quem vai usar; para qual
-   nicho; quais portas ela abre e por quê; e a saída do `scripts/validar-pacote.sh` (é a sua
+   nicho; quais portas ela abre e por quê; e a saída do `.agents/skills/deskcomm-extensao/scripts/validar-pacote.sh` (é a sua
    medição — cole o comando e o resultado, não a conclusão).
 3. **O destino declarado** (item 18 do Definition of Done): "extensão", com a razão medida pela
    pergunta-raiz. Se alguma parte do seu trabalho é núcleo, ela vai em **outro** PR.
