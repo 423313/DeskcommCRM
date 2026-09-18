@@ -30,6 +30,8 @@ def carregar(nome):
 
 REAIS = carregar("sonda-reais.json")
 PARADO = carregar("sonda-1122-action-required.json")
+# #1170: o verify, job que TODO PR atravessa, morto no teto de 15 min (1/3 das rodadas do dia).
+VERIFY_TETO = carregar("sonda-1170-verify-teto.json")
 SHA_1122_ANTIGO = "ee8a486b65933b1dd031fc0cd590a9b3a9fa6244"
 
 
@@ -49,6 +51,24 @@ class ClassesComCasoReal(unittest.TestCase):
         self.assertEqual(teto[0]["classe"], "teto")
         self.assertEqual(teto[0]["teto_min"], 30)
         self.assertEqual(teto[0]["conclusao"], "cancelled")
+
+    def test_teto_1170_verify_aos_15m15s(self):
+        (v,) = sondar(1170, VERIFY_TETO)["vermelhos"]
+        self.assertEqual((v["check"], v["classe"], v["teto_min"], v["duracao"]), ("verify", "teto", 15, "15m15s"))
+
+    def test_teto_lido_da_main_do_instante_do_run_nao_da_de_hoje(self):
+        # O #1184 sobe o verify para 25 min. Com a main de HOJE dizendo 25, o
+        # cancelamento de ontem aos 15m15s tem de continuar sendo teto — a régua é a
+        # do instante em que o run nasceu.
+        dados = copy.deepcopy(VERIFY_TETO)
+        chave = next(k for k in dados if k.startswith("workflow:.github/workflows/ci.yml@"))
+        dados["workflow:.github/workflows/ci.yml"] = dados[chave].replace(
+            "    timeout-minutes: 15", "    timeout-minutes: 25", 1)
+        self.assertEqual(classes(sondar(1170, dados)), ["teto"])
+        # Controle: a régua do instante, se fosse 25, faria o mesmo cancelamento NÃO ser teto.
+        dados[chave] = dados["workflow:.github/workflows/ci.yml"]
+        (v,) = sondar(1170, dados)["vermelhos"]
+        self.assertEqual((v["classe"], v["teto_min"]), ("cancelado", 25))
 
     def test_teto_1056_exit_124_do_orcamento_interno(self):
         r = sondar(1056)
@@ -96,6 +116,8 @@ class ControlesNegativos(unittest.TestCase):
         for n, esperado in self.ESPERADO.items():
             with self.subTest(pr=n):
                 self.assertEqual(classes(sondar(n)), esperado)
+        with self.subTest(pr=1170):
+            self.assertEqual(classes(sondar(1170, VERIFY_TETO)), ["teto"])
 
     def test_1025_nao_e_herdado_porque_a_falha_cita_codigo_do_diff(self):
         # O teste que falhou (branding.test.ts) está FORA do diff e a main o mudou

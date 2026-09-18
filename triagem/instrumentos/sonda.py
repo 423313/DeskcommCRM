@@ -106,8 +106,20 @@ class FonteGitHub:
         d = self._api(f"repos/{self.repo}/branches/main/protection/required_status_checks")
         return list(d.get("contexts") or [])
 
-    def workflow(self, caminho: str) -> str:
-        return exigir(["git", "-C", self.raiz, "show", f"origin/main:{caminho}"])
+    def workflow(self, caminho: str, quando: Optional[str] = None) -> str:
+        """O workflow como a main estava QUANDO o run nasceu — não como está hoje.
+
+        O teto muda (o #1184 sobe verify 15→25): lido da main de hoje, um cancelamento
+        aos 15m15s de ontem viraria "cancelado antes do teto" e mentiria. PR que muda o
+        próprio workflow roda a versão dele, e isto não a vê.
+        """
+        ref = "origin/main"
+        if quando:
+            rev = exigir(["git", "-C", self.raiz, "rev-list", "-1", f"--before={quando}", "origin/main"]).strip()
+            if not rev:
+                raise NaoMedido(f"a main local não tem commit anterior a {quando}")
+            ref = rev
+        return exigir(["git", "-C", self.raiz, "show", f"{ref}:{caminho}"])
 
     def main_head(self) -> str:
         return exigir(["git", "-C", self.raiz, "rev-parse", "origin/main"]).strip()
@@ -146,7 +158,10 @@ class FonteGravada:
     def job_log(self, job_id): return self._get(f"job_log:{job_id}")
     def arquivos_do_pr(self, n): return self._get(f"arquivos:{n}")
     def protecao(self): return self._get("protecao")
-    def workflow(self, caminho): return self._get(f"workflow:{caminho}")
+    def workflow(self, caminho, quando=None):
+        # Fixture antiga (sem o instante) grava só `workflow:<caminho>`.
+        chave = f"workflow:{caminho}@{quando}"
+        return self._get(chave if chave in self.dados else f"workflow:{caminho}")
     def main_head(self): return self._get("main_head")
 
     def commits_da_main_desde(self, desde_iso, arquivos):
@@ -184,7 +199,7 @@ class Gravador:
     def runs(self, sha): return self._chamar(f"runs:{sha}", self.fonte.runs, sha)
     def arquivos_do_pr(self, n): return self._chamar(f"arquivos:{n}", self.fonte.arquivos_do_pr, n)
     def protecao(self): return self._chamar("protecao", self.fonte.protecao)
-    def workflow(self, c): return self._chamar(f"workflow:{c}", self.fonte.workflow, c)
+    def workflow(self, c, quando=None): return self._chamar(f"workflow:{c}@{quando}", self.fonte.workflow, c, quando)
     def main_head(self): return self._chamar("main_head", self.fonte.main_head)
 
     def commits_da_main_desde(self, desde, arquivos):
@@ -419,7 +434,7 @@ def sondar(fonte, n: int, sha: Optional[str] = None) -> dict:
     suites_obrig = set()
     for x in runs:
         try:
-            t = tetos_do_workflow(fonte.workflow(x["path"]))
+            t = tetos_do_workflow(fonte.workflow(x["path"], x.get("created_at")))
         except NaoMedido:
             continue
         if any(o in t for o in obrig):
