@@ -6712,6 +6712,7 @@ export type Database = {
           body: string
           caso_id: string | null
           cliente_avisado: boolean | null
+          cobrancas: number
           contact_id: string
           content: string | null
           conversation_id: string
@@ -6732,6 +6733,7 @@ export type Database = {
           body: string
           caso_id?: string | null
           cliente_avisado?: boolean | null
+          cobrancas?: number
           contact_id: string
           content?: string | null
           conversation_id: string
@@ -6752,6 +6754,7 @@ export type Database = {
           body?: string
           caso_id?: string | null
           cliente_avisado?: boolean | null
+          cobrancas?: number
           contact_id?: string
           content?: string | null
           conversation_id?: string

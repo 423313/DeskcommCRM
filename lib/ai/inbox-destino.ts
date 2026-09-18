@@ -44,7 +44,11 @@ export const POLITICAS_DE_AVISO = {
   event_dead: { refs: [], orientacao: "Peça a quem administra para conferir o processamento descrito neste aviso." },
   budget_exceeded: { refs: ["ai_budget"], orientacao: "Peça ao gestor para revisar o limite e o uso de IA." },
   budget_warning: { refs: ["ai_budget"], orientacao: "Peça ao gestor para revisar o limite e o uso de IA." },
-  handoff: { refs: ["contact", "conversation"], orientacao: "Confira o atendimento descrito e combine quem assume o próximo passo." },
+  // `conversation` primeiro porque é o que o produtor grava hoje (o corpo do
+  // aviso ficou CURTO e o contexto foi para dentro da conversa, onde a RLS o
+  // protege). `contact` continua na lista por causa dos itens de clone antigo,
+  // gravados antes da troca — tirá-lo faria aqueles avisos perderem o destino.
+  handoff: { refs: ["conversation", "contact"], orientacao: "Abra a conversa: o cartão no fim do fio diz por que a IA passou, o que ela já tentou e se o cliente foi avisado." },
   promotion_review: { refs: [], orientacao: "Na evolução do assistente, confira as propostas disponíveis. Este aviso não identifica uma proposta específica.", geral: EVOLUCAO },
   judge_unaligned: { refs: [], orientacao: "Na evolução do assistente, confira a avaliação de qualidade. Este aviso não identifica uma avaliação específica.", geral: EVOLUCAO },
   followup_dead: { refs: ["followup_enrollment"], orientacao: "Peça ao gestor para revisar o acompanhamento que parou." },

@@ -202,9 +202,25 @@ async function main(): Promise<void> {
     orgId,
     contatoId,
   ]);
+  // OS DOIS `ref_kind`, e não só o novo. O aviso de passagem passou a nascer com
+  // `ref_kind='conversation'` (é o que dá o botão "Abrir conversa" na Central);
+  // um `delete` que só olhasse `'contact'` viraria NO-OP e o item sobreviveria
+  // entre corridas — e a asserção "a segunda passagem nasce" passaria POR SOBRA,
+  // que é exatamente o defeito que este bloco de reset existe para impedir.
+  // Trocar em vez de somar teria o mesmo problema ao contrário: item de clone
+  // antigo continua gravado com `'contact'`.
   await pool.query(
-    `delete from agent_inbox_items where organization_id = $1 and ref_kind = 'contact' and ref_id = $2`,
-    [orgId, contatoId],
+    `delete from agent_inbox_items
+      where organization_id = $1
+        and ((ref_kind = 'contact' and ref_id = $2) or (ref_kind = 'conversation' and ref_id = $3))`,
+    [orgId, contatoId, conversaId],
+  );
+  // A passagem em si também entra no reset: ela é o FATO, e um fato de ontem na
+  // tela de hoje faria o cartão aparecer antes de esta corrida ter produzido
+  // passagem nenhuma.
+  await pool.query(
+    `delete from passagens_de_atendimento where organization_id = $1 and conversation_id = $2`,
+    [orgId, conversaId],
   );
   // As atividades TAMBÉM entram no reset, e antes de `performHumanHandoff`.
   // Sem isto o E2E passaria com sobra da corrida anterior: a asserção "a volta

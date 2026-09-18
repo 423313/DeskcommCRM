@@ -56,6 +56,8 @@ const RAW: AtritoRaw = {
     esperas_caladas: 4,
     esperas_medidas: 80,
     espera_resposta_p90_s: 1800,
+    repeticao_pos_passagem: 4,
+    passagens_medidas: 10,
   },
   empresa: {
     intervencoes_por_demanda: 1.4,
@@ -356,5 +358,71 @@ describe("formatação", () => {
     [5400, "1h 30min"],
   ])("duração de %is é %s", (segundos, esperado) => {
     expect(formatarDuracao(segundos)).toBe(esperado);
+  });
+});
+
+/**
+ * O LAÇO DE RETORNO DA PASSAGEM (invariante 7, migration 0294).
+ *
+ * A pergunta que mede se o cartão da passagem serviu para alguma coisa: DEPOIS
+ * de a IA passar a conversa, o cliente precisou repetir o que já tinha dito? Se
+ * o briefing chegou a quem assumiu, a repetição cai. Se não chegou, ela não muda
+ * — e a feature é decoração cara.
+ *
+ * Ela é publicada como DANO do par `automacao`, encostada em "Passagens para
+ * humano": a eficiência ali empurra o sistema a automatizar mais, e o custo de
+ * automatizar mal é exatamente a pessoa repetindo o que já disse.
+ */
+describe("repetição depois da passagem — o laço de retorno", () => {
+  const pares = montarPares(RAW);
+  const automacao = pares.find((p) => p.chave === "automacao")!;
+  const medida = automacao.danos.find((d) => d.chave === "repeticao_pos_passagem");
+
+  it("é publicada no par da AUTOMAÇÃO, ao lado das passagens para humano", () => {
+    // Fora do par ela vira número solto num painel: sem a eficiência ao lado,
+    // ninguém sabe do que ela é o custo — e é justamente a regra 3.3 que este
+    // arquivo inteiro guarda.
+    expect(medida, "a medida do laço sumiu do par `automacao`").toBeDefined();
+    const chaves = automacao.danos.map((d) => d.chave);
+    expect(chaves).toContain("pedidos_de_humano");
+  });
+
+  it("é uma RAZÃO calculada na borda: 4 de 10", () => {
+    expect(medida!.unidade).toBe("razao");
+    expect(medida!.valor).toBeCloseTo(0.4, 6);
+  });
+
+  it("sem passagem em que o cliente voltou a falar, o número é `—`, nunca 0%", () => {
+    // AUSÊNCIA DE DADO É null. Um `0` aqui viraria "0% de repetição" numa
+    // organização onde ninguém voltou a falar depois de nenhuma passagem — a
+    // frase tranquilizadora que a falta de medição não autoriza, e o número que
+    // faria alguém declarar a feature um sucesso.
+    const vazio = montarPares({
+      ...RAW,
+      cliente: { ...RAW.cliente, repeticao_pos_passagem: 0, passagens_medidas: 0 },
+    });
+    const semDado = vazio
+      .find((p) => p.chave === "automacao")!
+      .danos.find((d) => d.chave === "repeticao_pos_passagem")!;
+    expect(semDado.valor).toBeNull();
+    expect(formatarMedida(semDado)).toBe("—");
+  });
+
+  it("a nota traz o numerador, o denominador e a RÉGUA — número sem régua não compara", () => {
+    // Limiar e janela precisam viajar com o número: se amanhã alguém mexer em
+    // qualquer um dos dois, o valor de hoje e o de então não são comparáveis, e
+    // o índice perde a única coisa que ele tinha.
+    expect(medida!.nota).toContain("4");
+    expect(medida!.nota).toContain("10");
+    expect(medida!.nota).toMatch(/0,7/);
+    expect(medida!.nota).toMatch(/24h/);
+  });
+
+  it("a nota declara que dois papéis veem números diferentes — e isso é de boa-fé", () => {
+    // `fn_atrito_metrics` é SECURITY INVOKER: um `agent` numa organização em
+    // `visibility_mode='own'` enxerga só as conversas dele. Sem esta ressalva,
+    // quem comparar o painel de duas pessoas vai concluir que um dos dois está
+    // errado — e nenhum está.
+    expect(medida!.nota).toMatch(/own/);
   });
 });
