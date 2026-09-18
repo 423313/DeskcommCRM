@@ -116,7 +116,7 @@ describe("sidebarGroups", () => {
       "/app/kanban",
       "/app/contacts",
       "/app/tasks",
-      // Chamadas (módulo VoIP, migration 0232): mesmo critério de Tarefas —
+      // Chamadas (módulo VoIP, migration 0318): mesmo critério de Tarefas —
       // quem atende confere ligações perdidas e transcrições no dia a dia.
       // Reabre a corrida por pixel que este teste vigia; ver navegacao.spec.ts.
       "/app/calls",

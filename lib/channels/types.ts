@@ -9,7 +9,24 @@ import type { OutboundMedia } from "@/lib/waha/media-send";
 
 export type { OutboundMedia };
 
-export type ChannelProvider = "waha" | "meta_cloud" | "zernio";
+export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls";
+
+/**
+ * Os providers que transportam MENSAGEM — o subconjunto sobre o qual a matriz
+ * de capabilities, os adapters e as fontes de template fazem sentido.
+ *
+ * `wacalls` (spec 18) mora em `channel_sessions` porque o que ele tem é
+ * exatamente o que aquela tabela modela — pareamento por QR, `status`,
+ * `archived_at`, jid, uma linha por organização — e porque `voice_calls` já
+ * aponta para ela. O que ele NÃO é: um canal por onde texto entra ou sai.
+ *
+ * Distinguir os dois no TIPO, e não numa condicional espalhada, é o que faz o
+ * compilador cobrar a decisão em cada lugar que perguntava "qual canal é este?"
+ * presumindo que a resposta sempre sabe mandar recado. Antes disto o CHECK do
+ * banco já aceitava `'wacalls'` enquanto este union não — e uma organização que
+ * pareasse voz derrubava `getAdapter` com `unknown_channel_provider`.
+ */
+export type ProviderDeMensagem = Exclude<ChannelProvider, "wacalls">;
 
 export interface ChannelCapabilities {
   /** Pode enviar texto livre a qualquer momento? false = exige template fora da janela. */
@@ -213,6 +230,23 @@ export interface ChannelAdapter {
    */
   resolvePhoneForIdentity?(
     input: ChannelTenantScope & { sessionRef: string; identity: string },
+  ): Promise<string | null>;
+
+  /**
+   * O número, em dígitos, pelo qual este canal REGISTRA um telefone — `null`
+   * quando não souber, quando o número não existir ou quando só houver
+   * identidade opaca.
+   *
+   * Existe porque o cadastro guarda o celular brasileiro COM o nono dígito e o
+   * WhatsApp registra muito deles SEM. Quem precisa do endereço exato fora do
+   * envio de mensagem — a chamada de voz, que disca por dígitos e não pergunta
+   * nada a ninguém — pede aqui, testando a presença do método em vez de
+   * perguntar QUAL provider é.
+   *
+   * OPCIONAL: só implementa quem consegue perguntar à plataforma.
+   */
+  resolveRegisteredPhone?(
+    input: ChannelTenantScope & { sessionRef: string; phone: string },
   ): Promise<string | null>;
 
   /**

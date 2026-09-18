@@ -92,3 +92,173 @@ export function rollbackFoiSuperado(
   const descritasPeloRun = [run?.to_version, run?.from_version].filter(Boolean);
   return !descritasPeloRun.includes(versaoReportadaPeloHost);
 }
+
+/**
+ * O run terminou BEM e o host ainda não teve chance de contar?
+ *
+ * ## O silêncio de até 5 minutos depois de dar certo
+ *
+ * `run_result` com `status: "success"` escreve só em `system_update_runs` — ele
+ * **não toca** `system_version.current_version`. Quem escreve essa coluna é o
+ * heartbeat do `agent.sh`, e ele roda de 5 em 5 minutos — o cabeçalho do
+ * próprio `agent.sh` diz "a cada 5 minutos", e a linha de cron que o instalador
+ * escreve está em `hostgator-setup-kit/test-validators.sh`.
+ *
+ * Então, na janela entre o fim da atualização e a batida seguinte,
+ * `current_version` ainda nomeia a versão ANTIGA — e `update_available`
+ * (`latest !== current`) continua verdadeiro. A tela volta do reinício
+ * oferecendo o botão "Atualizar agora" para a versão que **acabou de ser
+ * instalada**. Quem clicou faz tudo de novo, ou conclui que não funcionou.
+ *
+ * ## Por que a assunção do `to_version` é defensável
+ *
+ * `success` é o agente do host dizendo que o `update.sh` foi até o fim — a
+ * troca de imagem incluída. Diferente do caso de rollback (onde o host reporta
+ * a versão que QUEBROU e o run precisa contradizê-lo), aqui os dois concordam;
+ * o host só ainda não falou. É por isso que a janela NÃO volta a oferecer
+ * "Atualizar agora" para a versão que acabou de ser instalada.
+ *
+ * E é auto-corrigível por construção: assim que a batida chega,
+ * `system_version.updated_at` passa a ser posterior ao `finished_at` e esta
+ * função devolve `false` — o host volta a mandar, sem exceção nenhuma. É o
+ * mesmo desempate temporal de `rollbackFoiSuperado`, na direção contrária.
+ *
+ * ## O que a assunção NÃO pode fazer: durar para sempre
+ *
+ * A auto-correção acima depende de a batida CHEGAR. Se o agente do host parou
+ * (serviço morto, cron removido, token vencido) ela nunca chega, e a assunção
+ * deixa de ser uma aposta de minutos para virar AFIRMAÇÃO eterna: medido em
+ * produção, a tela anunciava `1.32.0` com o container rodando `1.23.0` — o
+ * `update.sh` trocou o código, o app não subiu na imagem nova, e nada nunca
+ * mais desmentiu o run.
+ *
+ * Por isso a assunção tem FIM DE VALIDADE, com um relógio só e o mesmo de
+ * `isRunStale`: passados `RUN_STALE_AFTER_MS` do `finished_at` sem confirmação
+ * do host, o run para de falar. Quem volta a mandar é a última versão que o
+ * host CONFIRMOU — não a que o run pediu. O erro que sobra cai para o lado que
+ * empurra para atualizar (a tela volta a oferecer a versão do run, que pode já
+ * estar no ar): é o lado que a issue do defeito prefere, e o outro é o defeito
+ * — prometer instalação que ninguém confirmou, por tempo indeterminado.
+ *
+ * A ORDEM importa: o corte de validade vem ANTES do degrau "host nunca
+ * reportou nada" (`!versionUpdatedAt` → `true`). Invertida, a instalação que
+ * nunca reportou nada seria justamente a única a afirmar para sempre.
+ *
+ * Sem `finished_at` (run antigo, agente velho) devolve `false`: sem a data não
+ * há como saber se o host já falou depois, nem validade a medir — o degrau
+ * conservador é o de antes.
+ *
+ * `true` quer dizer UMA coisa: "não reofereça a atualização agora". NÃO quer
+ * dizer "a `to_version` está no ar" — quem nomeia versão na tela é a última que
+ * o host confirmou (`current_version`), e é assim que a rota usa este campo.
+ */
+export function sucessoJaInstalado(
+  versionUpdatedAt: string | null | undefined,
+  runFinishedAt: string | null | undefined,
+  run?: { status?: string | null; to_version?: string | null } | null,
+  now?: Date,
+): boolean {
+  if (run?.status !== "success" || !run.to_version) return false;
+  if (!runFinishedAt) return false;
+  const terminou = Date.parse(runFinishedAt);
+  if (Number.isNaN(terminou)) return false;
+  const agora = now ?? new Date();
+  if (agora.getTime() - terminou > RUN_STALE_AFTER_MS) return false;
+  if (!versionUpdatedAt) return true;
+  const gravado = Date.parse(versionUpdatedAt);
+  if (Number.isNaN(gravado)) return true;
+  // Empate conta como "o host ainda não falou": a escrita do `run_result` e a
+  // do heartbeat são de relógios diferentes, e na janela de um segundo o degrau
+  // seguro é o que NÃO volta a oferecer a versão já instalada.
+  return gravado <= terminou;
+}
+
+/**
+ * O que aconteceu com o banco na rodada de atualização — o pedaço que até
+ * agora só existia no log do servidor. Quando o baseline é reaplicado com o
+ * sistema no ar, a primeira passada pode não fechar e o kit tenta de novo; sem
+ * estes três números, uma rodada que precisou de três passadas fica idêntica a
+ * uma que fechou de primeira, e quem operou não sabe que o banco estava em uso.
+ */
+export type RodadaDoBanco = {
+  /** Houve disputa de lock com o sistema no ar em alguma passada. */
+  disputa: boolean;
+  /** Quantas retentativas a rodada gastou depois da primeira passada. */
+  retentativas: number;
+  /** Em qual passada a rodada fechou (1 = primeira). */
+  passada: number;
+};
+
+/**
+ * Lê a rodada de banco da linha de `system_update_runs`. Devolve `null` quando
+ * ela não foi medida por inteiro — coluna nula é "não medido", e nulo é o que
+ * a tela precisa para ficar calada em vez de inventar um zero.
+ */
+export function rodadaDoBancoDaLinha(
+  linha:
+    | {
+        disputa_de_banco?: boolean | null;
+        retentativas_do_banco?: number | null;
+        passada_do_banco?: number | null;
+      }
+    | null
+    | undefined,
+): RodadaDoBanco | null {
+  if (!linha) return null;
+  if (typeof linha.disputa_de_banco !== "boolean") return null;
+  if (typeof linha.retentativas_do_banco !== "number") return null;
+  if (typeof linha.passada_do_banco !== "number") return null;
+  return {
+    disputa: linha.disputa_de_banco,
+    retentativas: linha.retentativas_do_banco,
+    passada: linha.passada_do_banco,
+  };
+}
+
+function passadasPorExtenso(passada: number): string {
+  return passada === 2 ? "duas passadas" : `${passada} passadas`;
+}
+
+function retentativasPorExtenso(retentativas: number): string {
+  return retentativas === 1 ? "uma retentativa" : `${retentativas} retentativas`;
+}
+
+/**
+ * Conta o que aconteceu com o banco quando a atualização terminou — em
+ * português de gente, para a tela de atualização mostrar. Devolve `null` quando
+ * não há o que contar (ninguém mediu, ou os números não fazem sentido): a tela
+ * fica silenciosa em vez de afirmar uma passada que não aconteceu.
+ */
+export function textoDaRodadaDoBanco(
+  rodada: RodadaDoBanco | null | undefined,
+): string | null {
+  if (!rodada) return null;
+
+  const { disputa, retentativas, passada } = rodada;
+  if (typeof disputa !== "boolean") return null;
+  if (!Number.isInteger(retentativas) || retentativas < 0) return null;
+  if (!Number.isInteger(passada) || passada < 1) return null;
+  // Uma passada por tentativa: sem isto, { retentativas: 5, passada: 2 } viraria
+  // uma frase que contradiz a si mesma.
+  if (passada < retentativas + 1) return null;
+
+  if (retentativas === 0) {
+    return disputa
+      ? "Houve disputa com o sistema usando o banco, mas a primeira passada fechou."
+      : "O banco atualizou de uma vez, na primeira passada, sem disputa com o sistema no ar.";
+  }
+
+  if (disputa) {
+    return `O banco estava em disputa com o sistema no ar: foram ${passadasPorExtenso(
+      passada,
+    )} e ${retentativasPorExtenso(retentativas)} até a atualização do banco fechar.`;
+  }
+
+  // `retentativas >= 1` com `disputa: false` é um estado que NINGUÉM produz: quem
+  // grava tira os dois do MESMO contador de passadas (`disputa = passadas > 1`,
+  // `retentativas = passadas - 1`), então retentativa implica disputa por
+  // construção. A frase que existia aqui dava à tela a impressão de cobrir um
+  // caso que não existe — e o caso de teste, a de que estava coberto. Silêncio é
+  // o degrau certo, o mesmo de todo número impossível.
+  return null;
+}

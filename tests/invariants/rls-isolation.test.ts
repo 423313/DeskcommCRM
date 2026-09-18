@@ -232,6 +232,28 @@ beforeAll(() => {
                     (select id from public.crm_leads where organization_id = v_org limit 1));
         end if;
 
+        -- voice_calls (0232): a chamada pendurada na sessão de canal da org.
+        -- O wacalls_call_id varia por organizacao porque a tabela tem
+        -- unique (organization_id, wacalls_call_id) — mesmo cuidado do endpoint
+        -- de push_subscriptions logo abaixo.
+        -- (sem crase nesta prosa: o bloco inteiro é um template literal de JS.)
+        if not exists (select 1 from public.voice_calls where organization_id = v_org) then
+          insert into public.voice_calls
+            (organization_id, channel_session_id, contact_id, wacalls_call_id,
+             direction, peer_phone, status)
+            values (v_org, v_sess, v_contact, 'rls-' || v_org::text,
+                    'inbound', '5511900000000', 'ended');
+        end if;
+
+        -- org_voice_calls (0236): o opt-in da chamada de voz, uma linha por
+        -- organizacao. A PK e o proprio organization_id, entao a semente e
+        -- idempotente por construcao — mas o if not exists fica pelo mesmo
+        -- motivo das vizinhas: o seed roda duas vezes, uma por org.
+        if not exists (select 1 from public.org_voice_calls where organization_id = v_org) then
+          insert into public.org_voice_calls (organization_id, enabled)
+            values (v_org, false);
+        end if;
+
         if not exists (select 1 from public.push_subscriptions where organization_id = v_org) then
           insert into public.push_subscriptions
             (organization_id, user_id, endpoint, p256dh, auth)
@@ -244,7 +266,7 @@ beforeAll(() => {
             );
         end if;
 
-        -- voip_trunk_settings (migration 0257): credenciais do trunk SIP da
+        -- voip_trunk_settings (migration 0320): credenciais do trunk SIP da
         -- organizacao. PK e o proprio organization_id (um trunk por org), e a
         -- senha cifrada tem o MESMO esquema de ai_provider_credentials -- os
         -- bytea aqui sao so preenchimento minimo pra satisfazer os NOT NULL,
@@ -263,21 +285,10 @@ beforeAll(() => {
             values (v_org, 'rls-' || v_org::text, 'trunk-endpoint');
         end if;
 
-        -- voice_calls (0233, trazida de main): a chamada pendurada na sessao
-        -- de canal da org -- mesmo seed que a main ja usa pra esta tabela.
-        if not exists (select 1 from public.voice_calls where organization_id = v_org) then
-          insert into public.voice_calls
-            (organization_id, channel_session_id, contact_id, wacalls_call_id,
-             direction, peer_phone, status)
-            values (v_org, v_sess, v_contact, 'rls-' || v_org::text,
-                    'inbound', '5511900000000', 'ended');
-        end if;
-
-        -- org_voice_calls (0236, trazida de main): o opt-in da chamada de voz,
-        -- uma linha por organizacao. PK e o proprio organization_id.
-        if not exists (select 1 from public.org_voice_calls where organization_id = v_org) then
-          insert into public.org_voice_calls (organization_id, enabled)
-            values (v_org, false);
+        if not exists (select 1 from public.ai_provider_credentials where organization_id = v_org) then
+          insert into public.ai_provider_credentials
+            (organization_id, provider, label, api_key_encrypted, api_key_iv, api_key_tag, api_key_last4)
+            values (v_org, 'anthropic', 'rls-invariant', '\\x00'::bytea, '\\x00'::bytea, '\\x00'::bytea, '0000');
         end if;
       end loop;
     end
@@ -330,7 +341,7 @@ export const TABLES = [
   "crm_tasks",
   // 0227 — texto de sugestões: org + visibilidade da conversa por authenticated.
   "ai_reply_drafts",
-  // migration 0257 — credenciais do trunk SIP por organizacao. Leitura e
+  // migration 0320 — credenciais do trunk SIP por organizacao. Leitura e
   // qualquer membro da org (a tela de originar chamada precisa saber SE
   // existe trunk configurado); a ESCRITA exige admin (mesmo nivel de
   // ai_provider_credentials) e NAO e medida aqui.
@@ -339,14 +350,24 @@ export const TABLES = [
   // Leitura/escrita org-scoped (sem segundo eixo medido aqui -- ver a nota
   // de DIVIDA_RBAC_CONHECIDA em rbac-config-ia-canais.test.ts).
   "phone_numbers",
-  // voice_calls (migration 0233, trazida de main via #677/#252): historico
-  // de chamada, compartilhado entre SIP e WhatsApp/WaCalls (discriminado por
-  // `provider`). Prova propria da main; entra aqui so pra esta branch nao
-  // ficar sem prova ate o rebase renumerar as migrations.
+  // 0232/0235 — chamada de voz. Guarda `peer_phone` (telefone da outra ponta) e
+  // `owner_user_id` (quem atendeu): vazar a linha entrega ao vizinho com quem a
+  // organização falou, quando, por quanto tempo e por meio de quem. A policy
+  // nasceu SEM o `for all` explícito, e o comportamento casava com o nome
+  // `_all` por default do Postgres, não por declaração — a 0235 a reescreve e
+  // este é o caso que mede a reescrita pelo desfecho.
   "voice_calls",
-  // org_voice_calls (migration 0236, trazida de main): opt-in da chamada de
-  // voz por organizacao, uma linha por org.
+  // migration 0236 — o opt-in por organizacao da chamada de voz. Guarda quem
+  // aceitou o risco do segundo aparelho vinculado: vazar entre organizacoes
+  // diria a uma empresa quem, na outra, ligou a feature e quando.
   "org_voice_calls",
+  // migration 0207 — as credenciais de IA da organização. A 0150 apagou a policy
+  // de leitura por organização sem que nada acusasse, e a 0207 a restaurou; esta
+  // linha é o que passa a acusar se ela sumir de novo (issue #545). A leitura é
+  // org-scoped sem gate de papel, então o `agent` semeado serve de controle
+  // positivo. O SELECT de `authenticated` é por COLUNA, sem as colunas cifradas:
+  // a contagem abaixo usa só `organization_id` e mede o que um membro enxerga.
+  "ai_provider_credentials",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"

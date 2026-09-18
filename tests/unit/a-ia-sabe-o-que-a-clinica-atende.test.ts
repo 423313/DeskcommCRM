@@ -78,6 +78,10 @@ function tipo(over: Partial<TipoDeAtendimento> = {}): TipoDeAtendimento {
     bufferDepoisMin: 0,
     antecedenciaMinimaMin: 120,
     janelaDeAgendamentoDias: 60,
+    // Como o banco devolve: o lembrete nasce desligado (migration 0194).
+    lembreteLigado: false,
+    lembreteAntecedenciaMin: 1440,
+    lembreteDegrausExtras: [],
     ...over,
   };
 }

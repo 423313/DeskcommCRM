@@ -25,9 +25,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
+import { marcarConversaComMensagem } from "@/lib/channels/marcar-conversa";
 
 import { extrairAtribuicaoMeta } from "@/lib/channels/atribuicao-de-anuncio-oficial";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { extrairEEstamparAtribuicaoGoogle } from "@/lib/plataformas-de-anuncio/google/atribuicao";
 import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
 
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
@@ -126,7 +128,7 @@ export async function ingestZernioInbound(
         .is("phone_number", null);
     }
     if (inseridaNaExistente !== "duplicate") {
-      await marcarConversa(admin, existente.id, msg);
+      await marcarConversa(admin, input.organizationId, existente.id, msg);
       if (msg.attachments[0]?.url) {
         await pedirPersistenciaDaMidia(
           admin,
@@ -170,7 +172,7 @@ export async function ingestZernioInbound(
 
   if (inserted === "duplicate") return { status: "duplicate", conversationId };
 
-  await marcarConversa(admin, conversationId, msg);
+  await marcarConversa(admin, input.organizationId, conversationId, msg);
   if (msg.attachments[0]?.url) {
     await pedirPersistenciaDaMidia(admin, input.organizationId, conversationId, inserted);
   }
@@ -222,6 +224,11 @@ async function efeitosDaEntrada(
   const atribuicao = extrairAtribuicaoMeta(msg.referral);
   if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
 
+  // Irmão do bloco acima, para o Google: o dado não vem no `referral` (que é
+  // exclusivo da Meta), vem no PRÓPRIO texto da mensagem — ver o cabeçalho de
+  // `lib/plataformas-de-anuncio/google/atribuicao.ts`. Best-effort, mesma postura.
+  await extrairEEstamparAtribuicaoGoogle(admin, input.organizationId, contactId, msg.text);
+
   await aplicarEfeitosPosEntrada(admin, {
     organizationId: input.organizationId,
     contactId,
@@ -259,30 +266,28 @@ async function efeitosDaEntrada(
  *
  * Não carimba no `duplicate`: a reentrega é a MESMA mensagem, e somar de novo
  * inflaria o contador de não lidas a cada reenvio do provider.
+ *
+ * ⚠️ A FALHA DEIXOU DE SER SÓ `logger.warn`, que some no próximo restart do
+ * contêiner. O destino agora é o mesmo dos outros canais — uma linha em
+ * `event_log` —, e quem decide isso é `lib/channels/marcar-conversa.ts`.
  */
 async function marcarConversa(
   admin: SupabaseClient,
+  organizationId: string,
   conversationId: string,
   msg: ZernioInboundMessage,
 ): Promise<void> {
-  const { error } = await admin.rpc("fn_mark_conversation_message" as never, {
-    p_conv: conversationId,
-    p_direction: msg.direction,
-    p_preview: (msg.text ?? "").slice(0, 200),
+  await marcarConversaComMensagem(admin, {
+    organizationId,
+    conversationId,
+    direction: msg.direction,
+    preview: (msg.text ?? "").slice(0, 200),
     // `sentAt` do provider quando existe: a ordem da lista e o cálculo da janela
     // têm que usar a hora em que o cliente ESCREVEU, não a hora em que o webhook
     // chegou — numa reentrega atrasada as duas diferem por horas.
-    p_at: msg.sentAt ?? new Date().toISOString(),
-  } as never);
-  // Não derruba a ingestão: a mensagem já está gravada, e perder o carimbo é
-  // pior que perder a mensagem — mas MUITO melhor que devolver 500 e fazer o
-  // provider reenviar tudo de novo.
-  if (error) {
-    logger.warn("[zernio] carimbo da conversa falhou", {
-      conversationId,
-      detail: error.message,
-    });
-  }
+    at: msg.sentAt ?? new Date().toISOString(),
+    canal: "zernio",
+  });
 }
 
 /**

@@ -23,6 +23,7 @@ import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { DialButton } from "@/components/voice/DialButton";
 
 interface Props {
   contactId: string;
@@ -33,6 +34,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const t = useT();
   const q = useContact(contactId);
   const { user, activeOrg } = useAuth();
+  const clientesLigado = activeOrg?.cliente_pela_agenda === true;
   // As DEFINIÇÕES continuam no funil (`crm_pipelines.settings.fields[]`) — só o
   // VALOR mora no contato. `camposDoFunil` é o mesmo leitor que o Kanban usa.
   const pipelineQuery = useDefaultPipeline(Boolean(activeOrg));
@@ -104,10 +106,13 @@ export function ContactDetailClient({ contactId }: Props) {
           </div>
         </div>
         {!contact.is_anonymized && user.support?.access_mode !== "support_readonly" && (
-          <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
-            <PencilSimple size={16} weight="bold" aria-hidden />
-            <span>{t("Editar")}</span>
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
+            <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
+              <PencilSimple size={16} weight="bold" aria-hidden />
+              <span>{t("Editar")}</span>
+            </Button>
+          </div>
         )}
       </header>
 
@@ -140,7 +145,7 @@ export function ContactDetailClient({ contactId }: Props) {
                 <dd className="mt-1">{contact.name ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase text-muted-foreground">Display name</dt>
+                <dt className="text-xs uppercase text-muted-foreground">{t("Nome")} · WhatsApp</dt>
                 <dd className="mt-1">{contact.display_name ?? "—"}</dd>
               </div>
               <div>
@@ -173,6 +178,24 @@ export function ContactDetailClient({ contactId }: Props) {
                   {format(new Date(contact.created_at), "dd/MM/yyyy", { locale: localeDaData })}
                 </dd>
               </div>
+              {/*
+                Escondido quando nulo, em vez de mostrar "—": aqui a ausência não
+                é dado faltando, é "ainda não é cliente". Um travessão nesta
+                linha leria como falha de cadastro. E escondido com a regra
+                "Clientes pela agenda" desligada: a data está congelada.
+              */}
+              {clientesLigado && contact.first_service_at && (
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">
+                    {t("Cliente desde")}
+                  </dt>
+                  <dd className="mt-1">
+                    {format(new Date(contact.first_service_at), "dd/MM/yyyy", {
+                      locale: localeDaData,
+                    })}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">

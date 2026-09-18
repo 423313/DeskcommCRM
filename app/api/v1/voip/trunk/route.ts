@@ -5,7 +5,7 @@
  *                           organização (upsert em organization_id).
  *
  * Aplicar no Asterisk (asterisk/pjsip.conf) continua MANUAL nesta fase — ver
- * migration 0257. `password` no body é opcional numa atualização (mantém a
+ * migration 0320. `password` no body é opcional numa atualização (mantém a
  * senha já cifrada se omitida), obrigatório na primeira vez.
  */
 import { randomUUID } from "node:crypto";

@@ -40,7 +40,7 @@ async function callerName(contactId: string | null, fromNumber: string): Promise
  * atendente ainda (ver docstring de app/api/v1/calls/route.ts), então isto é
  * só aviso: quem está ligando, não um botão de atender.
  *
- * `voice_calls` (migration 0252) é compartilhada com a chamada de voz por
+ * `voice_calls` (migration 0319) é compartilhada com a chamada de voz por
  * WhatsApp (WaCalls) — o `IncomingCallBanner` deles já escuta a MESMA
  * tabela/publicação. `provider !== "sip"` descarta linhas de WhatsApp aqui
  * pra não duplicar o aviso; a assinatura ainda filtra por `organization_id`

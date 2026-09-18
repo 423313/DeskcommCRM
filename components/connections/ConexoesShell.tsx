@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { CanalOficialClient } from "./CanalOficialClient";
 import { CanalParceiroClient } from "./CanalParceiroClient";
+import { CanalVozClient } from "./CanalVozClient";
 import { ConnectionsClient } from "./ConnectionsClient";
 import { TemplatesClient } from "./TemplatesClient";
 import { TemplatesParceiroClient } from "./TemplatesParceiroClient";
@@ -34,7 +35,13 @@ import { useT } from "@/hooks/i18n/useT";
  * apontando a aba certa, e um link colado no chat abre onde deveria. Aba que só
  * existe em `useState` transforma todo link salvo em "abre e procura de novo".
  */
-export function ConexoesShell({ wahaConfigured }: { wahaConfigured: boolean }) {
+export function ConexoesShell({
+  wahaConfigured,
+  wacallsConfigured,
+}: {
+  wahaConfigured: boolean;
+  wacallsConfigured: boolean;
+}) {
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();
@@ -46,7 +53,9 @@ export function ConexoesShell({ wahaConfigured }: { wahaConfigured: boolean }) {
         ? "parceiro"
         : abaParam === "telefonia"
           ? "telefonia"
-          : "numeros";
+          : abaParam === "voz"
+            ? "voz"
+            : "numeros";
   const sub = params.get("sub") === "templates" ? "templates" : "conexao";
 
   const irPara = (proximaAba: string, proximaSub?: string): void => {
@@ -80,6 +89,7 @@ export function ConexoesShell({ wahaConfigured }: { wahaConfigured: boolean }) {
             Aqui fica o CONCEITO; lá dentro o cartão diz de quem se trata. */}
         <TabsTrigger value="parceiro">{t("Provedor parceiro")}</TabsTrigger>
         <TabsTrigger value="telefonia">{t("Telefone")}</TabsTrigger>
+        <TabsTrigger value="voz">{t("Chamada de voz")}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="numeros" className="mt-0">
@@ -88,6 +98,10 @@ export function ConexoesShell({ wahaConfigured }: { wahaConfigured: boolean }) {
 
       <TabsContent value="telefonia" className="mt-0">
         <TelefoniaClient />
+      </TabsContent>
+
+      <TabsContent value="voz" className="mt-0">
+        <CanalVozClient wacallsConfigured={wacallsConfigured} />
       </TabsContent>
 
       <TabsContent value="parceiro" className="mt-0">

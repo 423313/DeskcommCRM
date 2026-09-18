@@ -13,7 +13,7 @@
  *
  * Grava em `voice_calls` (provider='sip'), não numa tabela própria —
  * unificada com a chamada de voz por WhatsApp (WaCalls, #628/#697) na
- * migration 0252, porque duas tabelas de chamada que não conversam era o
+ * migration 0319, porque duas tabelas de chamada que não conversam era o
  * primeiro problema que a triagem do PR #677 apontou. O vocabulário de
  * `status` (starting/ringing/connected/ended) é do binário WaCalls
  * upstream — reaproveitado aqui, não estendido; granularidade extra
@@ -35,7 +35,7 @@
  *
  * Sem publicação em event_log (call.ended etc.): nenhum handler em
  * lib/event-log/register-handlers.ts consumiria esses tipos ainda — ver nota
- * na migration 0232. Sumarização/sentimento pós-chamada fica fora do escopo
+ * na migration 0318. Sumarização/sentimento pós-chamada fica fora do escopo
  * deste esqueleto até existir consumidor real.
  */
 

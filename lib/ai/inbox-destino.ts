@@ -22,6 +22,7 @@ export const REFERENCIAS_DE_AVISO = {
   followup_enrollment: { tabela: "followup_enrollments", papel: "viewer", rotulo: "Abrir acompanhamento", href: (id: string) => `/app/ai/followups/enrollments/${id}` },
   channel_session: { tabela: "channel_sessions", papel: "admin", rotulo: "Revisar conexão", href: () => "/app/connections", ativo: true },
   ai_knowledge_source: { tabela: "ai_knowledge_sources", papel: "manager", rotulo: "Abrir base de conhecimento", href: () => "/app/ai/knowledge/sources" },
+  agent_case: { tabela: "agent_cases", papel: "agent", rotulo: "Abrir atendimento", href: (id: string) => `/app/ai/cases?caso=${id}` },
 } satisfies Record<string, Alvo>;
 
 export type InboxRefKind = keyof typeof REFERENCIAS_DE_AVISO | "organization" | "ai_budget" | "job_queue" | "cron_jobs";
@@ -32,6 +33,9 @@ const CONEXOES: ContextoGeral = { papel: "admin", href: "/app/connections", rotu
 
 /** Completude em compile time; pares desconhecidos em clones falham fechados. */
 export const POLITICAS_DE_AVISO = {
+  // O caso parado.  traz só  porque o aviso SEMPRE nasce com
+  // o id do caso — nunca é genérico.
+  case_stale: { refs: ["agent_case"], orientacao: "Abra o atendimento e diga o que fazer: concluir, pedir informação ao cliente ou passar para uma pessoa." },
   appointment_outcome_required:{refs:["appointment"],orientacao:"Abra o compromisso e confirme a presença."},
   appointment_recovery_review:{refs:["appointment"],orientacao:"Confira o motivo e escolha o próximo passo no compromisso."},
   routing_unassigned: { refs: ["conversation"], orientacao: "Confira os responsáveis em Configurações → Atendimento." },
@@ -56,8 +60,31 @@ export const POLITICAS_DE_AVISO = {
   promise_unfulfilled: { refs: ["conversation"], orientacao: "Confira o compromisso descrito e defina quem fica responsável." },
   contact_proposal_expired: { refs: ["organization"], orientacao: "A sugestão venceu. Se a informação ainda for relevante, confirme com o cliente antes de editar sua ficha." },
   conhecimento_nao_indexado: { refs: ["ai_knowledge_source"], orientacao: "Peça ao gestor para conferir o material e o motivo da falha na base de conhecimento." },
+  // Aponta para o CONTATO, e não para a chamada: a ficha do contato é onde mora
+  // o botão de ligar (`components/voice/DialButton.tsx`), então "abrir o
+  // contexto" e "fazer o que o aviso pede" viram o mesmo clique. Uma tela de
+  // detalhe da ligação mostraria o registro de algo que já acabou e deixaria a
+  // ação — retornar — a mais dois passos de distância.
+  //
+  // Chamada de número que não casou com contato nenhum entra sem referência e
+  // cai em "sem destino" com a orientação abaixo: o telefone está no corpo do
+  // aviso, escrito pelo worker.
+  voice_call_missed: { refs: ["contact"], orientacao: "Retorne a ligação quando puder — quem ligou não foi atendido." },
   other: { refs: ["lead", "channel_session", "appointment", "ai_agent"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
+
+/**
+ * Quando o rótulo do BOTÃO depende do aviso, não do alvo.
+ *
+ * `REFERENCIAS_DE_AVISO.contact` diz "Ver contato" — certo para um aviso que
+ * pede conferência, errado para um que pede AÇÃO. Numa chamada perdida o botão
+ * tem de dizer o que a pessoa vai fazer ao clicar; "ver contato" transforma um
+ * pedido em um convite a olhar.
+ */
+const ROTULO_POR_KIND: Record<string, string> = {
+  message_send_stuck: "Abrir uma conversa afetada",
+  voice_call_missed: "Ligar de volta",
+};
 
 const SEM_DESTINO: DestinoDoAviso = { estado: "sem_destino", orientacao: "Este aviso não tem um contexto que possa ser aberto nesta versão." };
 const INDISPONIVEL: DestinoDoAviso = { estado: "indisponivel", orientacao: "Este contexto não está disponível para você. Ele pode ter sido removido ou seu acesso pode ter mudado." };
@@ -132,7 +159,7 @@ export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
         if (a) {
           destination = !permite(papel, a.papel) ? semPermissao(a.papel)
             : visiveis.get(item.ref_kind!)?.has(item.ref_id!)
-              ? { estado: "disponivel", rotulo: item.kind === "message_send_stuck" ? "Abrir uma conversa afetada" : a.rotulo, href: a.href(item.ref_id!, funilPorLead.get(item.ref_id!)) }
+              ? { estado: "disponivel", rotulo: ROTULO_POR_KIND[item.kind] ?? a.rotulo, href: a.href(item.ref_id!, funilPorLead.get(item.ref_id!)) }
               : INDISPONIVEL;
         } else if (item.ref_kind === "ai_budget" || item.ref_kind === "organization") {
           destination = item.ref_id !== organizationId ? INDISPONIVEL
