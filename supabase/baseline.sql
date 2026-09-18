@@ -26245,9 +26245,9 @@ revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text
 grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) to authenticated, service_role;
 
 -- ════════════════════════════════════════════════════════════════════════════
--- PAÍS DA ORGANIZAÇÃO (migration 20260917121500_0269) — issue #1033
+-- PAÍS DA ORGANIZAÇÃO (migration 20260918014500_0277) — issue #1033
 --
--- Derivado de supabase/migrations/20260917121500_0269_pais_da_organizacao.sql;
+-- Derivado de supabase/migrations/20260918014500_0277_pais_da_organizacao.sql;
 -- o porquê inteiro (o defeito medido, o que entra e o que NÃO entra) está no
 -- cabeçalho de lá.
 --
@@ -26281,7 +26281,7 @@ comment on column public.organizations.country is
   'conversa ir para o modelo. Resolvido por lib/legal/perfil-do-pais.ts — nenhuma rota lê esta coluna '
   'inline, pela mesma razão escrita em lib/catalogo/moeda-da-org.ts: duas leituras divergem no dia em '
   'que uma ganhar fallback e a outra não, e aqui a divergência prometeria a lei de um país com o prazo '
-  'de outro. Sem default e sem backfill: null é o perfil brasileiro, o comportamento de antes da 0269. '
+  'de outro. Sem default e sem backfill: null é o perfil brasileiro, o comportamento de antes da 0277. '
   'País só é oferecido no seletor quando a citação da lei dele já foi revisada por quem pode revisar.';
 -- ---- extensões declarativas: catálogo, artefato, instalação, vínculo e recibo (migration 0271) ----
 -- BEGIN 0271_extensoes_declarativas — 20260917120000

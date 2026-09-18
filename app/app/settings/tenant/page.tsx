@@ -63,7 +63,7 @@ export default async function TenantSettingsPage() {
             display_name: row.display_name,
             legal_name: row.legal_name,
             cnpj: row.cnpj,
-            // `null` na coluna é Brasil (migration 0269): o seletor não tem
+            // `null` na coluna é Brasil (migration 0277): o seletor não tem
             // opção vazia, então o país padrão aparece EXPLÍCITO. Salvar sem
             // trocar nada grava `BR` onde estava `null` — mesmo país, mesma
             // lei, mesmo calendário; o que muda é a linha deixar de depender

@@ -93,7 +93,7 @@ export const tenantSchema = z.object({
   /**
    * O país da organização (issue #1033): ISO-3166 alpha-2, maiúsculas, `null` =
    * Brasil. É a MESMA régua do CHECK `organizations_country_check` da migration
-   * 0269 — a validação de aplicação e a do banco não podem divergir, ou a tela
+   * 0277 — a validação de aplicação e a do banco não podem divergir, ou a tela
    * aceita o que o banco recusa (e o erro chega como 500 em vez de formulário).
    * Aqui NÃO se valida se o país tem perfil revisado: quem oferece a lista é
    * `paisesOferecidos()` (`lib/legal/perfil-do-pais.ts`), e o valor que chega é
