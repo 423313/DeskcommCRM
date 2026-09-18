@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const controle = vi.hoisted(() => ({
   falharHandlers: false,
-  sincronizar: vi.fn(async () => {}),
+  // Rest param: o wrapper do vi.mock espalha `unknown[]`, e o TS6 só aceita o
+  // spread em função com rest parameter (ou tupla tipada).
+  sincronizar: vi.fn(async (..._args: unknown[]) => {}),
 }));
 
 vi.mock("@/lib/event-log/aviso-do-laco", () => ({
