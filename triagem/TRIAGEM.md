@@ -530,7 +530,7 @@ de apêndice (`baseline.sql`, `MANIFEST.md`), migration e interação entre PRs 
 fila de merge (merge queue) do GitHub, que faria isso por nós, **não está disponível** neste
 repositório (conta pessoal; a regra é recusada com 422).
 
-Três cuidados, cada um com a sonda:
+Quatro cuidados, cada um com a sonda:
 
 1. **Dependência entre PRs.** Se o PR depende de outro ainda aberto, ele vai com o lote. Confira
    antes de ligar: o corpo do PR e `git diff --name-only origin/main...refs/tri/<n>` contra os
@@ -540,6 +540,12 @@ Três cuidados, cada um com a sonda:
    faixa leve já encheu o teto, **corte a versão antes do lote**.
 3. **A rede é o CI da `main`**, que roda depois de cada merge. `main` vermelha por causa de um
    merge automático é a primeira coisa que a rodada conserta, antes de qualquer lote.
+4. **Janela de corte de versão.** Enquanto um corte está anunciado e ainda não saiu, PR cujo
+   fragmento declara `impacto: capacidade_nova` ou `exige_acao` **não recebe `--auto`**, e o que já
+   tinha recebido é desligado até o corte (`gh pr merge <n> --disable-auto`). O merge automático não
+   olha o calendário: entrando no meio da janela, ele converte o patch anunciado numa minor — foi o
+   ponto levantado em 18/09, com a 1.35.1 esperando o #1196. PR `nada_mudou` segue normal. Sonda:
+   `git diff --name-only origin/main...refs/tri/<n> -- .changes/ | xargs -r grep -h '^impacto:'`.
 
 ### ⚠️ O gate que o lote esconde: `build`
 
