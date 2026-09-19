@@ -68,7 +68,7 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 
 > **Cobertura em camadas (J1.22/J1.23):** a decisão de *não provisionar* é provada por unitário, porque é uma função pura e roda no gate obrigatório. O caso de tela cobre o caminho visível (CTA → signup com o token → campos certos). O que **não** está coberto ponta a ponta é a volta do link de confirmação de e-mail: exigiria caixa de e-mail no e2e, e a spec que faria isso é a de instalação fresca, que está fora do CI.
 
-> **A jornada J1 passou a ter GATE.** `tests/e2e/wizard-do-funcionario.spec.ts` roda no CI (SPECS_PARTE_1) e cobre o wizard inteiro pela tela — do login ao "Começar a usar" — criando a PRÓPRIA organização, porque o seed compartilhado entrega uma já onboardada e zerá-la mandaria as specs seguintes para dentro do onboarding. Fica de fora só o ensaio com resposta real, que exige chave de IA com saldo. `vps-fresh-onboarding.spec.ts` continua fora do gate (depende de WAHA, Redis, Resend e Nuvemshop) e segue sendo a prova mais completa, para rodar à mão.
+> **A jornada J1 passou a ter GATE.** `tests/e2e/wizard-do-funcionario.spec.ts` roda no CI (SPECS_PARTE_1) e cobre o wizard inteiro pela tela — do login ao "Começar a usar" — criando a PRÓPRIA organização, porque o seed compartilhado entrega uma já onboardada e zerá-la mandaria as specs seguintes para dentro do onboarding. Fica de fora só o ensaio com resposta real, que exige chave de IA com saldo. `vps-fresh-onboarding.spec.ts` **também passou a ter gate** — o PR #983 subiu WAHA e Redis de verdade no CI e a pôs na `SPECS_PARTE_4`; esta linha dizia o contrário, e quem quiser o estado de hoje pergunta ao workflow: `git show origin/main:.github/workflows/e2e.yml | grep -A4 'FORA_DO_CI:'`. Ela segue sendo a prova mais completa da instalação fresca, e ter gate não a dispensa de rodar numa VPS de verdade: o CI aplica o `baseline.sql` e o `scripts/bootstrap-owner.ts`, não o `install.sh` inteiro.
 
 > **Achado ABERTO (não é regressão, é primeira impressão):** percorrendo o wizard inteiro num tenant fresco, o botão "Começar a usar" entrega o dono no Inbox e a PRIMEIRA coisa que ele vê é um modal bloqueante de verificação em duas etapas — um sétimo passo que a barra de progresso do wizard nunca anunciou. O MFA obrigatório para `admin` é decisão de produto e está correto; o que está errado é ele aparecer como surpresa depois de seis passos que se apresentaram como o caminho completo. Conserto natural: virar passo do wizard, ou ao menos ser anunciado na tela final. Fora do escopo da frente do quadro de clientes.
 
@@ -1449,12 +1449,19 @@ porque são vistos primeiro por um terceiro. **A receita para fechá-la está em
 ## J10 — Instalação fresca com a marca do revendedor `[P0]` (receita manual)
 
 **Por que isto é receita escrita e não spec.** O lugar natural desses casos seria
-`tests/e2e/vps-fresh-onboarding.spec.ts`, e ela é a **única** spec do repo fora do CI —
-`.github/workflows/e2e.yml`, bloco `FORA_DO_CI`. Nenhum job a invoca. Acrescentar dois
-`expect()` ali produziria asserção que nunca executa, com a aparência de cobertura: pior que
-a ausência, porque a ausência pelo menos se vê. Enquanto a spec não tiver quem a rode, o
-artefato honesto é o procedimento — com os comandos exatos, para que a execução seja
-repetível por outra pessoa e o resultado seja comparável.
+`tests/e2e/vps-fresh-onboarding.spec.ts`. O argumento escrito aqui era que ninguém a
+invocava, então um `expect()` novo ali seria asserção que nunca executa — aparência de
+cobertura, pior que a ausência. **Esse argumento morreu:** o PR #983 pôs a spec na
+`SPECS_PARTE_4` e ela roda no CI (confira em `.github/workflows/e2e.yml`, ou com
+`grep -A4 'FORA_DO_CI:'` no mesmo arquivo, onde ela já não está).
+
+O que sobrou, e é o motivo de a receita continuar existindo, é outro: o CI **não** faz a
+instalação que estes casos medem. Ele aplica o `baseline.sql` e roda o
+`scripts/bootstrap-owner.ts`, e nenhum job executa o `install.sh` respondendo `APP_NAME`
+com o nome de um revendedor. Os cinco artefatos de marca que saem dali (aba, ícone, e-mail
+de acesso, convite, endereço de suporte) não têm por onde ser observados numa rodada do
+`e2e`. Enquanto isso valer, o artefato honesto é o procedimento — com os comandos exatos,
+para que a execução seja repetível por outra pessoa e o resultado seja comparável.
 
 **Estado:** `NÃO EXECUTADA`. Quem executar, troque por `PASS`/`FAIL` com data, SHA e as
 evidências, e mova os achados para a tabela de defeitos.
