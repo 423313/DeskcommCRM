@@ -5,6 +5,49 @@ set -euo pipefail
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
 COMPOSE_NPM="docker-compose.npm.yml"
+# Overlay que constrói as imagens no lugar de puxá-las. Existe no repo com
+# `pull_policy: never` nas três imagens e sai do MESMO commit que o `git
+# checkout` deixou no disco — é o caminho de quem não consegue usar as imagens
+# publicadas (ver construir_aqui_e_subir, abaixo).
+COMPOSE_BUILD="docker-compose.build.yml"
+
+# ── Arquitetura das imagens publicadas ───────────────────────────────────────
+# O registry publica hoje somente linux/amd64. Sem esta guarda, ARM64 chega até
+# o pull e morre com "no matching manifest"; o update.sh traduzia isso como
+# pacote ainda publicando/privado, um diagnóstico que manda repetir algo que
+# nunca vai funcionar nessa máquina.
+#
+# A decisão fica pura no argumento para os testes simularem a arquitetura sem
+# depender do runner. A leitura de `uname -m` é o único ponto ligado ao host.
+arquitetura_suportada_pelo_kit() {
+  case "${1:-}" in
+    x86_64|amd64) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+verificar_arquitetura_do_kit() {
+  local arch
+  arch="$(uname -m 2>/dev/null || printf 'desconhecida')"
+  arquitetura_suportada_pelo_kit "$arch" && return 0
+
+  printf '%s\n' \
+    "✖ Este servidor usa arquitetura '$arch', mas as imagens publicadas do DeskcommCRM hoje são linux/amd64." \
+    "  Use uma VPS x86_64/amd64. Repetir o download não resolve; ARM64 só será suportado quando houver imagens multi-arquitetura." >&2
+  return 1
+}
+
+# Este arquivo é compartilhado por várias ferramentas. A limitação de imagem só
+# deve bloquear os dois caminhos que realmente instalam/atualizam contêineres.
+# update.sh sourceia aqui antes de qualquer trabalho; install.sh sourceia depois
+# de localizar/clonar o repo, mas ainda antes de consultar ou baixar imagens do
+# DeskcommCRM.
+_deskcomm_chamador="${BASH_SOURCE[1]:-}"
+_deskcomm_chamador="${_deskcomm_chamador##*/}"
+case "$_deskcomm_chamador" in
+  install.sh|update.sh) verificar_arquitetura_do_kit || exit 1 ;;
+esac
+unset _deskcomm_chamador
 
 # Proxy reverso desta instalação. Vem do .env (load_env), com default 'caddy' —
 # ou seja, toda instalação que já existe continua exatamente como está.
@@ -37,6 +80,49 @@ dc_files() {
   npm)     printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_NPM" ;;
   *)       printf -- '-f %s' "$COMPOSE" ;;
   esac
+}
+
+# ── Imagem pronta que não serve para esta VPS: constrói a versão aqui ────────
+# Uma VPS cuja arquitetura não é a das imagens publicadas (Oracle Ampere, por
+# exemplo) recebe "no matching manifest for linux/arm64/v8" ao puxá-las. O
+# `up -d` seguinte morre junto: sem imagem no disco e sem `build:` ao lado do
+# `image:` do app, o Compose não tem o que subir. O desfecho visível era o pior
+# possível — a atualização não acontecia, o script terminava como se tivesse
+# dado certo e o dono só descobria pelo CRM velho. Pelo botão "Atualizar" do
+# site, nem isso: o agente roda sozinho no cron e não há ninguém lendo a tela.
+#
+# A saída já existe no repo e é o docker-compose.build.yml: `pull_policy: never`
+# nas três imagens e o build saindo do MESMO commit que o `git checkout` deixou
+# no disco. A imagem construída aqui é a versão alvo, não sobra de build antigo
+# — e o `up` por este overlay também não volta ao registro para reclamar.
+#
+# O gatilho é o CÓDIGO DE SAÍDA de quem falhou, nunca o texto do erro:
+# arquitetura da VPS, tag que ainda está publicando, pacote que nasceu privado
+# no registro e registro fora do ar caem todos no mesmo caminho, sem depender de
+# casar em inglês uma frase que o Docker escreve como quer.
+construir_aqui_e_subir() {  # construir_aqui_e_subir [versão alvo] → 0 se subiu
+  local versao="${1:-}"
+  # A imagem construída aqui responde /api/v1/health com a versão de verdade —
+  # o código no disco É a versão alvo. Sem isto ela responderia "local".
+  [ -n "$versao" ] && export APP_VERSION="$versao"
+  # O aviso vem ANTES da construção, e não depois: são 15 a 25 minutos de tela
+  # parada, e sem ele o dono conclui que travou e mata o script no meio.
+  c_ylw "⚠ As imagens prontas desta versão não servem para esta VPS."
+  c_ylw "  O motivo mais comum é a arquitetura dela ser diferente da das imagens"
+  c_ylw "  publicadas: o registro responde que não tem manifest para a arquitetura"
+  c_ylw "  daqui. Não é problema da sua VPS nem do seu acesso."
+  c_ylw "  Vou construir as três imagens aqui, do código desta versão."
+  c_ylw "  Leva de 15 a 25 minutos e a tela fica sem novidade nesse tempo —"
+  c_ylw "  não é travamento, pode deixar rodando."
+  if ! dc -f "$COMPOSE_BUILD" build; then
+    c_red "✖ A construção das imagens aqui falhou (o erro está logo acima)."
+    return 1
+  fi
+  if ! dc -f "$COMPOSE_BUILD" up -d; then
+    c_red "✖ As imagens foram construídas, mas os serviços não subiram."
+    return 1
+  fi
+  return 0
 }
 
 # ── A rede externa por onde o proxy de fora alcança o app ────────────────────
@@ -521,14 +607,77 @@ reaplicar_baseline() {
       BASELINE_INESPERADO="$(printf '%s\n' "$BASELINE_INESPERADO" \
         "a aplicação não chegou ao fim do arquivo (o psql saiu com código $rc): $causa" | sed '/^$/d')"
     fi
-    [ -n "$BASELINE_INESPERADO" ] || return 0
-    [ "$BASELINE_PASSADAS" -lt "$tentativas" ] || return 1
-    grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BASELINE_INESPERADO" || return 1
+    if [ -z "$BASELINE_INESPERADO" ]; then
+      # Fechou: em qual passada, e quantas retentativas custou até aqui.
+      registrar_rodada_do_banco "$([ "$BASELINE_PASSADAS" -gt 1 ] && printf 1 || printf 0)" \
+        "$((BASELINE_PASSADAS - 1))" "$BASELINE_PASSADAS"
+      return 0
+    fi
+    if [ "$BASELINE_PASSADAS" -ge "$tentativas" ]; then
+      # Esgotou as passadas SEM fechar o banco. Não se registra nada: as frases
+      # da tela são todas escritas como "…até a atualização do banco fechar", e
+      # esta rodada não fechou — gravar aqui faria a tela afirmar um fechamento
+      # que não houve, na rodada em que ela mais precisa calar. (Antes, este
+      # ponto gravava os MESMOS três números do sucesso, e os dois desfechos
+      # ficavam indistinguíveis no registro.) O desfecho da rodada vive no log
+      # do kit e no `status` do run.
+      return 1
+    fi
+    if ! grep -qiE "$BASELINE_ERROS_DE_DISPUTA" <<<"$BASELINE_INESPERADO"; then
+      # Erro que retentativa não cura — e a rodada NÃO fechou. O `0 0 1` que
+      # este ponto gravava era literal, não medido: se a passada 1 teve disputa
+      # de lock e a passada 2 morreu num erro fatal, ele afirmava "primeira
+      # passada, sem disputa" em cima de duas coisas que ninguém mediu. Silêncio.
+      return 1
+    fi
     c_ylw "• parte do banco não aplicou (disputa com o app no ar ou conexão instável) — aplicando de novo, é seguro (passada $((BASELINE_PASSADAS + 1)) de $tentativas). O que não aplicou:"
     listar_erros_do_banco "$BASELINE_INESPERADO" 10 "    "
     sleep "$((espera * BASELINE_PASSADAS))"
     BASELINE_PASSADAS=$((BASELINE_PASSADAS + 1))
   done
+}
+
+# ---------------------------------------------------------------------------
+# O que a rodada do banco conta de si mesma.
+#
+# Achado do PR #997: o baseline reaplicado sobrevive a uma disputa com o sistema
+# no ar — o kit tenta de novo e fecha. Até aqui essa parte da história morria no
+# log do servidor: quem clicou via "terminou" sem saber que a base estava
+# ocupada, nem quanto custou. Estas duas funções passam a rodada ADIANTE, por um
+# arquivo simples, porque o kit e o reporte do agente são passos separados.
+# ---------------------------------------------------------------------------
+# O caminho pode vir do processo que chamou (agent.sh exporta antes de rodar o
+# update.sh): o kit e o reporte são processos diferentes, e os dois precisam
+# apontar para o MESMO arquivo — é ele que carrega a história da rodada.
+RODADA_DO_BANCO_ARQUIVO="${RODADA_DO_BANCO_ARQUIVO:-${TMPDIR:-/tmp}/deskcomm-rodada-do-banco.$$}"
+
+registrar_rodada_do_banco() {
+  # $1 disputa (1|0), $2 retentativas, $3 passada em que fechou.
+  printf 'disputa=%s\nretentativas=%s\npassada=%s\n' "$1" "$2" "$3" \
+    >"$RODADA_DO_BANCO_ARQUIVO" 2>/dev/null || true
+}
+
+ler_rodada_do_banco() {
+  # Sem medição, silêncio: nada é impresso e o campo chega ausente — a tela
+  # ignora. Número impossível (negativo, fracionado, passada 0) também é
+  # silêncio, nunca uma afirmação torta.
+  [ -s "$RODADA_DO_BANCO_ARQUIVO" ] || return 0
+  local disputa retentativas passada
+  disputa="$(sed -n 's/^disputa=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  retentativas="$(sed -n 's/^retentativas=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  passada="$(sed -n 's/^passada=//p' "$RODADA_DO_BANCO_ARQUIVO" | tail -1)"
+  case "$disputa" in 0|1) ;; *) return 0 ;; esac
+  case "$retentativas" in ''|*[!0-9]*) return 0 ;; esac
+  case "$passada" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$passada" -ge 1 ] || return 0
+  # As três chaves saem PLANAS e com os nomes da rota (`disputa_de_banco`,
+  # `retentativas_do_banco`, `passada_do_banco`), prontas para entrarem no corpo
+  # do `run_result`: é o contrato de `app/api/v1/system/agent/route.ts`. O
+  # arquivo desta função fala a língua do kit; a fronteira fala a da API — e
+  # era aqui que as duas se confundiam, com o `z.object` da rota descartando em
+  # SILÊNCIO o objeto aninhado e gravando as três colunas nulas em toda rodada.
+  printf '"disputa_de_banco":%s,"retentativas_do_banco":%s,"passada_do_banco":%s\n' \
+    "$([ "$disputa" = "1" ] && printf true || printf false)" "$retentativas" "$passada"
 }
 
 # ── As três imagens que NÓS publicamos ───────────────────────────────────────
@@ -541,7 +690,8 @@ reaplicar_baseline() {
 # `tests/unit/namespace-das-imagens.test.ts`, que assere este valor e cobra que
 # `docker-compose.prod.yml`, `.env.hostgator.example` e a matriz de
 # `publish-image.yml` digam o mesmo. Se você é um fork, é lá que está a lista do
-# que trocar junto.
+# que trocar junto — e, desde 18/09/2026, o CI do SEU fork não cobra este valor:
+# a asserção só vale quando o dono do runner é o dono deste repositório.
 IMG_NS="ghcr.io/melgarafael"
 IMG_APP="${IMG_NS}/deskcommcrm"
 IMG_WORKER="${IMG_NS}/deskcomm-worker"
@@ -817,7 +967,7 @@ set_env_var() {
 # instalação sem SMTP, que é o estado normal de um self-host, e o mesmo comando
 # que o CLAUDE.md do kit manda usar quando a pessoa se tranca fora.
 #
-# ── Por que o casamento tem de ser EXATO aqui ───────────────────────────────
+# ── Por que o casamento tem de ser EXATO aqui ────────────────────────────────
 # Justamente por ser substring, `ana@empresa.com` casa também
 # `mariana@empresa.com`. Um `head -1` cego devolveria o UUID da outra pessoa
 # numa função cujo único consumidor TROCA SENHA. O padrão abaixo ancora no
@@ -909,6 +1059,14 @@ gravar_cabecalho_do_cron() {  # gravar_cabecalho_do_cron <arquivo> <segredo>
 }
 
 setup_event_log_drain_cron() {
+  # A troca da senha que vazou vive AQUI, e não no corpo do update.sh, porque
+  # esta é a função que o corpo de QUALQUER update.sh já publicado chama depois
+  # de reler este arquivo (bloco 7): o corpo que roda na atualização é o da
+  # versão antiga, e só as funções são as novas. Fora do update.sh (install.sh
+  # nasce marcado; o agent.sh chama a troca por conta própria) não se troca.
+  if [ "$(basename "$0")" = update.sh ] && [ -z "${DESKCOMM_AGENT_REPORT:-}" ]; then
+    trocar_segredo_do_cron_vazado || true
+  fi
   command -v crontab >/dev/null 2>&1 || { c_ylw "⚠ 'crontab' não encontrado — instale o pacote 'cron' e rode de novo pra ativar as automações."; return 0; }
 
   local secret="${INTERNAL_CRON_SECRET:-}"
@@ -983,6 +1141,115 @@ setup_event_log_drain_cron() {
       && c_grn "✓ eventos pendentes com mais de 7 dias marcados como concluídos" \
       || c_ylw "⚠ não consegui higienizar eventos antigos — confira manualmente a tabela event_log se necessário."
   fi
+}
+
+# ── A senha que o log do sistema já guardou (#1054): trocar UMA vez ─────────
+# Parar de escrever o segredo na linha do crontab (acima) estanca o vazamento
+# daqui para frente; não desfaz o que já foi gravado. Em toda instalação que
+# rodou a linha antiga, o segredo das rotinas está em `/var/log/syslog`, nos
+# arquivos rotacionados e no journal — e continua abrindo as rotas de cron e a
+# de atualização (`lib/auth/cron-auth.ts`, `app/api/v1/system/agent/route.ts`)
+# para quem ler esse log. Esta função troca o segredo sozinha, uma vez na vida
+# da instalação, sem pedir edição de `.env` a ninguém (doutrina de packaging).
+#
+# QUAL segredo: o mesmo que `setup_event_log_drain_cron` punha na linha —
+# `INTERNAL_CRON_SECRET`, ou `INTERNAL_SECRET` quando o primeiro está vazio. O
+# outro nunca foi para o log e fica como está.
+#
+# QUEM LÊ, e por isso a ordem gerar → `.env` → recriar → arquivo do cron:
+#   - o `app` (rotas de cron, /system/agent, /system/relogio/tick, /health) lê
+#     os dois pelo `env_file: .env`, no boot do contêiner;
+#   - o `scheduler` lê só `INTERNAL_SECRET`, por interpolação no compose;
+#   - o `.env.cron-drain` (a linha do drain) e o `agent.sh` (a cada 5 min, do
+#     `.env`, no início de cada execução).
+# O `dc up -d` recria só o que mudou de configuração; o arquivo do cron é
+# regravado logo depois. No intervalo, uma batida de minuto do drain pode
+# levar 401 — a seguinte já vai com a senha nova.
+#
+# QUEM NÃO PODE TROCAR: o `update.sh` dirigido pelo botão da tela. Quem o
+# dirige é o `agent.sh` que já estava rodando, com a senha VELHA numa variável;
+# trocada no meio, o `run_result` dele leva 401 e a tela nunca sabe como a
+# atualização terminou. Nesse caso a troca fica para a próxima execução do
+# `agent.sh` (≤5 min), que é lido do disco a cada vez e já é o novo.
+#
+# Uma vez só: a marca em disco é o que impede gerar senha nova a cada update.
+# A instalação nova nasce marcada (`marcar_segredo_do_cron_como_novo`, no
+# install.sh): a senha dela nunca foi para linha nenhuma.
+#
+# Devolve 0 quando trocou OU quando não havia nada a trocar (e só no primeiro
+# caso deixa SEGREDO_DO_CRON_TROCADO=1); 1 quando tentou e não conseguiu —
+# nesse caso o `.env` volta ao que era e a marca NÃO é gravada, para a próxima
+# execução tentar de novo.
+MARCA_SEGREDO_DO_CRON_NOME=".deskcomm-segredo-do-cron-trocado"
+
+marcar_segredo_do_cron_como_novo() {
+  # Só marca se ESTE host nunca teve a linha antiga: reinstalar por cima de uma
+  # instalação que vazou não pode pular a troca.
+  if { crontab -l 2>/dev/null || true; } | grep -qF 'Authorization: Bearer'; then return 0; fi
+  : > "${PROJECT_DIR:-$PWD}/${MARCA_SEGREDO_DO_CRON_NOME}" 2>/dev/null || true
+}
+
+trocar_segredo_do_cron_vazado() {
+  SEGREDO_DO_CRON_TROCADO=""
+  local dir="${PROJECT_DIR:-$PWD}"
+  local marca="${dir}/${MARCA_SEGREDO_DO_CRON_NOME}" envfile="${dir}/.env"
+  [ -e "$marca" ] && return 0
+
+  local chave=""
+  if [ -n "${INTERNAL_CRON_SECRET:-}" ]; then chave=INTERNAL_CRON_SECRET
+  elif [ -n "${INTERNAL_SECRET:-}" ]; then chave=INTERNAL_SECRET
+  fi
+  # Sem segredo, ou sem nunca ter tido a linha do drain neste host: nada foi
+  # para o log, e trocar seria reiniciar o app à toa.
+  if [ -z "$chave" ] \
+     || ! { crontab -l 2>/dev/null || true; } | grep -qF '/api/v1/cron/event-log-drain'; then
+    : > "$marca" 2>/dev/null || true
+    return 0
+  fi
+
+  # Mesmo cadeado do agent.sh: nunca trocar com uma atualização pelo botão em
+  # andamento (quem a dirige ainda fala com a senha velha), nem duas vezes ao
+  # mesmo tempo (update.sh no terminal e agent.sh no cron).
+  local tem_cadeado=""
+  if command -v flock >/dev/null 2>&1; then
+    exec 8>"${dir}/.update.lock"
+    flock -n 8 || { exec 8>&-; return 0; }
+    tem_cadeado=1
+  fi
+  if [ -e "$marca" ]; then [ -n "$tem_cadeado" ] && exec 8>&-; return 0; fi
+
+  local velho="${!chave}" novo=""
+  novo="$(openssl rand -hex 32 2>/dev/null)" || novo=""
+  if [ -z "$novo" ]; then
+    [ -n "$tem_cadeado" ] && exec 8>&-
+    c_ylw "⚠ não consegui gerar a senha nova das rotinas — tento de novo na próxima atualização."
+    return 1
+  fi
+
+  step "Trocando a senha interna das rotinas (a antiga ficou no log do sistema)"
+  set_env_var "$envfile" "$chave" "$novo"
+  export "${chave}=${novo}"
+  if ! dc up -d >/dev/null 2>&1; then
+    set_env_var "$envfile" "$chave" "$velho"
+    export "${chave}=${velho}"
+    dc up -d >/dev/null 2>&1 || true
+    [ -n "$tem_cadeado" ] && exec 8>&-
+    c_ylw "⚠ não consegui reiniciar o app com a senha nova — mantive a antiga e tento de novo na próxima atualização."
+    return 1
+  fi
+  wait_app_healthy 20 3 >/dev/null \
+    || c_ylw "⚠ o app ainda não respondeu depois da troca — a senha nova já está no .env e segue valendo."
+  gravar_cabecalho_do_cron "${dir}/.env.cron-drain" "$novo" || true
+  : > "$marca" 2>/dev/null || true
+  [ -n "$tem_cadeado" ] && exec 8>&-
+  SEGREDO_DO_CRON_TROCADO=1
+
+  c_grn "✓ senha interna das rotinas trocada — a que ficou gravada no log do sistema não abre mais nada"
+  c_ylw "  Recomendado (não obrigatório): apagar os logs antigos, onde a senha velha aparece."
+  c_ylw "  Numa VPS Ubuntu/Debian, como root:"
+  c_ylw "    sudo truncate -s 0 /var/log/syslog && sudo rm -f /var/log/syslog.*"
+  c_ylw "    sudo journalctl --rotate && sudo journalctl --vacuum-time=1s"
+  return 0
 }
 
 # Ativa (idempotente) o cron do agente de atualização: a cada 5 minutos ele

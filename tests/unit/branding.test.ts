@@ -844,7 +844,12 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
   "oauth2.googleapis.com": {
     categoria: "FORNECEDOR",
     motivo:
-      "endpoint de token do OAuth do Google — o par de `accounts.google.com` no fluxo de autorização da agenda.",
+      "endpoint de token do OAuth do Google — o par de `accounts.google.com` no fluxo de autorização da agenda, e também do Google Ads (`lib/plataformas-de-anuncio/google/token.ts`).",
+  },
+  "googleads.googleapis.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint da Google Ads API, para onde `lib/plataformas-de-anuncio/google/conversions.ts` reporta a venda de volta ao anúncio que trouxe o lead. Irmão de `graph.facebook.com` no eixo da Meta: é contrato do fornecedor, não escolha nossa — a conta de anúncios é do cliente, o domínio é do Google.",
   },
   "accounts.google.com": {
     categoria: "FORNECEDOR",
@@ -885,6 +890,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
       "portal de parceiros da Nuvemshop, onde o operador registra o aplicativo e pega client id e secret. Endereço da plataforma, não nosso.",
   },
   // ── amostra de formato: mostra o que digitar, não é destino ──────────────
+  "wa.me": {
+    categoria: "AMOSTRA",
+    motivo:
+      "o encurtador de link do próprio WhatsApp, num exemplo de link GERADO pela tela de Conversões (issue #924): é o formato que quem opera vai colar no botão da landing page. Não é destino de chamada — o produto nunca fala com `wa.me`; quem abre o link é o visitante do site, no navegador dele. E não é marca nossa que um revendedor troque: o endereço é da Meta, e trocá-lo faria o link não abrir conversa nenhuma. Fica AMOSTRA porque chega à TELA, que é a razão de a régua exigir declaração em vez de silêncio.",
+  },
   "meusistema.com": {
     categoria: "AMOSTRA",
     motivo:
@@ -1076,6 +1086,10 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // enxergá-lo, e não porque o produto ganhou host novo.
       "s.whatsapp.net",
       "tusitio.com",
+      // Exemplo de link do WhatsApp gerado pela tela de Conversões (#924). Está
+      // aqui, e não em FORNECEDOR, porque o produto NÃO fala com esse host: quem
+      // abre o link é o visitante do site. Crescimento escrito, como a regra pede.
+      "wa.me",
     ]);
   });
 

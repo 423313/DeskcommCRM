@@ -54,7 +54,21 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
 - Wrapper sucesso: `{ data, meta?: { cursor, has_more, total } }`
 - Wrapper erro: `{ error: { code, message, details? } }` — usar helpers `ok()` / `fail()` de `lib/api/wrappers.ts`
 - Paginação: cursor opaco base64+HMAC por default
-- Auth dual: cookie session (frontend) OU `Authorization: Bearer tok_...` (server-to-server)
+- **Auth dual é a direção do produto, e ela se cumpre rota por rota.** Cookie de sessão para o
+  frontend; `Authorization: Bearer dsk_...` (linha de `api_tokens`, resolvida no servidor) para
+  chamada de servidor. O prefixo é **`dsk_`**, e quem o exige é `lib/mcp/auth.ts` — `tok_` nunca
+  existiu no código e estava escrito aqui, em `AGENTS.md` e na Spec 09 até 17/09/2026
+  - O helper é `lib/api/auth-dual.ts`, e habilitar uma rota é **por rota**: não há chave geral.
+    Para saber quais já aceitam bearer — o número muda, o comando não:
+    `git grep -ln "auth-dual" -- app/api/v1` (mais `app/api/v1/contacts/route.ts`, que implementou
+    o padrão inline e deu origem ao helper)
+  - **Chamar o helper na rota não basta:** o `proxy.ts` global roda antes de qualquer handler e só
+    reconhece cookie. Sem uma entrada em `lib/auth/public-paths.ts` para o caminho, todo bearer
+    recebe 401 do proxy antes de chegar ao handler. "Público" ali quer dizer "o proxy não decide",
+    nunca "sem autenticação"
+  - Decisão do dono do produto em 17/09/2026: **converter as rotas que cada integração precisar**,
+    conforme aparecerem, em vez de namespace paralelo por cliente. Uma rota convertida serve a todo
+    integrador. Contexto: PR #1008, que escreveu 26 rotas paralelas porque não achou por onde entrar
 - **API key NUNCA em query string** (vaza em logs Vercel/CF). Sempre header
 - Plaintext de bearer token mostrado **uma vez** na criação; depois apenas hash SHA256 no DB
 - Rate limit headers: `X-RateLimit-*` + `Retry-After` em 429
@@ -414,7 +428,7 @@ Checks **obrigatórios** na branch protection da `main` (verificado na configura
 - **`verify`** (`ci.yml`) — typecheck + lint + test:unit.
 - **`invariants`** (`ci.yml`) — **job de fachada**: ele não roda suíte nenhuma; reprova quando a matriz `invariants-majors` não fecha em `success`. Quem roda é a matriz, uma perna por major do Postgres que o produto diz suportar, e cada perna faz duas passadas: `pnpm test:db` (baseline em modo install com `ON_ERROR_STOP=1` e update, mais os invariantes, incluindo o isolamento RLS entre 2 organizações) e `pnpm test:db:update` (atualização de um banco COM dados). Para saber quais majors hoje, pergunte ao arquivo em vez de a esta linha: `awk '/^  invariants-majors:/,/^  [a-z-]+:/' .github/workflows/ci.yml | grep -A6 'matrix:'`.
 - **`build-and-size`** (`perf.yml`) — `pnpm build` em Node 22.
-- **`e2e`** (`e2e.yml`) — sobe Supabase local, aplica o `baseline.sql` e roda **todas as specs Playwright menos as que `FORA_DO_CI` declara**. O número saiu daqui de propósito: ele apodreceu **cinco** vezes (a quinta em 2026-08-24, quando `inbox-quem-manda.spec.ts` entrou), e a condição que o PR #242 pôs para parar de recontar já tinha vencido na quarta. Quem precisa do número roda o comando abaixo — comando não envelhece. Quais ficam de fora, e por quê, é o que a própria variável diz — **não confie nesta linha, leia-a**:
+- **`e2e`** (`e2e.yml`) — sobe Supabase local, aplica o `baseline.sql` e roda **todas as specs Playwright menos as que `FORA_DO_CI` declara** — **em PR que alcança algo que ele mede**. PR só de documentação, teste de outra suíte, fragmento ou workflow alheio pula as partes (regra em `scripts/pr-alcanca-o-e2e.sh`, na dúvida roda), e ali o `e2e` verde **não prova tela nenhuma**. O número saiu daqui de propósito: ele apodreceu **cinco** vezes (a quinta em 2026-08-24, quando `inbox-quem-manda.spec.ts` entrou), e a condição que o PR #242 pôs para parar de recontar já tinha vencido na quarta. Quem precisa do número roda o comando abaixo — comando não envelhece. Quais ficam de fora, e por quê, é o que a própria variável diz — **não confie nesta linha, leia-a**:
 
   ```bash
   git show origin/main:.github/workflows/e2e.yml | \
@@ -450,6 +464,25 @@ a versão anterior dizia que ele "ainda não é obrigatório"; depois o `imagens
 seguiu dizendo "quatro". Uma triagem que leia qualquer uma dessas versões mede contra a régua errada —
 que é o modo de falha nº 1 do procedimento de triagem. **Reconfira na fonte antes de confiar em
 qualquer lista aqui**, com o comando acima.
+
+**Onde os jobs rodam.** A conta tem o plano Pro: até **40** jobs simultâneos nas máquinas do GitHub
+(medidos 39 em 18/09/2026, com 180 na fila). Os jobs pesados do trabalho **nosso** (push na `main`
+e PR de branch deste repositório) podem ir para o **executor próprio** (`infra/executor-proprio/`)
+quando a variável de repositório `EXECUTOR_PROPRIO` vale `ligado`; PR de fork roda sempre no GitHub,
+e a publicação da `main` também. Duas regras que não se negociam:
+
+- **A guarda contra fork mora na máquina, não no YAML.** Em PR de fork o GitHub roda o workflow do
+  fork, que pode reescrever `runs-on:`. Quem recusa é `infra/executor-proprio/so-o-que-e-nosso.sh`,
+  gravado na imagem como hook de entrada do runner. Mudar a expressão de `runs-on` não é mudar a
+  segurança — e afrouxar a guarda é.
+- **Imagem que o parque instala nunca se constrói na máquina nossa.** `build-and-push` e
+  `promover-stable` ficam em `ubuntu-latest`; os jobs `*-sobe` só vão para a máquina em PR.
+
+Vigiado por `tests/unit/executor-proprio-so-roda-o-que-e-nosso.test.ts`. Botão de emergência:
+apagar a variável `EXECUTOR_PROPRIO` — os jobs novos voltam na hora para o GitHub. **A fila de merge
+(merge queue) do GitHub não está disponível** neste repositório (conta pessoal; medido em 18/09/2026:
+a regra é recusada com 422 e uma regra comum no mesmo formato é aceita) — a integração em lote da
+triagem (`triagem/TRIAGEM.md` §3-quinquies) é o que cumpre esse papel.
 
 Ao mexer em schema, RLS, RBAC, atribuição, escopo, roteamento, follow-up, webhooks ou automações: rode `pnpm test:db` **localmente** antes de abrir PR. É o único caminho que exercita o `baseline.sql` que o self-hoster realmente aplica.
 

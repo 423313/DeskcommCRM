@@ -20,6 +20,11 @@
 #   7. nome fora de <14 dígitos>_<NNNN>_<slug>.sql reprova: sem NNNN não há o que medir.
 #   8. sem ref da base, o gate busca a base sozinho (o clone raso do CI); e quando não
 #      consegue medir, REPROVA (exit 2) declarando o NÃO MEDIDO — nunca verde silencioso.
+#   9. outra ref do clone (branch local de resgate) levanta o teto do conselho: o número
+#      salta e a saída nomeia QUEM tem (issue #1155).
+#  10. clone sem outras refs (o raso do CI) declara na própria saída que NÃO as mediu.
+#  11. ref que resolve para o próprio HEAD não vira "quem tem" — o alvo não mede a si
+#      mesmo (a armadilha da #1155).
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -34,11 +39,23 @@ assert_not_contains() { if grep -qF -- "$2" <<<"$1"; then falha "$3" "não esper
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+# ── isolamento do git: nada aqui escreve fora de "$TMP" ─────────────────────────────
+# Um `git -C "$dir" config user.*` grava onde o git RESOLVER o repositório, e não
+# necessariamente em "$dir": um GIT_DIR herdado (rodar de dentro de um hook, de um
+# `rebase --exec`) manda por cima do -C; "$dir" que não é repositório sobe até o pai.
+# Foi assim que "Pessoa <alguem@fork.dev>" parou no .git/config do checkout de quem
+# rodava a suíte e assinou 829 commits da main a partir de 10/09/2026. Três travas:
+#   1. zera o ambiente local do git herdado — o idioma canônico do próprio git;
+#   2. a descoberta de repositório nunca sobe para fora de "$TMP";
+#   3. identidade por ambiente, não por `git config` (NENHUM teste aqui mede o autor).
+unset $(git rev-parse --local-env-vars)
+export GIT_CEILING_DIRECTORIES="$TMP"
+export GIT_AUTHOR_NAME="Teste" GIT_AUTHOR_EMAIL="teste@exemplo.invalid"
+export GIT_COMMITTER_NAME="Teste" GIT_COMMITTER_EMAIL="teste@exemplo.invalid"
 
 # ── um "repositório principal" mínimo, com duas migrations já aplicadas ──────────────
 principal="$TMP/principal"; mkdir -p "$principal/supabase/migrations"
 git -C "$principal" init -q -b main
-git -C "$principal" config user.email "mantenedor@exemplo.com"; git -C "$principal" config user.name "Mantenedor"
 printf 'select 1;\n' > "$principal/supabase/migrations/20260101120000_0262_existente.sql"
 printf 'select 2;\n' > "$principal/supabase/migrations/20260102090000_0261_anterior.sql"
 printf '# leia\n' > "$principal/README.md"
@@ -46,7 +63,6 @@ git -C "$principal" add -A && git -C "$principal" commit -q -m "base"
 
 clonar() { # $1 = destino (traz o gate SOB PROVA, a versão da árvore de trabalho)
   rm -rf "$1"; git clone -q "$principal" "$1"
-  git -C "$1" config user.email "alguem@fork.dev"; git -C "$1" config user.name "Pessoa"
   mkdir -p "$1/scripts"; cp "$GATE_ORIGEM" "$1/scripts/checar-colisao-de-migration.sh"
 }
 gate() { ( cd "$1" && bash scripts/checar-colisao-de-migration.sh "${2:-origin/main}" 2>&1 ); }
@@ -127,12 +143,10 @@ assert_contains "$saida" "0268_rascunho.sql" "acusa o arquivo que entrou pela ma
 echo "8. duplicata que JÁ existia na base não é do PR (linha de base, TRIAGEM.md:934)"
 principal2="$TMP/principal2"; mkdir -p "$principal2/supabase/migrations"
 git -C "$principal2" init -q -b main
-git -C "$principal2" config user.email "mantenedor@exemplo.com"; git -C "$principal2" config user.name "Mantenedor"
 printf 'select 1;\n' > "$principal2/supabase/migrations/20260101120000_0270_um.sql"
 printf 'select 2;\n' > "$principal2/supabase/migrations/20260102090000_0270_dois.sql"
 git -C "$principal2" add -A && git -C "$principal2" commit -q -m "base com divida herdada"
 c="$TMP/c8"; rm -rf "$c"; git clone -q "$principal2" "$c"
-git -C "$c" config user.email "alguem@fork.dev"; git -C "$c" config user.name "Pessoa"
 mkdir -p "$c/scripts"; cp "$GATE_ORIGEM" "$c/scripts/checar-colisao-de-migration.sh"
 git -C "$c" switch -q -c fix/livre
 migrar "$c" "20260916180000_0271_livre.sql"; commit "$c" "migration livre com dívida antiga na base"
@@ -181,6 +195,44 @@ saida="$(gate "$c" "origin/nao-existe")"; code=$?
 assert_exit "$code" 2 "base imensurável reprova com exit 2 (distinto de colisão)"
 assert_contains "$saida" "NÃO MEDIDO" "declara o não medido em vez de passar em silêncio"
 assert_contains "$saida" "git fetch origin origin/nao-existe" "diz o comando do conserto"
+
+# O commit() varre o gate copiado para dentro da árvore; o switch de branch seguinte o
+# remove (ficou tracked na branch que ficou para trás). Re-arma a cópia antes de medir.
+rearmar_gate() { rm -rf "$1/scripts"; mkdir -p "$1/scripts"; cp "$GATE_ORIGEM" "$1/scripts/"; }
+
+echo "13. outra ref do clone levanta o teto: o conselho salta e nomeia QUEM tem"
+c="$TMP/c13"; clonar "$c"
+git -C "$c" switch -q -c outra/resgate
+migrar "$c" "20260916230000_0275_resgate.sql"; commit "$c" "branch local de resgate com 0275"
+git -C "$c" switch -q -c fix/do-pr origin/main
+migrar "$c" "20260916233000_0274_do_pr.sql"; commit "$c" "PR com 0274"
+rearmar_gate "$c"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "outra ref não reprova o PR — empurra o próximo livre"
+assert_contains "$saida" "NNNN=0276" "o conselho pula o número que a outra ref tomou"
+assert_contains "$saida" "refs/heads/outra/resgate" "nomeia QUEM tem o número que forçou o salto"
+assert_contains "$saida" "1 outra(s) ref(s)" "declara a régua ampliada na própria saída"
+
+echo "14. clone sem outras refs declara que NÃO as mediu (o raso do CI degrada limpo)"
+c="$TMP/c14"; clonar "$c"; git -C "$c" switch -q -c fix/sozinho
+migrar "$c" "20260916234000_0274_livre.sql"; commit "$c" "migration livre"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "sem outras refs o gate segue medindo (degradação limpa)"
+assert_contains "$saida" "NÃO foram medidos" "declara o limite do conselho na própria saída"
+assert_contains "$saida" "confira com a triagem antes de renomear" "diz o que fazer antes de confiar no número"
+
+echo "15. ref que resolve para o próprio HEAD não vira 'quem tem' (o alvo não mede a si mesmo)"
+c="$TMP/c15"; clonar "$c"
+git -C "$c" switch -q -c outra/resgate
+migrar "$c" "20260916235000_0275_resgate.sql"; commit "$c" "branch local de resgate com 0275"
+git -C "$c" switch -q -c fix/do-pr origin/main
+migrar "$c" "20260916235500_0274_do_pr.sql"; commit "$c" "PR com 0274"
+git -C "$c" branch espelho-do-head fix/do-pr
+rearmar_gate "$c"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "espelho do HEAD não interfere na medição"
+assert_not_contains "$saida" "espelho-do-head" "não nomeia ref que é o próprio HEAD"
+assert_contains "$saida" "refs/heads/outra/resgate" "só o dono de verdade é nomeado"
 
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0

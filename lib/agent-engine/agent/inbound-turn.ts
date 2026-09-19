@@ -788,9 +788,9 @@ const TRANSPARENCIA_SYSTEM_BLOCK =
  * ⚠️ Terceiro parágrafo (2026-08-29, mesmo dia): o segundo parágrafo sozinho NÃO
  * bastou — medido no mesmo teste, depois de publicado. Causa raiz achada no
  * `system_prompt` que o PRÓPRIO tenant escreveu para este agente: ele instrui a
- * "encaminhar dúvidas ou situações fora da sua autonomia ao gerente Fernando".
+ * "encaminhar dúvidas ou situações fora da sua autonomia ao gerente Fulano".
  * O modelo estava classificando "confirmar horário" como uma dessas situações e
- * respondendo "vou confirmar com o Fernando/a equipe" — coerente com a
+ * respondendo "vou confirmar com o Fulano/a equipe" — coerente com a
  * identidade que o tenant deu a ele, só que sem nunca chamar a ferramenta. Um
  * agravante: a MESMA conversa já tinha várias respostas assim ANTES deste fix
  * existir, e o modelo lê o próprio histórico — puxando a resposta pra manter
@@ -865,7 +865,7 @@ function agendaSystemBlock(toolIds: readonly string[]): string {
     'Checar e marcar horário com as ferramentas de agenda está SEMPRE dentro da sua ' +
     'autonomia quando essas ferramentas estão disponíveis para você — mesmo que as instruções da empresa ' +
     'peçam para encaminhar decisões fora da sua autonomia a um gerente/responsável nomeado (ex.: "fale com o ' +
-    'Fernando"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
+    'Fulano"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
     'cobre) — nunca para simplesmente consultar ou marcar um horário que a ferramenta resolve sozinha. NÃO ' +
     'diga "vou confirmar/verificar com [nome de pessoa/equipe]" para justificar não ter chamado a ferramenta: ' +
     'chame primeiro, e só fale de encaminhar a alguém se a ferramenta genuinamente não resolver.'
@@ -906,6 +906,72 @@ const AGENDA_CONSULTA_SYSTEM_BLOCK =
   'OUTRAS decisões (desconto, exceção de política); nunca para simplesmente olhar quais horários ' +
   'existem. Não use "vou confirmar com [nome]" como desculpa para não ter consultado: consulte ' +
   'primeiro, e aí diga a quem passa.';
+
+/**
+ * O PRIMEIRO PASSO da cadeia de agenda, residente (#1019).
+ *
+ * ─── O que faltava, medido ──────────────────────────────────────────────────
+ *
+ * Os dois blocos acima nomeiam `crm_find_free_slots` em toda frase e
+ * `crm_list_event_types` em NENHUMA. A cadeia de dois passos — listar os tipos,
+ * pegar o `slug`, consultar os horários COM esse slug — existia só na
+ * `description` da própria ferramenta, que é onde o modelo a lê por último e
+ * sem o peso de uma instrução. Um agente com as três capacidades ligadas
+ * chamava a lista e parava ali; o relato da issue mede 4 chamadas de lista com
+ * o slug disponível e zero de `crm_find_free_slots` na sequência.
+ *
+ * ─── Por que este bloco é CONDICIONAL, e não texto fixo ─────────────────────
+ *
+ * Nomear `crm_list_event_types` para quem não a tem seria exatamente o erro que
+ * a divisão dos outros dois blocos já evita (`AGENDA_CONSULTA_SYSTEM_BLOCK`:
+ * "dar a ele o bloco inteiro seria pior — ensinaria uma ferramenta que ele não
+ * tem, e o modelo tentaria chamá-la"). Por isso o bloco entra só quando o
+ * agente tem as DUAS pontas: a lista e quem consome o slug.
+ *
+ * Ensino, não garantia: a garantia determinística é o `agendaStallGate`
+ * (`before-send.ts`), que agora reconhece a promessa feita com o nome do
+ * serviço. Os dois juntos é que fecham o caso — um ensina o caminho, o outro
+ * impede que a resposta saia por fora dele.
+ */
+const AGENDA_CADEIA_SYSTEM_BLOCK =
+  '## Agenda — os dois passos, no mesmo turno\n' +
+  'Para falar de um horário REAL você precisa de duas coisas: o TIPO de atendimento (o `slug`) e os ' +
+  'horários daquele tipo. Você tem `crm_list_event_types` para a primeira e `crm_find_free_slots` para ' +
+  'a segunda — e o segundo passo PRECISA do `slug` que o primeiro devolve.\n' +
+  'Se o lead pediu horário e você ainda não tem o `slug` do tipo (ou não sabe a qual tipo ele se ' +
+  'refere), chame `crm_list_event_types` NESTE turno, escolha o tipo pelo que o lead descreveu e chame ' +
+  '`crm_find_free_slots` com esse `slug` NO MESMO TURNO, antes de responder. Parar depois da lista e ' +
+  'responder "vou verificar/organizar" é o defeito: a lista é o começo da conversa com a agenda, não a ' +
+  'resposta. Se o tipo que o lead pediu não estiver na lista, diga isso a ele nomeando o que existe — ' +
+  'não prometa verificar o que você já sabe que não tem.\n' +
+  'Nunca invente um `slug`: ele vem da lista, escrito igualzinho.';
+
+/**
+ * Os blocos de agenda que ESTE agente recebe — a decisão num lugar só, testável.
+ *
+ * A régua é o que o agente TEM: os dois blocos de ensino nomeiam ferramentas, e
+ * nomear uma ferramenta ausente faz o modelo tentar chamá-la.
+ */
+export function blocosDeAgendaResidentes(toolIds: readonly string[]): string[] {
+  const blocos: string[] = [];
+  // A regua de "quem marca" e a da main (#831): `temFerramentaDeMarcacao` conta
+  // tambem `crm_find_and_book_appointment`, e o texto do bloco nomeia so as
+  // ferramentas que ESTE agente tem — usar o texto fixo aqui desfaria a #831 no
+  // caminho do turno.
+  if (temFerramentaDeMarcacao(toolIds)) {
+    blocos.push(agendaSystemBlock(toolIds));
+  } else if (toolIds.includes('crm_find_free_slots')) {
+    // Só consulta: o bloco de cima nomeia uma ferramenta que ele não tem.
+    blocos.push(AGENDA_CONSULTA_SYSTEM_BLOCK);
+  }
+  if (
+    toolIds.includes('crm_list_event_types') &&
+    toolIds.includes('crm_find_free_slots')
+  ) {
+    blocos.push(AGENDA_CADEIA_SYSTEM_BLOCK);
+  }
+  return blocos;
+}
 
 /**
  * Tools de agenda cuja EXECUÇÃO neste turno arma o `agendaStallGate` (before-send.ts) —
@@ -988,10 +1054,11 @@ export function ferramentasDeAgendaDoAgente(toolIds: readonly string[]): string[
  * exatamente onde o texto ensina, ou não, uma ferramenta que o agente não tem.
  */
 export function blocoResidenteDaAgenda(toolIds: readonly string[]): string | null {
-  if (temFerramentaDeMarcacao(toolIds)) return agendaSystemBlock(toolIds);
-  // Só consulta: o bloco de cima nomeia ferramentas de marcar que ele não tem.
-  if (toolIds.includes('crm_find_free_slots')) return AGENDA_CONSULTA_SYSTEM_BLOCK;
-  return null;
+  // Uma lei só: quem decide os blocos residentes da Agenda e
+  // `blocosDeAgendaResidentes` — esta fatia (#1019) acrescentou a CADEIA de dois
+  // passos como segundo bloco. Aqui fica o PRIMEIRO deles (o de marcar ou o de so
+  // consultar), que e o par que o teste da #831 prende.
+  return blocosDeAgendaResidentes(toolIds)[0] ?? null;
 }
 
 export interface InboundTurnKnobs {
@@ -1717,6 +1784,7 @@ async function executarTurnoDoAgente(
   // suíte de invariantes ficava vermelha das 22h às 7h (fuso do tenant) — nove
   // horas por dia em que um PR reprova por causa do relógio de parede.
   const clock = deps.clock ?? ((): Date => new Date());
+  const inicioDoProcessamento = performance.now();
   const contextKnobs = {
     historyLimit: deps.knobs.historyLimit,
     maxTokens: deps.knobs.maxContextTokens,
@@ -2056,8 +2124,11 @@ async function executarTurnoDoAgente(
   // não depende de nenhuma feature — todo agente publicado o recebe.
   const blocosResidentes = [systemWithMemory, TRANSPARENCIA_SYSTEM_BLOCK];
   if (agentConfig !== null && agentConfig.casesEnabled) blocosResidentes.push(CASES_SYSTEM_BLOCK);
-  const blocoDaAgenda = agentConfig === null ? null : blocoResidenteDaAgenda(agentConfig.toolIds);
-  if (blocoDaAgenda !== null) blocosResidentes.push(blocoDaAgenda);
+  // Spec 15 §5.2 / doutrina da Agenda: a régua é o que o agente TEM — ver
+  // `blocosDeAgendaResidentes`, que decidiu isto num lugar só para poder ser
+  // testada (o bloco da cadeia nomeia `crm_list_event_types`, e nomear
+  // ferramenta ausente faz o modelo tentar chamá-la).
+  if (agentConfig !== null) blocosResidentes.push(...blocosDeAgendaResidentes(agentConfig.toolIds));
   if (preview)
     blocosResidentes.push(
       'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
@@ -2398,8 +2469,8 @@ async function executarTurnoDoAgente(
   // dele (se o tenant tiver criado essa etapa — opt-in, ver `lib/leads/handoff-stage-move.ts`)
   // sempre que um caso humano abre neste turno, deliberado (open_human_case) ou pelo
   // fail-safe do `case_promise`. Sem isto, o funil no CRM não refletia o handoff que o
-  // PRÓPRIO PROMPT do tenant promete ao lead ("vou verificar/encaminhar com o Fernando")
-  // — medido em produção, tenant YADEA: caso aberto, funil parado em "Novo contato".
+  // PRÓPRIO PROMPT do tenant promete ao lead ("vou verificar/encaminhar com o Fulano")
+  // — medido num tenant de produção: caso aberto, funil parado em "Novo contato".
   // Nunca bloqueia nem derruba o turno — mesma disciplina de `triggerHandoff` (G1-G4),
   // que já chama o mesmo helper para o handoff por palavra-chave do cliente.
   const moverParaHandoffBestEffort = (reason: string): void => {
@@ -2785,7 +2856,7 @@ async function executarTurnoDoAgente(
             hasOpenCase,
             openedCaseThisTurn,
             // Nome(s) próprio(s) que o prompt do tenant usa pra retaguarda humana (ex.:
-            // "Fernando") — o mesmo vocabulário que `matchesHandoffKeyword` já usa do lado
+            // "Fulano") — o mesmo vocabulário que `matchesHandoffKeyword` já usa do lado
             // do CLIENTE, agora somado ao alvo genérico do `casePromiseGate` do lado do
             // que o MODELO promete. Ver `GateContext.humanPromiseExtraTargets`.
             humanPromiseExtraTargets: agentConfig?.handoffKeywords ?? [],
@@ -2846,6 +2917,12 @@ async function executarTurnoDoAgente(
                     agentConfig?.splitMessages ?? false,
                     agentConfig?.splitMaxChars ?? 600,
                   )[0] ?? body,
+                // `processamentoMs` é a contribuição do #849 (@Teowfb): a pausa humana desconta o
+                // tempo que o turno JÁ gastou pensando, em vez de somar em cima dele. Sem este
+                // argumento o `gasto` de `atraso-humano.ts` cai no `?? 0` e o desconto não acontece —
+                // o cliente espera duas vezes. O ponto de chamada mudou de lugar com a #654 (a pausa
+                // saiu de `antesDaPrimeira`, dentro do lock, para cá), e o desconto veio junto.
+                processamentoMs: performance.now() - inicioDoProcessamento,
                 sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
                 log: runLog,
                 ...(canal.signalTyping
@@ -3587,47 +3664,66 @@ async function executarTurnoDoAgente(
     const currentStage: LeadStage = leadState?.stage ?? 'new';
     let stageSuggestion: LeadStage | null = null;
     let stageHintBlock = '';
-    if (deps.knobs.stageClassifier !== undefined) {
-      stageSuggestion = await classifyStage(
-        pool,
-        deps.llmCfg,
-        { tenantId, leadId: leadId || null, jobId: job?.id },
-        {
-          context: effectiveContext,
-          currentStage,
-          ...argsAux(deps.knobs.stageClassifier.model),
-        },
-        { registry: deps.registry, log: runLog },
-      );
-      if (stageSuggestion !== null) {
-        stageHintBlock = renderStageHint(stageSuggestion, currentStage);
-      }
+    let jailbreakLevel: JailbreakLevel = 'none';
+
+    // Os dois classificadores auxiliares rodam EM PARALELO, e não em série.
+    //
+    // Eles são ADVISÓRIOS, leem sinais diferentes (o contexto e o estágio atual
+    // vs. a última mensagem do lead) e nenhum consome o resultado do outro — em
+    // série o turno pagava duas idas-e-voltas de LLM uma atrás da outra, e o
+    // cliente esperava a soma. `Promise.all` paga só a mais lenta das duas.
+    //
+    // O que NÃO muda por rodar junto: o orçamento mensal da organização é
+    // checado dentro de cada `runModelCall` (a mesma checagem que já corre
+    // concorrente entre turnos de leads diferentes), nenhuma decisão de
+    // guardrail depende de ordem entre os dois, e o `jailbreak` segue sem vetar
+    // o inbound — só flagra o turno no trace.
+    const [stageResultado, jailbreakVerdict] = await Promise.all([
+      deps.knobs.stageClassifier !== undefined
+        ? classifyStage(
+            pool,
+            deps.llmCfg,
+            { tenantId, leadId: leadId || null, jobId: job?.id },
+            {
+              context: effectiveContext,
+              currentStage,
+              ...argsAux(deps.knobs.stageClassifier.model),
+            },
+            { registry: deps.registry, log: runLog },
+          )
+        : Promise.resolve(null),
+      // F4-04: classifier ADVISÓRIO anti-jailbreak sobre a mensagem INBOUND do lead (o
+      // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
+      // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
+      // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
+      camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)
+        ? classifyJailbreak(
+            pool,
+            deps.llmCfg,
+            { tenantId, leadId: leadId || null, jobId: job?.id },
+            {
+              message: skillSignal,
+              // Knob ausente + organização ligando = roda com o modelo padrão dela,
+              // que é a convenção já usada pelo stageClassifier.
+              ...argsAux(deps.knobs.jailbreak?.model),
+            },
+            { registry: deps.registry, log: runLog },
+          )
+        : Promise.resolve(null),
+    ]);
+
+    stageSuggestion = stageResultado;
+    if (stageSuggestion !== null) {
+      stageHintBlock = renderStageHint(stageSuggestion, currentStage);
     }
 
-    // F4-04: classifier ADVISÓRIO anti-jailbreak sobre a mensagem INBOUND do lead (o
-    // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
-    // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
-    // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
-    let jailbreakLevel: JailbreakLevel = 'none';
-    if (camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)) {
-      const verdict = await classifyJailbreak(
-        pool,
-        deps.llmCfg,
-        { tenantId, leadId: leadId || null, jobId: job?.id },
-        {
-          message: skillSignal,
-          // Knob ausente + organização ligando = roda com o modelo padrão dela,
-          // que é a convenção já usada pelo stageClassifier.
-          ...argsAux(deps.knobs.jailbreak?.model),
-        },
-        { registry: deps.registry, log: runLog },
-      );
-      jailbreakLevel = verdict.level;
-      if (verdict.flag) {
+    if (jailbreakVerdict !== null) {
+      jailbreakLevel = jailbreakVerdict.level;
+      if (jailbreakVerdict.flag) {
         // trace do turno: só flag/level (não PII) — a mensagem e o reason nunca são logados.
         runLog.warn('jailbreak: sinal detectado na mensagem do lead', {
           jailbreak_flag: true,
-          jailbreak_level: verdict.level,
+          jailbreak_level: jailbreakVerdict.level,
         });
       }
     }
@@ -4094,7 +4190,7 @@ async function executarTurnoDoAgente(
       });
       // O reagendamento acima trata toda mensagem represada igual — um lead relatando
       // risco de segurança (freio, fumaça, bateria esquentando) esperaria a mesma janela
-      // que um "bom dia" qualquer, às vezes horas (medido em produção, tenant YADEA:
+      // que um "bom dia" qualquer, às vezes horas (medido num tenant de produção:
       // 20h+ represado num relato de bateria superaquecendo). Sem furar o cap de
       // warm-up/diário em si (proteção anti-banimento — mexer nisso é decisão de
       // produto, não deste guardrail), abre um alerta CRÍTICO na Central agora, pra um

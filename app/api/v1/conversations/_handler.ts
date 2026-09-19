@@ -84,7 +84,7 @@ function idsQueCabemNaURL(ids: string[]): string[] {
 
 const SELECT_COLS = `
   id, organization_id, contact_id, channel_session_id, channel, status,
-  status_changed_at, service_revision, service_closed_at, service_started_at, current_demanda_id, assigned_to_user_id, assigned_to_user_name, assignee_kind, assigned_at, last_inbound_at,
+  status_changed_at, service_revision, service_closed_at, service_started_at, current_demanda_id, assigned_to_user_id, assigned_to_user_name, assignee_kind, assigned_at, last_inbound_at, awaiting_since,
   last_outbound_at, last_message_at, last_message_preview,
   unread_count_for_assignee, is_group, group_chat_id, tags, metadata,
   snooze_until, created_at, updated_at,
@@ -93,6 +93,22 @@ const SELECT_COLS = `
   contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, avatar_storage_path, force_human),
   channel_sessions:channel_session_id (phone_number, display_name, provider)
 `;
+
+/**
+ * `{valor}` como operando de `cs` DENTRO de um `or=` do PostgREST.
+ *
+ * Duas gramáticas, uma dentro da outra: o literal de array do Postgres
+ * (`{"vip"}`, com `"` e `\` escapados por barra) e, por fora, o valor entre
+ * aspas do `or=` (mesmo escape). Sem as aspas de fora, marcador com `,` ou `)`
+ * quebra a árvore lógica, e com `{`/`}` o PostgREST nem reconhece o array —
+ * `pLogicSingleVal` só aceita `{…}` sem chave dentro. O `termoSeguroParaOr` da
+ * busca não serve aqui: ele troca esses caracteres por curinga, e marcador é
+ * igualdade exata.
+ */
+function arrayDeUmValorParaOr(valor: string): string {
+  const escapa = (t: string) => t.replace(/[\\"]/g, (c) => `\\${c}`);
+  return `"${escapa(`{"${escapa(valor)}"}`)}"`;
+}
 
 interface CursorPayload {
   sort: string | null;
@@ -150,10 +166,11 @@ export async function listConversationsHandler(
   ctx: HandlerCtx,
   q: ListConversationsQuery,
 ): Promise<ListConversationsResult> {
-  // Fila (assigned_to=unassigned): ordena por TEMPO DE ESPERA — quem espera há
-  // mais tempo primeiro. `last_inbound_at` = última mensagem do cliente = "há
-  // quanto tempo aguarda resposta" (não `created_at`, que pode ser uma conversa
-  // antiga reaberta). Demais visões: por atividade recente (last_message_at desc).
+  // Fila: ordena por TEMPO DE ESPERA — quem espera há mais tempo primeiro. A
+  // régua é `awaiting_since` = a mensagem do cliente MAIS ANTIGA sem resposta
+  // (não `last_inbound_at`, que é reescrito a cada mensagem dele e fazia quem
+  // insiste descer para o fim da fila — #990; e não `created_at`, que pode ser uma
+  // conversa antiga reaberta). Demais visões: por atividade recente.
   // A Fila deixou de se identificar por `assigned_to=unassigned` — ela agora pede
   // `comando`. Sem esta linha o `isQueue` ficaria PARA SEMPRE falso na aba Fila e
   // a ordenação por tempo de espera sumiria **sem nenhum sintoma na tela**: a
@@ -195,7 +212,24 @@ export async function listConversationsHandler(
     query = query.not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
   }
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
-  if (q.tag) query = query.contains("tags", [q.tag]); // tags @> array[tag] (GIN)
+  // ⚠️ O MARCADOR FILTRADO É O DA CONVERSA **OU** O DO CONTATO.
+  //
+  // Era só `conversations.tags`, e o relato mede o buraco: *"adicionei a tag nele
+  // para testar e ele n aparece no filtro"* — o marcador fora posto no CONTATO
+  // (`ContactTagsEditor`, a mesma caixa da ficha e da campanha). Trocar a fonte
+  // pelo contato consertaria o relato e tiraria o filtro de quem marca a
+  // CONVERSA (`ConversationTagsEditor`, e a IA por `crm_manage_tags`): o marcador
+  // continuaria editável e deixaria de ser filtrável. As duas caixas, então.
+  //
+  // O lado do contato é o campo calculado `tags_do_contato` (migration 0323), e
+  // não um `contact_id.in.(…)`: a lista de ids viaja na URL e tem teto (ver
+  // `idsQueCabemNaURL`) — numa org com mais contatos marcados que isso, conversas
+  // sumiriam do filtro sem aviso. Este `or=` compõe por AND com o da busca e o do
+  // cursor: o PostgREST junta os parâmetros repetidos com E.
+  if (q.tag) {
+    const marcador = arrayDeUmValorParaOr(q.tag);
+    query = query.or(`tags.cs.${marcador},tags_do_contato.cs.${marcador}`);
+  }
 
   // No BANCO, e não em memória: filtrar depois de paginar devolveria páginas curtas —
   // e, quando a página inteira estivesse lida, uma lista vazia que a tela apresentava
