@@ -105,6 +105,34 @@ describe("cobertura do e2e no CI", () => {
   // specs dentro, e NINGUÉM as roda — e todos os casos acima continuavam
   // verdes, porque elas seguem "declaradas". É a cobertura parcial silenciosa
   // que este arquivo existe para impedir, entrando pela porta de trás.
+  // ⚠️ A PARTE 4 É UM AMBIENTE, NÃO UMA VAGA LIVRE.
+  //
+  // Nela os passos de semeadura não rodam (`if: matrix.parte != 4`); em vez
+  // deles sobem WAHA, o par Redis e a criação do dono como o `install.sh` faz.
+  // A `vps-fresh-onboarding` existe para provar que "o único dado que existe
+  // antes dela é o dono" — é a P0 da jornada que se vende.
+  //
+  // Medido em 19/09, e é por isso que esta cerca nasceu: a
+  // `funil-arquivado-volta-pela-tela` foi parar nesta lista e PASSOU no CI —
+  // por acoplamento, não por direito. Ela semeia os próprios funis e chama
+  // `scripts/seed-e2e-credentials.ts` no `beforeAll`, ou seja, cria no banco da
+  // instalação fresca exatamente os dados que a vizinha afirma não existirem.
+  // Verde por ordem de execução é verde que morre num retry — e leva junto a
+  // única prova da jornada de instalação. Nada impedia isso de entrar.
+  it("a parte 4 só aceita spec de instalação fresca (lista fechada)", () => {
+    const PERMITIDAS = ["vps-fresh-onboarding.spec.ts"];
+    expect(
+      parte4.filter((f) => !PERMITIDAS.includes(f)),
+      "spec que não é de instalação fresca entrou em SPECS_PARTE_4. O ambiente dela não " +
+        "semeia credenciais nem fixtures, e qualquer dado criado ali quebra a premissa que a " +
+        "`vps-fresh-onboarding` prova. Ponha em SPECS_PARTE_1/2/3/5. Se a spec nova for MESMO " +
+        "de instalação fresca, acrescente-a a PERMITIDAS aqui, com a razão escrita.\n",
+    ).toEqual([]);
+    // Controle positivo: a lista não pode estar vazia por engano de parser —
+    // vazia, a asserção acima passaria sem vigiar nada.
+    expect(parte4.length, "SPECS_PARTE_4 veio vazia — parser morto").toBeGreaterThan(0);
+  });
+
   it("toda lista declarada é invocada pela matrix (e vice-versa)", () => {
     const m = /^\s*parte:\s*\[([^\]]+)\]/m.exec(yml);
     expect(m, "não achei a matrix `parte:` no workflow — o parser envelheceu").not.toBeNull();

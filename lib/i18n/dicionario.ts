@@ -119,6 +119,45 @@ export const DICIONARIO: Traducoes = {
   // PACOTES (lib/mcp/tools/pacotes.ts) — rótulo/explicação dos pacotes de
   // capacidade na tela de criar/editar agente (ToolPicker.tsx).
   "Atender e responder": { es: "Atender y responder" },
+
+  // Painel de configuração da instalação (migration 0341) — os motivos pelos
+  // quais uma chave NÃO é editável pela tela. São valores de uma tabela de
+  // rótulo (`MOTIVO_CURTO`), então o teste de cobertura exige TODOS os valores
+  // que a expressão pode assumir, não só os que aparecem hoje.
+  "Necessária para o sistema ligar": { es: "Necesaria para que el sistema arranque" },
+  "É a chave que protege as outras": { es: "Es la clave que protege a las demás" },
+  "Gravada quando o programa foi montado": { es: "Grabada cuando se compiló el programa" },
+  "Tem um par em outro programa do servidor": {
+    es: "Tiene un par en otro programa del servidor",
+  },
+  "Lida por outro programa ao ligar": { es: "La lee otro programa al arrancar" },
+
+  // Painel de configuração da instalação — a tela, o formulário e a porta do
+  // modo administrador no menu do usuário.
+  "Configuração da instalação": { es: "Configuración de la instalación" },
+  "O que este servidor precisa saber para funcionar. O que dá para trocar aqui, você troca e vale na hora — sem mexer no servidor.":
+    {
+      es: "Lo que este servidor necesita saber para funcionar. Lo que se puede cambiar aquí, lo cambias y vale al instante — sin tocar el servidor.",
+    },
+  "Modo administrador": { es: "Modo administrador" },
+  "Configurar este servidor": { es: "Configurar este servidor" },
+  "Não configurado": { es: "Sin configurar" },
+  "Definido aqui nesta tela": { es: "Definido aquí, en esta pantalla" },
+  "Vem do arquivo de instalação do servidor": {
+    es: "Viene del archivo de instalación del servidor",
+  },
+  "Pronto, já está valendo.": { es: "Listo, ya está en vigor." },
+  "Voltou para o valor do arquivo de instalação.": {
+    es: "Volvió al valor del archivo de instalación.",
+  },
+  "Guardado, terminando em": { es: "Guardado, termina en" },
+  "Agora:": { es: "Ahora:" },
+  "Escreva para substituir": { es: "Escribe para reemplazar" },
+  "Escreva para configurar": { es: "Escribe para configurar" },
+  "Voltar ao padrão": { es: "Volver al valor por defecto" },
+  "Não se troca por aqui": { es: "No se cambia por aquí" },
+  "ocultar": { es: "ocultar" },
+  "por quê?": { es: "¿por qué?" },
   "O agente lê a conversa, entende o histórico e responde ao cliente sem pedir que ele repita o que já disse.": {
     es: "El agente lee la conversación, entiende el historial y responde al cliente sin pedirle que repita lo que ya dijo.",
   },
@@ -1155,6 +1194,7 @@ export const DICIONARIO: Traducoes = {
   "Um de cada vez por conversa": { es: "Una a la vez por conversación" },
   "Um de cada vez por cliente": { es: "Una a la vez por cliente" },
   "Só atender em horário de funcionamento": { es: "Solo atender en horario de funcionamiento" },
+  "Só enviar follow-up nestes horários": { es: "Solo enviar seguimiento en estos horarios" },
   Início: { es: "Inicio" },
   Fim: { es: "Fin" },
   Dias: { es: "Días" },
@@ -9551,6 +9591,31 @@ export const DICIONARIO: Traducoes = {
   // As frases de recusa do servidor. Três delas não tinham entrada: o argumento
   // de `t()` ali é uma expressão `??`, que o guarda também não resolve.
   "Confira a etiqueta e o novo nome.": { es: "Revisa la etiqueta y el nombre nuevo." },
+  // ── A COR DA ETIQUETA (fatia S6 da #1271) ─────────────────────────────────
+  //
+  // Os oito tons têm NOME além de cor, e é de propósito: quem não distingue
+  // matiz — ou está com o brilho no mínimo, ou usa leitor de tela — escolhe e
+  // reconhece por "Âmbar"/"Roxo". A fileira de tons é a única escolha de cor do
+  // produto, e sem estas entradas ela sairia MUDA para quem escolheu espanhol.
+  //
+  // `"Cor"` NÃO entra aqui: a chave já existe no arquivo (linha ~3312, do
+  // seletor de cor da marca) e repeti-la é TS1117 no `as const` do dicionário.
+  "Confira a etiqueta, o novo nome e a cor.": {
+    es: "Revisa la etiqueta, el nombre nuevo y el color.",
+  },
+  "Cor da etiqueta": { es: "Color de la etiqueta" },
+  "nas listas e nos filtros:": { es: "en las listas y en los filtros:" },
+  "Sem cor": { es: "Sin color" },
+  "Prévia:": { es: "Vista previa:" },
+  "Cor da etiqueta atualizada.": { es: "Color de la etiqueta actualizado." },
+  Amarelo: { es: "Amarillo" },
+  Âmbar: { es: "Ámbar" },
+  Vermelho: { es: "Rojo" },
+  "Verde-água": { es: "Verde agua" },
+  Azul: { es: "Azul" },
+  Índigo: { es: "Índigo" },
+  Roxo: { es: "Morado" },
+  Cinza: { es: "Gris" },
   "Só um gerente ou administrador da organização pode mudar as etiquetas.": {
     es: "Solo un gerente o administrador de la organización puede cambiar las etiquetas.",
   },

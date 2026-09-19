@@ -26103,7 +26103,8 @@ create or replace function public.fn_vocabulario_de_tags_operar(
   p_org uuid,
   p_acao text,
   p_tag text,
-  p_destino text
+  p_destino text,
+  p_cor text default null
 )
 returns jsonb
 language plpgsql
@@ -26114,7 +26115,13 @@ as $$
 declare
   v_tag     text := btrim(coalesce(p_tag, ''));
   v_destino text := btrim(coalesce(p_destino, ''));
+  -- A cor entra normalizada (minúscula, sem espaço). A rota valida com Zod antes;
+  -- esta linha defende o caminho que NÃO passa por ela — RPC direta, psql, um
+  -- cliente futuro. Sem isso, `#FFF` gravaria e a comparação por igualdade da
+  -- tela (que compara o que o servidor devolveu) passaria a mentir.
+  v_cor     text := lower(btrim(coalesce(p_cor, '')));
   v_remover boolean;
+  v_so_cor  boolean;
   v_contatos integer := 0;
   v_leads integer := 0;
   v_conversas integer := 0;
@@ -26132,15 +26139,22 @@ begin
     raise exception using errcode = '42501', message = 'insufficient_role';
   end if;
 
-  if p_acao is null or p_acao not in ('renomear', 'juntar', 'excluir') then
+  if p_acao is null or p_acao not in ('renomear', 'juntar', 'excluir', 'definir_cor') then
     raise exception using errcode = '22023', message = 'acao_invalida';
   end if;
   if v_tag = '' then
     raise exception using errcode = '22023', message = 'tag_obrigatoria';
   end if;
   v_remover := (p_acao = 'excluir');
-  if not v_remover and v_destino = '' then
+  v_so_cor  := (p_acao = 'definir_cor');
+  if not v_remover and not v_so_cor and v_destino = '' then
     raise exception using errcode = '22023', message = 'destino_obrigatorio';
+  end if;
+  -- `v_cor` vazio é pedido legítimo ("sem cor"): limpa. O que não passa é cor
+  -- malformada — gravar `#12` e devolver `#12` para a tela pintar deixaria o
+  -- chip sem cor sem ninguém saber por quê.
+  if v_so_cor and v_cor <> '' and v_cor !~ '^#[0-9a-f]{6}$' then
+    raise exception using errcode = '22023', message = 'cor_invalida';
   end if;
 
   -- ── POR QUE NÃO SAI EVENTO DAQUI ──────────────────────────────────────────
@@ -26158,6 +26172,118 @@ begin
   -- Quem registra a operação é o AUDIT LOG, na borda: `tag_vocabulary.changed`
   -- em `app/api/v1/tags/vocabulario/route.ts`, com os contadores que este corpo
   -- devolve. E a tela aberta se atualiza pelo Realtime das próprias tabelas.
+
+  -- ── (z) A COR SAI ANTES DOS LAÇOS, E NÃO É OTIMIZAÇÃO ─────────────────────
+  --
+  -- Cor é atributo do VOCABULÁRIO, não das linhas: `contacts.tags`,
+  -- `crm_leads.tags` e `conversations.tags` continuam `text[]` de nomes, porque
+  -- automação, webhook (`lead.tag_added`) e MCP (`*.tags_changed`) falam em
+  -- string há versões (contrato da fatia S4). Então a ação `definir_cor` não tem
+  -- o que reescrever em contatos, leads nem conversas — e os laços abaixo, se
+  -- rodassem, custariam uma varredura das três tabelas para devolver zero.
+  --
+  -- O bloco de `canonical_conversation_tags` (mais abaixo) é pior que inútil
+  -- aqui: ele troca o nome da semente por `v_destino` e descarta o que sobra
+  -- vazio — com `destino` nulo nesta ação, a semente seria APAGADA. Daí o
+  -- `return` cedo: nesta ação, só o vocabulário curado muda.
+  if v_so_cor then
+    select coalesce(o.settings, '{}'::jsonb) into v_settings
+    from public.organizations o where o.id = p_org;
+    if v_settings is null then
+      v_settings := '{}'::jsonb;
+    end if;
+
+    -- (a) tolera `settings.tags` torto (escalar/objeto): a leitura já tolera com
+    -- `jsonb_typeof`, e sem esta guarda o `jsonb_array_elements` levantava
+    -- `cannot extract elements from a scalar` e derrubava a tela inteira numa
+    -- organização com o dado malformado. Lista que não é lista é lista vazia.
+    v_antes := case
+      when jsonb_typeof(v_settings -> 'tags') = 'array' then v_settings -> 'tags'
+      else '[]'::jsonb
+    end;
+    v_depois := coalesce(
+      (
+        select jsonb_agg(entrada.valor order by entrada.ord)
+        from (
+          -- Uma entrada por chave canônica, agora acrescentando a cor na que
+          -- casar. A entrada que era string vira objeto — a mesma forma que o
+          -- rename já grava (mais abaixo, `jsonb_build_object('tag', …)`) — e
+          -- `descricao` que já existia é PRESERVADA: esta ação fala de cor.
+          --
+          -- ⚠️ O desempate é o MESMO da função de leitura
+          -- (`fn_vocabulario_de_tags`, `order by … (cor is not null or descricao
+          -- is not null) desc`), e de propósito: onde a lista curada já tiver a
+          -- mesma etiqueta duas vezes (uma como string, outra como objeto com
+          -- cor), quem sobrevive é a entrada que carrega o metadado. Ordenar só
+          -- por `ord` apagaria a cor na primeira vez que a ação rodasse sobre um
+          -- vocabulário nesse estado, e a tela mostraria "sem cor" logo depois de
+          -- alguém ter escolhido uma.
+          select distinct on (lower(x.chave)) x.valor, x.ord
+          from (
+            select btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}')) as chave,
+                   case
+                     when lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag)
+                     then case
+                            when nullif(v_cor, '') is null
+                            then (case when jsonb_typeof(e.valor) = 'string'
+                                       then jsonb_build_object('tag', e.valor #>> '{}')
+                                       else e.valor end) - 'cor'
+                            else jsonb_set(
+                                   case when jsonb_typeof(e.valor) = 'string'
+                                        then jsonb_build_object('tag', e.valor #>> '{}')
+                                        else e.valor end,
+                                   '{cor}', to_jsonb(v_cor))
+                          end
+                     else case when jsonb_typeof(e.valor) = 'string'
+                               then jsonb_build_object('tag', e.valor #>> '{}')
+                               else e.valor end
+                   end as valor,
+                   e.ord
+            from jsonb_array_elements(v_antes) with ordinality as e(valor, ord)
+            where btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}')) <> ''
+          ) x
+          where x.valor is not null
+          order by lower(x.chave),
+                   ((x.valor ->> 'cor') is not null or (x.valor ->> 'descricao') is not null) desc,
+                   x.ord
+        ) as entrada
+      ),
+      '[]'::jsonb
+    );
+
+    -- A etiqueta que ainda não tinha entrada no vocabulário curado — semente, ou
+    -- nome que só existe em uso (`no_vocabulario = false` na leitura) — GANHA
+    -- uma. É deliberado: dar cor é curar. Sem isto, a tela ofereceria cor para
+    -- uma etiqueta que continuaria marcada como "em uso, fora do vocabulário", e
+    -- a leitura devolveria a cor de uma linha que não está na lista curada.
+    if nullif(v_cor, '') is not null and not exists (
+      select 1 from jsonb_array_elements(v_depois) as e(valor)
+      where lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag)
+    ) then
+      v_depois := v_depois || jsonb_build_array(jsonb_build_object('tag', v_tag, 'cor', v_cor));
+    end if;
+
+    if v_depois <> v_antes then
+      v_settings := jsonb_set(v_settings, '{tags}', v_depois);
+      update public.organizations o
+         set settings = v_settings,
+             updated_at = now()
+       where o.id = p_org;
+      v_definido := true;
+    end if;
+
+    return jsonb_build_object(
+      'acao', p_acao,
+      'tag', v_tag,
+      'destino', null,
+      'cor', nullif(v_cor, ''),
+      'contatos', 0,
+      'leads', 0,
+      'conversas', 0,
+      'regras', 0,
+      'alterou', v_definido
+    );
+  end if;
 
   -- (a) contatos
   for v_id in
@@ -26298,7 +26424,12 @@ begin
   end if;
 
   -- (e) o vocabulário da organização, nos dois lugares onde ele mora.
-  v_antes := coalesce(v_settings -> 'tags', '[]'::jsonb);
+  -- Mesma guarda do ramo de renomear: `settings.tags` malformado não pode
+  -- derrubar a cor (a leitura tolera; a escrita agora também).
+  v_antes := case
+    when jsonb_typeof(v_settings -> 'tags') = 'array' then v_settings -> 'tags'
+    else '[]'::jsonb
+  end;
   v_depois := coalesce(
     (
       select jsonb_agg(entrada.valor order by entrada.ord)
@@ -26306,6 +26437,9 @@ begin
         -- Dedupe pela chave DEPOIS da substituição (mesma razão de
         -- `fn_tags_normalizar`): juntar duas entradas de chaves diferentes num
         -- nome só deixava as duas no vocabulário, agora com o mesmo `tag`.
+        --
+        -- ⚠️ `cor` e `descricao` da entrada sobrevivem ao rename: o `jsonb_set`
+        -- mexe só em `{tag}`. Renomear não é perder a cor que alguém escolheu.
         select distinct on (lower(x.chave)) x.valor, x.ord
         from (
           select case
@@ -26380,6 +26514,7 @@ begin
     'acao', p_acao,
     'tag', v_tag,
     'destino', nullif(v_destino, ''),
+    'cor', null,
     'contatos', v_contatos,
     'leads', v_leads,
     'conversas', v_conversas,
@@ -26402,13 +26537,16 @@ grant  execute on function public.fn_vocabulario_de_tags(uuid) to authenticated,
 revoke execute on function public.fn_tags_normalizar(text[], text, text, boolean) from public, anon;
 grant  execute on function public.fn_tags_normalizar(text[], text, text, boolean) to authenticated, service_role;
 
+-- ⚠️ A partir da 0336 a assinatura é (uuid, text, text, text, text) —
+-- `p_cor text default null`. Revoke/grant com a assinatura ANTIGA não
+-- alcançam a função que existe.
 -- A de escrita é definer e volátil: `authenticated` chama pela sessão do usuário
 -- (POST app/api/v1/tags/vocabulario/route.ts, com createClient de cookie), e por
 -- isso está declarada em AUTHENTICATED_PERMITIDO no gate
 -- tests/invariants/hardening-definer-varredura.test.ts — a exceção nomeia o call
 -- site, não abre a porta.
-revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) from public, anon;
-grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) to authenticated, service_role;
+revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text, text) from public, anon;
+grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text, text) to authenticated, service_role;
 
 -- ---- mensagem do lembrete no tipo (migration 0328) ----
 -- O texto que o cron manda no WhatsApp passa a ser do MOLDE. NULL = a frase
@@ -32229,6 +32367,129 @@ alter table public.ai_reply_drafts
 alter table public.ai_reply_drafts
   add constraint ai_reply_drafts_message_id_fkey
   foreign key (message_id) references public.messages(id) on delete set null;
+
+notify pgrst, 'reload schema';
+
+-- ---- a configuração da instalação cabe na tela (migration 0341) ----
+-- 0341 — A configuração da INSTALAÇÃO sai do `.env` e passa a caber na tela.
+--
+-- ── O problema ───────────────────────────────────────────────────────────────
+--
+-- Trocar a chave de IA, o token do WAHA ou o remetente de e-mail exige SSH na
+-- VPS, editar o `.env` e recriar os contêineres. Para o público do kit — quem
+-- compra hospedagem e instala sozinho — isso é o mesmo que não ser configurável.
+-- A marca (0155) e a credencial do Google (0201) já fizeram essa travessia; esta
+-- migration generaliza o caminho para o resto da configuração.
+--
+-- ── Por que LINHAS e não COLUNAS ─────────────────────────────────────────────
+--
+-- `platform_branding` e `platform_settings` são singletons com uma coluna por
+-- campo, e para 3 ou 4 campos isso é o certo. Aqui não serve, por duas razões
+-- medidas:
+--
+--   1. ESCALA. São 42 chaves candidatas (27 migráveis + 15 knobs). Cifrada, cada
+--      credencial ocupa quatro campos (ciphertext, iv, tag, last4) — a tabela
+--      passaria de 150 colunas, e cada chave nova seria um ALTER.
+--
+--   2. O TUDO-OU-NADA. O cabeçalho de `lib/branding/instalacao.ts` documenta que
+--      coluna nova em singleton é tudo-ou-nada por construção: código novo sobre
+--      schema velho faz o PostgREST devolver `42703` para a LINHA INTEIRA, e a
+--      marca toda cai no `.env`. Numa tabela de linhas esse modo de falha não
+--      existe: chave que o banco ainda não tem é simplesmente linha ausente, e
+--      linha ausente JÁ significa "usa o `.env`" — que é o mesmo desfecho, sem
+--      derrubar as outras 41 no caminho.
+--
+-- ── Por que a cifra é da APLICAÇÃO e não do banco ────────────────────────────
+--
+-- O repositório tem DOIS padrões de cifra convivendo, e a escolha entre eles não
+-- é estética:
+--
+--   • `fn_encrypt_oauth` (0201/0257) cifra no banco com `pgp_sym_encrypt`, e a
+--     chave mora em `private.app_secrets`, semeada pelo kit.
+--   • `lib/crypto/aes_gcm.ts` cifra na aplicação (AES-256-GCM), e a chave mora
+--     só no `.env` (`AI_CRED_AES_KEY`). É o que já protege
+--     `ai_provider_credentials`, com nove consumidores.
+--
+-- O `backup.sh` do kit roda `pg_dump` SEM filtrar schema, pela mesma conexão
+-- privilegiada que semeia a chave — se a semeadura alcança `private.app_secrets`,
+-- o dump também alcança. E o backup NÃO leva o `.env` (só banco + sessões do
+-- WhatsApp). Com a cifra do banco, portanto, um arquivo de backup vazado entrega
+-- a chave e o cofre juntos. Isso é tolerável para um segredo do Google; deixa de
+-- ser quando o cofre guarda TODAS as credenciais da instalação.
+--
+-- Por isso esta tabela guarda o envelope AES-GCM cru (`ciphertext`/`iv`/`tag`) e
+-- nenhuma função do banco sabe abri-lo. Backup vazado sem o `.env` é ruído.
+--
+-- ── `semeado_do_env` não é enfeite de proveniência ───────────────────────────
+--
+-- É o que impede o `.env` de desfazer uma escolha humana, e a regra vem inteira
+-- de `precisaSemear` em `lib/branding/instalacao.ts`: a escrita pela tela zera o
+-- campo, e linha com `semeado_do_env = false` NUNCA é semeada de novo. Sem isso,
+-- o valor antigo do `.env` reescreveria no próximo boot o que a pessoa acabou de
+-- digitar, e o campo pareceria não funcionar.
+--
+-- Apagar a linha é o "voltar ao padrão": sem linha, o resolvedor lê o `.env` de
+-- novo e pode semear outra vez. Por isso `delete` entra no grant.
+--
+-- Sem dado tocado, sem backfill: tabela nova, vazia, e o resolvedor degrada para
+-- o `.env` enquanto ela estiver assim.
+
+create table if not exists public.platform_config (
+  chave           text        primary key,
+  valor           text,
+  ciphertext      bytea,
+  iv              bytea,
+  tag             bytea,
+  last4           text,
+  eh_segredo      boolean     not null default false,
+  semeado_do_env  boolean     not null default false,
+  updated_at      timestamptz not null default now(),
+  updated_by      uuid,
+  -- A chave É o nome da variável de ambiente, para que a correspondência
+  -- banco ↔ `.env` seja literal e conferível por quem opera a VPS.
+  constraint platform_config_chave_formato
+    check (chave ~ '^[A-Z][A-Z0-9_]{2,63}$'),
+  -- Segredo e knob são formas mutuamente exclusivas da mesma linha. Sem este
+  -- XOR, uma linha poderia ter `valor` em claro E envelope cifrado — e o
+  -- resolvedor teria de escolher, o que é como um segredo vaza em claro.
+  constraint platform_config_forma_do_valor check (
+    (eh_segredo
+       and ciphertext is not null and iv is not null and tag is not null
+       and valor is null)
+    or
+    (not eh_segredo
+       and valor is not null
+       and ciphertext is null and iv is null and tag is null)
+  )
+);
+
+comment on table public.platform_config is
+  'Configuração da INSTALAÇÃO editável pela tela (não do tenant): uma linha por variável, nomeada como a própria variável de ambiente. Linha ausente = usa o .env. Segredo guarda envelope AES-256-GCM cru (lib/crypto/aes_gcm.ts, chave em AI_CRED_AES_KEY, fora do banco de propósito — ver o cabeçalho da migration 0341); knob guarda texto. Lida/escrita só server-side por service_role. Ver lib/instalacao/config.ts.';
+
+comment on column public.platform_config.semeado_do_env is
+  'true = o valor veio do .env por semeadura automática e pode ser re-semeado. false = uma pessoa escreveu pela tela, e o .env NUNCA sobrescreve. Mesma regra de platform_branding.seeded_from_env (0155).';
+
+comment on column public.platform_config.last4 is
+  'Últimos 4 caracteres do segredo, para a tela identificar QUAL chave está lá sem nunca devolver o valor. Null para knob.';
+
+-- ZERO POLICIES, DE PROPÓSITO — mesma decisão de `platform_branding` (0155) e
+-- `platform_settings` (0253): esta linha não pertence a organização nenhuma,
+-- então não há predicado de tenant que a isole. RLS ligada sem policy = ninguém
+-- alcança pela REST; quem lê é o service_role, que a bypassa, e só do servidor.
+alter table public.platform_config enable row level security;
+
+-- As DUAS origens de grant, e tratar só uma deixa a tabela exposta com o gate
+-- verde: (A) o `alter default privileges ... on tables to anon` do baseline
+-- alcança TODA tabela criada depois dele — isto é, todo apêndice novo; (B) o
+-- grant que o Postgres dá ao dono. O repositório já registra alguém que
+-- conhecia a doutrina e errou exatamente aqui.
+revoke all on public.platform_config from anon, authenticated;
+grant select, insert, update, delete on public.platform_config to service_role;
+
+drop trigger if exists trg_platform_config_touch on public.platform_config;
+create trigger trg_platform_config_touch
+  before update on public.platform_config
+  for each row execute function public.fn_touch_updated_at();
 
 notify pgrst, 'reload schema';
 
