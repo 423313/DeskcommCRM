@@ -153,8 +153,14 @@ export function slugDoProvisionamento(integration: string, externalId: string): 
   return `${integration}-${hash}`;
 }
 
-function marcadorDe(settings: unknown): MarcadorDeProvisionamento | null {
-  const m = (settings as { provisioning?: unknown } | null)?.provisioning as
+/**
+ * Lê o marcador de onde ele estiver gravado — `organizations.settings` ou o
+ * `app_metadata` da conta do dono. É o MESMO formato nos dois lugares de
+ * propósito: são as duas provas de "nasceu deste provisionamento", e duas
+ * formas seriam duas verdades para manter em dia.
+ */
+function marcadorDe(fonte: unknown): MarcadorDeProvisionamento | null {
+  const m = (fonte as { provisioning?: unknown } | null)?.provisioning as
     | Partial<MarcadorDeProvisionamento>
     | undefined;
   return typeof m?.integration === "string" && typeof m?.external_id === "string"
@@ -175,7 +181,11 @@ function marcadorDe(settings: unknown): MarcadorDeProvisionamento | null {
  * humano um caminho de acesso por "esqueci minha senha".
  *
  * Idempotente por (integração, id externo), inclusive sob corrida: `23505` no
- * insert é relido e conferido pelo marcador.
+ * insert é relido e conferido pelo marcador. E inclusive depois de uma falha
+ * TRANSITÓRIA no meio: a conta do dono nasce antes da organização, então um
+ * INSERT que morre por timeout do pooler deixa a conta sozinha — a repetição a
+ * reaproveita pelo marcador em `app_metadata` (ver `ensureExternalOwnerUser`)
+ * em vez de bater num 409 permanente.
  */
 export async function provisionExternalTenant(
   input: ExternalProvisionInput,
@@ -215,7 +225,7 @@ export async function provisionExternalTenant(
   const existente = await reencontrar();
   if (existente) return { ...existente, replay: true };
 
-  const ownerId = await ensureExternalOwnerUser(admin, email, input.ownerName);
+  const ownerId = await ensureExternalOwnerUser(admin, email, input.ownerName, marcador);
 
   const { data: org, error: orgError } = await admin
     .from("organizations")
@@ -304,6 +314,11 @@ async function findAdminMember(
  * empresa nova, com um aceite que ela nunca deu, e com o NOME dessa empresa
  * escolhido por um sistema de fora. Quem quer essa pessoa numa empresa a
  * convida pela tela da empresa, e ela aceita.
+ *
+ * A ÚNICA conta existente que não cai aqui é a que este mesmo provisionamento
+ * criou e abandonou — marcador próprio em `app_metadata` e nenhum vínculo vivo.
+ * Não é pessoa que usa a instalação: é lixo da tentativa anterior, e o critério
+ * está no dado (ver `ensureExternalOwnerUser`).
  */
 export class EmailJaTemContaError extends Error {
   constructor() {
@@ -312,19 +327,47 @@ export class EmailJaTemContaError extends Error {
 }
 
 /**
- * Cria a pessoa dona — e só cria. E-mail que já tem conta é recusado ANTES de
- * existir organização ou vínculo, então a recusa não deixa nada para trás.
+ * Cria a pessoa dona — ou REAPROVEITA a conta que uma tentativa anterior DESTE
+ * mesmo provisionamento deixou para trás.
+ *
+ * ⚠️ POR QUE O REAPROVEITAMENTO PRECISOU EXISTIR. A conta nasce ANTES da
+ * organização, e as duas escritas não são uma transação: o INSERT da
+ * organização falhando com qualquer coisa que não seja `23505` (timeout do
+ * pooler, rede) devolvia 500 com a conta já criada e organização nenhuma. Na
+ * repetição do parceiro — o caminho NORMAL depois de um 500 — `reencontrar()`
+ * não achava nada, `createUser` batia em `email_exists`, e a resposta virava
+ * 409 `owner_email_ja_tem_conta` PARA SEMPRE, mandando "convide a pessoa pela
+ * tela da empresa" sobre uma empresa que não existe. Só saía com cirurgia no
+ * banco — o oposto do que o cabeçalho de `provisionExternalTenant` promete.
+ *
+ * ⚠️ E POR QUE ELE NÃO AFROUXA A RECUSA DO ITEM 8. Reaproveitar exige as DUAS
+ * provas, no dado e não na presunção:
+ *
+ *  1. a conta carrega o marcador DESTE par (integração, id externo) em
+ *     `app_metadata` — e `app_metadata` é escrita SÓ por service role
+ *     (`AdminUserAttributes`); o que a própria pessoa pode mudar pelo
+ *     `updateUser` é `data` → `raw_user_meta_data` (`UserAttributes`, que não
+ *     tem o campo). Gravar o marcador em `user_metadata` deixaria qualquer
+ *     usuário logado forjar a própria elegibilidade;
+ *  2. a conta não tem vínculo vivo com organização nenhuma — é órfã de
+ *     verdade, não alguém que já usa a instalação.
+ *
+ * Conta de pessoa real não tem o marcador, e continua recusada com o mesmo
+ * `EmailJaTemContaError`. Conta de OUTRO provisionamento tem marcador de outro
+ * par, e também é recusada.
  */
 async function ensureExternalOwnerUser(
   admin: ReturnType<typeof createAdminClient>,
   email: string,
   fullName: string,
+  marcador: MarcadorDeProvisionamento,
 ): Promise<string> {
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password: randomBytes(24).toString("base64url"),
     email_confirm: true,
     user_metadata: { full_name: fullName },
+    app_metadata: { provisioning: marcador },
   });
   if (data?.user) return data.user.id;
   // `email_exists` é o código do GoTrue atual; versões anteriores só diziam
@@ -332,6 +375,75 @@ async function ensureExternalOwnerUser(
   const jaExiste =
     error?.code === "email_exists" ||
     (error?.status === 422 && /already (been )?registered/i.test(error.message));
-  if (jaExiste) throw new EmailJaTemContaError();
+  if (jaExiste) {
+    const orfa = await donoOrfaoDesteProvisionamento(admin, email, marcador);
+    if (orfa) return orfa;
+    throw new EmailJaTemContaError();
+  }
   throw new Error(`provisioning: criar dono falhou: ${error?.message ?? "sem usuário"}`);
+}
+
+/** Contas por página na varredura do diretório. O servidor pode reduzir. */
+const CONTAS_POR_PAGINA = 200;
+/**
+ * Teto de páginas. Sem achar a conta dentro dele, a recusa do item 8 vale (é o
+ * comportamento de antes deste conserto) — nunca o reaproveitamento.
+ */
+const PAGINAS_DO_DIRETORIO = 50;
+
+/**
+ * A conta que ESTE provisionamento deixou órfã, ou `null` quando não há uma.
+ *
+ * Varre o diretório paginado porque `listUsers` NÃO filtra por e-mail
+ * (`@supabase/auth-js` 2.116.0 tipa só `page`/`perPage`; o repo já paga esse
+ * preço em `app/api/v1/admin/users/route.ts` e em `useRecoveryCode`). O custo
+ * fica no galho RARO: só roda quando o GoTrue já disse que o e-mail existe, e
+ * nunca no caminho feliz.
+ *
+ * A varredura para na página vazia, e não usa `nextPage`: o auth-js o deriva do
+ * header Link com `.substring(0, 1)`, então da página 10 em diante ele lê "1" e
+ * a varredura andaria para trás.
+ *
+ * Erro do GoTrue ou do Postgres NÃO vira "não é órfã": seria trocar "não
+ * consegui verificar" por uma recusa terminal de 409. Falha alto — o parceiro
+ * recebe 500 e a repetição ainda tem conserto.
+ */
+async function donoOrfaoDesteProvisionamento(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+  marcador: MarcadorDeProvisionamento,
+): Promise<string | null> {
+  let conta: { id: string; app_metadata: unknown } | null = null;
+
+  for (let pagina = 1; pagina <= PAGINAS_DO_DIRETORIO && !conta; pagina++) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page: pagina,
+      perPage: CONTAS_POR_PAGINA,
+    });
+    if (error) {
+      throw new Error(`provisioning: busca da conta do dono falhou: ${error.message}`);
+    }
+    if (data.users.length === 0) break;
+    const achada = data.users.find((u) => u.email?.toLowerCase() === email);
+    if (achada) conta = { id: achada.id, app_metadata: achada.app_metadata };
+  }
+
+  if (!conta) return null;
+
+  const dela = marcadorDe(conta.app_metadata);
+  if (dela?.integration !== marcador.integration || dela.external_id !== marcador.external_id) {
+    return null;
+  }
+
+  const { data: vinculo, error: erroDoVinculo } = await admin
+    .from("user_organizations")
+    .select("organization_id")
+    .eq("user_id", conta.id)
+    .is("revoked_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (erroDoVinculo) {
+    throw new Error(`provisioning: busca do vínculo do dono falhou: ${erroDoVinculo.message}`);
+  }
+  return vinculo ? null : conta.id;
 }

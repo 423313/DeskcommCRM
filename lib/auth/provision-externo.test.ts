@@ -11,7 +11,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   org: null as Record<string, unknown> | null,
   erroDaOrg: null as { message: string } | null,
+  /** Erro do INSERT da organização — a falha transitória do bloqueador 1. */
+  erroDoInsertDaOrg: null as { code?: string; message: string } | null,
   membro: null as Record<string, unknown> | null,
+  /** Vínculo vivo da conta candidata a órfã (null = órfã de verdade). */
+  vinculoDaConta: null as Record<string, unknown> | null,
+  erroDoVinculo: null as { message: string } | null,
   filtrosDoMembro: [] as unknown[][],
   auditadas: [] as Record<string, unknown>[],
   inseridas: [] as Record<string, unknown>[],
@@ -28,23 +33,36 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     auth: { admin: { createUser: h.createUser, listUsers: h.listUsers } },
     from: (tabela: string) => {
+      // Filtros POR CONSULTA: as duas leituras de `user_organizations` têm
+      // propósitos diferentes (o admin da org no replay; o vínculo da conta
+      // candidata a órfã) e devolvem coisas diferentes. Um estado compartilhado
+      // faria uma responder pela outra.
+      const filtros: unknown[][] = [];
       const chain = {
         select: () => chain,
         eq: (...args: unknown[]) => {
+          filtros.push(args);
           if (tabela === "user_organizations") h.filtrosDoMembro.push(args);
           return chain;
         },
         is: () => chain,
         order: () => chain,
         limit: () => chain,
-        maybeSingle: async () =>
-          tabela === "organizations"
-            ? { data: h.org, error: h.erroDaOrg }
-            : { data: h.membro, error: null },
+        maybeSingle: async () => {
+          if (tabela === "organizations") return { data: h.org, error: h.erroDaOrg };
+          return filtros.some((f) => f[0] === "user_id")
+            ? { data: h.vinculoDaConta, error: h.erroDoVinculo }
+            : { data: h.membro, error: null };
+        },
         insert: (linha: Record<string, unknown>) => {
           h.inseridas.push({ tabela, ...linha });
           return {
-            select: () => ({ single: async () => ({ data: { id: "org-nova" }, error: null }) }),
+            select: () => ({
+              single: async () =>
+                h.erroDoInsertDaOrg
+                  ? { data: null, error: h.erroDoInsertDaOrg }
+                  : { data: { id: "org-nova" }, error: null },
+            }),
             then: (ok: (v: unknown) => unknown) => ok({ error: null }),
           };
         },
@@ -67,15 +85,26 @@ const ENTRADA = {
   ownerName: "Dona",
 };
 
+/** O marcador que o provisionamento grava na conta que ele mesmo cria. */
+const MARCADOR = { integration: "clinicfx", external_id: "clinica-42" };
+const EMAIL_JA_EXISTE = {
+  data: { user: null },
+  error: { code: "email_exists", status: 422, message: "email exists" },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   h.org = null;
   h.erroDaOrg = null;
+  h.erroDoInsertDaOrg = null;
   h.membro = null;
+  h.vinculoDaConta = null;
+  h.erroDoVinculo = null;
   h.filtrosDoMembro = [];
   h.auditadas = [];
   h.inseridas = [];
   h.createUser.mockResolvedValue({ data: { user: { id: "user-novo" } }, error: null });
+  h.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
 });
 
 describe("o reencontro exige o marcador", () => {
@@ -160,16 +189,22 @@ describe("o dono", () => {
     expect(h.listUsers).not.toHaveBeenCalled();
   });
 
-  it("e-mail que já tem conta é RECUSADO, e nada é criado (decisão do dono, 19/09)", async () => {
+  // ⚠️ CONTROLE NEGATIVO do conserto do retry (abaixo). Sem ele, "a repetição
+  // reaproveita a conta órfã" pode ter virado "aceita qualquer e-mail que já
+  // existe" — que é exatamente a recusa do item 8 desfeita.
+  it("e-mail de PESSOA REAL que já tem conta é RECUSADO, e nada é criado (decisão do dono, 19/09)", async () => {
     // Reaproveitar fazia de uma pessoa que já usa a instalação admin de uma
     // empresa nova, sem aceite, com o nome escolhido por um sistema de fora.
-    h.createUser.mockResolvedValue({
-      data: { user: null },
-      error: { code: "email_exists", status: 422, message: "email exists" },
+    h.createUser.mockResolvedValue(EMAIL_JA_EXISTE);
+    // A conta existe no diretório e é de gente: nenhum marcador de
+    // provisionamento em `app_metadata`.
+    h.listUsers.mockResolvedValue({
+      data: { users: [{ id: "pessoa-1", email: "dona@clinica.test", app_metadata: {} }] },
+      error: null,
     });
+
     await expect(provisionExternalTenant(ENTRADA)).rejects.toBeInstanceOf(EmailJaTemContaError);
     expect(h.inseridas).toEqual([]);
-    expect(h.listUsers).not.toHaveBeenCalled();
   });
 
   it("a forma antiga do GoTrue (422 'already registered') também é recusa", async () => {
@@ -188,5 +223,114 @@ describe("o dono", () => {
     });
     await expect(provisionExternalTenant(ENTRADA)).rejects.toThrow(/criar dono falhou/);
     expect(h.listUsers).not.toHaveBeenCalled();
+  });
+
+  it("a conta criada leva o marcador em app_metadata, que é a prova do retry", async () => {
+    await provisionExternalTenant(ENTRADA);
+    expect(h.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ app_metadata: { provisioning: MARCADOR } }),
+    );
+  });
+});
+
+/**
+ * BLOQUEADOR 1: falha transitória entre a conta e a organização.
+ *
+ * A conta do dono nasce ANTES da organização e as duas escritas não são uma
+ * transação. INSERT da organização morrendo com qualquer coisa que não seja
+ * `23505` devolve 500 com a conta já criada — e a repetição do parceiro, que é
+ * o caminho normal depois de um 500, batia em 409 `owner_email_ja_tem_conta`
+ * para sempre, mandando "convide a pessoa pela tela da empresa" sobre uma
+ * empresa que não existe.
+ */
+describe("a repetição depois de uma falha transitória PROVISIONA", () => {
+  it("timeout do pooler no INSERT da organização → retry provisiona a mesma conta", async () => {
+    // --- 1ª chamada: a conta nasce, a organização morre no pooler.
+    h.erroDoInsertDaOrg = { code: "57014", message: "canceling statement due to statement timeout" };
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toThrow(/org insert failed/);
+    const contaCriada = h.createUser.mock.calls[0]![0] as { app_metadata: unknown };
+    expect(contaCriada.app_metadata).toEqual({ provisioning: MARCADOR });
+
+    // --- 2ª chamada (retry do parceiro): o GoTrue recusa o e-mail, porque a
+    // conta da 1ª chamada ficou lá. Ela está no diretório, com o marcador
+    // DESTE provisionamento e sem vínculo nenhum.
+    h.erroDoInsertDaOrg = null;
+    h.inseridas = [];
+    h.createUser.mockResolvedValue(EMAIL_JA_EXISTE);
+    h.listUsers.mockResolvedValue({
+      data: {
+        users: [
+          { id: "outra-pessoa", email: "alguem@outra.test", app_metadata: {} },
+          {
+            id: "user-orfao",
+            email: "dona@clinica.test",
+            app_metadata: { provisioning: MARCADOR },
+          },
+        ],
+      },
+      error: null,
+    });
+    h.vinculoDaConta = null;
+
+    const r = await provisionExternalTenant(ENTRADA);
+
+    expect(r).toEqual({ organizationId: "org-nova", ownerId: "user-orfao", replay: false });
+    expect(h.inseridas.find((l) => l.tabela === "organizations")?.created_by).toBe("user-orfao");
+    expect(h.inseridas.find((l) => l.tabela === "user_organizations")).toMatchObject({
+      user_id: "user-orfao",
+      role: "admin",
+    });
+  });
+
+  it("marcador de OUTRO provisionamento não é órfã desta: recusa", async () => {
+    h.createUser.mockResolvedValue(EMAIL_JA_EXISTE);
+    h.listUsers.mockResolvedValue({
+      data: {
+        users: [
+          {
+            id: "user-de-outra",
+            email: "dona@clinica.test",
+            app_metadata: { provisioning: { integration: "clinicfx", external_id: "outra" } },
+          },
+        ],
+      },
+      error: null,
+    });
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toBeInstanceOf(EmailJaTemContaError);
+    expect(h.inseridas).toEqual([]);
+  });
+
+  it("conta com marcador MAS com vínculo vivo não é órfã: recusa", async () => {
+    h.createUser.mockResolvedValue(EMAIL_JA_EXISTE);
+    h.listUsers.mockResolvedValue({
+      data: { users: [{ id: "user-com-org", email: "dona@clinica.test", app_metadata: { provisioning: MARCADOR } }] },
+      error: null,
+    });
+    h.vinculoDaConta = { organization_id: "org-de-alguem" };
+
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toBeInstanceOf(EmailJaTemContaError);
+    expect(h.inseridas).toEqual([]);
+  });
+
+  it("erro na varredura do diretório NÃO vira recusa terminal de 409", async () => {
+    h.createUser.mockResolvedValue(EMAIL_JA_EXISTE);
+    h.listUsers.mockResolvedValue({ data: { users: [] }, error: { message: "GoTrue 504" } });
+
+    const erro = await provisionExternalTenant(ENTRADA).catch((e: unknown) => e);
+    expect(erro).not.toBeInstanceOf(EmailJaTemContaError);
+    expect(erro).toMatchObject({ message: expect.stringMatching(/busca da conta do dono falhou/) });
+  });
+
+  it("erro na busca do vínculo NÃO vira recusa terminal de 409", async () => {
+    h.createUser.mockResolvedValue(EMAIL_JA_EXISTE);
+    h.listUsers.mockResolvedValue({
+      data: { users: [{ id: "user-orfao", email: "dona@clinica.test", app_metadata: { provisioning: MARCADOR } }] },
+      error: null,
+    });
+    h.erroDoVinculo = { message: "PostgREST fora" };
+
+    const erro = await provisionExternalTenant(ENTRADA).catch((e: unknown) => e);
+    expect(erro).not.toBeInstanceOf(EmailJaTemContaError);
+    expect(erro).toMatchObject({ message: expect.stringMatching(/busca do vínculo do dono falhou/) });
   });
 });
