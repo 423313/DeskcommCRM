@@ -143,6 +143,35 @@ async function ligar(page: Page, origem: string, destino: string, ramo?: string)
 }
 
 /**
+ * Publicar e EXIGIR sucesso — dizendo o motivo quando o publish recusa.
+ *
+ * `expect(getByText("Fluxo publicado.")).toBeVisible()` sozinho gasta o PRAZO
+ * inteiro e reporta "o toast não apareceu", que é o sintoma e não a causa: o
+ * publish pode ter recusado o fluxo e ancorado o motivo num nó. O conserto do
+ * salto de zoom (`12d79edf0`) provou o custo disso no caso do posicionamento —
+ * a falha nascia no arrasto e só aparecia três passos depois, no toast ausente.
+ * `moverNo` fechou aquele caminho; este fecha o resto, que são as recusas de
+ * validação (ramo sem cobertura, regra em branco) e não têm nada a ver com
+ * coordenada.
+ */
+async function publicarEExigirSucesso(page: Page): Promise<void> {
+  await page.getByTestId("publish-button").click();
+  const toast = page.getByText("Fluxo publicado.");
+  const recusa = page.locator('[data-testid^="node-error-"]').first();
+  await expect
+    .poll(
+      async () =>
+        (await toast.count()) > 0 ? "publicado" : (await recusa.count()) > 0 ? "recusado" : "esperando",
+      { timeout: PRAZO, message: "nem o toast de publicado nem um motivo ancorado no nó apareceram" },
+    )
+    .not.toBe("esperando");
+  if ((await recusa.count()) > 0) {
+    throw new Error(`o publish RECUSOU o fluxo: ${(await recusa.textContent())?.trim()}`);
+  }
+  await expect(toast).toBeVisible({ timeout: PRAZO });
+}
+
+/**
  * Texto cortado, MEDIDO: um elemento com `truncate`/`line-clamp` esconde o que
  * passa da caixa, e a diferença entre `scrollWidth` e `clientWidth` (ou as
  * alturas) é a única forma de saber disso sem olhar. Ler o `textContent` não
@@ -351,8 +380,7 @@ test.describe("o cartão do nó diz o que o motor faz", () => {
 
     await page.getByRole("button", { name: "Salvar" }).click();
     await expect(page.getByTestId("dirty-indicator")).toHaveCount(0, { timeout: PRAZO });
-    await page.getByTestId("publish-button").click();
-    await expect(page.getByText("Fluxo publicado.")).toBeVisible({ timeout: PRAZO });
+    await publicarEExigirSucesso(page);
 
     async function matricular(nome: string, stageId: string): Promise<string> {
       const contatoRes = await page.request.post("/api/v1/contacts", { data: { display_name: nome } });

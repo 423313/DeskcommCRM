@@ -8,6 +8,207 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.36.0] — 2026-09-19
+
+### Adicionado
+
+- **A mensagem que a automação manda tem número próprio no painel** O painel de atrito passa a separar o que o AGENTE escreveu do que a AUTOMAÇÃO enviou. Regra de automação, texto fixo do follow-up e lembrete de agenda aparecem num número novo — "Mensagens enviadas por automação" —, e a conversa nomeia essas mensagens como "Automação" em vez de "IA".
+
+  O número "Mensagens enviadas pelo agente" fica MENOR em quem usa automação, e isso não é regressão: aquelas mensagens nunca foram escritas pela IA, e até agora eram contadas como se fossem. Nenhum número antigo saiu do painel.
+
+  Crédito: @webtecnica.
+
+- **A Central avisa quando um follow-up publicado não está disparando** Um fluxo de follow-up com gatilho automático — silêncio, etapa do funil, atendimento aberto ou
+  falta a compromisso — só cria acompanhamento se **algum agente publicado tiver esse fluxo ligado**
+  em "follow-ups que arma". Faltando esse vínculo, nada acontecia e nada avisava: o fluxo aparecia
+  publicado na tela, com o gatilho configurado, e nenhum contato entrava. Sem erro, sem log, sem
+  sinal. Quem publicou achava que tinha ligado o follow-up, e a descoberta vinha semanas depois —
+  pela pergunta "por que ninguém recebeu mensagem?".
+
+  Agora a Central de avisos abre um aviso por fluxo nessa situação, dizendo qual fluxo é, quando ele
+  dispararia e os três passos que consertam. O aviso **se resolve sozinho** assim que o vínculo com o
+  agente existir — ninguém precisa fechá-lo à mão, e ele não fica pedindo algo que já foi feito.
+
+  Fluxos **manuais** e os disparados por **regra em Webhooks** ficam de fora: eles funcionam sem
+  agente nenhum, e avisar sobre eles seria alarme falso.
+
+  A verificação roda de hora em hora. Em quem instala pela VPS ela entra junto com a atualização,
+  sem nenhuma edição de arquivo — o agendador do kit já vem com ela.
+
+- **A ficha do contato mostra campanha, conjunto, anúncio e posicionamento** A ficha do contato respondia "de onde veio?" com uma palavra só — `site` para quem chegou pelo link do site e o nome da plataforma (`meta_ads`, `google_ads`) para quem clicou num anúncio —, mesmo quando a campanha de origem já estava gravada ao lado. Agora, para quem chegou pelo link do site, a linha **Origem** mostra a fonte da campanha (`utm_source`) e, logo abaixo, aparecem **Campanha**, **Conjunto**, **Anúncio** e **Posicionamento** quando o dado existe. Nível sem valor não aparece.
+
+  No clique em anúncio para o WhatsApp a plataforma não informa o posicionamento de cada clique, e a ficha diz isso ao lado em vez de deixar o campo vazio.
+
+  O editor de regras de automação ganhou os mesmos quatro campos, com as mesmas palavras.
+
+  Nada a fazer na atualização. Crédito: @rafaelbatistazz (#1212).
+
+- **Follow-ups de clínica prontos para instalar — consulta, exame, cirurgia e falta** A tela de Follow-ups tinha o motor inteiro e nenhum fluxo: para ter o primeiro era preciso
+  abrir o construtor e desenhar nó por nó — gatilho, espera, ramo, prazo de resposta — e ainda
+  escrever as mensagens. Numa clínica recém-instalada isso quase nunca acontecia, e a tela ficava
+  vazia embaixo da frase que promete reengajar contato sem ninguém lembrar de mandar mensagem.
+
+  Agora existe **Começar de um modelo**, com as quatro vezes em que um paciente some no meio do
+  caminho, cada uma com os textos escritos e o relógio certo:
+
+  - **Consulta** — o paciente perguntou, a conversa parou antes de marcar: três mensagens em dez
+    dias, disparadas por um dia de silêncio.
+  - **Exame** — saiu o pedido e ninguém marcou: três mensagens em duas semanas, disparadas quando o
+    negócio entra na etapa do funil que você escolher.
+  - **Cirurgia** — quem foi avaliado está decidindo, não desistiu: quatro mensagens ao longo de
+    quase três meses, sem pressionar.
+  - **Falta** — a falta foi confirmada na agenda e o horário ficou vago: três mensagens em onze
+    dias, a primeira duas horas depois da falta.
+
+  Nos quatro, **responder qualquer coisa encerra o fluxo** e devolve a conversa a quem atende —
+  agente ou pessoa. O follow-up existe para o silêncio; quem marca é o atendimento, que tem a
+  agenda na mão. E nenhum texto nomeia doença, exame, procedimento ou especialidade: mensagem de
+  saúde é lida na tela de bloqueio, às vezes por outra pessoa.
+
+  Instalar **não manda mensagem para ninguém**: o fluxo nasce como rascunho, com o gatilho já
+  armado, e abre no construtor para você ler os textos na voz da sua clínica. Para ele passar a
+  disparar sozinho faltam dois passos, que a própria tela diz: publicar, e ligar o fluxo no seu
+  agente em Agentes › Follow-up.
+
+- **O link do site passa a levar conjunto, anúncio e posicionamento do anúncio** O código de origem que vai no link do WhatsApp agora aceita `utm_adset`, `utm_ad` e `utm_placement`, além da campanha: os quatro níveis que quem opera tráfego lê chegam à origem do contato. Na Meta, basta apontar as macros dinâmicas de conjunto, anúncio e posicionamento para essas chaves na URL do anúncio. Você não precisa fazer nada; quem não usar as chaves novas não vê diferença. Contribuição de @rafaelbatistazz (#1211). Disponível desde a 1.35.1, que saiu sem esta nota.
+
+- **O canal oficial passa a registrar o próprio webhook na Meta** Conectar o canal oficial deixava metade do caminho para o operador: o CRM gravava a credencial validada e o canal ficava ENVIANDO e sem RECEBER até alguém abrir o painel da Meta, colar a URL de callback e marcar os campos — por número, e sem que a tela do CRM dissesse isso em lugar algum. Quem não sabia não via erro nenhum: as respostas do cliente simplesmente não chegavam e a janela de 24 horas nunca abria. Agora, ao conectar, a instalação inscreve o app na WABA e aponta o webhook daquele número para o endereço dela mesma (a inscrição primeiro: sem ela a Meta não entrega nada), guardando o desfecho na sessão — a tela mostra "webhook pendente" com o motivo que a Meta deu e um botão de tentar de novo, sem desconectar e reconectar o canal. Falhar nesse passo NÃO desfaz a conexão: o canal continua enviando, e o que falta é a entrega. O par número/WABA passa a ser conferido junto da credencial (número de uma conta com id de outra gravava uma sessão que envia e cujo webhook nunca chega), e o endereço público da instalação, que era calculado em três rotas com o mesmo código, passa a ter um dono só.
+
+  Crédito: @webtecnica.
+
+- **Conectar WhatsApp por código de pareamento** Conexões e primeiro acesso permitem escolher QR Code ou código de pareamento. O administrador informa o telefone completo e digita no celular o código gerado. O QR continua disponível como alternativa. A conexão só é concluída quando o serviço confirma o aparelho conectado; gerar o código não desconecta sessões ativas.
+
+  Contribuição de @saraivabr (#963).
+
+### Alterado
+
+- **O PDF que responde ao titular passa a ser medido no byte** A resposta ao direito do titular é um arquivo PDF, e nenhum teste olhava o arquivo: as provas existentes conferem o texto extraído e o nome do controlador, que continuam certos mesmo se o motor de renderização mudar o formato do que sai. Agora a suíte mede o próprio byte entregue: o arquivo tem de começar com o cabeçalho `%PDF-` e ter ao menos uma página. Nada muda para quem opera — nenhuma tela, nenhuma rota, nenhum dado. Crédito: @webtecnica.
+
+### Corrigido
+
+- **A senha interna das rotinas que ficou no log do sistema é trocada sozinha** Versões anteriores do instalador escreviam a senha interna das rotinas (`INTERNAL_CRON_SECRET`) dentro da linha do agendamento, e o sistema da VPS gravava essa linha no log a cada minuto (`/var/log/syslog`, arquivos rotacionados e journal). O conserto que parou de gravar (#1054, achado por @rafaeskytrabalho) não desfazia o que já estava lá: a senha velha continuava abrindo as rotas internas para quem lesse esse log.
+
+  Agora a atualização troca essa senha sozinha, uma vez só: gera uma nova, grava no `.env`, reinicia o app e reescreve o agendamento. A senha que ficou no log deixa de valer. Quem atualiza pelo terminal vê a troca no fim da atualização; quem atualiza pelo botão da tela tem a troca feita pelo agente de atualização em até 5 minutos depois (o app reinicia por alguns segundos nesse momento). Nenhum arquivo precisa ser editado. Instalação nova já nasce com senha que nunca foi para o log e não passa pela troca.
+
+  Recomendado, não obrigatório: apagar os logs antigos, onde a senha velha aparece — o comando está no aviso do fim da atualização.
+
+- **Envio de integração por token deixa de aparecer como se fosse da IA** Uma integração que manda mensagem pelo CRM com um token de servidor (o caminho do servidor MCP) tinha o envio registrado como se tivesse saído da IA: o balão da conversa mostrava "IA" e as telas que contam o que a IA falou somavam esse movimento. Na agenda acontecia o mesmo com o compromisso marcado por token, que nascia como "Marcado pelo atendente de IA". Nos dois casos, o dado afirmava uma autoria que não existia.
+
+  A partir desta versão, quem envia por token é registrado como o SISTEMA, separado da IA: o balão passa a dizer "Sistema", o compromisso passa a dizer "Marcado pelo sistema", e as contagens de IA deixam de incluir esse envio. Nada muda para quem responde pelo WhatsApp do celular nem para quem digita no CRM.
+
+  Não há nada a fazer na atualização. As linhas já gravadas ficam exatamente como estão — não há reescrita de histórico — e só os envios novos recebem o rótulo certo. Envios de automação continuam registrados como antes: movê-los junto mexe na mesma leitura e é decisão de produto à parte.
+
+  Contribuição de @webtecnica.
+
+- **A busca do agente que não acha nada para de contar como sucesso** A busca de produtos do agente que não encontrava nada **terminava bem** e era auditada como sucesso: o painel de capacidades (`fn_agent_tool_usage`) mostrava "nenhuma falha" enquanto o agente respondia "não temos" para todo cliente — o defeito era invisível justamente para quem precisava vê-lo (issue #484). O número não mentia: ele não existia.
+
+  Agora a tool **declara** o vazio que não é sucesso (`motivoDoVazio`) e a auditoria grava a chamada como falha, com o motivo — `nao_encontrado`, `sem_estoque` ou `varredura_parcial`, que são vazios diferentes e passam a ser contáveis um por um. Quem acha continua sucesso, e vazio que é **resposta** (um contato sem pedidos, uma agenda sem compromissos na janela) continua sucesso: só o vazio declarado pela própria tool muda de lado, para o conserto não virar alarme geral.
+
+- **O construtor de fluxos deixa de ampliar a tela para 200% no primeiro nó** Num fluxo novo, ainda vazio, o primeiro nó adicionado fazia a tela saltar para o zoom máximo (200%): o enquadramento automático, que existe para mostrar o fluxo inteiro ao abrir, ficava guardado para quando aparecesse o primeiro nó — e enquadrar um nó só é ampliá-lo. Os nós seguintes nasciam fora da vista. Agora o enquadramento vale só para quem abre um fluxo que já tem nós; o fluxo vazio fica no zoom normal. Nada muda para quem opera a VPS.
+
+- **O Despausar do menu da lista volta a funcionar para os agentes-molde** No menu de ações de cada linha da lista de agentes, o item Despausar nascia
+  bloqueado para os agentes do tipo mcp_agent — que são justamente os
+  agentes-molde criados com a instalação (Atendimento, Agendamento, Financeiro).
+  O Pausar logo abaixo não tinha essa trava, então quem pausava um desses agentes
+  ficava sem nenhuma forma de despausar pela lista: o item aparecia apagado, sem
+  aviso e sem explicação, e a única saída era abrir a página do agente.
+
+  Agora as duas ações se comportam igual. Continua bloqueado só o que faz sentido
+  bloquear: agente arquivado (nem pausa, nem despausa) e agente sem versão
+  publicada — este último clicável de propósito, para que a tentativa diga em
+  português o motivo, que é concluir a configuração e publicar uma versão.
+  Nenhuma permissão, nenhum dado e nenhum fluxo de conversa mudam com isso.
+
+- **O filtro por marcador do funil enxerga também o marcador do contato** O produto tem mais de uma caixa de marcador, e duas delas importam para o
+  funil. Uma é o marcador do negócio, o campo de texto dentro de "Editar lead". A
+  outra é o marcador da pessoa, o que você escreve em "Tags do contato" no Inbox e
+  na ficha do contato — o mesmo que a campanha lê, e o que a maioria usa no dia a
+  dia.
+
+  O filtro do funil só enxergava o primeiro. Quem marcava o cliente e depois
+  tentava filtrar o quadro por esse marcador não achava o card, e o seletor nem
+  oferecia a opção: ele montava a lista da mesma fonte, então só aparecia o que
+  alguém tivesse digitado dentro de algum card. Quadros inteiros ficavam com uma
+  ou duas etiquetas no seletor, nenhuma delas a que se usava.
+
+  Agora o quadro traz os marcadores do contato junto dos cards, o seletor lista as
+  duas caixas juntas, sem repetir, e filtrar por qualquer uma acha o negócio.
+
+  Nada deixa de funcionar: o marcador escrito dentro do card continua filtrável
+  como antes. As "Tags da conversa", a terceira caixa do Inbox, seguem fora do
+  filtro do funil. Negócio sem contato — criado à mão ou por webhook — continua
+  aparecendo normalmente. Nenhuma variável nova, nenhum passo na atualização.
+
+- **O agente passa a saber os DOIS passos da agenda — e não promete mais checar sem checar** Um agente com as capacidades de agenda ligadas ("Ver o que a empresa atende", "Ver horários livres na agenda", "Marcar consulta ou sessão") respondia ao cliente com "vou verificar/organizar seu atendimento" e nunca consultava a agenda: o cliente ficava sem horário e sem resposta. Eram dois buracos, e os dois estão fechados.
+
+  **1. O primeiro passo não era ensinado.** Falar de horário real exige duas coisas: o TIPO de atendimento (o `slug`) e os horários daquele tipo — e o segundo passo precisa do `slug` que o primeiro devolve. O bloco de instruções que o agente recebe nomeava `crm_find_free_slots` em toda frase e `crm_list_event_types` em nenhuma: a cadeia existia só na descrição da própria ferramenta, que o modelo lê por último e sem peso de instrução. Agora o agente que tem as duas ferramentas recebe também a instrução dos dois passos, dizendo que a lista não é a resposta e que o `slug` sai dela — e que inventar um `slug` não vale.
+
+  **2. A trava não reconhecia a promessa.** Havia uma trava determinística para isto — a mensagem que promete uma checagem só sai depois que a ferramenta foi de fato chamada —, mas ela reconhecia a promessa apenas quando o texto dizia "horário", "agenda", "disponibilidade", "agendamento", "marcação", "encaixe" ou "vaga". Duas palavras ficavam de fora, e é justamente por elas que o caso escapava:
+
+  - **o nome do serviço**: "atendimento", "consulta" e "sessão" são o que a própria tela chama de serviço na hora de agendar;
+  - **o verbo "organizar"**: prometer "organizar o atendimento" é a mesma promessa vazia de "verificar o atendimento", dita de outro jeito.
+
+  Com a trava enxergando essas frases, o agente que promete olhar a agenda é obrigado a consultá-la no mesmo turno — e responde com os horários reais (ou explica o que impediu), em vez de deixar o cliente esperando. Conversa comum que só menciona o atendimento ("o atendimento de vocês é ótimo") continua passando normalmente.
+
+- **A guarda da release confere a identidade do PR de origem, e não o nome do autor do commit** O passo que decide se um push para a `main` corta tag de release conferia o NOME de autor do commit — campo de texto que quem commita escolhe, e que era um literal dentro do próprio `release.yml`. Agora ele pergunta à API do GitHub quem abriu o PR de origem daquele merge, e só corta a tag quando o PR foi aberto pelo bot do App da release ou quando o head do PR é um branch `release/*` do repositório de cima, que é o caminho por onde um corte legítimo passa. Um commit que se apresente com o nome do bot num PR de outra pessoa passa a ser recusado, e o passo da guarda fica vermelho em vez de criar a tag em silêncio. A contagem de fragmentos apagados também passou a pedir `--find-renames`, para que renomear um fragmento não seja lido como fragmento consumido. Nada muda na operação de quem já roda o DeskcommCRM numa VPS.
+
+- **Repetir a mesma criação pela API não cria o registro duas vezes** Quem integra com a API e manda o cabeçalho `Idempotency-Key` ao criar um modelo de mensagem (`POST /api/v1/message-templates`) tinha duas falhas. Repetir o mesmo pedido devolvia 409 `idempotency_conflict` em vez da resposta gravada, porque o resumo do pedido era gravado num formato que a comparação nunca reconhecia. E dois pedidos iguais chegando ao MESMO tempo criavam o modelo duas vezes. Agora a chave é reservada antes da criação: a repetição devolve a resposta original, e o pedido simultâneo recebe 409 `idempotency_in_progress`, que pode ser repetido em instantes. Se a criação falhar, a chave é liberada na hora e a nova tentativa executa normalmente.
+
+  O `update.sh` aplica a mudança de banco sozinho (migration 0321), inclusive em quem já tinha a tabela. O operador não precisa fazer nada, e a tela não muda. Diagnóstico e desenho de @webtecnica (PR #1189, issue #778).
+
+- **O filtro por marcador do Inbox procura nas duas caixas onde você marca** O Inbox tem duas caixas de marcadores no mesmo painel: a do contato — a mesma
+  da ficha e a mesma que a campanha lê — e a da conversa, onde o atendimento
+  automático também encosta os próprios marcadores. O filtro da lista de
+  conversas procurava só na caixa da conversa.
+
+  O efeito era marcar um cliente, filtrar por esse marcador e receber "nenhuma
+  conversa". Sem erro, sem aviso — a leitura natural é que o CRM perdeu o
+  marcador. E a lista de opções do filtro sofria do mesmo desencontro: oferecia
+  só os marcadores da conversa, então o que você acabara de escrever no contato
+  nem aparecia para ser escolhido.
+
+  Agora o filtro encontra a conversa quando o marcador está em qualquer uma das
+  duas caixas, e a lista de opções junta os marcadores das duas, sem repetir.
+  Quem já filtrava por marcador de conversa continua achando o mesmo. Sem
+  marcador filtrado, a lista é a mesma de antes.
+
+  Nada muda para quem opera: nenhuma variável nova, nenhum passo na atualização.
+  A atualização aplica sozinha a função nova do banco que o filtro usa.
+
+- **A Central avisa quando o processamento rápido de eventos cai para o cron de segurança** Quando o laço rápido do `event_log` não consegue carregar no worker, a instalação deixa de esconder a degradação só no log do contêiner. A Central passa a mostrar um aviso por organização explicando que o cron de segurança continua processando a fila, mas com atraso maior; o aviso é resolvido automaticamente quando o laço volta a carregar.
+
+- **O marcador novo posto numa conversa aparece na hora no filtro do Inbox** Ao criar um marcador novo em "Tags da conversa", ele só aparecia no filtro por marcador do Inbox e nas sugestões depois de até cinco minutos, ou recarregando a página: a lista de marcadores ficava guardada e ninguém mandava relê-la. Agora gravar o marcador manda reler a lista, como o lado do contato já fazia. Nada muda para quem opera a instalação.
+
+- **A nota de voz gravada no Chrome chega no canal oficial** Quem gravava uma nota de voz no CRM pelo Chrome — no computador ou no celular — via o envio dar certo na tela, e o cliente recebia uma mensagem de áudio que não toca: o WhatsApp dele dizia que o áudio não estava mais disponível. No Firefox a mesma gravação sempre funcionou, e é essa diferença que explica o defeito ter durado: o Firefox grava direto no formato de destino e não passava pelo trecho com o erro.
+
+  O CRM converte a gravação do Chrome para o formato que o WhatsApp aceita, e a conversão estava certa — o arquivo saía como Ogg com Opus. O que estava errado era a etiqueta gravada junto: `audio/ogg`, sem dizer o codec. O canal oficial não aceita `audio/ogg` genérico para nota de voz, e o áudio chegava ao cliente sem tocar. Agora a etiqueta sai completa, com o codec, e é a mesma que o navegador usa quando ele próprio sabe gravar nesse formato.
+
+  Duas coisas que valem saber: notas de voz enviadas antes desta correção continuam quebradas para quem as recebeu — é preciso gravar de novo. E, quando a plataforma recusa a entrega e avisa o CRM, a mensagem aparece como falha, mas ainda sem o motivo; se ela aceita um áudio que depois não toca, o CRM não tem como saber, e a mensagem fica como enviada.
+
+  Contribuição de @rafaelbatistazz (#1187).
+
+- **O radar de risco parava de avaliar a empresa inteira quando um negócio tinha compromisso na agenda** O radar que avalia quais negócios estão esfriando **parava de avaliar a empresa inteira** quando encontrava um único negócio em estado inesperado. Todos os outros ficavam sem avaliação, e ninguém era avisado.
+
+  Agora um negócio problemático é registrado e a rodada **segue para os demais**. No fim, o registro diz quantos falharam — então o problema aparece em vez de se esconder atrás de uma lista vazia.
+
+  A causa era uma data: para negócio com compromisso adiado ou com presença vencida na agenda, o radar calculava "neste estado desde" com uma data **no futuro**, e o banco recusava a gravação. Agora essa data nunca passa do momento da avaliação.
+
+- **A IA escolhida no onboarding passa a valer para a empresa inteira** Quem escolhia um provedor no passo "Configurar IA" do onboarding e colava a chave dele ficava com a escolha valendo só para o atendente que nascia ali, e o atendente nascia como rascunho pedindo uma chave de outro provedor. A prova de crédito da própria tela piorava a impressão: ela procurava a chave no provedor da empresa, e dizia que não conseguia testar o crédito sobre uma chave que funcionava. Agora a escolha daquele passo passa a valer para a empresa inteira, com o provedor e o modelo do catálogo dele gravados juntos — um não serve sem o outro. Quando a lista de modelos do provedor escolhido ainda não chegou nesta instalação, a IA da empresa continua a anterior e a tela diz por quê; a chave fica guardada do mesmo jeito, e não é preciso colá-la de novo. Trocar a IA de um atendente continua possível, depois, no editor dele.
+
+- **PDF sem texto deixa de virar "falha de infraestrutura" quando a frase do erro mudar** A leitura de PDF distingue dois casos: o arquivo que abriu inteiro e não tem letra selecionável (é conteúdo, não defeito) e a falha de verdade ao ler. Até agora essa distinção era feita comparando a FRASE do erro, em inglês. Passa a ser feita por um motivo próprio, que não muda quando alguém traduzir ou reescrever a mensagem — e alguém vai traduzir, porque essa frase chega a quem usa.
+
+  Sem isso, no dia em que a frase mudasse, todo PDF escaneado passaria a ser registrado como falha de infraestrutura, enchendo o log de alarme falso e escondendo a falha real no meio.
+
+  Nada a fazer na instalação.
+
+- **Os testes do kit param de trocar o autor dos commits de quem os roda** Cinco testes de shell (`pnpm test:shell`) montam repositórios git descartáveis e gravavam neles uma identidade de mentira com `git -C <pasta> config user.*`. Só que o git grava onde ele *resolve* o repositório, e isso não é necessariamente a pasta pedida. Um `GIT_DIR` herdado, por exemplo quando a suíte roda de dentro de um hook, passa por cima do `-C`, e uma pasta que não é repositório sobe até o repositório de cima. Em 10/09/2026 isso deixou `Pessoa <alguem@fork.dev>` no `.git/config` de um checkout de desenvolvimento, e essa identidade assinou 829 dos 987 commits (sem merge) que entraram na `main` até 18/09.
+
+  Agora cada um desses testes zera o ambiente do git herdado e dá a identidade de commit por variável de ambiente. Onde o próprio config é o dado sob teste, a escrita vai direto no arquivo de config do clone, sem resolver repositório. Uma guarda estática (`tests/unit/testes-de-shell-nao-vazam-identidade.test.ts`) reprova a volta de qualquer uma das duas formas. Nada muda para quem opera uma instalação.
+
+- **A instalação que escolheu OpenAI deixa de ouvir que falta chave de IA** Se a instalação escolheu **OpenAI** como provedor e guardou a chave em `OPENAI_API_KEY`, o boot anunciava `[env] Nenhuma chave de IA configurada` — uma lista que não contava a chave que o produto usa — e a escada de chave usada pelos processos de fundo não sabia de qual provedor era a chave da instalação quando o modelo vinha sem o prefixo do provedor (o id do catálogo, como `gpt-5.6-terra`). Agora o aviso conta a chave da OpenAI e o degrau resolve o modelo no provedor que a organização escolheu.
+
+  Nada muda para quem opera: nenhuma variável nova, nenhum ajuste, nenhum passo na atualização. Quem cadastra a chave pela tela (IA › Credenciais) já era atendido e segue igual. O agente publicado já respondia por essa chave; este conserto não muda o atendimento dele. Crédito: @webtecnica.
+
 ## [1.35.1] — 2026-09-18
 
 ### Alterado
@@ -5811,7 +6012,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.35.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.36.0...HEAD
+[1.36.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.35.1...v1.36.0
 [1.35.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.35.0...v1.35.1
 [1.35.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.34.0...v1.35.0
 [1.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.33.0...v1.34.0
