@@ -6898,7 +6898,7 @@ create table if not exists reentry_knob_pointers (
 -- 8 e atropelaria as policies por papel das 66. Já uma tabela recém-criada — o
 -- que a provisionadora de um módulo produz — nasce com RLS desligada, e é
 -- exatamente ela que esta régua pega. O racional inteiro está no cabeçalho da
--- migration 20260919140000_0295_*.sql.
+-- migration 20260919140000_0325_*.sql.
 --
 -- Idempotente: `drop policy if exists` antes do `create policy`; reaplicar
 -- converge. A definição fica AQUI, antes da varredura de anon (que é, de

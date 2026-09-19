@@ -229,37 +229,37 @@ describe("varredura: provisionadora de módulo respeita a forma da ADR-0002 (D4)
 
 describe("as rotinas de proteção da D5 existem e protegem (migration 0325)", () => {
   afterEach(() => {
-    sql(`drop table if exists public.sonda_protecao_0295 cascade;`);
+    sql(`drop table if exists public.sonda_protecao_0325 cascade;`);
   });
 
   it("uma tabela de organização criada FORA do baseline nasce desprotegida", () => {
     // O fato que justifica a D5 inteira, medido aqui e não citado de memória.
-    sql(`create table public.sonda_protecao_0295 (
+    sql(`create table public.sonda_protecao_0325 (
            id uuid primary key default gen_random_uuid(),
            organization_id uuid not null references public.organizations(id) on delete cascade);`);
     const estado = sql(`
       select c.relrowsecurity::text || '|' || has_table_privilege('anon', c.oid, 'select')::text
              || '|' || (select count(*) from pg_policy p where p.polrelid = c.oid)::text
         from pg_class c join pg_namespace n on n.oid = c.relnamespace
-       where n.nspname = 'public' and c.relname = 'sonda_protecao_0295';`);
+       where n.nspname = 'public' and c.relname = 'sonda_protecao_0325';`);
     expect(estado, "RLS desligada, anon lendo, zero policies — é o estado que a D5 descreve").toBe(
       "false|true|0",
     );
   });
 
   it("fn_proteger_modulo_provisionado() a protege, e é idempotente", () => {
-    sql(`create table public.sonda_protecao_0295 (
+    sql(`create table public.sonda_protecao_0325 (
            id uuid primary key default gen_random_uuid(),
            organization_id uuid not null references public.organizations(id) on delete cascade);`);
     const medir = () =>
       sql(`
         select c.relrowsecurity::text || '|' || has_table_privilege('anon', c.oid, 'select')::text
                || '|' || exists(select 1 from pg_policy p where p.polrelid = c.oid
-                                 and p.polname = 'tenant_isolation_sonda_protecao_0295_all')::text
+                                 and p.polname = 'tenant_isolation_sonda_protecao_0325_all')::text
                || '|' || (select count(*) from pg_policy p where p.polrelid = c.oid
                            and p.polname like 'support\\_write\\_%')::text
           from pg_class c join pg_namespace n on n.oid = c.relnamespace
-         where n.nspname = 'public' and c.relname = 'sonda_protecao_0295';`);
+         where n.nspname = 'public' and c.relname = 'sonda_protecao_0325';`);
 
     sql(`select public.fn_proteger_modulo_provisionado();`);
     expect(medir(), "RLS ligada, anon fora, isolamento e as 3 travas do suporte").toBe(
@@ -277,15 +277,15 @@ describe("as rotinas de proteção da D5 existem e protegem (migration 0325)", (
     // — porque quer policy por papel, ou server-only — fica fora do alcance
     // dela. É o que impede a rotina de reabrir as 8 tabelas server-only e de
     // atropelar as 66 com policy por papel que o baseline já tem.
-    sql(`create table public.sonda_protecao_0295 (
+    sql(`create table public.sonda_protecao_0325 (
            id uuid primary key default gen_random_uuid(),
            organization_id uuid not null references public.organizations(id) on delete cascade);
-         alter table public.sonda_protecao_0295 enable row level security;`);
+         alter table public.sonda_protecao_0325 enable row level security;`);
     sql(`select public.fn_proteger_tabelas_de_organizacao();`);
     const policies = sql(`select count(*)::text from pg_policy p
                            join pg_class c on c.oid = p.polrelid
-                          where c.relname = 'sonda_protecao_0295'
-                            and p.polname = 'tenant_isolation_sonda_protecao_0295_all';`);
+                          where c.relname = 'sonda_protecao_0325'
+                            and p.polname = 'tenant_isolation_sonda_protecao_0325_all';`);
     expect(policies, "a rotina criou a policy ampla numa tabela que já tinha RLS ligada").toBe("0");
   });
 
