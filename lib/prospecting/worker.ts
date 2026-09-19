@@ -1,3 +1,4 @@
+import { audit } from "@/lib/audit";
 import type pg from "pg";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
@@ -221,6 +222,42 @@ export async function sendNextCandidate(
         sent ? null : "Envio não confirmado. Consulte a conversa antes de reenviar.",
       ],
     );
+
+    /*
+     * A TRILHA DA ABORDAGEM FRIA — quem foi abordado, por qual campanha, quando.
+     *
+     * Esta é a única linha do produto que fala PRIMEIRO com alguém que nunca
+     * falou com a empresa, e o titular pode perguntar "por que vocês me
+     * escreveram?". Sem esta entrada, a resposta não existe em lugar nenhum:
+     * `prospecting_candidates.status` guarda o ESTADO atual (e é reescrito no
+     * próximo passo), não o fato de que a mensagem saiu naquele instante.
+     *
+     * Auditado quando houve EFEITO — a tentativa, bem ou malsucedida —, nunca
+     * rodada de cron vazia: o tick sem candidato não passa por aqui, que é a
+     * regra do CLAUDE.md ("rodada de cron que não fez nada NÃO é mutação").
+     * `sent` entra no metadata em vez de virar duas ações: a pergunta que a
+     * trilha responde é "houve abordagem para este contato", e a recusa do
+     * transporte é parte dessa história, não outra.
+     *
+     * Sem PII: nem telefone, nem o texto gerado. Os ponteiros bastam para
+     * chegar à conversa, e o texto vive nela.
+     */
+    void audit({
+      action: "prospecting.approach_sent",
+      organizationId: c.organization_id,
+      bypassedRls: true,
+      resourceType: "prospecting_candidate",
+      resourceId: p.id,
+      metadata: {
+        campaign_id: c.id,
+        contact_id: p.contact_id,
+        conversation_id: p.conversation_id,
+        agent_id: cfg.agent_id,
+        channel_session_id: cfg.channel_session_id,
+        sent,
+      },
+      requestId: `prospecting:${p.id}`,
+    });
   } catch (error) {
     await db.query(
       "update prospecting_candidates set status='failed',error=$3,updated_at=now() where organization_id=$1 and id=$2",
