@@ -207,6 +207,7 @@ export const AUDIT_ACTIONS = [
   "ai_agent.run_completed",
   "ai_agent.run_failed",
   "channel.connected",
+  "channel.pairing_code_requested",
   "channel.ai_access_updated",
   "channel.reconnected",
   // Duas ações distintas de propósito: `deleted` apagou a linha (canal virgem),
@@ -257,6 +258,11 @@ export const AUDIT_ACTIONS = [
   "demanda.encerrada",
   "routing.worker_run",
   "attendant.heartbeat_swept",
+  // A PRIMEIRA batida de presença de um atendente: é ela que insere a linha e
+  // acorda o roteamento (`trg_routing_availability_changed`), efeito que outra
+  // pessoa sente. As batidas seguintes não auditam, pela mesma régua do cron
+  // que não faz nada (CLAUDE.md, Audit log).
+  "attendant.presence_started",
   "webhook.source_created",
   "webhook.source_updated",
   "webhook.source_deleted",
@@ -600,6 +606,13 @@ export const AUDIT_ACTIONS = [
   // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
   // responde — a coluna `updated_at` se move por qualquer motivo.
   "ai.credential_updated",
+  // A rodada do cron `followup-sem-agente` que MEXEU em alguma coisa: abriu
+  // aviso de fluxo publicado que nenhum agente arma, fechou aviso cujo vínculo
+  // apareceu, ou os dois. Rodada sem efeito não audita (CLAUDE.md §Audit log),
+  // então esta linha existe quando `abertos + fechados > 0` — e `metadata` leva
+  // as duas contagens mais `examinados`, que é o que diferencia "ninguém tinha
+  // fluxo desarmado" de "a varredura não rodou".
+  "ai.followup_sem_agente_reconciliado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
