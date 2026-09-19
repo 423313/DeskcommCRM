@@ -397,6 +397,38 @@ jobs:
     # agora isso está escrito como CONCLUSÃO desta medição, e não como proibição
     # geral que o mecanismo do repo desmente.
 
+    # ── 2026-09-18, noite: a apertada passou a ser a PARTE 2 ────────────────
+    #
+    # Medido em jobs VERDES (misturar vermelha e cancelada nesta conta dá número
+    # sem significado), relógio do JOB, que é onde o teto de 30 min morde:
+    #
+    #     parte 1 → mediana 1367s (n=21, máx 1388)  ← folga de 412s
+    #     parte 2 → mediana 1522s (n=17, máx 1594)  ← folga de 206s, a menor
+    #     parte 3 → mediana 1443s (n=16, máx 1572)  ← folga de 228s
+    #
+    # Só de Playwright, em três amostras de cada: parte 2 = 1060/1173/1180s
+    # contra parte 1 = 794/803/973s. A parte 3 era a que aparecia nos relatos
+    # porque era onde o caso instável caía — "onde o problema aparece" não é
+    # "onde a folga acabou".
+    #
+    # UM arquivo muda de lista, e é o menor movimento que equilibra:
+    #
+    #   `agente-novo-e-uso` (102–120s)  PARTE_2 → PARTE_1, onde já moram
+    #       `agente-papeis-operador` e as outras telas de agente.
+    #
+    # Previsão (é previsão; a rodada deste PR é que mede): ~1060s × ~1003s de
+    # Playwright, com a diferença caindo de ~300s para ~60s. Mover TAMBÉM
+    # `capacidades-do-agente` (99–102s) inverteria o desequilíbrio — 958 × 1105.
+    #
+    # ⚠️ `navegacao` (281–305s, 25% da parte 2) continua onde está: o bloco
+    # acima documenta que ela REPROVA na parte 1 por estado do banco daquela
+    # parte (run 35345305473). A alavanca óbvia pelo relógio é justamente a
+    # proibida pela medição.
+    #
+    # NÃO MEDIDO: se `agente-novo-e-uso` passa no estado de banco da parte 1 —
+    # é exatamente o que derrubou a tentativa com `navegacao`, e quem responde é
+    # a rodada deste PR, não esta previsão.
+
     # ── A próxima alavanca, quando esta acabar ──────────────────────────────
     #
     # `prova-painel-provedores` é 199,4 s — 42% de toda a parte 1, num arquivo
@@ -467,6 +499,7 @@ jobs:
         confirmar-dado-do-contato.spec.ts
         credenciais-de-ia.spec.ts
         risk-radar.spec.ts invite-lifecycle.spec.ts system-update.spec.ts
+        agente-novo-e-uso.spec.ts
         agente-papeis-operador.spec.ts
         followup-linguagem.spec.ts followup-ramos.spec.ts
         wizard-do-funcionario.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
@@ -565,7 +598,6 @@ jobs:
         agenda-grade-interativa.spec.ts
         agenda-papel-de-leitura.spec.ts
         agenda-busca-cliente-pelo-nome-do-perfil.spec.ts
-        agente-novo-e-uso.spec.ts
         agente-organiza-operacao.spec.ts
         central-de-avisos-capacidades.spec.ts
         escalacao-ciclo.spec.ts
