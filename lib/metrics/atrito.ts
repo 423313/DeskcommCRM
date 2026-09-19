@@ -53,6 +53,7 @@ export interface AtritoRaw {
      * painel para a queda do "por IA" não ser lida como o agente encolhendo.
      */
     envios_por_automacao: number;
+    envios_por_integracao: number;
     envios_humano_no_sistema: number;
     envios_humano_fora: number;
     demandas_sem_proximo_passo: number;
@@ -359,6 +360,19 @@ export function montarPares(
         // O número da #652. Ele existe porque o contrário dele mente: quando o
         // carimbo da automação saiu de `'ai'`, o "por IA" CAIU para quem usa
         // regra — sem este número, a queda apareceria como o agente encolhendo.
+        // O irmão do número acima, pela decisão da #866: o envio por TOKEN DE
+        // SERVIDOR também não é a IA — mas chamá-lo de "automação" seria mentir
+        // no rótulo, porque quem manda é um sistema de fora, não uma regra desta
+        // instalação. Número próprio, e os dois somados aos que já existiam.
+        {
+          chave: "envios_por_integracao",
+          rotulo: t("Mensagens enviadas por integração"),
+          valor: empresa.envios_por_integracao,
+          unidade: "contagem",
+          nota: t(
+            "Envios feitos por um sistema de fora com token de servidor. Como a automação, não entram no número do agente — e é por isso que ele cai onde há integração.",
+          ),
+        },
         {
           chave: "envios_por_automacao",
           rotulo: t("Mensagens enviadas por automação"),
