@@ -10,23 +10,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   org: null as Record<string, unknown> | null,
+  erroDaOrg: null as { message: string } | null,
+  membro: null as Record<string, unknown> | null,
+  filtrosDoMembro: [] as unknown[][],
+  auditadas: [] as Record<string, unknown>[],
   inseridas: [] as Record<string, unknown>[],
   createUser: vi.fn(),
   listUsers: vi.fn(),
 }));
 
-vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
+vi.mock("@/lib/audit", () => ({
+  audit: (linha: Record<string, unknown>) => {
+    h.auditadas.push(linha);
+  },
+}));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     auth: { admin: { createUser: h.createUser, listUsers: h.listUsers } },
     from: (tabela: string) => {
       const chain = {
         select: () => chain,
-        eq: () => chain,
+        eq: (...args: unknown[]) => {
+          if (tabela === "user_organizations") h.filtrosDoMembro.push(args);
+          return chain;
+        },
         is: () => chain,
         order: () => chain,
         limit: () => chain,
-        maybeSingle: async () => ({ data: tabela === "organizations" ? h.org : null }),
+        maybeSingle: async () =>
+          tabela === "organizations"
+            ? { data: h.org, error: h.erroDaOrg }
+            : { data: h.membro, error: null },
         insert: (linha: Record<string, unknown>) => {
           h.inseridas.push({ tabela, ...linha });
           return {
@@ -55,6 +69,10 @@ const ENTRADA = {
 beforeEach(() => {
   vi.clearAllMocks();
   h.org = null;
+  h.erroDaOrg = null;
+  h.membro = null;
+  h.filtrosDoMembro = [];
+  h.auditadas = [];
   h.inseridas = [];
   h.createUser.mockResolvedValue({ data: { user: { id: "user-novo" } }, error: null });
 });
@@ -102,6 +120,34 @@ describe("o reencontro exige o marcador", () => {
     expect(slugDoProvisionamento("clinicfx", `${longo}-1`)).not.toBe(
       slugDoProvisionamento("clinicfx", `${longo}-2`),
     );
+  });
+});
+
+describe("o que a revisão de segurança pediu", () => {
+  it("falha na busca da organização não vira 'não existe'", async () => {
+    h.erroDaOrg = { message: "PostgREST fora" };
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toThrow(/busca da organização falhou/);
+    expect(h.createUser).not.toHaveBeenCalled();
+  });
+
+  it("o replay sem created_by procura um ADMIN, não o primeiro vínculo qualquer", async () => {
+    h.org = {
+      id: "org-1",
+      created_by: null,
+      settings: { provisioning: { integration: "clinicfx", external_id: "clinica-42" } },
+    };
+    h.membro = { user_id: "admin-1" };
+    const r = await provisionExternalTenant(ENTRADA);
+    expect(r.ownerId).toBe("admin-1");
+    expect(h.filtrosDoMembro).toContainEqual(["role", "admin"]);
+  });
+
+  it("a auditoria da criação credita a máquina e leva o requestId", async () => {
+    await provisionExternalTenant({ ...ENTRADA, requestId: "req-9" });
+    const criada = h.auditadas.find((a) => a.action === "tenant.created_by_provisioning");
+    expect(criada?.actorUserId).toBeNull();
+    expect(criada?.requestId).toBe("req-9");
+    expect((criada?.metadata as { owner_user_id: string }).owner_user_id).toBe("user-novo");
   });
 });
 

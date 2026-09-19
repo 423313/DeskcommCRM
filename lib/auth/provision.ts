@@ -121,6 +121,8 @@ type ExternalProvisionInput = {
   organizationName: string;
   ownerEmail: string;
   ownerName: string;
+  /** O `X-Request-Id` da rota — é ele que liga esta linha de auditoria à resposta. */
+  requestId?: string;
 };
 
 /**
@@ -187,11 +189,17 @@ export async function provisionExternalTenant(
   };
 
   const reencontrar = async (): Promise<{ organizationId: string; ownerId: string } | null> => {
-    const { data } = await admin
+    // O erro do SELECT NÃO some: falha transitória do PostgREST lida como "não
+    // existe" manda o fluxo para o INSERT e o operador recebe `org insert
+    // failed` no lugar da causa real.
+    const { data, error } = await admin
       .from("organizations")
       .select("id, created_by, settings")
       .eq("slug", slug)
       .maybeSingle();
+    if (error) {
+      throw new Error(`provisioning: busca da organização falhou: ${error.message}`);
+    }
     if (!data) return null;
     const achado = marcadorDe(data.settings);
     if (achado?.integration !== marcador.integration || achado.external_id !== marcador.external_id) {
@@ -240,31 +248,52 @@ export async function provisionExternalTenant(
     throw new Error(`provisioning: membership insert failed: ${memberError.message}`);
   }
 
+  // Ator NULO: quem criou foi um sistema de fora, com o segredo da instalação.
+  // O dono é dado da linha, não o autor da ação — e como o e-mail pode
+  // reaproveitar uma conta existente, creditá-lo deixaria quem chama escolher
+  // qual humano da instalação carimbar.
   void audit({
     action: "tenant.created_by_provisioning",
-    actorUserId: ownerId,
+    actorUserId: null,
     organizationId: org.id,
     resourceType: "organization",
     resourceId: org.id,
+    requestId: input.requestId,
     bypassedRls: true,
-    metadata: { slug, integration: input.integration, external_id: input.externalId },
+    metadata: {
+      slug,
+      integration: input.integration,
+      external_id: input.externalId,
+      owner_user_id: ownerId,
+    },
   });
 
   return { organizationId: org.id, ownerId, replay: false };
 }
 
+/**
+ * O admin mais antigo da organização — e admin MESMO.
+ *
+ * Sem o filtro de papel, o nome prometia admin e a consulta devolvia o primeiro
+ * vínculo qualquer, `viewer` inclusive: o replay emitiria a chave com
+ * `created_by` de quem não administra nada.
+ */
 async function findAdminMember(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
 ): Promise<string | null> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("user_organizations")
     .select("user_id")
     .eq("organization_id", organizationId)
+    .eq("role", "admin")
     .is("revoked_at", null)
     .order("accepted_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  if (error) {
+    throw new Error(`provisioning: busca do admin da organização falhou: ${error.message}`);
+  }
   return data?.user_id ?? null;
 }
 

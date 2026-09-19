@@ -17,10 +17,14 @@ const h = vi.hoisted(() => ({
   provision: vi.fn(),
   rotate: vi.fn(),
   limite: vi.fn(),
+  espiar: vi.fn(),
 }));
 
 vi.mock("@/lib/env", () => ({ env: h.env }));
-vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({ checkRateLimit: h.limite }));
+vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({
+  checkRateLimit: h.limite,
+  peekRateLimit: h.espiar,
+}));
 vi.mock("@/lib/tenants/api-key", () => ({ rotateIntegrationApiKey: h.rotate }));
 vi.mock("@/lib/auth/provision", async (original) => {
   const real = await original<typeof ProvisionModule>();
@@ -39,11 +43,16 @@ const CORPO = {
   owner_name: "Dona da Clínica",
 };
 
-function pedido(bearer: string | null, corpo: unknown = CORPO): NextRequest {
+function pedido(
+  bearer: string | null,
+  corpo: unknown = CORPO,
+  extra: Record<string, string> = { "x-forwarded-for": "203.0.113.7" },
+): NextRequest {
   return new NextRequest("http://localhost/api/v1/tenants/provision", {
     method: "POST",
     headers: {
       "content-type": "application/json",
+      ...extra,
       ...(bearer === null ? {} : { authorization: `Bearer ${bearer}` }),
     },
     body: JSON.stringify(corpo),
@@ -54,6 +63,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.env.TENANT_PROVISIONING_SECRET = SEGREDO;
   h.limite.mockResolvedValue({ allowed: true, count: 1, limit: 10, window_sec: 60 });
+  h.espiar.mockResolvedValue(0);
   h.provision.mockResolvedValue({ organizationId: "org-1", ownerId: "user-1", replay: false });
   h.rotate.mockResolvedValue("dsk_abcd1234_segredo");
 });
@@ -83,12 +93,46 @@ describe("ligada: as guardas, em ordem", () => {
   });
 
   it("acima do limite → 429 com Retry-After, antes de olhar o segredo", async () => {
-    h.limite.mockResolvedValue({ allowed: false, count: 11, limit: 10, window_sec: 60 });
-    const res = await POST(pedido(SEGREDO));
+    // Segredo ERRADO de propósito: com o certo, este caso passaria igual se a
+    // ordem das guardas estivesse invertida. Errado e ainda 429 prova a ordem.
+    h.espiar.mockResolvedValue(10);
+    const res = await POST(pedido("s".repeat(39) + "x"));
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBe("60");
     expect(res.headers.get("X-RateLimit-Limit")).toBe("10");
+    expect(h.limite).not.toHaveBeenCalled();
     expect(h.provision).not.toHaveBeenCalled();
+  });
+
+  it("o balde é por IP e só conta FALHA: acertar o segredo não gasta o limite", async () => {
+    await POST(pedido("s".repeat(39) + "x"));
+    expect(h.espiar).toHaveBeenCalledWith("tenants_provision:falha:ip:203.0.113.7", 60);
+    expect(h.limite).toHaveBeenCalledWith("tenants_provision:falha:ip:203.0.113.7", 10, 60);
+
+    h.limite.mockClear();
+    expect((await POST(pedido(SEGREDO))).status).toBe(201);
+    expect(h.limite).not.toHaveBeenCalled();
+  });
+
+  it("sem IP identificável não há balde — nunca um balde compartilhado por todos", async () => {
+    // O kit self-host expõe o app sem proxy: sem `x-forwarded-for` é o caso
+    // NORMAL. Um sentinela ("desconhecido") juntaria atacante e integração no
+    // mesmo balde e derrubaria a rota da instalação inteira.
+    const res = await POST(pedido("s".repeat(39) + "x", CORPO, {}));
+    expect(res.status).toBe(401);
+    expect(h.espiar).not.toHaveBeenCalled();
+    expect(h.limite).not.toHaveBeenCalled();
+  });
+
+  it("o Bearer segue o extrator do resto da API: minúscula e espaço extra passam", async () => {
+    const res = await POST(
+      new NextRequest("http://localhost/api/v1/tenants/provision", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `bearer   ${SEGREDO}` },
+        body: JSON.stringify(CORPO),
+      }),
+    );
+    expect(res.status).toBe(201);
   });
 
   it("corpo inválido → 422, sem provisionar", async () => {
@@ -108,6 +152,7 @@ describe("ligada: o provisionamento", () => {
   it("cria → 201 com a chave, uma vez, e o escopo da integração", async () => {
     const res = await POST(pedido(SEGREDO));
     expect(res.status).toBe(201);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(await res.json()).toEqual({
       data: { organization_id: "org-1", api_key: "dsk_abcd1234_segredo", replay: false },
     });
@@ -117,6 +162,7 @@ describe("ligada: o provisionamento", () => {
       organizationName: "Clínica Sorriso",
       ownerEmail: "dona@clinica.test",
       ownerName: "Dona da Clínica",
+      requestId: expect.any(String),
     });
     expect(h.rotate).toHaveBeenCalledWith(
       expect.objectContaining({
