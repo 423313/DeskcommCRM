@@ -358,6 +358,23 @@ sobra="$(git -C "$c" for-each-ref --format='%(refname)' refs/colisao-pr | grep -
 if [ -z "$sobra" ]; then ok "esta rodada limpou só o que era dela"
 else falha "esta rodada limpou só o que era dela" "sobrou: $sobra"; fi
 
+echo "23. dois conjuntos para duas funções: a main é MEMBRO da população, e só o que o PR"
+echo "    ACRESCENTA a ela é DELE — herdar o número da main não faz um PR ser 'quem tem'"
+# Toda cabeça de PR carrega as migrations da main que herdou. Atribuir pelo conjunto inteiro
+# nomearia, numa colisão com a main, todo PR aberto que já trouxe a main — como se o número
+# fosse deles. O #7 aqui só herdou o 0262 (e acrescentou o 0276).
+c="$TMP/c23"; clonar "$c"; git -C "$c" switch -q -c fix/colide-com-a-main
+migrar "$c" "20260917200000_0262_colide.sql"; commit "$c" "PR com o 0262 que a main já tem"
+saida="$(gate_prs "7" "$c")"; code=$?
+assert_exit "$code" 1 "colisão com a MAIN continua reprovando"
+assert_contains "$saida" "NNNN=0262 já existe em 'origin/main'" "e acusa a main, que é quem tem"
+# A asserção mira a LINHA da atribuição, não o nome do PR: "PR aberto #7" solto também casa com
+# o ::notice legítimo do teto (o #7 ACRESCENTA o 0276) — e foi por ele que a primeira versão
+# desta asserção ficou vermelha, pelo motivo errado.
+assert_not_contains "$saida" "NNNN=0262 também está em" "o PR que só HERDOU o 0262 da main não é nomeado"
+assert_contains "$saida" "(o teto medido) existe em: PR aberto #7" "o que o #7 ACRESCENTOU (0276) segue atribuído a ele"
+assert_contains "$saida" "NNNN=0277" "e segue empurrando o próximo livre (a main e os PRs como população)"
+
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0
 else echo "colisao-de-migration: $falhas de $casos casos vermelhos"; exit 1; fi

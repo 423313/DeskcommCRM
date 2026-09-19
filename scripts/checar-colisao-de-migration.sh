@@ -246,9 +246,20 @@ while IFS= read -r ref; do
     | sed 's#^supabase/migrations/##' | awk -v r="$ref" '{ print r "\t" $0 }' >> "$listagem"
   case "$ref" in "$ns"/*) ;; *) outras_medidas=$((outras_medidas + 1)) ;; esac
 done <<<"$(printf '%s\n%s\n' "$todos_refs" "$cabecas")"
+# DOIS CONJUNTOS PARA DUAS FUNÇÕES. A POPULAÇÃO (o próximo livre) é tudo: a main e as árvores
+# INTEIRAS das outras refs — se ela fosse montada a partir do que cada PR acrescenta à main, o
+# número de um PR recém-mesclado sumiria das duas metades (saiu da lista de abertos e foi
+# subtraído junto com a main: foi o 0324 do #1249, em 19/09/2026). Já a ATRIBUIÇÃO ("também
+# está no PR aberto #N") é só o que a cabeça ACRESCENTA à main: toda cabeça carrega as
+# migrations que herdou, e atribuir pelo conjunto inteiro nomearia, numa colisão com a main,
+# todo PR aberto que já trouxe a main — como se o número fosse dele.
 outras_arvores="$(cut -f2 "$listagem")"
-# "N<espaço>nome" das cabeças de PR — sem array associativo: o bash do macOS é o 3.2
-arvores_prs="$(awk -F'\t' -v p="$ns/" 'index($1, p) == 1 { print substr($1, length(p) + 1) " " $2 }' "$listagem")"
+# "N<espaço>nome" do que cada cabeça de PR acrescenta — sem array associativo: o bash do
+# macOS é o 3.2
+arvores_prs="$(awk -F'\t' -v p="$ns/" '
+  NR == FNR { na_base[$0] = 1; next }
+  index($1, p) == 1 && !($2 in na_base) { print substr($1, length(p) + 1) " " $2 }
+' <(printf '%s\n' "$base_arvore") "$listagem")"
 
 # Próximo livre medido no UNIVERSO: as duas árvores, as outras refs do clone e as cabeças
 # dos PRs abertos. Olhar só a listagem local é o erro que a complemento-do-ci.md §1 aponta
