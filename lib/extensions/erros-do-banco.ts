@@ -50,6 +50,11 @@ export const SQL_ERRORS: Readonly<Record<string, { message: string; status: numb
     message: "Já existe conteúdo diferente para esta versão. Peça uma nova versão ao mantenedor.",
     status: 409,
   },
+  extension_permissions_changed: {
+    message:
+      "Esta versão pede portas diferentes das que a organização aceitou. Instale-a como extensão nova.",
+    status: 409,
+  },
   extension_version_changed: {
     message: "A extensão mudou em outra sessão. Recarregue antes de continuar.",
     status: 409,
