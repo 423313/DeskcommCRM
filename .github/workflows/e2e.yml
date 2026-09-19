@@ -814,6 +814,7 @@ jobs:
         extensoes-versao.spec.ts
         motivo-do-publicar-na-tela.spec.ts
         followup-cartoes.spec.ts
+        followup-modelos-de-clinica.spec.ts
         presenca-do-atendente.spec.ts
 
       FORA_DO_CI: >-
