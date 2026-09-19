@@ -78,6 +78,12 @@ export const KIND_LABEL = {
   // conseguiu. O motivo cru do upstream (`user_ended`, `do_not_disturb`) nunca
   // chega à tela — vira frase de gente no corpo do aviso, escrito pelo worker.
   voice_call_missed: "Alguém ligou e ninguém atendeu",
+  // Diz o que NÃO aconteceu do ponto de vista de quem opera — "não chegou ao
+  // WhatsApp da equipe" —, e nunca "a entrega falhou": quem lê precisa entender
+  // que o caso continua aberto e que ninguém foi avisado por fora do CRM. O
+  // código do erro (`canal_desconectado`, `teto_diario_do_numero`) vira frase no
+  // CORPO do aviso, escrito pelo handler; aqui é só o título.
+  aviso_de_caso_nao_entregue: "Um aviso de atendimento não chegou ao WhatsApp da equipe",
   // Diz o que o fluxo NÃO está fazendo, não o que falta no cadastro. "Sem
   // agente vinculado" descreve a linha do banco; do lado de lá existe gente que
   // devia estar recebendo mensagem e não recebe, e é isso que faz alguém abrir

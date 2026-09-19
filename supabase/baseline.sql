@@ -5079,12 +5079,14 @@ alter table public.conversation_assignment_events enable row level security;
 -- cae_select nasce na 0173, com o escopo da conversa. A versão org-flat que
 -- vivia aqui era reinstalada a cada update.sh e valia até aquele bloco.
 
-drop policy if exists cae_insert on public.conversation_assignment_events;
-create policy cae_insert on public.conversation_assignment_events
-  for insert with check (
-    (organization_id in (select public.fn_user_org_ids()))
-    or public.fn_is_platform_admin()
-  );
+-- `cae_insert` não nasce mais aqui, e nem é derrubada aqui: desde a 0279 a
+-- tabela é server-only, e o INSERT legítimo é feito por dentro de
+-- `fn_conversation_assign`, que é `security definer`. Quem a derruba — no clone
+-- que já a tem — é o bloco da 0279, lá embaixo, junto do revoke. Criar aqui para
+-- derrubar lá faria a regra antiga valer no meio de cada instalação
+-- (tests/unit/baseline-nao-constroi-o-que-derruba.test.ts); derrubar aqui deixaria
+-- a tabela sem policy nenhuma por 20 mil linhas de DDL, que num `update.sh` sobre
+-- banco vivo é uma janela de leitura vazia na tela.
 
 revoke all on public.conversation_assignment_events from anon;
 
@@ -7531,15 +7533,15 @@ alter table ai_agent_versions add column if not exists cases_enabled boolean not
 
 alter table agent_cases enable row level security;
 alter table agent_case_events enable row level security;
-drop policy if exists tenant_isolation_agent_cases_all on agent_cases;
-create policy tenant_isolation_agent_cases_all on agent_cases
-  for all using (organization_id in (select fn_user_org_ids())) with check (organization_id in (select fn_user_org_ids()));
+-- A policy `for all` não nasce mais aqui desde a 0279: quem escreve caso é o
+-- motor, e a leitura ganhou policy própria (`tenant_isolation_agent_cases_select`).
+-- O par drop+create mora no bloco da 0279, colado, pelo motivo escrito acima.
 drop policy if exists tenant_isolation_agent_case_events_select on agent_case_events;
 create policy tenant_isolation_agent_case_events_select on agent_case_events
   for select using (organization_id in (select fn_user_org_ids()));
-drop policy if exists tenant_isolation_agent_case_events_insert on agent_case_events;
-create policy tenant_isolation_agent_case_events_insert on agent_case_events
-  for insert with check (organization_id in (select fn_user_org_ids()));
+-- A policy de INSERT não nasce mais aqui desde a 0279 (mesmo motivo da tabela
+-- mãe); quem a derruba no clone que já a tem é o bloco da 0279. A de SELECT,
+-- logo acima, fica: a tela e o MCP leem.
 
 -- estender CHECKs de job_queue (kind + coerência kind⇔contato) p/ case_reply_turn
 -- nomes reais conferidos no banco linkado: job_queue_kind_check (named) e
@@ -9766,7 +9768,11 @@ alter table public.agent_case_events
     'resolved',
     'escalated',
     'cancelled',
-    'agent_noted'
+    'agent_noted',
+    -- (migration 0292) A equipe foi avisada no WhatsApp de que este caso
+    -- abriu. UM valor só: a FALHA do aviso vai para a Central, e dois kinds
+    -- seriam vocabulário para uma superfície que não existe.
+    'alert_sent'
   ));
 
 -- ---- catálogo de modelos atualizado (migration 0104) ----
@@ -9972,6 +9978,12 @@ alter table public.agent_inbox_items
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
     'case_stale',
+    -- (migration 0292) O aviso de caso não chegou ao WhatsApp da equipe,
+    -- em definitivo. Nasce com `ref_kind='agent_case'` para levar AO CASO —
+    -- que continua esperando — e não a uma tela genérica. A fonte da verdade
+    -- sobre "o aviso saiu?" continua sendo `entregas_de_aviso_de_caso`:
+    -- qualquer membro apaga um item da Central pelo PostgREST hoje.
+    'aviso_de_caso_nao_entregue',
     -- (migration 0312) O fluxo de follow-up publicado que NUNCA vai disparar:
     -- gatilho automático (silêncio, etapa, caso, falta) só cria inscrição se
     -- algum agente publicado arma o ponteiro, e sem esse vínculo os produtores
@@ -27785,6 +27797,183 @@ end; $$;
 revoke execute on function public.fn_mark_conversation_message(uuid,text,text,timestamptz) from public,anon,authenticated;
 grant execute on function public.fn_mark_conversation_message(uuid,text,text,timestamptz) to service_role;
 
+-- ---- o caso só nasce do motor (migration 0279) ----
+-- 0279 — O caso só nasce do motor.
+--
+-- Três tabelas nasceram graváveis por QUALQUER membro, pelas DUAS origens:
+--   (A) o GRANT: `ALTER DEFAULT PRIVILEGES … GRANT ALL ON TABLES TO
+--       "authenticated"` (supabase/baseline.sql:4727) vale para toda tabela
+--       criada DEPOIS dele — e as três são de apêndice, criadas depois;
+--   (B) a POLICY: `for all` / `for insert` sem papel mínimo.
+--
+-- Tratar só uma deixa o furo aberto: o revoke sozinho não sobrevive a um grant
+-- futuro, e a policy sozinha faz o UPDATE casar 0 linhas e o PostgREST devolver
+-- SUCESSO. As duas, na mesma migration.
+--
+-- Para reconferir as origens sem acreditar nesta prosa:
+--   grep -n 'ALTER DEFAULT PRIVILEGES .* ON TABLES TO "authenticated"' supabase/baseline.sql
+--   grep -nE 'policy .*(agent_cases|agent_case_events|cae_insert)' supabase/baseline.sql
+--
+-- ── O que se pagaria ────────────────────────────────────────────────────────
+-- `agent_cases` guarda o título, o resumo e o bloqueio que a IA escreveu sobre
+-- o atendimento de uma pessoa — o texto que a equipe lê para decidir. Um
+-- `viewer` da própria organização escrevia essa linha falando direto com o
+-- PostgREST, com o JWT dele. E um INSERT forjado em
+-- `conversation_assignment_events` faz o histórico de dono da conversa dizer
+-- que alguém assumiu um atendimento que ninguém assumiu.
+--
+-- ── Nenhum caminho legítimo escreve por `authenticated` (censo medido) ──────
+--   · agent_cases / agent_case_events → `pg.Pool` em
+--     lib/agent-engine/agent/human-cases.ts (inserts em :183, :193, :247, :297,
+--     :324, :352, :383, :432; `db: pg.Pool` em :166, :236), e o admin client
+--     (service role) em app/api/v1/cron/case-stale-watcher/route.ts:77,:156.
+--   · conversation_assignment_events → o INSERT é feito DENTRO de
+--     public.fn_conversation_assign, que é `security definer` e executa com o
+--     privilégio do DONO. É por ela que passam as rotas de claim, transfer e
+--     release (app/api/v1/conversations/[id]/{claim,release,transfer}/route.ts),
+--     todas com o client de SESSÃO — e é por isso que elas continuam
+--     funcionando depois deste revoke (controle positivo do invariante).
+--   · o reset da "Zona de perigo" (lib/settings/apagar-dados-operacionais.ts)
+--     apaga `conversations`; as três tabelas somem por CASCADE, que roda como o
+--     dono da tabela e não como quem apagou.
+-- Refeito por: rg -n "agent_cases|agent_case_events|conversation_assignment_events" app lib hooks components workers scripts
+--
+-- SELECT continua aberto nas três: a tela, o MCP e o motor leem.
+-- Vigiado por tests/invariants/caso-so-nasce-do-motor.test.ts.
+
+-- ── agent_cases ─────────────────────────────────────────────────────────────
+revoke insert, update, delete, truncate on public.agent_cases from authenticated, anon;
+drop policy if exists tenant_isolation_agent_cases_all    on public.agent_cases;
+drop policy if exists tenant_isolation_agent_cases_select on public.agent_cases;
+create policy tenant_isolation_agent_cases_select on public.agent_cases
+  for select to authenticated
+  using (organization_id in (select public.fn_user_org_ids()));
+
+-- ── agent_case_events ───────────────────────────────────────────────────────
+revoke insert, update, delete, truncate on public.agent_case_events from authenticated, anon;
+drop policy if exists tenant_isolation_agent_case_events_insert on public.agent_case_events;
+-- A policy de SELECT (`tenant_isolation_agent_case_events_select`) fica como está.
+
+-- ── conversation_assignment_events ──────────────────────────────────────────
+revoke insert, update, delete, truncate on public.conversation_assignment_events
+  from authenticated, anon;
+drop policy if exists cae_insert on public.conversation_assignment_events;
+-- `cae_select` (que desde a 0173 herda o escopo da conversa) fica como está.
+
+-- ── emit_event: reservar os eventos de caso ─────────────────────────────────
+-- ⚠️ O CORPO ABAIXO É O VIGENTE, DERIVADO — não redigitado. A definição que vale
+--    é a de MAIOR número de linha no baseline (há cinco lá, e a última vence):
+--      grep -nEi 'create (or replace )?function ("public"\.|public\.)?"?emit_event"?' supabase/baseline.sql | tail -1
+--    Copiar a errada reintroduz comportamento revogado — foi o que a 0224 fez
+--    com `fn_service_event_origin` (ver o cabeçalho de
+--    tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts). A ÚNICA
+--    mudança em relação ao corpo vigente é a lista de tipos reservados.
+--
+--    A reserva SOZINHA não fecha nada: ela só barra quem tem `auth.uid()`, e
+--    quem fecha a forja da LINHA é o revoke acima. As duas na mesma migration.
+-- Estende o produtor permitido mantendo a origem imutável da 0223.
+CREATE OR REPLACE FUNCTION public.emit_event(p_event_type text, p_entity_kind text, p_entity_id uuid, p_payload jsonb DEFAULT '{}'::jsonb, p_metadata jsonb DEFAULT '{}'::jsonb, p_organization_id uuid DEFAULT NULL::uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_org_id uuid;
+  v_event_id uuid;
+  v_contact uuid;
+  v_origin jsonb;
+begin
+  -- message.received nasce somente do INSERT inbound interno. Um chamador
+  -- público não pode reapresentar uma mensagem existente como evento novo.
+  -- `ai.case_opened`/`ai.case_closed` entram pela mesma razão (0279): o caso é
+  -- do motor, e um evento de caso forjado por login move o funil e acorda o
+  -- agente em nome de uma decisão que ninguém tomou.
+  if auth.uid() is not null and p_event_type in (
+    'message.received','appointment.outcome_confirmed',
+    'ai.case_opened','ai.case_closed'
+  ) then
+    raise exception 'reserved_message_received' using errcode='42501';
+  end if;
+  -- Estes campos autorizam efeitos operacionais; não são payload público.
+  if auth.uid() is not null and (
+    coalesce(p_payload,'{}'::jsonb) ?| array['service_origin','service_boundary']
+    or coalesce(p_metadata,'{}'::jsonb) ?| array['service_origin','service_boundary']
+  ) then raise exception 'reserved_service_origin' using errcode='42501'; end if;
+  v_org_id := coalesce(p_organization_id, (public.fn_support_context()->>'organization_id')::uuid);
+  if v_org_id is null then
+    select organization_id into v_org_id
+      from public.user_organizations
+      where user_id = auth.uid() and revoked_at is null
+      limit 1;
+  end if;
+  if v_org_id is null then
+    raise exception 'emit_event: organization_id obrigatorio';
+  end if;
+
+  if auth.uid() is not null
+     and not public.fn_role_at_least(v_org_id, 'viewer') then
+    raise exception 'caller_not_authorized_for_org'
+      using hint = 'emit_event: caller must be an active member of the organization';
+  end if;
+
+  if not public.fn_support_write_allowed(v_org_id) then raise exception 'support_readonly' using errcode='42501'; end if;
+
+  -- A ORIGEM E RESERVADA AO SERVIDOR — ENTAO O SERVIDOR TEM DE ESCREVE-LA.
+  --
+  -- O bloco acima recusa `service_origin` vindo de chamador autenticado (42501,
+  -- e com razao: e o campo que AUTORIZA efeito operacional, nao payload
+  -- publico). So que ninguem o escrevia no lugar dele. Efeito medido: quem move
+  -- o negocio pela IA carimba a origem no servidor (`agent-stage-sync`,
+  -- `appointment-stage-move`, `handoff-stage-move`) e o follow-up nasce; quem
+  -- move PELO QUADRO — o operador, pela rota HTTP autenticada — emitia um
+  -- evento SEM origem, `fn_service_event_origin` caia no `service_stale` final
+  -- (40001), `serviceForEvent` engolia como `stale_origin` e o follow-up nunca
+  -- nascia. Sem erro em lugar nenhum: o gatilho de etapa era inalcancavel pelo
+  -- caminho que o produto oferece na tela.
+  --
+  -- O retrato e tirado AQUI, no instante da emissao, que e exatamente a
+  -- semantica de procedencia que a 0223 quer: "quando este evento nasceu, o
+  -- atendimento estava assim". A resolucao do contato repete a mesma regra de
+  -- `fn_service_event_origin` — se ela nao souber resolver o tipo, nao ha o que
+  -- carimbar e o evento segue sem origem, como antes.
+  if not (coalesce(p_payload,'{}'::jsonb) ? 'service_origin')
+     and not (coalesce(p_metadata,'{}'::jsonb) ? 'service_origin') then
+    if p_event_type in ('lead.created','lead.stage_changed','lead.tag_added') and p_entity_kind='crm_lead' then
+      select contact_id into v_contact from public.crm_leads where organization_id=v_org_id and id=p_entity_id;
+    elsif p_event_type='contact.tag_added' and p_entity_kind='contact' then
+      select id into v_contact from public.contacts where organization_id=v_org_id and id=p_entity_id;
+    end if;
+    if v_contact is not null
+       and exists(select 1 from public.contacts
+                   where organization_id=v_org_id and id=v_contact
+                     and not is_anonymized and is_merged_into is null) then
+      v_origin := jsonb_build_object('kind','command',
+        'observed', public.fn_service_observe_command(v_org_id, v_contact));
+    end if;
+  end if;
+
+  insert into public.event_log
+    (organization_id, event_type, entity_kind, entity_id, payload, metadata)
+  values
+    (v_org_id, p_event_type, p_entity_kind, p_entity_id,
+     coalesce(p_payload, '{}'::jsonb)
+       || case when v_origin is null then '{}'::jsonb else jsonb_build_object('service_origin', v_origin) end,
+     coalesce(p_metadata, '{}'::jsonb)
+       || jsonb_build_object('emitted_at', extract(epoch from now())))
+  returning id into v_event_id;
+
+  return v_event_id;
+end $function$;
+-- A mensagem fica com o nome herdado (`reserved_message_received`): renomeá-la é
+-- mudança de contrato observável, e NÃO MEDIMOS se alguém a trata por nome.
+
+-- ── travas do suporte, depois de toda mudança de privilégio (migration 0274) ─
+-- As três tabelas passam a ser server-only, e o ramo server-only da função
+-- derruba as `support_write_*` que elas tinham. Escrever `drop policy` à mão
+-- aqui seria a segunda representação da mesma regra.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
 notify pgrst, 'reload schema';
 
 -- ---- a espera longa dorme: status `dormente` (migration 0308) ----
@@ -27965,6 +28154,3191 @@ comment on column public.ad_platform_connections.google_login_customer_id is
   'A conta de GERENTE (MCC) através da qual google_customer_id é acessada, quando aplicável. NULL = acesso direto, sem MCC.';
 comment on column public.ad_platform_connections.google_conversion_action_id is
   'Qual ação de conversão, dentro de google_customer_id, recebe os envios de venda. Formato: só o id numérico, o resource name completo é montado no transporte.';
+-- ---- o caso anonimizado leva o que a IA escreveu sobre ele (migration 0280) ----
+-- 0280 — Anonimizar um contato alcança o CASO que a IA abriu sobre ele.
+--
+-- ─── O defeito ────────────────────────────────────────────────────────────
+--
+-- Quando o atendimento automático trava, o motor abre um caso e escreve nele o
+-- que entendeu: título, resumo da conversa e o que falta para resolver, mais o
+-- recorte da conversa que foi ao modelo (`context_snapshot`). Depois abre um
+-- aviso na Central com esse texto dentro, e a demanda do pedido guarda o
+-- assunto. Nada disso é registro de operação: é o relato do problema de uma
+-- pessoa identificável, escrito por máquina, em quatro tabelas.
+--
+-- `fn_lgpd_cascade_redact_contact` percorre uma lista escrita à mão, e nenhuma
+-- das quatro estava nela. O modo de falha é o pior que existe para obrigação
+-- legal: a rota devolve SUCESSO, a contagem por tabela fecha, o SLA de D+15 é
+-- marcado como cumprido, e o relato continua legível com o nome de quem pediu
+-- para ser esquecido. Nada erra, nada loga.
+--
+-- ─── O que esta migration faz ─────────────────────────────────────────────
+--
+-- Redefine a cascata com QUATRO passos novos, derivados do corpo vigente (a
+-- definição de maior número de linha em `supabase/baseline.sql`, copiada, não
+-- redigitada — o corpo anterior fica byte a byte igual):
+--
+--   agent_cases        title/summary/blocker/context_snapshot  (vínculo: conversa)
+--   agent_case_events  body/metadata                           (vínculo: caso)
+--   demandas           assunto                                 (vínculo: contato)
+--   agent_inbox_items  resolve + corpo fixo + solta a referência (polimórfico)
+--
+-- Cada passo preserva o que é OPERAÇÃO — estado, dono, marcas de tempo,
+-- contagem. Um passo que apagasse a linha inteira ficaria verde num teste de
+-- "o texto sumiu" e tiraria da organização a resposta a "quantos atendimentos
+-- houve em março".
+--
+-- ─── O que esta migration NÃO faz ─────────────────────────────────────────
+--
+-- Não cria tabela, coluna, índice nem constraint; não toca dado fora da
+-- anonimização; não muda assinatura (então `lib/database.types.ts` não muda).
+-- Não alarga o predicado para os outros `kind` de aviso que apontam para a
+-- conversa do titular (`routing_unassigned`, `snooze_expired`,
+-- `promise_unfulfilled` e irmãos): eles têm produtor e dono próprios, e essa
+-- medição é de outra entrega.
+--
+-- ─── Reaplicação ──────────────────────────────────────────────────────────
+--
+-- `create or replace function` é idempotente por construção. A função já era
+-- idempotente no efeito: a segunda chamada devolve `already_anonymized` e não
+-- escreve nada — por isso `resolved_at = now()` no passo dos avisos não oscila
+-- entre execuções.
+
+CREATE OR REPLACE FUNCTION "public"."fn_lgpd_cascade_redact_contact"("p_organization_id" "uuid", "p_contact_id" "uuid", "p_request_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_already bool;
+  v_counts jsonb := '{}'::jsonb;
+  v_media_paths text[] := '{}';
+  v_anon_label text;
+  v_count int;
+begin
+  perform public.fn_service_lock(p_organization_id,p_contact_id);
+  select is_anonymized into v_already
+    from contacts
+    where id = p_contact_id and organization_id = p_organization_id;
+
+  if not found then
+    raise exception 'contact not found' using errcode = 'P0002';
+  end if;
+
+  if v_already then
+    return jsonb_build_object('already_anonymized', true, 'counts', v_counts, 'media_paths', v_media_paths);
+  end if;
+
+  v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+
+  -- Collect media storage paths (we only delete what we own — media_storage_path)
+  select coalesce(array_agg(distinct media_storage_path) filter (where media_storage_path is not null), '{}')
+    into v_media_paths
+    from messages
+    where organization_id = p_organization_id
+      and conversation_id in (
+        select id from conversations
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      );
+
+  -- 1. contacts (irreversible)
+  update contacts set
+    name = v_anon_label,
+    display_name = v_anon_label,
+    email = null,
+    -- email_normalized NÃO entra: é GENERATED ALWAYS AS (lower(trim(email)))
+    -- e o Postgres recusa escrita nela — a linha acima já a zera por derivação.
+    -- Com a atribuição, o cascade INTEIRO abortava e nada era anonimizado.
+    phone_number = null,
+    cpf_encrypted = null,
+    cpf_hash = null,
+    birthdate = null,
+    is_anonymized = true,
+    anonymized_at = now(),
+    consent = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('contacts', v_count);
+
+  -- 2. conversations metadata + preview strip
+  update conversations set
+    metadata = '{}'::jsonb,
+    last_message_preview = null,
+    updated_at = now()
+  where contact_id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('conversations', v_count);
+
+  -- 3. messages: redact body + null media + strip metadata (preserve status/timestamps/conversation_id)
+  update messages set
+    body = '[mensagem anonimizada]',
+    media_url = null,
+    media_mime = null,
+    media_size_bytes = null,
+    media_storage_path = null,
+    metadata = '{}'::jsonb,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('messages', v_count);
+
+  -- 4. crm_lead_activities — strip payload, metadata E reason (migration 0071).
+  --    `reason` é texto livre escrito por LLM sobre a conversa do lead: supor que
+  --    nunca conterá um nome é a suposição que falha. `evidence` NÃO é limpa —
+  --    guarda só ids, e as linhas apontadas são redigidas por conta própria.
+  update crm_lead_activities set
+    payload = '{}'::jsonb,
+    metadata = '{}'::jsonb,
+    reason = null
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or lead_id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+      or lead_id in (
+        select id from crm_leads
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('activities', v_count);
+
+  -- 5. crm_leads — strip title/description/custom_fields/source_metadata/tags but PRESERVE pipeline/stage/value
+  update crm_leads set
+    title = v_anon_label,
+    description = null,
+    custom_fields = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('leads', v_count);
+
+  -- 6. orders — PRESERVE values + status + timestamps. Strip personal fields from payload jsonb
+  --    and replace customer_external_id with null (FK-safe; soft de-link). Keep contact_id null.
+  update orders set
+    payload = (coalesce(payload, '{}'::jsonb))
+      - 'customer'
+      - 'customer_name'
+      - 'customer_email'
+      - 'customer_phone'
+      - 'shipping_address'
+      - 'billing_address'
+      - 'contact_identification',
+    customer_external_id = null,
+    contact_id = null,
+    is_anonymized = true,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('orders', v_count);
+
+  -- 7. enqueue media for async deletion (idempotent via unique (bucket, object_path))
+  if array_length(v_media_paths, 1) > 0 then
+    insert into storage_redaction_queue (organization_id, request_id, bucket, object_path)
+    select p_organization_id, p_request_id, 'whatsapp-media', path
+      from unnest(v_media_paths) as path
+      where path is not null and length(path) > 0
+    on conflict (bucket, object_path) do nothing;
+  end if;
+
+  -- 7b. voice_calls — o TELEFONE de quem falou ao telefone (migration 0235).
+  --
+  -- `peer_phone` é `not null` e guarda o número da outra ponta: depois de
+  -- anonimizar o contato, ele sobrevivia ligado ao `contact_id` e reidentificava
+  -- a pessoa que pediu para ser esquecida. É o mesmo argumento que a foto de
+  -- perfil já tinha (ver o bloco do avatar em `lib/lgpd/redact-cascade.ts`):
+  -- anonimizar em toda parte menos numa é não ter anonimizado.
+  --
+  -- O que fica: direção, status, motivo do fim, marcas de tempo e duração. Um
+  -- registro de "houve uma chamada de 12 minutos" sem número e sem dono não
+  -- identifica ninguém e é o que sustenta a métrica do atendente e a fatura.
+  -- `peer_phone` é NOT NULL, então recebe o rótulo, não `null`.
+  update voice_calls set
+    peer_phone = v_anon_label,
+    owner_user_id = null,
+    created_by = null,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('voice_calls', v_count);
+
+  -- agent_cases — o que a IA escreveu SOBRE a pessoa quando travou (migration 0280).
+  --
+  -- O caso é o texto que a equipe lê antes de decidir: `title`, `summary` e
+  -- `blocker` saem do modelo a partir da conversa, e `context_snapshot` é o
+  -- recorte dessa conversa que o motor mandou para ele. Nada disso é registro de
+  -- operação — é o relato do problema de uma pessoa identificável, escrito por
+  -- máquina. Sem este passo, anonimizar devolvia SUCESSO com o relato intacto.
+  --
+  -- As três colunas de texto são `not null`: recebem rótulo e texto fixo, nunca
+  -- `null` (a mesma razão de `voice_calls.peer_phone` logo acima).
+  --
+  -- ⚠️ `updated_at` FICA FORA DO `set`, de propósito. O cobrador de caso parado
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts`) lê `updated_at` como "alguém
+  -- da equipe encostou neste caso". A cascata não é alguém encostando: escrever
+  -- ali faria a anonimização ADIAR a cobrança de um caso que continua parado, e
+  -- o efeito só apareceria como um cliente esperando mais tempo.
+  --
+  -- O vínculo é pela CONVERSA porque `agent_cases` não tem FK para `contacts`.
+  update agent_cases set
+    title = v_anon_label,
+    summary = '[resumo anonimizado]',
+    blocker = '[bloqueio anonimizado]',
+    context_snapshot = '{}'::jsonb
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_cases', v_count);
+
+  -- agent_case_events — a linha do tempo do caso (migration 0280).
+  --
+  -- `body` é o que a pessoa da equipe escreveu ao responder o caso e o que o
+  -- agente registrou sobre o que o LEAD respondeu; `metadata` carrega o recorte
+  -- que o motor anexou. `kind`, `actor_kind`, `human_action` e `created_at`
+  -- FICAM: são o registro de que houve um toque humano e quando — operação, não
+  -- dado da pessoa, e é deles que sai a métrica de atendimento.
+  update agent_case_events set
+    body = null,
+    metadata = '{}'::jsonb
+  where organization_id = p_organization_id
+    and case_id in (
+      select id from agent_cases
+        where organization_id = p_organization_id
+          and conversation_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_case_events', v_count);
+
+  -- demandas — o assunto do pedido (migration 0280).
+  --
+  -- `assunto` é texto livre sobre o que a pessoa pediu. O resto da linha é a
+  -- operação da demanda (origem, estado, dono, prazo, desfecho) e fica de pé:
+  -- apagar a linha inteira tiraria da organização a resposta a "quantos pedidos
+  -- houve em março", que é o mesmo argumento do compromisso da agenda.
+  --
+  -- FK direta (`demandas.contact_id` é `not null`), então o vínculo é o contato.
+  update demandas set
+    assunto = null
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('demandas', v_count);
+
+  -- agent_inbox_items — o aviso que leva o texto do caso para a Central (migration 0280).
+  --
+  -- O `body` do aviso de caso parado EMBUTE o título do caso
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts:128`), e o do handoff embute o
+  -- motivo da parada (`lib/ai/handoff/orchestrator.ts:335`). Redigir o caso e
+  -- deixar o aviso de pé seria anonimizar em toda parte menos numa — que é não
+  -- ter anonimizado. O molde (resolver + trocar o corpo + soltar a referência) é
+  -- o de `fn_meet_redact_contact`, que já faz isto para o aviso de compromisso.
+  --
+  -- ⚠️ O VÍNCULO É POLIMÓRFICO E TEM TRÊS BRAÇOS, não dois. Medido nos
+  -- produtores, não suposto: `handoff` nasce com `ref_kind='contact'`
+  -- (`lib/ai/handoff/orchestrator.ts:339`) E com `ref_kind='conversation'`
+  -- (`lib/agent-engine/agent/inbound-turn.ts:4100`); `case_stale` nasce SEMPRE
+  -- com `ref_kind='agent_case'` (a rota do cron acima, e a política em
+  -- `lib/ai/inbox-destino.ts:38`). Um predicado com só os dois primeiros braços
+  -- casa ZERO avisos de caso parado — e casar zero linha não é erro: é sucesso
+  -- com o texto intacto.
+  --
+  -- Os `kind` são os MEDIDOS no CHECK vigente (`supabase/baseline.sql`, bloco
+  -- único de `agent_inbox_items_kind_check`). `case_opened` NÃO existe, e kind
+  -- inexistente num `in (...)` também casa zero e devolve sucesso. Para
+  -- reconferir sem acreditar nesta prosa:
+  --   grep -n "agent_inbox_items_kind_check check" -A40 supabase/baseline.sql
+  update agent_inbox_items set
+    status = 'resolved',
+    resolved_at = now(),
+    body = 'Contato anonimizado.',
+    ref_id = null
+  where organization_id = p_organization_id
+    and kind in ('handoff', 'case_stale')
+    and (
+      (ref_kind = 'contact' and ref_id = p_contact_id)
+      or (ref_kind = 'conversation' and ref_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          ))
+      or (ref_kind = 'agent_case' and ref_id in (
+            select id from agent_cases
+              where organization_id = p_organization_id
+                and conversation_id in (
+                  select id from conversations
+                    where contact_id = p_contact_id and organization_id = p_organization_id
+                )
+          ))
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_inbox_items', v_count);
+
+  -- 8. dense audit row
+  insert into api_audit_log (organization_id, action, actor_user_id, resource_type, resource_id, metadata, bypassed_rls)
+  values (
+    p_organization_id,
+    'lgpd.redact_executed',
+    null,
+    'contact',
+    p_contact_id,
+    jsonb_build_object(
+      'cascaded_to', v_counts,
+      'media_queued', coalesce(array_length(v_media_paths, 1), 0),
+      'request_id', p_request_id
+    ),
+    true
+  );
+
+  return jsonb_build_object(
+    'already_anonymized', false,
+    'counts', v_counts,
+    'media_paths', v_media_paths
+  );
+end;
+$$;
+revoke all on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) to service_role;
+
+notify pgrst, 'reload schema';
+
+-- ---- a conversa do caso: a consulta interna da equipe (migration 0281) ----
+-- 0281 — Conversar com o caso: onde a consulta interna da equipe à IA fica.
+--
+-- ─── POR QUE TABELA PRÓPRIA, e não um lugar que já existe ─────────────────
+--
+-- As três alternativas óbvias quebram consumidores VIVOS, e as três foram
+-- medidas antes de a tabela ser escrita:
+--
+--   · `conversation_notes` → `lerContinuidadeHumana` (lib/escalacao/
+--     continuidade.ts) lê essa tabela e `montarResumo` põe o texto, literal,
+--     no prompt do agente que fala com o CLIENTE. A pergunta do atendente
+--     viraria ordem para a IA — e o cliente leria a consequência.
+--   · `agent_case_events` com `actor_kind='human'` → `fn_atrito_metrics` conta
+--     `count(*)` como intervenções e `min(created_at)` como primeiro toque.
+--     Perguntar zeraria a espera da fila sem ninguém ter decidido nada: o
+--     Índice de Atrito passaria a medir LEITURA em vez de DECISÃO.
+--   · `agent_cases`, qualquer coluna → `updated_at` é o "alguém encostou" do
+--     cobrador de caso parado (`app/api/v1/cron/case-stale-watcher`). Escrever
+--     ali calaria o vigia. Esta tabela NÃO toca `agent_cases`, e a ausência é
+--     garantia e não esperança: não há trigger de `updated_at` naquela tabela.
+--
+-- ─── POR QUE A COLUNA DE TEXTO SE CHAMA `body` ────────────────────────────
+--
+-- De propósito, e não por gosto. `tests/invariants/lgpd-cascata-alcanca-quem-
+-- guarda-pessoa.test.ts` só enxerga a tabela que satisfaz as DUAS condições:
+-- FK para `contacts` E coluna cujo NOME case o padrão de PII
+-- (`…|notes|note|body|content|title|subject…`). Uma tabela com colunas
+-- `pergunta`/`resposta` nasceria INVISÍVEL ao gate — que é exatamente o ponto
+-- cego que a investigação mediu. Escolher o nome que o gate lê é mais barato
+-- que ensinar o gate a ler outro nome. `contact_id` existe pela mesma razão.
+--
+-- ─── O QUE ESTA MIGRATION FAZ ─────────────────────────────────────────────
+--
+--   1. cria `public.agent_case_chat_messages` — uma linha por MENSAGEM, com
+--      `turn_id` agrupando pergunta e resposta;
+--   2. liga a RLS de LEITURA em três condições (organização + papel `agent` +
+--      visibilidade da conversa) e deixa a tabela SERVER-ONLY na escrita;
+--   3. cria `fn_expurgar_conversa_do_caso_vencida` (365 dias, piso de 90 no
+--      CORPO), que o cron diário de retenção passa a chamar;
+--   4. redefine `fn_lgpd_cascade_redact_contact` com UM passo novo, derivado
+--      do corpo VIGENTE (a definição de maior número de linha no
+--      `supabase/baseline.sql`, copiada por script — o corpo anterior fica
+--      byte a byte igual).
+--
+-- ─── REAPLICAÇÃO ──────────────────────────────────────────────────────────
+--
+-- `create table if not exists`, `create index if not exists`, `drop policy if
+-- exists` + `create policy`, `create or replace function`. O `update.sh` de um
+-- clone reaplica sem erro e sem duplicar efeito.
+
+create table if not exists public.agent_case_chat_messages (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  case_id          uuid not null references public.agent_cases(id)   on delete cascade,
+  -- DUAS COLUNAS DENORMALIZADAS DE PROPÓSITO (doutrina DIRC: Duplicar, não
+  -- Referenciar):
+  --  · `conversation_id`: a policy de SELECT precisa da conversa SEM passar
+  --    por `agent_cases`, cuja policy é org-wide e reintroduziria exatamente o
+  --    vazamento que esta feature fecha;
+  --  · `contact_id`: é a FK que põe a tabela no escopo do invariante de LGPD e
+  --    o filtro que a redação e o export usam. Sem ela, anonimizar devolveria
+  --    sucesso com a conversa legível, e nenhum gate acusaria.
+  conversation_id  uuid not null references public.conversations(id) on delete cascade,
+  contact_id       uuid not null references public.contacts(id)      on delete cascade,
+  -- Agrupa pergunta + resposta. GERADO NO CLIENTE: é ele que dá a idempotência
+  -- sem copiar a resposta para `idempotency_keys` (ver a unique lá embaixo).
+  turn_id          uuid not null,
+  author_kind      text not null check (author_kind in ('human','ai')),
+  -- `on delete set null`: a saída de uma pessoa do sistema não apaga o que ela
+  -- perguntou. Por isso NÃO existe check acoplando `author_kind` a
+  -- `author_user_id` — ele quebraria o próprio `set null`.
+  author_user_id   uuid references auth.users(id) on delete set null,
+  -- null quando a resposta falhou, ou quando a redação de LGPD passou por aqui.
+  body             text,
+  -- null = deu certo. NÃO existe coluna `status`: ela seria a segunda
+  -- representação do mesmo fato (anti-pattern 2 do CLAUDE.md).
+  error_code       text,
+  -- Quem RESPONDEU de fato. null = respondeu a persona padrão da organização
+  -- (agente do caso ausente, arquivado, pausado ou despublicado). A persona "de
+  -- agora" é recalculada a cada requisição; esta coluna é o registro histórico.
+  agent_id         uuid references public.ai_agents(id)  on delete set null,
+  llm_call_id      uuid references public.llm_calls(id)  on delete set null,
+  -- O atendimento que originou o caso já tinha mudado quando esta resposta foi
+  -- dada. Mesmo vocabulário do audit da rota de resposta ao caso.
+  service_stale    boolean not null default false,
+  redacted_at      timestamptz,
+  created_at       timestamptz not null default now(),
+  -- A IDEMPOTÊNCIA DO POST, no banco e NÃO em `idempotency_keys`: o helper
+  -- `comIdempotencia` grava `response_body` (lib/api/idempotency.ts), que seria
+  -- uma cópia da resposta sobre a pessoa numa tabela FORA da cascata de LGPD e
+  -- SEM expurgo nenhum (`grep -rn "idempotency_keys" app/api/v1/cron lib/retencao
+  -- lib/lgpd` → vazio). Esta unique resolve o clique duplo E a corrida que o
+  -- próprio helper declara não cobrir.
+  constraint agent_case_chat_messages_turno_unico
+    unique (organization_id, case_id, turn_id, author_kind)
+);
+
+-- Auto-cura para o clone que já tenha uma versão ANTERIOR da tabela: o
+-- `create table if not exists` acima é no-op ali. Só as colunas que podem ser
+-- acrescentadas a uma tabela COM LINHAS entram — as `not null` sem default não
+-- podem, e não precisam: a tabela nasce aqui, então nenhum clone tem uma forma
+-- anterior dela sem elas.
+alter table public.agent_case_chat_messages add column if not exists author_user_id uuid;
+alter table public.agent_case_chat_messages add column if not exists body text;
+alter table public.agent_case_chat_messages add column if not exists error_code text;
+alter table public.agent_case_chat_messages add column if not exists agent_id uuid;
+alter table public.agent_case_chat_messages add column if not exists llm_call_id uuid;
+alter table public.agent_case_chat_messages add column if not exists service_stale boolean not null default false;
+alter table public.agent_case_chat_messages add column if not exists redacted_at timestamptz;
+
+-- O CHECK e a unique em bloco próprio, para o clone que tenha a tabela sem
+-- eles. `drop` + `add` é auto-curativo; a tabela nasce vazia, então não há dado
+-- a corrigir antes (a regra 8 da doutrina de migrations).
+alter table public.agent_case_chat_messages
+  drop constraint if exists agent_case_chat_messages_author_kind_check;
+alter table public.agent_case_chat_messages
+  add constraint agent_case_chat_messages_author_kind_check
+  check (author_kind in ('human','ai'));
+
+alter table public.agent_case_chat_messages
+  drop constraint if exists agent_case_chat_messages_turno_unico;
+alter table public.agent_case_chat_messages
+  add constraint agent_case_chat_messages_turno_unico
+  unique (organization_id, case_id, turn_id, author_kind);
+
+-- Três índices, um propósito cada, e nenhum é prefixo de outro (a memória da
+-- 0259: índice redundante sai).
+create index if not exists agent_case_chat_messages_case_idx
+  on public.agent_case_chat_messages (organization_id, case_id, created_at);
+-- Redação e export só procuram o que ainda é legível.
+create index if not exists agent_case_chat_messages_contact_idx
+  on public.agent_case_chat_messages (organization_id, contact_id)
+  where redacted_at is null;
+-- O expurgo ordena por `created_at`.
+create index if not exists agent_case_chat_messages_purga_idx
+  on public.agent_case_chat_messages (created_at);
+
+alter table public.agent_case_chat_messages enable row level security;
+
+-- ── Privilégio: leitura pelo login, escrita SÓ pelo servidor ───────────────
+-- `revoke all` PRIMEIRO porque o `ALTER DEFAULT PRIVILEGES … GRANT ALL ON
+-- TABLES TO "authenticated"` do baseline vem ANTES de toda tabela de apêndice:
+-- sem o revoke, a tabela nasce com INSERT/UPDATE/DELETE para `authenticated` e
+-- a policy seria a única coisa entre um `viewer` e a escrita. Mesmo desenho de
+-- `ai_reply_drafts` (0227) e das três tabelas da 0279.
+revoke all    on public.agent_case_chat_messages from anon, authenticated;
+grant  select on public.agent_case_chat_messages to authenticated;
+grant  all    on public.agent_case_chat_messages to service_role;
+
+-- ── RLS: organização + papel + VISIBILIDADE DA CONVERSA ───────────────────
+-- A terceira condição é a razão de a tabela carregar `conversation_id` dentro.
+-- `fn_can_view_conversation` restringe SÓ o papel `agent`: viewer/manager/admin
+-- leem tudo por desenho, que é a decisão do dono do produto. Policy POR COMANDO
+-- (`for select`), nunca `for all` — e aqui nem se trata disso: não existe
+-- caminho de escrita pelo PostgREST, porque o `revoke` acima o fechou.
+drop policy if exists tenant_isolation_agent_case_chat_messages_select on public.agent_case_chat_messages;
+create policy tenant_isolation_agent_case_chat_messages_select
+  on public.agent_case_chat_messages
+  for select to authenticated
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and exists (
+      select 1
+        from public.conversations c
+       where c.organization_id = agent_case_chat_messages.organization_id
+         and c.id = agent_case_chat_messages.conversation_id
+         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+-- ── Retenção: a tabela nasce com dono de piso ─────────────────────────────
+create or replace function public.fn_expurgar_conversa_do_caso_vencida(
+  p_retencao_dias int default null,
+  p_limite int default null
+) returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  -- 365 = um ano fiscal: depois disso, "por que decidimos assim" é respondido
+  -- pelos EVENTOS do caso, não pela deliberação que os precedeu. O piso de 90
+  -- impede que o knob vire apagador de rastro recente — o mesmo piso da
+  -- auditoria, e pela mesma razão. O piso mora AQUI, no corpo, porque só assim
+  -- ele vale para QUALQUER chamador, inclusive um `psql` na mão.
+  v_dias int := greatest(coalesce(p_retencao_dias, 365), 90);
+  v_limite int := least(greatest(coalesce(p_limite, 1000), 1), 10000);
+  v_apagadas int;
+begin
+  with vencidas as (
+    select m.id from public.agent_case_chat_messages m
+     where m.created_at < now() - make_interval(days => v_dias)
+     order by m.created_at
+     limit v_limite
+  )
+  delete from public.agent_case_chat_messages m using vencidas v where m.id = v.id;
+  get diagnostics v_apagadas = row_count;
+  return v_apagadas;
+end;
+$$;
+-- As DUAS origens de EXECUTE: o `ALTER DEFAULT PRIVILEGES … GRANT ALL ON
+-- FUNCTIONS TO anon` do baseline (que `revoke from public` não remove) e o
+-- grant implícito a PUBLIC que o Postgres dá a toda função ao criá-la (que
+-- `revoke from anon` não remove). Fechar uma só deixa a função exposta com o
+-- gate verde.
+revoke all    on function public.fn_expurgar_conversa_do_caso_vencida(int,int) from public, anon, authenticated;
+grant  execute on function public.fn_expurgar_conversa_do_caso_vencida(int,int) to service_role;
+
+-- ── A cascata de LGPD alcança a conversa do caso ──────────────────────────
+-- Derivada do corpo VIGENTE do baseline (a definição de maior número de linha),
+-- por script, nunca redigitada: o corpo anterior fica byte a byte igual e o
+-- único acréscimo é o passo de `agent_case_chat_messages`. O Postgres troca o
+-- corpo INTEIRO num `create or replace` — quem derivar da versão errada apaga
+-- o passo de outra entrega sem um único erro. A catraca que vigia isso é
+-- `tests/invariants/cascata-lgpd-nao-encolhe.test.ts`.
+CREATE OR REPLACE FUNCTION "public"."fn_lgpd_cascade_redact_contact"("p_organization_id" "uuid", "p_contact_id" "uuid", "p_request_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_already bool;
+  v_counts jsonb := '{}'::jsonb;
+  v_media_paths text[] := '{}';
+  v_anon_label text;
+  v_count int;
+begin
+  perform public.fn_service_lock(p_organization_id,p_contact_id);
+  select is_anonymized into v_already
+    from contacts
+    where id = p_contact_id and organization_id = p_organization_id;
+
+  if not found then
+    raise exception 'contact not found' using errcode = 'P0002';
+  end if;
+
+  if v_already then
+    return jsonb_build_object('already_anonymized', true, 'counts', v_counts, 'media_paths', v_media_paths);
+  end if;
+
+  v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+
+  -- Collect media storage paths (we only delete what we own — media_storage_path)
+  select coalesce(array_agg(distinct media_storage_path) filter (where media_storage_path is not null), '{}')
+    into v_media_paths
+    from messages
+    where organization_id = p_organization_id
+      and conversation_id in (
+        select id from conversations
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      );
+
+  -- 1. contacts (irreversible)
+  update contacts set
+    name = v_anon_label,
+    display_name = v_anon_label,
+    email = null,
+    -- email_normalized NÃO entra: é GENERATED ALWAYS AS (lower(trim(email)))
+    -- e o Postgres recusa escrita nela — a linha acima já a zera por derivação.
+    -- Com a atribuição, o cascade INTEIRO abortava e nada era anonimizado.
+    phone_number = null,
+    cpf_encrypted = null,
+    cpf_hash = null,
+    birthdate = null,
+    is_anonymized = true,
+    anonymized_at = now(),
+    consent = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('contacts', v_count);
+
+  -- 2. conversations metadata + preview strip
+  update conversations set
+    metadata = '{}'::jsonb,
+    last_message_preview = null,
+    updated_at = now()
+  where contact_id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('conversations', v_count);
+
+  -- 3. messages: redact body + null media + strip metadata (preserve status/timestamps/conversation_id)
+  update messages set
+    body = '[mensagem anonimizada]',
+    media_url = null,
+    media_mime = null,
+    media_size_bytes = null,
+    media_storage_path = null,
+    metadata = '{}'::jsonb,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('messages', v_count);
+
+  -- 4. crm_lead_activities — strip payload, metadata E reason (migration 0071).
+  --    `reason` é texto livre escrito por LLM sobre a conversa do lead: supor que
+  --    nunca conterá um nome é a suposição que falha. `evidence` NÃO é limpa —
+  --    guarda só ids, e as linhas apontadas são redigidas por conta própria.
+  update crm_lead_activities set
+    payload = '{}'::jsonb,
+    metadata = '{}'::jsonb,
+    reason = null
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or lead_id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+      or lead_id in (
+        select id from crm_leads
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('activities', v_count);
+
+  -- 5. crm_leads — strip title/description/custom_fields/source_metadata/tags but PRESERVE pipeline/stage/value
+  update crm_leads set
+    title = v_anon_label,
+    description = null,
+    custom_fields = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('leads', v_count);
+
+  -- 6. orders — PRESERVE values + status + timestamps. Strip personal fields from payload jsonb
+  --    and replace customer_external_id with null (FK-safe; soft de-link). Keep contact_id null.
+  update orders set
+    payload = (coalesce(payload, '{}'::jsonb))
+      - 'customer'
+      - 'customer_name'
+      - 'customer_email'
+      - 'customer_phone'
+      - 'shipping_address'
+      - 'billing_address'
+      - 'contact_identification',
+    customer_external_id = null,
+    contact_id = null,
+    is_anonymized = true,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('orders', v_count);
+
+  -- 7. enqueue media for async deletion (idempotent via unique (bucket, object_path))
+  if array_length(v_media_paths, 1) > 0 then
+    insert into storage_redaction_queue (organization_id, request_id, bucket, object_path)
+    select p_organization_id, p_request_id, 'whatsapp-media', path
+      from unnest(v_media_paths) as path
+      where path is not null and length(path) > 0
+    on conflict (bucket, object_path) do nothing;
+  end if;
+
+  -- 7b. voice_calls — o TELEFONE de quem falou ao telefone (migration 0235).
+  --
+  -- `peer_phone` é `not null` e guarda o número da outra ponta: depois de
+  -- anonimizar o contato, ele sobrevivia ligado ao `contact_id` e reidentificava
+  -- a pessoa que pediu para ser esquecida. É o mesmo argumento que a foto de
+  -- perfil já tinha (ver o bloco do avatar em `lib/lgpd/redact-cascade.ts`):
+  -- anonimizar em toda parte menos numa é não ter anonimizado.
+  --
+  -- O que fica: direção, status, motivo do fim, marcas de tempo e duração. Um
+  -- registro de "houve uma chamada de 12 minutos" sem número e sem dono não
+  -- identifica ninguém e é o que sustenta a métrica do atendente e a fatura.
+  -- `peer_phone` é NOT NULL, então recebe o rótulo, não `null`.
+  update voice_calls set
+    peer_phone = v_anon_label,
+    owner_user_id = null,
+    created_by = null,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('voice_calls', v_count);
+
+  -- agent_cases — o que a IA escreveu SOBRE a pessoa quando travou (migration 0280).
+  --
+  -- O caso é o texto que a equipe lê antes de decidir: `title`, `summary` e
+  -- `blocker` saem do modelo a partir da conversa, e `context_snapshot` é o
+  -- recorte dessa conversa que o motor mandou para ele. Nada disso é registro de
+  -- operação — é o relato do problema de uma pessoa identificável, escrito por
+  -- máquina. Sem este passo, anonimizar devolvia SUCESSO com o relato intacto.
+  --
+  -- As três colunas de texto são `not null`: recebem rótulo e texto fixo, nunca
+  -- `null` (a mesma razão de `voice_calls.peer_phone` logo acima).
+  --
+  -- ⚠️ `updated_at` FICA FORA DO `set`, de propósito. O cobrador de caso parado
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts`) lê `updated_at` como "alguém
+  -- da equipe encostou neste caso". A cascata não é alguém encostando: escrever
+  -- ali faria a anonimização ADIAR a cobrança de um caso que continua parado, e
+  -- o efeito só apareceria como um cliente esperando mais tempo.
+  --
+  -- O vínculo é pela CONVERSA porque `agent_cases` não tem FK para `contacts`.
+  update agent_cases set
+    title = v_anon_label,
+    summary = '[resumo anonimizado]',
+    blocker = '[bloqueio anonimizado]',
+    context_snapshot = '{}'::jsonb
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_cases', v_count);
+
+  -- agent_case_events — a linha do tempo do caso (migration 0280).
+  --
+  -- `body` é o que a pessoa da equipe escreveu ao responder o caso e o que o
+  -- agente registrou sobre o que o LEAD respondeu; `metadata` carrega o recorte
+  -- que o motor anexou. `kind`, `actor_kind`, `human_action` e `created_at`
+  -- FICAM: são o registro de que houve um toque humano e quando — operação, não
+  -- dado da pessoa, e é deles que sai a métrica de atendimento.
+  update agent_case_events set
+    body = null,
+    metadata = '{}'::jsonb
+  where organization_id = p_organization_id
+    and case_id in (
+      select id from agent_cases
+        where organization_id = p_organization_id
+          and conversation_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_case_events', v_count);
+
+  -- demandas — o assunto do pedido (migration 0280).
+  --
+  -- `assunto` é texto livre sobre o que a pessoa pediu. O resto da linha é a
+  -- operação da demanda (origem, estado, dono, prazo, desfecho) e fica de pé:
+  -- apagar a linha inteira tiraria da organização a resposta a "quantos pedidos
+  -- houve em março", que é o mesmo argumento do compromisso da agenda.
+  --
+  -- FK direta (`demandas.contact_id` é `not null`), então o vínculo é o contato.
+  update demandas set
+    assunto = null
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('demandas', v_count);
+
+  -- agent_inbox_items — o aviso que leva o texto do caso para a Central (migration 0280).
+  --
+  -- O `body` do aviso de caso parado EMBUTE o título do caso
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts:128`), e o do handoff embute o
+  -- motivo da parada (`lib/ai/handoff/orchestrator.ts:335`). Redigir o caso e
+  -- deixar o aviso de pé seria anonimizar em toda parte menos numa — que é não
+  -- ter anonimizado. O molde (resolver + trocar o corpo + soltar a referência) é
+  -- o de `fn_meet_redact_contact`, que já faz isto para o aviso de compromisso.
+  --
+  -- ⚠️ O VÍNCULO É POLIMÓRFICO E TEM TRÊS BRAÇOS, não dois. Medido nos
+  -- produtores, não suposto: `handoff` nasce com `ref_kind='contact'`
+  -- (`lib/ai/handoff/orchestrator.ts:339`) E com `ref_kind='conversation'`
+  -- (`lib/agent-engine/agent/inbound-turn.ts:4100`); `case_stale` nasce SEMPRE
+  -- com `ref_kind='agent_case'` (a rota do cron acima, e a política em
+  -- `lib/ai/inbox-destino.ts:38`). Um predicado com só os dois primeiros braços
+  -- casa ZERO avisos de caso parado — e casar zero linha não é erro: é sucesso
+  -- com o texto intacto.
+  --
+  -- Os `kind` são os MEDIDOS no CHECK vigente (`supabase/baseline.sql`, bloco
+  -- único de `agent_inbox_items_kind_check`). `case_opened` NÃO existe, e kind
+  -- inexistente num `in (...)` também casa zero e devolve sucesso. Para
+  -- reconferir sem acreditar nesta prosa:
+  --   grep -n "agent_inbox_items_kind_check check" -A40 supabase/baseline.sql
+  update agent_inbox_items set
+    status = 'resolved',
+    resolved_at = now(),
+    body = 'Contato anonimizado.',
+    ref_id = null
+  where organization_id = p_organization_id
+    and kind in ('handoff', 'case_stale')
+    and (
+      (ref_kind = 'contact' and ref_id = p_contact_id)
+      or (ref_kind = 'conversation' and ref_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          ))
+      or (ref_kind = 'agent_case' and ref_id in (
+            select id from agent_cases
+              where organization_id = p_organization_id
+                and conversation_id in (
+                  select id from conversations
+                    where contact_id = p_contact_id and organization_id = p_organization_id
+                )
+          ))
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_inbox_items', v_count);
+
+  -- agent_case_chat_messages — a consulta interna da equipe à IA SOBRE o caso
+  -- (migration 0281). FK DIRETA para `contacts`, então o vínculo é o titular e
+  -- não precisa passar pela conversa.
+  --
+  -- `redacted_at is null` no `where` é o que torna o passo IDEMPOTENTE: a
+  -- varredura diária de redações incompletas roda a função de novo, e sem essa
+  -- condição o carimbo de QUANDO se apagou seria reescrito a cada rodada.
+  --
+  -- A linha NÃO é apagada, só o texto: quem abrir o caso depois continua vendo
+  -- que a equipe perguntou N vezes, quando, e se a IA respondeu. Apagar a linha
+  -- inteira ficaria verde num teste de "o texto sumiu" e tiraria da organização
+  -- a resposta a "quanto a equipe deliberou sobre este caso".
+  update agent_case_chat_messages set
+    body = null,
+    redacted_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id
+    and redacted_at is null;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_case_chat_messages', v_count);
+
+  -- 8. dense audit row
+  insert into api_audit_log (organization_id, action, actor_user_id, resource_type, resource_id, metadata, bypassed_rls)
+  values (
+    p_organization_id,
+    'lgpd.redact_executed',
+    null,
+    'contact',
+    p_contact_id,
+    jsonb_build_object(
+      'cascaded_to', v_counts,
+      'media_queued', coalesce(array_length(v_media_paths, 1), 0),
+      'request_id', p_request_id
+    ),
+    true
+  );
+
+  return jsonb_build_object(
+    'already_anonymized', false,
+    'counts', v_counts,
+    'media_paths', v_media_paths
+  );
+end;
+$$;
+revoke all on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) to service_role;
+
+-- ── travas do suporte, depois de toda tabela nova (migration 0274) ─────────
+-- `agent_case_chat_messages` nasce SERVER-ONLY (revoke de anon/authenticated +
+-- grant select), então o ramo server-only da função lhe dá ZERO policies
+-- `support_write_*` — que é o contrato mais restritivo. Escrever `drop policy`
+-- à mão aqui seria a segunda representação da mesma regra.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+notify pgrst, 'reload schema';
+
+
+
+-- ---- a passagem para uma pessoa vira um fato com registro (migration 0291) ----
+-- 0291 — A passagem do atendimento para uma pessoa vira um FATO com registro.
+--
+-- ─── O que se perdia, e onde ──────────────────────────────────────────────
+--
+-- Existem dois motores que tiram a conversa do automático: `performHumanHandoff`
+-- (`lib/agent-engine`, `pg.Pool`) e `triggerHandoff` (`lib/ai/handoff`,
+-- supabase-js). O primeiro monta um resumo do checkpoint e o enfia no corpo do
+-- aviso da Central; o segundo abre o aviso SEM resumo nenhum. Em nenhum dos dois
+-- sobrevive o que a pessoa que assume precisa: POR QUE a IA passou, o que ela já
+-- tentou, o que o cliente pediu com as palavras dele, e se ele chegou a ser
+-- avisado de que alguém vai responder.
+--
+-- O resultado, medido em conversa real: quem assume relê a conversa inteira e
+-- repete as perguntas que a IA já fez. O cliente responde duas vezes. É esse o
+-- laço de retorno desta entrega — se o briefing chegou, a repetição cai; se não
+-- chegou, ela não muda e a feature é decoração.
+--
+-- ─── POR QUE TABELA PRÓPRIA, e não um veículo que já existe ───────────────
+--
+-- `crm_lead_activities.reason` é o candidato óbvio (a transferência manual já o
+-- usa), e as três razões de ele não servir foram medidas antes:
+--
+--   1. a coluna é declarada "O PORQUÊ, legível por humano. Sem PII" em
+--      `lib/leads/activity-emitter.ts`, e é por isso que `performHumanHandoff`
+--      grava ali o texto FIXO "Atendimento passado para uma pessoa". O briefing
+--      é resumo de conversa: é PII por construção;
+--   2. a atividade é roteada para um NEGÓCIO ABERTO (`emitAgentActivityForContact`)
+--      e sem negócio ela não nasce — passagem sem lead existiria e seria invisível;
+--   3. o registro precisa de ESTADO (`reconhecido_por`/`reconhecido_em`) e de
+--      estrutura (as tentativas). `crm_lead_activities` não tem onde pôr isso sem
+--      virar `jsonb` lido por path, que é o anti-pattern nº 6 do CLAUDE.md.
+--
+-- ─── POR QUE AS COLUNAS SE CHAMAM `title`/`body`/`notes`/`content` ────────
+--
+-- De propósito, e não por gosto — é a mesma escolha da 0281.
+-- `tests/invariants/lgpd-cascata-alcanca-quem-guarda-pessoa.test.ts` só enxerga
+-- a tabela que satisfaz as DUAS condições: FK para `contacts` E coluna cujo NOME
+-- case o padrão de PII (`…|notes|note|body|content|title|subject…`). Uma tabela
+-- com `resumo`/`motivo_texto`/`cliente_quer` — que foi o desenho anterior —
+-- nasceria INVISÍVEL ao gate, e a cobertura dependeria de alguém lembrar de um
+-- invariante comportamental que uma sessão futura pode apagar com o gate de
+-- classe verde. Escolher o nome que o instrumento lê é mais barato que ensinar o
+-- instrumento a ler outro nome.
+--
+-- ─── DOUTRINA DIRC, respondida ────────────────────────────────────────────
+--
+--   Duplicar   — não: motivo, narrativa e tentativas não existem hoje em lugar
+--                nenhum (`rg -n -i "o que (já )?tentou|ja_tentou"` → vazio);
+--   Integrar   — `contact_id`/`conversation_id`/`caso_id` são FK, não cópias;
+--   Referenciar— `motor`/`origem`/`motivo_codigo` são vocabulário fechado;
+--   Calcular   — `body` NÃO é calculável depois: ele depende do estado do turno,
+--                que não sobrevive ao turno.
+--
+-- ─── O QUE ESTA MIGRATION FAZ ─────────────────────────────────────────────
+--
+--   1. cria `public.passagens_de_atendimento` — uma linha por episódio;
+--   2. liga a RLS de LEITURA em três condições (organização + papel `agent` +
+--      visibilidade da conversa) e deixa a tabela SERVER-ONLY na escrita;
+--   3. cria `fn_expurgar_passagens_vencidas` (1825 dias, piso de 90 no CORPO),
+--      que o cron diário de retenção passa a chamar — e que NUNCA apaga
+--      passagem ainda não reconhecida, porque passagem aberta é demanda viva;
+--   4. redefine `fn_lgpd_cascade_redact_contact` com UM passo novo e UMA coluna
+--      a mais no passo 2, derivada do corpo VIGENTE (a definição de maior número
+--      de linha no `supabase/baseline.sql`, copiada por script — o corpo anterior
+--      fica byte a byte igual, exceto pelas duas edições declaradas).
+--
+-- O que esta migration NÃO faz, declarado: ninguém ESCREVE nesta tabela ainda.
+-- Os 13 call sites dos dois motores, o reconhecimento automático por
+-- `fn_conversation_assign` e o cartão na conversa são das ondas seguintes. Uma
+-- tabela sem escritor é "evento sem consumidor" ao contrário, e a única razão de
+-- ela nascer antes é que schema e call site no mesmo PR fazem o reviewer ler
+-- 1.500 linhas para julgar uma decisão de modelagem.
+--
+-- ─── REAPLICAÇÃO ──────────────────────────────────────────────────────────
+--
+-- `create table if not exists`, `add column if not exists`, `drop constraint if
+-- exists` + `add constraint`, `create index if not exists`, `drop policy if
+-- exists` + `create policy`, `create or replace function`. O `update.sh` de um
+-- clone reaplica sem erro e sem duplicar efeito. Nenhuma constraint nova sobre
+-- dados existentes ⇒ não há deduplicação prévia a fazer (regra 8 da doutrina).
+
+create table if not exists public.passagens_de_atendimento (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  -- FK para `contacts`: é ela que põe a tabela no escopo do invariante de LGPD,
+  -- e é o filtro que a redação e o export usam.
+  contact_id       uuid not null references public.contacts(id)      on delete cascade,
+  -- FK para `conversations`: a passagem é da CONVERSA (é onde a pessoa
+  -- responde), e é este ponteiro que a RLS usa para herdar
+  -- `fn_can_view_conversation` sem passar por nenhuma tabela org-wide.
+  conversation_id  uuid not null references public.conversations(id) on delete cascade,
+  -- Só quando a passagem nasceu do "Não consigo → escalar" de um caso.
+  -- `set null` e NÃO `cascade`: apagar o caso não pode apagar o fato de a
+  -- conversa ter ido para uma pessoa.
+  caso_id          uuid references public.agent_cases(id)            on delete set null,
+
+  -- Qual dos dois motores passou. Sem esta coluna, "o motor B parou de gravar"
+  -- é indistinguível de "ninguém passou conversa nenhuma".
+  motor            text not null check (motor in ('engine','crm')),
+  -- POR ONDE entrou (o caminho de código), distinto de POR QUE (a razão). O
+  -- mesmo `requested_human` chega por três origens, e é a origem que responde
+  -- "que parte do sistema decidiu isto?".
+  origem           text not null check (origem in (
+                     'pedido_explicito','opt_out_provavel','ferramenta_do_modelo',
+                     'teto_de_gasto','caso_escalado','sentimento','legado_pedido',
+                     'legado_juridico','legado_etapa','legado_confianca','legado_teto',
+                     'mcp_externo','runtime_nativo')),
+  -- POR QUE saiu do automático. É o que vira FRASE na tela — o código nunca
+  -- aparece para uma pessoa (`lib/escalacao/passagem.ts` → `FRASE_DO_MOTIVO`).
+  motivo_codigo    text not null check (motivo_codigo in (
+                     'requested_human','suspected_optout','orcamento_de_ia','low_sentiment',
+                     'low_confidence','critical_stage','legal_mention','refund_mention',
+                     'caso_escalado')),
+
+  -- ─── OS QUATRO NOMES QUE O GATE DE LGPD LÊ (ver o cabeçalho) ─────────────
+  --   title   ← "o que o cliente quer", em uma linha (é o título do cartão)
+  --   body    ← a narrativa montada, que é o que a pessoa lê antes de responder
+  --   notes   ← as últimas palavras LITERAIS do cliente (citação, não conclusão)
+  --   content ← o texto livre de quem passou (o `por_que` da ferramenta, a razão
+  --             humana do caso, o `reason` do MCP). Vem do modelo ou de fora: é
+  --             dado NÃO confiável, e por isso é sanitizado antes do insert e
+  --             exibido como citação, nunca como instrução.
+  title            text,
+  -- `not null` porque é o que a tela mostra: um cartão sem corpo afirma que não
+  -- há contexto, quando o que houve foi a montagem não ter recebido nada. O piso
+  -- mora em `lib/escalacao/briefing-da-passagem.ts` (`PISO_DO_BRIEFING`).
+  body             text not null,
+  notes            text,
+  content          text,
+
+  -- Estruturado, para a lista numerada do cartão. NÃO é "texto livre solto": é
+  -- validado por `tentativasDaPassagemSchema` (Zod, `lib/escalacao/passagem.ts`)
+  -- ANTES do insert e lido por parser tipado, nunca por path cru — o CHECK aqui
+  -- garante só a forma externa, porque é o que um CHECK consegue garantir.
+  tentativas       jsonb not null default '[]'::jsonb
+                     check (jsonb_typeof(tentativas) = 'array'),
+
+  -- A VERDADE sobre o aviso ao cliente. `null` = ninguém tentou avisar (o
+  -- caminho acionado por uma pessoa que já está na conversa e fala por si).
+  -- A distinção existe porque a promessa "o cliente JÁ foi avisado" era dita sem
+  -- ninguém olhar o desfecho do envio: `sendMessageHandler` devolve `failed` sem
+  -- lançar, e o caminho seguinte afirmava `avisado: true`.
+  cliente_avisado      boolean,
+  -- Vocabulário FECHADO, não texto livre: é a TELA que traduz. Uma frase gravada
+  -- em português aqui seria a segunda representação do mesmo fato, e a primeira
+  -- a ficar sem espanhol.
+  aviso_motivo_codigo  text check (aviso_motivo_codigo is null or aviso_motivo_codigo in (
+                         'na_fila_canal_fora','falhou_no_envio','sem_telefone',
+                         'pre_go_live','canal_arquivado','fora_da_janela')),
+
+  criado_em        timestamptz not null default now(),
+  -- Quem assumiu. `reconhecido_por is null` COM `reconhecido_em` preenchido = a
+  -- conversa foi devolvida ao automático (ninguém assumiu, mas o episódio
+  -- fechou). Nunca o contrário — é o que a constraint abaixo garante.
+  reconhecido_por  uuid references auth.users(id) on delete set null,
+  reconhecido_em   timestamptz,
+  constraint passagens_reconhecimento_coerente
+    check (reconhecido_por is null or reconhecido_em is not null)
+);
+
+-- Auto-cura para o clone que já tenha uma versão ANTERIOR da tabela: o
+-- `create table if not exists` acima é no-op ali. Só as colunas que podem ser
+-- acrescentadas a uma tabela COM LINHAS entram — as `not null` sem default não
+-- podem, e não precisam: a tabela nasce aqui.
+alter table public.passagens_de_atendimento add column if not exists caso_id uuid;
+alter table public.passagens_de_atendimento add column if not exists title text;
+alter table public.passagens_de_atendimento add column if not exists notes text;
+alter table public.passagens_de_atendimento add column if not exists content text;
+alter table public.passagens_de_atendimento add column if not exists tentativas jsonb not null default '[]'::jsonb;
+alter table public.passagens_de_atendimento add column if not exists cliente_avisado boolean;
+alter table public.passagens_de_atendimento add column if not exists aviso_motivo_codigo text;
+alter table public.passagens_de_atendimento add column if not exists reconhecido_por uuid;
+alter table public.passagens_de_atendimento add column if not exists reconhecido_em timestamptz;
+
+-- Os CHECK em bloco próprio, para o clone que tenha a tabela sem eles.
+-- `drop` + `add` é auto-curativo E é o que garante UMA constraint por coluna: o
+-- nome usado aqui é o mesmo que o Postgres dá ao CHECK inline do `create table`
+-- acima, então a segunda aplicação substitui em vez de duplicar. Duas
+-- constraints definindo o mesmo vocabulário fazem
+-- `tests/invariants/vocabulario-banco-x-typescript.test.ts` se RECUSAR a medir —
+-- e ele está certo em se recusar: escolher uma daria veredito falso sobre todos
+-- os pares.
+alter table public.passagens_de_atendimento
+  drop constraint if exists passagens_de_atendimento_motor_check;
+alter table public.passagens_de_atendimento
+  add constraint passagens_de_atendimento_motor_check
+  check (motor in ('engine','crm'));
+
+alter table public.passagens_de_atendimento
+  drop constraint if exists passagens_de_atendimento_origem_check;
+alter table public.passagens_de_atendimento
+  add constraint passagens_de_atendimento_origem_check
+  check (origem in (
+    'pedido_explicito','opt_out_provavel','ferramenta_do_modelo',
+    'teto_de_gasto','caso_escalado','sentimento','legado_pedido',
+    'legado_juridico','legado_etapa','legado_confianca','legado_teto',
+    'mcp_externo','runtime_nativo'));
+
+alter table public.passagens_de_atendimento
+  drop constraint if exists passagens_de_atendimento_motivo_codigo_check;
+alter table public.passagens_de_atendimento
+  add constraint passagens_de_atendimento_motivo_codigo_check
+  check (motivo_codigo in (
+    'requested_human','suspected_optout','orcamento_de_ia','low_sentiment',
+    'low_confidence','critical_stage','legal_mention','refund_mention',
+    'caso_escalado'));
+
+alter table public.passagens_de_atendimento
+  drop constraint if exists passagens_de_atendimento_aviso_motivo_codigo_check;
+alter table public.passagens_de_atendimento
+  add constraint passagens_de_atendimento_aviso_motivo_codigo_check
+  check (aviso_motivo_codigo is null or aviso_motivo_codigo in (
+    'na_fila_canal_fora','falhou_no_envio','sem_telefone',
+    'pre_go_live','canal_arquivado','fora_da_janela'));
+
+alter table public.passagens_de_atendimento
+  drop constraint if exists passagens_de_atendimento_tentativas_check;
+alter table public.passagens_de_atendimento
+  add constraint passagens_de_atendimento_tentativas_check
+  check (jsonb_typeof(tentativas) = 'array');
+
+alter table public.passagens_de_atendimento
+  drop constraint if exists passagens_reconhecimento_coerente;
+alter table public.passagens_de_atendimento
+  add constraint passagens_reconhecimento_coerente
+  check (reconhecido_por is null or reconhecido_em is not null);
+
+-- Três índices, um LEITOR DECLARADO cada. Índice sem leitor é evento sem
+-- consumidor com outro nome.
+--   · por conversa  → o cartão, que lista as passagens daquela conversa;
+create index if not exists passagens_por_conversa
+  on public.passagens_de_atendimento (organization_id, conversation_id, criado_em desc);
+--   · por contato   → a redação e o export do titular (FK direta);
+create index if not exists passagens_por_contato
+  on public.passagens_de_atendimento (organization_id, contact_id, criado_em desc);
+--   · não reconhecidas → o segundo braço do cobrador em
+--     `app/api/v1/cron/case-stale-watcher` (onda seguinte) e o expurgo, que só
+--     apaga linha JÁ reconhecida.
+create index if not exists passagens_nao_reconhecidas
+  on public.passagens_de_atendimento (organization_id, criado_em desc)
+  where reconhecido_em is null;
+
+alter table public.passagens_de_atendimento enable row level security;
+
+-- ── Privilégio: leitura pelo login, escrita SÓ pelo servidor ───────────────
+-- `revoke all` PRIMEIRO porque o `ALTER DEFAULT PRIVILEGES … GRANT ALL ON
+-- TABLES TO "authenticated"` do baseline vem ANTES de toda tabela de apêndice:
+-- sem o revoke, a tabela nasce com INSERT/UPDATE/DELETE para `authenticated` e a
+-- policy seria a única coisa entre um `viewer` e a escrita. É exatamente o
+-- defeito que a 0279 teve de consertar em três tabelas já nascidas.
+--
+-- E não há caminho de escrita pelo PostgREST NENHUM: quem grava é o service role
+-- (os dois motores) e, na onda seguinte, o trigger definer do reconhecimento.
+-- Uma passagem forjada por um membro é uma mentira com cara de registro — ela
+-- diria que a IA desistiu de um atendimento que ela nunca tocou.
+revoke all    on public.passagens_de_atendimento from anon, authenticated;
+grant  select on public.passagens_de_atendimento to authenticated;
+grant  all    on public.passagens_de_atendimento to service_role;
+
+-- ── RLS: organização + papel + VISIBILIDADE DA CONVERSA ───────────────────
+-- As três condições, e cada uma fecha uma porta diferente:
+--   · `fn_user_org_ids`      — o vizinho não lê;
+--   · `fn_role_at_least`     — `viewer` não lê briefing de atendimento (ele vê a
+--     conversa por desenho, e o briefing diz MAIS que a conversa: diz o que a IA
+--     concluiu sobre a pessoa);
+--   · `fn_can_view_conversation` — numa organização em `visibility_mode='own'`,
+--     um atendente não lê o briefing de um atendimento que não é dele. É o mesmo
+--     predicado de `ai_reply_drafts`, e é a razão de `conversation_id` viver
+--     dentro desta tabela.
+drop policy if exists tenant_isolation_passagens_de_atendimento_all on public.passagens_de_atendimento;
+drop policy if exists tenant_isolation_passagens_de_atendimento_select on public.passagens_de_atendimento;
+create policy tenant_isolation_passagens_de_atendimento_select
+  on public.passagens_de_atendimento
+  for select to authenticated
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and exists (
+      select 1
+        from public.conversations c
+       where c.organization_id = passagens_de_atendimento.organization_id
+         and c.id = passagens_de_atendimento.conversation_id
+         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+-- ── Retenção: a tabela nasce com dono de piso ─────────────────────────────
+create or replace function public.fn_expurgar_passagens_vencidas(
+  p_retencao_dias int default null,
+  p_limite int default null
+) returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  -- 1825 = os 5 anos da auditoria, e pelo mesmo motivo: a passagem é rastro de
+  -- ATENDIMENTO — quem assumiu, quando, e por quê. O piso de 90 impede que o
+  -- knob vire apagador de rastro recente, e mora AQUI, no corpo, porque só assim
+  -- vale para QUALQUER chamador, inclusive um `psql` na mão.
+  v_dias int := greatest(coalesce(p_retencao_dias, 1825), 90);
+  v_limite int := least(greatest(coalesce(p_limite, 1000), 1), 10000);
+  v_apagadas int;
+begin
+  with vencidas as (
+    select p.id from public.passagens_de_atendimento p
+      -- ⚠️ SÓ passagem JÁ RECONHECIDA. Uma passagem aberta é demanda viva: alguém
+      -- do outro lado está esperando resposta e ninguém assumiu. Apagá-la por
+      -- idade seria o expurgo virando esquecedor de pendência — e o único sinal
+      -- de que a pessoa ficou sem resposta some junto.
+     where p.reconhecido_em is not null
+       and p.criado_em < now() - make_interval(days => v_dias)
+     order by p.criado_em
+     limit v_limite
+  )
+  delete from public.passagens_de_atendimento p using vencidas v where p.id = v.id;
+  get diagnostics v_apagadas = row_count;
+  return v_apagadas;
+end;
+$$;
+-- As DUAS origens de EXECUTE: o `ALTER DEFAULT PRIVILEGES … GRANT ALL ON
+-- FUNCTIONS TO anon` do baseline (que `revoke from public` não remove) e o grant
+-- implícito a PUBLIC que o Postgres dá a toda função ao criá-la (que `revoke
+-- from anon` não remove). Fechar uma só deixa a função exposta com o gate verde.
+revoke all     on function public.fn_expurgar_passagens_vencidas(int,int) from public, anon, authenticated;
+grant  execute on function public.fn_expurgar_passagens_vencidas(int,int) to service_role;
+
+-- ── A cascata de LGPD alcança a passagem ──────────────────────────────────
+-- Derivada do corpo VIGENTE do baseline (a definição de maior número de linha),
+-- por script, nunca redigitada: o corpo anterior fica byte a byte igual e as
+-- ÚNICAS mudanças são as duas declaradas — o passo de `passagens_de_atendimento`
+-- e o `last_handoff_reason = null` dentro do passo 2, que já visita as mesmas
+-- linhas com o mesmo predicado. O Postgres troca o corpo INTEIRO num `create or
+-- replace`; quem derivar da versão errada apaga o passo de outra entrega sem um
+-- único erro. A catraca que vigia isso é
+-- `tests/invariants/cascata-lgpd-nao-encolhe.test.ts`.
+CREATE OR REPLACE FUNCTION "public"."fn_lgpd_cascade_redact_contact"("p_organization_id" "uuid", "p_contact_id" "uuid", "p_request_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_already bool;
+  v_counts jsonb := '{}'::jsonb;
+  v_media_paths text[] := '{}';
+  v_anon_label text;
+  v_count int;
+begin
+  perform public.fn_service_lock(p_organization_id,p_contact_id);
+  select is_anonymized into v_already
+    from contacts
+    where id = p_contact_id and organization_id = p_organization_id;
+
+  if not found then
+    raise exception 'contact not found' using errcode = 'P0002';
+  end if;
+
+  if v_already then
+    return jsonb_build_object('already_anonymized', true, 'counts', v_counts, 'media_paths', v_media_paths);
+  end if;
+
+  v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+
+  -- Collect media storage paths (we only delete what we own — media_storage_path)
+  select coalesce(array_agg(distinct media_storage_path) filter (where media_storage_path is not null), '{}')
+    into v_media_paths
+    from messages
+    where organization_id = p_organization_id
+      and conversation_id in (
+        select id from conversations
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      );
+
+  -- 1. contacts (irreversible)
+  update contacts set
+    name = v_anon_label,
+    display_name = v_anon_label,
+    email = null,
+    -- email_normalized NÃO entra: é GENERATED ALWAYS AS (lower(trim(email)))
+    -- e o Postgres recusa escrita nela — a linha acima já a zera por derivação.
+    -- Com a atribuição, o cascade INTEIRO abortava e nada era anonimizado.
+    phone_number = null,
+    cpf_encrypted = null,
+    cpf_hash = null,
+    birthdate = null,
+    is_anonymized = true,
+    anonymized_at = now(),
+    consent = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('contacts', v_count);
+
+  -- 2. conversations metadata + preview strip
+  update conversations set
+    metadata = '{}'::jsonb,
+    last_message_preview = null,
+    -- O motivo CRU da última passagem (migration 0291). É código de
+    -- vocabulário, não texto livre — mas ele diz que ESTA pessoa foi escalada
+    -- por irritação, por assunto jurídico ou por suspeita de opt-out, e isso é
+    -- um fato sobre ela. Entra NESTE update, e não num segundo: mesmo
+    -- predicado, mesmas linhas, metade das varreduras.
+    --
+    -- ⚠️ `last_handoff_reason` é CHAVE DE NEGÓCIO em outro módulo: a ponte de
+    -- voz limpa o silêncio filtrando pelo VALOR da coluna
+    -- (`lib/wacalls/events-bridge.ts`). Zerá-la num contato anonimizado é
+    -- seguro — não há chamada viva de contato anonimizado — e é a razão de
+    -- esta entrega NÃO usar essa coluna para texto rico: ela continua
+    -- recebendo só o código, e o texto vive em `passagens_de_atendimento`.
+    last_handoff_reason = null,
+    updated_at = now()
+  where contact_id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('conversations', v_count);
+
+  -- 3. messages: redact body + null media + strip metadata (preserve status/timestamps/conversation_id)
+  update messages set
+    body = '[mensagem anonimizada]',
+    media_url = null,
+    media_mime = null,
+    media_size_bytes = null,
+    media_storage_path = null,
+    metadata = '{}'::jsonb,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('messages', v_count);
+
+  -- 4. crm_lead_activities — strip payload, metadata E reason (migration 0071).
+  --    `reason` é texto livre escrito por LLM sobre a conversa do lead: supor que
+  --    nunca conterá um nome é a suposição que falha. `evidence` NÃO é limpa —
+  --    guarda só ids, e as linhas apontadas são redigidas por conta própria.
+  update crm_lead_activities set
+    payload = '{}'::jsonb,
+    metadata = '{}'::jsonb,
+    reason = null
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or lead_id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+      or lead_id in (
+        select id from crm_leads
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('activities', v_count);
+
+  -- 5. crm_leads — strip title/description/custom_fields/source_metadata/tags but PRESERVE pipeline/stage/value
+  update crm_leads set
+    title = v_anon_label,
+    description = null,
+    custom_fields = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('leads', v_count);
+
+  -- 6. orders — PRESERVE values + status + timestamps. Strip personal fields from payload jsonb
+  --    and replace customer_external_id with null (FK-safe; soft de-link). Keep contact_id null.
+  update orders set
+    payload = (coalesce(payload, '{}'::jsonb))
+      - 'customer'
+      - 'customer_name'
+      - 'customer_email'
+      - 'customer_phone'
+      - 'shipping_address'
+      - 'billing_address'
+      - 'contact_identification',
+    customer_external_id = null,
+    contact_id = null,
+    is_anonymized = true,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('orders', v_count);
+
+  -- 7. enqueue media for async deletion (idempotent via unique (bucket, object_path))
+  if array_length(v_media_paths, 1) > 0 then
+    insert into storage_redaction_queue (organization_id, request_id, bucket, object_path)
+    select p_organization_id, p_request_id, 'whatsapp-media', path
+      from unnest(v_media_paths) as path
+      where path is not null and length(path) > 0
+    on conflict (bucket, object_path) do nothing;
+  end if;
+
+  -- 7b. voice_calls — o TELEFONE de quem falou ao telefone (migration 0235).
+  --
+  -- `peer_phone` é `not null` e guarda o número da outra ponta: depois de
+  -- anonimizar o contato, ele sobrevivia ligado ao `contact_id` e reidentificava
+  -- a pessoa que pediu para ser esquecida. É o mesmo argumento que a foto de
+  -- perfil já tinha (ver o bloco do avatar em `lib/lgpd/redact-cascade.ts`):
+  -- anonimizar em toda parte menos numa é não ter anonimizado.
+  --
+  -- O que fica: direção, status, motivo do fim, marcas de tempo e duração. Um
+  -- registro de "houve uma chamada de 12 minutos" sem número e sem dono não
+  -- identifica ninguém e é o que sustenta a métrica do atendente e a fatura.
+  -- `peer_phone` é NOT NULL, então recebe o rótulo, não `null`.
+  update voice_calls set
+    peer_phone = v_anon_label,
+    owner_user_id = null,
+    created_by = null,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('voice_calls', v_count);
+
+  -- agent_cases — o que a IA escreveu SOBRE a pessoa quando travou (migration 0280).
+  --
+  -- O caso é o texto que a equipe lê antes de decidir: `title`, `summary` e
+  -- `blocker` saem do modelo a partir da conversa, e `context_snapshot` é o
+  -- recorte dessa conversa que o motor mandou para ele. Nada disso é registro de
+  -- operação — é o relato do problema de uma pessoa identificável, escrito por
+  -- máquina. Sem este passo, anonimizar devolvia SUCESSO com o relato intacto.
+  --
+  -- As três colunas de texto são `not null`: recebem rótulo e texto fixo, nunca
+  -- `null` (a mesma razão de `voice_calls.peer_phone` logo acima).
+  --
+  -- ⚠️ `updated_at` FICA FORA DO `set`, de propósito. O cobrador de caso parado
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts`) lê `updated_at` como "alguém
+  -- da equipe encostou neste caso". A cascata não é alguém encostando: escrever
+  -- ali faria a anonimização ADIAR a cobrança de um caso que continua parado, e
+  -- o efeito só apareceria como um cliente esperando mais tempo.
+  --
+  -- O vínculo é pela CONVERSA porque `agent_cases` não tem FK para `contacts`.
+  update agent_cases set
+    title = v_anon_label,
+    summary = '[resumo anonimizado]',
+    blocker = '[bloqueio anonimizado]',
+    context_snapshot = '{}'::jsonb
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_cases', v_count);
+
+  -- agent_case_events — a linha do tempo do caso (migration 0280).
+  --
+  -- `body` é o que a pessoa da equipe escreveu ao responder o caso e o que o
+  -- agente registrou sobre o que o LEAD respondeu; `metadata` carrega o recorte
+  -- que o motor anexou. `kind`, `actor_kind`, `human_action` e `created_at`
+  -- FICAM: são o registro de que houve um toque humano e quando — operação, não
+  -- dado da pessoa, e é deles que sai a métrica de atendimento.
+  update agent_case_events set
+    body = null,
+    metadata = '{}'::jsonb
+  where organization_id = p_organization_id
+    and case_id in (
+      select id from agent_cases
+        where organization_id = p_organization_id
+          and conversation_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_case_events', v_count);
+
+  -- demandas — o assunto do pedido (migration 0280).
+  --
+  -- `assunto` é texto livre sobre o que a pessoa pediu. O resto da linha é a
+  -- operação da demanda (origem, estado, dono, prazo, desfecho) e fica de pé:
+  -- apagar a linha inteira tiraria da organização a resposta a "quantos pedidos
+  -- houve em março", que é o mesmo argumento do compromisso da agenda.
+  --
+  -- FK direta (`demandas.contact_id` é `not null`), então o vínculo é o contato.
+  update demandas set
+    assunto = null
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('demandas', v_count);
+
+  -- agent_inbox_items — o aviso que leva o texto do caso para a Central (migration 0280).
+  --
+  -- O `body` do aviso de caso parado EMBUTE o título do caso
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts:128`), e o do handoff embute o
+  -- motivo da parada (`lib/ai/handoff/orchestrator.ts:335`). Redigir o caso e
+  -- deixar o aviso de pé seria anonimizar em toda parte menos numa — que é não
+  -- ter anonimizado. O molde (resolver + trocar o corpo + soltar a referência) é
+  -- o de `fn_meet_redact_contact`, que já faz isto para o aviso de compromisso.
+  --
+  -- ⚠️ O VÍNCULO É POLIMÓRFICO E TEM TRÊS BRAÇOS, não dois. Medido nos
+  -- produtores, não suposto: `handoff` nasce com `ref_kind='contact'`
+  -- (`lib/ai/handoff/orchestrator.ts:339`) E com `ref_kind='conversation'`
+  -- (`lib/agent-engine/agent/inbound-turn.ts:4100`); `case_stale` nasce SEMPRE
+  -- com `ref_kind='agent_case'` (a rota do cron acima, e a política em
+  -- `lib/ai/inbox-destino.ts:38`). Um predicado com só os dois primeiros braços
+  -- casa ZERO avisos de caso parado — e casar zero linha não é erro: é sucesso
+  -- com o texto intacto.
+  --
+  -- Os `kind` são os MEDIDOS no CHECK vigente (`supabase/baseline.sql`, bloco
+  -- único de `agent_inbox_items_kind_check`). `case_opened` NÃO existe, e kind
+  -- inexistente num `in (...)` também casa zero e devolve sucesso. Para
+  -- reconferir sem acreditar nesta prosa:
+  --   grep -n "agent_inbox_items_kind_check check" -A40 supabase/baseline.sql
+  update agent_inbox_items set
+    status = 'resolved',
+    resolved_at = now(),
+    body = 'Contato anonimizado.',
+    ref_id = null
+  where organization_id = p_organization_id
+    and kind in ('handoff', 'case_stale')
+    and (
+      (ref_kind = 'contact' and ref_id = p_contact_id)
+      or (ref_kind = 'conversation' and ref_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          ))
+      or (ref_kind = 'agent_case' and ref_id in (
+            select id from agent_cases
+              where organization_id = p_organization_id
+                and conversation_id in (
+                  select id from conversations
+                    where contact_id = p_contact_id and organization_id = p_organization_id
+                )
+          ))
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_inbox_items', v_count);
+
+  -- agent_case_chat_messages — a consulta interna da equipe à IA SOBRE o caso
+  -- (migration 0281). FK DIRETA para `contacts`, então o vínculo é o titular e
+  -- não precisa passar pela conversa.
+  --
+  -- `redacted_at is null` no `where` é o que torna o passo IDEMPOTENTE: a
+  -- varredura diária de redações incompletas roda a função de novo, e sem essa
+  -- condição o carimbo de QUANDO se apagou seria reescrito a cada rodada.
+  --
+  -- A linha NÃO é apagada, só o texto: quem abrir o caso depois continua vendo
+  -- que a equipe perguntou N vezes, quando, e se a IA respondeu. Apagar a linha
+  -- inteira ficaria verde num teste de "o texto sumiu" e tiraria da organização
+  -- a resposta a "quanto a equipe deliberou sobre este caso".
+  update agent_case_chat_messages set
+    body = null,
+    redacted_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id
+    and redacted_at is null;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_case_chat_messages', v_count);
+
+  -- passagens_de_atendimento — o BRIEFING é sobre a pessoa (migration 0291).
+  --
+  -- A linha guarda o que a IA concluiu sobre um atendimento de alguém
+  -- identificável: o que ela entendeu que a pessoa quer (`title`), a narrativa
+  -- que quem assumiu leu (`body`), as PALAVRAS LITERAIS do cliente (`notes`), o
+  -- texto livre de quem passou (`content`) e o que a IA já tinha tentado
+  -- (`tentativas`). Nada disso é registro de operação — é o relato do problema
+  -- de uma pessoa, escrito por máquina, na tela de quem vai responder.
+  --
+  -- `body` é `not null` e recebe o RÓTULO, não `null` — a mesma razão de
+  -- `voice_calls.peer_phone` e de `agent_cases.title` acima: coluna obrigatória
+  -- anulada aborta o cascade INTEIRO, e um cascade abortado não anonimiza nada.
+  --
+  -- O que FICA, de propósito: `motor`, `origem`, `motivo_codigo`,
+  -- `cliente_avisado`, `aviso_motivo_codigo`, `criado_em` e o par de
+  -- reconhecimento. São operação — quantas passagens houve, por quê, quanto
+  -- tempo até alguém assumir. Um passo que apagasse a linha inteira ficaria
+  -- verde num teste de "o texto sumiu" e tiraria da organização a resposta a
+  -- "quantos atendimentos a IA devolveu em março, e quanto tempo esperaram".
+  --
+  -- O vínculo é a FK DIRETA `contact_id`: a tabela a carrega exatamente para
+  -- este passo não precisar passar pela conversa.
+  update passagens_de_atendimento set
+    body       = v_anon_label,
+    title      = null,
+    notes      = null,
+    content    = null,
+    tentativas = '[]'::jsonb
+  where organization_id = p_organization_id and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('passagens_de_atendimento', v_count);
+
+  -- 8. dense audit row
+  insert into api_audit_log (organization_id, action, actor_user_id, resource_type, resource_id, metadata, bypassed_rls)
+  values (
+    p_organization_id,
+    'lgpd.redact_executed',
+    null,
+    'contact',
+    p_contact_id,
+    jsonb_build_object(
+      'cascaded_to', v_counts,
+      'media_queued', coalesce(array_length(v_media_paths, 1), 0),
+      'request_id', p_request_id
+    ),
+    true
+  );
+
+  return jsonb_build_object(
+    'already_anonymized', false,
+    'counts', v_counts,
+    'media_paths', v_media_paths
+  );
+end;
+$$;
+revoke all on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) to service_role;
+
+-- ── travas do suporte, depois de toda tabela nova (migration 0274) ─────────
+-- `passagens_de_atendimento` nasce SERVER-ONLY (revoke de anon/authenticated +
+-- grant select), então o ramo server-only da função lhe dá ZERO policies
+-- `support_write_*` — que é o contrato mais restritivo. Escrever `drop policy` à
+-- mão aqui seria a segunda representação da mesma regra.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+notify pgrst, 'reload schema';
+
+
+-- ---- o WhatsApp da equipe é avisado quando a IA abre um caso (migration 0292) ----
+-- 0292 — O WhatsApp da equipe é avisado quando a IA abre um caso.
+--
+-- ─── O que não existia ────────────────────────────────────────────────────
+--
+-- A IA abre um caso quando trava (`agent_cases`), o caso entra numa fila e
+-- espera alguém da equipe. O único lugar onde ele APARECE é uma tela do CRM —
+-- e quem opera uma PME não fica com o CRM aberto: fica com o WhatsApp aberto.
+-- O cobrador de caso parado (`app/api/v1/cron/case-stale-watcher`) só reclama
+-- DEPOIS de horas, e reclama na mesma tela que ninguém abriu. O resultado
+-- medido é um cliente esperando do outro lado sem que ninguém tenha sido
+-- avisado de nada.
+--
+-- Esta migration é o SCHEMA e as RPCs desse aviso. A tela que o liga é a onda
+-- seguinte; o motor que o envia (`lib/escalacao/aviso-ao-suporte.ts`) entra no
+-- MESMO commit que este arquivo.
+--
+-- ─── DOUTRINA DIRC, respondida ────────────────────────────────────────────
+--
+--   Duplicar   — não: não existe hoje nenhuma tabela de "para onde mandar
+--                aviso interno" (`organizations.settings` guarda preferência de
+--                produto, não vínculo com `channel_sessions`);
+--   Integrar   — `channel_session_id` e `case_id` são FK, não cópias;
+--   Referenciar— `status` e `erro_codigo` são vocabulário fechado;
+--   Calcular   — "este aviso já saiu?" NÃO é calculável depois: sem a linha de
+--                entrega, o único jeito de saber seria reler o WhatsApp da
+--                equipe, e a segunda rodada do dreno mandaria de novo.
+--
+-- ─── AS DUAS TABELAS, e por que são duas ──────────────────────────────────
+--
+--   `config_aviso_de_caso`    — UMA linha por organização: para onde mandar,
+--                               por qual conexão, ligado ou não.
+--   `entregas_de_aviso_de_caso` — UMA linha por (organização, caso, destino).
+--                               É a `unique` dela que dá a IDEMPOTÊNCIA: o
+--                               dreno do `event_log` reentrega o mesmo evento
+--                               em retry, e sem essa chave a equipe receberia o
+--                               mesmo aviso três vezes.
+--
+-- **O TEXTO DO AVISO NUNCA É GUARDADO.** Só `corpo_hash` — precedente
+-- `send_ledger.body_hash`. Um registro de entrega que guardasse o corpo seria
+-- uma segunda cópia do relato do cliente, numa tabela que a cascata de LGPD
+-- teria de aprender a redigir. A única coluna capaz de ecoar um dado pessoal é
+-- `erro_detalhe` (o texto cru do transporte), e é ela que a cascata zera.
+--
+-- ─── POR QUE NÃO HÁ `check (ligado = false or channel_session_id is not null)`
+--
+-- Ele parece a expressão natural de "ligado sem canal nunca dispara", e é uma
+-- armadilha: `on delete set null` é um UPDATE, o CHECK é reavaliado na linha
+-- resultante e VIOLA quando `ligado` é `true` — abortando o DELETE INTEIRO da
+-- conexão. A rota de exclusão de canal devolveria 500 com mensagem de
+-- constraint, sem nenhuma pista de que a causa está em outra tela. A coerência
+-- é do trigger `trg_aviso_de_caso_coerente`, que se autocura: canal nulo ⇒
+-- `ligado` cai para `false`, e a tela explica o que houve.
+--
+-- ─── POR QUE A ESCRITA É POR RPC E A LEITURA É POR RLS ────────────────────
+--
+-- Padrão vigente da 0228 e da 0262. A escrita precisa de quatro guardas na
+-- MESMA transação (papel `admin`, escrita de suporte liberada, MFA comprovada
+-- quando há fator, e o canal sendo da própria organização) — e uma policy não
+-- sabe recusar "este número já é de um cliente seu". A leitura da CONFIGURAÇÃO
+-- é `admin` (quem configura conexão é admin); a do HISTÓRICO é `manager`,
+-- porque "o aviso está saindo?" é pergunta de quem opera o atendimento.
+-- Nenhuma policy `for all` ⇒ as duas tabelas nascem fora da consulta `cmd='ALL'`
+-- do gate de RBAC, sem entrar em dívida nova.
+--
+-- ─── AS DUAS COLUNAS DE CONTAGEM NÃO SÃO ENFEITE ──────────────────────────
+--
+-- `mensagens_ignoradas` / `ultima_mensagem_ignorada_em` existem porque a onda
+-- do corte (o número de aviso é INTERNO: nada que venha dele vira contato,
+-- conversa, lead ou despacho do agente) produz um silêncio que, na tela, é
+-- indistinguível de defeito. Com elas a tela diz "3 mensagens deste número
+-- foram ignoradas nos últimos 7 dias — é o esperado". Quem incrementa é
+-- `fn_contar_mensagem_ignorada`, e ela NÃO toca `updated_at`: aquele carimbo
+-- responde "quando alguém mexeu na configuração", e uma resposta do suporte não
+-- é alguém mexendo na configuração.
+--
+-- ─── REAPLICAÇÃO ──────────────────────────────────────────────────────────
+--
+-- `create table if not exists`, `add column if not exists`, `drop constraint if
+-- exists` + `add constraint`, `create index if not exists`, `drop policy if
+-- exists` + `create policy`, `create or replace function`, `drop trigger if
+-- exists` + `create trigger`. O `update.sh` de um clone reaplica sem erro e sem
+-- duplicar efeito. Nenhuma constraint nova sobre dados existentes (as duas
+-- tabelas nascem aqui, e os dois CHECK de vocabulário só CRESCEM) ⇒ não há
+-- deduplicação prévia a fazer (regra 8 da doutrina de migrations).
+
+create table if not exists public.config_aviso_de_caso (
+  organization_id     uuid primary key references public.organizations(id) on delete cascade,
+  -- NULLABLE de propósito, e `set null` e não `cascade`/`restrict`: com
+  -- `cascade` a exclusão do canal apagaria a configuração CALADA; com
+  -- `restrict`, a exclusão do canal falharia por causa de um aviso. `set null`
+  -- desliga (pelo trigger) e deixa a tela explicar.
+  channel_session_id  uuid references public.channel_sessions(id) on delete set null,
+  -- E.164, com `+`. É o que a pessoa digita e o que o transporte recebe.
+  telefone_destino    text not null,
+  -- O JID que o transporte resolveu da última vez. É o que faz o corte da
+  -- ingestão funcionar para destinatário em MODO PRIVACIDADE, onde o telefone
+  -- nunca chega no webhook e o chat chega como um identificador opaco.
+  destino_jid         text,
+  -- Como a equipe chama esse número ("Plantão", "Suporte 1"). Só rótulo.
+  rotulo              text,
+  ligado              boolean not null default false,
+  -- A SUPERFÍCIE DO DESCARTE (ver o cabeçalho): sem elas, "as mensagens deste
+  -- número somem" é indistinguível de defeito para quem olha a tela.
+  mensagens_ignoradas         integer not null default 0,
+  ultima_mensagem_ignorada_em timestamptz,
+  criado_por          uuid references auth.users(id) on delete set null,
+  atualizado_por      uuid references auth.users(id) on delete set null,
+  created_at          timestamptz not null default now(),
+  -- Responde "quando alguém MEXEU na configuração" — e só isso. O contador de
+  -- mensagens ignoradas não o toca de propósito.
+  updated_at          timestamptz not null default now()
+);
+
+-- Colunas declaradas de novo para o clone que já tenha a tabela de uma versão
+-- anterior deste arquivo: `add column if not exists` é o que torna o apêndice
+-- auto-curativo.
+alter table public.config_aviso_de_caso
+  add column if not exists destino_jid                 text,
+  add column if not exists rotulo                      text,
+  add column if not exists mensagens_ignoradas         integer not null default 0,
+  add column if not exists ultima_mensagem_ignorada_em timestamptz,
+  add column if not exists criado_por                  uuid,
+  add column if not exists atualizado_por              uuid;
+
+-- As constraints nomeadas fora do `create table`: é o que as torna
+-- auto-curativas num clone cuja tabela nasceu de uma versão anterior. O nome é
+-- o MESMO que o Postgres daria ao inline, então não há duas constraints
+-- definindo o mesmo domínio — duas fariam o invariante de vocabulário se
+-- RECUSAR a medir.
+alter table public.config_aviso_de_caso
+  drop constraint if exists config_aviso_de_caso_e164;
+alter table public.config_aviso_de_caso
+  add constraint config_aviso_de_caso_e164
+  check (telefone_destino ~ '^\+[1-9][0-9]{7,14}$');
+
+alter table public.config_aviso_de_caso
+  drop constraint if exists config_aviso_de_caso_rotulo_curto;
+alter table public.config_aviso_de_caso
+  add constraint config_aviso_de_caso_rotulo_curto
+  check (rotulo is null or char_length(rotulo) <= 60);
+
+-- Coerência que se AUTOCURA, em vez de um CHECK que aborta o DELETE da conexão
+-- (ver o cabeçalho). `before insert or update` para valer também quando o
+-- `on delete set null` da FK dispara o UPDATE.
+create or replace function public.fn_aviso_de_caso_coerente()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  -- Sem canal não há por onde mandar. Deixar `ligado = true` aqui produziria a
+  -- pior tela possível: a que diz que o aviso está ativo enquanto ele nunca
+  -- dispara. `security invoker` de propósito — ela não lê nem escreve nada além
+  -- da linha que o próprio comando já está tocando.
+  if new.channel_session_id is null then
+    new.ligado := false;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.fn_aviso_de_caso_coerente() from public, anon, authenticated;
+
+drop trigger if exists trg_aviso_de_caso_coerente on public.config_aviso_de_caso;
+create trigger trg_aviso_de_caso_coerente
+  before insert or update on public.config_aviso_de_caso
+  for each row execute function public.fn_aviso_de_caso_coerente();
+
+create table if not exists public.entregas_de_aviso_de_caso (
+  id                  uuid primary key default gen_random_uuid(),
+  organization_id     uuid not null references public.organizations(id) on delete cascade,
+  case_id             uuid not null references public.agent_cases(id)   on delete cascade,
+  -- O destino NO INSTANTE do envio. Não é FK para a configuração de propósito:
+  -- trocar o número do plantão não pode reescrever para onde os avisos de ontem
+  -- foram — isso é registro, não estado.
+  destino             text not null,
+  channel_session_id  uuid references public.channel_sessions(id) on delete set null,
+  status              text not null default 'pendente',
+  tentativas          smallint not null default 0,
+  -- Vocabulário FECHADO (lib/escalacao/vocabulario-do-aviso.ts), nunca a
+  -- mensagem do provedor: é o que a tela lê e o que a Central traduz.
+  erro_codigo         text,
+  -- O texto cru do transporte, truncado. ÚNICA coluna desta tabela capaz de
+  -- ecoar um dado pessoal — e é por isso que a cascata de LGPD a zera.
+  erro_detalhe        text,
+  external_id         text,
+  -- O TEXTO NUNCA É GUARDADO (precedente: `send_ledger.body_hash`). O hash
+  -- responde "o aviso que saiu era este?" sem guardar o relato do cliente uma
+  -- segunda vez.
+  corpo_hash          text,
+  enviado_em          timestamptz,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+
+alter table public.entregas_de_aviso_de_caso
+  add column if not exists channel_session_id uuid,
+  add column if not exists erro_codigo        text,
+  add column if not exists erro_detalhe       text,
+  add column if not exists external_id        text,
+  add column if not exists corpo_hash         text,
+  add column if not exists enviado_em         timestamptz;
+
+alter table public.entregas_de_aviso_de_caso
+  drop constraint if exists entregas_de_aviso_de_caso_status_check;
+alter table public.entregas_de_aviso_de_caso
+  add constraint entregas_de_aviso_de_caso_status_check
+  check (status in ('pendente', 'enviado', 'falhou', 'cancelado'));
+
+alter table public.entregas_de_aviso_de_caso
+  drop constraint if exists entregas_de_aviso_de_caso_erro_codigo_check;
+alter table public.entregas_de_aviso_de_caso
+  add constraint entregas_de_aviso_de_caso_erro_codigo_check
+  check (erro_codigo is null or erro_codigo in (
+    'canal_desconectado',
+    'canal_arquivado',
+    'canal_nao_aceita_aviso_livre',
+    'transporte_ausente',
+    'destino_invalido',
+    'teto_diario_do_numero',
+    'sem_endereco_publico',
+    'titular_anonimizado',
+    'expirou',
+    'falha_no_envio',
+    'indeterminado'));
+
+-- A CHAVE DA IDEMPOTÊNCIA. O dreno do `event_log` reentrega o mesmo evento em
+-- retry e três processos diferentes drenam a mesma fila: sem esta unique, a
+-- equipe receberia o mesmo aviso uma vez por tentativa. O `23505` dela é o
+-- sinal que o handler lê para REIVINDICAR a entrega antes de tocar a rede.
+create unique index if not exists entregas_de_aviso_de_caso_unica
+  on public.entregas_de_aviso_de_caso (organization_id, case_id, destino);
+
+-- O leitor declarado: a lista "os últimos avisos" da tela de configuração, que
+-- é a fonte da verdade sobre "o aviso está saindo?" (a Central pode ter tido o
+-- item apagado por qualquer membro; esta tabela, não).
+create index if not exists entregas_de_aviso_de_caso_org_idx
+  on public.entregas_de_aviso_de_caso (organization_id, created_at desc);
+
+-- `updated_at` da ENTREGA é operacional: ele responde "há quanto tempo esta
+-- reivindicação está de pé?", e é ele que separa "outro processo está enviando
+-- agora" de "alguém morreu no meio". Por isso a entrega ganha o trigger e a
+-- CONFIGURAÇÃO não: lá o carimbo significa "alguém mexeu", e um contador de
+-- mensagem ignorada não é alguém mexendo.
+drop trigger if exists trg_entregas_de_aviso_de_caso_updated_at on public.entregas_de_aviso_de_caso;
+create trigger trg_entregas_de_aviso_de_caso_updated_at
+  before update on public.entregas_de_aviso_de_caso
+  for each row execute function public.fn_set_updated_at();
+
+alter table public.config_aviso_de_caso      enable row level security;
+alter table public.entregas_de_aviso_de_caso enable row level security;
+
+-- `revoke all` PRIMEIRO: o `ALTER DEFAULT PRIVILEGES … GRANT ALL ON TABLES TO
+-- "authenticated"` do baseline vem ANTES de toda tabela de apêndice, então sem
+-- ele as tabelas nascem com INSERT/UPDATE/DELETE para `authenticated` e a
+-- policy seria a única coisa entre um `viewer` e a escrita. É o defeito que a
+-- 0279 teve de consertar em três tabelas já nascidas.
+revoke all    on public.config_aviso_de_caso      from anon, authenticated;
+revoke all    on public.entregas_de_aviso_de_caso from anon, authenticated;
+grant  select on public.config_aviso_de_caso      to authenticated;
+grant  select on public.entregas_de_aviso_de_caso to authenticated;
+grant  all    on public.config_aviso_de_caso      to service_role;
+grant  all    on public.entregas_de_aviso_de_caso to service_role;
+
+-- Leitura da CONFIGURAÇÃO: `admin`. Ela carrega o telefone de um funcionário e
+-- o vínculo com a conexão — quem configura conexão neste produto é admin.
+drop policy if exists leitura_config_aviso_de_caso on public.config_aviso_de_caso;
+create policy leitura_config_aviso_de_caso
+  on public.config_aviso_de_caso
+  for select to authenticated
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'admin')
+  );
+
+-- Leitura do HISTÓRICO: `manager`. "O aviso está saindo?" é pergunta de quem
+-- opera o atendimento, e a linha não expõe o número inteiro para a tela (que o
+-- mascara) nem guarda texto nenhum.
+drop policy if exists leitura_entregas_de_aviso_de_caso on public.entregas_de_aviso_de_caso;
+create policy leitura_entregas_de_aviso_de_caso
+  on public.entregas_de_aviso_de_caso
+  for select to authenticated
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'manager')
+  );
+
+-- ── A escrita da configuração: uma RPC, quatro guardas, uma transação ──────
+create or replace function public.fn_definir_aviso_de_caso(
+  p_org uuid,
+  p_channel uuid,
+  p_telefone text,
+  p_rotulo text,
+  p_ligado boolean,
+  p_confirma_contato boolean default false
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_antes public.config_aviso_de_caso;
+  v_arch timestamptz;
+  v_digitos text;
+  v_variantes text[];
+begin
+  -- Papel + suporte, nesta ordem e na MESMA transação da escrita. `auth.uid()`
+  -- nulo é o caminho do service role: quem escreve configuração é gente.
+  if auth.uid() is null or p_org is null
+     or not public.fn_role_at_least(p_org, 'admin')
+     or not public.fn_support_write_allowed(p_org) then
+    raise exception 'aviso_de_caso_forbidden' using errcode = '42501';
+  end if;
+  -- Quem NÃO tem fator cadastrado passa: a função já trata isso, e é coerente
+  -- com a política de MFA opcional deste produto.
+  if not public.fn_session_mfa_proven() then
+    raise exception 'aviso_de_caso_mfa_required' using errcode = '42501';
+  end if;
+  if p_telefone is null or p_telefone !~ '^\+[1-9][0-9]{7,14}$' then
+    raise exception 'aviso_de_caso_telefone_invalido' using errcode = '22023';
+  end if;
+
+  -- O canal é DA organização e não está arquivado. Sem isto a FK simples
+  -- deixaria apontar para o canal de outro tenant — a FK composta do padrão
+  -- 0228 não serve aqui porque o `on delete set null` anularia também
+  -- `organization_id`, que é a chave primária desta tabela.
+  if p_channel is not null then
+    select archived_at into v_arch
+      from public.channel_sessions
+     where id = p_channel and organization_id = p_org;
+    if not found or v_arch is not null then
+      raise exception 'aviso_de_caso_canal_invalido' using errcode = '22023';
+    end if;
+  end if;
+
+  -- As duas grafias do nono dígito — a MESMA regra de
+  -- `lib/channels/phone-variants.ts`. Comparar a string crua deixaria passar o
+  -- número do suporte cadastrado com 9 e registrado sem.
+  v_digitos := regexp_replace(p_telefone, '\D', '', 'g');
+  v_variantes := array[v_digitos];
+  if v_digitos like '55%' then
+    if length(v_digitos) = 13
+       and substring(v_digitos from 5 for 1) = '9'
+       and substring(v_digitos from 6 for 1) between '6' and '9' then
+      v_variantes := v_variantes || (substring(v_digitos from 1 for 4) || substring(v_digitos from 6));
+    elsif length(v_digitos) = 12
+       and substring(v_digitos from 5 for 1) between '6' and '9' then
+      v_variantes := v_variantes || (substring(v_digitos from 1 for 4) || '9' || substring(v_digitos from 5));
+    end if;
+  end if;
+
+  -- O NÚMERO DE AVISO NÃO PODE SER UM NÚMERO DA PRÓPRIA ORGANIZAÇÃO. É o laço
+  -- robô-com-robô: a conexão de avisos manda para o número oficial, o agente
+  -- dele responde, e as duas pontas se alimentam sem fim.
+  if exists (
+       select 1 from public.channel_sessions s
+        where s.organization_id = p_org
+          and s.phone_number is not null
+          and regexp_replace(s.phone_number, '\D', '', 'g') = any (v_variantes)) then
+    raise exception 'aviso_de_caso_numero_da_propria_org' using errcode = '22023';
+  end if;
+
+  -- O número de aviso vira INTERNO: tudo o que chegar dele deixa de virar
+  -- contato, conversa, lead e despacho do agente. Se ele já é um CLIENTE desta
+  -- organização, as mensagens dessa pessoa param de chegar ao CRM — e isso não
+  -- pode acontecer por engano. A tela pergunta e reenvia com `p_confirma_contato`.
+  if not coalesce(p_confirma_contato, false) and exists (
+       select 1 from public.contacts c
+        where c.organization_id = p_org
+          and c.phone_number is not null
+          and regexp_replace(c.phone_number, '\D', '', 'g') = any (v_variantes)) then
+    raise exception 'aviso_de_caso_numero_de_cliente' using errcode = '22023';
+  end if;
+
+  select * into v_antes from public.config_aviso_de_caso where organization_id = p_org;
+
+  insert into public.config_aviso_de_caso
+    (organization_id, channel_session_id, telefone_destino, rotulo, ligado, criado_por, atualizado_por)
+  values
+    (p_org, p_channel, p_telefone, nullif(btrim(p_rotulo), ''), coalesce(p_ligado, false), auth.uid(), auth.uid())
+  on conflict (organization_id) do update
+    set channel_session_id = excluded.channel_session_id,
+        telefone_destino   = excluded.telefone_destino,
+        rotulo             = excluded.rotulo,
+        ligado             = excluded.ligado,
+        atualizado_por     = auth.uid(),
+        -- Trocou o número, o JID resolvido do anterior não vale mais — e é o
+        -- JID que o corte da ingestão usa para reconhecer quem está em modo
+        -- privacidade. Mantê-lo faria o corte continuar valendo para o número
+        -- ANTIGO, que pode voltar a ser um cliente.
+        destino_jid        = case
+                               when excluded.telefone_destino is distinct from config_aviso_de_caso.telefone_destino
+                               then null
+                               else config_aviso_de_caso.destino_jid
+                             end,
+        updated_at         = now();
+
+  return jsonb_build_object(
+    'trocou_numero', (v_antes.telefone_destino is distinct from p_telefone),
+    'antes_ligado',  coalesce(v_antes.ligado, false)
+  );
+end;
+$$;
+-- AS DUAS ORIGENS DE EXECUTE (item 9 da doutrina de migrations): o grant direto
+-- a `anon` do `ALTER DEFAULT PRIVILEGES … GRANT ALL ON FUNCTIONS TO anon` do
+-- baseline (que `revoke from public` não remove) e o grant implícito a PUBLIC
+-- que o Postgres dá a toda função ao criá-la (que `revoke from anon` não
+-- remove). Fechar uma só deixa a função exposta com o gate verde.
+revoke all     on function public.fn_definir_aviso_de_caso(uuid,uuid,text,text,boolean,boolean) from public, anon;
+grant  execute on function public.fn_definir_aviso_de_caso(uuid,uuid,text,text,boolean,boolean) to authenticated;
+
+-- ── O JID que o transporte resolveu ───────────────────────────────────────
+-- Função SEPARADA, e não `update` direto pelo handler: dar `update` da
+-- configuração ao service role abriria o caminho de "o motor mudou o número de
+-- destino sozinho". Aqui ele só pode gravar UM campo, o que ele mesmo resolveu.
+create or replace function public.fn_registrar_jid_do_aviso(p_org uuid, p_jid text)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_org is null or p_jid is null or btrim(p_jid) = '' then
+    return;
+  end if;
+  -- `is distinct from` para não gastar um UPDATE (e o trigger de coerência) a
+  -- cada aviso enviado: o JID muda uma vez e depois é sempre o mesmo.
+  -- `updated_at` FICA FORA: ele responde "alguém mexeu na configuração".
+  update public.config_aviso_de_caso
+     set destino_jid = p_jid
+   where organization_id = p_org
+     and destino_jid is distinct from p_jid;
+end;
+$$;
+revoke all     on function public.fn_registrar_jid_do_aviso(uuid,text) from public, anon, authenticated;
+grant  execute on function public.fn_registrar_jid_do_aviso(uuid,text) to service_role;
+
+-- ── O contador do descarte ────────────────────────────────────────────────
+-- Chamada pelos ingestores quando uma mensagem do número interno é descartada.
+-- Sem ela o silêncio é indistinguível de defeito para quem olha a tela.
+create or replace function public.fn_contar_mensagem_ignorada(p_org uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_org is null then
+    return;
+  end if;
+  -- `updated_at` FICA FORA, de propósito: uma resposta do suporte não é alguém
+  -- mexendo na configuração, e a tela usa aquele carimbo para dizer "alterado
+  -- por Fulano em tal dia".
+  update public.config_aviso_de_caso
+     set mensagens_ignoradas = mensagens_ignoradas + 1,
+         ultima_mensagem_ignorada_em = now()
+   where organization_id = p_org;
+end;
+$$;
+revoke all     on function public.fn_contar_mensagem_ignorada(uuid) from public, anon, authenticated;
+grant  execute on function public.fn_contar_mensagem_ignorada(uuid) to service_role;
+
+-- ── Retenção: a tabela nasce com dono de piso ─────────────────────────────
+create or replace function public.fn_expurgar_avisos_de_caso_vencidos(
+  p_retencao_dias int default null,
+  p_limite int default null
+) returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  -- 180 dias: mais curto que a auditoria (5 anos) porque a pergunta útil — "o
+  -- aviso daquele caso saiu?" — é de semanas, não de anos. O piso de 30 impede
+  -- que o knob vire apagador do rastro de um incidente que ainda está sendo
+  -- apurado, e mora AQUI, no corpo, porque só assim vale para QUALQUER
+  -- chamador, inclusive um `psql` na mão.
+  v_dias int := greatest(coalesce(p_retencao_dias, 180), 30);
+  v_limite int := least(greatest(coalesce(p_limite, 1000), 1), 10000);
+  v_apagadas int;
+begin
+  with vencidas as (
+    select e.id from public.entregas_de_aviso_de_caso e
+     where e.created_at < now() - make_interval(days => v_dias)
+     order by e.created_at
+     limit v_limite
+  )
+  delete from public.entregas_de_aviso_de_caso e using vencidas v where e.id = v.id;
+  get diagnostics v_apagadas = row_count;
+  return v_apagadas;
+end;
+$$;
+revoke all     on function public.fn_expurgar_avisos_de_caso_vencidos(int,int) from public, anon, authenticated;
+grant  execute on function public.fn_expurgar_avisos_de_caso_vencidos(int,int) to service_role;
+
+-- Os dois CHECK de vocabulário (`agent_case_events.kind` += 'alert_sent' e
+-- `agent_inbox_items.kind` += 'aviso_de_caso_nao_entregue') NÃO são
+-- reconstruídos aqui: neste arquivo cada constraint tem UM bloco só, e os
+-- valores novos foram acrescentados ao bloco original (o de
+-- `agent_case_events.kind ganha 'agent_noted' (migration 0100)` e o de
+-- `agent_inbox_items.kind ganha 'capabilities_missing' (migration 0105)`).
+-- Um segundo bloco é o defeito da issue #159: num banco com uma linha do
+-- vocabulário mais novo, ele falha ao reaplicar e a tabela fica sem
+-- constraint entre o `drop` e o `add` que funciona. Para conferir na fonte:
+--   grep -c "agent_inbox_items_kind_check check" supabase/baseline.sql
+
+-- ── A cascata de LGPD alcança o registro de entrega ───────────────────────
+-- Derivada do corpo VIGENTE do baseline (a definição de maior número de linha),
+-- por script, nunca redigitada: o corpo anterior fica byte a byte igual e as
+-- ÚNICAS mudanças são as duas declaradas — o passo de `entregas_de_aviso_de_caso`
+-- e o `aviso_de_caso_nao_entregue` acrescentado ao `kind in (...)` do passo de
+-- `agent_inbox_items`. O Postgres troca o corpo INTEIRO num `create or replace`;
+-- quem derivar da versão errada apaga o passo de outra entrega sem um único
+-- erro. A catraca que vigia isso é
+-- `tests/invariants/cascata-lgpd-nao-encolhe.test.ts`.
+CREATE OR REPLACE FUNCTION "public"."fn_lgpd_cascade_redact_contact"("p_organization_id" "uuid", "p_contact_id" "uuid", "p_request_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_already bool;
+  v_counts jsonb := '{}'::jsonb;
+  v_media_paths text[] := '{}';
+  v_anon_label text;
+  v_count int;
+begin
+  perform public.fn_service_lock(p_organization_id,p_contact_id);
+  select is_anonymized into v_already
+    from contacts
+    where id = p_contact_id and organization_id = p_organization_id;
+
+  if not found then
+    raise exception 'contact not found' using errcode = 'P0002';
+  end if;
+
+  if v_already then
+    return jsonb_build_object('already_anonymized', true, 'counts', v_counts, 'media_paths', v_media_paths);
+  end if;
+
+  v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+
+  -- Collect media storage paths (we only delete what we own — media_storage_path)
+  select coalesce(array_agg(distinct media_storage_path) filter (where media_storage_path is not null), '{}')
+    into v_media_paths
+    from messages
+    where organization_id = p_organization_id
+      and conversation_id in (
+        select id from conversations
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      );
+
+  -- 1. contacts (irreversible)
+  update contacts set
+    name = v_anon_label,
+    display_name = v_anon_label,
+    email = null,
+    -- email_normalized NÃO entra: é GENERATED ALWAYS AS (lower(trim(email)))
+    -- e o Postgres recusa escrita nela — a linha acima já a zera por derivação.
+    -- Com a atribuição, o cascade INTEIRO abortava e nada era anonimizado.
+    phone_number = null,
+    cpf_encrypted = null,
+    cpf_hash = null,
+    birthdate = null,
+    is_anonymized = true,
+    anonymized_at = now(),
+    consent = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('contacts', v_count);
+
+  -- 2. conversations metadata + preview strip
+  update conversations set
+    metadata = '{}'::jsonb,
+    last_message_preview = null,
+    -- O motivo CRU da última passagem (migration 0291). É código de
+    -- vocabulário, não texto livre — mas ele diz que ESTA pessoa foi escalada
+    -- por irritação, por assunto jurídico ou por suspeita de opt-out, e isso é
+    -- um fato sobre ela. Entra NESTE update, e não num segundo: mesmo
+    -- predicado, mesmas linhas, metade das varreduras.
+    --
+    -- ⚠️ `last_handoff_reason` é CHAVE DE NEGÓCIO em outro módulo: a ponte de
+    -- voz limpa o silêncio filtrando pelo VALOR da coluna
+    -- (`lib/wacalls/events-bridge.ts`). Zerá-la num contato anonimizado é
+    -- seguro — não há chamada viva de contato anonimizado — e é a razão de
+    -- esta entrega NÃO usar essa coluna para texto rico: ela continua
+    -- recebendo só o código, e o texto vive em `passagens_de_atendimento`.
+    last_handoff_reason = null,
+    updated_at = now()
+  where contact_id = p_contact_id and organization_id = p_organization_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('conversations', v_count);
+
+  -- 3. messages: redact body + null media + strip metadata (preserve status/timestamps/conversation_id)
+  update messages set
+    body = '[mensagem anonimizada]',
+    media_url = null,
+    media_mime = null,
+    media_size_bytes = null,
+    media_storage_path = null,
+    metadata = '{}'::jsonb,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('messages', v_count);
+
+  -- 4. crm_lead_activities — strip payload, metadata E reason (migration 0071).
+  --    `reason` é texto livre escrito por LLM sobre a conversa do lead: supor que
+  --    nunca conterá um nome é a suposição que falha. `evidence` NÃO é limpa —
+  --    guarda só ids, e as linhas apontadas são redigidas por conta própria.
+  update crm_lead_activities set
+    payload = '{}'::jsonb,
+    metadata = '{}'::jsonb,
+    reason = null
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or lead_id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+      or lead_id in (
+        select id from crm_leads
+          where contact_id = p_contact_id and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('activities', v_count);
+
+  -- 5. crm_leads — strip title/description/custom_fields/source_metadata/tags but PRESERVE pipeline/stage/value
+  update crm_leads set
+    title = v_anon_label,
+    description = null,
+    custom_fields = '{}'::jsonb,
+    source_metadata = '{}'::jsonb,
+    tags = '{}'::text[],
+    updated_at = now()
+  where organization_id = p_organization_id
+    and (
+      contact_id = p_contact_id
+      or id in (
+        select lead_id from crm_lead_links
+          where target_kind = 'contact'
+            and target_id = p_contact_id
+            and organization_id = p_organization_id
+      )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('leads', v_count);
+
+  -- 6. orders — PRESERVE values + status + timestamps. Strip personal fields from payload jsonb
+  --    and replace customer_external_id with null (FK-safe; soft de-link). Keep contact_id null.
+  update orders set
+    payload = (coalesce(payload, '{}'::jsonb))
+      - 'customer'
+      - 'customer_name'
+      - 'customer_email'
+      - 'customer_phone'
+      - 'shipping_address'
+      - 'billing_address'
+      - 'contact_identification',
+    customer_external_id = null,
+    contact_id = null,
+    is_anonymized = true,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('orders', v_count);
+
+  -- 7. enqueue media for async deletion (idempotent via unique (bucket, object_path))
+  if array_length(v_media_paths, 1) > 0 then
+    insert into storage_redaction_queue (organization_id, request_id, bucket, object_path)
+    select p_organization_id, p_request_id, 'whatsapp-media', path
+      from unnest(v_media_paths) as path
+      where path is not null and length(path) > 0
+    on conflict (bucket, object_path) do nothing;
+  end if;
+
+  -- 7b. voice_calls — o TELEFONE de quem falou ao telefone (migration 0235).
+  --
+  -- `peer_phone` é `not null` e guarda o número da outra ponta: depois de
+  -- anonimizar o contato, ele sobrevivia ligado ao `contact_id` e reidentificava
+  -- a pessoa que pediu para ser esquecida. É o mesmo argumento que a foto de
+  -- perfil já tinha (ver o bloco do avatar em `lib/lgpd/redact-cascade.ts`):
+  -- anonimizar em toda parte menos numa é não ter anonimizado.
+  --
+  -- O que fica: direção, status, motivo do fim, marcas de tempo e duração. Um
+  -- registro de "houve uma chamada de 12 minutos" sem número e sem dono não
+  -- identifica ninguém e é o que sustenta a métrica do atendente e a fatura.
+  -- `peer_phone` é NOT NULL, então recebe o rótulo, não `null`.
+  update voice_calls set
+    peer_phone = v_anon_label,
+    owner_user_id = null,
+    created_by = null,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('voice_calls', v_count);
+
+  -- agent_cases — o que a IA escreveu SOBRE a pessoa quando travou (migration 0280).
+  --
+  -- O caso é o texto que a equipe lê antes de decidir: `title`, `summary` e
+  -- `blocker` saem do modelo a partir da conversa, e `context_snapshot` é o
+  -- recorte dessa conversa que o motor mandou para ele. Nada disso é registro de
+  -- operação — é o relato do problema de uma pessoa identificável, escrito por
+  -- máquina. Sem este passo, anonimizar devolvia SUCESSO com o relato intacto.
+  --
+  -- As três colunas de texto são `not null`: recebem rótulo e texto fixo, nunca
+  -- `null` (a mesma razão de `voice_calls.peer_phone` logo acima).
+  --
+  -- ⚠️ `updated_at` FICA FORA DO `set`, de propósito. O cobrador de caso parado
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts`) lê `updated_at` como "alguém
+  -- da equipe encostou neste caso". A cascata não é alguém encostando: escrever
+  -- ali faria a anonimização ADIAR a cobrança de um caso que continua parado, e
+  -- o efeito só apareceria como um cliente esperando mais tempo.
+  --
+  -- O vínculo é pela CONVERSA porque `agent_cases` não tem FK para `contacts`.
+  update agent_cases set
+    title = v_anon_label,
+    summary = '[resumo anonimizado]',
+    blocker = '[bloqueio anonimizado]',
+    context_snapshot = '{}'::jsonb
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_cases', v_count);
+
+  -- agent_case_events — a linha do tempo do caso (migration 0280).
+  --
+  -- `body` é o que a pessoa da equipe escreveu ao responder o caso e o que o
+  -- agente registrou sobre o que o LEAD respondeu; `metadata` carrega o recorte
+  -- que o motor anexou. `kind`, `actor_kind`, `human_action` e `created_at`
+  -- FICAM: são o registro de que houve um toque humano e quando — operação, não
+  -- dado da pessoa, e é deles que sai a métrica de atendimento.
+  update agent_case_events set
+    body = null,
+    metadata = '{}'::jsonb
+  where organization_id = p_organization_id
+    and case_id in (
+      select id from agent_cases
+        where organization_id = p_organization_id
+          and conversation_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_case_events', v_count);
+
+  -- demandas — o assunto do pedido (migration 0280).
+  --
+  -- `assunto` é texto livre sobre o que a pessoa pediu. O resto da linha é a
+  -- operação da demanda (origem, estado, dono, prazo, desfecho) e fica de pé:
+  -- apagar a linha inteira tiraria da organização a resposta a "quantos pedidos
+  -- houve em março", que é o mesmo argumento do compromisso da agenda.
+  --
+  -- FK direta (`demandas.contact_id` é `not null`), então o vínculo é o contato.
+  update demandas set
+    assunto = null
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('demandas', v_count);
+
+  -- agent_inbox_items — o aviso que leva o texto do caso para a Central (migration 0280).
+  --
+  -- O `body` do aviso de caso parado EMBUTE o título do caso
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts:128`), e o do handoff embute o
+  -- motivo da parada (`lib/ai/handoff/orchestrator.ts:335`). Redigir o caso e
+  -- deixar o aviso de pé seria anonimizar em toda parte menos numa — que é não
+  -- ter anonimizado. O molde (resolver + trocar o corpo + soltar a referência) é
+  -- o de `fn_meet_redact_contact`, que já faz isto para o aviso de compromisso.
+  --
+  -- ⚠️ O VÍNCULO É POLIMÓRFICO E TEM TRÊS BRAÇOS, não dois. Medido nos
+  -- produtores, não suposto: `handoff` nasce com `ref_kind='contact'`
+  -- (`lib/ai/handoff/orchestrator.ts:339`) E com `ref_kind='conversation'`
+  -- (`lib/agent-engine/agent/inbound-turn.ts:4100`); `case_stale` nasce SEMPRE
+  -- com `ref_kind='agent_case'` (a rota do cron acima, e a política em
+  -- `lib/ai/inbox-destino.ts:38`). Um predicado com só os dois primeiros braços
+  -- casa ZERO avisos de caso parado — e casar zero linha não é erro: é sucesso
+  -- com o texto intacto.
+  --
+  -- Os `kind` são os MEDIDOS no CHECK vigente (`supabase/baseline.sql`, bloco
+  -- único de `agent_inbox_items_kind_check`). `case_opened` NÃO existe, e kind
+  -- inexistente num `in (...)` também casa zero e devolve sucesso. Para
+  -- reconferir sem acreditar nesta prosa:
+  --   grep -n "agent_inbox_items_kind_check check" -A40 supabase/baseline.sql
+  update agent_inbox_items set
+    status = 'resolved',
+    resolved_at = now(),
+    body = 'Contato anonimizado.',
+    ref_id = null
+  where organization_id = p_organization_id
+    -- `aviso_de_caso_nao_entregue` (migration 0292) entra AQUI e não num
+    -- passo próprio: é o mesmo predicado polimórfico, e o braço
+    -- `ref_kind='agent_case'` já alcança o caso do titular. O corpo do aviso
+    -- embute o título do caso, que é texto sobre a pessoa.
+    and kind in ('handoff', 'case_stale', 'aviso_de_caso_nao_entregue')
+    and (
+      (ref_kind = 'contact' and ref_id = p_contact_id)
+      or (ref_kind = 'conversation' and ref_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          ))
+      or (ref_kind = 'agent_case' and ref_id in (
+            select id from agent_cases
+              where organization_id = p_organization_id
+                and conversation_id in (
+                  select id from conversations
+                    where contact_id = p_contact_id and organization_id = p_organization_id
+                )
+          ))
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_inbox_items', v_count);
+
+  -- agent_case_chat_messages — a consulta interna da equipe à IA SOBRE o caso
+  -- (migration 0281). FK DIRETA para `contacts`, então o vínculo é o titular e
+  -- não precisa passar pela conversa.
+  --
+  -- `redacted_at is null` no `where` é o que torna o passo IDEMPOTENTE: a
+  -- varredura diária de redações incompletas roda a função de novo, e sem essa
+  -- condição o carimbo de QUANDO se apagou seria reescrito a cada rodada.
+  --
+  -- A linha NÃO é apagada, só o texto: quem abrir o caso depois continua vendo
+  -- que a equipe perguntou N vezes, quando, e se a IA respondeu. Apagar a linha
+  -- inteira ficaria verde num teste de "o texto sumiu" e tiraria da organização
+  -- a resposta a "quanto a equipe deliberou sobre este caso".
+  update agent_case_chat_messages set
+    body = null,
+    redacted_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id
+    and redacted_at is null;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_case_chat_messages', v_count);
+
+  -- passagens_de_atendimento — o BRIEFING é sobre a pessoa (migration 0291).
+  --
+  -- A linha guarda o que a IA concluiu sobre um atendimento de alguém
+  -- identificável: o que ela entendeu que a pessoa quer (`title`), a narrativa
+  -- que quem assumiu leu (`body`), as PALAVRAS LITERAIS do cliente (`notes`), o
+  -- texto livre de quem passou (`content`) e o que a IA já tinha tentado
+  -- (`tentativas`). Nada disso é registro de operação — é o relato do problema
+  -- de uma pessoa, escrito por máquina, na tela de quem vai responder.
+  --
+  -- `body` é `not null` e recebe o RÓTULO, não `null` — a mesma razão de
+  -- `voice_calls.peer_phone` e de `agent_cases.title` acima: coluna obrigatória
+  -- anulada aborta o cascade INTEIRO, e um cascade abortado não anonimiza nada.
+  --
+  -- O que FICA, de propósito: `motor`, `origem`, `motivo_codigo`,
+  -- `cliente_avisado`, `aviso_motivo_codigo`, `criado_em` e o par de
+  -- reconhecimento. São operação — quantas passagens houve, por quê, quanto
+  -- tempo até alguém assumir. Um passo que apagasse a linha inteira ficaria
+  -- verde num teste de "o texto sumiu" e tiraria da organização a resposta a
+  -- "quantos atendimentos a IA devolveu em março, e quanto tempo esperaram".
+  --
+  -- O vínculo é a FK DIRETA `contact_id`: a tabela a carrega exatamente para
+  -- este passo não precisar passar pela conversa.
+  update passagens_de_atendimento set
+    body       = v_anon_label,
+    title      = null,
+    notes      = null,
+    content    = null,
+    tentativas = '[]'::jsonb
+  where organization_id = p_organization_id and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('passagens_de_atendimento', v_count);
+
+  -- entregas_de_aviso_de_caso — o registro do aviso ao suporte (migration 0292).
+  --
+  -- A tabela NÃO guarda o texto do aviso (só `corpo_hash`), e a única coluna
+  -- capaz de ecoar um dado da pessoa é `erro_detalhe`: ali vai o texto CRU que
+  -- o transporte devolveu, truncado, e um provedor que recusa um envio costuma
+  -- devolver o destinatário dentro da mensagem de erro.
+  --
+  -- O que FICA, de propósito: `status`, `erro_codigo`, `tentativas`,
+  -- `enviado_em`, `destino`, `corpo_hash`. São operação — quantos avisos saíram,
+  -- quantos falharam e por quê. Um passo que apagasse a linha inteira ficaria
+  -- verde num teste de "o texto sumiu" e tiraria da organização a resposta a
+  -- "quantos avisos não chegaram em março". `destino` é o telefone da EQUIPE,
+  -- não do titular: anonimizar um cliente não apaga o número do plantão.
+  --
+  -- ⚠️ PONTO CEGO DECLARADO: `tests/invariants/lgpd-cascata-alcanca-quem-
+  -- guarda-pessoa.test.ts` só cobra tabela com FK para `contacts` E coluna cujo
+  -- NOME case o padrão de PII. Esta tabela não satisfaz nenhuma das duas — o
+  -- gate ficaria VERDE sem este passo. Ele entra porque é certo, não porque o
+  -- gate cobra, e isto está escrito aqui para a próxima sessão não o remover
+  -- achando que é ornamento. Quem o vigia é a catraca
+  -- `tests/invariants/cascata-lgpd-nao-encolhe.test.ts`.
+  --
+  -- O vínculo é pela CONVERSA, como o de `agent_cases`: esta tabela aponta para
+  -- o caso, e o caso não tem FK para `contacts`.
+  update entregas_de_aviso_de_caso set
+    erro_detalhe = null
+  where organization_id = p_organization_id
+    and case_id in (
+      select id from agent_cases
+        where organization_id = p_organization_id
+          and conversation_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('entregas_de_aviso_de_caso', v_count);
+
+  -- 8. dense audit row
+  insert into api_audit_log (organization_id, action, actor_user_id, resource_type, resource_id, metadata, bypassed_rls)
+  values (
+    p_organization_id,
+    'lgpd.redact_executed',
+    null,
+    'contact',
+    p_contact_id,
+    jsonb_build_object(
+      'cascaded_to', v_counts,
+      'media_queued', coalesce(array_length(v_media_paths, 1), 0),
+      'request_id', p_request_id
+    ),
+    true
+  );
+
+  return jsonb_build_object(
+    'already_anonymized', false,
+    'counts', v_counts,
+    'media_paths', v_media_paths
+  );
+end;
+$$;
+revoke all on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) to service_role;
+
+-- ── travas do suporte, depois de toda tabela nova (migration 0274) ─────────
+-- `config_aviso_de_caso` e `entregas_de_aviso_de_caso` nascem com a escrita
+-- fechada para `anon`/`authenticated` (revoke + grant select), então o ramo
+-- server-only da função lhes dá ZERO policies `support_write_*` — que é o
+-- contrato mais restritivo. Escrever `drop policy` à mão aqui seria a segunda
+-- representação da mesma regra.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+notify pgrst, 'reload schema';
+
+
+-- ---- a passagem se reconhece sozinha (migration 0293) ----
+--
+-- DERIVADO, byte a byte, de
+-- supabase/migrations/20260918130000_0293_a_passagem_se_reconhece_sozinha.sql
+-- (copiado por script, nunca redigitado — ver
+-- tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts).
+--
+-- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, que é de propósito o último a
+-- criar função: este bloco CRIA duas, e a varredura proíbe `create function`
+-- depois dela.
+-- ════════════════════════════════════════════════════════════════════════════
+-- 0293 — A PASSAGEM SE RECONHECE SOZINHA
+-- ════════════════════════════════════════════════════════════════════════════
+--
+-- ─── O defeito que esta migration fecha ────────────────────────────────────
+--
+-- A migration 0291 criou `passagens_de_atendimento` com `reconhecido_por` /
+-- `reconhecido_em`, e NINGUÉM os escrevia. Sem um escritor, três coisas ficam
+-- quebradas ao mesmo tempo:
+--
+--   1. o cartão da conversa nunca sai do estado "esperando alguém assumir",
+--      mesmo depois de alguém ter assumido;
+--   2. o aviso da Central fica ABERTO para sempre — e como o aviso deduplica
+--      por episódio aberto, a PRÓXIMA passagem daquela conversa não abre aviso
+--      nenhum. O cliente pede um atendente de novo e ninguém é avisado;
+--   3. `fn_expurgar_passagens_vencidas` só apaga linha reconhecida (é o certo:
+--      passagem aberta é demanda viva), então a tabela nunca é podada.
+--
+-- ─── Por que um TRIGGER, e não uma chamada em cinco rotas ──────────────────
+--
+-- Os cinco caminhos que trocam o dono de uma conversa — assumir, transferir,
+-- liberar, devolver ao automático e o rodízio por canal — passam TODOS por
+-- `public.fn_conversation_assign`, que insere a linha de auditoria em
+-- `conversation_assignment_events` na MESMA transação. Um gatilho ali cobre os
+-- cinco sem tocar em rota nenhuma, e cobre também o sexto caminho que alguém
+-- escrever amanhã.
+--
+-- É SQL puro: **nenhum HTTP dentro de trigger** (anti-pattern nº 9). Ele faz dois
+-- `update` locais e volta.
+--
+-- ─── A guarda de estado, e por que ela é a SEGUNDA camada ──────────────────
+--
+-- A migration 0279 já revogou `insert` direto em `conversation_assignment_events`
+-- de `authenticated`: pela REST ninguém forja um evento de atribuição. Esta
+-- guarda fecha a INSTÂNCIA também para quem escreve com a service key: o gatilho
+-- só reconhece quando a conversa REALMENTE está com aquele dono. Sem ela, uma
+-- linha de auditoria incoerente (inserida à mão, ou por um script de migração de
+-- dados) marcaria como "assumida" uma passagem que ninguém assumiu — e o aviso
+-- da Central sumiria da lista de quem precisa agir.
+--
+-- ─── Portabilidade ─────────────────────────────────────────────────────────
+--
+-- Idempotente e portável em `psql` puro: `create or replace function`,
+-- `drop trigger if exists` + `create trigger`. Sem `BEGIN`/`COMMIT` (o runner já
+-- envolve). Nenhuma tabela é criada, então não há travas de suporte a reaplicar.
+
+-- ── O gatilho: alguém assumiu a conversa ────────────────────────────────────
+create or replace function public.fn_passagem_reconhecida()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  -- `to_user_id is null` é release/devolução ao automático: ninguém assumiu.
+  -- Quem fecha esse episódio é `fn_passagem_devolvida`, chamada pela rota de
+  -- "devolver ao automático" — e ela grava `reconhecido_em` SEM
+  -- `reconhecido_por`, que é como a tabela distingue os dois desfechos.
+  if new.to_user_id is null then
+    return new;
+  end if;
+
+  -- SEGUNDA CAMADA (ver o cabeçalho): só reconhece se a conversa está mesmo com
+  -- aquele dono agora. `is not distinct from` e não `=` porque os dois lados
+  -- podem ser nulos em outras rotas desta mesma tabela.
+  if not exists (
+    select 1 from public.conversations c
+     where c.id = new.conversation_id
+       and c.organization_id = new.organization_id
+       and c.assigned_to_user_id is not distinct from new.to_user_id
+  ) then
+    return new;
+  end if;
+
+  update public.passagens_de_atendimento
+     set reconhecido_por = new.to_user_id,
+         reconhecido_em  = now()
+   where organization_id = new.organization_id
+     and conversation_id = new.conversation_id
+     and reconhecido_em is null;
+
+  -- O aviso da Central se resolve junto. `ref_kind='conversation'` é a chave que
+  -- os dois motores passaram a usar (a mesma da dedup) — com `contact` o aviso
+  -- de um contato com duas conversas abertas era um só.
+  update public.agent_inbox_items
+     set status = 'resolved',
+         resolved_at = now()
+   where organization_id = new.organization_id
+     and kind = 'handoff'
+     and ref_kind = 'conversation'
+     and ref_id = new.conversation_id
+     and status = 'open';
+
+  return new;
+end;
+$$;
+
+-- Função nova em `public` nasce EXPOSTA por DUAS origens (o grant implícito a
+-- PUBLIC do Postgres e o `ALTER DEFAULT PRIVILEGES … TO anon` do baseline), e
+-- revogar só uma deixa a função alcançável com o gate verde.
+revoke all on function public.fn_passagem_reconhecida() from public, anon, authenticated;
+
+drop trigger if exists trg_passagem_reconhecida on public.conversation_assignment_events;
+create trigger trg_passagem_reconhecida
+  after insert on public.conversation_assignment_events
+  for each row execute function public.fn_passagem_reconhecida();
+
+-- ── A devolução ao automático: o episódio fechou sem ninguém assumir ────────
+--
+-- `reconhecido_em` preenchido COM `reconhecido_por` nulo é o par que a 0291
+-- documentou: "devolvida ao automático (ninguém assumiu, mas o episódio
+-- fechou)". O CHECK `passagens_reconhecimento_coerente` permite exatamente esse
+-- lado e proíbe o inverso.
+--
+-- **`security definer` e não o client de sessão**: a policy da tabela é `for
+-- select` apenas, e `authenticated` não tem `update` — de propósito, para que
+-- ninguém reescreva um fato. E não o client de serviço porque abrir admin numa
+-- rota quando há molde de definer no repositório é privilégio a mais sem
+-- necessidade. A autorização mora NO CORPO.
+create or replace function public.fn_passagem_devolvida(
+  p_organization_id uuid,
+  p_conversation_id uuid
+) returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_fechadas integer;
+begin
+  -- Mesmo padrão de `fn_conversation_assign`: quando há sessão, ela precisa ser
+  -- de um membro `agent`+ da organização. Sem sessão (worker com service key) a
+  -- checagem não se aplica — quem tem a chave já tem tudo.
+  if auth.uid() is not null
+     and not public.fn_role_at_least(p_organization_id, 'agent') then
+    raise exception 'caller_not_authorized_for_org'
+      using hint = 'caller must be an active agent+ member of the organization';
+  end if;
+
+  update public.passagens_de_atendimento
+     set reconhecido_em = now()
+   where organization_id = p_organization_id
+     and conversation_id = p_conversation_id
+     and reconhecido_em is null;
+  get diagnostics v_fechadas = row_count;
+
+  update public.agent_inbox_items
+     set status = 'resolved',
+         resolved_at = now()
+   where organization_id = p_organization_id
+     and kind = 'handoff'
+     and ref_kind = 'conversation'
+     and ref_id = p_conversation_id
+     and status = 'open';
+
+  return v_fechadas;
+end;
+$$;
+
+revoke all     on function public.fn_passagem_devolvida(uuid, uuid) from public, anon;
+grant  execute on function public.fn_passagem_devolvida(uuid, uuid) to authenticated, service_role;
+
+-- ---- o cliente repetiu depois da passagem + o contador do cobrador (migration 0294) ----
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 0294 — O LAÇO DE RETORNO DA PASSAGEM, e o contador que cala o cobrador.
+--
+-- ─── O que esta migration responde ────────────────────────────────────────
+--
+-- A entrega da passagem (0291, 0293) fez a IA gravar POR QUE parou, o que já
+-- tentou e o que o cliente quer, e pôs esse texto na frente de quem assume. A
+-- pergunta que ela ainda não respondia é a única que diz se aquilo serviu para
+-- alguma coisa: **depois de a IA passar a conversa, o cliente precisou repetir
+-- o que já tinha dito?**
+--
+-- Se o briefing chegou, a repetição cai. Se não chegou, ela não muda — e a
+-- feature é decoração cara. Sem este número, a única evidência de sucesso seria
+-- alguém achar o cartão bonito.
+--
+-- ─── POR QUE NÃO UMA TABELA DE MÉTRICA, NEM UM PAINEL NOVO ────────────────
+--
+-- O instrumento já existe e está calibrado: `fn_atrito_jaccard(a,b)` (0135),
+-- `immutable`, com limiar `p_repeticao_min` default 0.7 escolhido para zero
+-- falso positivo. `fn_atrito_metrics` já o usa para a repergunta dentro do
+-- Índice de Atrito, já roda SECURITY INVOKER (logo a RLS da tabela nova vale) e
+-- já devolve `jsonb` — onde acrescentar chave não quebra leitor antigo. Uma
+-- tabela de agregado seria um número sincronizado por cron onde cabe uma
+-- consulta, que é o anti-pattern nº 5 do CLAUDE.md.
+--
+-- ─── AS DUAS CHAVES, E POR QUE SÃO DUAS ──────────────────────────────────
+--
+--   `repeticao_pos_passagem` — numerador: passagens em que o cliente repetiu;
+--   `passagens_medidas`      — denominador: passagens em que ele voltou a falar.
+--
+-- A razão NÃO é calculada aqui. Ela é montada em `lib/metrics/atrito.ts`, que é
+-- onde mora a regra "denominador zero devolve null, nunca 0". Uma razão
+-- calculada no SQL devolveria `0/0` como `null` por acaso e `0/1` como `0` por
+-- acidente — e a tela não teria como distinguir "ninguém repetiu" de "ninguém
+-- voltou a falar". Publicar os dois números é o que torna a régua auditável por
+-- quem lê a tela, não só por quem lê este arquivo.
+--
+-- ⚠️ A RESSALVA QUE VIAJA COM O NÚMERO (e que a tela publica na `nota`):
+-- `fn_atrito_metrics` é **SECURITY INVOKER**. Um `agent` numa organização em
+-- `visibility_mode='own'` enxerga o número só das conversas dele; `manager` e
+-- `admin` enxergam o da organização. Dois papéis veem números diferentes de
+-- boa-fé, e quem comparar sem saber disso vai achar que um deles está errado.
+--
+-- ─── A SEGUNDA COISA: `cobrancas` ────────────────────────────────────────
+--
+-- O reconhecimento da passagem (0293) só acontece por gesto de quem CHEGOU.
+-- Ninguém cobra a passagem em que ninguém chegou — e dos treze caminhos que
+-- passam conversa para uma pessoa, UM nasce de caso, então o
+-- `case-stale-watcher` não alcança os outros doze nem por acidente. A população
+-- já foi medida num CRM em produção com o mesmo desenho de fila (2026-09-14):
+-- 22 pedidos parados, o mais antigo há 17,6 dias, e ONZE deles eram gente
+-- pedindo para falar com uma pessoa.
+--
+-- O conserto é um segundo braço no MESMO cron, e ele precisa de um lugar para
+-- guardar quantas vezes já cobrou — senão o alarme nunca cala, e alarme que
+-- nunca cala treina a equipe a ignorar o alarme certo. `agent_cases` tem
+-- `followup_attempts` para isso; `passagens_de_atendimento` não tinha nada.
+--
+-- DIRC, respondida: Duplicar — não, o contador é desta linha e de mais nada;
+-- Integrar — não há de onde vir (o aviso da Central não conta tentativa);
+-- Referenciar — não é ponteiro; Calcular — não dá: a cobrança não deixa rastro
+-- próprio em lugar nenhum, e inferi-la por idade cobraria de novo o que já foi
+-- cobrado três vezes.
+--
+-- ─── REAPLICAÇÃO ─────────────────────────────────────────────────────────
+--
+-- `add column if not exists` com default (aplicável a tabela COM linhas) e
+-- `create or replace function` com a MESMA assinatura. O `update.sh` de um
+-- clone reaplica sem erro e sem duplicar efeito. Nenhuma constraint nova sobre
+-- dados existentes ⇒ não há deduplicação prévia a fazer (regra 8 da doutrina).
+--
+-- O corpo de `fn_atrito_metrics` abaixo é DERIVADO do corpo vigente por script
+-- (`scratchpad/onda11/montar-0294.py`), nunca redigitado: duas edições, as duas
+-- provadas reversíveis ao byte antes de o arquivo ser escrito.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Quantas vezes o vigia já cobrou ESTA passagem. Teto de 3 no chamador
+-- (`app/api/v1/cron/case-stale-watcher/route.ts`), pelo mesmo argumento de
+-- `agent_cases.followup_attempts`: quem ignorou três vezes não atende no quarto.
+alter table public.passagens_de_atendimento
+  add column if not exists cobrancas int not null default 0;
+
+
+drop function if exists public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int);
+
+create or replace function public.fn_atrito_metrics(
+  p_org uuid,
+  p_from timestamptz,
+  p_to timestamptz,
+  p_abandono_horas int default 72,
+  p_repeticao_min float8 default 0.7,
+  p_espera_horas int default 4
+) returns jsonb
+language sql stable
+set search_path = public
+as $$
+  with
+  -- DENOMINADOR DEFINITIVO: demandas encerradas na janela. Não mais os casos.
+  demandas_j as (
+    select d.id, d.agent_case_id, d.aberta_em, d.fechada_em, d.desfecho
+      from public.demandas d
+     where d.organization_id = p_org
+       and d.fechada_em is not null
+       and d.fechada_em >= p_from
+       and d.fechada_em <  p_to
+  ),
+  -- Turnos: mensagens de TODAS as conversas da demanda (N:N), dentro da vida
+  -- dela. Uma demanda que atravessou dois canais soma os dois.
+  turnos as (
+    select d.id,
+           (select count(*)
+              from public.demanda_conversas dc
+              join public.messages m
+                on m.conversation_id = dc.conversation_id
+               and m.organization_id = p_org
+               and m.sent_at >= d.aberta_em
+               and m.sent_at <  d.fechada_em
+             where dc.demanda_id = d.id) as n
+      from demandas_j d
+  ),
+  -- Insistência: só existe onde houve caso. O payload declara o denominador
+  -- próprio (`demandas_com_caso`) para o número não ser lido como se fosse
+  -- sobre o total.
+  insistencia as (
+    select avg(c.followup_attempts)::float8 as media,
+           max(c.followup_attempts)         as maximo,
+           count(*)                         as base
+      from demandas_j d
+      join public.agent_cases c on c.id = d.agent_case_id
+  ),
+  humano as (
+    select e.case_id, count(*) as intervencoes, min(e.created_at) as primeiro_toque
+      from public.agent_case_events e
+      join demandas_j d on d.agent_case_id = e.case_id
+     where e.organization_id = p_org and e.actor_kind = 'human'
+     group by e.case_id
+  ),
+  espera_fila as (
+    select extract(epoch from (h.primeiro_toque - d.aberta_em)) as segundos
+      from demandas_j d join humano h on h.case_id = d.agent_case_id
+     where h.primeiro_toque > d.aberta_em
+  ),
+  retrabalho as (
+    select count(distinct e.case_id) as n
+      from public.agent_case_events e
+      join demandas_j d on d.agent_case_id = e.case_id
+     where e.organization_id = p_org
+       and (e.kind = 'escalated' or e.human_action = 'escalate')
+  ),
+  abandono as (
+    select
+      count(*) filter (
+        where cv.last_outbound_at >= p_from and cv.last_outbound_at < p_to
+          and (cv.last_inbound_at is null or cv.last_outbound_at > cv.last_inbound_at)
+          and cv.last_outbound_at < now() - make_interval(hours => p_abandono_horas)
+          and cv.status not in ('resolved', 'closed')
+      ) as abandonadas,
+      count(*) filter (
+        where cv.last_outbound_at >= p_from and cv.last_outbound_at < p_to
+      ) as com_fala_nossa
+      from public.conversations cv
+     where cv.organization_id = p_org and cv.last_outbound_at is not null
+  ),
+  -- INVARIANTE 4, agora VERIFICÁVEL: demanda aberta sem próximo passo é o
+  -- vazamento que a doutrina proíbe. Antes da 0119 isto não era enumerável.
+  sem_proximo_passo as (
+    select count(*) as n
+      from public.demandas d
+     where d.organization_id = p_org
+       and d.fechada_em is null
+       and d.proximo_passo is null
+  ),
+  demandas_abertas as (
+    select count(*) as n from public.demandas d
+     where d.organization_id = p_org and d.fechada_em is null
+  ),
+  inbounds as (
+    select m.conversation_id, m.sent_at, m.body,
+           lag(m.body)    over (partition by m.conversation_id order by m.sent_at) as body_anterior,
+           lag(m.sent_at) over (partition by m.conversation_id order by m.sent_at) as sent_at_anterior
+      from public.messages m
+     where m.organization_id = p_org and m.direction = 'inbound' and m.body is not null
+       and m.sent_at >= p_from and m.sent_at < p_to
+  ),
+  repeticao as (
+    select
+      count(*) filter (
+        where i.body_anterior is not null
+          and exists (select 1 from public.messages o
+                       where o.organization_id = p_org and o.conversation_id = i.conversation_id
+                         and o.direction = 'outbound'
+                         and o.sent_at > i.sent_at_anterior and o.sent_at < i.sent_at)
+          and public.fn_atrito_jaccard(i.body, i.body_anterior) >= p_repeticao_min
+      ) as repetidas,
+      count(*) filter (
+        where i.body_anterior is not null
+          and exists (select 1 from public.messages o
+                       where o.organization_id = p_org and o.conversation_id = i.conversation_id
+                         and o.direction = 'outbound'
+                         and o.sent_at > i.sent_at_anterior and o.sent_at < i.sent_at)
+      ) as com_resposta_no_meio
+      from inbounds i
+  ),
+  espera_calada as (
+    select count(*) filter (where prox.espera_s > p_espera_horas * 3600) as caladas,
+           count(*) as com_resposta,
+           percentile_cont(0.9) within group (order by prox.espera_s) as p90_s
+      from (
+        select extract(epoch from (
+                 (select min(o.sent_at) from public.messages o
+                   where o.organization_id = p_org and o.conversation_id = m.conversation_id
+                     and o.direction = 'outbound' and o.sent_at > m.sent_at) - m.sent_at)) as espera_s
+          from public.messages m
+         where m.organization_id = p_org and m.direction = 'inbound'
+           and m.sent_at >= p_from and m.sent_at < p_to
+      ) prox
+     where prox.espera_s is not null
+  ),
+  envios as (
+    select count(*) filter (where m.sent_via = 'ai')              as por_ia,
+           count(*) filter (where m.sent_via = 'automation')      as por_automacao,
+           count(*) filter (where m.sent_via = 'system')          as por_integracao,
+           count(*) filter (where m.sent_via = 'user')            as por_humano_no_sistema,
+           count(*) filter (where m.sent_via = 'external_device') as por_humano_fora
+      from public.messages m
+     where m.organization_id = p_org and m.direction = 'outbound'
+       and m.sent_at >= p_from and m.sent_at < p_to
+  ),
+  vetos as (
+    select count(*) filter (where t.vetoed_gate is not null) as vetados,
+           count(distinct t.job_id) as execucoes
+      from public.before_send_traces t
+     where t.organization_id = p_org and t.created_at >= p_from and t.created_at < p_to
+  ),
+  descadastros as (
+    select count(*) as n from public.contacts c
+     where c.organization_id = p_org and c.blocked_at is not null
+       and c.blocked_at >= p_from and c.blocked_at < p_to
+  ),
+  pedidos_humano as (
+    select count(*) as n from public.crm_lead_activities a
+     where a.organization_id = p_org and a.type = 'handoff_triggered'
+       and a.performed_at >= p_from and a.performed_at < p_to
+  ),
+  -- ─── O LAÇO DE RETORNO DA PASSAGEM (migration 0294) ──────────────────────
+  -- A pergunta que mede se o briefing serviu para alguma coisa: DEPOIS de a IA
+  -- passar a conversa, o cliente precisou repetir o que já tinha dito? Se o
+  -- contexto chegou a quem assumiu, a repetição cai; se não chegou, ela não
+  -- muda — e a feature é decoração.
+  --
+  -- A RÉGUA, escrita para o número não envelhecer:
+  --   · limiar         = `p_repeticao_min` (0.7), o MESMO do índice de
+  --                      repergunta — dois limiares para o mesmo fenômeno
+  --                      fariam dois números incomparáveis na mesma tela;
+  --   · janela         = 24 h depois da passagem. Mais que isso já é outra
+  --                      conversa; menos deixaria de fora o atendente que
+  --                      assumiu no dia seguinte;
+  --   · denominador    = passagens em que o cliente VOLTOU A FALAR. Sem fala
+  --                      nova não há repetição a medir, e contá-las como "não
+  --                      repetiu" inflaria o número para o lado bonito. É a
+  --                      mesma regra de `lib/metrics/atrito.ts`: ausência de
+  --                      dado é `null`, nunca `0` — e é a razão de as DUAS
+  --                      chaves saírem daqui (numerador e denominador), em vez
+  --                      de uma razão já calculada.
+  repeticao_pos_passagem as (
+    select count(*) filter (where r.repetiu) as repetidas,
+           count(*)                          as medidas
+      from (
+        select p.id,
+               exists (
+                 select 1
+                   from public.messages depois
+                   join public.messages antes
+                     on antes.organization_id = depois.organization_id
+                    and antes.conversation_id = depois.conversation_id
+                    and antes.direction = 'inbound'
+                    and antes.body is not null
+                    and antes.sent_at < p.criado_em
+                  where depois.organization_id = p.organization_id
+                    and depois.conversation_id = p.conversation_id
+                    and depois.direction = 'inbound'
+                    and depois.body is not null
+                    and depois.sent_at > p.criado_em
+                    and depois.sent_at < p.criado_em + interval '24 hours'
+                    and public.fn_atrito_jaccard(depois.body, antes.body) >= p_repeticao_min
+               ) as repetiu
+          from public.passagens_de_atendimento p
+         where p.organization_id = p_org
+           and p.criado_em >= p_from and p.criado_em < p_to
+           and exists (
+             select 1 from public.messages m
+              where m.organization_id = p.organization_id
+                and m.conversation_id = p.conversation_id
+                and m.direction = 'inbound'
+                and m.body is not null
+                and m.sent_at > p.criado_em
+                and m.sent_at < p.criado_em + interval '24 hours'
+           )
+      ) r
+  ),
+  eficiencia as (
+    select count(*) filter (where status = 'won')  as ganhos,
+           count(*) filter (
+             where status = 'lost'
+               -- A transferência entre funis não é perda comercial (migration 0266).
+               and coalesce(lost_reason, '') <> 'moved_to_another_pipeline'
+           ) as perdidos
+      from public.crm_leads
+     where organization_id = p_org and status in ('won', 'lost')
+       and closed_at >= p_from and closed_at < p_to
+  )
+  select jsonb_build_object(
+    'escopo', jsonb_build_object(
+      'demandas',            (select count(*) from demandas_j),
+      'demandas_com_caso',   (select base from insistencia),
+      'demandas_abertas',    (select n from demandas_abertas),
+      'de', p_from, 'ate', p_to,
+      'abandono_horas', p_abandono_horas,
+      'repeticao_min',  p_repeticao_min,
+      'espera_horas',   p_espera_horas,
+      -- Marca a régua do denominador: quem comparar dois períodos precisa saber
+      -- se foram medidos sobre casos ou sobre demandas.
+      'denominador', 'demandas'
+    ),
+    'cliente', jsonb_build_object(
+      'turnos_p50',        (select percentile_cont(0.5) within group (order by n) from turnos),
+      'turnos_p90',        (select percentile_cont(0.9) within group (order by n) from turnos),
+      'insistencia_media', (select media  from insistencia),
+      'insistencia_max',   (select maximo from insistencia),
+      'pedidos_de_humano', (select n from pedidos_humano),
+      'descadastros',      (select n from descadastros),
+      'abandonos',         (select abandonadas   from abandono),
+      'conversas_com_fala_nossa', (select com_fala_nossa from abandono),
+      'reperguntas',              (select repetidas            from repeticao),
+      'perguntas_com_resposta',   (select com_resposta_no_meio from repeticao),
+      'esperas_caladas',          (select caladas      from espera_calada),
+      'esperas_medidas',          (select com_resposta from espera_calada),
+      'espera_resposta_p90_s',    (select p90_s        from espera_calada),
+      -- As duas chaves do laço da passagem (0294). Numerador e denominador
+      -- SEPARADOS de propósito: a razão é calculada na borda, que é onde
+      -- mora a regra de devolver `null` quando o denominador é zero.
+      'repeticao_pos_passagem',   (select repetidas from repeticao_pos_passagem),
+      'passagens_medidas',        (select medidas   from repeticao_pos_passagem)
+    ),
+    'empresa', jsonb_build_object(
+      'intervencoes_por_demanda', (select avg(coalesce(h.intervencoes, 0))::float8
+                                     from demandas_j d left join humano h on h.case_id = d.agent_case_id),
+      'espera_humana_p50_s',      (select percentile_cont(0.5) within group (order by segundos) from espera_fila),
+      'espera_humana_p90_s',      (select percentile_cont(0.9) within group (order by segundos) from espera_fila),
+      'retrabalho',               (select n from retrabalho),
+      'vetos',                    (select vetados  from vetos),
+      'execucoes_medidas',        (select execucoes from vetos),
+      'envios_por_ia',            (select por_ia                from envios),
+      'envios_por_automacao',     (select por_automacao         from envios),
+      'envios_por_integracao',    (select por_integracao        from envios),
+      'envios_humano_no_sistema', (select por_humano_no_sistema from envios),
+      'envios_humano_fora',       (select por_humano_fora       from envios),
+      -- O invariante 4 vira NÚMERO na tela: demanda aberta sem próximo passo é
+      -- vazamento, e vazamento invisível é o que a doutrina inteira combate.
+      'demandas_sem_proximo_passo', (select n from sem_proximo_passo)
+    ),
+    'eficiencia', jsonb_build_object(
+      'ganhos',   (select ganhos   from eficiencia),
+      'perdidos', (select perdidos from eficiencia)
+    )
+  );
+$$;
+
+revoke all     on function public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int) from public;
+revoke execute on function public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int) from anon;
+grant  execute on function public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int)
+  to authenticated, service_role;
+
 
 -- ---- o banco conhece o perfil declarativo v2 das extensões (migration 0282) ----
 -- 0282 — O banco passa a conhecer o perfil declarativo v2 (ADR-0003)
@@ -28693,7 +32067,7 @@ alter table public.idempotency_keys
   add constraint idempotency_keys_recibo_ou_reserva
   check ((status_code is null) = (response_body is null));
 
--- ---- destinos internos que o dono da instalação autoriza (migration 0324) ----
+-- ---- destinos internos que o dono da instalação autoriza (migration 0326) ----
 -- Decisão 22-d, #1004. null = nunca configurado pela tela (vale o .env);
 -- '{}' = o dono esvaziou a lista. Idempotente; sem dado tocado.
 alter table public.platform_settings
