@@ -551,6 +551,7 @@ jobs:
         prova-painel-provedores.spec.ts
         relatorio-de-atividades.spec.ts
         qa-l12-inbox.spec.ts
+        canal-mudo-avisa-na-central.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
         qa-l12-troca-de-funil.spec.ts
         qa-l12-agente-ia.spec.ts
