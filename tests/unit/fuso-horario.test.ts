@@ -120,6 +120,16 @@ describe("os fusos OFERECIDOS — a lista, não o padrão", () => {
     expect(formulario).toContain("Africa/Luanda");
   });
 
+  // As quatro listas são três fontes: `FUSOS_OFERECIDOS` (jornada e janela de
+  // envio) e as duas escritas à mão, da empresa e do perfil. Lisboa faltava
+  // nas três — e o assistente de boas-vindas já a oferecia.
+  it("oferece Lisboa nas três fontes", () => {
+    expect(FUSOS_OFERECIDOS.map((f) => f.codigo)).toContain("Europe/Lisbon");
+    for (const arquivo of ["app/app/settings/tenant/_form.tsx", "app/app/settings/profile/_form.tsx"]) {
+      expect(readFileSync(arquivo, "utf8"), arquivo).toContain('"Europe/Lisbon"');
+    }
+  });
+
   it("e o padrão de quem não escolheu segue sendo São Paulo", () => {
     expect(FUSO_PADRAO).toBe("America/Sao_Paulo");
   });
