@@ -37,6 +37,56 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // /admin/email — o servidor SMTP da instalação (PR #714, @betoarts, recorte).
+  "Servidor de e-mail conectado e autenticado.": { es: "Servidor de correo conectado y autenticado." },
+  "Preencha e salve o servidor e o remetente antes de testar.": {
+    es: "Completa y guarda el servidor y el remitente antes de probar.",
+  },
+  "O servidor respondeu, mas recusou o usuário e a senha.": {
+    es: "El servidor respondió, pero rechazó el usuario y la contraseña.",
+  },
+  "Não foi possível falar com o servidor. Confira o endereço, a porta e a segurança.": {
+    es: "No fue posible comunicarse con el servidor. Revisa la dirección, el puerto y la seguridad.",
+  },
+  "Servidor de e-mail salvo.": { es: "Servidor de correo guardado." },
+  "Servidor de e-mail desta instalação": { es: "Servidor de correo de esta instalación" },
+  "Convite de equipe, entrega de dados de LGPD e aviso de prazo saem por aqui. Preencher esta tela é a alternativa a contratar um serviço externo de envio: o e-mail passa a sair pelo seu próprio servidor.": {
+    es: "Las invitaciones al equipo, la entrega de datos personales y los avisos de plazo salen por aquí. Completar esta pantalla es la alternativa a contratar un servicio externo de envío: el correo pasa a salir por tu propio servidor.",
+  },
+  "Endereço do servidor": { es: "Dirección del servidor" },
+  "Normalmente é a palavra smtp seguida do seu domínio. Só o endereço: sem smtp:// na frente e sem a porta no fim.": {
+    es: "Normalmente es la palabra smtp seguida de tu dominio. Solo la dirección: sin smtp:// al principio y sin el puerto al final.",
+  },
+  "Porta": { es: "Puerto" },
+  "STARTTLS (normalmente a porta 587)": { es: "STARTTLS (normalmente el puerto 587)" },
+  "TLS/SSL (normalmente a porta 465)": { es: "TLS/SSL (normalmente el puerto 465)" },
+  "Sem criptografia": { es: "Sin cifrado" },
+  "Senha do e-mail": { es: "Contraseña del correo" },
+  "Já existe uma senha gravada. Deixe em branco para mantê-la, ou digite uma nova para substituir.": {
+    es: "Ya hay una contraseña guardada. Déjalo en blanco para mantenerla, o escribe una nueva para reemplazarla.",
+  },
+  "E-mail que aparece como remetente": { es: "Correo que aparece como remitente" },
+  "Nome que aparece como remetente": { es: "Nombre que aparece como remitente" },
+  "Estes valores vieram do arquivo de configuração do servidor. O que você salvar aqui passa a valer no lugar dele; apagar o que está aqui faz o sistema voltar a usar o arquivo.": {
+    es: "Estos valores vienen del archivo de configuración del servidor. Lo que guardes aquí pasa a valer en su lugar; borrar lo que está aquí hace que el sistema vuelva a usar el archivo.",
+  },
+  "Em uso: o e-mail está saindo por este servidor.": { es: "En uso: el correo está saliendo por este servidor." },
+  "O e-mail desta instalação já sai por um serviço externo. Preencher esta tela passa a entrega para o seu servidor.": {
+    es: "El correo de esta instalación ya sale por un servicio externo. Completar esta pantalla pasa la entrega a tu servidor.",
+  },
+  "Nenhum caminho de e-mail configurado: os convites aparecem como link para copiar, em vez de chegar na caixa de entrada.": {
+    es: "Ningún camino de correo configurado: las invitaciones aparecen como enlace para copiar, en vez de llegar a la bandeja de entrada.",
+  },
+  "Testar conexão": { es: "Probar conexión" },
+  "Informe uma porta entre 1 e 65535.": { es: "Indica un puerto entre 1 y 65535." },
+  "Informe somente o e-mail do remetente, por exemplo suporte@empresa.com.": {
+    es: "Indica solo el correo del remitente, por ejemplo soporte@empresa.com.",
+  },
+  "Selecione STARTTLS, TLS ou Sem criptografia.": { es: "Selecciona STARTTLS, TLS o Sin cifrado." },
+  "Revise os dados SMTP informados.": { es: "Revisa los datos SMTP indicados." },
+  "A cifra está indisponível nesta instalação; a senha não foi gravada.": {
+    es: "El cifrado no está disponible en esta instalación; la contraseña no se guardó.",
+  },
   // vocabulario.ts (followups) — MatchReplyForm.tsx não traduzia, ClassifyForm.tsx sim.
   "Se a informação já existir": { es: "Si la información ya existe" },
   "Perguntar de novo e substituir": { es: "Preguntar de nuevo y reemplazar" },
@@ -6745,6 +6795,28 @@ export const DICIONARIO: Traducoes = {
   },
   "avisa o cliente": { es: "avisa al cliente" },
   "antes": { es: "antes" },
+  "Mensagem do lembrete": { es: "Mensaje del recordatorio" },
+  "Oi {{nome}}! Passando pra lembrar: {{titulo}}, {{dia}} às {{hora}}.": {
+    es: "Hola {{nome}}! Te recuerdo: {{titulo}}, {{dia}} a las {{hora}}.",
+  },
+  "Deixe em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.": {
+    es: "Déjalo en blanco para el texto predeterminado. Variables: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.",
+  },
+  "Quanto antes": { es: "Cuánto antes" },
+  "Unidade": { es: "Unidad" },
+  "minutos": { es: "minutos" },
+  "Mensagem deste lembrete": { es: "Mensaje de este recordatorio" },
+  "Adicionar lembrete": { es: "Agregar recordatorio" },
+  "Deixe a mensagem em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.": {
+    es: "Deja el mensaje en blanco para el texto predeterminado. Variables: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.",
+  },
+  "texto próprio": { es: "texto propio" },
+  "A mensagem do lembrete cabe em 1000 caracteres.": {
+    es: "El mensaje del recordatorio cabe en 1000 caracteres.",
+  },
+  "No máximo 20 lembretes adicionais por tipo.": {
+    es: "Como máximo 20 recordatorios adicionales por tipo.",
+  },
   "O lembrete precisa sair pelo menos 15 minutos antes do compromisso.": { es: "El recordatorio debe salir al menos 15 minutos antes de la cita." },
   "O lembrete não pode sair mais de 7 dias (10080 minutos) antes.": { es: "El recordatorio no puede salir más de 7 días (10080 minutos) antes." },
   "Ação contém": { es: "La acción contiene" },
@@ -6986,7 +7058,7 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar os horários": { es: "No pude cargar los horarios" },
   "Os dias ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista. Numa instalação nova, isso costuma ser a jornada de atendimento que ainda não foi publicada.": { es: "Los días quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista. En una instalación nueva, esto suele ser la jornada de atención que todavía no se publicó." },
   "Nenhum horário livre em": { es: "Ningún horario libre en" },
-  "Os próximos 30 dias são o que está publicado hoje — meses adiante aparecem conforme a data se aproxima.": { es: "Los próximos 30 días son lo que está publicado hoy — los meses siguientes aparecen conforme la fecha se acerca." },
+  "Não há horário livre publicado neste mês.": { es: "No hay horario libre publicado en este mes." },
   "Conferindo a chave com a OpenAI — leva alguns segundos.": { es: "Verificando la clave con OpenAI — toma unos segundos." },
   "Pronto para preparar material.": { es: "Listo para preparar material." },
   "Falta uma chave da OpenAI para o agente aprender o seu material": { es: "Falta una clave de OpenAI para que el agente aprenda tu material" },
@@ -8167,9 +8239,23 @@ export const DICIONARIO: Traducoes = {
   "cliente@empresa.com": { es: "cliente@empresa.com" },
   "Endereço inválido — confira antes de marcar.":
     { es: "Dirección inválida — revísala antes de agendar." },
-  "Preenchido, o Google envia o convite por e-mail para esta pessoa.":
-    { es: "Si se completa, Google envía la invitación por correo a esta persona." },
-
+  "O cliente com e-mail na ficha já recebe o convite. Preencha só se quiser chamar mais alguém.":
+    {
+      es: "El cliente con correo en la ficha ya recibe la invitación. Complétalo solo si quieres llamar a alguien más.",
+    },
+  "Rua, número, sala": { es: "Calle, número, sala" },
+  "Onde o atendimento acontece. Digite para filtrar ou salvar para a próxima vez.":
+    { es: "Dónde ocurre la atención. Escribe para filtrar o guardar para la próxima vez." },
+  "Salvar para os próximos agendamentos": { es: "Guardar para las próximas citas" },
+  "Não foi possível salvar o endereço. Tente novamente.":
+    { es: "No se pudo guardar la dirección. Inténtalo de nuevo." },
+  "Não foi possível carregar os endereços. Tente novamente.":
+    { es: "No se pudieron cargar las direcciones. Inténtalo de nuevo." },
+  "Observação": { es: "Observación" },
+  "O que a equipe precisa lembrar neste horário": {
+    es: "Lo que el equipo necesita recordar en este horario",
+  },
+  "Aparece na descrição do compromisso.": { es: "Aparece en la descripción de la cita." },
 
   // ─── Tarefas (extraídas do PR #418) ───
   "Tarefas": { es: "Tareas" },

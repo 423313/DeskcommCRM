@@ -26372,6 +26372,127 @@ grant  execute on function public.fn_tags_normalizar(text[], text, text, boolean
 revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) from public, anon;
 grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) to authenticated, service_role;
 
+-- ---- mensagem do lembrete no tipo (migration 0328) ----
+-- O texto que o cron manda no WhatsApp passa a ser do MOLDE. NULL = a frase
+-- padrão ("Passando pra lembrar…"), o comportamento anterior. Distinto de
+-- reminder_template_name, que é o nome do template do provedor oficial.
+alter table public.calendar_event_types
+  add column if not exists reminder_body text;
+
+comment on column public.calendar_event_types.reminder_body is
+  'Texto do lembrete no WhatsApp. NULL = a frase padrão do cron. Variáveis {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}. Distinto de reminder_template_name, que é o nome do template aprovado no provedor oficial.';
+
+-- ---- mensagem por lembrete (migration 0329) ----
+-- Cada extra ganha texto próprio (`reminder_bodies`) e o teto de 3 extras
+-- sobe para 20. O CHECK antigo chama a função pelo nome: `create or replace`
+-- basta. Backfill copia reminder_body para cada extra que já existia, para
+-- a atualização não trocar o texto que o cliente já recebia.
+alter table public.calendar_event_types
+  add column if not exists reminder_bodies jsonb not null default '{}'::jsonb;
+
+create or replace function public.fn_degraus_de_lembrete_validos(p_degraus integer[])
+returns boolean
+language sql
+immutable
+as $$
+  select coalesce(array_length(p_degraus, 1), 0) <= 20
+     and coalesce(bool_and(x between 15 and 10080), true)
+    from unnest(coalesce(p_degraus, '{}'::integer[])) as x;
+$$;
+
+revoke execute on function public.fn_degraus_de_lembrete_validos(integer[]) from public, anon;
+grant execute on function public.fn_degraus_de_lembrete_validos(integer[]) to authenticated, service_role;
+
+create or replace function public.fn_corpos_de_lembrete_validos(p_corpos jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select p_corpos is not null
+     and jsonb_typeof(p_corpos) = 'object'
+     and coalesce((select count(*) from jsonb_object_keys(p_corpos)), 0) <= 20
+     and coalesce((
+       select bool_and(
+         e.key ~ '^[0-9]+$'
+         and jsonb_typeof(e.value) = 'string'
+         and length(e.value #>> '{}') <= 1000
+       )
+       from jsonb_each(p_corpos) as e
+     ), true);
+$$;
+
+revoke execute on function public.fn_corpos_de_lembrete_validos(jsonb) from public, anon;
+grant execute on function public.fn_corpos_de_lembrete_validos(jsonb) to authenticated, service_role;
+
+update public.calendar_event_types
+   set reminder_bodies = coalesce((
+     select jsonb_object_agg(x::text, reminder_body)
+       from unnest(reminder_extra_offsets_minutes) as x
+   ), '{}'::jsonb)
+ where reminder_body is not null
+   and length(trim(reminder_body)) > 0
+   and coalesce(array_length(reminder_extra_offsets_minutes, 1), 0) > 0
+   and reminder_bodies = '{}'::jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'calendar_event_types_corpos_validos'
+       and conrelid = 'public.calendar_event_types'::regclass
+  ) then
+    update public.calendar_event_types
+       set reminder_bodies = '{}'::jsonb
+     where not public.fn_corpos_de_lembrete_validos(reminder_bodies);
+
+    alter table public.calendar_event_types
+      add constraint calendar_event_types_corpos_validos
+      check (public.fn_corpos_de_lembrete_validos(reminder_bodies));
+  end if;
+end $$;
+
+comment on column public.calendar_event_types.reminder_bodies is
+  'Texto de cada lembrete ADICIONAL, chave = minutos antes (string). Extra ausente do mapa usa a frase de fábrica do cron, não reminder_body. Vazio = nenhum extra tem texto próprio.';
+
+-- ---- endereços salvos da agenda (migration 0330) ----
+-- Lista da ORGANIZAÇÃO: salas e unidades que a equipe reusa ao marcar.
+-- Unique por (org, endereço normalizado). Escrita agent+; leitura de membro.
+create table if not exists public.calendar_locations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  address text not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  constraint calendar_locations_endereco_tamanho
+    check (char_length(btrim(address)) between 1 and 300)
+);
+
+create unique index if not exists calendar_locations_org_endereco_key
+  on public.calendar_locations (organization_id, lower(btrim(address)));
+
+comment on table public.calendar_locations is
+  'Endereços da ORGANIZAÇÃO reutilizáveis ao marcar. Não é o endereço de um contato: é o lugar onde se atende (sala, unidade). Unique por org + endereço normalizado.';
+comment on column public.calendar_locations.address is
+  'Texto livre, 1–300 caracteres depois do trim. O mesmo teto de calendar_appointments.location_details.';
+
+alter table public.calendar_locations enable row level security;
+
+drop policy if exists calendar_locations_select on public.calendar_locations;
+create policy calendar_locations_select on public.calendar_locations
+  for select using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+
+drop policy if exists calendar_locations_insert on public.calendar_locations;
+create policy calendar_locations_insert on public.calendar_locations
+  for insert with check (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+revoke all on public.calendar_locations from anon;
+
 -- ---- a transferência entre funis não é perda comercial (migration 0266) ----
 --
 -- Entra ANTES do bloco da varredura anon, que é de propósito o último do arquivo
@@ -31549,6 +31670,54 @@ revoke execute on function public.tags_do_contato(public.conversations) from pub
 grant  execute on function public.tags_do_contato(public.conversations) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
+
+-- ---- transporte SMTP da instalação: a segunda opção de e-mail (migration 0333) ----
+--
+-- Singleton de escopo de INSTALAÇÃO, no mesmo desenho de `platform_meta_app`
+-- (0257) e `platform_google_oauth` (0201): um servidor SMTP atende os e-mails de
+-- todas as empresas desta VPS. A Resend NÃO sai — `lib/email/roteador.ts` usa
+-- SMTP quando há SMTP e Resend quando não há, e as sete `SMTP_*` do `.env`
+-- seguem valendo como piso de rollback.
+--
+-- O `revoke` é obrigatório: o `alter default privileges` do topo deste arquivo
+-- concede tabela nova a `anon` e `authenticated`.
+--
+-- Idempotente e auto-curativo (é o caminho do `update.sh` de um clone): tabela,
+-- comentários e trigger com `if not exists`/`drop … if exists`. Nenhum dado é
+-- tocado e nenhuma constraint nova incide sobre linha existente.
+create table if not exists public.platform_smtp_settings (
+  id smallint primary key default 1,
+  smtp_host text,
+  smtp_port integer not null default 587 check (smtp_port between 1 and 65535),
+  smtp_security text not null default 'starttls' check (smtp_security in ('starttls', 'tls', 'none')),
+  smtp_username text,
+  smtp_password_encrypted bytea,
+  from_email text,
+  from_name text,
+  updated_at timestamptz not null default now(),
+  updated_by uuid,
+  constraint platform_smtp_settings_singleton check (id = 1),
+  constraint platform_smtp_settings_host check (smtp_host is null or smtp_host ~ '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$'),
+  constraint platform_smtp_settings_from_email check (
+    from_email is null or from_email ~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+  )
+);
+
+comment on table public.platform_smtp_settings is
+  'O servidor SMTP DESTA INSTALAÇÃO (singleton). Server-side only: RLS ligada sem policies e grants revogados de anon/authenticated — o PostgREST não a serve. A senha é cifrada e nunca volta ao browser; a tela devolve apenas se existe.';
+comment on column public.platform_smtp_settings.smtp_password_encrypted is
+  'Cifrada por fn_encrypt_oauth (pgp_sym_encrypt/aes256). Nunca gravar em claro: sem a chave mestra o save recusa. Quem tem este valor manda e-mail como a instalação.';
+comment on column public.platform_smtp_settings.smtp_security is
+  'starttls (normalmente porta 587), tls (TLS implícito, normalmente 465) ou none. O CHECK existe porque o valor vira flag do transporte em lib/email/smtp.ts.';
+
+alter table public.platform_smtp_settings enable row level security;
+revoke all on public.platform_smtp_settings from anon, authenticated;
+grant select, insert, update on public.platform_smtp_settings to service_role;
+
+drop trigger if exists trg_platform_smtp_settings_updated_at on public.platform_smtp_settings;
+create trigger trg_platform_smtp_settings_updated_at
+  before update on public.platform_smtp_settings
+  for each row execute function public.fn_set_updated_at();
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

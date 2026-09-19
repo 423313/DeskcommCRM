@@ -375,6 +375,7 @@ export const AUDIT_ACTIONS = [
   // handler o consumiria; evento sem consumer é o anti-pattern nº 3).
   "platform.internal_destinations_updated",
   "platform_google_oauth.updated",
+  "platform_smtp_settings.updated",
   // A credencial do APP da Meta da INSTALAÇÃO (migration 0257): o App Secret que
   // assina a entrega do webhook e o verify token que responde ao handshake.
   // Auditável pelo mesmo motivo da linha acima, e com alcance maior — quem tem o
@@ -541,6 +542,7 @@ export const AUDIT_ACTIONS = [
   "agenda.appointment_updated",
   "agenda.confirmation_sweep_run",
   "agenda.settings_updated",
+  "agenda.endereco_salvo",
   "agenda.appointment_rescheduled",
   "agenda.appointment_cancelled",
   // Relógio HTTP (Hobby / sem contêiner scheduler): uma batida que alguém

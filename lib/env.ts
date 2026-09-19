@@ -295,6 +295,26 @@ const schema = z.object({
   RESEND_FROM_EMAIL: z.string().optional().default(""),
 
   /**
+   * SMTP — o SEGUNDO transporte de e-mail, ao lado da Resend, nunca no lugar
+   * dela. Quem já roda com Resend não mexe em nada; quem instala numa VPS e não
+   * quer criar conta em serviço externo preenche estas sete e o envio sai pelo
+   * servidor dele. Qual dos dois atende cada envio é decidido em
+   * `lib/email/roteador.ts` — SMTP quando há SMTP, Resend quando não há.
+   *
+   * O banco (`platform_smtp_settings`, pela tela /admin/email) PREVALECE sobre
+   * estas variáveis; elas existem para provisionar uma VPS sem abrir interface,
+   * e são o piso de rollback. Todas `optional().default()`: `.env` antigo não
+   * quebra ao atualizar.
+   */
+  SMTP_HOST: z.string().optional().default(""),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional().default(587),
+  SMTP_SECURITY: z.enum(["starttls", "tls", "none"]).optional().default("starttls"),
+  SMTP_USERNAME: z.string().optional().default(""),
+  SMTP_PASSWORD: z.string().optional().default(""),
+  SMTP_FROM_EMAIL: z.string().optional().default(""),
+  SMTP_FROM_NAME: z.string().optional().default(""),
+
+  /**
    * E-mail de suporte que a instalação mostra ao CLIENTE FINAL (tela de conta
    * suspensa, tela de cobrança).
    *
