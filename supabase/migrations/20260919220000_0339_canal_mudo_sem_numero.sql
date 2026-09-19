@@ -59,7 +59,8 @@ alter table public.agent_inbox_items
     'case_stale',
     'followup_sem_agente',
     'canal_mudo_sem_numero',
-    'other'
+    'other',
+    'aviso_de_caso_nao_entregue'
 ));
 
 notify pgrst, 'reload schema';
