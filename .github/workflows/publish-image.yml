@@ -295,7 +295,11 @@ jobs:
   imagem-do-app-sobe:
     needs: [a-tag-veio-da-main]
     if: needs.a-tag-veio-da-main.outputs.imagem == 'sim'
-    runs-on: ubuntu-latest
+    # Executor próprio SÓ em PR de branch deste repo (EXECUTOR_PROPRIO=ligado).
+    # Na `main` e em tag esta imagem vira a que o parque instala: ela se constrói
+    # nas máquinas do GitHub, nunca numa máquina nossa. Guarda contra fork:
+    # comentário do e2e-parte no e2e.yml.
+    runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'deskcomm-proprio' || 'ubuntu-latest' }}
     concurrency:
       group: ${{ github.workflow }}-imagem-do-app-sobe-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
@@ -508,7 +512,11 @@ jobs:
   imagens-de-fundo-sobem:
     needs: [a-tag-veio-da-main]
     if: needs.a-tag-veio-da-main.outputs.imagem == 'sim'
-    runs-on: ubuntu-latest
+    # Executor próprio SÓ em PR de branch deste repo (EXECUTOR_PROPRIO=ligado).
+    # Na `main` e em tag esta imagem vira a que o parque instala: ela se constrói
+    # nas máquinas do GitHub, nunca numa máquina nossa. Guarda contra fork:
+    # comentário do e2e-parte no e2e.yml.
+    runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'deskcomm-proprio' || 'ubuntu-latest' }}
     concurrency:
       group: ${{ github.workflow }}-imagens-de-fundo-sobem-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}

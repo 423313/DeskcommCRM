@@ -41,7 +41,7 @@ const GOOGLE_ENDPOINT = 'https://generativelanguage.googleapis.com';
  * com ela sem dependência nova — e os ids dela já vêm no formato
  * `familia/modelo`, o mesmo dos nossos, sem tradução no meio.
  */
-export const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1';
+export const OPENROUTER_ENDPOINT = process.env.OPENROUTER_BASE_URL?.trim() || 'https://openrouter.ai/api/v1';
 
 /**
  * Cabeçalhos OPCIONAIS de atribuição da OpenRouter.
