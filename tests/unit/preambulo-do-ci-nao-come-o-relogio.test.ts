@@ -248,6 +248,43 @@ describe("o preâmbulo do CI não come o orçamento dos testes", () => {
     }
   });
 
+  it("o orçamento vale para as DUAS partes da matrix, não só para uma", () => {
+    // `verify-parte` é uma `matrix` de 2, e o `ORCAMENTO_MIN` vive num passo
+    // ÚNICO que as duas partes executam. Os passos vizinhos (`Cercas`,
+    // `Typecheck`, `Lint`, `Kit self-host`) são todos `if: matrix.parte == N` —
+    // então pôr um `if:` de parte neste aqui é uma edição de uma linha, natural
+    // de fazer por simetria, e deixaria metade da suíte sem detector nenhum.
+    const linhas = readFileSync(join(DIR_WORKFLOWS, "ci.yml"), "utf8").split("\n");
+    const i = linhas.findIndex((l) => /^\s+- name: Orçamento de tempo do [\w-]+\s*$/.test(l));
+
+    // Controle de VIVACIDADE: sem ele, o passo renomeado sumiria da busca e as
+    // asserções abaixo passariam por vacuidade.
+    expect(i, "o passo do orçamento não foi encontrado no ci.yml — esta guarda cegou").toBeGreaterThanOrEqual(0);
+
+    const recuo = linhas[i]!.length - linhas[i]!.trimStart().length;
+    let fim = linhas.length;
+    for (let j = i + 1; j < linhas.length; j++) {
+      const l = linhas[j]!;
+      if (l.trim() === "") continue;
+      if (l.length - l.trimStart().length <= recuo) {
+        fim = j;
+        break;
+      }
+    }
+    const corpo = linhas.slice(i, fim).filter((l) => !l.trimStart().startsWith("#"));
+
+    expect(
+      corpo.some((l) => /^\s+ORCAMENTO_MIN:/.test(l)),
+      "o ORCAMENTO_MIN saiu deste passo — a busca por nome deixou de encontrar o número",
+    ).toBe(true);
+
+    const condicoes = corpo.filter((l) => /^\s+if:/.test(l)).map((l) => l.trim());
+    expect(
+      condicoes.filter((c) => c.includes("matrix")),
+      "o passo do orçamento ficou preso a uma parte da matrix: a outra roda sem detector de crescimento",
+    ).toEqual([]);
+  });
+
   it("o orçamento é MENOR que o teto — senão o detector nunca dispara", () => {
     // O invariante que importa mais que os dois números: se o orçamento passar do
     // teto, o job morre de relógio ANTES de o passo de orçamento rodar, e o sinal
