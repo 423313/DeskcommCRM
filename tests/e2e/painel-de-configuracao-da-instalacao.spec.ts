@@ -84,7 +84,13 @@ test.describe("Painel de configuração da instalação", () => {
     });
 
     test("a porta do modo administrador é achável sem digitar URL", async ({ page }) => {
-      // Caminho do usuário: menu do próprio usuário, no canto. Nada de goto().
+      // Caminho do usuário: entra no sistema pela porta de sempre (`/app`, que
+      // redireciona para a tela inicial dele, como depois do login) e acha o
+      // painel pelo menu do próprio usuário, no canto. Nenhum goto() para /admin.
+      // Com a sessão reaproveitada a página nasce em branco: sem esta entrada, o
+      // caso procurava o menu numa página vazia (run 35454062082).
+      await page.goto("/app");
+      await page.waitForURL(/\/app\//);
       await page.getByRole("button", { name: /menu do usuário/i }).click();
 
       const porta = page.getByTestId("porta-modo-administrador");
