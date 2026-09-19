@@ -700,6 +700,16 @@ export const AUDIT_ACTIONS = [
   // as duas contagens mais `examinados`, que é o que diferencia "ninguém tinha
   // fluxo desarmado" de "a varredura não rodou".
   "ai.followup_sem_agente_reconciliado",
+  /** POST /api/v1/tenants/provision — organização criada por um sistema externo (doc 38 b). */
+  "tenant.created_by_provisioning",
+  /**
+   * A repetição do provisionamento completou o que a tentativa anterior não
+   * chegou a gravar — hoje, o vínculo de admin do dono. Sai SÓ quando houve
+   * efeito, e é o único registro que a organização nascida de uma tentativa
+   * partida tem: a `tenant.created_by_provisioning` dela nunca saiu, porque a
+   * primeira tentativa morreu antes de chegar nessa linha.
+   */
+  "tenant.provisioning_completed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

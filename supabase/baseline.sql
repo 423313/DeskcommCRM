@@ -27060,7 +27060,7 @@ alter table public.extension_installations add constraint extension_installation
 alter table public.organization_extensions add column if not exists deactivated_by_removal_at timestamptz;
 alter table public.extension_operations drop constraint if exists extension_operations_kind_check;
 alter table public.extension_operations add constraint extension_operations_kind_check
-  check (kind in ('catalog_admission','install','update','revert','removal','configure'));
+  check (kind in ('catalog_admission','install','update','revert','removal','configure','module_install'));
 alter table public.extension_operations drop constraint if exists extension_operations_status_check;
 alter table public.extension_operations add constraint extension_operations_status_check
   check (status in ('preparing','completed','failed','cancelled'));
@@ -31757,6 +31757,171 @@ create trigger trg_platform_smtp_settings_updated_at
   before update on public.platform_smtp_settings
   for each row execute function public.fn_set_updated_at();
 
+-- ---- módulo instalado: instalar e reaplicar, D3 e D6 da ADR-0002 (migration 0340) ----
+--
+-- Cópia literal da migration, com duas diferenças: as duas chamadas do fim moram
+-- no rodapé do arquivo, depois de toda tabela; e a CHECK de `kind` ampliada vive no
+-- bloco único dela (0271). Entra ANTES da VARREDURA anon porque cria função.
+-- 0340 — Módulo instalado: D3 e D6 da ADR-0002 (onda 2, issue #1114)
+--
+-- Empilhada sobre a 0325 (#1178, onda 1): chama as provisionadoras, que terminam em
+-- `fn_proteger_modulo_provisionado()`. Por isso vem DEPOIS dela no timestamp — posição de
+-- migration aqui é semântica, não cosmética.
+--
+-- D3 — instalar um módulo na INSTÂNCIA cria as tabelas dele na hora. O corte é por instalação,
+-- não por organização (decisão do dono, aceite da ADR-0002).
+-- D6 — reaplicar nas atualizações é explícito e falha alto.
+--
+-- O QUE NÃO ESTÁ AQUI: a provisionadora de um módulo concreto. Nenhum módulo com tabelas está na
+-- main; o primeiro (financeiro/comanda) escreve o próprio corpo. Até lá, a lista de módulos
+-- instaláveis é VAZIA em todo banco de cliente, e o mecanismo é provado por um módulo de teste
+-- que só existe na bateria de invariantes.
+--
+-- Desenho completo: docs/specs/modulo-instalado-onda-2.md.
+
+-- ── 1. O registro da instância ───────────────────────────────────────────────
+create table if not exists public.modulos_instalados (
+  modulo text primary key check (modulo ~ '^[a-z][a-z0-9_]{1,40}$'),
+  estado text not null default 'ativo' check (estado in ('ativo', 'suspenso')),
+  instalado_em timestamptz not null default now(),
+  instalado_por uuid references auth.users(id) on delete set null,
+  reaplicado_em timestamptz,
+  motivo_suspensao text
+);
+comment on table public.modulos_instalados is
+  'Módulos opcionais instalados NA INSTÂNCIA (ADR-0002, D3). Sem organization_id: o corte é por instalação. Escrito só por fn_modulo_instalar e fn_reaplicar_modulos_instalados.';
+
+alter table public.modulos_instalados enable row level security;
+revoke all on public.modulos_instalados from anon, authenticated;
+
+-- ── 2. O recibo mora no mesmo livro das extensões ────────────────────────────
+-- Um tipo novo, `module_install`, em vez de um segundo livro: a instalação passa "pelo mesmo
+-- caminho já provado das extensões" (ADR-0002, D3) — chave idempotente, `applied_now`, e a tela
+-- de recibos que já existe. É recibo de PLATAFORMA (organization_id nulo), o que a restrição de
+-- escopo já aceita sem mudança.
+-- A lista ampliada com `module_install` NÃO é recriada aqui: ela vive no bloco único da
+-- constraint, no apêndice da migration 0271 — uma constraint, um bloco
+-- (tests/unit/baseline-constraint-reconstruida.test.ts). A migration 0340 faz o drop + add.
+
+-- ── 3. A porta de instalação ─────────────────────────────────────────────────
+create or replace function public.fn_modulo_instalar(p_actor uuid, p_operation uuid, p_modulo text)
+returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_request jsonb := jsonb_build_object('kind', 'module_install', 'actor', p_actor, 'modulo', p_modulo);
+  v_op public.extension_operations;
+begin
+  perform public.fn_extensions_assert_actor(p_actor);
+  if p_operation is null or p_modulo is null or p_modulo !~ '^[a-z][a-z0-9_]{1,40}$' then
+    raise exception using errcode = 'P0001', message = 'extension_invalid_input';
+  end if;
+
+  -- A mesma trava das extensões: serializa com instalar/atualizar pacote E com a atualização do
+  -- núcleo. O ator é conferido de novo depois dela, porque a autoridade pode ter mudado na espera.
+  perform pg_advisory_xact_lock(255, 1);
+  perform public.fn_extensions_assert_actor(p_actor);
+
+  select * into v_op from public.extension_operations where id = p_operation;
+  if found then
+    if v_op.request_fingerprint <> public.fn_extensions_fingerprint(v_request) then
+      raise exception using errcode = 'P0001', message = 'extension_idempotency_conflict';
+    end if;
+    return to_jsonb(v_op) || jsonb_build_object('applied_now', false);
+  end if;
+
+  -- A lista de módulos instaláveis é o conjunto de provisionadoras que EXISTEM. Não há segunda
+  -- lista para divergir: um módulo oficial entra pela tripla migration + baseline + MANIFEST
+  -- trazendo `fn_<modulo>_provisionar()`, e o invariante da onda 1 prova a forma dela.
+  if to_regprocedure(format('public.fn_%s_provisionar()', p_modulo)) is null then
+    raise exception using errcode = 'P0001', message = 'extension_module_unknown';
+  end if;
+
+  if public.fn_extensions_core_update_in_progress() then
+    raise exception using errcode = 'P0001', message = 'extension_core_update_in_progress';
+  end if;
+
+  -- O nome só chega aqui depois de passar pelo slug e pela existência da função; `%I` o cita.
+  execute format('select public.%I()', 'fn_' || p_modulo || '_provisionar');
+
+  insert into public.modulos_instalados (modulo, estado, instalado_por, reaplicado_em)
+    values (p_modulo, 'ativo', p_actor, now())
+    on conflict (modulo) do update
+      set estado = 'ativo', motivo_suspensao = null, reaplicado_em = now();
+
+  insert into public.extension_operations
+      (id, kind, status, actor_id, name, request_fingerprint, request, result)
+    values
+      (p_operation, 'module_install', 'completed', p_actor, p_modulo,
+       public.fn_extensions_fingerprint(v_request), v_request, jsonb_build_object('modulo', p_modulo))
+    returning * into v_op;
+
+  -- Tabela criada em tempo de execução é INVISÍVEL para a API até o PostgREST recarregar o
+  -- schema. Sem isto, "instalar e usar, sem espera" (condição 3 do dono) seria falso: o módulo
+  -- estaria instalado e o app receberia 404 ao consultá-lo. A notificação sai no commit.
+  perform pg_notify('pgrst', 'reload schema');
+
+  return to_jsonb(v_op) || jsonb_build_object('applied_now', true);
+end $$;
+
+revoke execute on function public.fn_modulo_instalar(uuid, uuid, text) from public, anon;
+revoke execute on function public.fn_modulo_instalar(uuid, uuid, text) from authenticated;
+grant execute on function public.fn_modulo_instalar(uuid, uuid, text) to service_role;
+
+-- ── 4. A reaplicação nas atualizações (D6) — dois comandos, de propósito ─────
+-- O kit aplica o baseline SEM transação única (`psql -f`) e trata como falha toda linha ERROR
+-- que não case com a lista de benignos (`already exists` e afins, em _common.sh). Então:
+--   A) captura a falha de cada módulo e o marca `suspenso` SEM relançar — o comando se confirma
+--      sozinho e a marca PERSISTE;
+--   B) se há módulo suspenso, levanta um ERROR com texto próprio, que o update.sh já reporta.
+-- Num comando só, relançar desfaria a marca; não relançar deixaria o kit dizer "atualizado".
+create or replace function public.fn_reaplicar_modulos_instalados()
+returns void language plpgsql set search_path = public, pg_temp as $$
+declare
+  r record;
+begin
+  for r in select modulo from public.modulos_instalados order by modulo loop
+    begin
+      if to_regprocedure(format('public.fn_%s_provisionar()', r.modulo)) is null then
+        raise exception 'a provisionadora de % não existe nesta versão', r.modulo;
+      end if;
+      execute format('select public.%I()', 'fn_' || r.modulo || '_provisionar');
+      update public.modulos_instalados
+        set estado = 'ativo', motivo_suspensao = null, reaplicado_em = now()
+        where modulo = r.modulo;
+    exception
+      -- Disputa de trava com o app no ar NÃO é defeito do módulo: relançar desfaz esta
+      -- passada inteira (nenhum módulo é marcado), e o texto do Postgres — "deadlock
+      -- detected", "could not obtain lock" — é o que o kit reconhece como disputa e o faz
+      -- aplicar de novo. Suspender aqui tiraria do ar um módulo que só precisava esperar.
+      when deadlock_detected or serialization_failure or lock_not_available then
+        raise;
+      when others then
+        update public.modulos_instalados
+          set estado = 'suspenso', motivo_suspensao = sqlerrm
+          where modulo = r.modulo;
+    end;
+  end loop;
+  perform pg_notify('pgrst', 'reload schema');
+end $$;
+
+create or replace function public.fn_conferir_modulos_instalados()
+returns void language plpgsql set search_path = public, pg_temp as $$
+declare
+  v_suspensos text;
+begin
+  select string_agg(modulo, ', ' order by modulo) into v_suspensos
+    from public.modulos_instalados where estado = 'suspenso';
+  -- A mensagem NÃO repete o erro original, e isso é o ponto: se a provisionadora falhou com
+  -- "already exists" e o texto viesse junto, a linha casaria com a lista de erros benignos do
+  -- kit e seria ENGOLIDA — exatamente o silêncio que esta função existe para impedir. O motivo
+  -- fica em modulos_instalados.motivo_suspensao; o aviso só nomeia o módulo.
+  if v_suspensos is not null then
+    raise exception 'modulo suspenso na atualizacao: % — o motivo esta em modulos_instalados.motivo_suspensao', v_suspensos;
+  end if;
+end $$;
+
+revoke execute on function public.fn_reaplicar_modulos_instalados() from public, anon, authenticated, service_role;
+revoke execute on function public.fn_conferir_modulos_instalados() from public, anon, authenticated, service_role;
+
 -- APÊNDICE 20260919230000_0343_redes_sociais_nativas.sql
 -- Social connections reuse channel sessions, the inbox and the outbound ledger.
 -- Credentials are server-only; tenant admins use authenticated API routes.
@@ -32586,7 +32751,6 @@ drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_
 create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
-
 -- ---- a regra de automação guarda a CONFIGURAÇÃO do gatilho (migration 0268) ----
 -- O gatilho de data do funil (#989) não nasce de evento: quem o emite é a
 -- varredura `cron/lead-date-field-due`, e ela só sabe onde olhar se a regra
@@ -32769,6 +32933,14 @@ update public.contacts c
 
 notify pgrst, 'reload schema';
 
+-- ---- módulos instalados são reaplicados, depois de toda tabela do núcleo (migration 0340) ----
+--
+-- A provisionadora de cada módulo instalado roda de novo, sobre o núcleo já
+-- atualizado. Falha de um módulo NÃO derruba este comando: ele marca o módulo
+-- `suspenso` e a marca se confirma sozinha (o kit aplica sem transação única).
+-- Vem ANTES das proteções e das travas, para que tabela recriada aqui passe por elas.
+do $f$ begin perform public.fn_reaplicar_modulos_instalados(); end $f$;
+
 -- ---- proteção de tabela de organização, depois de toda tabela (migration 0325) ----
 --
 -- Auto-curativa e no-op hoje (as 119 tabelas de organização deste baseline já
@@ -32790,3 +32962,49 @@ do $f$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $f$;
 -- tests/invariants/travas-de-suporte-cobrem-toda-tabela-na-instalacao.test.ts.
 -- A definição da função está antes da varredura de anon.
 do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+-- ---- Catálogo da DeepSeek (migration 0342) ----
+--
+-- O próximo provedor que a abertura de vocabulário da 0127 existia para
+-- destravar: OpenAI-compatível e com desconto automático de prefixo de cache.
+-- Ids e preços verificados no provedor (`GET /models`; docs oficiais em dólares
+-- por 1M). Preço em CENTAVOS por milhão — entrada (cache miss) 14, saída 28; o
+-- cache hit (0,28¢/1M) não cabe no integer do catálogo e é desconto de
+-- cobrança, não preço de tabela. `ai_pricing` acompanha para o orçamento somar
+-- com o mesmo número. Sem `is_default_for_provider`: a escolha cai no mais
+-- barato com ferramentas, como na OpenRouter.
+insert into public.ai_models
+  (provider, model_id, display_name, description,
+   input_price_per_million_cents, output_price_per_million_cents, supports_tools)
+values
+  ('deepseek', 'deepseek-flash',  'DeepSeek Flash',
+   'O mais barato da DeepSeek, para atendimento de volume. Tem desconto automático do trecho repetido da conversa.',
+   14, 28, true),
+  ('deepseek', 'deepseek-v4-pro', 'DeepSeek V4 Pro',
+   'O mais capaz da linha v4, para conversas que exigem raciocínio. Também desconta o trecho repetido da conversa.',
+   44, 87, true)
+on conflict (provider, model_id) do update set
+  display_name = excluded.display_name,
+  description = excluded.description,
+  input_price_per_million_cents = excluded.input_price_per_million_cents,
+  output_price_per_million_cents = excluded.output_price_per_million_cents,
+  supports_tools = excluded.supports_tools;
+
+insert into public.ai_pricing
+  (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
+values
+  ('deepseek-flash',   14, 28, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo'),
+  ('deepseek-v4-pro',  44, 87, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo')
+on conflict (model) do update set
+  prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
+  completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,
+  notes = excluded.notes,
+  superseded_at = null;
+
+-- ---- módulo suspenso vira ERRO que o kit reporta (migration 0340) ----
+--
+-- Um comando SEPARADO da reaplicação, de propósito: se ela relançasse, a marca
+-- de suspenso seria desfeita junto. Aqui o ERROR sai com texto que não casa com
+-- a lista de erros benignos do update.sh, então a atualização não diz
+-- "atualizado" com módulo fora do ar. Instalação nova não tem módulo: no-op.
+do $f$ begin perform public.fn_conferir_modulos_instalados(); end $f$;

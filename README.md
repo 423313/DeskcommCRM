@@ -226,6 +226,28 @@ Passo a passo em linguagem simples: [`docs/ATUALIZANDO.md`](docs/ATUALIZANDO.md)
 > **Backup importa:** o plano grátis do Supabase **não faz backup sozinho**. Vale agendar
 > `backup.sh` no cron diariamente. O `update.sh` já roda um backup antes de cada atualização.
 
+### 🧹 Desinstalar (tirar esta aplicação do Docker)
+
+Para parar e apagar **somente os recursos Docker desta instalação**, na raiz do repositório:
+
+```bash
+bash desinstalar_docker.sh
+```
+
+Ele descobre o projeto pelo label que o Docker Compose grava e remove apenas os containers,
+volumes e redes internas **deste** projeto. Outras aplicações do mesmo servidor, imagens,
+cache de build, a rede externa do proxy reverso, o código, o `.env`, os backups e um Supabase
+externo não são tocados.
+
+O modo interativo mostra quantos recursos encontrou e exige a confirmação
+`REMOVER-<nome-do-projeto>` antes de remover qualquer coisa. Para uma rotina de descarte de
+ambiente, `bash desinstalar_docker.sh --force` pula a pergunta. Use `--project-name NOME`
+só quando a instalação tiver um `COMPOSE_PROJECT_NAME` personalizado que não esteja mais no
+`.env`.
+
+> **Os volumes vão junto** — inclusive as sessões locais do WhatsApp. Rode `backup.sh` antes se
+> precisar preservá-las.
+
 ---
 
 ## ✨ O que é
