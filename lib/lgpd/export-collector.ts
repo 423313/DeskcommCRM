@@ -370,7 +370,7 @@ export interface ExportPayload {
   organization_legal_name: string;
   /** Nome fantasia. Não vai para o rodapé; existe para o JSON do export. */
   organization_display_name: string;
-  /** Encarregado da organização. `null` cai em `env.LGPD_DPO_EMAIL`. */
+  /** Encarregado da organização; `null` cai no encarregado da INSTALAÇÃO (0341). */
   dpo_email: string | null;
   /**
    * A lei que o documento de acesso cita, pronta (`LGPD Art. 18, II (Lei nº
@@ -459,6 +459,18 @@ interface CollectArgs {
   requestId: string;
   contactId: string | null;
   externalCustomerId: string | null;
+  /**
+   * O encarregado de dados da INSTALAÇÃO — o piso do da organização, já
+   * RESOLVIDO por quem chama.
+   *
+   * Injetado, e não lido aqui, porque o coletor de LGPD tem de tocar o mínimo:
+   * `tests/invariants/agenda-meet-export.test.ts` exige que a coleta sem
+   * identificador visite APENAS `organizations`, e consultar a configuração da
+   * instalação acrescentaria uma tabela a toda coleta — inclusive à que não vai
+   * usar o valor. Quem chama já é assíncrono e já resolve outras coisas da
+   * instalação; resolver mais esta ali não custa visita nenhuma aqui.
+   */
+  dpoDaInstalacao?: string | null;
 }
 
 const RECENT_MESSAGES_LIMIT = 100;
@@ -489,8 +501,14 @@ async function lerControlador(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
   requestId: string,
+  dpoDaInstalacao: string | null,
 ): Promise<Controlador> {
-  const vazio: Controlador = { legal_name: "", display_name: "", dpo_email: null, country: null };
+  const vazio: Controlador = {
+    legal_name: "",
+    display_name: "",
+    dpo_email: dpoDaInstalacao,
+    country: null,
+  };
   const { data, error } = await admin
     .from("organizations")
     .select("legal_name, display_name, dpo_email, country")
@@ -506,7 +524,7 @@ async function lerControlador(
   return {
     legal_name: data.legal_name ?? "",
     display_name: data.display_name ?? "",
-    dpo_email: data.dpo_email ?? null,
+    dpo_email: data.dpo_email?.trim() || dpoDaInstalacao,
     country: (data as { country?: string | null }).country ?? null,
   };
 }
@@ -516,7 +534,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   const { organizationId, requestId, externalCustomerId } = args;
   // ANTES do primeiro `return`: o caminho "nenhum dado localizado" também gera
   // um relatório entregue ao titular, e ele precisa nomear o controlador igual.
-  const controlador = await lerControlador(admin, organizationId, requestId);
+  const controlador = await lerControlador(admin, organizationId, requestId, args.dpoDaInstalacao ?? null);
   let contactId = args.contactId;
 
   // Resolve contact_id when only external customer id is provided.
