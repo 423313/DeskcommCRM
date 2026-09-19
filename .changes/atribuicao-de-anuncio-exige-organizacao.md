@@ -10,4 +10,4 @@ A organização agora é parâmetro obrigatório e o `where` casa `organization_
 
 Para quem opera nada muda: a migration sobe com o deploy e o comportamento visível do produto é o mesmo. Quem protegia a barba de fora — um bug que escrevia no contato de outra organização — deixa de escrever.
 
-Crédito: @webtecnica.
+Contribuição de @webtecnica (#1321).
