@@ -333,7 +333,7 @@ export interface VoiceCallRow {
   duration_ms: number | null;
 }
 
-/** Pesquisa e resultado da abordagem ligados ao titular (redação: migration 0263). */
+/** Pesquisa e resultado da abordagem ligados ao titular (redação: migration 0345). */
 export interface ProspectingCandidateRow {
   id: string;
   campaign_id: string;
@@ -888,7 +888,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       if (!data || data.length < 500) break;
     }
   }
-  // Espelha exatamente o escopo da redação 0263: contato + organização.
+  // Espelha exatamente o escopo da redação 0345: contato + organização.
   // Telefone coincidente sem vínculo não comprova identidade. Tokens de
   // supressão e a autorização de envio permanecem internos, fora da projeção.
   const prospecting_candidates: ProspectingCandidateRow[] = [];

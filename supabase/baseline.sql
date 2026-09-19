@@ -31757,7 +31757,7 @@ create trigger trg_platform_smtp_settings_updated_at
   before update on public.platform_smtp_settings
   for each row execute function public.fn_set_updated_at();
 
--- APÊNDICE 20260915230000_0261_redes_sociais_nativas.sql
+-- APÊNDICE 20260919230000_0343_redes_sociais_nativas.sql
 -- Social connections reuse channel sessions, the inbox and the outbound ledger.
 -- Credentials are server-only; tenant admins use authenticated API routes.
 create table if not exists public.channel_integrations (
@@ -31783,7 +31783,7 @@ alter table public.conversations add constraint conversations_channel_check
   check (channel in ('whatsapp', 'instagram', 'facebook'));
 
 
--- APÊNDICE 20260916010000_0262_prospeccao_nativa.sql
+-- APÊNDICE 20260919230100_0344_prospeccao_nativa.sql
 -- Native prospecting is an adapter to discovery, CRM creation and existing AI delivery.
 -- Server-only tables: authenticated routes resolve the tenant and authorize every command.
 create table if not exists public.prospecting_settings (
@@ -31843,8 +31843,8 @@ revoke all on public.prospecting_settings, public.prospecting_campaigns, public.
 grant all on public.prospecting_settings, public.prospecting_campaigns, public.prospecting_candidates to service_role;
 notify pgrst, 'reload schema';
 
--- Migration 0263: native prospecting redaction and suppression
--- 0263: Redact discovery data through the canonical contact cascade.
+-- Migration 0345: native prospecting redaction and suppression
+-- 0345: Redact discovery data through the canonical contact cascade.
 -- Suppression tokens are pseudonymous, server-only and used exclusively to
 -- refuse re-import. The API explicitly selects public fields and never exposes them.
 alter table public.prospecting_candidates add column if not exists suppression_salt bytea;
@@ -32104,7 +32104,7 @@ grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) 
 
 notify pgrst, 'reload schema';
 
--- ---- Conversa de configuração da prospecção (migration 0264) ----
+-- ---- Conversa de configuração da prospecção (migration 0346) ----
 -- The administrator's unfinished setup belongs to the campaign, not to Inbox.
 -- Existing rows keep the empty default. Server-only RLS/grants remain unchanged.
 alter table public.prospecting_campaigns
