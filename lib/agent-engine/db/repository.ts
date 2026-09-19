@@ -27,6 +27,7 @@ export type { InboxRefKind } from '@/lib/ai/inbox-destino';
  */
 export type InboxKind =
   | 'case_stale'
+  | 'canal_mudo_sem_numero'
   | 'appointment_outcome_required'
   | 'appointment_recovery_review'
   | 'qr_rescan'
@@ -57,6 +58,10 @@ export type InboxKind =
   | 'midia_nao_lida'
   | 'promise_unfulfilled'
   | 'contact_proposal_expired'
+  // (migration 0292) O aviso de caso não chegou ao WhatsApp da equipe, em
+  // definitivo. Nasce com `ref_kind='agent_case'` para levar AO CASO, que
+  // continua esperando — um aviso que não leva ao assunto é meio aviso.
+  | 'aviso_de_caso_nao_entregue'
   // (migration 0159) O degrau de AVISO do teto de gasto de IA — o que a
   // organização vê antes de qualquer parada. Existe separado de
   // `budget_exceeded` porque diz coisa diferente: um relata que algo

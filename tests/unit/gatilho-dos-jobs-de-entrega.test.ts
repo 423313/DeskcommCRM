@@ -190,6 +190,14 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "workflow chamava desde 2026-08-27, e `test:db` sozinho mede um banco VAZIO — constraint " +
       "que só quebra com linha existente passava verde.",
   },
+  "vigia-de-colisao.yml::vigia": {
+    condicao: null,
+    efeito:
+      "Este job remede os PRs de schema abertos contra a `main` de agora e avisa quem teve o " +
+      "número tomado depois de ficar verde. Desligá-lo devolve a classe inteira: PR verde de " +
+      "três dias atrás mergeado com número duplicado, e a descoberta vira o `db push` de um " +
+      "self-hoster.",
+  },
   "ci.yml::invariants-alcance": {
     condicao: null,
     efeito:
