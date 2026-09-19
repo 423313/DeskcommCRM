@@ -9274,9 +9274,10 @@ alter table public.channel_sessions
 
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
-  -- 'wacalls' (migration 0233, chamada de voz) somado aqui — UM bloco só por
-  -- constraint, doutrina de baseline (não duplicar drop+add por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text]));
+  -- 'wacalls' (migration 0233, chamada de voz) e 'zernio_social' (migration
+  -- 0343, redes sociais nativas) somados AQUI — UM bloco só por constraint,
+  -- doutrina de baseline (não duplicar drop+add por migration).
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
@@ -9285,7 +9286,9 @@ alter table public.channel_sessions
   add constraint channel_sessions_provider_ref_check check (
     (provider = 'waha'       and waha_session_name    is not null) or
     (provider = 'meta_cloud' and meta_phone_number_id is not null) or
-    (provider = 'zernio'     and zernio_account_id    is not null) or
+    -- 'zernio_social' (migration 0343) endereça pelo MESMO `zernio_account_id`:
+    -- é o mesmo intermediário, com outra superfície de canal.
+    (provider in ('zernio', 'zernio_social') and zernio_account_id is not null) or
     (provider = 'wacalls'    and wacalls_session_id    is not null)
   );
 
@@ -32508,30 +32511,20 @@ alter table public.prospecting_campaigns
   add column if not exists agent_setup_revision bigint not null default 0;
 notify pgrst, 'reload schema';
 
--- ---- provider "zernio_social" entra nos CHECKs de channel_sessions (migration 0343) ----
+-- ---- provider "zernio_social" nos CHECKs de channel_sessions (migration 0343) ----
 --
--- SEM ESTE BLOCO, TODA VPS DE CLIENTE QUEBRA e a nossa máquina não vê: o
--- `install.sh` e o `update.sh` aplicam SÓ este arquivo, enquanto aqui a cadeia
--- de `migrations/` roda e conserta o CHECK por outro caminho. O sintoma no
--- cliente é 23514 na PRIMEIRA tentativa de conectar uma rede social — a
--- constraint do dump conhece só waha/meta_cloud/zernio/wacalls.
+-- NÃO HÁ BLOCO AQUI, e a ausência é decisão: `zernio_social` foi somado ao
+-- bloco ÚNICO das duas constraints, lá em cima (procure por
+-- `channel_sessions_provider_check`). A doutrina é "uma constraint, um bloco"
+-- (`tests/unit/baseline-constraint-reconstruida.test.ts`), e ela existe por um
+-- motivo de produção: cada drop+add repetido é mais uma janela em que a tabela
+-- fica SEM constraint durante o `update.sh` de um cliente, e o último bloco a
+-- rodar é quem decide o vocabulário — dois blocos discordando viram um banco
+-- que recusa o canal novo com o script fechando verde.
 --
--- Idempotente e auto-curativo (drop + add), no mesmo padrão dos outros
--- apêndices: reaplicar não duplica constraint nem falha.
-alter table public.channel_sessions drop constraint if exists channel_sessions_provider_check;
-alter table public.channel_sessions add constraint channel_sessions_provider_check
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'zernio_social'::text, 'wacalls'::text]));
-
--- O segundo CHECK amarra cada provider à coluna de identidade que ele usa.
--- `zernio_social` usa a MESMA `zernio_account_id` do `zernio` — sem esta linha,
--- a sessão da rede social é recusada mesmo com o provider já aceito acima.
-alter table public.channel_sessions drop constraint if exists channel_sessions_provider_ref_check;
-alter table public.channel_sessions add constraint channel_sessions_provider_ref_check check (
-  (provider = 'waha'       and waha_session_name   is not null) or
-  (provider = 'meta_cloud' and meta_phone_number_id is not null) or
-  (provider in ('zernio', 'zernio_social') and zernio_account_id is not null) or
-  (provider = 'wacalls'    and wacalls_session_id  is not null)
-);
+-- Este comentário fica no lugar do bloco porque foi exatamente aqui que a
+-- versão anterior deste PR o pôs, e a cerca reprovou (`2x` cada constraint).
+-- Quem vier somar o quinto provider: some no bloco de cima, não aqui.
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
