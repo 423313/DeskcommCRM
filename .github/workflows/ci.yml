@@ -288,6 +288,68 @@ jobs:
   # `TEST_DB_IMAGE`, a MESMA variável dos dois scripts, e o PADRÃO dela continua
   # sendo o piso (`scripts/test-db.sh`) — quem guarda isso é
   # tests/unit/baseline-no-piso-do-postgres.test.ts.
+  # QUAL MATRIZ DE MAJOR? A de cima sempre; a de PISO só quando o PR a alcança.
+  #
+  # `invariants-majors` roda o `test:db` inteiro uma vez por major. Medido de 15 a
+  # 18/09/2026: 1.658 min de runner por dia nas duas pernas, e 72% dos PRs não
+  # tocam schema, script de banco, kit nem invariante — nesses, a perna do piso
+  # mede a mesma coisa que a de cima, com outra versão de Postgres, sem chance de
+  # reprovar por razão de major. A regra e o porquê de cada caminho estão no
+  # cabeçalho de scripts/pr-mexe-no-piso-do-postgres.sh.
+  #
+  # O que a major de CIMA continua pegando em todo PR: RLS, governança e o
+  # vocabulário banco × TypeScript — nada disso depende da versão do Postgres.
+  # O piso existe por outra razão (issue #454): provar que o `baseline.sql` sobe
+  # na MENOR major que dizemos suportar.
+  #
+  # Fora de pull_request (push na `main`, tag, dispatch) a pergunta não é feita:
+  # as duas majors rodam sempre. Então toda mudança de schema é medida no piso no
+  # PR dela E de novo na árvore integrada — e o agregador EXIGE isso fora de PR.
+  #
+  # Roda nas máquinas do GitHub sempre: é de segundos e decide a matriz.
+  invariants-alcance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      majors: ${{ steps.alcance.outputs.majors }}
+      piso: ${{ steps.alcance.outputs.piso }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          sparse-checkout: scripts/pr-mexe-no-piso-do-postgres.sh
+          sparse-checkout-cone-mode: false
+
+      - name: O PR alcança o piso do Postgres?
+        id: alcance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          responde() {
+            echo "piso=$1" >> "$GITHUB_OUTPUT"
+            if [ "$1" = sim ]; then echo 'majors=["15","17"]' >> "$GITHUB_OUTPUT"
+            else echo 'majors=["17"]' >> "$GITHUB_OUTPUT"; fi
+            echo "piso=$1 ($2)"
+          }
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            responde sim "evento ${GITHUB_EVENT_NAME}"; exit 0
+          fi
+          if ! arquivos=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[].filename'); then
+            echo "::warning::não consegui listar os arquivos do PR — roda as duas majors"
+            responde sim "lista indisponível"; exit 0
+          fi
+          n=$(printf '%s\n' "$arquivos" | grep -c . || true)
+          if [ "$n" -ge 3000 ]; then
+            responde sim "lista cortada em ${n}"; exit 0
+          fi
+          resposta=$(printf '%s\n' "$arquivos" | bash scripts/pr-mexe-no-piso-do-postgres.sh) || resposta=sim
+          [ "$resposta" = "nao" ] || resposta=sim
+          responde "$resposta" "${n} arquivo(s) no PR"
+
   invariants-majors:
     # Eram 20 min quando a perna tinha UMA passada; agora ela tem duas
     # (`test:db` + `test:db:update`) e o teto acompanha. O 30 é DECLARADO, não
@@ -298,6 +360,7 @@ jobs:
     # Executor próprio para trabalho nosso quando EXECUTOR_PROPRIO=ligado; o
     # porquê e a guarda contra fork: comentário do e2e-parte no e2e.yml.
     runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
+    needs: [invariants-alcance]
     concurrency:
       group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -308,7 +371,9 @@ jobs:
       # que esta issue existe para fechar.
       fail-fast: false
       matrix:
-        pg: ["15", "17"]
+        # A lista vem do `invariants-alcance`: ["15","17"] sempre que o PR
+        # alcança o piso, e fora de pull_request; ["17"] no PR que não alcança.
+        pg: ${{ fromJSON(needs.invariants-alcance.outputs.majors) }}
     env:
       # Uma variável, os dois scripts: `scripts/test-db.sh` e
       # `scripts/test-update-com-dados.sh` leem esta para escolher a imagem.
@@ -345,16 +410,30 @@ jobs:
   # sempre um check que nenhum run produz, e NENHUM PR mergearia.
   invariants:
     if: always()
-    needs: [invariants-majors]
+    needs: [invariants-alcance, invariants-majors]
     runs-on: ubuntu-latest
     # Nenhuma permissão: este job só lê o resultado de `needs`.
     permissions: {}
     steps:
       - name: Falhar se qualquer major não passou
+        env:
+          EVENTO: ${{ github.event_name }}
+          PORTAO: ${{ needs.invariants-alcance.result }}
+          PISO: ${{ needs.invariants-alcance.outputs.piso }}
+          MAJORS: ${{ needs.invariants-majors.result }}
         run: |
-          echo "invariants-majors: ${{ needs.invariants-majors.result }}"
+          set -euo pipefail
+          echo "evento=${EVENTO} invariants-alcance=${PORTAO} piso=${PISO:-<vazio>}"
+          echo "invariants-majors: ${MAJORS}"
+          # A pergunta tem de ter sido RESPONDIDA: portão que falhou deixa a
+          # matriz `skipped`, e isso não pode ler como aprovação.
+          [ "$PORTAO" = "success" ]
+          # Fora de pull_request o piso é OBRIGATÓRIO: a `main` mede as duas.
+          if [ "$EVENTO" != "pull_request" ]; then
+            [ "$PISO" = "sim" ]
+          fi
           # `success` é o único desfecho aceito: o agregado de uma matrix só é
           # `success` com TODAS as pernas verdes, então uma major sozinha
           # reprovando derruba o check obrigatório. `skipped` também reprova, de
           # propósito — perna pulada não mediu nada.
-          [ "${{ needs.invariants-majors.result }}" = "success" ]
+          [ "$MAJORS" = "success" ]
