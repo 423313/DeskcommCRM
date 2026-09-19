@@ -89,7 +89,14 @@ export function MessageBubble({
   const senderLabel = (() => {
     if (!isOutbound) return null;
     if (message.sent_via === "ai") return "IA";
+    // A REGRA falou, e não a IA: texto fixo de automação, follow-up ou lembrete
+    // de agenda (#652). O ramo passou a existir porque o valor passou a ser
+    // gravado — antes dele, um rótulo aqui seria promessa sem dado atrás.
     if (message.sent_via === "automation") return "Automação";
+    // A integração falou, a IA não. Sem este ramo a bolha omite a autoria e o
+    // dono lê a conversa como se tudo tivesse saído do CRM — que é o defeito do
+    // #866 visto de dentro da tela.
+    if (message.sent_via === "system") return "Sistema";
     if (message.sent_via === "external_device") return "Celular";
     if (message.sent_via === "user" || message.sent_via === "crm") {
       // "Você" exige as DUAS pontas: saber quem lê e saber quem enviou. Falta

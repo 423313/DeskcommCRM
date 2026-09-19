@@ -80,6 +80,7 @@ const VAZIO: Omit<AtritoRaw, "escopo"> = {
     execucoes_medidas: 0,
     envios_por_ia: 0,
     envios_por_automacao: 0,
+    envios_por_integracao: 0,
     envios_humano_no_sistema: 0,
     envios_humano_fora: 0,
     demandas_sem_proximo_passo: 0,
