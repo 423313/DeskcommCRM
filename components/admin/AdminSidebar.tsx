@@ -15,6 +15,7 @@ import {
   Palette,
   Key,
   EnvelopeSimple,
+  Gear,
   Plugs,
   WebhooksLogo,
   ArrowRight,
@@ -64,6 +65,11 @@ const NAV_ITEMS: NavItem[] = [
   // `lib/navigation/` cobre só `app/app/**`). O rótulo é "E-mail" e não "SMTP"
   // porque quem instala não precisa conhecer a sigla para achar a tela.
   { href: "/admin/email", label: "E-mail", icon: EnvelopeSimple },
+  // A porta da tela do COMPORTAMENTO da instalação (issue #1034) — mesma razão
+  // das três de cima: são chaves da INSTALAÇÃO, e /admin tem navegação própria.
+  // O rótulo é o do assunto da tela para quem chega por aqui sabendo o que foi
+  // mexer, e não o nome de um arquivo de configuração.
+  { href: "/admin/sistema", label: "Comportamento", icon: Gear },
   // A porta da tela que libera endereços da rede interna (decisão 22-d, #1004).
   // Mesma razão das de cima: o objeto é a MÁQUINA, não uma empresa — e a
   // decisão pede explicitamente que o lugar onde o dono controla seja visível.
