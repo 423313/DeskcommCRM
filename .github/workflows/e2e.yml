@@ -851,6 +851,7 @@ jobs:
         inbox-abas-espelham-o-comando.spec.ts
         moeda-da-organizacao.spec.ts
         zona-de-perigo-apaga-dados-de-teste.spec.ts
+        email-da-instalacao-pela-tela.spec.ts
         central-avisos-resolver-em-lote.spec.ts
         voz-desligada-por-padrao.spec.ts
         voz-primeiro-pareamento.spec.ts
@@ -1094,6 +1095,19 @@ jobs:
         run: |
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
             -v ON_ERROR_STOP=1 -q -f supabase/baseline.sql
+
+      # A chave de cifra dos segredos, como o install.sh semeia em TODA instalação
+      # (`ensure_encryption_key`, em hostgator-setup-kit/_common.sh). Sem ela,
+      # `fn_encrypt_oauth` levanta "NUVEMSHOP_OAUTH_ENCRYPTION_KEY ausente" e
+      # qualquer tela que guarda segredo cifrado recusa o salvamento — medido na
+      # `email-da-instalacao-pela-tela.spec.ts`, a primeira a exercitar isso
+      # pela tela: o log do servidor dizia exatamente essa frase, e a senha do
+      # SMTP nunca chegava ao banco. O ambiente do e2e imita a VPS recém-
+      # instalada; uma VPS recém-instalada TEM essa chave.
+      - name: Semear a chave de cifra dos segredos (o que o install.sh faz)
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -q \
+            -c "insert into private.app_secrets (name, value) values ('nuvemshop_oauth_key', '$(openssl rand -hex 32)') on conflict (name) do nothing;"
 
       # ⚠️ O REALTIME PRECISA REINICIAR DEPOIS DO BASELINE — senão ele assina e
       # não entrega, em silêncio.

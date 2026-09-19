@@ -37,6 +37,56 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // /admin/email — o servidor SMTP da instalação (PR #714, @betoarts, recorte).
+  "Servidor de e-mail conectado e autenticado.": { es: "Servidor de correo conectado y autenticado." },
+  "Preencha e salve o servidor e o remetente antes de testar.": {
+    es: "Completa y guarda el servidor y el remitente antes de probar.",
+  },
+  "O servidor respondeu, mas recusou o usuário e a senha.": {
+    es: "El servidor respondió, pero rechazó el usuario y la contraseña.",
+  },
+  "Não foi possível falar com o servidor. Confira o endereço, a porta e a segurança.": {
+    es: "No fue posible comunicarse con el servidor. Revisa la dirección, el puerto y la seguridad.",
+  },
+  "Servidor de e-mail salvo.": { es: "Servidor de correo guardado." },
+  "Servidor de e-mail desta instalação": { es: "Servidor de correo de esta instalación" },
+  "Convite de equipe, entrega de dados de LGPD e aviso de prazo saem por aqui. Preencher esta tela é a alternativa a contratar um serviço externo de envio: o e-mail passa a sair pelo seu próprio servidor.": {
+    es: "Las invitaciones al equipo, la entrega de datos personales y los avisos de plazo salen por aquí. Completar esta pantalla es la alternativa a contratar un servicio externo de envío: el correo pasa a salir por tu propio servidor.",
+  },
+  "Endereço do servidor": { es: "Dirección del servidor" },
+  "Normalmente é a palavra smtp seguida do seu domínio. Só o endereço: sem smtp:// na frente e sem a porta no fim.": {
+    es: "Normalmente es la palabra smtp seguida de tu dominio. Solo la dirección: sin smtp:// al principio y sin el puerto al final.",
+  },
+  "Porta": { es: "Puerto" },
+  "STARTTLS (normalmente a porta 587)": { es: "STARTTLS (normalmente el puerto 587)" },
+  "TLS/SSL (normalmente a porta 465)": { es: "TLS/SSL (normalmente el puerto 465)" },
+  "Sem criptografia": { es: "Sin cifrado" },
+  "Senha do e-mail": { es: "Contraseña del correo" },
+  "Já existe uma senha gravada. Deixe em branco para mantê-la, ou digite uma nova para substituir.": {
+    es: "Ya hay una contraseña guardada. Déjalo en blanco para mantenerla, o escribe una nueva para reemplazarla.",
+  },
+  "E-mail que aparece como remetente": { es: "Correo que aparece como remitente" },
+  "Nome que aparece como remetente": { es: "Nombre que aparece como remitente" },
+  "Estes valores vieram do arquivo de configuração do servidor. O que você salvar aqui passa a valer no lugar dele; apagar o que está aqui faz o sistema voltar a usar o arquivo.": {
+    es: "Estos valores vienen del archivo de configuración del servidor. Lo que guardes aquí pasa a valer en su lugar; borrar lo que está aquí hace que el sistema vuelva a usar el archivo.",
+  },
+  "Em uso: o e-mail está saindo por este servidor.": { es: "En uso: el correo está saliendo por este servidor." },
+  "O e-mail desta instalação já sai por um serviço externo. Preencher esta tela passa a entrega para o seu servidor.": {
+    es: "El correo de esta instalación ya sale por un servicio externo. Completar esta pantalla pasa la entrega a tu servidor.",
+  },
+  "Nenhum caminho de e-mail configurado: os convites aparecem como link para copiar, em vez de chegar na caixa de entrada.": {
+    es: "Ningún camino de correo configurado: las invitaciones aparecen como enlace para copiar, en vez de llegar a la bandeja de entrada.",
+  },
+  "Testar conexão": { es: "Probar conexión" },
+  "Informe uma porta entre 1 e 65535.": { es: "Indica un puerto entre 1 y 65535." },
+  "Informe somente o e-mail do remetente, por exemplo suporte@empresa.com.": {
+    es: "Indica solo el correo del remitente, por ejemplo soporte@empresa.com.",
+  },
+  "Selecione STARTTLS, TLS ou Sem criptografia.": { es: "Selecciona STARTTLS, TLS o Sin cifrado." },
+  "Revise os dados SMTP informados.": { es: "Revisa los datos SMTP indicados." },
+  "A cifra está indisponível nesta instalação; a senha não foi gravada.": {
+    es: "El cifrado no está disponible en esta instalación; la contraseña no se guardó.",
+  },
   // vocabulario.ts (followups) — MatchReplyForm.tsx não traduzia, ClassifyForm.tsx sim.
   "Se a informação já existir": { es: "Si la información ya existe" },
   "Perguntar de novo e substituir": { es: "Preguntar de nuevo y reemplazar" },
@@ -3517,6 +3567,11 @@ export const DICIONARIO: Traducoes = {
   "Seu WhatsApp": { es: "Tu WhatsApp" },
   "Seu e-mail": { es: "Tu correo" },
   "Quero receber contato": { es: "Quiero que me contacten" },
+  // A tela do tronco SIP (#677) — mesma família das duas linhas vizinhas de
+  // "não consegui copiar", com o bloco de configuração no lugar do token.
+  "Não consegui copiar. Selecione o bloco acima e copie à mão.": {
+    es: "No pude copiar. Selecciona el bloque de arriba y cópialo a mano.",
+  },
   "Não foi possível copiar — selecione e copie manualmente.": {
     es: "No se pudo copiar — selecciona y copia manualmente.",
   },
