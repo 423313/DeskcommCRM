@@ -33486,7 +33486,7 @@ begin
  return true;
 end;$$;
 
--- ---- reenviar o link do Meet é ação própria (migration 0364) ----
+-- ---- reenviar o link do Meet é ação própria (migration 0365) ----
 -- `p_action in ('deliver','resend')`, e o `return false` em estado enviado
 -- passa a valer só para o `deliver` — ele é a proteção contra clique duplo, e
 -- afrouxá-lo daria o reenvio tirando a proteção. `waiting_for_link`/`queued`
