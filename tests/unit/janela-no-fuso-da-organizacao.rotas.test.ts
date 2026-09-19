@@ -21,7 +21,7 @@ vi.mock("@/lib/auth/server", () => ({ loadAuthUser: vi.fn(), resolveActiveOrg: v
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 
-import { GET as getPacing } from "@/app/api/v1/ai/pacing/route";
+import { GET as getPacing, PUT as putPacing } from "@/app/api/v1/ai/pacing/route";
 import { GET as getRetention } from "@/app/api/v1/conversations/[id]/retention/route";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
@@ -72,6 +72,25 @@ describe("o fuso da organização chega à tela", () => {
       data: { items: { effective: { timezone: string } }[] };
     };
     expect(corpo.data.items[0]?.effective.timezone).toBe("Europe/Lisbon");
+  });
+
+  it("Conexões › Proteção de envio: a resposta do salvar também, e não só a do abrir", async () => {
+    // Sem isto, a tela voltava a anunciar São Paulo logo depois de salvar.
+    vi.mocked(createAdminClient).mockReturnValue(
+      cliente({
+        channel_sessions: { id: CANAL },
+        channel_knobs: { window_start_hour: 8, timezone: null, warmup_daily_caps: null },
+        organizations: { timezone: "Europe/Lisbon" },
+      }),
+    );
+    const res = await putPacing(
+      new NextRequest("http://localhost/api/v1/ai/pacing", {
+        method: "PUT",
+        body: JSON.stringify({ channel_session_id: CANAL, window_start_hour: 8 }),
+      }),
+    );
+    const corpo = (await res.json()) as { data: { effective: { timezone: string; windowStartHour: number } } };
+    expect(corpo.data.effective).toMatchObject({ timezone: "Europe/Lisbon", windowStartHour: 8 });
   });
 
   it("retenção: o contexto diz em que fuso a janela segurou o envio", async () => {
