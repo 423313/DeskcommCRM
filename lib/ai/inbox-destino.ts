@@ -67,6 +67,13 @@ export const POLITICAS_DE_AVISO = {
   midia_nao_lida: { refs: [], orientacao: "Peça ao gestor para revisar o provedor e as credenciais de leitura de fotos e áudios.", geral: { papel: "manager", href: "/app/ai/providers", rotulo: "Revisar provedores de IA" } },
   channel_template_review: { refs: [], orientacao: "Confira os modelos na conexão WhatsApp via Parceiro. Este aviso não identifica um modelo específico.", geral: { papel: "admin", href: "/app/connections?aba=parceiro&sub=templates", rotulo: "Revisar modelos do canal" } },
   channel_number_alert: { refs: ["channel_session"], orientacao: "Peça a quem administra para revisar a situação do número nas conexões.", geral: CONEXOES },
+  // Sem `geral`, ao contrário do vizinho acima: o `canal-mudo-watcher` SEMPRE
+  // nasce apontando para a conexão que ficou muda (`ref_kind: channel_session`),
+  // nunca genérico — quem emite sem referência é a ponte da Zernio, que este
+  // aviso não tem. Um contexto geral aqui seria caminho que nunca executa.
+  // A orientação evita "revisar a conexão": nada caiu, e o conserto é um clique
+  // de autorização em Conexões — dizer "revisar" mandaria procurar um defeito.
+  canal_mudo_sem_numero: { refs: ["channel_session"], orientacao: "Peça a quem administra para autorizar os números de teste em Conexões ou abrir o canal ao público." },
   promise_unfulfilled: { refs: ["conversation"], orientacao: "Confira o compromisso descrito e defina quem fica responsável." },
   contact_proposal_expired: { refs: ["organization"], orientacao: "A sugestão venceu. Se a informação ainda for relevante, confirme com o cliente antes de editar sua ficha." },
   conhecimento_nao_indexado: { refs: ["ai_knowledge_source"], orientacao: "Peça ao gestor para conferir o material e o motivo da falha na base de conhecimento." },
