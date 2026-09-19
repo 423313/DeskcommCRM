@@ -2753,6 +2753,9 @@ export const DICIONARIO: Traducoes = {
   "A IA parou porque o gasto do mês atingiu o limite que você definiu. Ajuste o limite (ou desligue a parada) em Uso de IA › Orçamento.": {
     es: "La IA se detuvo porque el gasto del mes llegó al límite que definiste. Ajusta el límite (o apaga la parada) en Uso de IA › Presupuesto.",
   },
+  "A chamada foi recusada porque este ponto usa um endereço próprio e a empresa não tem chave cadastrada para ele — a chave da instalação não vai para endereço escolhido pela empresa. Cadastre a chave da empresa em Agente de IA › Provedores, ou tire o endereço próprio do ponto.": {
+    es: "La llamada fue rechazada porque este punto usa una dirección propia y la empresa no tiene clave registrada para él — la clave de la instalación no va a una dirección elegida por la empresa. Registra la clave de la empresa en Agente de IA › Proveedores, o quita la dirección propia del punto.",
+  },
   "Não conseguimos classificar esta falha. A mensagem original do provedor está abaixo.": {
     es: "No pudimos clasificar esta falla. El mensaje original del proveedor está abajo.",
   },
