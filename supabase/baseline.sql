@@ -12507,9 +12507,10 @@ grant execute on function public.fn_aplicar_quadro_do_onboarding(uuid, uuid, tex
 --
 -- A MARCA DO CLIENTE FINAL SE GRAVA EM UMA INSTRUÇÃO SÓ.
 --
--- `organizations.settings` tem três donos com gates diferentes (updateTenant =
--- admin, PATCH de atendimento = manager, régua de atrito = manager) e os três
--- fazem read-modify-write do jsonb INTEIRO, em round-trips HTTP separados. A
+-- `organizations.settings` tem vários donos com gates diferentes, e cada um
+-- faz read-modify-write do jsonb INTEIRO, em round-trips HTTP separados. Quem
+-- são hoje, no código: `git grep -n "update({ settings" -- app lib workers` (a
+-- aba Organização saiu dessa lista no PR #1209). A
 -- perda é medida, não deduzida: `visibility_mode` volta de 'own' para 'all' sem
 -- erro em lugar nenhum — e essa chave é lida DIRETO pela RLS, dentro de
 -- `fn_can_view_conversation`/`fn_can_view_lead`. Um write de COR reverteria, em
