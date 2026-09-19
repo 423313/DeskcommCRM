@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
@@ -32,6 +33,11 @@ const Composer = dynamic(() => import("./Composer").then((m) => m.Composer));
 /** Mounted in the authenticated shell: navigation does not destroy the draft. */
 export function FloatingInbox() {
   const { activeOrg, user } = useAuth();
+  const rota = usePathname();
+  // No próprio Inbox o atalho é o que a tela já é — e não era só redundância
+  // visual: o gatilho é `h-14 w-64`, 256×56px fixos no canto inferior direito,
+  // exatamente onde o Inbox põe o campo de envio.
+  if (rota?.startsWith("/app/inbox")) return null;
   if (!activeOrg) return null;
   return <InboxDock key={`${activeOrg.orgId}:${user.id}`} orgId={activeOrg.orgId} />;
 }
