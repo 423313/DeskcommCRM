@@ -1,12 +1,12 @@
 ---
-impacto: exige_acao
+impacto: capacidade_nova
 secao: alterado
-titulo: Endereço próprio de IA passa a exigir a chave da própria empresa também no atendimento
+titulo: A IA avisa quando uma empresa usa endereço próprio sem a chave dela — e passa a recusar em 19/10/2026
 ---
-Em Agente de IA › Provedores, quem administra uma empresa pode apontar um ponto de IA para um endereço próprio — um gateway compatível ou um serviço alternativo. Quando essa empresa não tinha chave cadastrada e validada para o provedor do ponto, o sistema usava a chave de IA da instalação, a que paga a conta de todas as empresas do servidor, e a enviava para esse endereço. Numa instalação com várias empresas, era a chave do dono do servidor saindo para um endereço escolhido por uma delas.
+Em Agente de IA › Provedores, quem administra uma empresa pode apontar um ponto de IA para um endereço próprio — um gateway compatível ou um serviço alternativo. Quando essa empresa não tem chave cadastrada e validada para o provedor do ponto, o sistema usa a chave de IA da instalação, a que paga a conta de todas as empresas do servidor, e a envia para esse endereço. Numa instalação com várias empresas, é a chave do dono do servidor saindo para um endereço escolhido por uma delas.
 
-A leitura de imagens já recusava essa combinação desde a versão 1.29.0. Agora as chamadas de IA do atendimento recusam também — identificar a etapa do lead, barrar manipulação, resumir e fechar a conversa e os demais pontos que aceitam endereço próprio. A chamada é recusada antes de sair do servidor, um aviso crítico abre na Central dizendo qual ponto corrigir e como, e a tela de Execuções mostra o motivo. Empresa sem endereço próprio não percebe diferença, e empresa com endereço próprio e chave própria cadastrada continua funcionando como antes.
+A partir desta versão, toda vez que isso acontece **abre um aviso crítico na Central** dizendo qual ponto está nessa situação, qual empresa, e o que fazer — e o motivo também aparece na tela de Execuções. **A chamada continua funcionando**: nada para de responder quando você atualiza, e ninguém precisa mexer em configuração nenhuma para instalar esta versão.
 
-## Requer atenção
+O aviso traz a data em que isso muda: **a partir de 19/10/2026 essas chamadas passam a ser recusadas**, como a leitura de imagens já faz desde a versão 1.29.0. Até lá há tempo de sobra para corrigir, com o aviso apontando exatamente onde.
 
-Se alguma empresa desta instalação usa endereço próprio num ponto de IA sem ter a chave dela cadastrada e validada para o provedor desse ponto, as chamadas desse ponto passam a ser recusadas no instante em que a atualização entra — e, quando o ponto roda durante o atendimento, a IA dessa empresa pode parar de responder aos clientes. Antes de atualizar, abra Agente de IA › Provedores em cada empresa e, em todo ponto com endereço próprio preenchido, faça uma de duas coisas: cadastre e valide a chave da empresa para o provedor desse ponto, ou apague o endereço próprio para o ponto voltar ao provedor padrão da instalação. Se alguma escapar, o aviso "A IA recusou usar o endereço próprio desta empresa sem a chave dela" na Central diz qual ponto corrigir.
+Para corrigir, em cada empresa que aparecer no aviso: abra Agente de IA › Provedores e, no ponto indicado, cadastre e valide a chave daquela empresa para o provedor — ou apague o endereço próprio, para o ponto voltar ao provedor padrão da instalação. Empresa sem endereço próprio não percebe diferença nenhuma, e empresa com endereço próprio e chave própria continua funcionando como sempre.
