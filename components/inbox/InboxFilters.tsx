@@ -91,7 +91,20 @@ export function InboxFilters({ value, onChange }: Props) {
       setSearchInput(value.search);
     }
   }, [value.search]);
-  const { data: channels } = useChannelSessions({ refetchInterval: 30_000 });
+  // ── EXPERIMENTO (não é conserto): o refetch de 30s está DESLIGADO ──────────
+  //
+  // Hipótese a testar: o `filtro-por-marcador-pela-tela` falha SÓ nesta branch
+  // porque um refetch periódico re-renderiza este componente enquanto o Select
+  // de tags está ABERTO, e o menu do Radix fecha. A evidência que motivou: no
+  // instante da falha a opção já tinha sido vista como visível na linha
+  // anterior, e a screenshot mostra o seletor FECHADO — ou seja, ele se fechou
+  // sozinho, e o teste não faz nada entre as duas linhas.
+  //
+  // FURO DECLARADO DA HIPÓTESE, para quem ler o resultado: este refetch existe
+  // IGUAL na main, e lá a spec passa. Se o intervalo sozinho explicasse, a main
+  // falharia também. O que este experimento mede é se o re-render por refetch é
+  // NECESSÁRIO para a falha — não se ele é suficiente.
+  const { data: channels } = useChannelSessions();
   const { activeOrg } = useAuth();
   /**
    * As opções são a UNIÃO das duas caixas — as mesmas que o filtro consulta
