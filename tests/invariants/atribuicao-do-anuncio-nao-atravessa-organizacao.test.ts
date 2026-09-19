@@ -53,10 +53,11 @@ beforeAll(() => {
   `);
   // Reset determinístico: a suíte roda repetidas vezes sobre o MESMO banco, e a
   // guarda de primeiro-toque (`ad_platform is null`) faria a segunda rodada não
-  // escrever nada — o teste passaria pelo motivo errado.
+  // escrever nada — o teste passaria pelo motivo errado. `source` volta ao
+  // DEFAULT da coluna, e não a null: `contacts.source` é `not null default 'manual'`.
   sql(`
     update public.contacts
-       set source = null,
+       set source = 'manual',
            source_metadata = coalesce(source_metadata, '{}'::jsonb) - 'ad_platform'
      where id in ('${GOV_CONTACT_1}', '${GOV_CONTACT_2}');
   `);
