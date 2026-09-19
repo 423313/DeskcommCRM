@@ -22,6 +22,7 @@ import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { origemDoContato } from "@/lib/leads/origem-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 import { DialButton } from "@/components/voice/DialButton";
 
@@ -29,11 +30,30 @@ interface Props {
   contactId: string;
 }
 
+/**
+ * Um nível da origem, ou nada.
+ *
+ * Escondido quando não há valor, em vez de mostrar "—": quatro travessões
+ * seguidos leem como cadastro quebrado, e não como "este contato não veio de
+ * campanha". O rótulo chega já traduzido porque `t()` com argumento não literal
+ * escapa do guardião de espanhol.
+ */
+function NivelDaOrigem({ rotulo, valor }: { rotulo: string; valor: string | null }) {
+  if (!valor) return null;
+  return (
+    <div>
+      <dt className="text-xs uppercase text-muted-foreground">{rotulo}</dt>
+      <dd className="mt-1 break-words">{valor}</dd>
+    </div>
+  );
+}
+
 export function ContactDetailClient({ contactId }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useContact(contactId);
   const { user, activeOrg } = useAuth();
+  const clientesLigado = activeOrg?.cliente_pela_agenda === true;
   // As DEFINIÇÕES continuam no funil (`crm_pipelines.settings.fields[]`) — só o
   // VALOR mora no contato. `camposDoFunil` é o mesmo leitor que o Kanban usa.
   const pipelineQuery = useDefaultPipeline(Boolean(activeOrg));
@@ -65,6 +85,10 @@ export function ContactDetailClient({ contactId }: Props) {
   // uma das DUAS que ignoravam o telefone: contato com número e sem nome
   // aparecia como "Sem nome" aqui e com o número no inbox.
   const displayName = rotuloDoContato(contact, t);
+
+  // Os quatro níveis que quem opera tráfego lê. O jsonb já os recebia dos dois
+  // caminhos de entrada — site e clique-para-WhatsApp — e nenhuma tela o abria.
+  const origem = origemDoContato(contact.source_metadata, contact.source);
 
   return (
     <div className="space-y-4 p-6">
@@ -144,7 +168,7 @@ export function ContactDetailClient({ contactId }: Props) {
                 <dd className="mt-1">{contact.name ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase text-muted-foreground">Display name</dt>
+                <dt className="text-xs uppercase text-muted-foreground">{t("Nome")} · WhatsApp</dt>
                 <dd className="mt-1">{contact.display_name ?? "—"}</dd>
               </div>
               <div>
@@ -157,10 +181,31 @@ export function ContactDetailClient({ contactId }: Props) {
                   {contact.phone_number ? phoneForDisplay(contact.phone_number) : "—"}
                 </dd>
               </div>
+              {/*
+                A origem sai do `source_metadata` quando ele tem algo melhor a
+                dizer, e cai na coluna `source` quando não tem. Antes esta linha
+                lia só a coluna, e a resposta era `site` para quem chegou pelo
+                link do site, ou o nome da plataforma para quem clicou num
+                anúncio — mesmo com o `utm_source` da campanha gravado ao lado.
+              */}
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Origem")}</dt>
-                <dd className="mt-1">{contact.source}</dd>
+                <dd className="mt-1">{origem.origem}</dd>
               </div>
+              <NivelDaOrigem rotulo={t("Campanha")} valor={origem.campanha} />
+              <NivelDaOrigem rotulo={t("Conjunto")} valor={origem.conjunto} />
+              <NivelDaOrigem rotulo={t("Anúncio")} valor={origem.anuncio} />
+              <NivelDaOrigem rotulo={t("Posicionamento")} valor={origem.posicionamento} />
+              {origem.semPosicionamentoDeAnuncio && (
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">
+                    {t("Posicionamento")}
+                  </dt>
+                  <dd className="mt-1 text-sm text-muted-foreground">
+                    {t("A plataforma não informa o posicionamento de cada clique em anúncio.")}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Última atividade")}</dt>
                 <dd className="mt-1">
@@ -177,6 +222,24 @@ export function ContactDetailClient({ contactId }: Props) {
                   {format(new Date(contact.created_at), "dd/MM/yyyy", { locale: localeDaData })}
                 </dd>
               </div>
+              {/*
+                Escondido quando nulo, em vez de mostrar "—": aqui a ausência não
+                é dado faltando, é "ainda não é cliente". Um travessão nesta
+                linha leria como falha de cadastro. E escondido com a regra
+                "Clientes pela agenda" desligada: a data está congelada.
+              */}
+              {clientesLigado && contact.first_service_at && (
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">
+                    {t("Cliente desde")}
+                  </dt>
+                  <dd className="mt-1">
+                    {format(new Date(contact.first_service_at), "dd/MM/yyyy", {
+                      locale: localeDaData,
+                    })}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">

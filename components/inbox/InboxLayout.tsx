@@ -90,6 +90,15 @@ export function tabToFilter(
       return { assigned_to: "me", exclude_finished: true };
     case "closed":
       return { status: "closed" };
+    case "archived":
+      // O ARQUIVO É UM ESTADO SÓ ELE, não `in(terminais)`.
+      //
+      // `CONVERSATION_TERMINAL_STATUSES` responde outra pergunta ("o que sai do
+      // fluxo vivo", usada pelo `exclude_finished` de Minhas). Reaproveitá-la
+      // aqui faria a aba Arquivadas listar também as fechadas — duas abas com a
+      // mesma lista e badges diferentes, que é a mentira de tela que o mapa
+      // abaixo existe para impedir.
+      return { status: "archived" };
     case "ai":
       // `ai_handling` é escrito por UM caminho só em produção (a volta pelo botão
       // "Devolver ao automático"), então a aba vivia mostrando 2 enquanto o robô
@@ -101,7 +110,7 @@ export function tabToFilter(
   }
 }
 
-const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "ai"];
+const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "archived", "ai"];
 
 /**
  * Lê ?filter= (G4-02, deep-link). ?filter=all é HONRADO mesmo para agent — a
@@ -480,7 +489,19 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
           <>
             <ConversationHeader conversation={selectedConversation} />
             <div className="min-h-0 flex-1 overflow-hidden">
-              <ChatThread conversationId={selectedConversation.id} onResponder={setRespondendo} />
+              <ChatThread
+                conversationId={selectedConversation.id}
+                onResponder={setRespondendo}
+                // O cartão da passagem escolhe o gesto a partir de quem é o dono
+                // da conversa: sem dono convida a assumir, com outro dono diz
+                // quem atende. Sem estes dois campos ele cairia no estado mais
+                // conservador e ficaria mudo justamente para quem mais precisa.
+                dono={{
+                  userId: selectedConversation.assigned_to_user_id ?? null,
+                  nome: selectedConversation.assigned_to_user_name ?? null,
+                }}
+                contatoId={selectedConversation.contacts?.id ?? null}
+              />
             </div>
             <RetentionNotice conversationId={selectedConversation.id} />
             {motivoDaJanela && (
