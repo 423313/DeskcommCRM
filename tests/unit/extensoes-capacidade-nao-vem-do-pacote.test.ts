@@ -104,13 +104,21 @@ function valoresDeHref(origem: ts.SourceFile): ts.Expression[] {
 }
 
 describe("a capacidade não vem do pacote — guarda estática", () => {
-  it("todo href devolvido pela rota é literal do mapa ou sai de destinoDaCapacidade", () => {
+  it("todo href devolvido pela rota sai de destinoDaCapacidade — nunca de literal", () => {
     const hrefs = valoresDeHref(origemDaRota());
     expect(hrefs.length).toBeGreaterThan(0);
 
+    // A versão anterior aceitava TAMBÉM literal que estivesse em DESTINOS_PERMITIDOS, e esse foi
+    // o ponto cego que deixou um defeito de produto chegar ao CI: a rota devolvia `/app/tasks`
+    // FIXO, ignorando qual porta a pessoa clicou, e a guarda aprovava porque `/app/tasks` é um
+    // destino permitido. Seis portas eram seis botões abrindo Tarefas, com esta guarda verde.
+    //
+    // A guarda provava que o destino é SEGURO. Nunca provou que ele DEPENDE do clique. São duas
+    // propriedades, e literal no href satisfaz a primeira e viola a segunda por construção.
+    //
+    // O literal continua aceito onde ele é o desenho — o mapa em `capacidades.ts` —, porque esta
+    // varredura só lê a ROTA. O que se proíbe aqui é a rota decidir o destino por conta própria.
     const inaceitaveis = hrefs.filter((valor) => {
-      if (ts.isStringLiteral(valor)) return !DESTINOS_PERMITIDOS.includes(valor.text);
-      // Única forma não-literal aceita: a chamada do resolvedor canônico.
       if (ts.isCallExpression(valor) && ts.isIdentifier(valor.expression)) {
         return valor.expression.text !== "destinoDaCapacidade";
       }
