@@ -164,17 +164,20 @@ head_commit="$(git rev-parse HEAD^{commit} 2>/dev/null || true)"
 # Só entra na conta a ref que é DE OUTREM: nem a base (já medida), nem o HEAD (este PR), nem
 # ancestral do HEAD — a cabeça do próprio PR publicada antes de um commit local, a main de
 # antes de um merge, as branches já mescladas. O filtro de ancestral é UMA passada pelo grafo
-# (`--no-merged HEAD`), não um `merge-base --is-ancestor` por ref: medido em 19/09/2026 num
-# clone com 2601 refs, a checagem por ref custava 33 ms cada e rodava em dois laços (~3 min);
-# o filtro inteiro custa 0,2 s e deixa 578. No clone raso não há history para julgar
-# ancestralidade — lá a lista vai inteira, como antes.
+# (`--no-merged HEAD`), não um `merge-base --is-ancestor` por ref. No clone raso não há
+# history para julgar ancestralidade — lá a lista vai inteira, como antes.
+# Cópias de cabeça de PR em refs/remotes/*/pr/N (é onde o fetch de triagem as guarda) ficam
+# de FORA: os PRs entram pela lista de ABERTOS, e essas cópias persistem depois que o PR
+# fecha — no clone do mantenedor, 919 delas, 891 de PR não aberto (medido em 19/09/2026).
+# Seria o curinga refs/pull/* entrando pela porta dos fundos.
 raso=0; [ -f "$(git rev-parse --git-dir)/shallow" ] && raso=1
 filtro_ancestral=(); [ "$raso" = 0 ] && filtro_ancestral=(--no-merged HEAD)
 refs_de_outrem() { # $@ = padrões de ref
   git for-each-ref ${filtro_ancestral[@]+"${filtro_ancestral[@]}"} \
       --format='%(objectname) %(refname)' "$@" 2>/dev/null \
-    | awk -v b="$base_commit" -v h="$head_commit" \
-        '$2 != "refs/remotes/origin/HEAD" && $1 != b && $1 != h { print $2 }' || true
+    | awk -v b="$base_commit" -v h="$head_commit" '
+        $2 != "refs/remotes/origin/HEAD" && $2 !~ /^refs\/remotes\/[^\/]+\/pr\/[0-9]+$/ \
+          && $1 != b && $1 != h { print $2 }' || true
 }
 todos_refs="$(refs_de_outrem refs/heads refs/remotes)"
 
@@ -189,63 +192,121 @@ rotulo() { sed -E 's#^refs/colisao-pr/[0-9]+/([0-9]+)$#PR aberto \#\1#'; }
 # sessões rodando isto ao mesmo tempo, limpar refs/colisao-pr inteiro apagaria as cabeças
 # da outra no meio da medição. Cada rodada só lê e só apaga o que é dela.
 ns="refs/colisao-pr/$$"
-erro_gh="$(mktemp)"
-limpar_cabecas() {
-  git for-each-ref --format='%(refname)' "$ns" 2>/dev/null \
-    | while IFS= read -r r; do git update-ref -d "$r" 2>/dev/null; done
+tmpd="$(mktemp -d)"; erro_gh="$tmpd/erro-gh"
+apagar_refs() { # stdin: nomes de ref. UMA transação, não um processo por ref.
+  sed '/^$/d; s/^/delete /' | git update-ref --stdin 2>/dev/null
 }
+limpar_cabecas() {
+  git for-each-ref --format='%(refname)' "$ns" 2>/dev/null | apagar_refs \
+    || echo "::notice::não apaguei as refs temporárias de $ns (outro git segurava o lock?) — a próxima rodada as varre."
+}
+# Sobra de rodada MORTA (SIGKILL, máquina que caiu) não entra na população de ninguém — cada
+# rodada só lê o próprio namespace —, mas prende objetos de fork e aparece em todo `--all`.
+# Varre os namespaces cujo PID não existe mais. `ps -p`, não `kill -0`: kill -0 em processo
+# de OUTRO usuário falha como se ele estivesse morto, e apagaria uma rodada viva.
+varrer_mortas() {
+  git for-each-ref --format='%(refname)' refs/colisao-pr 2>/dev/null \
+    | awk -F/ '{ print $3 }' | sort -u | while IFS= read -r pid; do
+        case "$pid" in '' | *[!0-9]*) continue ;; esac
+        [ "$pid" = "$$" ] && continue
+        ps -p "$pid" >/dev/null 2>&1 && continue
+        git for-each-ref --format='%(refname)' "refs/colisao-pr/$pid" 2>/dev/null | apagar_refs || true
+      done
+}
+varrer_mortas
 limpar_cabecas   # PID reaproveitado de uma rodada morta: a sobra dela não vira população
-trap 'limpar_cabecas; rm -f "$erro_gh"' EXIT
+trap 'limpar_cabecas; rm -rf "$tmpd"' EXIT
 
-repo_gh=""
-url_origin="$(git remote get-url origin 2>/dev/null || true)"
+# O REPOSITÓRIO DOS PRs. A URL vem crua da configuração: `git remote get-url` já aplica o
+# insteadOf. Com a origin num FORK — o clone de contribuidor —, os PRs moram no repositório
+# PAI: listar o fork devolve zero, e esse zero sairia como medição (revisão de 19/09/2026).
+# As cabeças vêm do pai também: o fork não tem refs/pull dos PRs do projeto.
+export GH_PROMPT_DISABLED=1
+url_origin="$(git config --get remote.origin.url 2>/dev/null || true)"
+repo_origin=""
 case "$url_origin" in
-  *github.com[:/]*) repo_gh="$(sed -E 's#^.*github\.com[:/]##; s#\.git$##' <<<"$url_origin")" ;;
+  *github.com[:/]*) repo_origin="$(sed -E 's#^.*github\.com[:/]+##; s#/+$##; s#\.git$##' <<<"$url_origin")" ;;
 esac
-prs_listados=""; prs_n_listados=0; prs_medidos=0; prs_falhos=""; prs_motivo=""
-if lista_gh="$(GH_PROMPT_DISABLED=1 gh pr list ${repo_gh:+--repo "$repo_gh"} --state open \
-                 --limit 1000 --json number --jq '.[].number' 2>"$erro_gh")"; then
-  prs_listados="$(grep -E '^[0-9]+$' <<<"$lista_gh" || true)"
-  prs_n_listados="$(grep -c . <<<"$prs_listados" || true)"
-  if [ -n "$prs_listados" ]; then
-    opcoes_pr=(); [ "$raso" = 1 ] && opcoes_pr+=(--depth=1)
-    specs=()
-    while IFS= read -r n; do specs+=("+refs/pull/$n/head:$ns/$n"); done <<<"$prs_listados"
-    # Um lote é uma ida à rede; mas UMA cabeça ausente aborta o lote inteiro. Então, se o
-    # lote falhar, repete um a um — só para NOMEAR quem falhou, nunca para pular calado.
-    if ! git fetch --no-tags -q ${opcoes_pr[@]+"${opcoes_pr[@]}"} origin "${specs[@]}" >/dev/null 2>&1; then
-      while IFS= read -r n; do
-        git fetch --no-tags -q ${opcoes_pr[@]+"${opcoes_pr[@]}"} origin \
-          "+refs/pull/$n/head:$ns/$n" >/dev/null 2>&1 || true
-      done <<<"$prs_listados"
-    fi
-    # Controle de SOMA: todo PR listado virou ref, ou é NÃO MEDIDO nomeado.
-    while IFS= read -r n; do
-      if git rev-parse -q --verify "$ns/$n^{commit}" >/dev/null 2>&1; then
-        prs_medidos=$((prs_medidos + 1))
-      else
-        prs_falhos="${prs_falhos}${prs_falhos:+ }#$n"
+repo_prs="$repo_origin"; fonte_cabecas="origin"
+prs_listados=""; prs_n_listados=0; prs_medidos=0; prs_falhos=""; prs_motivo=""; proprios=""
+if [ -n "$repo_origin" ]; then
+  if pai="$(gh repo view "github.com/$repo_origin" --json isFork,parent \
+              --jq 'if .isFork then .parent.owner.login + "/" + .parent.name else "" end' 2>"$erro_gh")"; then
+    pai="$(grep -E '^[^/[:space:]]+/[^/[:space:]]+$' <<<"$pai" | head -1 || true)"
+    if [ -n "$pai" ]; then
+      repo_prs="$pai"; fonte_cabecas="https://github.com/$pai.git"
+      if [ "${BASE#origin/}" != "$BASE" ]; then
+        echo "::warning::a origin é um FORK ($repo_origin): a base '$BASE' é a main do FORK, que pode estar atrás da de $pai. Colisão com a main de verdade só aparece medindo contra ela: git remote add upstream https://github.com/$pai.git && bash scripts/checar-colisao-de-migration.sh upstream/main"
       fi
+    fi
+  else
+    prs_motivo="não consegui saber se a origin ($repo_origin) é um fork: $(grep -m1 . "$erro_gh" 2>/dev/null || echo 'gh não respondeu')"
+  fi
+fi
+if [ -z "$prs_motivo" ]; then
+  if lista_gh="$(gh pr list ${repo_prs:+--repo "github.com/$repo_prs"} --state open --limit 1000 \
+                   --json number,isCrossRepository,headRefName \
+                   --jq '.[] | "\(.number) \(.isCrossRepository) \(.headRefName)"' 2>"$erro_gh")"; then
+    validas="$(grep -E '^[0-9]+ (true|false) [^[:space:]]+$' <<<"$lista_gh" || true)"
+    if [ -n "$(tr -d '[:space:]' <<<"$lista_gh")" ] && [ -z "$validas" ]; then
+      # Saiu 0 mas não disse número nenhum: não é "zero PRs abertos", é resposta que não entendo.
+      prs_motivo="o gh respondeu sem número de PR nenhum ($(head -1 <<<"$lista_gh"))"
+    else
+      # O PRÓPRIO PR sai pelo NÚMERO — ancestralidade um amend ou rebase desfaz. No CI o número
+      # está no GITHUB_REF (refs/pull/N/merge); fora dele, é o PR DESTE repositório cuja branch
+      # é a de agora. Nome de branch SOZINHO não serve: um fork que abre PR da `main` dele colide
+      # com a sua (headRefName não é qualificado) — por isso só conta PR que não é de fork.
+      ramo_atual="$(git symbolic-ref --short -q HEAD || true)"
+      n_ci="$(sed -nE 's#^refs/pull/([0-9]+)/merge$#\1#p' <<<"${GITHUB_REF:-}")"
+      proprios="$(awk -v r="$ramo_atual" -v c="$n_ci" \
+                    '($1 == c) || ($2 == "false" && r != "" && $3 == r) { print $1 }' <<<"$validas")"
+      prs_listados="$(awk -v p=" $(tr '\n' ' ' <<<"$proprios")" 'index(p, " " $1 " ") == 0 { print $1 }' <<<"$validas")"
+      prs_n_listados="$(grep -c . <<<"$validas" || true)"
+    fi
+  else
+    prs_motivo="$(grep -m1 . "$erro_gh" 2>/dev/null || true)"; [ -z "$prs_motivo" ] && prs_motivo="gh não respondeu"
+  fi
+fi
+if [ -n "$prs_listados" ]; then
+  opcoes_pr=(); [ "$raso" = 1 ] && opcoes_pr+=(--depth=1)
+  specs=()
+  while IFS= read -r n; do specs+=("+refs/pull/$n/head:$ns/$n"); done <<<"$prs_listados"
+  # Um lote é uma ida à rede; mas UMA cabeça ausente aborta o lote inteiro. Então, se o lote
+  # falhar, repete um a um — só para NOMEAR quem falhou, nunca para pular calado.
+  if ! git fetch --no-tags -q ${opcoes_pr[@]+"${opcoes_pr[@]}"} "$fonte_cabecas" "${specs[@]}" >/dev/null 2>&1; then
+    while IFS= read -r n; do
+      git fetch --no-tags -q ${opcoes_pr[@]+"${opcoes_pr[@]}"} "$fonte_cabecas" \
+        "+refs/pull/$n/head:$ns/$n" >/dev/null 2>&1 || true
     done <<<"$prs_listados"
   fi
-else
-  prs_motivo="$(grep -m1 . "$erro_gh" 2>/dev/null || true)"
-  [ -z "$prs_motivo" ] && prs_motivo="gh não respondeu"
+  # Controle de SOMA: todo PR listado virou ref, ou é NÃO MEDIDO nomeado.
+  obtidas="$(git for-each-ref --format='%(refname)' "$ns" 2>/dev/null | sed "s#^$ns/##")"
+  prs_medidos="$(awk 'NR == FNR { ok[$1] = 1; next } ($1 in ok) { n++ } END { print n + 0 }' \
+                   <(printf '%s\n' "$obtidas") <(printf '%s\n' "$prs_listados"))"
+  prs_falhos="$(awk 'NR == FNR { ok[$1] = 1; next } !($1 in ok) { printf "%s#%s", (s++ ? " " : ""), $1 }' \
+                  <(printf '%s\n' "$obtidas") <(printf '%s\n' "$prs_listados"))"
 fi
 cabecas="$(refs_de_outrem "$ns")"
 
-# A listagem vai para ARQUIVO ("ref<TAB>nome"), não para uma variável que cresce a cada volta:
-# concatenar string no bash recopia tudo a cada iteração, e são centenas de refs com centenas
-# de migrations cada. O segundo laço (nomear donos) lê daqui, sem chamar o git de novo.
-listagem="$(mktemp)"
-trap 'limpar_cabecas; rm -f "$erro_gh" "$listagem"' EXIT
-outras_medidas=0
-while IFS= read -r ref; do
-  [ -z "$ref" ] && continue
-  git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null \
-    | sed 's#^supabase/migrations/##' | awk -v r="$ref" '{ print r "\t" $0 }' >> "$listagem"
-  case "$ref" in "$ns"/*) ;; *) outras_medidas=$((outras_medidas + 1)) ;; esac
-done <<<"$(printf '%s\n%s\n' "$todos_refs" "$cabecas")"
+# ── a listagem, EM LOTE: nenhum processo por ref ────────────────────────────────────────
+# Medido em 19/09/2026 num clone com 2601 refs: a main levava ~21 min (ls-tree por ref,
+# concatenado numa variável que o bash recopia a cada volta); `cat-file --batch-check` dá a
+# árvore de supabase/migrations de cada ref num processo só, e centenas de refs dividem a
+# MESMA árvore — `diff-tree --stdin` lista só as árvores únicas, noutro processo.
+outras_medidas="$(grep -c . <<<"$todos_refs" || true)"
+todas="$(printf '%s\n%s\n' "$todos_refs" "$cabecas" | sed '/^$/d')"
+arvore_por_ref=""; nomes_por_arvore=""
+if [ -n "$todas" ]; then
+  # "<ref> <árvore>"
+  arvore_por_ref="$(sed 's#$#:supabase/migrations#' <<<"$todas" \
+    | git cat-file --batch-check='%(objectname) %(objecttype)' 2>/dev/null \
+    | paste -d' ' <(printf '%s\n' "$todas") - | awk '$3 == "tree" { print $1, $2 }')"
+  vazia="$(git hash-object -t tree /dev/null)"
+  # "<árvore> <nome>": `diff-tree --stdin` contra a árvore vazia lista cada árvore inteira.
+  nomes_por_arvore="$(cut -d' ' -f2 <<<"$arvore_por_ref" | sed '/^$/d' | sort -u | sed "s#^#$vazia #" \
+    | git diff-tree -r --name-only --stdin 2>/dev/null \
+    | awk -v v="$vazia" '$1 == v && NF == 2 { a = $2; next } { print a, $0 }')"
+fi
 # DOIS CONJUNTOS PARA DUAS FUNÇÕES. A POPULAÇÃO (o próximo livre) é tudo: a main e as árvores
 # INTEIRAS das outras refs — se ela fosse montada a partir do que cada PR acrescenta à main, o
 # número de um PR recém-mesclado sumiria das duas metades (saiu da lista de abertos e foi
@@ -253,13 +314,16 @@ done <<<"$(printf '%s\n%s\n' "$todos_refs" "$cabecas")"
 # está no PR aberto #N") é só o que a cabeça ACRESCENTA à main: toda cabeça carrega as
 # migrations que herdou, e atribuir pelo conjunto inteiro nomearia, numa colisão com a main,
 # todo PR aberto que já trouxe a main — como se o número fosse dele.
-outras_arvores="$(cut -f2 "$listagem")"
+outras_arvores="$(cut -d' ' -f2- <<<"$nomes_por_arvore" | sed '/^$/d' | sort -u)"
 # "N<espaço>nome" do que cada cabeça de PR acrescenta — sem array associativo: o bash do
 # macOS é o 3.2
-arvores_prs="$(awk -F'\t' -v p="$ns/" '
-  NR == FNR { na_base[$0] = 1; next }
-  index($1, p) == 1 && !($2 in na_base) { print substr($1, length(p) + 1) " " $2 }
-' <(printf '%s\n' "$base_arvore") "$listagem")"
+arvores_prs="$(awk -v ns="$ns/" '
+  FILENAME == ARGV[1] { na_base[$0] = 1; next }
+  FILENAME == ARGV[2] { nomes[$1] = nomes[$1] "\n" substr($0, length($1) + 2); next }
+  index($1, ns) == 1 && ($2 in nomes) {
+    p = substr($1, length(ns) + 1); m = split(substr(nomes[$2], 2), l, "\n")
+    for (i = 1; i <= m; i++) if (!(l[i] in na_base)) print p, l[i]
+  }' <(printf '%s\n' "$base_arvore") <(printf '%s\n' "$nomes_por_arvore") <(printf '%s\n' "$arvore_por_ref"))"
 
 # Próximo livre medido no UNIVERSO: as duas árvores, as outras refs do clone e as cabeças
 # dos PRs abertos. Olhar só a listagem local é o erro que a complemento-do-ci.md §1 aponta
@@ -282,7 +346,7 @@ escopo_do_proximo_livre() {
   if [ -n "$prs_motivo" ]; then
     echo "::warning::NÃO MEDIDO: PRs abertos (inclusive de fork) — $prs_motivo. Confira com a triagem antes de renomear."
   else
-    echo "PRs abertos: ${prs_n_listados} listado(s), ${prs_medidos} medido(s)."
+    echo "PRs abertos${repo_prs:+ em $repo_prs}: ${prs_n_listados} listado(s), ${prs_medidos} medido(s).${proprios:+ O seu fica fora: $(sed 's/^/#/' <<<"$proprios" | paste -sd' ' -).}"
     [ -n "$prs_falhos" ] && echo "::warning::NÃO MEDIDO: ${prs_falhos} — a cabeça não pôde ser buscada; o número desses PRs não entrou na conta."
   fi
   return 0
@@ -293,8 +357,10 @@ escopo_do_proximo_livre() {
 # O dono da branch decide renumerá-la ou ceder; aqui só se mede quem é.
 if [ $((outras_medidas + prs_medidos)) -gt 0 ] && [ -n "$ultimo" ] && [ -n "$ultimo_base_head" ] \
    && [ "$ultimo" -gt "$ultimo_base_head" ]; then
-  donos="$(grep -E $'\t'"[0-9]{14}_${ultimo}_" "$listagem" | cut -f1 | sort -u | rotulo \
-             | tr '\n' ' ' | sed 's/ *$//' || true)"
+  arvores_do_teto="$(grep -E "^[0-9a-f]+ [0-9]{14}_${ultimo}_" <<<"$nomes_por_arvore" | cut -d' ' -f1 | sort -u || true)"
+  donos="$(awk 'FILENAME == ARGV[1] { t[$1] = 1; next } ($2 in t) { print $1 }' \
+             <(printf '%s\n' "$arvores_do_teto") <(printf '%s\n' "$arvore_por_ref") \
+           | sort -u | rotulo | tr '\n' ' ' | sed 's/ *$//' || true)"
   echo "::notice::NNNN=${ultimo} (o teto medido) existe em: ${donos:-?} — não é colisão sua; se for branch sua descartável, apagá-la libera o número."
 fi
 
@@ -333,9 +399,15 @@ while IFS= read -r nome; do
   # Outro PR ABERTO (inclusive de fork) com o mesmo NNNN ou timestamp: AVISA no arquivo,
   # não reprova — quem entrar primeiro fica; o outro PR pode nunca entrar.
   if [ -n "$arvores_prs" ]; then
+    # Quem tem o MESMO arquivo (mesmo nome inteiro) não é outro dono: é a cabeça publicada
+    # deste PR antes de um amend/rebase, ou um PR empilhado sobre ele. Sem isso, o amend
+    # manda o autor renumerar contra ele mesmo (revisão de 19/09/2026).
+    iguais="$(awk -v f="$nome" '$2 == f { print $1 }' <<<"$arvores_prs" | sort -u)"
     donos_n="$(grep -E "^[0-9]+ [0-9]{14}_${nnnn}_.+\.sql$" <<<"$arvores_prs" | cut -d' ' -f1 | sort -un \
+                 | { if [ -n "$iguais" ]; then grep -vxF "$iguais"; else cat; fi; } \
                  | sed 's/^/PR aberto #/' | paste -sd, - | sed 's/,/, /g' || true)"
     donos_t="$(grep -E "^[0-9]+ ${ts}_[0-9]{4}_.+\.sql$" <<<"$arvores_prs" | cut -d' ' -f1 | sort -un \
+                 | { if [ -n "$iguais" ]; then grep -vxF "$iguais"; else cat; fi; } \
                  | sed 's/^/PR aberto #/' | paste -sd, - | sed 's/,/, /g' || true)"
     if [ -n "$donos_n" ]; then
       echo "::warning file=$caminho::NNNN=$nnnn também está em: $donos_n — não reprova: quem entrar primeiro fica, e o outro renumera (NNNN e timestamp juntos)."
