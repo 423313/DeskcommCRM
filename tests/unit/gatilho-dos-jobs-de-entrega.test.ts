@@ -190,6 +190,13 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "workflow chamava desde 2026-08-27, e `test:db` sozinho mede um banco VAZIO — constraint " +
       "que só quebra com linha existente passava verde.",
   },
+  "ci.yml::invariants-alcance": {
+    condicao: null,
+    efeito:
+      "Este job decide a matriz de majors do `invariants-majors`. Sem ele a matriz fica " +
+      "vazia, nenhuma major roda e o agregador `invariants` reprova — o PORTAO dele exige " +
+      "`success` aqui.",
+  },
   "e2e.yml::e2e-alcance": {
     condicao: null,
     efeito:

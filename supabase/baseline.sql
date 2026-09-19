@@ -28128,6 +28128,15 @@ alter table public.idempotency_keys
   add constraint idempotency_keys_recibo_ou_reserva
   check ((status_code is null) = (response_body is null));
 
+-- ---- destinos internos que o dono da instalação autoriza (migration 0324) ----
+-- Decisão 22-d, #1004. null = nunca configurado pela tela (vale o .env);
+-- '{}' = o dono esvaziou a lista. Idempotente; sem dado tocado.
+alter table public.platform_settings
+  add column if not exists internal_destinations text[];
+
+comment on column public.platform_settings.internal_destinations is
+  'IPv4 e faixas CIDR IPv4 que a INSTALAÇÃO pode alcançar mesmo sendo rede interna — só para destinos configurados pela instalação, nunca por uma organização (decisão 22-d, #1004). null = nunca configurado pela tela: vale IA_DESTINOS_INTERNOS_PERMITIDOS do .env. Array vazio = nada autorizado. Ver lib/automation/destinos-internos-autorizados.ts.';
+
 notify pgrst, 'reload schema';
 
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
