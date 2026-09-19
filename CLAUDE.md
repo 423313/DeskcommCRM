@@ -435,7 +435,15 @@ Checks **obrigatórios** na branch protection da `main` (verificado na configura
     python3 -c "import sys,re; y=sys.stdin.read(); print(sorted({s for _,c in re.findall(r'(FORA_DO_CI):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)}))"
   ```
 
-  Esta frase já dizia "a **única** de fora é `vps-fresh-onboarding`" e estava errada: em 2026-09-04 a variável listava **duas** (`inbox-tempo-real` entrou depois). É o mesmo defeito que o parágrafo acima descreve — afirmação de estado que envelhece —, cometido na frase seguinte à que o denuncia. O que continua verdade e é o que importa: `vps-fresh-onboarding` é a **P0** da doutrina de QA Visual, então `e2e` verde **não** prova a jornada de instalação fresca, que é o produto que se vende.
+  **Esta frase já envelheceu TRÊS vezes, e é o parágrafo que denuncia afirmações que envelhecem.** Ela dizia "a **única** de fora é `vps-fresh-onboarding`" quando a variável já listava duas (2026-09-04, `inbox-tempo-real`); depois seguiu dizendo que a jornada de instalação fresca estava sem gate — e em 2026-09-19 o **#983** (@webtecnica) pôs `vps-fresh-onboarding.spec.ts` para rodar no CI, com WAHA e Redis de verdade, então a frase virou o contrário do estado.
+
+  Por isso ela sai e não volta: a pergunta "a jornada de instalação fresca tem gate?" se responde por **comando**, com o de cima (o que `FORA_DO_CI` declara) e com este, que diz quem o CI **invoca**:
+
+  ```bash
+  git show origin/main:.github/workflows/e2e.yml | python3 -c "import sys,re; y=sys.stdin.read(); print('vps-fresh-onboarding no CI:', 'vps-fresh-onboarding.spec.ts' in {s for _,c in re.findall(r'(SPECS_PARTE_\d+):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)})"
+  ```
+
+  O que **não** envelhece e é o que importa: `vps-fresh-onboarding` é a **P0** da doutrina de QA Visual porque a instalação fresca é o produto que se vende. Ter gate não dispensa a prova pela tela (DoD 12) — gate prova que não regrediu, não que a experiência ficou boa.
 
   **Não confie em `grep` no arquivo inteiro.** `grep -oE '[a-z0-9-]+\.spec\.ts' .github/workflows/e2e.yml | sort -u | wc -l` conta quem é CITADO, não quem é INVOCADO: a `FORA_DO_CI` é uma variável YAML como as outras e entra na conta. (Até 2026-08-14 este parágrafo culpava "menções em comentários", e isso é falso — medido, o conjunto de specs citadas fora de variável é **vazio**.) O que roda são as `SPECS_PARTE_*`:
 

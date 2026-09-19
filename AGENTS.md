@@ -379,12 +379,17 @@ itens envelhecem em ritmos diferentes, e o cabeçalho passava a mentir por todos
 (O SHA `789dfa6`, que ficava aqui, ficou para trás — meça com
 `git rev-list --count 789dfa6..origin/main`.)
 
-- **As specs E2E fora do CI são exatamente as declaradas em `FORA_DO_CI`** — hoje
-  `vps-fresh-onboarding` é a P0 entre elas —, e o `e2e` **é** check obrigatório. Ou seja: um PR
-  que quebre o `e2e` não entra — mas a jornada de
-  instalação fresca, que é o produto que se vende, continua sem gate. Se você mexeu nela, a
-  prova é sua. O número e a contagem que ficavam aqui eram de uma fotografia de agosto, e o
-  disco já tinha mudado desde então.
+- **As specs E2E fora do CI são exatamente as declaradas em `FORA_DO_CI`**, e o `e2e` **é**
+  check obrigatório — um PR que quebre o `e2e` não entra. **Quais estão de fora é pergunta de
+  comando, não de leitura:** esta linha já afirmou por semanas que a jornada de instalação
+  fresca seguia sem gate, e em 2026-09-19 o #983 pôs `vps-fresh-onboarding.spec.ts` no CI.
+
+  ```bash
+  git show origin/main:.github/workflows/e2e.yml | python3 -c "import sys,re; y=sys.stdin.read(); print(sorted({s for _,c in re.findall(r'(FORA_DO_CI):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)}))"
+  ```
+
+  Gate não substitui prova: se você mexeu numa jornada, a prova pela tela continua sendo sua
+  (DoD 12). O número e a contagem que ficavam aqui eram de uma fotografia de agosto.
 - Rate limit HTTP: `lib/auth/rate-limit.ts` cobre **login, signup, recuperação de senha e
   aceite de convite** (contando por IP **e** por identificador hasheado); `checkRateLimit` cobre
   o webhook de captação e o dispatcher de IA. **Crons e MCP seguem sem.** Meça antes de agir:
