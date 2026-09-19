@@ -111,6 +111,12 @@ describe("sidebarGroups", () => {
     //
     // A lista é EXATA de propósito. `toContain` deixaria um sexto item entrar
     // calado no sidebar e reabrir a mesma corrida por pixel.
+    //
+    // Comandas NÃO entra: ela chegou pedindo a quarta linha, e o e2e mediu o
+    // menu rolando em 1280×900 — a mesma corrida por pixel que o hub existe
+    // para encerrar. Ela mora dentro do hub, em "O dia a dia da venda", que é
+    // onde o grupo com hub recebe tela nova (ver o comentário no destino, em
+    // lib/navigation/catalogo.ts).
     const crm = sidebarGroups(true, null).find((g) => g.group.id === "crm");
     expect(crm?.items.map((i) => i.href)).toEqual([
       "/app/kanban",
@@ -124,6 +130,10 @@ describe("sidebarGroups", () => {
       // para cá no dia em que o app souber que o módulo está ligado (hoje isso
       // é profile do compose, não estado que o aplicativo conheça).
     ]);
+    // E continua alcançável: o hub é a porta dela.
+    expect(
+      hubSections("crm", true, null).flatMap((s) => s.items.map((i) => i.href)),
+    ).toContain("/app/comandas");
     expect(NAV_GROUPS.find((g) => g.id === "crm")?.hub?.href).toBe("/app/crm");
   });
 
@@ -160,6 +170,7 @@ describe("hubSections", () => {
       "/app/contacts",
       "/app/tasks",
       "/app/calls",
+      "/app/comandas",
       "/app/products",
       "/app/settings/tenant/pipelines",
     ]);
