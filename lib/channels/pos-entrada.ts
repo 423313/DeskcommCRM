@@ -350,7 +350,14 @@ async function guardarOrigemDaPagina(admin: Admin, entrada: EntradaDeMensagem): 
     // A consulta vem ANTES de qualquer escrita, e DENTRO do try: falha de
     // leitura não pode virar estampa. O `estampar` só roda depois de a
     // primeira mensagem estar confirmada.
-    if (!(await ehAPrimeiraMensagemDoContato(admin, entrada.contactId, entrada.messageId))) {
+    if (
+      !(await ehAPrimeiraMensagemDoContato(
+        admin,
+        entrada.organizationId,
+        entrada.contactId,
+        entrada.messageId,
+      ))
+    ) {
       logger.info("pos-entrada: código de origem fora da primeira mensagem (ignorado)", {
         contactId: entrada.contactId,
         messageId: entrada.messageId,

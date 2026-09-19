@@ -44,6 +44,26 @@ log_err() {  # log_err <mensagem> — grava com timestamp, corta pra ~200 linhas
 # base num número que não descreve o que está no ar.
 recusar_projeto_de_outra_arvore log_err || exit 0
 
+# A senha das rotinas que o log do sistema guardou (#1054) é trocada AQUI quando
+# a atualização veio do botão da tela: o `update.sh` dirigido por um agent.sh
+# não pode trocá-la (o agente que o dirige fala com a senha velha até o fim).
+# Esta execução já é a do kit novo — o cron relê o arquivo a cada 5 minutos — e
+# ainda não segura nenhuma atualização. Uma vez só: a marca em disco encerra.
+# Depois da troca, `setup_event_log_drain_cron` reescreve a linha do crontab
+# (numa instalação que atualizou por um update.sh antigo, ela ainda carrega a
+# senha escrita) e o SECRET desta execução passa a ser o novo.
+if [ ! -e "${PROJECT_DIR}/${MARCA_SEGREDO_DO_CRON_NOME}" ]; then
+  if trocar_segredo_do_cron_vazado >/dev/null 2>&1; then
+    if [ -n "${SEGREDO_DO_CRON_TROCADO:-}" ]; then
+      setup_event_log_drain_cron >/dev/null 2>&1 || true
+      log_err "troquei a senha interna das rotinas (a antiga ficou no log do sistema por versões anteriores do instalador). Recomendado: apagar os logs antigos — sudo truncate -s 0 /var/log/syslog && sudo rm -f /var/log/syslog.* && sudo journalctl --rotate && sudo journalctl --vacuum-time=1s"
+    fi
+  else
+    log_err "não consegui trocar a senha interna das rotinas nesta execução — tento de novo na próxima"
+  fi
+  SECRET="${INTERNAL_CRON_SECRET:-${INTERNAL_SECRET:-}}"
+fi
+
 post() {  # post <json> → corpo da resposta em 2xx; VAZIO em qualquer falha
   # (quem chama, ex. o laço de retry do run_result, usa "saiu vazio" como sinal
   # de falha — por isso o corpo só é impresso no ramo de sucesso).

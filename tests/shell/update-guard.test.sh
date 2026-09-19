@@ -23,6 +23,14 @@
 #      e o fallback de "nenhuma tag conhecida + fetch falhou") — casos 8 e 9
 #      isolam cada uma, provado por sabotagem cirúrgica de cada linha.
 set -uo pipefail
+# Isolamento do git: um GIT_DIR herdado (suíte rodada de dentro de um hook ou de um
+# `rebase --exec`) manda por cima de todo `cd`/`git -C` dos repositórios descartáveis
+# abaixo, e init/commit/config caem no repositório de quem roda — foi uma escrita de
+# `user.*` assim que assinou como "Pessoa <alguem@fork.dev>" 829 commits da main a
+# partir de 10/09/2026. Zera o ambiente local do git (o idioma do próprio git) e dá a
+# identidade por ambiente: nenhum teste aqui mede o autor.
+unset $(git rev-parse --local-env-vars)
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t.t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t.t
 
 # O namespace das imagens publicadas, lido da FONTE (hostgator-setup-kit/_common.sh)
 # em vez de repetido aqui. Este arquivo tinha o literal em 29 lugares — fixtures e
@@ -212,7 +220,6 @@ chmod 600 "$PROJ/.env"
 
 cd "$PROJ" || exit 1
 git init --quiet
-git config user.email t@t.t; git config user.name t
 git add -A
 git commit --quiet -m "v0.9.0"
 git tag v0.9.0
@@ -392,7 +399,7 @@ mkdir -p "$SRC/supabase"; printf 'select 1;\n' > "$SRC/supabase/baseline.sql"
 printf 'services:\n  app:\n    image: \${APP_IMAGE:-x}\n' > "$SRC/docker-compose.prod.yml"
 printf '.env\n' > "$SRC/.gitignore"
 cd "$SRC" || exit 1
-git init --quiet; git config user.email t@t.t; git config user.name t
+git init --quiet
 git add -A; git commit --quiet -m "release antiga"; git tag v0.9.0
 echo topo > topo.txt; git add -A; git commit --quiet -m "main, depois da release"
 
