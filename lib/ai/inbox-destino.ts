@@ -69,7 +69,7 @@ export const POLITICAS_DE_AVISO = {
   channel_number_alert: { refs: ["channel_session"], orientacao: "Peça a quem administra para revisar a situação do número nas conexões.", geral: CONEXOES },
   // Sem `geral`, ao contrário do vizinho acima: o `canal-mudo-watcher` SEMPRE
   // nasce apontando para a conexão que ficou muda (`ref_kind: channel_session`),
-  // nunca genérico — quem emite sem referência é a ponte da Zernio, que este
+  // nunca genérico — quem emite sem referência é uma ponte de canal que este
   // aviso não tem. Um contexto geral aqui seria caminho que nunca executa.
   // A orientação evita "revisar a conexão": nada caiu, e o conserto é um clique
   // de autorização em Conexões — dizer "revisar" mandaria procurar um defeito.
