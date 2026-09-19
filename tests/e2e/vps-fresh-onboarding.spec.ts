@@ -507,12 +507,35 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
     await page.getByText(/salvei meus códigos/i).click();
     await page.getByRole("button", { name: /^concluir$/i }).click();
 
-    // gate some após reload; shell do app visível
+    // ⚠️ SEGUNDA HERANÇA DA MESMA MUDANÇA DE PORTA. Cobrar que o título
+    // "Verificação em duas etapas" SUMA valia quando o cadastro vinha do
+    // bloqueador de tela cheia e terminar caía no inbox — daí o nome
+    // `j1.10-inbox-livre`. Hoje o fluxo começa e termina em Configurações ›
+    // Segurança, e essa página imprime a seção "Verificação em duas etapas"
+    // o tempo todo (`app/app/settings/security/_client.tsx:78`, fora de
+    // qualquer condicional). Medido no job 105829755207: `44 × locator
+    // resolved to 1 element` — o único casamento era essa seção, com o
+    // diálogo já fechado e o selo em "Ativada". O vermelho media a mudança de
+    // porta, não regressão.
+    //
+    // O que prova o fim do fluxo HOJE são duas coisas, e a segunda é a que
+    // não deixa o caso passar por acidente:
     await page.waitForLoadState("networkidle");
-    await expect(
-      page.getByRole("heading", { name: /verificação em duas etapas/i }),
-    ).toHaveCount(0, { timeout: 20_000 });
-    await snap(page, "j1.10-inbox-livre");
+    // 1) o DIÁLOGO fechou — `#mfa-title` é o título dos três passos do modal
+    //    (intro, QR, códigos), então count 0 é o modal inteiro desmontado;
+    await expect(page.locator("#mfa-title")).toHaveCount(0, { timeout: 20_000 });
+    // 2) CONTROLE NEGATIVO — o estado MUDOU no servidor. Se o enroll não
+    //    persistisse, ou se "Concluir" desfizesse o cadastro, a página
+    //    recarregada voltaria exatamente ao estado em que este caso COMEÇOU
+    //    (selo "Desativada" + botão "Ativar") e o modal também estaria
+    //    fechado — ou seja, só a asserção (1) passaria feliz. Esta reprova.
+    await expect(page.getByText("Ativada", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^desligar$/i })).toBeVisible();
+    await expect(page.getByText("Desativada", { exact: true })).toHaveCount(0);
+    // e a pessoa não ficou presa: o shell do app respondeu ao reload (se a
+    // sessão tivesse caído no enroll, aqui seria a tela de login).
+    await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+    await snap(page, "j1.10-verificacao-ativada");
   });
 
   test("J1.13 wizard não reabre depois de concluído", async ({ page }) => {
