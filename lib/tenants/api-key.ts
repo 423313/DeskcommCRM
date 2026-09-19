@@ -39,6 +39,38 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * `scopesRole` (`lib/mcp/auth.ts:49`) lê o primeiro `role:` da lista; o teste
  * ao lado fixa o conjunto emitido, então acrescentar `role:manager` sem querer
  * reprova.
+ *
+ * ## Não há `actor:ai_agent`, e a AUSÊNCIA é a decisão (decisão do dono, 19/09)
+ *
+ * O parceiro é uma INTEGRAÇÃO, não um agente de IA. `deriveActor`
+ * (`lib/mcp/auth.ts:64`) escolhe a espécie do ator pela PRESENÇA de
+ * `actor:ai_agent`: com ele, `{ type: "ai_agent" }`; sem ele, `{ type:
+ * "api_token" }` — a variante que `lib/api/handlers/types.ts:57` criou
+ * exatamente para "token de servidor sem escopo de agente". Não existe escopo
+ * que LIGUE `api_token`; ele é o caminho de quem não se declara agente.
+ *
+ * Três coisas quebravam com o escopo posto:
+ *
+ * 1. **A linha do tempo atribuía à IA o que um sistema parceiro fez.**
+ *    `lib/operacao/autoria.ts:57` devolvia `"ai"` e
+ *    `lib/leads/activity-emitter.ts:131` gravava `kind: "ai"` com `agentId:
+ *    null` — "alterado pelo assistente" na tela, sem assistente nenhum. É o
+ *    mesmo defeito que a #866 já consertou em `messages.sent_via`, onde
+ *    `origemDaMensagem` manda `api_token` para `"system"` justamente porque
+ *    chamar integração de IA inflava o número do agente no painel.
+ * 2. **`crm_resume_agent` ficava barrada.** `lib/mcp/tools/escalacao.ts:315`
+ *    lança `resume_requires_person` para ator `ai_agent` — e essa ferramenta é
+ *    `requiresRole: "agent"`, ou seja, está DENTRO das 46 que esta chave
+ *    promete. A regra ali é "o agente não desfaz a própria passagem"; um
+ *    parceiro que não fez passagem nenhuma não é o alvo dela.
+ * 3. **`run_id` mentia.** Sem nenhum `agent_run:` na lista, `deriveActor` cai
+ *    no fallback `runId = tokenId`, e `lib/mcp/tools/handoff.ts:91` gravava o
+ *    id do TOKEN na chave `run_id` — um id que não existe em `ai_agent_runs`.
+ *
+ * ⚠️ E o recorte NÃO encolhe: o despacho do MCP barra por `ensureScope` +
+ * `ensureRole` (`lib/mcp/server.ts:73-74`), nunca por espécie de ator. As 46
+ * ferramentas de `role:agent` continuam as mesmas 46 — `crm_resume_agent`
+ * deixa de ser recusada no handler, que é o item 2 acima.
  */
 export async function rotateIntegrationApiKey(input: {
   organizationId: string;
@@ -111,13 +143,9 @@ export async function rotateIntegrationApiKey(input: {
   const secret = randomBytes(32).toString("base64url");
   const plaintext = `${prefix}_${secret}`;
   const tokenHash = createHash("sha256").update(plaintext).digest();
-  const scopes = [
-    "mcp:read",
-    "mcp:write",
-    "role:agent",
-    "actor:ai_agent",
-    input.integrationScope,
-  ];
+  // Sem `actor:ai_agent` DE PROPÓSITO — ver "a AUSÊNCIA é a decisão" no
+  // cabeçalho. É a ausência que faz `deriveActor` devolver `api_token`.
+  const scopes = ["mcp:read", "mcp:write", "role:agent", input.integrationScope];
 
   const { data: created, error } = await admin
     .from("api_tokens")

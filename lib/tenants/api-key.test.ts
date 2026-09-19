@@ -54,6 +54,9 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 const { rotateIntegrationApiKey } = await import("./api-key");
+// O consumidor REAL dos escopos: é ele que decide a espécie do ator. Afirmar a
+// lista sem passá-la por aqui provaria a lista, não o efeito dela.
+const { deriveActor } = await import("@/lib/mcp/auth");
 
 const ENTRADA = {
   organizationId: "org-1",
@@ -77,8 +80,8 @@ beforeEach(() => {
 
 describe("a chave abre o que promete", () => {
   // `toEqual` na lista INTEIRA, e não `arrayContaining`: o recorte é
-  // deliberado. Sem `mcp:read`/`mcp:write` a chave não abre nada (todo
-  // consumidor de `dsk_` cobra um dos dois); com `role:manager` ou
+  // deliberado, nos DOIS sentidos. Sem `mcp:read`/`mcp:write` a chave não abre
+  // nada (todo consumidor de `dsk_` cobra um dos dois); com `role:manager` ou
   // `role:ai_operator` acrescentado sem querer, um parceiro EXTERNO ganharia
   // por provisionamento automático o que só deve sair de uma decisão humana na
   // tela de Chaves de API. Os dois erros reprovam aqui.
@@ -86,13 +89,26 @@ describe("a chave abre o que promete", () => {
     await rotateIntegrationApiKey(ENTRADA);
     const [insercao] = inseridas();
     const scopes = (insercao?.args[0] as { scopes: string[] }).scopes;
-    expect(scopes).toEqual([
-      "mcp:read",
-      "mcp:write",
-      "role:agent",
-      "actor:ai_agent",
-      "integration:clinicfx",
-    ]);
+    expect(scopes).toEqual(["mcp:read", "mcp:write", "role:agent", "integration:clinicfx"]);
+  });
+
+  // ⚠️ A AUSÊNCIA é afirmação, e `toEqual` acima já a cobre — este caso existe
+  // para dizer POR QUÊ, e para que quem reintroduzir o escopo leia o motivo no
+  // nome do teste que ficou vermelho. `deriveActor` escolhe a espécie do ator
+  // pela presença de `actor:ai_agent`: com ele, a linha do tempo atribui à "IA"
+  // o que um sistema parceiro fez, `crm_resume_agent` (uma das 46 de
+  // `role:agent`) responde `resume_requires_person`, e o `run_id` do handoff
+  // recebe o id do TOKEN. O parceiro é uma integração — `api_token`, a variante
+  // que `lib/api/handlers/types.ts` criou para este caso.
+  it("NÃO é um agente de IA: nenhum escopo `actor:` na chave da integração", async () => {
+    await rotateIntegrationApiKey(ENTRADA);
+    const scopes = (inseridas()[0]?.args[0] as { scopes: string[] }).scopes;
+    expect(scopes.filter((s) => s.startsWith("actor:"))).toEqual([]);
+    expect(deriveActor(scopes, "tok-novo")).toEqual({
+      type: "api_token",
+      id: "tok-novo",
+      role: "agent",
+    });
   });
 });
 
