@@ -1155,6 +1155,7 @@ export const DICIONARIO: Traducoes = {
   "Um de cada vez por conversa": { es: "Una a la vez por conversación" },
   "Um de cada vez por cliente": { es: "Una a la vez por cliente" },
   "Só atender em horário de funcionamento": { es: "Solo atender en horario de funcionamiento" },
+  "Só enviar follow-up nestes horários": { es: "Solo enviar seguimiento en estos horarios" },
   Início: { es: "Inicio" },
   Fim: { es: "Fin" },
   Dias: { es: "Días" },
