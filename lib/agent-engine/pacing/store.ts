@@ -20,7 +20,8 @@ interface ChannelKnobsRow {
   allow_sunday: boolean | null;
   timezone: string | null;
   warmup_daily_caps: unknown; // jsonb — shape validado em parseWarmupCaps (nunca confiado)
-  number_activated_at: Date;
+  /** Nulo quando o número não tem linha em channel_knobs (o `left join` da leitura). */
+  number_activated_at: Date | null;
   /** `organizations.timezone` — o fuso da janela de quem não escolheu um no número. */
   org_timezone?: string | null;
 }
