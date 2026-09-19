@@ -2,7 +2,7 @@
 
 /**
  * LIGAR E DESLIGAR "ATENDENTES PODEM MEXER NA AGENDA DOS COLEGAS" — a opção da
- * migration 0279 (issue #978).
+ * migration 0343 (issue #978).
  *
  * LIGADA (o padrão de quem já instalou): qualquer Atendente cancela e remarca o
  * compromisso de qualquer colega. DESLIGADA: o Atendente só mexe no compromisso

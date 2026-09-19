@@ -98,7 +98,7 @@ export default async function TiposDeAgendamentoPage() {
         podeConfigurarGoogle={ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent}
         podeEditar={podeEditar}
         clientePelaAgendaLigado={clientePelaAgendaLigado(org?.settings)}
-        // A OPÇÃO DA AGENDA (migration 0279, issue #978): LIGADA por padrão, e a
+        // A OPÇÃO DA AGENDA (migration 0343, issue #978): LIGADA por padrão, e a
         // régua de "ligado" é a ausência da chave — quem já instalou está no
         // padrão sem ter nada gravado. Mesma leitura do banco.
         colegasPodemMexerNaAgendaLigado={colegasPodemMexerNaAgendaLigado(org?.settings)}

@@ -128,7 +128,7 @@ export interface CancelarInput {
  * ─── A MESMA REGRA ESTÁ NO BANCO, E DE PROPÓSITO ──────────────────────────
  *
  * `fn_appointment_change_core` recusa com `appointment_do_colega` (42501) a
- * mudança de compromisso alheio (migration 0279). Aqui a recusa vem ANTES, com
+ * mudança de compromisso alheio (migration 0343). Aqui a recusa vem ANTES, com
  * a frase em português e o código de wire próprio, porque a rota é o que uma
  * pessoa vê — e porque o handler também atende MCP e webhook. Duas cópias da
  * mesma regra só valem se a régua for UMA: quem lê a opção é
@@ -219,7 +219,7 @@ export function recusaMudancaNaAgendaAlheia(
  *
  * Chamada por `alterarAgendamentoHandler` e `cancelarAgendamentoHandler` logo
  * depois de `exigeAgendamento` — antes de qualquer escrita, e é o mesmo ponto
- * em que o banco recusa (`appointment_do_colega`, migration 0279).
+ * em que o banco recusa (`appointment_do_colega`, migration 0343).
  */
 async function exigeDonoDoCompromisso(
   supabase: SB,
@@ -580,7 +580,7 @@ export async function cancelarAgendamentoHandler(
   const atual = await exigeAgendamento(supabase, ctx, input.id, [
     "id",
     "revision",
-    // `owner_user_id` entrou com a opção "agenda dos colegas" (migration 0279,
+    // `owner_user_id` entrou com a opção "agenda dos colegas" (migration 0343,
     // issue #978): é a coluna que a recusa lê. Sem ela, o cancelamento era a
     // ÚNICA das duas mudanças que não sabia de quem era o compromisso — e o
     // caminho mais fácil de apagar a agenda de um colega.

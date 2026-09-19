@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
 
 /**
- * AGENDA DOS COLEGAS — o interruptor da opção da migration 0279 (issue #978).
+ * AGENDA DOS COLEGAS — o interruptor da opção da migration 0343 (issue #978).
  *
  * Mora em Configurações › Tipos de agendamento, ao lado de "Clientes pela
  * agenda" e dos prazos da agenda: é a tela das regras de comportamento da

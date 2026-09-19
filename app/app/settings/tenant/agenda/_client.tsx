@@ -318,7 +318,7 @@ export function TiposDeAgendamentoClient({
   /** `organizations.settings.crm.cliente_pela_agenda`, lido pela página. */
   clientePelaAgendaLigado: boolean;
   podeLigarClientePelaAgenda: boolean;
-  /** `organizations.settings.colegas_podem_mexer_na_agenda` (migration 0279). */
+  /** `organizations.settings.colegas_podem_mexer_na_agenda` (migration 0343). */
   colegasPodemMexerNaAgendaLigado: boolean;
   podeMudarAgendaDosColegas: boolean;
 }) {

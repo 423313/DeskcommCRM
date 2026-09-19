@@ -287,7 +287,7 @@ export function clientePelaAgendaLigado(settings: unknown): boolean {
 }
 
 /**
- * A OPÇÃO "ATENDENTES PODEM MEXER NA AGENDA DOS COLEGAS" (migration 0279,
+ * A OPÇÃO "ATENDENTES PODEM MEXER NA AGENDA DOS COLEGAS" (migration 0343,
  * issue #978) — a agenda como opção POR ORGANIZAÇÃO, LIGADA POR PADRÃO.
  *
  * Com ela DESLIGADA, o Atendente só mexe no compromisso de que é dono; Gerente

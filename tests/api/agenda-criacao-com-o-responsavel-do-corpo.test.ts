@@ -153,7 +153,7 @@ const ctxDaIA = (): HandlerCtx =>
     actor: { type: "ai_agent", id: "run-1", role: "agent" },
   }) as unknown as HandlerCtx;
 
-const pedido = { event_type_id: TIPO, starts_at: INICIO, contact_id: null } as const;
+const pedido = { event_type_id: TIPO, starts_at: INICIO } as const;
 
 beforeEach(() => {
   vi.resetAllMocks();

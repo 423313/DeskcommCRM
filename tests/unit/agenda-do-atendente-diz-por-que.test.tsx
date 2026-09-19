@@ -256,7 +256,7 @@ describe("(c) o Atendente lê a lista de pessoas da agenda", () => {
  * `GET /api/v1/team` (`manager+`). A CHAMADA não existe mais desde o item 1 da
  * issue 896 — o hook lê `ROTA_DA_LISTA_DE_PESSOAS`, e o caso "(c)" acima já
  * vigia isso. O que sobrou foi a FRASE, e ela foi consertada junto com a opção
- * da migration 0279: um comentário que afirma um caminho extinto é o defeito de
+ * da migration 0343: um comentário que afirma um caminho extinto é o defeito de
  * novo, porque a próxima pessoa a medir o 403 vai medi-lo na prosa.
  *
  * Medido nesta rodada, no worktree da #978:
