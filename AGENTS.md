@@ -169,8 +169,10 @@ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
   --jq '.required_status_checks.contexts|join(", ")'
 ```
 
-`e2e` roda três partes em paralelo; as specs de fora estão declaradas, **com motivo escrito**, em
-`FORA_DO_CI` dentro de `.github/workflows/e2e.yml`. Leia em vez de supor:
+`e2e` roda as partes da sua matrix em paralelo (quantas:
+`git show origin/main:.github/workflows/e2e.yml | grep -E '^ +parte: \['` — esta linha dizia
+"três" até o PR #983 acrescentar a quarta); as specs de fora estão declaradas, **com motivo
+escrito**, em `FORA_DO_CI` dentro de `.github/workflows/e2e.yml`. Leia em vez de supor:
 
 ```bash
 git show origin/main:.github/workflows/e2e.yml | grep -A4 'FORA_DO_CI:'
@@ -379,12 +381,20 @@ itens envelhecem em ritmos diferentes, e o cabeçalho passava a mentir por todos
 (O SHA `789dfa6`, que ficava aqui, ficou para trás — meça com
 `git rev-list --count 789dfa6..origin/main`.)
 
-- **As specs E2E fora do CI são exatamente as declaradas em `FORA_DO_CI`** — hoje
-  `vps-fresh-onboarding` é a P0 entre elas —, e o `e2e` **é** check obrigatório. Ou seja: um PR
-  que quebre o `e2e` não entra — mas a jornada de
-  instalação fresca, que é o produto que se vende, continua sem gate. Se você mexeu nela, a
-  prova é sua. O número e a contagem que ficavam aqui eram de uma fotografia de agosto, e o
-  disco já tinha mudado desde então.
+- **As specs E2E fora do CI são exatamente as declaradas em `FORA_DO_CI`**, e o `e2e` **é** check
+  obrigatório: um PR que quebre o `e2e` não entra. Quais ficam fora, meça:
+
+  ```bash
+  git show origin/main:.github/workflows/e2e.yml | \
+    python3 -c "import sys,re; y=sys.stdin.read(); print(sorted({s for _,c in re.findall(r'(FORA_DO_CI):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)}))"
+  ```
+
+  Até 2026-09-19 a `vps-fresh-onboarding` — a P0, a jornada de instalação fresca, que é o
+  produto que se vende — estava nessa lista e seguia sem gate; desde o PR #983 ela roda na
+  `SPECS_PARTE_4`. O gate vale só em PR que alcança o `e2e` (regra em
+  `scripts/pr-alcanca-o-e2e.sh`): o que pula as partes sai com `e2e` verde sem ter provado tela
+  nenhuma, a da instalação fresca inclusive. O número e a contagem que ficavam aqui eram de uma
+  fotografia de agosto, e o disco já tinha mudado desde então.
 - Rate limit HTTP: `lib/auth/rate-limit.ts` cobre **login, signup, recuperação de senha e
   aceite de convite** (contando por IP **e** por identificador hasheado); `checkRateLimit` cobre
   o webhook de captação e o dispatcher de IA. **Crons e MCP seguem sem.** Meça antes de agir:
