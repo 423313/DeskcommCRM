@@ -186,8 +186,10 @@ export async function encerraDemanda(
     // Rede de segurança (#917) — mesma dos outros três caminhos (arrasto, lote,
     // agente): a recusa do banco por motivo da perda (fora do vocabulário do
     // funil) vira recusa de negócio (422 lost_reason_invalid), nunca 500. Sem
-    // isto, `/lose` e `/win` — as duas rotas humanas — eram o único caminho que
-    // devolvia o erro cru do Postgres para quem clicou "Marcar como perdido".
+    // isto, TODO chamador desta função devolvia o erro cru do Postgres — e são
+    // cinco: `/lose` e `/win` (as rotas humanas), `/leads/[id]/clone` (encerra a
+    // origem), a automação (`create-or-move-lead.ts`) e a capacidade de
+    // encerramento da IA (`lib/mcp/tools/retencao.ts`).
     const recusa = recusaDeMotivoDaPerdaPeloBanco(updErr, ctx.idioma);
     if (recusa) {
       throw new ApiError(422, recusa.codigo, undefined, ctx.requestId, recusa.mensagem);
