@@ -285,15 +285,58 @@ jobs:
         if: matrix.parte == 2
         run: pnpm test:shell
 
-      - name: Orçamento de tempo do verify
+      - name: Orçamento de tempo do verify-parte
         if: always()
         env:
-          # Orçamento em MINUTOS, POR PARTE. Era 16 com a suíte num job só
-          # (pior sucesso 14,9); a issue #1185 manda ele descer junto com a
-          # divisão — gate que não aperta depois do conserto fica cego. 12 é a
-          # estimativa de ~8,5 min da parte mais pesada (metade de 649 s de
-          # unit + typecheck + lint + cercas) com folga; NÃO MEDIDO até a
-          # primeira rodada das partes, e desce de novo quando for medido.
+          # Orçamento em MINUTOS, POR PARTE — o DETECTOR de crescimento da
+          # suíte. O teto (`timeout-minutes: 15`, no topo do job) é outra coisa:
+          # guarda de travamento.
+          #
+          # ── O 12 ERA DECLARADO; AGORA É MEDIDO ───────────────────────────
+          #
+          # Ele nasceu como estimativa ("~8,5 min da parte mais pesada... NÃO
+          # MEDIDO até a primeira rodada das partes"). Medido em 19/09/2026,
+          # sobre TODOS os jobs `verify-parte` das 240 rodadas completas de
+          # ci.yml criadas depois de as partes entrarem na main (18/09 18:37Z):
+          #
+          #     n=286 jobs que EXECUTARAM (260 success + 26 failure)
+          #     min 0,9 · mediana 7,2 · p90 8,6 · p95 8,8 · MÁX 9,6
+          #     acima de 10 min: ZERO.  acima de 12: ZERO.  acima de 15: ZERO.
+          #
+          #     parte 1/2 (cercas+typecheck+lint): mediana 8,3 · máx 9,6
+          #     parte 2/2 (kit bash):              mediana 7,0 · máx 7,5
+          #
+          # O 12 é máx+2,4, com 3 min até o teto — o detector dispara ANTES do
+          # corte, que é a propriedade que faz chegar um `::error::` legível em
+          # vez de um `cancelled` mudo. A estimativa acertou; agora ela tem
+          # número atrás.
+          #
+          # ── OS 100 CANCELADOS, E POR QUE ELES NÃO CENSURAM ESTA CONTA ────
+          #
+          # Descartar `cancelled` em silêncio é o erro que este bloco existe
+          # para não repetir, então: foram 100 no mesmo intervalo, e eu fui
+          # olhar o que eles eram. 87 têm ZERO passos — nunca rodaram, morreram
+          # esperando runner na fila; os 13 que executaram foram cortados no
+          # meio por push novo (`cancel-in-progress`), o mais longo com 6,5 min.
+          #
+          # NENHUM morreu no teto. A ausência deles não corta a cauda alta da
+          # distribuição (falta de runner não tem relação com a duração do
+          # job), então os 286 acima são amostra não-censurada — ao contrário
+          # do que aconteceu com o valor anterior deste campo.
+          #
+          # ⚠️ A LIÇÃO DE MÉTODO, que vale mais que o número: **teto e orçamento
+          # CENSURAM a medição que os calibra.** O valor que este campo teve
+          # antes (16, e depois 19) saiu de "pior sucesso 14,9" medido sob um
+          # teto de 15 — e sob aquele teto o job que passaria de 15 morria e
+          # entrava em `cancelled`, não em `success`. Era a distribuição dos
+          # SOBREVIVENTES tratada como a distribuição dos jobs. Nunca derive um
+          # destes dois números da distribuição medida sob o valor anterior:
+          # a cauda que interessa é exatamente a que o valor anterior cortou.
+          # Depois de mexer em qualquer um dos dois, ESPERE a distribuição nova,
+          # classifique os `cancelled` e só então recalibre.
+          #
+          # A catraca que impede este número de subir sem razão escrita está em
+          # tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts (`ORCAMENTOS`).
           ORCAMENTO_MIN: "12"
         run: |
           set -euo pipefail

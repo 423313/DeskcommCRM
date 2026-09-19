@@ -46,6 +46,10 @@ export const KIND_LABEL = {
   // chegou. O motivo técnico fica no corpo do aviso.
   message_send_stuck: "Uma resposta ficou presa e não chegou ao cliente",
   midia_nao_lida: "O agente não conseguiu ler uma foto ou áudio que o cliente enviou",
+  // Diz o que o CLIENTE vive, não a configuração: do lado de lá as mensagens
+  // chegam e ninguém responde. "Modo de teste sem número autorizado" descreve
+  // o campo; "a IA não responde ninguém" é o que faz o operador agir.
+  canal_mudo_sem_numero: "Um canal está em modo de teste — a IA não responde ninguém nele",
   // Diz o que o CLIENTE está esperando, não o que o sistema deixou de gravar.
   // "Promessa não cumprida" é a única frase que faz o dono do negócio agir: do
   // lado de lá existe uma pessoa que ouviu um compromisso e está aguardando.

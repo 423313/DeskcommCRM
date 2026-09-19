@@ -1,4 +1,4 @@
--- 0324 — a reconciliação de duas branches represadas que tocaram os MESMOS objetos
+-- 0326 — a reconciliação de duas branches represadas que tocaram os MESMOS objetos
 --
 -- Por que esta migration existe, e por que ela não é "arrumação":
 --
@@ -25,8 +25,44 @@
 --
 -- Idempotente: `drop constraint if exists` + `add constraint`, e
 -- `create or replace function`. Reaplicar não duplica efeito.
+--
+-- ⚠️ ESTE ARQUIVO FOI EDITADO DEPOIS DE ENTRAR NA `main` — e é a exceção
+-- consciente à regra "nunca edite migration aplicada". Na primeira versão, o
+-- parágrafo acima prometia o `drop constraint if exists` e o SQL não o tinha. A
+-- constraint existe desde a 0050 (CHECK de coluna, batizado pelo Postgres), então
+-- o `add` falhava com 42710 (already exists) em TODO banco que segue a cadeia, e
+-- a aplicação parava aqui: nenhuma migration posterior a esta, na ordem dos
+-- nomes de arquivo, rodava.
+--
+-- Por que editar e não fazer forward-fix: a forward-fix viria DEPOIS desta, e a
+-- cadeia nunca chega nela. Por que editar é seguro: pelo mesmo motivo, esta
+-- migration não tem como ter rodado com sucesso em banco nenhum que siga a
+-- cadeia — não há clone que "já a aplicou" para ser surpreendido. Quem a tem
+-- registrada como aplicada por outro caminho (`migration repair`) não a roda de
+-- novo; quem ainda não a aplicou, agora consegue. O kit self-host nunca foi
+-- afetado: ele aplica o `baseline.sql`, onde o bloco sempre foi drop + add.
+--
+-- A reprodução (19/09/2026, `pgvector/pgvector:pg17` com o prelude de
+-- scripts/test-db.sh, `psql -v ON_ERROR_STOP=1`):
+--
+--     baseline.sql (install) ........................ rc=0
+--     esta migration SEM o drop (a versão anterior) .. rc=3  ERROR: constraint
+--         "agent_inbox_items_kind_check" for relation "agent_inbox_items"
+--         already exists
+--     esta migration COM o drop ...................... rc=0, 29 kinds
+--     reaplicada ..................................... rc=0
+--
+-- NÃO MEDIDO: se alguma instância do mantenedor aplica a cadeia (MCP
+-- `apply_migration` ou `supabase db push`). Se aplicou, falhou aqui e alguém
+-- contornou à mão, o que rodou lá difere deste arquivo — confira em
+-- `select version from supabase_migrations.schema_migrations where version = '20260919150500'`.
+--
+-- A cerca que teria pegado isto: tests/unit/reconstruir-constraint-derruba-antes.test.ts.
 
 -- ---- 1. o CHECK com os dois vocabulários ----
+
+alter table public.agent_inbox_items
+  drop constraint if exists agent_inbox_items_kind_check;
 
 alter table public.agent_inbox_items
   add constraint agent_inbox_items_kind_check check (kind in (

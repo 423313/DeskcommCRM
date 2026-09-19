@@ -6879,40 +6879,90 @@ create table if not exists reentry_knob_pointers (
 -- playbook_versions/pointers, skill_versions/pointers, metrics) a MESMA policy
 -- serve: `null in (...)` nunca é true ⇒ linhas de plataforma são visíveis só ao
 -- service role (que bypassa RLS).
+--
+-- A enumeração que morava AQUI virou a função sem parâmetro logo abaixo
+-- (migration 0325) — ela é chamada em cada um dos três pontos onde havia laço,
+-- e de novo no fim do arquivo.
 -- ============================================================================
-do $$
-declare
-  t text;
+
+-- ---- proteções de tabela de organização: o laço vira função (migration 0325) ----
+--
+-- ADR-0002, D5: "Essas rotinas saem do laço do baseline para funções sem
+-- parâmetro, chamadas pelo baseline e pela provisionadora." É a irmã da 0274 —
+-- lá foram as travas do suporte, aqui são RLS ligada, `revoke all … from anon` e
+-- o isolamento por organização.
+--
+-- A RÉGUA É `not relrowsecurity`, e não "toda tabela com organization_id".
+-- Medido no baseline de ed42ad119 (pg17 descartável, ON_ERROR_STOP=1): das 119
+-- tabelas de organização, 0 estão sem RLS — então esta varredura é no-op aqui —,
+-- mas 49 ainda têm privilégio de `anon`, 8 são server-only (RLS ligada e ZERO
+-- policies, de propósito) e 66 não têm a policy ampla. Varrer as 119 abriria as
+-- 8 e atropelaria as policies por papel das 66. Já uma tabela recém-criada — o
+-- que a provisionadora de um módulo produz — nasce com RLS desligada, e é
+-- exatamente ela que esta régua pega. O racional inteiro está no cabeçalho da
+-- migration 20260919153000_0325_*.sql.
+--
+-- Idempotente: `drop policy if exists` antes do `create policy`; reaplicar
+-- converge. A definição fica AQUI, antes da varredura de anon (que é, de
+-- propósito, quem cura o `anon` de toda função nova); a CHAMADA fica no fim do
+-- arquivo, junto com a da 0274.
+
+create or replace function public.fn_proteger_tabelas_de_organizacao()
+returns void
+language plpgsql
+set search_path = public
+as $f$
+declare r record;
 begin
-  foreach t in array array[
-    'agent_inbox_items', 'job_queue', 'send_ledger',
-    'playbook_versions', 'playbook_pointers',
-    'channel_session_health', 'llm_calls',
-    'lead_checkpoints', 'lead_state', 'lead_state_transitions',
-    'metrics', 'channel_knobs', 'pacing_ledger', 'outbound_copies',
-    'cron_jobs',
-    'reentry_template_versions', 'reentry_template_pointers',
-    'lead_notes', 'skill_versions', 'skill_pointers',
-    'promise_table_versions', 'promise_table_pointers',
-    'disclosure_template_versions', 'disclosure_template_pointers',
-    'before_send_traces',
-    'flywheel_judge_verdicts', 'flywheel_distiller_proposals',
-    'judge_alignment_pool',
-    'reentry_knob_versions', 'reentry_knob_pointers'
-  ]
-  loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
-    execute format('revoke all on public.%I from anon', t);
-  end loop;
-end
-$$;
+ for r in
+   select c.relname
+     from pg_class c
+     join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and not c.relrowsecurity
+      and exists (
+        select 1 from pg_attribute a
+         where a.attrelid = c.oid
+           and a.attname = 'organization_id'
+           and a.attnum > 0
+           and not a.attisdropped)
+    order by c.relname
+ loop
+   execute format('alter table public.%I enable row level security', r.relname);
+   execute format('revoke all on public.%I from anon', r.relname);
+   execute format('drop policy if exists tenant_isolation_%s_all on public.%I', r.relname, r.relname);
+   execute format(
+     'create policy tenant_isolation_%s_all on public.%I for all
+        using (organization_id in (select * from public.fn_user_org_ids()))
+        with check (organization_id in (select * from public.fn_user_org_ids()))',
+     r.relname, r.relname);
+ end loop;
+end $f$;
+
+-- O ponto de entrada que a provisionadora de um módulo chama no FIM do corpo,
+-- na MESMA transação em que criou as tabelas. A ORDEM importa: as travas do
+-- suporte (0274) leem o privilégio de `authenticated` de cada tabela para
+-- decidir entre as três policies restritivas e o contrato server-only, então
+-- vêm DEPOIS de a RLS e o isolamento estarem no lugar.
+create or replace function public.fn_proteger_modulo_provisionado()
+returns void
+language plpgsql
+set search_path = public
+as $f$
+begin
+  perform public.fn_proteger_tabelas_de_organizacao();
+  perform public.fn_aplicar_travas_de_suporte();
+end $f$;
+
+revoke execute on function public.fn_proteger_tabelas_de_organizacao() from public, anon, authenticated, service_role;
+revoke execute on function public.fn_proteger_modulo_provisionado() from public, anon, authenticated, service_role;
+
+
+-- A rotina da migration 0325 no lugar do laço enumerado: ela varre o catálogo
+-- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
+-- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
+do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
 
 -- watchdog_cursors não tem organization_id (infra de plataforma): RLS habilitada
 -- SEM policy ⇒ só o service role acessa.
@@ -7624,21 +7674,10 @@ alter table flywheel_distiller_proposals add constraint flywheel_distiller_propo
   check (type in ('playbook_bullet', 'golden_case', 'reentry_trigger', 'org_memory_entry'));
 
 -- RLS (mesmo shape do loop tenant_isolation_* do baseline).
-do $$
-declare t text;
-begin
-  foreach t in array array['org_memory_versions', 'org_memory_pointers', 'org_memory_entries'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
-    execute format('revoke all on public.%I from anon', t);
-  end loop;
-end $$;
+-- A rotina da migration 0325 no lugar do laço enumerado: ela varre o catálogo
+-- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
+-- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
+do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
 
 -- ---- skills instaláveis: manifest + skill_activations + catálogo (migration 0068) ----
 -- 0068: Skills instaláveis + marketplace (Fase 2 do épico harness — spec 2026-07-23).
@@ -7664,21 +7703,10 @@ create index if not exists idx_skill_activations_skill
 
 -- RLS das tabelas org-scoped novas (skill_activations). skill_versions/pointers já
 -- estão no loop tenant_isolation do baseline; a leitura de catálogo é policy extra abaixo.
-do $$
-declare t text;
-begin
-  foreach t in array array['skill_activations'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
-    execute format('revoke all on public.%I from anon', t);
-  end loop;
-end $$;
+-- A rotina da migration 0325 no lugar do laço enumerado: ela varre o catálogo
+-- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
+-- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
+do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
 
 -- Catálogo do marketplace: qualquer usuário autenticado LÊ as skills de plataforma
 -- (organization_id null). Só SELECT; escrita de plataforma continua service-role.
@@ -9992,6 +10020,16 @@ alter table public.agent_inbox_items
     -- (bloco único por constraint, #159; e a janela de 2000 caracteres que
     -- `tests/unit/midia-nao-lida.test.ts` varre a partir do `add constraint`).
     'followup_sem_agente',
+    -- (migration 0339, doc 11 decisão B) O canal de WhatsApp em modo de teste
+    -- SEM número autorizado não responde a ninguém — e o esquecimento é o
+    -- defeito: as mensagens chegam no Inbox e a IA nunca fala, então quem
+    -- instalou conclui que o produto está quebrado. O cron canal-mudo-watcher
+    -- abre este aviso depois de 3 dias e o FECHA quando deixa de valer.
+    --
+    -- Entra NESTA lista, e não num bloco novo no fim do arquivo: reconstruir a
+    -- mesma constraint em N blocos quebra o `update.sh` de todo clone com
+    -- vocabulário posterior (lição do #159).
+    'canal_mudo_sem_numero',
     'other'
   ));
 
@@ -31937,7 +31975,6 @@ drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_
 create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
-
 -- ---- a regra de automação guarda a CONFIGURAÇÃO do gatilho (migration 0268) ----
 -- O gatilho de data do funil (#989) não nasce de evento: quem o emite é a
 -- varredura `cron/lead-date-field-due`, e ela só sabe onde olhar se a regra
@@ -32243,6 +32280,18 @@ update public.contacts c
 
 notify pgrst, 'reload schema';
 
+-- ---- proteção de tabela de organização, depois de toda tabela (migration 0325) ----
+--
+-- Auto-curativa e no-op hoje (as 119 tabelas de organização deste baseline já
+-- têm RLS ligada — medido, e cobrado por
+-- tests/invariants/rls-completude-varredura.test.ts). Ela existe para o dia em
+-- que um apêndice novo, ou a provisionadora de um módulo, criar tabela de
+-- organização sem as proteções: a cura acontece no MESMO run em que o defeito
+-- nasceria. Vem ANTES da chamada da 0274 de propósito — as travas do suporte
+-- leem o privilégio de `authenticated` de cada tabela, então precisam ver a
+-- tabela já com RLS e isolamento.
+do $f$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $f$;
+
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
 --
 -- ⚠️ ESTA CHAMADA É O ÚLTIMO BLOCO DO ARQUIVO. Tabela nova, coluna
@@ -32252,3 +32301,41 @@ notify pgrst, 'reload schema';
 -- tests/invariants/travas-de-suporte-cobrem-toda-tabela-na-instalacao.test.ts.
 -- A definição da função está antes da varredura de anon.
 do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+-- ---- Catálogo da DeepSeek (migration 0342) ----
+--
+-- O próximo provedor que a abertura de vocabulário da 0127 existia para
+-- destravar: OpenAI-compatível e com desconto automático de prefixo de cache.
+-- Ids e preços verificados no provedor (`GET /models`; docs oficiais em dólares
+-- por 1M). Preço em CENTAVOS por milhão — entrada (cache miss) 14, saída 28; o
+-- cache hit (0,28¢/1M) não cabe no integer do catálogo e é desconto de
+-- cobrança, não preço de tabela. `ai_pricing` acompanha para o orçamento somar
+-- com o mesmo número. Sem `is_default_for_provider`: a escolha cai no mais
+-- barato com ferramentas, como na OpenRouter.
+insert into public.ai_models
+  (provider, model_id, display_name, description,
+   input_price_per_million_cents, output_price_per_million_cents, supports_tools)
+values
+  ('deepseek', 'deepseek-flash',  'DeepSeek Flash',
+   'O mais barato da DeepSeek, para atendimento de volume. Tem desconto automático do trecho repetido da conversa.',
+   14, 28, true),
+  ('deepseek', 'deepseek-v4-pro', 'DeepSeek V4 Pro',
+   'O mais capaz da linha v4, para conversas que exigem raciocínio. Também desconta o trecho repetido da conversa.',
+   44, 87, true)
+on conflict (provider, model_id) do update set
+  display_name = excluded.display_name,
+  description = excluded.description,
+  input_price_per_million_cents = excluded.input_price_per_million_cents,
+  output_price_per_million_cents = excluded.output_price_per_million_cents,
+  supports_tools = excluded.supports_tools;
+
+insert into public.ai_pricing
+  (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
+values
+  ('deepseek-flash',   14, 28, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo'),
+  ('deepseek-v4-pro',  44, 87, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo')
+on conflict (model) do update set
+  prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
+  completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,
+  notes = excluded.notes,
+  superseded_at = null;
