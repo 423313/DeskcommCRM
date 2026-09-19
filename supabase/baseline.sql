@@ -26296,7 +26296,7 @@ grant  execute on function public.fn_tags_normalizar(text[], text, text, boolean
 revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) from public, anon;
 grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) to authenticated, service_role;
 
--- ---- mensagem do lembrete no tipo (migration 0314) ----
+-- ---- mensagem do lembrete no tipo (migration 0328) ----
 -- O texto que o cron manda no WhatsApp passa a ser do MOLDE. NULL = a frase
 -- padrão ("Passando pra lembrar…"), o comportamento anterior. Distinto de
 -- reminder_template_name, que é o nome do template do provedor oficial.
@@ -26306,7 +26306,7 @@ alter table public.calendar_event_types
 comment on column public.calendar_event_types.reminder_body is
   'Texto do lembrete no WhatsApp. NULL = a frase padrão do cron. Variáveis {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}. Distinto de reminder_template_name, que é o nome do template aprovado no provedor oficial.';
 
--- ---- mensagem por lembrete (migration 0315) ----
+-- ---- mensagem por lembrete (migration 0329) ----
 -- Cada extra ganha texto próprio (`reminder_bodies`) e o teto de 3 extras
 -- sobe para 20. O CHECK antigo chama a função pelo nome: `create or replace`
 -- basta. Backfill copia reminder_body para cada extra que já existia, para
@@ -26378,7 +26378,7 @@ end $$;
 comment on column public.calendar_event_types.reminder_bodies is
   'Texto de cada lembrete ADICIONAL, chave = minutos antes (string). Extra ausente do mapa usa a frase de fábrica do cron, não reminder_body. Vazio = nenhum extra tem texto próprio.';
 
--- ---- endereços salvos da agenda (migration 0316) ----
+-- ---- endereços salvos da agenda (migration 0330) ----
 -- Lista da ORGANIZAÇÃO: salas e unidades que a equipe reusa ao marcar.
 -- Unique por (org, endereço normalizado). Escrita agent+; leitura de membro.
 create table if not exists public.calendar_locations (
