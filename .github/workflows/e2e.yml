@@ -970,6 +970,44 @@ jobs:
             # (até o #983 incluía ~51 s de `Initialize containers` em toda
             # perna; os contêineres agora sobem só na parte 4, dentro de um
             # passo) e o envio de artefato/resumo depois da suíte.
+            # ── A CARÊNCIA DO KILL É UM CUSTO, E ELE FOI MEDIDO ─────────
+            #
+            # O corte abaixo usa `timeout -k 30 --signal=TERM`. O `-k 30` NÃO é
+            # grátis, e o custo tem uma condição. Medido pelo @webtecnica
+            # (GNU coreutils 9.4, orçamento reduzido a 2s e filho dormindo 90s
+            # para não terminar sozinho e mascarar a carência):
+            #
+            #   timeout -k 3  2 …'trap "" TERM; sleep 90'          rc=137   5,00s
+            #   timeout -k 30 2 …'trap "" TERM; sleep 90'          rc=137  32,00s
+            #   timeout -k 30 2 …'trap "exit 143" TERM; sleep 90'  rc=124   2,01s
+            #
+            # A conta fecha exata: **a carência custa o valor do `-k`, e SÓ
+            # quando o filho ignora o TERM.** Quem sai no TERM não paga nada.
+            # Traduzido para cá:
+            #
+            #   spec que respeita o TERM → morre em FOLGA,      rc=124
+            #   spec que IGNORA  o TERM → morre em FOLGA + 30s, rc=137
+            #
+            # ⚠️ RESTRIÇÃO DE DESENHO, e é ela que este comentário existe para
+            # não deixar implícita: o job precisa de **ao menos 30s de folga
+            # dentro do `timeout-minutes` depois do ponto de corte**. Senão o
+            # corte do próprio GitHub chega ANTES do KILL, e o aviso existe mas
+            # ninguém chega a ler — gate que fala depois de o job morrer é gate
+            # decorativo.
+            #
+            # A conta em vigor, conferida antes de o #1184 ser mesclado:
+            #
+            #   corte ............. (1800 − 120) / 60 = 28,0 min
+            #   KILL .............. 28,0 + 30s        = 28,5 min
+            #   teto do job ....... 30,0 min
+            #   folga após o KILL .................... 90 s   ← 3× o mínimo
+            #
+            # Quem mexer em MARGEM_SEGUNDOS refaz essa conta: `MARGEM` menor que
+            # ~35s põe o KILL depois do teto e cala o aviso.
+            #
+            # NÃO MEDIDO: o caso completo no e2e, com um spec que ignore o TERM
+            # de propósito. O `-k 30` está aqui por comportamento observado no
+            # `timeout` (os três `rc` acima), não por sabotagem de spec real.
             echo "MARGEM_SEGUNDOS=120"
             # Piso para a suíte sequer começar: com menos que isto, rodar a
             # suíte é gastar o que resta para ver um cancelamento no meio.
