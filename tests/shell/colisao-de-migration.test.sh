@@ -522,6 +522,20 @@ saida="$(gate_prs "$(seq -s ' ' 101 131)" "$c")"; code=$?
 assert_exit "$code" 0 "PRs imensuráveis não reprovam"
 assert_contains "$saida" "31 listado(s)" "os 31 abertos foram listados, não os 30 do padrão do gh"
 
+echo "31. branch local ANCESTRAL do HEAD, com o número de ANTES de uma renumeração, não sobe o teto"
+# Isola o filtro de ancestral (`--no-merged HEAD`). A sabotagem de 19/09 mostrou que, depois da
+# regra do "mesmo arquivo", NENHUM caso o isolava mais: o 21 passou a ser coberto pelas duas.
+# Aqui o nome MUDOU (0290 → 0263), então a regra do mesmo arquivo não alcança — só o filtro.
+c="$TMP/c31"; clonar "$c"; git -C "$c" switch -q -c fix/pr
+migrar "$c" "20260917235500_0290_meu.sql"; commit "$c" "PR com 0290"
+git -C "$c" branch retrato-antigo   # aponta para o commit com o 0290: ancestral do HEAD
+git -C "$c" mv "supabase/migrations/20260917235500_0290_meu.sql" "supabase/migrations/20260917235500_0263_meu.sql"
+commit "$c" "renumerado para 0263 (commit novo, não amend)"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "o renumerado passa"
+assert_not_contains "$saida" "NNNN=0291" "o 0290 do retrato ANCESTRAL não sobe o próximo livre"
+assert_not_contains "$saida" "refs/heads/retrato-antigo" "e o retrato ancestral não vira 'quem tem'"
+
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0
 else echo "colisao-de-migration: $falhas de $casos casos vermelhos"; exit 1; fi
