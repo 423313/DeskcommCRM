@@ -8,7 +8,7 @@ import { warmupCapFor } from "@/lib/agent-engine/pacing/engine";
  *
  * `PACING_DEFAULTS.warmupDailyCaps` começa em **20 mensagens no primeiro dia**.
  * Esse degrau foi calibrado para a esteira de RESPOSTA — alguém escreveu, o
- * agente responde. Ali, 20 conversas no dia 1 é uso normal e o WhatsApp lê como
+ * agente responde. Ali, 20 conversas no dia 1 é uso normal e o canal lê como
  * tal: há mensagem de entrada para cada saída.
  *
  * Na esteira fria não há entrada nenhuma. Vinte PRIMEIRAS abordagens saindo de
@@ -18,8 +18,8 @@ import { warmupCapFor } from "@/lib/agent-engine/pacing/engine";
  *
  * ## De onde sai o número, para não ser chute
  *
- * A doutrina do repo (`CLAUDE.md`, seção WAHA) já fixa a proporção entre as duas
- * esteiras no eixo do tempo: **resposta 1 msg/1,2s, campanha 1 msg/5s** — a
+ * A doutrina do repo (`CLAUDE.md`, a seção do transporte de mensagem) já fixa
+ * a proporção entre as duas esteiras no eixo do tempo: **resposta 1 msg/1,2s, campanha 1 msg/5s** — a
  * campanha é ~4× mais lenta. Este módulo aplica a MESMA proporção ao eixo do
  * volume diário, em vez de inventar uma tabela nova: o teto frio é o teto da
  * casa dividido por 4.
