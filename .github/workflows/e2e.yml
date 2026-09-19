@@ -60,6 +60,58 @@ permissions:
 # no agregador — razão medida e a tabela por evento no cabeçalho do ci.yml.
 
 jobs:
+  # O PR ALCANÇA ALGO QUE O E2E MEDE? Responde em segundos, antes das partes.
+  #
+  # O e2e é o maior consumidor da fila: 56% dos minutos de runner medidos de 15 a
+  # 18/09/2026. Um PR só de documentação, teste de outra suíte ou workflow alheio
+  # pagava três partes de ~23 min para medir o mesmo produto — 25 dos 200 PRs
+  # mais recentes eram assim. A regra, e o porquê de cada caminho, estão no
+  # cabeçalho de scripts/pr-alcanca-o-e2e.sh.
+  #
+  # Fora de pull_request é SEMPRE `sim`: a `main` mede tudo. Falha ao listar,
+  # lista cortada (≥3000) ou resposta estranha também viram `sim`. E o agregador
+  # `e2e` só aceita parte pulada quando ESTE job terminou `success` com `nao`:
+  # job que falhou aqui reprova, em vez de passar por falta de medida.
+  #
+  # Roda nas máquinas do GitHub sempre: é de segundos, e não pode depender do
+  # executor próprio estar de pé para decidir nada.
+  e2e-alcance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      e2e: ${{ steps.alcance.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          sparse-checkout: scripts/pr-alcanca-o-e2e.sh
+          sparse-checkout-cone-mode: false
+
+      - name: O PR alcança o que o e2e mede?
+        id: alcance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            echo "e2e=sim" >> "$GITHUB_OUTPUT"; echo "evento ${GITHUB_EVENT_NAME}: roda"; exit 0
+          fi
+          if ! arquivos=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[].filename'); then
+            echo "e2e=sim" >> "$GITHUB_OUTPUT"; echo "::warning::não consegui listar os arquivos do PR — roda"; exit 0
+          fi
+          n=$(printf '%s\n' "$arquivos" | grep -c . || true)
+          if [ "$n" -ge 3000 ]; then
+            resposta=sim
+          else
+            resposta=$(printf '%s\n' "$arquivos" | bash scripts/pr-alcanca-o-e2e.sh) || resposta=sim
+          fi
+          [ "$resposta" = "nao" ] || resposta=sim
+          echo "e2e=${resposta}" >> "$GITHUB_OUTPUT"
+          echo "${n} arquivo(s) no PR → e2e=${resposta}"
+
   # AS DUAS PARTES RODAM EM PARALELO, e o motivo é medido, não estético.
   #
   # Elas rodavam como dois passos do MESMO job, então somavam contra um único
@@ -88,7 +140,15 @@ jobs:
   # subi-lo seria trocar um vermelho honesto por um CI que demora mais a cada
   # mês sem ninguém perceber.
   e2e-parte:
-    runs-on: ubuntu-latest
+    needs: [e2e-alcance]
+    if: needs.e2e-alcance.outputs.e2e == 'sim'
+    # Executor próprio para trabalho NOSSO (push na main, PR de branch deste
+    # repo) quando a variável de repositório EXECUTOR_PROPRIO vale `ligado`;
+    # máquinas do GitHub para todo o resto, fork inclusive. A expressão decide
+    # só para quem não a edita — a guarda que vale contra fork mora na máquina
+    # (infra/executor-proprio/so-o-que-e-nosso.sh). Vigiado por
+    # tests/unit/executor-proprio-so-roda-o-que-e-nosso.test.ts.
+    runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
     # O teto FICA EM 30, e essa foi uma correção de rumo desta branch.
     #
     # Eu tinha subido para 45, com o argumento de que o teto acumula dois papéis
@@ -337,6 +397,38 @@ jobs:
     # agora isso está escrito como CONCLUSÃO desta medição, e não como proibição
     # geral que o mecanismo do repo desmente.
 
+    # ── 2026-09-18, noite: a apertada passou a ser a PARTE 2 ────────────────
+    #
+    # Medido em jobs VERDES (misturar vermelha e cancelada nesta conta dá número
+    # sem significado), relógio do JOB, que é onde o teto de 30 min morde:
+    #
+    #     parte 1 → mediana 1367s (n=21, máx 1388)  ← folga de 412s
+    #     parte 2 → mediana 1522s (n=17, máx 1594)  ← folga de 206s, a menor
+    #     parte 3 → mediana 1443s (n=16, máx 1572)  ← folga de 228s
+    #
+    # Só de Playwright, em três amostras de cada: parte 2 = 1060/1173/1180s
+    # contra parte 1 = 794/803/973s. A parte 3 era a que aparecia nos relatos
+    # porque era onde o caso instável caía — "onde o problema aparece" não é
+    # "onde a folga acabou".
+    #
+    # UM arquivo muda de lista, e é o menor movimento que equilibra:
+    #
+    #   `agente-novo-e-uso` (102–120s)  PARTE_2 → PARTE_1, onde já moram
+    #       `agente-papeis-operador` e as outras telas de agente.
+    #
+    # Previsão (é previsão; a rodada deste PR é que mede): ~1060s × ~1003s de
+    # Playwright, com a diferença caindo de ~300s para ~60s. Mover TAMBÉM
+    # `capacidades-do-agente` (99–102s) inverteria o desequilíbrio — 958 × 1105.
+    #
+    # ⚠️ `navegacao` (281–305s, 25% da parte 2) continua onde está: o bloco
+    # acima documenta que ela REPROVA na parte 1 por estado do banco daquela
+    # parte (run 35345305473). A alavanca óbvia pelo relógio é justamente a
+    # proibida pela medição.
+    #
+    # NÃO MEDIDO: se `agente-novo-e-uso` passa no estado de banco da parte 1 —
+    # é exatamente o que derrubou a tentativa com `navegacao`, e quem responde é
+    # a rodada deste PR, não esta previsão.
+
     # ── A próxima alavanca, quando esta acabar ──────────────────────────────
     #
     # `prova-painel-provedores` é 199,4 s — 42% de toda a parte 1, num arquivo
@@ -407,6 +499,7 @@ jobs:
         confirmar-dado-do-contato.spec.ts
         credenciais-de-ia.spec.ts
         risk-radar.spec.ts invite-lifecycle.spec.ts system-update.spec.ts
+        agente-novo-e-uso.spec.ts
         agente-papeis-operador.spec.ts
         followup-linguagem.spec.ts followup-ramos.spec.ts
         wizard-do-funcionario.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
@@ -423,6 +516,7 @@ jobs:
         prova-painel-provedores.spec.ts
         relatorio-de-atividades.spec.ts
         qa-l12-inbox.spec.ts
+        filtro-por-marcador-pela-tela.spec.ts
         qa-l12-troca-de-funil.spec.ts
         qa-l12-agente-ia.spec.ts
       # ⚠️ A ORDEM DESTA LISTA NÃO DECIDE A ORDEM DE EXECUÇÃO. O Playwright
@@ -504,7 +598,6 @@ jobs:
         agenda-grade-interativa.spec.ts
         agenda-papel-de-leitura.spec.ts
         agenda-busca-cliente-pelo-nome-do-perfil.spec.ts
-        agente-novo-e-uso.spec.ts
         agente-organiza-operacao.spec.ts
         central-de-avisos-capacidades.spec.ts
         escalacao-ciclo.spec.ts
@@ -716,6 +809,7 @@ jobs:
       SPECS_PARTE_3: >-
         autonomia-assistida.spec.ts
         roteamento-por-canal.spec.ts
+        whatsapp-pareamento-por-codigo.spec.ts
         central-avisos-destino.spec.ts
         agenda-presenca-recuperacao.spec.ts
         agenda-google-sync.spec.ts
@@ -753,6 +847,7 @@ jobs:
         extensoes-versao.spec.ts
         motivo-do-publicar-na-tela.spec.ts
         followup-cartoes.spec.ts
+        followup-modelos-de-clinica.spec.ts
         presenca-do-atendente.spec.ts
 
       FORA_DO_CI: >-
@@ -1099,18 +1194,58 @@ jobs:
           # `-k 30` manda SIGKILL 30 s depois do TERM: o TERM deixa o Playwright
           # escrever o relatório, o KILL garante que o job não pare no meio de um
           # spec que ignorou o sinal.
+          # A saída vai para arquivo TAMBÉM, e não só para o log do Actions: é
+          # dela que sai (a) a contagem de casos já vermelhos quando o corte
+          # chega e (b) os specs mais lentos da rodada, no resumo. `PIPESTATUS`
+          # porque com `| tee` o `$?` seria o do tee — sempre 0.
+          SAIDA="${RUNNER_TEMP}/e2e-parte-${PARTE}.log"
           set +e
-          timeout -k 30 --signal=TERM "${FOLGA}s" pnpm exec playwright test --workers=1 $LISTA --reporter=list
-          CODIGO=$?
+          timeout -k 30 --signal=TERM "${FOLGA}s" pnpm exec playwright test --workers=1 $LISTA --reporter=list 2>&1 | tee "$SAIDA"
+          CODIGO=${PIPESTATUS[0]}
           set -e
+          echo "SAIDA_DA_SUITE=${SAIDA}" >> "$GITHUB_ENV"
           SUITE=$(( $(date -u +%s) - INICIO_SUITE ))
           {
             echo "SUITE_SEGUNDOS=${SUITE}"
             echo "CUSTO_FIXO_SEGUNDOS=${DECORRIDO}"
           } >> "$GITHUB_ENV"
           # 124 = o `timeout` cortou; 137 = o KILL da carência chegou antes.
+          # ── O CORTE NÃO PODE AFIRMAR "a parte cresceu" SEM OLHAR O VERMELHO ──
+          #
+          # Medido no #1210 (job 105739419202, parte 1): o `timeout` matou a
+          # suíte ANTES de o Playwright imprimir o sumário, então o único
+          # vestígio do caso que falhou era a linha `✘` no meio do log. O
+          # resumo do job dizia só "a parte cresceu" — e o time saiu
+          # rebalancear a partição. A parte estava saudável (797–933 s de
+          # suíte em quatro rodadas do mesmo dia): o que estourou o relógio foi
+          # UM caso vermelho de `followup-ramos.spec.ts`, que declara
+          # `test.setTimeout(420_000)` e, ao travar, queima 7 min sozinho —
+          # 29% do orçamento. Há specs com 480 e 600 s declarados; qualquer uma
+          # delas, travando, cabe nesta mesma armadilha.
+          #
+          # Então o corte passa a CONTAR os vermelhos antes de diagnosticar.
           if [ "$CODIGO" -eq 124 ] || [ "$CODIGO" -eq 137 ]; then
-            echo "::error title=A parte ${PARTE} estourou o relógio do e2e::a suíte rodou ${SUITE}s e foi interrompida ${FOLGA}s depois de entrar, o job já tinha ${DECORRIDO}s de preparo e o teto é de $(( TETO_SEGUNDOS / 60 )) min (orçamento: $(( ORCAMENTO_SEGUNDOS / 60 )) min). Não é infraestrutura: a parte cresceu."
+            # O padrão casa a linha do reporter `list` pelo FORMATO
+            # (`✘   36 [chromium] › …`), não pelo começo da linha: âncora em
+            # `^` só funciona no arquivo cru, e some no mesmo log baixado pela
+            # API do GitHub, que prefixa carimbo de hora. Uma sonda que depende
+            # do prefixo devolve zero — e zero aqui lê como "não havia vermelho".
+            PADRAO_VERMELHO="✘[[:space:]]+[0-9]+[[:space:]]+\["
+            # FALHA ESPERADA NÃO É VERMELHO. Spec que declara `test.fail(...)`
+            # (catraca de lacuna conhecida) é impressa com o MESMO `✘`, e a rodada
+            # termina verde — medido no run 35388254053, parte 1:
+            # `degradacao-silenciosa.spec.ts` sai com ✘ e o job fecha "150 passed".
+            # Contá-la aqui inverteria o erro: em vez de calar o vermelho, eu
+            # inventaria um.
+            ESPERADAS=$(grep -rlE "^[[:space:]]*test\.fail\(" tests/e2e --include="*.spec.ts" 2>/dev/null | sed "s|.*/||" | paste -sd"|" - || true)
+            SEM_ESPERADAS="tests/e2e/(${ESPERADAS:-nada-casa-aqui}):"
+            VERMELHOS=$(grep -aE "$PADRAO_VERMELHO" "$SAIDA" | grep -acvE "$SEM_ESPERADAS" || true)
+            if [ "${VERMELHOS:-0}" -gt 0 ]; then
+              echo "::error title=A parte ${PARTE} foi cortada pelo relógio, e já havia ${VERMELHOS} caso(s) VERMELHO(s) antes do corte::o corte veio aos ${SUITE}s (preparo de ${DECORRIDO}s, teto de $(( TETO_SEGUNDOS / 60 )) min), mas a suíte NÃO estava só grande: conserte o vermelho abaixo antes de concluir qualquer coisa sobre a partição. Caso que falha por tempo esgotado queima o timeout declarado no próprio spec (há specs com 420–600 s)."
+              grep -aE "$PADRAO_VERMELHO" "$SAIDA" | grep -avE "$SEM_ESPERADAS" | head -10
+            else
+              echo "::error title=A parte ${PARTE} estourou o relógio do e2e::a suíte rodou ${SUITE}s e foi interrompida ${FOLGA}s depois de entrar, o job já tinha ${DECORRIDO}s de preparo e o teto é de $(( TETO_SEGUNDOS / 60 )) min (orçamento: $(( ORCAMENTO_SEGUNDOS / 60 )) min). Nenhum caso vermelho até o corte: a parte cresceu."
+            fi
           fi
           exit "$CODIGO"
         env:
@@ -1169,6 +1304,41 @@ jobs:
             echo "| suíte (Playwright) | ${SUITE}s | — |"
             echo "| **total da parte** | **${TOTAL}s** | orçamento $(( ORCAMENTO_SEGUNDOS / 60 )) min · teto $(( TETO_SEGUNDOS / 60 )) min |"
             echo ""
+            echo ""
+            # ── OS SPECS MAIS LENTOS DA RODADA, NO RESUMO ───────────────────
+            # Quem decide rebalancear precisa do tempo POR SPEC, e ele só
+            # existia no log, linha a linha: para diagnosticar o #1210 foi
+            # preciso baixar o log do job e somar as durações na mão. Com a
+            # tabela abaixo, a próxima partição é decidida lendo o resumo — e
+            # um caso que sozinho come minutos (há specs com `setTimeout` de
+            # 420–600 s) aparece no topo em vez de se esconder na soma.
+            if [ -s "${SAIDA_DA_SUITE:-/inexistente}" ]; then
+              echo "### Os 5 specs mais caros desta parte"
+              echo ""
+              echo "| spec | segundos | casos |"
+              echo "| --- | --- | --- |"
+              awk '
+            match($0, /tests\/e2e\/[A-Za-z0-9._-]+\.spec\.ts/) {
+              nome = substr($0, RSTART + 10, RLENGTH - 10)
+              if (match($0, /\([0-9.]+(ms|s|m)\)[ \r]*$/)) {
+                bruto = substr($0, RSTART + 1, RLENGTH - 2)
+                sub(/[ \r]+$/, "", bruto)
+                if (bruto ~ /ms\)?$/) { sub(/ms.*/, "", bruto); seg = bruto / 1000 }
+                else if (bruto ~ /m\)?$/) { sub(/m.*/, "", bruto); seg = bruto * 60 }
+                else { sub(/s.*/, "", bruto); seg = bruto }
+                total[nome] += seg; casos[nome] += 1; soma += seg; casosTotal += 1
+              }
+            }
+            END {
+              n = 0
+              for (k in total) { ordem[++n] = k }
+              for (i = 1; i < n; i++) for (j = i + 1; j <= n; j++) if (total[ordem[j]] > total[ordem[i]]) { t = ordem[i]; ordem[i] = ordem[j]; ordem[j] = t }
+              for (i = 1; i <= n && i <= 5; i++) printf "| `%s` | %.0f | %d |\n", ordem[i], total[ordem[i]], casos[ordem[i]]
+              printf "| **soma da suíte** | **%.0f** | **%d casos** |\n", soma, casosTotal
+            }
+              ' "$SAIDA_DA_SUITE"
+              echo ""
+            fi
             echo "O teto continua sendo o \`timeout-minutes: $(( TETO_SEGUNDOS / 60 ))\` do job — é ele que"
             echo "denuncia a parte crescendo. Quem corta primeiro é o \`timeout\` que dá"
             echo "$(( MARGEM_SEGUNDOS / 60 )) min de folga à suíte, para o vermelho dizer o NOME do problema"
@@ -1185,7 +1355,7 @@ jobs:
   # mesmo padrão do `imagens-ok` em `publish-image.yml`.
   e2e:
     if: always()
-    needs: [e2e-parte]
+    needs: [e2e-alcance, e2e-parte]
     runs-on: ubuntu-latest
     # Nenhuma permissão: este job só lê o resultado de `needs` e escreve o
     # summary. Sem o bloco, o token herdaria o default do REPOSITÓRIO, que vive
@@ -1193,12 +1363,29 @@ jobs:
     permissions: {}
     steps:
       - name: Falhar se qualquer parte não passou
+        env:
+          EVENTO: ${{ github.event_name }}
+          PORTAO: ${{ needs.e2e-alcance.result }}
+          ALCANCE: ${{ needs.e2e-alcance.outputs.e2e }}
+          PARTES: ${{ needs.e2e-parte.result }}
         run: |
-          echo "e2e-parte: ${{ needs.e2e-parte.result }}"
-          # `success` é o único desfecho aceito. `skipped` também reprova, de
-          # propósito: parte pulada não mediu nada, e ler isso como aprovação é
-          # o modo de falha que o `imagens-ok` documenta.
-          [ "${{ needs.e2e-parte.result }}" = "success" ]
+          set -euo pipefail
+          echo "evento=${EVENTO} e2e-alcance=${PORTAO} e2e=${ALCANCE:-<vazio>}"
+          echo "e2e-parte: ${PARTES}"
+          # A pergunta tem de ter sido RESPONDIDA: job de alcance que falhou
+          # deixa as partes `skipped`, e isso não pode ler como aprovação.
+          [ "$PORTAO" = "success" ]
+          # `skipped` das partes só é aceito com `e2e=nao` em pull_request — PR
+          # que não alcança nada que o e2e mede (scripts/pr-alcanca-o-e2e.sh).
+          # Qualquer outra combinação exige `success`: parte pulada não mediu
+          # nada, e ler isso como aprovação é o modo de falha que o `imagens-ok`
+          # documenta.
+          if [ "$EVENTO" = "pull_request" ] && [ "$ALCANCE" = "nao" ]; then
+            [ "$PARTES" = "skipped" ]
+            echo "PR não alcança nada que o e2e mede — partes puladas (scripts/pr-alcanca-o-e2e.sh)" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            [ "$PARTES" = "success" ]
+          fi
 
       - uses: actions/checkout@v7
         if: always()

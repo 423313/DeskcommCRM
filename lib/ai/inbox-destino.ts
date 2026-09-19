@@ -23,6 +23,10 @@ export const REFERENCIAS_DE_AVISO = {
   channel_session: { tabela: "channel_sessions", papel: "admin", rotulo: "Revisar conexão", href: () => "/app/connections", ativo: true },
   ai_knowledge_source: { tabela: "ai_knowledge_sources", papel: "manager", rotulo: "Abrir base de conhecimento", href: () => "/app/ai/knowledge/sources" },
   agent_case: { tabela: "agent_cases", papel: "agent", rotulo: "Abrir atendimento", href: (id: string) => `/app/ai/cases?caso=${id}` },
+  // O PONTEIRO do fluxo, não a inscrição: o aviso de `followup_sem_agente` é
+  // sobre um fluxo que não tem inscrição nenhuma — é exatamente essa a queixa.
+  // `manager` é a mesma régua da aba Fluxos (`canWrite` em FlowsList).
+  followup_flow: { tabela: "followup_flow_pointers", papel: "manager", rotulo: "Abrir o fluxo", href: (id: string) => `/app/ai/followups/${id}` },
 } satisfies Record<string, Alvo>;
 
 export type InboxRefKind = keyof typeof REFERENCIAS_DE_AVISO | "organization" | "ai_budget" | "job_queue" | "cron_jobs";
@@ -36,6 +40,12 @@ export const POLITICAS_DE_AVISO = {
   // O caso parado.  traz só  porque o aviso SEMPRE nasce com
   // o id do caso — nunca é genérico.
   case_stale: { refs: ["agent_case"], orientacao: "Abra o atendimento e diga o que fazer: concluir, pedir informação ao cliente ou passar para uma pessoa." },
+  // Aponta para o FLUXO, e não para a tela de agentes onde mora o conserto, por
+  // uma razão só: a organização pode ter vários agentes, e nenhum deles é "o"
+  // agente deste fluxo — é justamente isso que falta. O botão leva a quem o
+  // aviso é sobre; o passo que conserta está escrito no corpo, com as três
+  // telas na ordem.
+  followup_sem_agente: { refs: ["followup_flow"], orientacao: "Abra o agente que atende esse número, ligue este fluxo em «follow-ups que arma» e publique a versão." },
   appointment_outcome_required:{refs:["appointment"],orientacao:"Abra o compromisso e confirme a presença."},
   appointment_recovery_review:{refs:["appointment"],orientacao:"Confira o motivo e escolha o próximo passo no compromisso."},
   routing_unassigned: { refs: ["conversation"], orientacao: "Confira os responsáveis em Configurações → Atendimento." },
@@ -84,6 +94,9 @@ export const POLITICAS_DE_AVISO = {
 const ROTULO_POR_KIND: Record<string, string> = {
   message_send_stuck: "Abrir uma conversa afetada",
   voice_call_missed: "Ligar de volta",
+  // "Abrir o fluxo" convida a olhar; o aviso pede CONFERIR qual fluxo está
+  // parado antes de ir ligá-lo no agente.
+  followup_sem_agente: "Ver o fluxo parado",
 };
 
 const SEM_DESTINO: DestinoDoAviso = { estado: "sem_destino", orientacao: "Este aviso não tem um contexto que possa ser aberto nesta versão." };

@@ -9,6 +9,7 @@
  * Timeout 5s, sem retry. Erros 401 são distintos de erros de rede.
  */
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
+import { env } from "@/lib/env";
 
 /**
  * Os provedores cuja CHAVE este arquivo sabe validar.
@@ -141,10 +142,43 @@ export async function validateGoogleKey(apiKey: string): Promise<ValidationResul
  * ele é só dado, não prova. Catálogo fora do ar não recusa uma chave que já
  * provou ser válida: seria trocar um erro de credencial por um de
  * disponibilidade.
+ *
+ * O ENDEREÇO da prova é o da instalação: `OPENROUTER_BASE_URL` quando ela está
+ * definida (ver `baseDaOpenRouter` abaixo). Até aqui a tela de Credenciais era
+ * o único caminho que ainda batia em `openrouter.ai` fixo.
  */
+
+/**
+ * A base do OpenRouter, lida da MESMA fonte que o resto do código lê (`env`).
+ *
+ * O #1200 fez a variável valer para o agente publicado, para o turno do worker
+ * e para a credencial da organização. Ficou de fora a validação da tela de
+ * Credenciais: quem aponta a instalação para um gateway compatível via a tela
+ * dizer "chave inválida" (`auth_failed_401`, vindo da openrouter.ai) enquanto o
+ * agente respondia normalmente por ela.
+ *
+ * Duas decisões de montagem, as duas seguindo o que o repositório já faz:
+ *
+ *  - NADA de `/api/v1` é acrescentado. A variável pode ser a raiz ou já incluir
+ *    o prefixo, e o caminho entra por concatenação — igual ao
+ *    `${baseUrl ?? OPENROUTER_ENDPOINT}/chat/completions` da prova de crédito
+ *    (`lib/instalacao/prova-de-credito.ts`) e ao `baseURL` do gateway
+ *    (`lib/ai/gateway.ts`). Quem aponta para a raiz de um gateway que espera
+ *    `/chat/completions` na raiz continua sendo atendido.
+ *  - barra final é removida antes da junção, como `lib/webhooks/url-publica.ts`
+ *    decidiu para o mesmo formato (`base + "/" + caminho`, sob a mesma forma:
+ *    `.../api/v1/` viraria `.../api/v1//key`).
+ */
+function baseDaOpenRouter(): string {
+  const configurada = (env.OPENROUTER_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  return configurada || "https://openrouter.ai/api/v1";
+}
+
 export async function validateOpenRouterKey(apiKey: string): Promise<ValidationResult> {
   try {
-    const auth = await timedFetch("https://openrouter.ai/api/v1/key", {
+    const base = baseDaOpenRouter();
+
+    const auth = await timedFetch(`${base}/key`, {
       method: "GET",
       headers: { Authorization: `Bearer ${apiKey}` },
     });
@@ -155,7 +189,7 @@ export async function validateOpenRouterKey(apiKey: string): Promise<ValidationR
       return { ok: false, error: `provider_status_${auth.status}` };
     }
 
-    const res = await timedFetch("https://openrouter.ai/api/v1/models", {
+    const res = await timedFetch(`${base}/models`, {
       method: "GET",
       headers: { Authorization: `Bearer ${apiKey}` },
     });
