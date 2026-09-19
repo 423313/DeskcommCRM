@@ -134,25 +134,6 @@ export function AdminSidebar({ userEmail, variant = "desktop" }: AdminSidebarPro
             <Link
               key={item.href}
               href={item.href}
-              // ⚠️ SEM PREFETCH, e a razão é medida, não gosto. Ao abrir qualquer
-              // tela do painel, o prefetch destes links dispara RSC de TODAS as
-              // outras (inbox, audit, lgpd, incidents...) — e algumas dessas
-              // telas são pesadas de renderizar. No trace do CI (run 35447575926)
-              // quatro desses prefetches ficaram PENDENTES até o fim do teste
-              // (status -1), e a server action do botão "Voltar ao padrão" NUNCA
-              // FOI ENVIADA: zero POST com `next-action` para /admin/configuracao,
-              // e o formulário preso em `isPending` ([disabled] no retrato da
-              // falha). Server action passa pela fila do router do Next; prefetch
-              // travado na frente dela a segura.
-              //
-              // O "Salvar" passava e o "Voltar ao padrão" não pela mesma razão:
-              // digitar no campo antes de salvar dá tempo à fila de esvaziar.
-              // Um operador que clica logo ao abrir a tela teria o botão morto.
-              //
-              // O custo é pequeno e aceito: o painel é de uso raro, do dono da
-              // instalação, e cada tela passa a carregar só quando clicada — em
-              // vez de todas carregarem ao abrir qualquer uma.
-              prefetch={false}
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",

@@ -48,6 +48,13 @@ import { afirmarDonoDoServidor } from "./utils/precondicao";
 const CHAVE_DE_TESTE = "re_teste_do_painel_9f3a2b";
 
 test.describe("Painel de configuração da instalação", () => {
+  // ⚠️ O login do dono espera a PRÓXIMA janela do TOTP (o código não pode ser
+  // reusado) — até ~27 s dos 30 s padrão do Playwright. Com o teto padrão, o
+  // caso "voltar ao padrão" clicava aos 29,8 s e era morto antes de a ação
+  // voltar: duas falhas medidas no trace (runs 35447575926 e 35451492770),
+  // ambas lidas primeiro como defeito do botão. O teto cobre a espera + o caso.
+  test.describe.configure({ timeout: 90_000 });
+
   // ⚠️ As partes do job `e2e` compartilham banco SEM reset, e quem promove o
   // `e2e-dono` a `platform_admins` é `seed-e2e-system-update` — que o CI NÃO
   // roda como passo. Sem esta afirmação, esta bateria passaria ou reprovaria
