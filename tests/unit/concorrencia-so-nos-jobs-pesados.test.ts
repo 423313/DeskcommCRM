@@ -30,8 +30,8 @@ const PESADOS: Record<string, string[]> = {
   "publish-image.yml": ["build-and-push", "imagem-do-app-sobe", "imagens-de-fundo-sobem"],
 };
 const SEM_GRUPO: Record<string, string[]> = {
-  "ci.yml": ["verify", "invariants"],
-  "e2e.yml": ["e2e"],
+  "ci.yml": ["verify", "invariants", "invariants-alcance"],
+  "e2e.yml": ["e2e", "e2e-alcance"],
   "publish-image.yml": ["imagens-ok", "promover-stable", "a-tag-veio-da-main"],
 };
 

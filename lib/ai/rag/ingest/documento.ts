@@ -132,7 +132,8 @@ export async function extrairTextoDoArquivo(
         // instalação real em 2026-09-17: "Cannot find package 'pdfjs-dist'"
         // (pacote inteiro fora do tracing do `next build standalone`) virava
         // "só imagens escaneadas" pro operador, sem rastro nenhum em log.
-        if (err.message !== "pdfjs-dist extracted no text (possibly image-only PDF)") {
+        // A distinção é pelo `motivo`, nunca pela frase: a frase é traduzível.
+        if (err.motivo !== "sem_texto") {
           console.error("[extracao-pdf] falha de infraestrutura, não de conteúdo:", err.message);
         }
         throw new ErroDeExtracao(

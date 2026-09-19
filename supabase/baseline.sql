@@ -1552,8 +1552,8 @@ CREATE TABLE IF NOT EXISTS "public"."idempotency_keys" (
     "key" "text" NOT NULL,
     "endpoint" "text" NOT NULL,
     "request_hash" "bytea" NOT NULL,
-    "status_code" integer NOT NULL,
-    "response_body" "jsonb" NOT NULL,
+    "status_code" integer,
+    "response_body" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "expires_at" timestamp with time zone DEFAULT ("now"() + '24:00:00'::interval) NOT NULL
 );
@@ -9972,10 +9972,23 @@ alter table public.agent_inbox_items
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
     'case_stale',
+    -- (migration 0312) O fluxo de follow-up publicado que NUNCA vai disparar:
+    -- gatilho automático (silêncio, etapa, caso, falta) só cria inscrição se
+    -- algum agente publicado arma o ponteiro, e sem esse vínculo os produtores
+    -- saem por `pointers_armados = 0` em silêncio — `active` na tela, morto no
+    -- motor. Entra NESTA lista e no FIM dela, pelas duas razões de sempre
+    -- (bloco único por constraint, #159; e a janela de 2000 caracteres que
+    -- `tests/unit/midia-nao-lida.test.ts` varre a partir do `add constraint`).
+    'followup_sem_agente',
     'other'
   ));
 
 
+
+-- ---- índice do watcher de follow-up sem agente (migration 0312) ----
+create index if not exists agent_inbox_items_followup_sem_agente_aberto_idx
+  on public.agent_inbox_items (organization_id, ref_id)
+  where kind = 'followup_sem_agente' and status = 'open';
 
 notify pgrst, 'reload schema';
 
@@ -12494,9 +12507,10 @@ grant execute on function public.fn_aplicar_quadro_do_onboarding(uuid, uuid, tex
 --
 -- A MARCA DO CLIENTE FINAL SE GRAVA EM UMA INSTRUÇÃO SÓ.
 --
--- `organizations.settings` tem três donos com gates diferentes (updateTenant =
--- admin, PATCH de atendimento = manager, régua de atrito = manager) e os três
--- fazem read-modify-write do jsonb INTEIRO, em round-trips HTTP separados. A
+-- `organizations.settings` tem vários donos com gates diferentes, e cada um
+-- faz read-modify-write do jsonb INTEIRO, em round-trips HTTP separados. Quem
+-- são hoje, no código: `git grep -n "update({ settings" -- app lib workers` (a
+-- aba Organização saiu dessa lista no PR #1209). A
 -- perda é medida, não deduzida: `visibility_mode` volta de 'own' para 'all' sem
 -- erro em lugar nenhum — e essa chave é lida DIRETO pela RLS, dentro de
 -- `fn_can_view_conversation`/`fn_can_view_lead`. Um write de COR reverteria, em
@@ -21002,18 +21016,48 @@ returns boolean language sql stable security definer set search_path=public as $
 $$;
 revoke all on function public.fn_google_counts_for_conflicts(uuid,uuid,text) from public,anon;
 grant execute on function public.fn_google_counts_for_conflicts(uuid,uuid,text) to authenticated,service_role;
--- A view é recriada, não substituída no lugar: `create or replace view` não
--- renomeia nem remove coluna (aqui, tirar o `title` é o conserto da 0261 — o
--- membro lê a ocupação do colega, não o texto do compromisso pessoal dele). E o
--- corpo deste arquivo é REAPLICADO a cada update (`test:db`, job `invariants`),
--- então `drop` + `create` é a única forma que sobrevive à segunda passada —
--- `create or replace` sobre a view já recriada sem o `title` responde
--- `cannot change name of view column "starts_at" to "title"` e derruba o run.
--- Lista EXPLÍCITA de propósito: `e.*` é como a próxima coluna do espelho nasceria
+-- A view nasceu como `select e.*` — com o `title` dentro —, e a lista EXPLÍCITA
+-- abaixo é o conserto da 0261: o membro lê a ocupação do colega, não o texto do
+-- compromisso pessoal dele. `e.*` é como a próxima coluna do espelho nasceria
 -- exposta a quem só precisa saber se o horário está ocupado.
-drop view if exists public.calendar_selected_external_events;
+--
+-- O `drop` daqui é CONDICIONAL, e existe por um motivo só: `create or replace
+-- view` não remove nem renomeia coluna, então sobre um clone que ainda tem a
+-- forma antiga — a que sobra é o `title` — ele responde `cannot drop columns
+-- from view` (medido: 16.15) e derruba o run. Quem já está na forma alvo NÃO cai
+-- — passa direto pelo `create or replace` logo abaixo, que PRESERVA o OID. Este
+-- arquivo é reaplicado a cada instalação e a cada update (`test:db`, job
+-- `invariants`), e derrubar + recriar o objeto a cada passada era o defeito da
+-- issue #1086: o que quebrava a segunda passada era o `create view` sobre o
+-- objeto ainda existente, não a falta do `drop`.
+--
+-- A lista desta guarda anda JUNTA com a do `create or replace` (aqui e na 0261):
+-- coluna nova na view entra nas duas, senão a passada seguinte derruba uma view
+-- que já estava certa — e `scripts/test-update-com-dados.sh` fica vermelho nesse
+-- caso, pelo OID.
+do $$
+begin
+  if exists (
+    select 1
+      from pg_attribute a
+      join pg_class c on c.oid = a.attrelid
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname = 'calendar_selected_external_events'
+       and c.relkind = 'v'
+       and a.attnum > 0
+       and not a.attisdropped
+       and a.attname not in (
+         'id','organization_id','connection_id','external_calendar_id','external_event_id',
+         'starts_at','ends_at','is_all_day','status','transparency','external_updated_at',
+         'created_at','updated_at','ical_uid','seen_generation','recurring_event_id','original_start_time'
+       )
+  ) then
+    drop view if exists public.calendar_selected_external_events;
+  end if;
+end $$;
 
-create view public.calendar_selected_external_events with (security_invoker=true) as
+create or replace view public.calendar_selected_external_events with (security_invoker=true) as
  select e.id,e.organization_id,e.connection_id,e.external_calendar_id,e.external_event_id,
   e.starts_at,e.ends_at,e.is_all_day,e.status,e.transparency,e.external_updated_at,
   e.created_at,e.updated_at,e.ical_uid,e.seen_generation,e.recurring_event_id,e.original_start_time
@@ -24821,16 +24865,22 @@ notify pgrst, 'reload schema';
 -- — e o gestor já lê `account_email` em `calendar_connections`. Decisão do dono. O
 -- invariante mede que o colega segue lendo o id.
 --
--- ## A view precisa ser recriada, não substituída no lugar
+-- ## A view só é recriada quando ainda está na forma antiga
 --
 -- `calendar_selected_external_events` era `select e.*`. Com `security_invoker`, o
 -- Postgres confere privilégio de coluna EM NOME DO INVOCADOR para toda coluna
 -- referenciada na definição — inclusive as de um `e.*` que já foi expandido quando
 -- a view nasceu. Deixá-la assim faria TODA leitura de ocupação por membro falhar
--- com `permission denied` no `title`. E não dá para `create or replace view`
--- tirando coluna do meio (o Postgres recusa: "cannot drop columns from view") — por
--- isso `drop` + `create` aqui, com lista explícita. A lista explícita é o conserto
--- de fundo: `e.*` era a forma de a próxima coluna nascer exposta.
+-- com `permission denied` no `title`. E `create or replace view` não tira coluna
+-- do meio (o Postgres recusa: "cannot drop columns from view").
+--
+-- Por isso o `drop` daqui é CONDICIONAL (issue #1086): quem ainda tem o `title` —
+-- a forma da v1.26.0 — cai no `drop` e é recriado; quem já está na forma alvo
+-- passa direto pelo `create or replace`, que PRESERVA o OID. Derrubar e recriar
+-- a view a cada passada deste arquivo era o defeito da issue: o que quebrava a
+-- segunda passada era o `create view` sobre o objeto existente, não a falta do
+-- `drop`. A lista explícita segue sendo o conserto de fundo: `e.*` era a forma de
+-- a próxima coluna nascer exposta, e ela anda junto com a lista da guarda.
 --
 -- ## O que este bloco NÃO faz, de propósito
 --
@@ -24863,10 +24913,11 @@ notify pgrst, 'reload schema';
 --   view, que andam juntos, senão `select *` na view vira 42501) ou não. Estar no
 --   grant não quer dizer "não é pessoal": ver `external_calendar_id`, acima.
 -- * Quem LER esta view de dentro de função não pode usar `begin atomic`: a
---   dependência registrada no catálogo impede o `drop view` + `create view` deste
---   bloco a cada update. Hoje o único leitor é `fn_agenda_ocupacao_google_do_dono`
---   (0260), `language sql` sem `begin atomic`. `fn_google_counts_for_conflicts`
---   não é leitora — é a view que a chama, e essa direção não trava o `drop`.
+--   dependência registrada no catálogo impede o `drop view` condicional da guarda
+--   abaixo, que é o único caminho de quem ainda está na forma antiga (`e.*`). Hoje
+--   o único leitor é `fn_agenda_ocupacao_google_do_dono` (0260), `language sql` sem
+--   `begin atomic`. `fn_google_counts_for_conflicts` não é leitora — é a view que a
+--   chama, e essa direção não trava o `drop`.
 
 revoke select on public.calendar_external_events from authenticated;
 
@@ -24877,9 +24928,35 @@ grant select (
   original_start_time
 ) on public.calendar_external_events to authenticated;
 
-drop view if exists public.calendar_selected_external_events;
+-- A MESMA guarda do bloco da reconciliação do Google (migration 0225), e
+-- repetida de propósito: este bloco é medido
+-- SOZINHO por `tests/invariants/titulo-do-evento-pessoal-fora-do-alcance.test.ts`,
+-- sobre o estado da v1.26.0 (view com `e.*`), então a forma antiga tem de ser
+-- curada aqui também, sem depender do que veio antes no arquivo.
+do $$
+begin
+  if exists (
+    select 1
+      from pg_attribute a
+      join pg_class c on c.oid = a.attrelid
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname = 'calendar_selected_external_events'
+       and c.relkind = 'v'
+       and a.attnum > 0
+       and not a.attisdropped
+       and a.attname not in (
+         'id', 'organization_id', 'connection_id', 'external_calendar_id', 'external_event_id',
+         'starts_at', 'ends_at', 'is_all_day', 'status', 'transparency', 'external_updated_at',
+         'created_at', 'updated_at', 'ical_uid', 'seen_generation', 'recurring_event_id',
+         'original_start_time'
+       )
+  ) then
+    drop view if exists public.calendar_selected_external_events;
+  end if;
+end $$;
 
-create view public.calendar_selected_external_events
+create or replace view public.calendar_selected_external_events
 with (security_invoker = true) as
 select
   e.id, e.organization_id, e.connection_id, e.external_calendar_id,
@@ -26452,6 +26529,8 @@ as $$
   ),
   envios as (
     select count(*) filter (where m.sent_via = 'ai')              as por_ia,
+           count(*) filter (where m.sent_via = 'automation')      as por_automacao,
+           count(*) filter (where m.sent_via = 'system')          as por_integracao,
            count(*) filter (where m.sent_via = 'user')            as por_humano_no_sistema,
            count(*) filter (where m.sent_via = 'external_device') as por_humano_fora
       from public.messages m
@@ -26522,6 +26601,8 @@ as $$
       'vetos',                    (select vetados  from vetos),
       'execucoes_medidas',        (select execucoes from vetos),
       'envios_por_ia',            (select por_ia                from envios),
+      'envios_por_automacao',     (select por_automacao         from envios),
+      'envios_por_integracao',    (select por_integracao        from envios),
       'envios_humano_no_sistema', (select por_humano_no_sistema from envios),
       'envios_humano_fora',       (select por_humano_fora       from envios),
       -- O invariante 4 vira NÚMERO na tela: demanda aberta sem próximo passo é
@@ -27754,6 +27835,28 @@ comment on column public.ad_platform_connections.google_login_customer_id is
 comment on column public.ad_platform_connections.google_conversion_action_id is
   'Qual ação de conversão, dentro de google_customer_id, recebe os envios de venda. Formato: só o id numérico, o resource name completo é montado no transporte.';
 
+-- ---- marcadores do contato no filtro de conversas (migration 0323) ----
+-- Campo calculado do PostgREST: o filtro ?tag= do Inbox casa conversations.tags
+-- OU contacts.tags num único or=, sem lista de ids na URL. SECURITY INVOKER (a
+-- RLS de contacts vale para quem chama); as duas origens de EXECUTE revogadas.
+-- Antes da varredura de anon, como toda função nova do apêndice.
+create or replace function public.tags_do_contato(c public.conversations)
+  returns text[]
+  language sql
+  stable
+  set search_path = public
+as $$
+  select ct.tags from public.contacts ct where ct.id = c.contact_id
+$$;
+
+comment on function public.tags_do_contato(public.conversations) is
+  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0323).';
+
+revoke execute on function public.tags_do_contato(public.conversations) from public, anon;
+grant  execute on function public.tags_do_contato(public.conversations) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -27937,6 +28040,60 @@ comment on column public.automation_rules.trigger_config is
   'Configuração do gatilho (issue #989). Vazio nos gatilhos que nascem de evento. No gatilho lead.date_field_due guarda {pipeline_id, campo, dias} — o campo de data pertence a UM funil, e sem essa dupla a varredura não sabe onde olhar.';
 
 notify pgrst, 'reload schema';
+-- 0311 · O webhook do NÚMERO, registrado pela própria instalação (issue #850, fatia F1).
+--
+-- ─── O que o usuário via ────────────────────────────────────────────────────
+-- Conectar o canal oficial era metade do caminho: o canal ENVIAVA e não RECEBIA até
+-- alguém entrar no painel da Meta, abrir a configuração do webhook, colar a URL de
+-- callback e escolher os campos — por número. Quem não sabia disso (o produto é
+-- self-host para quem NÃO programa) ficava com um canal que parece pronto e cujas
+-- mensagens recebidas simplesmente não existem em lugar nenhum: nem erro, nem log.
+--
+-- ─── O que estas colunas guardam ────────────────────────────────────────────
+-- O DESFECHO do registro automático, não a configuração: a URL que ficou registrada
+-- (`meta_webhook_override_uri`), o motivo da última falha (`..._erro`) e quando foi
+-- (`..._em`). São o que a tela lê para dizer "conectado, webhook pendente: <motivo>"
+-- com botão de tentar de novo — em vez de dizer "conectado" e deixar a descoberta
+-- para a primeira mensagem que nunca chega.
+--
+-- ─── Por que colunas, e não o `metadata` jsonb que já existe na tabela ──────
+-- Porque a TELA consulta este estado a cada render e o desfecho tem três leitores
+-- (GET do canal, POST de conexão, rota de re-registro): chave dentro de jsonb é
+-- contrato que ninguém vê quebrar — o `metadata` da sessão é do ingest/roteamento, e
+-- misturar os dois faz um `update` de lá apagar o desfecho daqui.
+--
+-- ─── Por que registrar DEPOIS de gravar a sessão ────────────────────────────
+-- O GET de verificação da Meta chega no instante em que o override é registrado e
+-- procura a sessão pelo `webhook_path_token`. Registrar antes de a linha existir
+-- devolveria 404, e a Meta marcaria o webhook como inválido — pior que não registrar.
+-- Ordem invertida = defeito, não preferência.
+--
+-- ─── Exposição: nenhuma nova ────────────────────────────────────────────────
+-- A URL registrada contém o `webhook_path_token`, que JÁ vive nesta tabela
+-- (`channel_sessions`, com `GRANT ALL` a anon/authenticated e RLS de isolamento por
+-- organização desde as migrations 0106/0099). Não há coluna nova de segredo, não há
+-- grant novo, não há policy nova: a coluna herda exatamente o acesso das vizinhas.
+-- O que ela NÃO guarda é o token da Meta — esse continua só em
+-- `meta_token_encrypted`, cifrado (fn_encrypt_oauth).
+--
+-- ─── O que NÃO entra aqui, de propósito ─────────────────────────────────────
+-- * `message_template_status_update`: a Meta NÃO aceita override por número para este
+--   tópico — ele continua indo para a URL do app (limite da plataforma, não escolha).
+-- * Limpeza no arquivamento do canal e reaplicação na reconexão: é a fatia F1b, e
+--   roda em cima destas mesmas colunas (`meta_webhook_override_uri` null = desfeito).
+-- * Índice: as três colunas são lidas sempre pela chave primária da sessão.
+
+alter table public.channel_sessions
+  add column if not exists meta_webhook_override_uri text,
+  add column if not exists meta_webhook_override_erro text,
+  add column if not exists meta_webhook_override_em timestamptz;
+
+comment on column public.channel_sessions.meta_webhook_override_uri is
+  'URL de callback registrada na Meta para ESTE número (override por phone_number_id). Nulo = não registrado (ou desfeito). Contém o webhook_path_token, que já é desta tabela.';
+comment on column public.channel_sessions.meta_webhook_override_erro is
+  'Motivo da última falha ao registrar o webhook, como a Graph API devolveu. Não é falha da conexão: o canal envia normalmente; o que depende disto é a ENTREGA. Nulo = última tentativa deu certo.';
+comment on column public.channel_sessions.meta_webhook_override_em is
+  'Quando foi a última TENTATIVA de registrar (sucesso ou falha). A tela usa a data para o operador saber se o estado que ele vê é o de agora.';
 -- ---- a resposta revisada para de segurar a Zona de perigo (migration 0273) ----
 -- A FK inline da 0227 nasceu sem ação de exclusão (NO ACTION) e era a ÚNICA das
 -- quatro que apontam para `public.messages(id)` fora do padrão `on delete set
@@ -27971,6 +28128,85 @@ notify pgrst, 'reload schema';
 update storage.buckets
 set allowed_mime_types = array['application/pdf', 'text/markdown', 'text/x-markdown', 'text/plain', 'text/csv']
 where id = 'ai-policy';
+-- ---- o recibo de idempotência ganha o estado "em curso" (migration 0321) ----
+-- Issue #778, PR #1189 (@webtecnica). Reserva = `status_code` e `response_body`
+-- nulos, gravada ANTES do efeito; recibo = os dois preenchidos. O `create table`
+-- do corpo já nasce anulável (install); as duas primeiras linhas levam a
+-- nulidade a quem JÁ tinha a tabela (update), onde o `create table if not
+-- exists` é no-op. `drop not null` em coluna já anulável é no-op. O CHECK fecha
+-- o meio-termo (um gravado e o outro não), que nenhum leitor sabe interpretar;
+-- toda linha anterior tem as duas colunas preenchidas e passa sem backfill.
+alter table public.idempotency_keys alter column status_code drop not null;
+alter table public.idempotency_keys alter column response_body drop not null;
+alter table public.idempotency_keys
+  drop constraint if exists idempotency_keys_recibo_ou_reserva;
+alter table public.idempotency_keys
+  add constraint idempotency_keys_recibo_ou_reserva
+  check ((status_code is null) = (response_body is null));
+
+-- ---- destinos internos que o dono da instalação autoriza (migration 0324) ----
+-- Decisão 22-d, #1004. null = nunca configurado pela tela (vale o .env);
+-- '{}' = o dono esvaziou a lista. Idempotente; sem dado tocado.
+alter table public.platform_settings
+  add column if not exists internal_destinations text[];
+
+comment on column public.platform_settings.internal_destinations is
+  'IPv4 e faixas CIDR IPv4 que a INSTALAÇÃO pode alcançar mesmo sendo rede interna — só para destinos configurados pela instalação, nunca por uma organização (decisão 22-d, #1004). null = nunca configurado pela tela: vale IA_DESTINOS_INTERNOS_PERMITIDOS do .env. Array vazio = nada autorizado. Ver lib/automation/destinos-internos-autorizados.ts.';
+
+notify pgrst, 'reload schema';
+
+-- ---- marcador do contato normalizado, no dado que já estava gravado (migration 0335) ----
+-- Issue #1224 (triagem do #1206), @webtecnica. A escrita passou a normalizar o
+-- marcador do contato nos quatro caminhos (ficha, importação por CSV, API e
+-- `crm_manage_tags`) pela MESMA função que o filtro usa para ler
+-- (lib/contacts/tag-normalizada.ts) — sem isso, `?tag=vip` não encontra o contato
+-- marcado como "VIP" e o chip do marcador não sai da ficha por remoção nenhuma.
+-- Este apêndice é o backfill do dado ANTERIOR, e é idempotente por
+-- `is distinct from`: aplicado numa VPS que já recebeu a migration 0335, nenhuma
+-- linha é tocada (o arquivo é aplicado inteiro em quem instala, e de novo em
+-- quem atualiza). A ordem é a mesma da aplicação — corta as pontas, minúsculas,
+-- teto de 40 caracteres, descarta o vazio e tira o repetido — e a ordem de
+-- primeira aparição é preservada (`with ordinality`) para a ficha do contato não
+-- reembaralhar os marcadores de quem já os tinha.
+update public.contacts c
+   set tags = sub.normalizados
+  from (
+    select ct.id, array_agg(ct.tag order by ct.ord) as normalizados
+      from (
+        -- `c2.id` NA CHAVE: sem ele o `distinct on` é global e guarda UMA
+        -- linha por marcador na TABELA INTEIRA — o segundo contato com "VIP"
+        -- perde o marcador, e a deduplicação atravessa organizações. A
+        -- consulta é válida, roda sem erro e sem aviso; o que denuncia é o
+        -- dado. Reproduzido em Postgres 17.6: {VIP,Suporte} virava {suporte}.
+        select distinct on (c2.id, left(lower(btrim(u.x)), 40))
+               c2.id,
+               left(lower(btrim(u.x)), 40) as tag,
+               u.ord
+          from public.contacts c2
+          cross join lateral unnest(c2.tags) with ordinality as u(x, ord)
+         where c2.tags is not null
+           and left(lower(btrim(u.x)), 40) <> ''
+         order by c2.id, left(lower(btrim(u.x)), 40), u.ord
+      ) ct
+     group by ct.id
+  ) sub
+ where c.id = sub.id
+   and c.tags is distinct from sub.normalizados;
+
+-- Marcador que era só espaço vira lista vazia: a sentença acima não alcança
+-- essas linhas (a subconsulta descarta o vazio) e o contato ficaria com um
+-- marcador invisível que nenhum filtro casa e nenhuma tela mostra.
+update public.contacts c
+   set tags = '{}'::text[]
+ where c.tags is not null
+   and cardinality(c.tags) > 0
+   and c.tags is distinct from '{}'::text[]
+   and not exists (
+     select 1 from unnest(c.tags) as x where left(lower(btrim(x)), 40) <> ''
+   );
+
+notify pgrst, 'reload schema';
+
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
 --
 -- ⚠️ ESTA CHAMADA É O ÚLTIMO BLOCO DO ARQUIVO. Tabela nova, coluna
