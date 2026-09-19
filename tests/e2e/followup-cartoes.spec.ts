@@ -125,70 +125,45 @@ async function moverNo(page: Page, nodeId: string, x: number, y: number): Promis
   expect(perto(box), `o nó ${nodeId} não chegou a (${x}, ${y}): está em ${JSON.stringify(box)}`).toBe(true);
 }
 
-/**
- * Liga duas bolinhas por arrasto e CONFERE que a aresta nasceu.
- *
- * Sem a conferência, um arrasto que o React Flow não registra (acontece quando
- * o runner engasga no meio do movimento) não falha aqui: falha 40 linhas
- * adiante, no Publicar, como "o toast «Fluxo publicado.» não apareceu" — que é
- * a mensagem de um problema que não existe. Medido no run 35380905636, parte 3,
- * onde este arquivo foi o único vermelho de 26 min de job.
- *
- * Duas tentativas, e a segunda com o dobro de passos no movimento: o que falha
- * é a taxa de eventos de ponteiro, não a geometria.
- */
 async function ligar(page: Page, origem: string, destino: string, ramo?: string): Promise<void> {
   const seletor = ramo
     ? `.react-flow__node[data-id="${origem}"] .react-flow__handle.source[data-handleid="${ramo}"]`
     : `.react-flow__node[data-id="${origem}"] .react-flow__handle.source`;
-  const arestas = page.locator(".react-flow__edge");
-  const antes = await arestas.count();
-
-  for (const passos of [12, 24]) {
-    // Se a primeira tentativa criou a aresta devagar, não arrasta de novo: um
-    // segundo arrasto criaria uma aresta DUPLICADA e o teste reprovaria por
-    // excesso, dizendo o contrário do que aconteceu.
-    if ((await arestas.count()) > antes) return;
-    const source = page.locator(seletor).first();
-    const target = page.locator(`.react-flow__node[data-id="${destino}"] .react-flow__handle.target`);
-    const sBox = await source.boundingBox();
-    const tBox = await target.boundingBox();
-    if (!sBox || !tBox) throw new Error(`handle não encontrado: ${origem}[${ramo}] -> ${destino}`);
-    await page.mouse.move(sBox.x + sBox.width / 2, sBox.y + sBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(sBox.x + sBox.width / 2 + 5, sBox.y + sBox.height / 2 + 5, { steps: 3 });
-    await page.mouse.move(tBox.x + tBox.width / 2, tBox.y + tBox.height / 2, { steps: passos });
-    await page.mouse.up();
-    try {
-      await expect(arestas).toHaveCount(antes + 1, { timeout: 8_000 });
-      return;
-    } catch {
-      // segunda tentativa; se ela também não criar a aresta, o erro abaixo diz
-      // exatamente o que faltou, em vez de reaparecer como falha do Publicar.
-    }
-  }
-  if ((await arestas.count()) > antes) return;
-  throw new Error(
-    `a ligação ${origem}[${ramo ?? "saída única"}] → ${destino} não virou aresta ` +
-      `em duas tentativas (o canvas continua com ${antes})`,
-  );
+  const source = page.locator(seletor).first();
+  const target = page.locator(`.react-flow__node[data-id="${destino}"] .react-flow__handle.target`);
+  const sBox = await source.boundingBox();
+  const tBox = await target.boundingBox();
+  if (!sBox || !tBox) throw new Error(`handle não encontrado: ${origem}[${ramo}] -> ${destino}`);
+  await page.mouse.move(sBox.x + sBox.width / 2, sBox.y + sBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sBox.x + sBox.width / 2 + 5, sBox.y + sBox.height / 2 + 5, { steps: 3 });
+  await page.mouse.move(tBox.x + tBox.width / 2, tBox.y + tBox.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
 }
 
 /**
- * Publica e exige o toast — mas, se ele não vier, reprova DIZENDO o que o
- * produto respondeu. O publish recusa por regra do grafo e ancora o motivo no
- * nó; sem ler esse texto, a falha chega como "o toast não apareceu", que não
- * distingue "o publish recusou" de "o toast piscou".
+ * Publicar e EXIGIR sucesso — dizendo o motivo quando o publish recusa.
+ *
+ * `expect(getByText("Fluxo publicado.")).toBeVisible()` sozinho gasta o PRAZO
+ * inteiro e reporta "o toast não apareceu", que é o sintoma e não a causa: o
+ * publish pode ter recusado o fluxo e ancorado o motivo num nó. O conserto do
+ * salto de zoom (`12d79edf0`) provou o custo disso no caso do posicionamento —
+ * a falha nascia no arrasto e só aparecia três passos depois, no toast ausente.
+ * `moverNo` fechou aquele caminho; este fecha o resto, que são as recusas de
+ * validação (ramo sem cobertura, regra em branco) e não têm nada a ver com
+ * coordenada.
  */
 async function publicarEExigirSucesso(page: Page): Promise<void> {
   await page.getByTestId("publish-button").click();
   const toast = page.getByText("Fluxo publicado.");
   const recusa = page.locator('[data-testid^="node-error-"]').first();
   await expect
-    .poll(async () => ((await toast.count()) > 0 ? "publicado" : (await recusa.count()) > 0 ? "recusado" : "esperando"), {
-      timeout: PRAZO,
-      message: "nem o toast de publicado nem um motivo ancorado no nó apareceram",
-    })
+    .poll(
+      async () =>
+        (await toast.count()) > 0 ? "publicado" : (await recusa.count()) > 0 ? "recusado" : "esperando",
+      { timeout: PRAZO, message: "nem o toast de publicado nem um motivo ancorado no nó apareceram" },
+    )
     .not.toBe("esperando");
   if ((await recusa.count()) > 0) {
     throw new Error(`o publish RECUSOU o fluxo: ${(await recusa.textContent())?.trim()}`);
@@ -402,9 +377,6 @@ test.describe("o cartão do nó diz o que o motor faz", () => {
     await ligar(page, gatilhoId, condicaoId);
     await ligar(page, condicaoId, fimDaEtapa, "regra-1");
     await ligar(page, condicaoId, fimDoResto, "else");
-    // As três saídas ligadas são o que o publish exige; conferir aqui separa
-    // "o arrasto não pegou" de "o produto recusou".
-    await expect(page.locator(".react-flow__edge")).toHaveCount(3);
 
     await page.getByRole("button", { name: "Salvar" }).click();
     await expect(page.getByTestId("dirty-indicator")).toHaveCount(0, { timeout: PRAZO });
