@@ -233,15 +233,31 @@ export async function estamparOrigemDaPagina(
  * Na dúvida não se grava origem. O custo de uma origem faltando é um relatório
  * mais pobre; o de uma origem inventada é um número errado que ninguém vai
  * auditar depois — e este módulo trata o texto do cliente como não confiável.
+ *
+ * ─── O filtro de organização NÃO é dispensável aqui ─────────────────────────
+ *
+ * A consulta roda no client de ADMIN (service role), que passa por cima da RLS:
+ * sem filtro explícito ela lê as mensagens de TODAS as organizações. O
+ * `contact_id` de hoje é uuid e não colide entre tenants — e isso não é motivo
+ * para dispensar o filtro. A alternativa é reavaliar, a cada leitura deste
+ * arquivo, se a premissa de unicidade ainda vale; o filtro custa um `eq` e
+ * torna a resposta sobre "este contato" uma resposta sobre "este contato desta
+ * organização", que é a única pergunta que o domínio sabe fazer.
+ *
+ * A organização vem por PARÂMETRO, tirada do segredo do webhook que abriu a
+ * conversa (`entrada.organizationId`), nunca do corpo da requisição — quem
+ * escreve a mensagem escolhe o texto, não o tenant.
  */
 export async function ehAPrimeiraMensagemDoContato(
   admin: Admin,
+  organizationId: string,
   contactId: string,
   messageId: string | null,
 ): Promise<boolean> {
   const { data, count, error } = await admin
     .from("messages")
     .select("id", { count: "exact" })
+    .eq("organization_id", organizationId)
     .eq("contact_id", contactId)
     .eq("direction", "inbound")
     .order("sent_at", { ascending: true })

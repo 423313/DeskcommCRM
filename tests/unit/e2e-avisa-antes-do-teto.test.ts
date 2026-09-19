@@ -38,8 +38,21 @@ const RAIZ = path.resolve(__dirname, "../..");
 const CAMINHO = ".github/workflows/e2e.yml";
 const workflow = readFileSync(path.join(RAIZ, CAMINHO), "utf8");
 
-/** Linhas de COMANDO: comentário que MENCIONA a regra não é a regra. */
-const COMANDOS = workflow
+/**
+ * Só o job `e2e-parte`: é nele que o teto corta. O arquivo tem outros jobs com
+ * `actions/checkout` (o `e2e-alcance` roda antes das partes), e um índice sobre
+ * o arquivo inteiro compararia o relógio das partes com o checkout de outro job.
+ */
+const JOB_PARTE = (() => {
+  const inicio = workflow.indexOf("\n  e2e-parte:\n");
+  if (inicio < 0) return "";
+  const resto = workflow.slice(inicio + 1);
+  const fim = resto.slice(1).search(/\n  [a-zA-Z0-9_-]+:\n/);
+  return fim < 0 ? resto : resto.slice(0, fim + 1);
+})();
+
+/** Linhas de COMANDO do job: comentário que MENCIONA a regra não é a regra. */
+const COMANDOS = JOB_PARTE
   .split("\n")
   .filter((l) => !l.trim().startsWith("#"))
   .map((l) => l.trim());
@@ -175,6 +188,58 @@ describe("a rodada de e2e avisa antes de estourar o teto de 30 min", () => {
     expect(avisos.join("\n"), "o aviso não diz QUAL parte passou do orçamento").toMatch(
       /\$PARTE|\$\{PARTE\}|matrix\.parte/,
     );
+  });
+
+  // ── O CORTE NÃO DIAGNOSTICA SEM OLHAR O VERMELHO ─────────────────────────
+  //
+  // Medido no #1210 (job 105739419202): o `timeout` matou a suíte antes de o
+  // Playwright imprimir o sumário, o único vestígio do caso que falhou era a
+  // linha `✘` no meio do log, e a mensagem do corte afirmava "a parte cresceu".
+  // O time saiu rebalancear a partição — e a parte estava saudável (797–933 s
+  // de suíte em quatro rodadas do mesmo dia). O que estourou o relógio foi UM
+  // caso vermelho que declara `test.setTimeout(420_000)` e, ao travar, queima
+  // 7 min sozinho.
+  it("o corte por relógio conta os casos vermelhos antes de culpar o tamanho", () => {
+    const corte = COMANDOS.join("\n");
+    expect(
+      corte,
+      "a saída da suíte não é guardada em arquivo — sem ela não há o que contar depois do corte",
+    ).toMatch(/tee "\$SAIDA"/);
+    expect(
+      corte,
+      "o código de saída vem do `tee`, não do Playwright: com pipe, `$?` é sempre 0",
+    ).toMatch(/PIPESTATUS/);
+    expect(corte, "o corte não conta os casos vermelhos do log").toMatch(/VERMELHOS=/);
+    const diagnostico = COMANDOS.filter((l) => l.includes("::error") && /VERMELHO/.test(l));
+    expect(
+      diagnostico,
+      "o corte não tem mensagem própria para 'havia vermelho antes do corte'",
+    ).not.toHaveLength(0);
+    // A afirmação "a parte cresceu" só pode existir no ramo do ZERO vermelho.
+    const cresceu = COMANDOS.filter((l) => l.includes("a parte cresceu"));
+    expect(cresceu, "sumiu a mensagem do crescimento real").not.toHaveLength(0);
+    expect(
+      cresceu.join("\n"),
+      "'a parte cresceu' voltou a ser afirmado sem consultar o vermelho",
+    ).toMatch(/[Nn]enhum caso vermelho/);
+  });
+
+  // `test.fail(...)` é falha ESPERADA e sai com o MESMO `✘` (medido no run
+  // 35388254053: `degradacao-silenciosa.spec.ts` imprime ✘ e o job fecha
+  // "150 passed"). Contá-la inverteria o erro — inventaria um vermelho.
+  it("a contagem de vermelhos exclui as falhas declaradas como esperadas", () => {
+    const corte = COMANDOS.join("\n");
+    expect(corte, "a contagem não procura quem declara test.fail").toMatch(/test\\?\.fail/);
+    expect(corte, "a contagem não filtra os specs de falha esperada").toMatch(/ESPERADAS/);
+  });
+
+  it("o resumo publica os specs mais caros da parte (o dado que decide a partição)", () => {
+    const bloco = blocoDoResumo(/## E2E parte \$\{PARTE\}/);
+    expect(bloco, "o resumo não publica o tempo por spec").toMatch(/specs mais caros/);
+    expect(
+      bloco,
+      "o resumo não lê a saída guardada da suíte — sem ela não há tempo por spec",
+    ).toMatch(/SAIDA_DA_SUITE/);
   });
 
   it("o resumo do job publica os relógios da parte (o número fica onde alguém lê)", () => {

@@ -190,9 +190,18 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "workflow chamava desde 2026-08-27, e `test:db` sozinho mede um banco VAZIO — constraint " +
       "que só quebra com linha existente passava verde.",
   },
-  "e2e.yml::e2e-parte": {
+  "e2e.yml::e2e-alcance": {
     condicao: null,
-    efeito: "São as partes da matriz Playwright; sem elas o `e2e` fica sem nada para ler.",
+    efeito:
+      "Este job responde se o PR alcança algo que o e2e mede. Sem ele as partes nunca " +
+      "rodam e o agregador `e2e` reprova — o PORTAO dele exige `success` aqui.",
+  },
+  "e2e.yml::e2e-parte": {
+    condicao: "needs.e2e-alcance.outputs.e2e == 'sim'",
+    efeito:
+      "São as partes da matriz Playwright. Só pulam em PR que não alcança nada que o " +
+      "e2e mede (scripts/pr-alcanca-o-e2e.sh), e o agregador `e2e` só aceita o pulo com " +
+      "`e2e=nao` — vigiado por e2e-so-aceita-pulo-declarado.test.ts.",
   },
   "e2e.yml::e2e": {
     condicao: "always()",
