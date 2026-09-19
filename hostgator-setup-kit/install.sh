@@ -2137,6 +2137,33 @@ else
   [ -n "$health_body" ] && c_dim "  última resposta: $(printf '%s' "$health_body" | head -c 200 || true)"
 fi
 
+# O catálogo dos provedores diretos vem no baseline, mas a OpenRouter é grande
+# demais para ser congelada nele: seus ~400 modelos chegam pelo cron diário
+# `api/v1/cron/sync-model-catalog`, que o scheduler bate às 04:15 UTC
+# (docker/scheduler/entrypoint.sh). Numa instalação concluída DEPOIS dessa
+# rodada, o seletor de modelos do agente ficava vazio até o dia seguinte —
+# mesmo com uma chave OpenRouter válida já cadastrada. É a primeira tela que
+# quem instalou vai abrir para testar a IA.
+#
+# O segredo NÃO passa pelo argv deste processo: as aspas simples impedem a
+# expansão aqui, e quem expande `$INTERNAL_SECRET` é o sh de dentro do
+# contêiner `scheduler`, que já o recebe pelo ambiente (docker-compose.prod.yml).
+#
+# FALHA ABERTA, de propósito: a origem é externa (openrouter.ai) e pode estar
+# fora do ar no minuto da instalação. Uma instalação saudável não pode ser
+# invalidada por isso — o cron das 04:15 continua sendo a recuperação, e o
+# operador lê aqui que ela existe. Por isso o comando mora na CONDIÇÃO de um
+# `if`, onde o `set -e` não aborta o script.
+if [ "${APP_SAUDAVEL:-0}" = 1 ]; then
+  step "Semeando o catálogo de modelos de IA"
+  if catalogo_body="$(dc exec -T scheduler sh -c 'curl -fsS -m60 -H "Authorization: Bearer $INTERNAL_SECRET" http://app:3000/api/v1/cron/sync-model-catalog' 2>&1)"; then
+    c_grn "✓ catálogo de modelos semeado"
+  else
+    c_ylw "⚠ não consegui semear o catálogo de modelos agora; o agendador tenta de novo às 04:15 UTC."
+    [ -n "$catalogo_body" ] && c_dim "  detalhe: $(printf '%s' "$catalogo_body" | head -c 200 || true)"
+  fi
+fi
+
 # ── 11. Automações (cron do drain de eventos) ───────────────────────────────
 step "Ativando as automações"
 ensure_encryption_key .env
