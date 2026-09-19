@@ -99,6 +99,31 @@ describe("o ramo frio não afirma nada que a pessoa não fez", () => {
     }
   });
 
+  it("o ramo de AUTOMAÇÃO também não afirma preenchimento", () => {
+    // Resíduo que o Maestro pegou depois do meu conserto: `automacao` caía no
+    // lado do formulário, então quem entrou por etiqueta ou etapa recebia
+    // "ligando ao que ela preencheu" igual a quem preencheu. O defeito é o
+    // mesmo do frio, em escala menor — ali a pessoa É conhecida da empresa, mas
+    // não preencheu nada NESTA ocasião.
+    const auto = prompt("automacao");
+    const sobraram = AFIRMACOES_DO_DEFEITO.filter((f) => auto.toLowerCase().includes(f.toLowerCase()));
+    expect(sobraram, "o ramo de automação pressupõe um preenchimento que não houve").toEqual([]);
+    expect(auto).toMatch(/ela não preencheu nada desta vez/i);
+    // E a procedência dele é o CADASTRO, não um formulário nem uma raspagem.
+    expect(auto).toMatch(/o que a empresa já tem no cadastro dela/i);
+  });
+
+  it("os TRÊS ramos têm regras distintas — nenhum divide conjunto com outro", () => {
+    // Com três valores no tipo, dois ramos dividindo as mesmas regras pareceria
+    // deliberado para quem ler depois. Este caso trava isso.
+    const [f, a, p] = ["formulario", "automacao", "prospeccao_fria"].map((o) =>
+      prompt(o as OrigemDaAbordagem),
+    );
+    expect(f).not.toBe(a);
+    expect(a).not.toBe(p);
+    expect(f).not.toBe(p);
+  });
+
   it("o ramo de formulário continua podendo falar do formulário", () => {
     // O conserto não pode ter apagado o caso legítimo: quem preencheu ESPERA
     // que a mensagem se ligue ao que preencheu.
