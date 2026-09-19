@@ -330,6 +330,19 @@ describe("catraca: ninguém mais repete o namespace", () => {
     "hostgator-setup-kit/_common.sh",
     "docker-compose.prod.yml",
     ".env.hostgator.example",
+    // FIXTURE de comentário REAL de PR, capturada para os instrumentos de triagem.
+    // O literal aparece dentro do texto que um humano escreveu num PR
+    // (`ghcr.io/melgarafael/deskcommcrm:1.29.0`, citado ao diagnosticar o pdf.js).
+    //
+    // Entra aqui e não em `excluiDir` de propósito: `PERMITIDO` casa o caminho
+    // relativo EXATO, então o perdão vale para ESTE arquivo e só para ele —
+    // enquanto `--exclude-dir` cegaria a varredura para qualquer fixture futura.
+    //
+    // E o perdão é legítimo porque a catraca pergunta "alguém voltou a ESCREVER o
+    // namespace à mão?". Fixture não escreve: ela REGISTRA o que foi escrito.
+    // Sanitizar o texto falsificaria a fixture, que existe justamente para
+    // reproduzir byte a byte o que a triagem publicou.
+    "triagem/instrumentos/tests/fixtures/promessas-reais.json",
     // A CASA DO LITERAL desde 18/09/2026. Ele saiu deste arquivo para um módulo
     // compartilhado porque DOIS gates precisam da mesma resposta sobre "de quem
     // é esta corrida?", e eles chegaram a dizer coisas OPOSTAS (ver o cabeçalho
