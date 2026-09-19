@@ -42,6 +42,21 @@
 -- novo; quem ainda não a aplicou, agora consegue. O kit self-host nunca foi
 -- afetado: ele aplica o `baseline.sql`, onde o bloco sempre foi drop + add.
 --
+-- A reprodução (19/09/2026, `pgvector/pgvector:pg17` com o prelude de
+-- scripts/test-db.sh, `psql -v ON_ERROR_STOP=1`):
+--
+--     baseline.sql (install) ........................ rc=0
+--     esta migration SEM o drop (a versão anterior) .. rc=3  ERROR: constraint
+--         "agent_inbox_items_kind_check" for relation "agent_inbox_items"
+--         already exists
+--     esta migration COM o drop ...................... rc=0, 29 kinds
+--     reaplicada ..................................... rc=0
+--
+-- NÃO MEDIDO: se alguma instância do mantenedor aplica a cadeia (MCP
+-- `apply_migration` ou `supabase db push`). Se aplicou, falhou aqui e alguém
+-- contornou à mão, o que rodou lá difere deste arquivo — confira em
+-- `select version from supabase_migrations.schema_migrations where version = '20260919150500'`.
+--
 -- A cerca que teria pegado isto: tests/unit/reconstruir-constraint-derruba-antes.test.ts.
 
 -- ---- 1. o CHECK com os dois vocabulários ----
