@@ -5,10 +5,22 @@ import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { acharChave } from "@/lib/instalacao/catalogo";
-import { gravarPelaTela, voltarAoAmbiente } from "@/lib/instalacao/config";
+import { estadoParaTela, gravarPelaTela, voltarAoAmbiente, type EstadoParaTela } from "@/lib/instalacao/config";
 
+/**
+ * `ok: true` carrega o ESTADO NOVO da chave, relido depois da escrita.
+ *
+ * A tela aplica esse estado direto, em vez de depender do `router.refresh()`.
+ * Medido neste repo (memória `project_router_refresh_perde_corrida`): o refresh
+ * disparado depois de uma mutação é atropelado pelos prefetches RSC da barra
+ * lateral e a tela fica no estado ANTERIOR cerca de metade das vezes — com o
+ * dado já gravado no banco. A bateria E2E do painel reprovou exatamente assim,
+ * duas rodadas seguidas: o operador clicava "Voltar ao padrão" e a tela seguia
+ * dizendo "Definido aqui nesta tela". Aplicar o corpo da resposta é
+ * determinístico por construção; o refresh continua, só que ninguém depende dele.
+ */
 export type ResultadoDaGravacao =
-  | { ok: true }
+  | { ok: true; estado: EstadoParaTela }
   | { ok: false; erro: string };
 
 /**
@@ -93,7 +105,7 @@ export async function salvarConfiguracaoDaInstalacao(
   });
 
   revalidatePath("/admin/configuracao");
-  return { ok: true };
+  return { ok: true, estado: await estadoParaTela(chave, doCatalogo.natureza === "segredo") };
 }
 
 /**
@@ -121,5 +133,5 @@ export async function voltarConfiguracaoAoPadrao(chave: string): Promise<Resulta
   });
 
   revalidatePath("/admin/configuracao");
-  return { ok: true };
+  return { ok: true, estado: await estadoParaTela(chave, doCatalogo.natureza === "segredo") };
 }

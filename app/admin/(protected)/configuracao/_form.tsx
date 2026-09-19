@@ -69,13 +69,18 @@ function CampoEditavel({ linha, idioma }: { linha: LinhaDaTela; idioma: Idioma }
   const [valor, setValor] = useState("");
   const [salvando, comecar] = useTransition();
   const router = useRouter();
-  const { definicao, estado } = linha;
+  const { definicao } = linha;
+  // O estado mostrado é LOCAL, inicializado pelo servidor e atualizado pelo
+  // corpo da resposta de cada ação — não pelo `router.refresh()`, que perde a
+  // corrida para os prefetches da barra lateral (ver `ResultadoDaGravacao`).
+  const [estado, setEstado] = useState(linha.estado);
 
   function salvar() {
     comecar(async () => {
       const r = await salvarConfiguracaoDaInstalacao(definicao.chave, valor);
       if (r.ok) {
         setValor("");
+        setEstado(r.estado);
         toast.success(t("Pronto, já está valendo."));
         router.refresh();
       } else {
@@ -88,6 +93,7 @@ function CampoEditavel({ linha, idioma }: { linha: LinhaDaTela; idioma: Idioma }
     comecar(async () => {
       const r = await voltarConfiguracaoAoPadrao(definicao.chave);
       if (r.ok) {
+        setEstado(r.estado);
         toast.success(t("Voltou para o valor do arquivo de instalação."));
         router.refresh();
       } else {
