@@ -381,10 +381,16 @@ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
 | `verify` | typecheck + lint + `lint:channels` + `test:unit` + `test:shell` |
 | `invariants` | sobe um Postgres limpo, aplica o `baseline.sql` em modo **install** e depois em modo **update** — as duas passadas com `ON_ERROR_STOP=1`, que é o que torna a segunda uma prova de idempotência e não só um "terminou" —, e roda os invariantes de RBAC, atribuição, escopo, roteamento, follow-up, webhooks e automações |
 | `build-and-size` | `pnpm build` em Node 22 |
-| `e2e` | sobe Supabase local, aplica o `baseline.sql` e roda **48 das 49 specs** Playwright pelo frontend |
+| `e2e` | sobe Supabase local, aplica o `baseline.sql` e roda pelo frontend todas as specs Playwright menos as que `FORA_DO_CI` declara |
 | `imagens-ok` | reprova quando qualquer uma das três imagens Docker (`app`, `worker`, `scheduler`) não constrói — é o artefato que o self-hoster instala |
 
-A única spec fora do `e2e` é `vps-fresh-onboarding` — ela precisa de WAHA + Redis + Resend + Nuvemshop de verdade. Ela é a **P0** da nossa doutrina de QA visual, então `e2e` verde **não** prova a jornada de instalação fresca; essa se prova numa VPS.
+Quais specs ficam de fora é pergunta de comando, não de leitura — esta linha já afirmou que a única era `vps-fresh-onboarding`, e desde o PR #983 ela roda no CI:
+
+```bash
+git show origin/main:.github/workflows/e2e.yml | python3 -c "import sys,re; y=sys.stdin.read(); print(sorted({s for _,c in re.findall(r'(FORA_DO_CI):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)}))"
+```
+
+`vps-fresh-onboarding` segue sendo a **P0** da nossa doutrina de QA visual, porque a instalação fresca é o produto que se vende. Ter gate não dispensa a prova pela tela: gate prova que não regrediu, não que a experiência ficou boa.
 
 Entre os invariantes está o **teste de isolamento RLS**: cria 2 organizações, simula os claims JWT pelo mesmo caminho `auth.uid()` / `fn_user_org_ids()` que as policies de produção usam, e prova que um usuário da org A enxerga **zero linhas** da org B em `conversations`, `messages`, `contacts` e `crm_leads`. Antes disso, um caso de controle prova que as linhas da org B realmente existem — sem ele, o teste passaria com a tabela vazia.
 
