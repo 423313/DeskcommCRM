@@ -75,6 +75,10 @@ const parte3 = listaDoWorkflow(yml, "SPECS_PARTE_3");
 // que roda SÓ ali apareceria como "sem lista" e o gate acusaria o contrário do
 // que aconteceu.
 const parte4 = listaDoWorkflow(yml, "SPECS_PARTE_4");
+// PARTE_5 — a quarta parte COMUM (a 4 é a da instalação fresca). Nasceu em
+// 19/09 porque três partes comuns já não cabiam no teto: dois cortes por
+// relógio no mesmo dia, ambos sem caso vermelho.
+const parte5 = listaDoWorkflow(yml, "SPECS_PARTE_5");
 const foraDoCi = listaDoWorkflow(yml, "FORA_DO_CI");
 const noDisco = readdirSync(DIR_SPECS)
   .filter((f) => f.endsWith(".spec.ts"))
@@ -92,16 +96,39 @@ describe("cobertura do e2e no CI", () => {
     expect(parte2.length, "SPECS_PARTE_2 não foi lida do workflow").toBeGreaterThan(10);
     expect(parte3.length, "SPECS_PARTE_3 não foi lida do workflow").toBeGreaterThan(10);
     expect(parte4.length, "SPECS_PARTE_4 não foi lida do workflow").toBeGreaterThan(0);
+    expect(parte5.length, "SPECS_PARTE_5 não foi lida do workflow").toBeGreaterThan(0);
     expect(foraDoCi.length, "FORA_DO_CI não foi lida do workflow").toBeGreaterThan(0);
   });
 
+  // ⚠️ LISTA DECLARADA ≠ LISTA INVOCADA. Medido em 19/09, sabotando: tirar o `5`
+  // de `parte: [1, 2, 3, 4, 5]` deixa `SPECS_PARTE_5` no arquivo, com as 14
+  // specs dentro, e NINGUÉM as roda — e todos os casos acima continuavam
+  // verdes, porque elas seguem "declaradas". É a cobertura parcial silenciosa
+  // que este arquivo existe para impedir, entrando pela porta de trás.
+  it("toda lista declarada é invocada pela matrix (e vice-versa)", () => {
+    const m = /^\s*parte:\s*\[([^\]]+)\]/m.exec(yml);
+    expect(m, "não achei a matrix `parte:` no workflow — o parser envelheceu").not.toBeNull();
+    const naMatrix = m![1]!
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .sort();
+    const declaradas = [...yml.matchAll(/^\s*SPECS_PARTE_(\d+):/gm)].map((x) => x[1]!).sort();
+    expect(declaradas.length, "nenhuma SPECS_PARTE_N lida — parser morto").toBeGreaterThan(1);
+    expect(
+      naMatrix,
+      "a matrix e as listas discordam: parte declarada que ninguém roda esconde specs; " +
+        "parte na matrix sem lista faz o job morrer com `lista vazia`.",
+    ).toEqual(declaradas);
+  });
+
   it("toda spec do disco está em exatamente uma lista", () => {
-    const declaradas = [...parte1, ...parte2, ...parte3, ...parte4, ...foraDoCi];
+    const declaradas = [...parte1, ...parte2, ...parte3, ...parte4, ...parte5, ...foraDoCi];
     const semLista = noDisco.filter((f) => !declaradas.includes(f));
     expect(
       semLista,
       "Spec no disco que não roda no CI nem está declarada como fora. Ponha em " +
-        "SPECS_PARTE_1/2/3 (se rodar sem WAHA/Redis/Resend), em SPECS_PARTE_4 (com " +
+        "SPECS_PARTE_1/2/3/5 (se rodar sem WAHA/Redis/Resend), em SPECS_PARTE_4 (com " +
         "os serviços do job) ou em FORA_DO_CI com o " +
         "motivo escrito. Cobertura parcial silenciosa se lê como cobertura total.\n",
     ).toEqual([]);

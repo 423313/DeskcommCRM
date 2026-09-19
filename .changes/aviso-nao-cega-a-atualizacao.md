@@ -9,3 +9,5 @@ O aviso que aparece durante a atualização assumia a porta **inteira** — incl
 Agora o aviso responde a **pessoa** com a página e a **máquina** com uma resposta curta de "indisponível". A tela de atualização volta a contar o andamento.
 
 Medido na instalação real antes do conserto: 18 KB de página dentro do registro de erro do atualizador, a cada atualização.
+
+Trabalho de @paulolimajr77, recortado do #803.
