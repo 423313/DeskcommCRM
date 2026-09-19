@@ -18,14 +18,17 @@
 #
 # O que está sob prova, hook por hook:
 #
-#   freeze-invariants.sh — o eixo é PROCEDÊNCIA, e ela exige QUATRO referências: o índice
-#        (`:<p>`), `HEAD:<p>`, `MERGE_HEAD:<p>` e `merge-base:<p>`. Um caminho sai da lista
-#        só quando as CINCO condições valem — (1) há merge de um lado só, (2) o outro lado
-#        é alcançável por `origin/main`, (3) `HEAD:<p>` == `base:<p>`, (4) `:<p>` ==
-#        `MERGE_HEAD:<p>` e (5) `MERGE_HEAD:<p>` != `base:<p>` — e CADA uma tem aqui o caso
-#        que fica vermelho quando ela é removida (medido, uma sabotagem por condição):
+#   freeze-invariants.sh — o eixo é PROCEDÊNCIA, e ela exige CINCO referências: o índice
+#        (`:<p>`), `HEAD:<p>`, `MERGE_HEAD:<p>`, `merge-base:<p>` e `origin/main:<p>` (a
+#        PONTA da main — não qualquer ancestral dela). Um caminho sai da lista só quando as
+#        SEIS condições valem — (1) há merge de um lado só, (2) o outro lado é alcançável
+#        por `origin/main`, (3) `HEAD:<p>` == `base:<p>`, (4) `:<p>` == `MERGE_HEAD:<p>`,
+#        (5) `MERGE_HEAD:<p>` != `base:<p>` e (6) `:<p>` == `origin/main:<p>` — e CADA uma
+#        tem aqui o caso que fica vermelho quando ela é removida (medido, uma sabotagem por
+#        condição):
 #          2 → FURO-B, COLEGA-DEL, SEM-REF     4 → B+
 #          3 → FURO-A, FURO-A-MH               5 → MODO
+#          6 → ANCESTRAL-SUPERADO
 #        (a 1 não tem caso: octopus não está coberto — ver o comentário do caso FURO-B.)
 #     1. o FALSO POSITIVO morreu: invariante que o merge trouxe não é acusado — nem quando
 #        o merge o MODIFICA (caso B), nem quando ele o RENOMEIA (caso REN-LEGIT), nem
@@ -39,10 +42,15 @@
 #        · existência de CAMINHO (`git cat-file -e origin/main:$p`, a forma do guard de
 #          migration): o invariante existe na main tanto quando a main o trouxe quanto
 #          quando a branch o reescreveu → caso B+.
-#        · identidade de CONTEÚDO contra `origin/main` (duas versões atrás): também é
-#          verdade quando a sessão REVERTE o invariante para a versão da main, que é
-#          autoria → casos R1 e R1-LIMPO. E ela julgava só o `$3` da linha `R`, deixando o
-#          path VELHO ser apagado em silêncio → caso R-VELHO.
+#        · ALCANÇABILIDADE por `origin/main` (`git merge-base --is-ancestor`, também a forma
+#          do guard de migration): aceita QUALQUER ancestral, e o commit que a main absorveu
+#          e depois SUPEROU é alcançável — o conserto da main voltava para a branch, em
+#          silêncio → caso ANCESTRAL-SUPERADO (o defeito da #1227). Quem mede a ponta é a 6.
+#        · identidade de CONTEÚDO contra `origin/main`, SOZINHA: também é verdade quando a
+#          sessão REVERTE o invariante para a versão da main, que é autoria → casos R1 e
+#          R1-LIMPO e, DENTRO do merge, CONTEUDO-REVERTIDO — que é o motivo de a 6 ser
+#          CONJUNTA com a 3, e não a condição única. E ela julgava só o `$3` da linha `R`,
+#          deixando o path VELHO ser apagado em silêncio → caso R-VELHO.
 #        · julgar só o índice, `MERGE_HEAD` e a base, SEM ler `HEAD` (a versão anterior):
 #          as condições 4 e 5 valem quando a sessão DESCARTA a versão da própria branch
 #          dentro do merge → casos FURO-A e FURO-A-MH.
@@ -221,6 +229,25 @@ printf "$CORPO_PAR" "app da meta" > "$principal_ren/$RENOMEADO"
 printf '# leia\nlinha que a MAIN acrescentou\n' > "$principal_ren/README.md"
 commitar "$principal_ren" "a main RENOMEIA o invariante (e mexe no README)"
 
+# ── o "principal" do #1227: a main ABSORVE um commit e DEPOIS o SUPERA ───────────────────
+# É a montagem que faz da condição 2 uma garantia FALSA: o outro lado é um commit que a main
+# absorveu — `--is-ancestor` dele contra `origin/main` é VERDADEIRO — e sobre o qual a main
+# já andou por cima. Mede o caso ANCESTRAL-SUPERADO.
+principal_ponta="$TMP/principal_ponta"; mkdir -p "$principal_ponta/tests/invariants"
+git -C "$principal_ponta" init -q -b main
+inv > "$principal_ponta/$INV"
+printf '# leia\n' > "$principal_ponta/README.md"
+commitar "$principal_ponta" "base da main"
+BASE_PONTA=$(git -C "$principal_ponta" rev-parse HEAD)
+git -C "$principal_ponta" checkout -q -b colega_ponta
+inv "$MARCA_COLEGA" > "$principal_ponta/$INV"
+commitar "$principal_ponta" "o colega fortalece o invariante"
+ABSORVIDO=$(git -C "$principal_ponta" rev-parse HEAD)
+git -C "$principal_ponta" checkout -q main
+git -C "$principal_ponta" merge -q --no-ff colega_ponta -m "a main ABSORVE o fortalecimento do colega"
+inv "" "" "$MARCA_MAIN" > "$principal_ponta/$INV"
+commitar "$principal_ponta" "a main conserta o invariante que absorveu"
+
 # ── monta uma branch de trabalho atrasada, com um commit próprio ─────────────────────
 # $1 destino, $2 repo principal, $3 commit-base (o ponto em que a branch saiu)
 preparar() {
@@ -272,6 +299,50 @@ git -C "$bp" add "$INV"
 r=$(rodar "$bp" freeze-invariants.sh)
 assert_exit "$(exit_de "$r")" 1 "B+: edição PRÓPRIA escondida dentro do merge SEGUE bloqueada"
 assert_contains "$(saida_de "$r")" "$INV" "B+: e a mensagem nomeia o invariante acusado"
+
+# CASO ANCESTRAL-SUPERADO (#1227) · o outro lado é um commit que a main ABSORVEU e DEPOIS
+# SUPEROU. `git merge-base --is-ancestor <absorvido> origin/main` é VERDADEIRO — a condição 2 o
+# declara "trabalho aceito" — e o que ele traz é a versão SUPERADA: o conserto que a main fez
+# depois volta para a branch, em silêncio, se a exclusão passar. `--is-ancestor` aceita QUALQUER
+# ancestral; quem mede a ponta é a condição 6.
+as="$TMP/as"; preparar "$as" "$principal_ponta" "$BASE_PONTA"
+git -C "$as" merge --no-commit --no-ff "$ABSORVIDO" >/dev/null 2>&1 || true
+if git -C "$as" merge-base --is-ancestor "$ABSORVIDO" origin/main; then
+  ok "ANCESTRAL-SUPERADO: o outro lado É alcançável por origin/main (a 2 não o distingue da ponta)"
+else falha "ANCESTRAL-SUPERADO: o outro lado É alcançável por origin/main" "não é ancestral: a montagem não mede o que diz medir"; fi
+if [ "$(git -C "$as" rev-parse ":$INV")" != "$(git -C "$as" rev-parse "origin/main:$INV")" ]; then
+  ok "ANCESTRAL-SUPERADO: e o conteúdo encenado é DIFERENTE do da ponta (é a versão superada)"
+else falha "ANCESTRAL-SUPERADO: e o conteúdo encenado é DIFERENTE do da ponta" "encenado == ponta: a montagem não encena a perda"; fi
+r=$(rodar "$as" freeze-invariants.sh)
+assert_exit "$(exit_de "$r")" 1 "ANCESTRAL-SUPERADO: o merge do absorvido-e-superado é ACUSADO (o conserto da main não se reverte em silêncio)"
+assert_contains "$(saida_de "$r")" "$INV" "ANCESTRAL-SUPERADO: e a mensagem nomeia o invariante acusado"
+r=$(commitar_pelo_dispatcher "$as" "merge do absorvido (que a main superou)")
+assert_exit "$(exit_de "$r")" 1 "ANCESTRAL-SUPERADO: e pelo caminho de produção o commit do merge é RECUSADO"
+if [ -f "$as/.git/MERGE_HEAD" ]; then ok "ANCESTRAL-SUPERADO: e o merge continua em curso (MERGE_HEAD segue lá — bloqueio sem dano colateral)"
+else falha "ANCESTRAL-SUPERADO: e o merge continua em curso" "MERGE_HEAD sumiu: o commit passou"; fi
+
+# CASO CONTEUDO-REVERTIDO · o controle que fecha o "hook (b)" refutado e que a condição 6 SOZINHA
+# reabriria: a branch TEM autoria sobre o invariante (o ato com a válvula) e a sessão o troca,
+# DENTRO do merge, pela versão da main. `:<INV> == origin/main:<INV>` é VERDADE — e ainda assim
+# tem de ser ACUSADO, porque a exclusão perde a 3 (NA_BRANCH != BASE): reverter o próprio
+# fortalecimento dentro do merge é autoria, não "o que a main trouxe".
+cr="$TMP/cr"; preparar "$cr" "$principal" "$BASE_DA_BRANCH"
+inv "" "$MARCA_BRANCH" > "$cr/$INV"
+commitar "$cr" "a branch FORTALECE o invariante (ato com a válvula)"
+git -C "$cr" merge --no-commit --no-ff origin/main >/dev/null 2>&1 || true
+git -C "$cr" checkout -q origin/main -- "$INV"; git -C "$cr" add "$INV"
+if [ "$(git -C "$cr" rev-parse ":$INV")" = "$(git -C "$cr" rev-parse "origin/main:$INV")" ]; then
+  ok "CONTEUDO-REVERTIDO: o encenado é IDÊNTICO à ponta (a premissa do hook (b) refutado)"
+else falha "CONTEUDO-REVERTIDO: o encenado é IDÊNTICO à ponta" "blobs divergem: a montagem não encena o caso"; fi
+if [ "$(git -C "$cr" rev-parse "HEAD:$INV")" != "$(git -C "$cr" rev-parse "$BASE_DA_BRANCH:$INV")" ]; then
+  ok "CONTEUDO-REVERTIDO: e a branch TINHA tocado o invariante (a 3 é FALSA aqui)"
+else falha "CONTEUDO-REVERTIDO: e a branch TINHA tocado o invariante" "NA_BRANCH == BASE: o controle não encena autoria"; fi
+r=$(rodar "$cr" freeze-invariants.sh)
+assert_exit "$(exit_de "$r")" 1 "CONTEUDO-REVERTIDO: reverter para a versão da main DENTRO do merge SEGUE acusado"
+r=$(commitar_pelo_dispatcher "$cr" "merge revertendo o próprio fortalecimento")
+assert_exit "$(exit_de "$r")" 1 "CONTEUDO-REVERTIDO: e pelo caminho de produção também RECUSA"
+if tem_marcador "$cr" "$INV" BRANCH; then ok "CONTEUDO-REVERTIDO: e o MARCADOR-BRANCH segue no HEAD — nada foi perdido"
+else falha "CONTEUDO-REVERTIDO: e o MARCADOR-BRANCH segue no HEAD" "o fortalecimento da branch se perdeu"; fi
 
 # CASO A · edição genuína, fora de merge
 a="$TMP/a"; preparar "$a" "$principal" "$BASE_DA_BRANCH"
