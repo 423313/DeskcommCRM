@@ -114,9 +114,10 @@ async function removerEcoDoProprioEnvio(
       .in("external_id", candidatos)
       // ⚠️ SEGUNDA CAMADA, SEM COBERTURA POSSÍVEL — escrito porque medi: trocar
       // este `neq` por um que nunca casa deixa a suíte VERDE. O filtro de
-      // `sent_via` acima já exclui a linha deste envio (que nasce `user`, `ai`
-      // ou `automation`, nunca `external_device`), então nenhum teste alcança
-      // esta cláusula. Fica porque o desfecho que ela impede é o pior que esta função poderia
+      // `sent_via` acima já exclui a linha deste envio (que nasce `user`, `ai`,
+      // `automation` ou `system`, nunca `external_device`), então nenhum teste
+      // alcança esta cláusula.
+      // Fica porque o desfecho que ela impede é o pior que esta função poderia
       // produzir: apagar a própria mensagem que acabou de ser entregue. Quem
       // mexer no filtro de cima não vai ser avisado por teste nenhum.
       .neq("id", minhaLinhaId);
@@ -147,8 +148,13 @@ async function removerEcoDoProprioEnvio(
  * junto), o resgate da fila (`session-reconciler.ts`), a métrica de atrito e o
  * rótulo do balão (`components/inbox/MessageBubble.tsx`).
  */
-export function origemDaMensagem(actor: Actor): "user" | "ai" | "automation" {
+export function origemDaMensagem(actor: Actor): "user" | "ai" | "automation" | "system" {
   if (actor.type === "user") return "user";
+  // TOKEN DE SERVIDOR é integração, não IA (#866): quem manda é um sistema de
+  // fora, e chamar isso de "IA" inflava o número do agente no painel e punha o
+  // rótulo errado no balão. Um mecanismo só decide os quatro valores — quando
+  // eram dois (uma função e um mapa), o mesmo contrato tinha duas verdades.
+  if (actor.type === "api_token") return "system";
   // A regra dispara, mas nem sempre ESCREVE. A ação "Mensagem escrita pela IA"
   // manda texto de um agente publicado com este mesmo ator, e a decisão da #652
   // é por AUTORIA: ali a linha é da IA. Decidir só pelo tipo do ator carimbaria
@@ -170,6 +176,27 @@ export function origemDaMensagem(actor: Actor): "user" | "ai" | "automation" {
 const MSG_COLS =
   "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, edited_at, revoked_at, reply_to_message_id, created_at";
 
+/**
+ * `Actor.type` → o vocabulário de `messages.sent_via` (o CHECK da coluna:
+ * 'crm', 'external_device', 'automation', 'ai', 'user', 'system').
+ *
+ * ⚠️ O TOKEN DE SERVIDOR NÃO É A IA — e o mapa é `Record<Actor["type"], …>` de
+ * propósito. O ternário que vivia aqui (`actor.type === "user" ? "user" : "ai"`)
+ * dizia `ai` para TUDO que não fosse pessoa, então uma variante NOVA de `Actor`
+ * caía nesse `ai` sem ninguém decidir nada: foi assim que o envio de uma
+ * integração passou a ser contado como fala da IA (issue #866) — a leitura de
+ * `por_ia` no baseline conta exatamente `sent_via = 'ai'`, e a ingestão de canal
+ * tratava a linha como envio NASCIDO aqui (álibi de eco que só a IA e o humano
+ * merecem). Com o `Record`, variante nova de `Actor` não COMPILA até alguém
+ * escrever a autoria dela — o defeito deixa de ser possível por omissão.
+ *
+ * `webhook_source` continua `ai`: é divergência CONHECIDA das outras escalas de
+ * autoria do repo (`actorParaAtividade`, `especieDe` e `autorParaTimeline` mandam
+ * tudo que não é pessoa nem agente para `system`), porque a automação hoje se
+ * apresenta como IA no balão da conversa e mover o valor dela mexe no dedup de
+ * eco e nas telas que contam "quanto a IA falou". Decisão de produto registrada
+ * em `components/inbox/MessageBubble.tsx`, com issue própria.
+ */
 function actorAuditPayload(actor: Actor): {
   actorUserId: string | null;
   metadataActor: Record<string, unknown>;

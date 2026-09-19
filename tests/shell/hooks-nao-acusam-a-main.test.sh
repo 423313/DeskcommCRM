@@ -96,6 +96,19 @@ assert_contains() { if grep -qF -- "$2" <<<"$1"; then ok "$3"; else falha "$3" "
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+# ── isolamento do git: nada aqui escreve fora de "$TMP" ─────────────────────────────
+# Um `git -C "$dir" config user.*` grava onde o git RESOLVER o repositório, e não
+# necessariamente em "$dir": um GIT_DIR herdado (rodar de dentro de um hook, de um
+# `rebase --exec`) manda por cima do -C; "$dir" que não é repositório sobe até o pai.
+# Foi assim que "Pessoa <alguem@fork.dev>" parou no .git/config do checkout de quem
+# rodava a suíte e assinou 829 commits da main a partir de 10/09/2026. Três travas:
+#   1. zera o ambiente local do git herdado — o idioma canônico do próprio git;
+#   2. a descoberta de repositório nunca sobe para fora de "$TMP";
+#   3. identidade por ambiente, não por `git config` (NENHUM teste aqui mede o autor).
+unset $(git rev-parse --local-env-vars)
+export GIT_CEILING_DIRECTORIES="$TMP"
+export GIT_AUTHOR_NAME="Teste" GIT_AUTHOR_EMAIL="teste@exemplo.invalid"
+export GIT_COMMITTER_NAME="Teste" GIT_COMMITTER_EMAIL="teste@exemplo.invalid"
 unset DESKCOMM_GOV_INVARIANTS_EDIT DESKCOMM_GOV_PLAN_EDIT || true
 
 INV=tests/invariants/exemplo-congelado.test.ts
@@ -106,7 +119,6 @@ INV_CITADO='tests/invariants/inv-com-"aspas".test.ts'
 # e um com ACENTO, que o `core.quotepath` do git (padrão: true) também cita
 INV_ACENTO='tests/invariants/inv-acentuação.test.ts'
 
-identificar() { git -C "$1" config user.email "quem@exemplo.com"; git -C "$1" config user.name "Quem"; }
 commitar()    { git -C "$1" add -A >/dev/null && git -C "$1" commit -q --no-verify -m "$2"; }
 
 # O invariante tem TRÊS SLOTS separados por linhas de contexto, e isso é premissa de
@@ -128,7 +140,7 @@ tem_marcador() { git -C "$1" show "HEAD:$2" 2>/dev/null | grep -qF "MARCADOR-$3"
 
 # ── o "principal" que faz o papel da main ───────────────────────────────────────────
 principal="$TMP/principal"; mkdir -p "$principal/tests/invariants" "$principal/plan"
-git -C "$principal" init -q -b main; identificar "$principal"
+git -C "$principal" init -q -b main
 inv > "$principal/$INV"
 inv > "$principal/$INV_CITADO"
 inv > "$principal/$INV_ACENTO"
@@ -164,7 +176,7 @@ commitar "$principal" "a main anda: invariante, plano e README"
 
 # e um commit só-de-plano, para o caminho de CRIAÇÃO (a main cria o arquivo depois)
 principal2="$TMP/principal2"; mkdir -p "$principal2/plan"
-git -C "$principal2" init -q -b main; identificar "$principal2"
+git -C "$principal2" init -q -b main
 printf '# leia\n' > "$principal2/README.md"; commitar "$principal2" "base sem plano"
 BASE_SEM_PLANO=$(git -C "$principal2" rev-parse HEAD)
 printf '{\n  "epico": "G6",\n  "features": [ { "id": "F1", "title": "criado pela main", "passes": false } ]\n}\n' > "$principal2/$FEAT"
@@ -186,7 +198,7 @@ NOVO_DA_MAIN=tests/invariants/app-da-meta-e-server-side.test.ts
 # principal_par: a main ACRESCENTA um invariante parecido com o que já existe. É o par
 # `R` que o git forma sozinho quando a SESSÃO apaga o velho dentro do merge (caso R-VELHO).
 principal_par="$TMP/principal_par"; mkdir -p "$principal_par/tests/invariants"
-git -C "$principal_par" init -q -b main; identificar "$principal_par"
+git -C "$principal_par" init -q -b main
 printf "$CORPO_PAR" "credencial do google" > "$principal_par/$VELHO"
 printf '# leia\n' > "$principal_par/README.md"
 commitar "$principal_par" "base com o invariante velho"
@@ -199,7 +211,7 @@ commitar "$principal_par" "a main ACRESCENTA o invariante novo (e mexe no README
 # de PASSAR — a linha `R` inteira veio de lá (caso REN-LEGIT).
 RENOMEADO=tests/invariants/app-da-meta-e-server-side.test.ts
 principal_ren="$TMP/principal_ren"; mkdir -p "$principal_ren/tests/invariants"
-git -C "$principal_ren" init -q -b main; identificar "$principal_ren"
+git -C "$principal_ren" init -q -b main
 printf "$CORPO_PAR" "credencial do google" > "$principal_ren/$VELHO"
 printf '# leia\n' > "$principal_ren/README.md"
 commitar "$principal_ren" "base com o invariante velho"
@@ -212,7 +224,7 @@ commitar "$principal_ren" "a main RENOMEIA o invariante (e mexe no README)"
 # ── monta uma branch de trabalho atrasada, com um commit próprio ─────────────────────
 # $1 destino, $2 repo principal, $3 commit-base (o ponto em que a branch saiu)
 preparar() {
-  rm -rf "$1"; git clone -q "$2" "$1" >/dev/null 2>&1; identificar "$1"
+  rm -rf "$1"; git clone -q "$2" "$1" >/dev/null 2>&1
   mkdir -p "$1/loop/hooks"; cp "$HOOKS_ORIGEM"/*.sh "$HOOKS_ORIGEM/pre-commit" "$1/loop/hooks/"
   chmod +x "$1"/loop/hooks/*
   # o dispatcher fica ARMADO em todo fixture: os casos novos medem pelo caminho de
@@ -560,10 +572,10 @@ else falha "SEM-REF: o merge não foi concluído" "a versão da main entrou: o c
 # roda sob `set -euo pipefail` — a decisão é falhar FECHADO (bloquear pede uma válvula
 # declarada; liberar perde o eval em silêncio).
 fsb="$TMP/fsb"; mkdir -p "$fsb/tests/invariants" "$TMP/desconhecido/tests/invariants"
-git -C "$TMP/desconhecido" init -q -b main; identificar "$TMP/desconhecido"
+git -C "$TMP/desconhecido" init -q -b main
 printf 'test("versao do OUTRO lado", () => {});\n' > "$TMP/desconhecido/$INV"
 commitar "$TMP/desconhecido" "historia sem parentesco"
-git -C "$fsb" init -q -b trabalho; identificar "$fsb"
+git -C "$fsb" init -q -b trabalho
 printf 'test("versao da BRANCH", () => {});\n' > "$fsb/$INV"
 commitar "$fsb" "base da branch"
 mkdir -p "$fsb/loop/hooks"; cp "$HOOKS_ORIGEM"/*.sh "$HOOKS_ORIGEM/pre-commit" "$fsb/loop/hooks/"
