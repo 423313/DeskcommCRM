@@ -182,12 +182,43 @@ jobs:
         if: matrix.parte == 1
         run: |
           set -uo pipefail
-          bash scripts/checar-colisao-de-migration.sh origin/${GITHUB_BASE_REF:-main}
-          codigo=$?
-          if [ "$codigo" != 0 ]; then
-            echo "::error title=Número de migration em uso::Renumere o arquivo (NNNN e TIMESTAMP juntos, no mesmo commit). Não escolha o número sozinho quando houver outros PRs de schema em voo: peça ao alocador da rodada — o maestro de PRs de plantão —, porque quem mescla primeiro fica com o número e não há reserva. A regra está em triagem/TRIAGEM.md."
-            exit "$codigo"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            bash scripts/checar-colisao-de-migration.sh origin/${GITHUB_BASE_REF:-main}
+            codigo=$?
+            if [ "$codigo" != 0 ]; then
+              echo "::error title=Número de migration em uso::Renumere o arquivo (NNNN e TIMESTAMP juntos, no mesmo commit). Não escolha o número sozinho quando houver outros PRs de schema em voo: peça ao alocador da rodada — o maestro de PRs de plantão —, porque quem mescla primeiro fica com o número e não há reserva. A regra está em triagem/TRIAGEM.md."
+              exit "$codigo"
+            fi
+            exit 0
           fi
+          # FORA DE pull_request a guarda por diff é INERTE (HEAD é a própria
+          # base, nada foi "acrescentado"), e é justamente aqui que a duplicata
+          # aparece: o verde de um PR é uma foto do passado — o #965 estava verde
+          # com prévia de 1039 commits atrás e cinco números já tomados. Se uma
+          # duplicata escapar por prévia velha, por administrador que ignora o
+          # check ou por merge fora do fluxo, a `main` reprova NA HORA, em vez de
+          # a descoberta ser o `db push` de um self-hoster.
+          nomes="$(git ls-tree -r --name-only HEAD -- supabase/migrations | grep -E '\.sql$' | sed 's#.*/##')"
+          total="$(grep -c . <<<"$nomes" || true)"
+          # Controle de vivacidade: árvore sem migration nenhuma é sonda cega, não
+          # "está tudo certo". Medido em 19/09/2026: 263 arquivos.
+          if [ "${total:-0}" -lt 100 ]; then
+            echo "::error title=A varredura de duplicata não mediu nada::li ${total:-0} migration(ões) em supabase/migrations — a sonda perdeu o caminho."
+            exit 2
+          fi
+          dup_n="$(grep -oE '^[0-9]{14}_[0-9]{4}' <<<"$nomes" | cut -d_ -f2 | sort | uniq -d)"
+          dup_t="$(grep -oE '^[0-9]{14}' <<<"$nomes" | sort | uniq -d)"
+          if [ -n "$dup_n" ] || [ -n "$dup_t" ]; then
+            for n in $dup_n; do
+              echo "::error title=NNNN duplicado na árvore::${n} aparece em: $(grep -E "^[0-9]{14}_${n}_" <<<"$nomes" | tr '\n' ' ')"
+            done
+            for ts in $dup_t; do
+              echo "::error title=Timestamp duplicado na árvore::${ts} aparece em: $(grep -E "^${ts}_" <<<"$nomes" | tr '\n' ' ')"
+            done
+            echo "Conserto: renumerar o arquivo que entrou por último (NNNN e TIMESTAMP juntos) num PR de forward-fix — migration já aplicada não se edita."
+            exit 1
+          fi
+          echo "OK — ${total} migrations na árvore, nenhum NNNN nem timestamp repetido."
 
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
