@@ -2111,7 +2111,6 @@ export const DICIONARIO: Traducoes = {
   },
   "Não entendi estas linhas:": { es: "No entendí estas líneas:" },
   "Lista salva.": { es: "Lista guardada." },
-  "Salvar": { es: "Guardar" },
   "Deixe em branco para usar o endereço oficial do provedor. Use isto para apontar para um gateway compatível com a API da OpenAI. Um endereço na rede do servidor só funciona se quem administra a instalação o tiver liberado em Administração › Destinos internos — e, mesmo liberado, ele não vale para o endereço que esta empresa escolhe aqui.": {
     es: "Déjalo en blanco para usar la dirección oficial del proveedor. Usa esto para apuntar a un gateway compatible con la API de OpenAI. Una dirección en la red del servidor solo funciona si quien administra la instalación la liberó en Administración › Destinos internos — y, aun liberada, no vale para la dirección que esta empresa elige aquí.",
   },
