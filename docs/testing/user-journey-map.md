@@ -155,7 +155,7 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 | J4.25 | ⚠️ O funil de entrada de uma org nova é de **e-commerce** | `fn_seed_default_pipeline_for_org` semeia "Pedidos" com *Carrinho abandonado · Pago · Em separação…*. Numa clínica ou imobiliária, o lead nasce em **"Carrinho abandonado"**. Achado em 2026-08-06 ao provar J4.22; conserto é decisão de produto (spec 17 passo 4) |
 | J4.36 | **Editar campos do funil pela barra da conversa** | só os customizados (`settings.fields`) aparecem como inputs; título/valor ficam no dossiê. Salvar grava `custom_fields` no mesmo PATCH do quadro e a seção relê · `tests/unit/inbox-campos-lead.test.tsx` |
 | J4.37 | **Marcar como perdido oferece os motivos do FUNIL** (#918) | a janela lista `settings.lost_reasons` do funil do card, recusa em "Outro" o texto que o trigger negaria (22023) e diz onde se cadastra um motivo novo; confirmar grava o motivo com o texto do operador · `tests/e2e/motivos-de-perda-do-funil.spec.ts` (SPECS_PARTE_1) + `tests/unit/kanban-motivos-de-perda-do-funil.test.tsx` (9 casos). Evidência: `evidence/motivos-de-perda-do-funil/` |
-| J4.40 | ⚠️ **"Motivos de perda extras" da ORGANIZAÇÃO não tem consumidor** | `organizations.settings.lost_reasons_extra` (o campo "Motivos de perda extras (separados por vírgula)" em Configurações › Organização, `app/app/settings/tenant/_form.tsx`) não é lido pelo trigger `fn_validate_lost_reason_required` — que só olha `crm_pipelines.settings.lost_reasons` — nem pela janela de perder. Medido: `grep lost_reasons_extra` só devolve as telas de configuração e os schemas; no `baseline.sql` ele aparece apenas dentro de um `comment on function`. Defeito PRÉ-EXISTENTE, não introduzido pelo #938 — mas depois dele o produto tem dois campos quase homônimos, um que funciona (funil) e um que não (organização). Saídas possíveis: o trigger unir organização ∪ funil, ou o campo sair da aba Organização. Decisão do dono |
+| J4.40 | ✅ **"Motivos de perda extras" da ORGANIZAÇÃO saiu da tela** | O campo gravava `organizations.settings.lost_reasons_extra`, que ninguém lia: `fn_validate_lost_reason_required` aceita canônico ∪ `crm_pipelines.settings.lost_reasons`, e a janela de perder lê o funil pelo `useMotivosDePerdaDoFunil`. Das duas saídas que este item registrava — o trigger unir organização ∪ funil, ou o campo sair —, tomou-se a segunda: manter dois campos quase homônimos, um que vale e um que não, custa mais do que o alcance por organização entrega, e o motivo de perda é vocabulário do FUNIL (é nele que o relatório de perdas agrupa). O dado já gravado fica na linha, intocado, e volta a ser alcançável se a outra saída for escolhida um dia |
 | J4.39 | **Tag em lote oferece as tags que já existem** (#852, item 3) | o menu "Tag…" lista até 10 tags dos leads do quadro e digitar filtra. ⚠️ Defeito achado NA TRIAGEM e medido em jsdom: o typeahead do menu do Radix roubava o foco do campo na primeira tecla (digitar "goo" deixava "g" no campo) e o Enter aplicava a tag do MENU a todos os selecionados · `tests/unit/tag-em-lote-mostra-existentes.test.tsx` (4 casos, um deles no ponto de uso). **Falta prova de tela**: abrir o quadro com ≥12 tags distintas, selecionar 2 cards, digitar uma tag nova que comece como uma existente e conferir o texto inteiro no campo |
 | J4.38 | **Excluir um card pelo menu do próprio card, inclusive no toque** (#910) | o botão de ações é visível sem hover em aparelho de toque (opacidade COMPUTADA, não a string do `className`) e o menu traz "Excluir", que abre o `AlertDialog` da doutrina destrutiva · `tests/e2e/lote-no-quadro-do-funil.spec.ts` (bloco de toque) + `tests/unit/kanban-card-excluir.test.tsx` (5 casos). Evidência: `evidence/excluir-card-no-toque/` |
 | J4.41 | **Arrastar o mesmo card duas vezes seguidas** (#916, PR #919) | o segundo arrasto, feito logo depois do primeiro e com o refetch do quadro segurado (a rede lenta de uma VPS distante), responde `200` e o card chega à terceira etapa, sem o aviso "modificado por outro usuário" e sem recarregar a página; o banco guarda a etapa final. `tests/e2e/kanban-owner-filter.spec.ts`, funil próprio, arrasto pelo teclado do `@hello-pangea/dnd` (executado 2026-09-16, ambiente fresco do `baseline.sql`). Evidência: `evidence/arrastar-duas-vezes/01-depois-do-primeiro.png` (o card na segunda etapa, depois do primeiro arrasto) e `evidence/arrastar-duas-vezes/02-depois-do-segundo.png` (na terceira, depois do segundo) |
@@ -328,6 +328,46 @@ separação entre o vocabulário de LEITURA (7 valores, o do banco) e o de ESCRI
 (5 — quem grava `pending` é o motor, e um cliente REST não pode fingir uma
 escalação). Guardado por `tests/unit/fila-tem-uma-definicao-so.test.ts`, que varre
 o fonte dos quatro sítios e compara o CONJUNTO do trigger com o da constante.
+
+---
+
+## J31 — A clínica sai do zero em follow-up sem desenhar um grafo `[P0]`
+
+Contexto do código: o motor de follow-up está inteiro desde a 0054, e mesmo assim
+uma instalação nova não tem fluxo NENHUM — ter o primeiro exigia abrir o
+construtor e desenhar nó, ramo e prazo de graça, além de escrever os textos. É
+primeira impressão (`[P0]`) por isso: a tela vazia promete "sem depender de
+alguém lembrar de mandar mensagem" e não entrega nada. `lib/followup/modelos/`
+traz as quatro jornadas de clínica (consulta, exame, cirurgia, falta) e a
+galeria instala uma delas como RASCUNHO, com o gatilho já armado.
+
+Spec: `tests/e2e/followup-modelos-de-clinica.spec.ts` — dirige a tela; o grafo
+que aparece no construtor é o do catálogo, gravado pela rota real
+(`POST /api/v1/ai/followup-flows/from-model`), sem `INSERT` à mão.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J31.1 | Tela vazia de Follow-ups | "Começar de um modelo" aparece ANTES de "Novo fluxo" | **NÃO MEDIDO EM TELA** — o ambiente e2e (stack Supabase local + seed de credenciais) não foi levantado nesta sessão; coberto por unit + rota |
+| J31.2 | Abrir a galeria | as 4 jornadas, cada uma com nº de mensagens, horizonte e o que dispara | **NÃO MEDIDO EM TELA** |
+| J31.3 | Instalar o modelo de falta | cria o fluxo e abre o construtor com o grafo desenhado | **NÃO MEDIDO EM TELA** |
+| J31.4 | O fluxo recém-instalado na lista | badge "Rascunho" — instalar não manda mensagem a paciente nenhum | **NÃO MEDIDO EM TELA**; garantido por `from-model/route.test.ts` ("nasce RASCUNHO") |
+| J31.5 | Modelo de etapa sem etapa escolhida | botão "Instalar" travado; a rota recusa com `trigger_stage_missing` | **UNIT/ROTA PASS**, tela **NÃO MEDIDA** |
+| J31.6 | Instalar o mesmo modelo duas vezes | selo "Já instalado"; a rota responde 409 nomeando o fluxo existente | **UNIT/ROTA PASS**, tela **NÃO MEDIDA** |
+| J31.7 | Viewer na tela | não vê a galeria (`canWrite`) | **NÃO MEDIDO EM TELA** |
+| J31.8 | Todo modelo do catálogo é publicável | `validateFlowForPublish` aprova os 4 sem erro | **PASS** — `lib/followup/modelos/modelos.test.ts` |
+
+⚠️ **O que a galeria NÃO faz, e a tela diz:** publicar e armar o fluxo no agente
+continuam sendo atos de gente. Sem um agente PUBLICADO com o ponteiro em
+`followup.flow_pointer_ids`, gatilho automático não enrolla ninguém
+(`agent-followup-gate.ts`) — fluxo com cara de vivo. A linha está no rodapé do
+diálogo e é asserida na spec.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J31.9 | Fluxo automático publicado que nenhum agente arma | a Central abre um aviso nomeando o fluxo e quando ele dispararia | **PASS (unit)** — `app/api/v1/cron/followup-sem-agente/route.test.ts`; tela **NÃO MEDIDA** |
+| J31.10 | O mesmo fluxo depois de ligado no agente | o aviso é FECHADO pelo próprio cron, sem ninguém tocar nele | **PASS (unit)** |
+| J31.11 | Fluxo manual ou de webhook sem agente | nenhum aviso — eles funcionam sem agente, e o alarme seria falso | **PASS (unit)** |
+| J31.12 | Rodada do cron que não mudou nada | não audita (CLAUDE.md §Audit log) | **PASS (unit)** |
 
 ---
 
@@ -950,7 +990,7 @@ ação `send_ai_message`, retomada manual (`lib/escalacao/retomada.ts`).
 | J20.15 | Org SEM versão de agente publicada (caminho legado `ai-response-worker`), gate allowlist, contato não autorizado | IA NÃO responde por este caminho tampouco | **UNIT** — `ai-response-worker-elegibilidade.test.ts` (skip `nao_elegivel_para_ia` antes de ler mensagem/agente; fail-closed em erro de leitura) |
 | J20.16 | Follow-up de TEXTO FIXO drenado inline (`enviarTextoFixoPendente`, sem worker), contato não autorizado | NÃO envia; job vira `done` | **UNIT** — `enviar-texto-fixo.test.ts` "conversa NÃO elegível" (+ fail-closed volta pra `pending`) |
 | J20.17 | Cliente antigo irritado (gate allowlist, não autorizado) → worker de sentimento dispara `low_sentiment` | `triggerHandoff` NÃO dispara: sem "um humano vai te atender", sem mexer no estado da conversa | **UNIT** — `handoff-orchestrator-elegibilidade.test.ts` (`bloqueioPorAllowlist` e `conversa_silenciada` barram; fail-closed em erro) |
-| J20.18 | Eu respondo o cliente à mão pelo meu WhatsApp numa conversa autorizada | IA para naquela conversa por um PRAZO (`PRAZO_DO_SILENCIO_MS`, 60 min) renovado a cada nova fala humana, SEM apagar `ai_authorized_at`; volta sozinha quando o prazo vence, ou antes por "devolver ao automático" | **UNIT** — `atendimento-manual.test.ts` (as duas pontas do prazo medidas pelo motor real `decidirElegibilidade`, renovação, e o que NUNCA encurta: `'infinity'` do handoff formal e janela mais longa) + `waha-ingest-atendimento-manual.test.ts` (via `dispatchWahaEvent` real; eco do próprio envio NÃO pausa) + guarda de fonte no Zernio + fiação em `handoff-fernando-fiacao.test.ts`; **E2E** — `tests/e2e/j20-elegibilidade-atendimento-manual.spec.ts` (webhook `fromMe` genuíno → `bot_silenced_until` finito e futuro, nunca `'infinity'`, + rastro; `ai_authorized_at` intacto; 2ª mensagem RENOVA o prazo; tela mostra o selo; "devolver ao automático" solta a trava e a autorização continua) |
+| J20.18 | Eu respondo o cliente à mão pelo meu WhatsApp numa conversa autorizada | IA para naquela conversa por um PRAZO (`PRAZO_DO_SILENCIO_MS`, 60 min) renovado a cada nova fala humana, SEM apagar `ai_authorized_at`; volta sozinha quando o prazo vence, ou antes por "devolver ao automático" | **UNIT** — `atendimento-manual.test.ts` (as duas pontas do prazo medidas pelo motor real `decidirElegibilidade`, renovação, e o que NUNCA encurta: `'infinity'` do handoff formal e janela mais longa) + `waha-ingest-atendimento-manual.test.ts` (via `dispatchWahaEvent` real; eco do próprio envio NÃO pausa) + guarda de fonte no Zernio + fiação em `handoff-fantasma-fiacao.test.ts`; **E2E** — `tests/e2e/j20-elegibilidade-atendimento-manual.spec.ts` (webhook `fromMe` genuíno → `bot_silenced_until` finito e futuro, nunca `'infinity'`, + rastro; `ai_authorized_at` intacto; 2ª mensagem RENOVA o prazo; tela mostra o selo; "devolver ao automático" solta a trava e a autorização continua) |
 | J20.19 | Worker parado acorda com backlog; dois inbound antigos com o MESMO `sent_at` | a "última inbound" é a mais RECENTE (por `created_at`), nunca a de maior uuid — o evento antigo é pulado | **INVARIANTE** — `tests/invariants/drain-recencia-inbound.test.ts` (Postgres real) + `drain.test.ts` guarda a cláusula `coalesce(sent_at, created_at)` |
 
 **Sabotagem que confirma:** removendo o veto `sem_autorizacao` de
@@ -2557,3 +2597,27 @@ RPC `fn_support_context` falhou e derrubou `/api/v1/pipelines` com 500 — e foi
 assim que o estado "não consegui carregar as etapas" apareceu na tela sem ser
 provocado. A função existe e tem `EXECUTE` para `authenticated` no banco local;
 a falha foi de carga, não de permissão.
+
+### Conexão por código de pareamento — 2026-09-15
+
+[P0] Conexões → Conectar novo WhatsApp → Conectar por código → telefone com país
+e DDD → Gerar código → confirmação no celular → polling WORKING. Mesmo
+componente no onboarding. QR permanece disponível para retorno.
+
+Cobertura automatizada: `lib/channels/pairing-code.test.ts`,
+`app/api/v1/channel-sessions/[id]/pairing-code/route.test.ts`,
+`components/connections/PairingOptions.test.tsx`: contrato de transporte,
+isolamento da consulta, RBAC/MFA, arquivado, estados não pareáveis, rate limit,
+timeout, sanitização, formulário, geração explícita e retorno ao QR.
+Teste de componente/contrato não prova pareamento real no celular.
+
+Prova em 15/09/2026: 853 arquivos / 8.791 testes aprovados + 1 falha esperada;
+typecheck e build local/amd64 aprovados; lint sem erros (avisos preexistentes).
+Imagem `1.24.0-saraiva-pairing.edae079` saudável na VPS. Pela tela real,
+Conectar novo WhatsApp abriu QR/código, telefone curto desabilitou o envio,
+telefone malformado exibiu validação do servidor e a volta ao QR funcionou.
+API real retornou 401 sem login, 400 para telefone inválido, 404 para sessão
+ausente, 409 para sessão já conectada e 429 para repetição. Sessão vazia de QA
+removida pelo fluxo de exclusão, após conferir zero histórico/vínculos; canal
+original permaneceu WORKING. Código gerado pelo transporte é coberto por teste
+de contrato; pareamento real por código ainda requer confirmação no celular.

@@ -695,9 +695,29 @@ async function exigeSemSobreposicao(
   }
 }
 
-/** `Actor` → o vocabulário de `calendar_appointments.created_by_kind`. */
+/**
+ * `Actor` → o vocabulário de `calendar_appointments.created_by_kind`.
+ *
+ * ⚠️ O TOKEN DE SERVIDOR NÃO É A IA. Este ternário dizia `ai` para TUDO que não
+ * fosse pessoa, e a MESMA ação saía com duas autorias no MESMO request: a
+ * timeline, logo abaixo, grava `autorParaTimeline(ctx.actor.type)` — que manda
+ * `api_token` para `system` —, e a coluna do compromisso dizia `ai`. A tela
+ * (`ROTULO_DO_AUTOR`) anunciava "Marcado pelo atendente de IA" para compromisso
+ * que algoritmo nenhum escreveu (issue #866). Fora daqui, `actorParaAtividade`
+ * (lib/leads/activity-emitter.ts) e `especieDe` (lib/operacao/autoria.ts) já
+ * diziam o mesmo: quem age por token é o PRODUTO, não a IA.
+ *
+ * `webhook_source` continua `ai` — e isso é divergência CONHECIDA, não
+ * esquecimento: a automação do motor se apresenta como IA no balão da conversa
+ * (`components/inbox/MessageBubble.tsx`), e mover as duas colunas juntas é
+ * decisão de produto com efeito de leitura (as telas que contam "o que a IA
+ * marcou/falou" passam a excluir automação). Fica para issue própria, com o
+ * mesmo argumento escrito no mapeamento de `messages.sent_via`.
+ */
 function autorParaCriacao(actor: Actor): string {
-  return actor.type === "user" ? "user" : "ai";
+  if (actor.type === "user") return "user";
+  if (actor.type === "api_token") return "system";
+  return "ai";
 }
 
 /**

@@ -3002,6 +3002,9 @@ export type Database = {
           meta_phone_number_id: string | null
           meta_token_encrypted: string | null
           meta_waba_id: string | null
+          meta_webhook_override_em: string | null
+          meta_webhook_override_erro: string | null
+          meta_webhook_override_uri: string | null
           metadata: Json
           organization_id: string
           phone_number: string | null
@@ -3035,6 +3038,9 @@ export type Database = {
           meta_phone_number_id?: string | null
           meta_token_encrypted?: string | null
           meta_waba_id?: string | null
+          meta_webhook_override_em?: string | null
+          meta_webhook_override_erro?: string | null
+          meta_webhook_override_uri?: string | null
           metadata?: Json
           organization_id: string
           phone_number?: string | null
@@ -3068,6 +3074,9 @@ export type Database = {
           meta_phone_number_id?: string | null
           meta_token_encrypted?: string | null
           meta_waba_id?: string | null
+          meta_webhook_override_em?: string | null
+          meta_webhook_override_erro?: string | null
+          meta_webhook_override_uri?: string | null
           metadata?: Json
           organization_id?: string
           phone_number?: string | null
@@ -5098,8 +5107,8 @@ export type Database = {
           key: string
           organization_id: string
           request_hash: string
-          response_body: Json
-          status_code: number
+          response_body: Json | null
+          status_code: number | null
         }
         Insert: {
           tenant_creation_trusted?: boolean
@@ -5110,8 +5119,8 @@ export type Database = {
           key: string
           organization_id: string
           request_hash: string
-          response_body: Json
-          status_code: number
+          response_body?: Json | null
+          status_code?: number | null
         }
         Update: {
           tenant_creation_trusted?: boolean
@@ -5122,8 +5131,8 @@ export type Database = {
           key?: string
           organization_id?: string
           request_hash?: string
-          response_body?: Json
-          status_code?: number
+          response_body?: Json | null
+          status_code?: number | null
         }
         Relationships: [
           {
