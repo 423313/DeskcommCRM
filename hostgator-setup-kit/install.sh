@@ -1664,6 +1664,11 @@ esac
   printf '# e cole as duas chaves aqui (depois: docker compose up -d app).\n'
   envq VAPID_PUBLIC_KEY "${VAPID_PUBLIC_KEY:-}"
   envq VAPID_PRIVATE_KEY "${VAPID_PRIVATE_KEY:-}"
+  printf '# Provisionamento por sistema externo (POST /api/v1/tenants/provision):\n'
+  printf '# um sistema de fora cria empresas nesta instalação. DESLIGADO — vazio, a\n'
+  printf '# rota responde 404. Para ligar: openssl rand -hex 32, cole aqui e entregue\n'
+  printf '# só ao sistema que vai criar empresas (depois: docker compose up -d app).\n'
+  envq TENANT_PROVISIONING_SECRET "${TENANT_PROVISIONING_SECRET:-}"
   printf '# Telemetria de erros (você escolheu isto durante a instalação).\n'
   printf '#   "off"  = não envia nada.\n'
   printf '#   vazio  = só ERRO pro Sentry da comunidade, com CPF/telefone/e-mail\n'
