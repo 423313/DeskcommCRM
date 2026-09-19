@@ -32337,6 +32337,31 @@ alter table public.prospecting_campaigns
   add column if not exists agent_setup_revision bigint not null default 0;
 notify pgrst, 'reload schema';
 
+-- ---- provider "zernio_social" entra nos CHECKs de channel_sessions (migration 0343) ----
+--
+-- SEM ESTE BLOCO, TODA VPS DE CLIENTE QUEBRA e a nossa máquina não vê: o
+-- `install.sh` e o `update.sh` aplicam SÓ este arquivo, enquanto aqui a cadeia
+-- de `migrations/` roda e conserta o CHECK por outro caminho. O sintoma no
+-- cliente é 23514 na PRIMEIRA tentativa de conectar uma rede social — a
+-- constraint do dump conhece só waha/meta_cloud/zernio/wacalls.
+--
+-- Idempotente e auto-curativo (drop + add), no mesmo padrão dos outros
+-- apêndices: reaplicar não duplica constraint nem falha.
+alter table public.channel_sessions drop constraint if exists channel_sessions_provider_check;
+alter table public.channel_sessions add constraint channel_sessions_provider_check
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'zernio_social'::text, 'wacalls'::text]));
+
+-- O segundo CHECK amarra cada provider à coluna de identidade que ele usa.
+-- `zernio_social` usa a MESMA `zernio_account_id` do `zernio` — sem esta linha,
+-- a sessão da rede social é recusada mesmo com o provider já aceito acima.
+alter table public.channel_sessions drop constraint if exists channel_sessions_provider_ref_check;
+alter table public.channel_sessions add constraint channel_sessions_provider_ref_check check (
+  (provider = 'waha'       and waha_session_name   is not null) or
+  (provider = 'meta_cloud' and meta_phone_number_id is not null) or
+  (provider in ('zernio', 'zernio_social') and zernio_account_id is not null) or
+  (provider = 'wacalls'    and wacalls_session_id  is not null)
+);
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
