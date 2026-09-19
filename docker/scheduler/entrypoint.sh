@@ -99,6 +99,10 @@ CRONS="
 # a rodada só age naquela que marca a hora da varredura. Minuto diferente do
 # aniversário para as duas não disputarem a mesma batida num self-host pequeno.
 23 * * * *|60|api/v1/cron/lead-date-field-due
+# O canal mudo (doc 11, decisão B): varredura de banco, sem rede, com régua em
+# DIAS. Diária e de madrugada porque o estado que ela lê muda em dias — de 5 em
+# 5 minutos seriam 288 varreduras para nada, e o aviso chegaria na mesma hora.
+50 5 * * *|60|api/v1/cron/canal-mudo-watcher
 0 12 * * *|60|api/v1/cron/lgpd-sla-watcher
 30 3 * * *|120|api/v1/cron/kb-conversations-batch
 15 4 * * *|60|api/v1/cron/sync-model-catalog

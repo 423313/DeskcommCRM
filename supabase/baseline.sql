@@ -10020,6 +10020,16 @@ alter table public.agent_inbox_items
     -- (bloco único por constraint, #159; e a janela de 2000 caracteres que
     -- `tests/unit/midia-nao-lida.test.ts` varre a partir do `add constraint`).
     'followup_sem_agente',
+    -- (migration 0339, doc 11 decisão B) O canal de WhatsApp em modo de teste
+    -- SEM número autorizado não responde a ninguém — e o esquecimento é o
+    -- defeito: as mensagens chegam no Inbox e a IA nunca fala, então quem
+    -- instalou conclui que o produto está quebrado. O cron canal-mudo-watcher
+    -- abre este aviso depois de 3 dias e o FECHA quando deixa de valer.
+    --
+    -- Entra NESTA lista, e não num bloco novo no fim do arquivo: reconstruir a
+    -- mesma constraint em N blocos quebra o `update.sh` de todo clone com
+    -- vocabulário posterior (lição do #159).
+    'canal_mudo_sem_numero',
     'other'
   ));
 
