@@ -27793,7 +27793,7 @@ grant  execute on function public.tags_do_contato(public.conversations) to authe
 
 notify pgrst, 'reload schema';
 
--- ---- transporte SMTP da instalação: a segunda opção de e-mail (migration 0324) ----
+-- ---- transporte SMTP da instalação: a segunda opção de e-mail (migration 0333) ----
 --
 -- Singleton de escopo de INSTALAÇÃO, no mesmo desenho de `platform_meta_app`
 -- (0257) e `platform_google_oauth` (0201): um servidor SMTP atende os e-mails de
