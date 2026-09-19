@@ -28,11 +28,20 @@ const SHELL = path.join(RAIZ, "app/app/_components/AppShell.tsx");
 /** Tailwind: `4` = 1rem = 16px. Só o que este arquivo precisa. */
 const PX_POR_PASSO = 4;
 
+/**
+ * Captura o grupo 1 ou FALHA com a razão. Uma sonda que não casa devolve
+ * `undefined`, e `undefined` lido como texto vira zero medido — o jeito de
+ * errar mais barato que existe neste repo.
+ */
+function capturar(m: RegExpMatchArray | null, oQue: string): string {
+  expect(m?.[1], oQue).toBeTruthy();
+  return m![1]!;
+}
+
 function classesDoAside(fonte: string): string {
   // O `<aside>` é o invólucro fixo; é ele que carrega bottom/right/z.
   const m = fonte.match(/<aside[\s\S]*?className=\{cn\(([\s\S]*?)\)\}/);
-  expect(m, "o atalho deve continuar sendo um <aside> com className via cn()").toBeTruthy();
-  return m![1];
+  return capturar(m, "o atalho deve continuar sendo um <aside> com className via cn()");
 }
 
 /**
@@ -50,25 +59,24 @@ function classesDoAside(fonte: string): string {
  */
 function distanciaDoRodapePermanente(aside: string): number {
   const ternario = aside.match(/\?\s*"bottom-\d+"\s*:\s*"bottom-(\d+)"/);
-  if (ternario) return Number(ternario[1]) * PX_POR_PASSO;
+  if (ternario?.[1]) return Number(ternario[1]) * PX_POR_PASSO;
   return passo(aside, "bottom") * PX_POR_PASSO;
 }
 
 /** A altura do gatilho: o botão que fica visível com o painel fechado. */
 function alturaDoGatilho(fonte: string): number {
   const botao = fonte.match(/<button[^>]*aria-controls="floating-inbox-panel"[\s\S]{0,400}?className=\{?["'`]([^"'`]+)/);
-  expect(
+  const classes = capturar(
     botao,
     'não achei o botão com aria-controls="floating-inbox-panel" — se o gatilho mudou de forma, ' +
       "esta sonda precisa mudar junto, e não silenciosamente",
-  ).toBeTruthy();
-  return passo(botao![1], "h") * PX_POR_PASSO;
+  );
+  return passo(classes, "h") * PX_POR_PASSO;
 }
 
 function passo(classes: string, prefixo: string): number {
   const m = classes.match(new RegExp(`(?:^|["'\\s])${prefixo}-(\\d+)(?:["'\\s]|$)`));
-  expect(m, `esperava uma classe ${prefixo}-N em: ${classes.slice(0, 200)}`).toBeTruthy();
-  return Number(m![1]);
+  return Number(capturar(m, `esperava uma classe ${prefixo}-N em: ${classes.slice(0, 200)}`));
 }
 
 describe("o atalho de mensagens não cobre a ação de ninguém", () => {
@@ -81,8 +89,7 @@ describe("o atalho de mensagens não cobre a ação de ninguém", () => {
     const ocupado = distanciaDoRodape + altura;
 
     const main = shell.match(/<main className="([^"]+)"/);
-    expect(main, "o <main> do shell deve ter className literal").toBeTruthy();
-    const reservado = passo(main![1], "pb") * PX_POR_PASSO;
+    const reservado = passo(capturar(main, "o <main> do shell deve ter className literal"), "pb") * PX_POR_PASSO;
 
     expect(
       reservado,
