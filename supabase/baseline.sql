@@ -1552,8 +1552,8 @@ CREATE TABLE IF NOT EXISTS "public"."idempotency_keys" (
     "key" "text" NOT NULL,
     "endpoint" "text" NOT NULL,
     "request_hash" "bytea" NOT NULL,
-    "status_code" integer NOT NULL,
-    "response_body" "jsonb" NOT NULL,
+    "status_code" integer,
+    "response_body" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "expires_at" timestamp with time zone DEFAULT ("now"() + '24:00:00'::interval) NOT NULL
 );
@@ -9972,10 +9972,23 @@ alter table public.agent_inbox_items
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
     'case_stale',
+    -- (migration 0312) O fluxo de follow-up publicado que NUNCA vai disparar:
+    -- gatilho automático (silêncio, etapa, caso, falta) só cria inscrição se
+    -- algum agente publicado arma o ponteiro, e sem esse vínculo os produtores
+    -- saem por `pointers_armados = 0` em silêncio — `active` na tela, morto no
+    -- motor. Entra NESTA lista e no FIM dela, pelas duas razões de sempre
+    -- (bloco único por constraint, #159; e a janela de 2000 caracteres que
+    -- `tests/unit/midia-nao-lida.test.ts` varre a partir do `add constraint`).
+    'followup_sem_agente',
     'other'
   ));
 
 
+
+-- ---- índice do watcher de follow-up sem agente (migration 0312) ----
+create index if not exists agent_inbox_items_followup_sem_agente_aberto_idx
+  on public.agent_inbox_items (organization_id, ref_id)
+  where kind = 'followup_sem_agente' and status = 'open';
 
 notify pgrst, 'reload schema';
 
@@ -26452,6 +26465,8 @@ as $$
   ),
   envios as (
     select count(*) filter (where m.sent_via = 'ai')              as por_ia,
+           count(*) filter (where m.sent_via = 'automation')      as por_automacao,
+           count(*) filter (where m.sent_via = 'system')          as por_integracao,
            count(*) filter (where m.sent_via = 'user')            as por_humano_no_sistema,
            count(*) filter (where m.sent_via = 'external_device') as por_humano_fora
       from public.messages m
@@ -26522,6 +26537,8 @@ as $$
       'vetos',                    (select vetados  from vetos),
       'execucoes_medidas',        (select execucoes from vetos),
       'envios_por_ia',            (select por_ia                from envios),
+      'envios_por_automacao',     (select por_automacao         from envios),
+      'envios_por_integracao',    (select por_integracao        from envios),
       'envios_humano_no_sistema', (select por_humano_no_sistema from envios),
       'envios_humano_fora',       (select por_humano_fora       from envios),
       -- O invariante 4 vira NÚMERO na tela: demanda aberta sem próximo passo é
@@ -27754,6 +27771,28 @@ comment on column public.ad_platform_connections.google_login_customer_id is
 comment on column public.ad_platform_connections.google_conversion_action_id is
   'Qual ação de conversão, dentro de google_customer_id, recebe os envios de venda. Formato: só o id numérico, o resource name completo é montado no transporte.';
 
+-- ---- marcadores do contato no filtro de conversas (migration 0323) ----
+-- Campo calculado do PostgREST: o filtro ?tag= do Inbox casa conversations.tags
+-- OU contacts.tags num único or=, sem lista de ids na URL. SECURITY INVOKER (a
+-- RLS de contacts vale para quem chama); as duas origens de EXECUTE revogadas.
+-- Antes da varredura de anon, como toda função nova do apêndice.
+create or replace function public.tags_do_contato(c public.conversations)
+  returns text[]
+  language sql
+  stable
+  set search_path = public
+as $$
+  select ct.tags from public.contacts ct where ct.id = c.contact_id
+$$;
+
+comment on function public.tags_do_contato(public.conversations) is
+  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0323).';
+
+revoke execute on function public.tags_do_contato(public.conversations) from public, anon;
+grant  execute on function public.tags_do_contato(public.conversations) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -27937,6 +27976,60 @@ comment on column public.automation_rules.trigger_config is
   'Configuração do gatilho (issue #989). Vazio nos gatilhos que nascem de evento. No gatilho lead.date_field_due guarda {pipeline_id, campo, dias} — o campo de data pertence a UM funil, e sem essa dupla a varredura não sabe onde olhar.';
 
 notify pgrst, 'reload schema';
+-- 0311 · O webhook do NÚMERO, registrado pela própria instalação (issue #850, fatia F1).
+--
+-- ─── O que o usuário via ────────────────────────────────────────────────────
+-- Conectar o canal oficial era metade do caminho: o canal ENVIAVA e não RECEBIA até
+-- alguém entrar no painel da Meta, abrir a configuração do webhook, colar a URL de
+-- callback e escolher os campos — por número. Quem não sabia disso (o produto é
+-- self-host para quem NÃO programa) ficava com um canal que parece pronto e cujas
+-- mensagens recebidas simplesmente não existem em lugar nenhum: nem erro, nem log.
+--
+-- ─── O que estas colunas guardam ────────────────────────────────────────────
+-- O DESFECHO do registro automático, não a configuração: a URL que ficou registrada
+-- (`meta_webhook_override_uri`), o motivo da última falha (`..._erro`) e quando foi
+-- (`..._em`). São o que a tela lê para dizer "conectado, webhook pendente: <motivo>"
+-- com botão de tentar de novo — em vez de dizer "conectado" e deixar a descoberta
+-- para a primeira mensagem que nunca chega.
+--
+-- ─── Por que colunas, e não o `metadata` jsonb que já existe na tabela ──────
+-- Porque a TELA consulta este estado a cada render e o desfecho tem três leitores
+-- (GET do canal, POST de conexão, rota de re-registro): chave dentro de jsonb é
+-- contrato que ninguém vê quebrar — o `metadata` da sessão é do ingest/roteamento, e
+-- misturar os dois faz um `update` de lá apagar o desfecho daqui.
+--
+-- ─── Por que registrar DEPOIS de gravar a sessão ────────────────────────────
+-- O GET de verificação da Meta chega no instante em que o override é registrado e
+-- procura a sessão pelo `webhook_path_token`. Registrar antes de a linha existir
+-- devolveria 404, e a Meta marcaria o webhook como inválido — pior que não registrar.
+-- Ordem invertida = defeito, não preferência.
+--
+-- ─── Exposição: nenhuma nova ────────────────────────────────────────────────
+-- A URL registrada contém o `webhook_path_token`, que JÁ vive nesta tabela
+-- (`channel_sessions`, com `GRANT ALL` a anon/authenticated e RLS de isolamento por
+-- organização desde as migrations 0106/0099). Não há coluna nova de segredo, não há
+-- grant novo, não há policy nova: a coluna herda exatamente o acesso das vizinhas.
+-- O que ela NÃO guarda é o token da Meta — esse continua só em
+-- `meta_token_encrypted`, cifrado (fn_encrypt_oauth).
+--
+-- ─── O que NÃO entra aqui, de propósito ─────────────────────────────────────
+-- * `message_template_status_update`: a Meta NÃO aceita override por número para este
+--   tópico — ele continua indo para a URL do app (limite da plataforma, não escolha).
+-- * Limpeza no arquivamento do canal e reaplicação na reconexão: é a fatia F1b, e
+--   roda em cima destas mesmas colunas (`meta_webhook_override_uri` null = desfeito).
+-- * Índice: as três colunas são lidas sempre pela chave primária da sessão.
+
+alter table public.channel_sessions
+  add column if not exists meta_webhook_override_uri text,
+  add column if not exists meta_webhook_override_erro text,
+  add column if not exists meta_webhook_override_em timestamptz;
+
+comment on column public.channel_sessions.meta_webhook_override_uri is
+  'URL de callback registrada na Meta para ESTE número (override por phone_number_id). Nulo = não registrado (ou desfeito). Contém o webhook_path_token, que já é desta tabela.';
+comment on column public.channel_sessions.meta_webhook_override_erro is
+  'Motivo da última falha ao registrar o webhook, como a Graph API devolveu. Não é falha da conexão: o canal envia normalmente; o que depende disto é a ENTREGA. Nulo = última tentativa deu certo.';
+comment on column public.channel_sessions.meta_webhook_override_em is
+  'Quando foi a última TENTATIVA de registrar (sucesso ou falha). A tela usa a data para o operador saber se o estado que ele vê é o de agora.';
 -- ---- a resposta revisada para de segurar a Zona de perigo (migration 0273) ----
 -- A FK inline da 0227 nasceu sem ação de exclusão (NO ACTION) e era a ÚNICA das
 -- quatro que apontam para `public.messages(id)` fora do padrão `on delete set
@@ -27971,6 +28064,24 @@ notify pgrst, 'reload schema';
 update storage.buckets
 set allowed_mime_types = array['application/pdf', 'text/markdown', 'text/x-markdown', 'text/plain', 'text/csv']
 where id = 'ai-policy';
+-- ---- o recibo de idempotência ganha o estado "em curso" (migration 0321) ----
+-- Issue #778, PR #1189 (@webtecnica). Reserva = `status_code` e `response_body`
+-- nulos, gravada ANTES do efeito; recibo = os dois preenchidos. O `create table`
+-- do corpo já nasce anulável (install); as duas primeiras linhas levam a
+-- nulidade a quem JÁ tinha a tabela (update), onde o `create table if not
+-- exists` é no-op. `drop not null` em coluna já anulável é no-op. O CHECK fecha
+-- o meio-termo (um gravado e o outro não), que nenhum leitor sabe interpretar;
+-- toda linha anterior tem as duas colunas preenchidas e passa sem backfill.
+alter table public.idempotency_keys alter column status_code drop not null;
+alter table public.idempotency_keys alter column response_body drop not null;
+alter table public.idempotency_keys
+  drop constraint if exists idempotency_keys_recibo_ou_reserva;
+alter table public.idempotency_keys
+  add constraint idempotency_keys_recibo_ou_reserva
+  check ((status_code is null) = (response_body is null));
+
+notify pgrst, 'reload schema';
+
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
 --
 -- ⚠️ ESTA CHAMADA É O ÚLTIMO BLOCO DO ARQUIVO. Tabela nova, coluna
