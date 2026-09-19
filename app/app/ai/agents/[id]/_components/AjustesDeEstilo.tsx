@@ -17,7 +17,10 @@ export function AjustesDeEstilo() {
   const t = useT();
   const consulta = useStyleAdjustments();
   const gravar = useSetStyleAdjustment();
-  const atual = consulta.data?.ajustes.find((item) => item.ajuste === "sem_travessao_longo");
+  // `?.ajustes?.find`: enquanto a consulta não volta, `data` existe sem `ajustes`
+  // no cache de outra chave, e o `.find` direto estourava a tela inteira
+  // (medido em tests/unit/painel-de-seguranca.test.tsx, 3 casos).
+  const atual = consulta.data?.ajustes?.find((item) => item.ajuste === "sem_travessao_longo");
   const ligado = atual?.enabled ?? false;
   const podeEditar = consulta.data?.podeEditar ?? false;
 
@@ -35,7 +38,7 @@ export function AjustesDeEstilo() {
           }
           aria-label="— → ,"
         />
-        <code className="rounded bg-muted px-2 py-1 text-xs">— → ,</code>
+        <code className="rounded-md bg-muted px-2 py-1 text-xs">— → ,</code>
         <span className="text-xs text-muted-foreground">
           {consulta.isLoading
             ? t("carregando…")

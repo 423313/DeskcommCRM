@@ -30,15 +30,31 @@ export function ajusteDaChavePersistida(layer: string): AjusteDeEstilo | null {
     : null;
 }
 
+/** O que a leitura viu — e se ela chegou a ver. */
+export interface LeituraDosAjustes {
+  ajustes: AjustesDeEstiloDaOrg;
+  /**
+   * `true` quando a consulta falhou e os ajustes acima são o default, não a
+   * escolha da organização. Quem chama registra isso: degradar em silêncio faz
+   * "a organização desligou" e "não consegui perguntar" terem a mesma cara.
+   */
+  leituraFalhou: boolean;
+}
+
 /**
  * Lê somente escolhas conhecidas da organização. Ausência de linha = desligado,
  * que é o default de produto pedido pela #378. Falha de leitura também degrada
- * para desligado: preferência de estilo não pode derrubar um atendimento.
+ * para desligado: preferência de estilo não pode derrubar um atendimento — mas
+ * ela volta marcada, para o chamador deixar rastro.
+ *
+ * ⚠️ **Chame FORA de transação aberta.** Uma consulta que falha dentro de uma
+ * transação a deixa abortada, e a PRÓXIMA consulta morre com 25P02 — o `catch`
+ * daqui esconderia a causa e o envio quebraria longe, com outro nome.
  */
 export async function lerAjustesDeEstiloDaOrg(
   db: Queryable,
   organizationId: string,
-): Promise<AjustesDeEstiloDaOrg> {
+): Promise<LeituraDosAjustes> {
   try {
     const { rows } = await db.query<{ layer: string; enabled: boolean }>(
       `select layer, enabled
@@ -52,9 +68,9 @@ export async function lerAjustesDeEstiloDaOrg(
       const ajuste = ajusteDaChavePersistida(row.layer);
       if (ajuste !== null) ajustes[ajuste] = row.enabled;
     }
-    return ajustes;
+    return { ajustes, leituraFalhou: false };
   } catch {
-    return { ...AJUSTES_DESLIGADOS };
+    return { ajustes: { ...AJUSTES_DESLIGADOS }, leituraFalhou: true };
   }
 }
 
@@ -63,14 +79,27 @@ export async function lerAjustesDeEstiloDaOrg(
  *
  * Nas bordas de uma linha o travessão some, em vez de virar vírgula órfã. No
  * meio, apenas espaços horizontais ao redor dele são absorvidos (`a—b` e
- * `a — b`); `\n` nunca entra na regex, então um ajuste de pontuação não achata
- * os parágrafos escritos pelo modelo.
+ * `a — b`); a quebra de linha nunca entra no lugar da vírgula, então um ajuste
+ * de pontuação não achata os parágrafos escritos pelo modelo.
+ *
+ * As quatro bordas abaixo foram medidas na versão anterior desta função, que
+ * trocava o travessão por vírgula em qualquer posição:
+ *
+ *   "Olá: — tudo bem?"        → "Olá:, tudo bem?"        (pontuação dupla)
+ *   "Oi, — tudo bem?"         → "Oi,, tudo bem?"         (vírgula dupla)
+ *   "Isso — — aquilo"         → "Isso, , aquilo"         (travessões seguidos)
+ *   "Fim da linha —\r\n"      → "Fim da linha, \r\n"     (vírgula órfã em CRLF)
+ *
+ * Por isso: `\r?\n` nas bordas (o texto do modelo pode chegar com CRLF), uma ou
+ * MAIS ocorrências por vez (`(?:—[ \t]*)+`), e travessão logo depois de `,`,
+ * `:` ou `;` apenas SOME — quem já tinha pontuação não ganha outra.
  */
 export function removerTravessaoLongo(texto: string): string {
   return texto
-    .replace(/(^|\n)[ \t]*—[ \t]*/g, "$1")
-    .replace(/[ \t]*—[ \t]*(?=\n|$)/g, "")
-    .replace(/[ \t]*—[ \t]*/g, ", ");
+    .replace(/(^|\r?\n)[ \t]*(?:—[ \t]*)+/g, "$1")
+    .replace(/[ \t]*(?:—[ \t]*)+(?=\r?\n|$)/g, "")
+    .replace(/([,:;])[ \t]*(?:—[ \t]*)+/g, "$1 ")
+    .replace(/[ \t]*(?:—[ \t]*)+/g, ", ");
 }
 
 /** Aplica os itens ligados em ordem de código, nunca por regra livre do usuário. */

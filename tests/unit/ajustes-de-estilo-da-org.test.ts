@@ -59,7 +59,8 @@ describe("ajustes de estilo da organização", () => {
     } as unknown as Queryable;
 
     await expect(lerAjustesDeEstiloDaOrg(db, "org-1")).resolves.toEqual({
-      sem_travessao_longo: true,
+      ajustes: { sem_travessao_longo: true },
+      leituraFalhou: false,
     });
     expect(chamadas).toHaveLength(1);
     expect(chamadas[0]!.sql).toContain("organization_id = $1");
@@ -72,7 +73,28 @@ describe("ajustes de estilo da organização", () => {
         throw new Error("db indisponível");
       },
     } as unknown as Queryable;
-    await expect(lerAjustesDeEstiloDaOrg(db, "org-1")).resolves.toEqual(AJUSTES_DESLIGADOS);
+    // Degrada para desligado E diz que degradou: sem a marca, "a organização
+    // desligou" e "não consegui perguntar" ficam indistinguíveis no rastro.
+    await expect(lerAjustesDeEstiloDaOrg(db, "org-1")).resolves.toEqual({
+      ajustes: AJUSTES_DESLIGADOS,
+      leituraFalhou: true,
+    });
+  });
+
+  it("bordas de pontuação: o travessão não vira pontuação dupla nem vírgula órfã", () => {
+    // As quatro medidas na versão anterior da função, que trocava o travessão
+    // por vírgula em qualquer posição:
+    //   "Olá: — tudo bem?"   → "Olá:, tudo bem?"
+    //   "Oi, — tudo bem?"    → "Oi,, tudo bem?"
+    //   "Isso — — aquilo"    → "Isso, , aquilo"
+    //   "Fim da linha —\r\n"  → "Fim da linha, \r\n"
+    expect(removerTravessaoLongo("Olá: — tudo bem?")).toBe("Olá: tudo bem?");
+    expect(removerTravessaoLongo("Oi, — tudo bem?")).toBe("Oi, tudo bem?");
+    expect(removerTravessaoLongo("Isso — — aquilo")).toBe("Isso, aquilo");
+    expect(removerTravessaoLongo("Fim da linha —\r\n")).toBe("Fim da linha\r\n");
+    expect(removerTravessaoLongo("Linha —\r\nSegunda")).toBe("Linha\r\nSegunda");
+    // E o que já funcionava continua igual.
+    expect(removerTravessaoLongo("Primeiro—segundo—terceiro")).toBe("Primeiro, segundo, terceiro");
   });
 });
 
