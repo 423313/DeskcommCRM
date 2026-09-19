@@ -1,4 +1,4 @@
--- 0320_voip_trunk_settings (nasceu 0257 no PR #677; renumerada)
+-- 0327_voip_trunk_settings (nasceu 0257 no PR #677; renumerada)
 --
 -- Tela de configuração de trunk SIP por organização — hoje o único trunk do
 -- módulo de voz (Asterisk/AudioSocket, #677) vive hardcoded em
