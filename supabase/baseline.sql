@@ -28082,6 +28082,53 @@ alter table public.idempotency_keys
 
 notify pgrst, 'reload schema';
 
+-- ---- marcador do contato normalizado, no dado que já estava gravado (migration 0324) ----
+-- Issue #1224 (triagem do #1206), @webtecnica. A escrita passou a normalizar o
+-- marcador do contato nos quatro caminhos (ficha, importação por CSV, API e
+-- `crm_manage_tags`) pela MESMA função que o filtro usa para ler
+-- (lib/contacts/tag-normalizada.ts) — sem isso, `?tag=vip` não encontra o contato
+-- marcado como "VIP" e o chip do marcador não sai da ficha por remoção nenhuma.
+-- Este apêndice é o backfill do dado ANTERIOR, e é idempotente por
+-- `is distinct from`: aplicado numa VPS que já recebeu a migration 0324, nenhuma
+-- linha é tocada (o arquivo é aplicado inteiro em quem instala, e de novo em
+-- quem atualiza). A ordem é a mesma da aplicação — corta as pontas, minúsculas,
+-- teto de 40 caracteres, descarta o vazio e tira o repetido — e a ordem de
+-- primeira aparição é preservada (`with ordinality`) para a ficha do contato não
+-- reembaralhar os marcadores de quem já os tinha.
+update public.contacts c
+   set tags = sub.normalizados
+  from (
+    select ct.id, array_agg(ct.tag order by ct.ord) as normalizados
+      from (
+        select distinct on (left(lower(btrim(u.x)), 40))
+               c2.id,
+               left(lower(btrim(u.x)), 40) as tag,
+               u.ord
+          from public.contacts c2
+          cross join lateral unnest(c2.tags) with ordinality as u(x, ord)
+         where c2.tags is not null
+           and left(lower(btrim(u.x)), 40) <> ''
+         order by left(lower(btrim(u.x)), 40), u.ord
+      ) ct
+     group by ct.id
+  ) sub
+ where c.id = sub.id
+   and c.tags is distinct from sub.normalizados;
+
+-- Marcador que era só espaço vira lista vazia: a sentença acima não alcança
+-- essas linhas (a subconsulta descarta o vazio) e o contato ficaria com um
+-- marcador invisível, que nenhum filtro casa e nenhuma tela mostra.
+update public.contacts c
+   set tags = '{}'::text[]
+ where c.tags is not null
+   and cardinality(c.tags) > 0
+   and c.tags is distinct from '{}'::text[]
+   and not exists (
+     select 1 from unnest(c.tags) as x where left(lower(btrim(x)), 40) <> ''
+   );
+
+notify pgrst, 'reload schema';
+
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
 --
 -- ⚠️ ESTA CHAMADA É O ÚLTIMO BLOCO DO ARQUIVO. Tabela nova, coluna
