@@ -482,7 +482,19 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
       await page.locator('input[aria-label="Dígito 1"]').click();
       await page.keyboard.type(generateTotp(secret), { delay: 40 });
       try {
-        await expect(page.getByRole("heading", { name: /códigos de recuperação/i })).toBeVisible({
+        // MESMA ARMADILHA DO FECHO, e aqui ela desligava o retry: a página de
+        // Segurança tem a seção "Códigos de recuperação" impressa desde antes
+        // do enroll (`_client.tsx:176`, fora de condicional), então
+        // `getByRole('heading', /códigos de recuperação/i)` já valia ANTES de
+        // o modal chegar ao passo dos códigos — e passava na hora, mesmo com o
+        // TOTP recusado. Medido: com os dois títulos no DOM o strict mode
+        // reprova (`resolved to 2 elements`), então o verde só podia vir do
+        // casamento único, o da página. Resultado: este `for` nunca dava a
+        // segunda volta e a virada da janela TOTP caía lá embaixo, como falha
+        // confusa. `#mfa-title` é o título do passo ATUAL do modal (intro,
+        // scan e codes são ramos exclusivos), então prendê-lo aqui é o que
+        // pergunta de fato "o modal avançou?".
+        await expect(page.locator("#mfa-title")).toHaveText(/códigos de recuperação/i, {
           timeout: 8_000,
         });
         break;
