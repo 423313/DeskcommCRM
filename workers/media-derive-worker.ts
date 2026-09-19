@@ -203,13 +203,18 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     // não tem nada a dizer sobre isso: ele recusa destino INTERNO, e este caso é
     // um destino externo perfeitamente público.
     //
-    // Enquanto o dono do produto não decide a regra (documento de decisão 22),
-    // a triagem escolhe o desfecho conservador: com endereço da organização e
-    // chave da instalação, a leitura é RECUSADA com aviso na Central, em vez de
-    // a chave sair. Quem cadastra a credencial da própria empresa segue
-    // funcionando — que é o caminho que o produto já oferece na mesma tela.
-    const chaveEhDaInstalacao = [llmCfg.anthropicApiKey, llmCfg.openaiApiKey, llmCfg.openrouterApiKey]
-      .some((k) => typeof k === "string" && k !== "" && k === llm.apiKey);
+    // Decisão 22-a do dono do produto: endereço próprio exige chave própria.
+    // Com endereço da organização e chave da instalação, a leitura é RECUSADA
+    // com aviso na Central, em vez de a chave sair. Quem cadastra a credencial
+    // da própria empresa segue funcionando — que é o caminho que o produto já
+    // oferece na mesma tela. O turno do agente aplica o mesmo corte no seam
+    // (`run-model-call.ts`).
+    //
+    // A origem vem do RESOLVEDOR, que é quem sabe qual degrau da escada
+    // escolheu a chave. Até aqui ela era deduzida comparando o plaintext com as
+    // chaves do `.env` — uma segunda cópia da escada, que o chat não tinha e que
+    // divergiria no primeiro degrau novo.
+    const chaveEhDaInstalacao = llm.origemDaChave === "chave_da_instalacao";
 
     // O 5º argumento é a `base_url` do binding: o factory precisa dela para não
     // cair no endpoint padrão do provedor (ver o comentário lá em cima).
