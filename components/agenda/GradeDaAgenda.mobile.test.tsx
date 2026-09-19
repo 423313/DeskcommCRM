@@ -88,12 +88,18 @@ describe("a semana no celular é lista", () => {
  * — não havia rolagem que o alcançasse, nem aviso de que ele existia.
  */
 describe("a grade estica para caber o que está fora do horário comum", () => {
+  // Construído no fuso LOCAL de propósito. Quem decide se a janela estica é a
+  // HORA LOCAL, e o componente lê o fuso do runtime — não recebe nenhum. Um
+  // fixture com deslocamento fixo ("-03:00") prova coisas DIFERENTES em
+  // máquinas diferentes: aqui às 06:30 a janela descia para as 5h; no CI, que
+  // roda em UTC, o mesmo instante era 09:30 e não esticava nada. Passava na
+  // máquina de quem escreveu e reprovava no CI.
   const cedo = {
     id: "a1",
     titulo: "Antes de abrir",
     responsavelId: "p1",
-    comeca: "2026-09-16T06:30:00-03:00",
-    termina: "2026-09-16T07:15:00-03:00",
+    comeca: new Date(2026, 8, 16, 6, 30).toISOString(),
+    termina: new Date(2026, 8, 16, 7, 15).toISOString(),
     origem: "ui" as const,
     situacao: "confirmed" as const,
   };
