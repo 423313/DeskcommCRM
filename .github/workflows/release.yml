@@ -518,8 +518,15 @@ jobs:
               # Sem pipeline: sob pipefail, `printf | grep -q` dá "faltando" com a
               # versão listada assim que o HTML tiver quebra de linha depois do link
               # (o grep sai cedo e o printf morre de SIGPIPE, 141).
-              html=$(cat "$corpo")
-              if [ "$codigo" = "200" ] && [[ "$html" == *"href=\"${p}/${VERSAO}\""* ]]; then
+              # A sonda do link fica com a FORMA que `release-chega-na-lp.test.ts`
+              # reconhece como segura (sem pipeline: sob `pipefail`, um
+              # `printf | grep -q` dá falso-faltando por SIGPIPE). O status entra
+              # como guarda ANTES dela, em vez de virar um `&&` na própria linha:
+              # alargar a cerca para caber no meu código seria trocar a régua pelo
+              # que eu escrevi.
+              html=""
+              if [ "$codigo" = "200" ]; then html=$(cat "$corpo"); fi
+              if [[ "$html" == *"href=\"${p}/${VERSAO}\""* ]]; then
                 echo "  ${p}: v${VERSAO} listada"
               else
                 faltando="${faltando} ${p}"
