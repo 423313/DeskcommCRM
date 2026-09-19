@@ -292,17 +292,26 @@ test.describe("a passagem para humano chega com contexto", () => {
 
     // ─── 5. a Central aponta para a conversa ──────────────────────────────
     await page.goto("/app/ai/inbox");
+    // O link é localizado pelo DESTINO, nunca por posição. No CI a parte do e2e
+    // divide o banco com outras specs, e a Central mostra os avisos delas também
+    // — com o MESMO texto "Abrir conversa". `.first()` pegava o aviso de outra
+    // spec (medido no CI: href de outra conversa, com 87 casos verdes em volta),
+    // e aqui passava só porque a bancada local tinha um aviso só. Casar pelo
+    // `href` é o que prova a afirmação desta etapa: a Central aponta para ESTA
+    // conversa, e não para "alguma".
+    const abrir = page
+      .locator(`a[href*="/app/inbox/${cenario.conversation_id}"]`)
+      .filter({ hasText: "Abrir conversa" });
+    await expect(
+      abrir,
+      "a passagem tem de virar aviso na Central, apontando para ESTA conversa — senão ninguém descobre que há alguém esperando",
+    ).toBeVisible({ timeout: ESPERA });
     const linhaDoAviso = page
       .locator("li, article, div")
       .filter({ hasText: "O assistente passou um atendimento para um humano" })
+      .filter({ has: abrir })
       .last();
-    await expect(
-      linhaDoAviso,
-      "a passagem tem de virar aviso na Central — senão ninguém descobre que há alguém esperando",
-    ).toBeVisible({ timeout: ESPERA });
-    const abrir = page.getByRole("link", { name: "Abrir conversa" }).first();
-    await expect(abrir).toBeVisible({ timeout: ESPERA });
-    await expect(abrir).toHaveAttribute("href", new RegExp(`/app/inbox/${cenario.conversation_id}`));
+    await expect(linhaDoAviso).toBeVisible({ timeout: ESPERA });
     // O corpo do aviso REMETE, não repete: o briefing mora no cartão.
     const corpoDaCentral = await page.locator("main").innerText();
     expect(
