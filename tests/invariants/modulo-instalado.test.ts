@@ -155,9 +155,12 @@ describe("D3 — instalar cria as tabelas na hora", () => {
 
   it("recusa durante a atualização do núcleo", async () => {
     const run = (await query("insert into public.system_update_runs(requested_by) values ($1) returning id", [plataforma])).rows[0].id;
+    const op = randomUUID();
     try {
-      await expect(instalar(randomUUID())).rejects.toThrow("extension_core_update_in_progress");
-      expect(await estado()).toBeUndefined();
+      await expect(instalar(op)).rejects.toThrow("extension_core_update_in_progress");
+      // Sem efeito medido pelo recibo DESTE pedido — e não pelo registro do módulo, que outro
+      // caso pode ter preenchido: a sabotagem do ator mostrou esse acoplamento de ordem.
+      expect((await query("select count(*)::int as n from public.extension_operations where id = $1", [op])).rows[0].n).toBe(0);
     } finally {
       await query("delete from public.system_update_runs where id = $1", [run]);
     }
