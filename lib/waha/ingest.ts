@@ -21,6 +21,7 @@ import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { extrairEEstamparAtribuicaoGoogle } from "@/lib/plataformas-de-anuncio/google/atribuicao";
 import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
@@ -79,7 +80,19 @@ async function ehEcoDeEnvioNosso(
     .eq("direction", "outbound")
     // `sent_via` separa o que NASCEU aqui do que veio do celular: a linha do
     // celular é gravada como `external_device` e nunca pode servir de álibi.
-    .in("sent_via", ["ai", "user"])
+    //
+    // `automation` entrou junto do carimbo novo (#652). A mensagem que a REGRA
+    // manda nasceu aqui tanto quanto a da IA e a do composer; sem ela nesta
+    // lista, o eco do próprio envio da regra era lido como resposta pelo celular
+    // e a IA ficava pausada na conversa por causa de uma mensagem que o CRM
+    // mandou sozinho. Lista e carimbo andam juntos: quem escreve estes valores é
+    // `origemDaMensagem`, em `app/api/v1/messages/_handler.ts`.
+    //
+    // `system` ENTRA pela mesma razão, e o sintoma seria idêntico: é o valor que
+    // o envio por TOKEN DE SERVIDOR grava (#866). Fora desta lista, a linha da
+    // integração deixa de ser reconhecida como envio NOSSO, o eco do próprio
+    // envio vira "resposta pelo celular" e cala a IA por três horas.
+    .in("sent_via", ["ai", "user", "automation", "system"])
     // Sem `external_id` = ainda não confirmada pelo canal = ainda em voo. É esta
     // a janela exata em que o eco é indistinguível de digitação humana.
     .is("external_id", null)
@@ -586,6 +599,11 @@ async function handleInbound(
   // contato já tem atribuição, o UPDATE casa zero linhas.
   const atribuicao = extrairAtribuicaoWaha(p._data?.message);
   if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+
+  // Irmão do bloco acima, para o Google: o token vem no PRÓPRIO texto da
+  // mensagem (não há payload de ad-reply equivalente para essa plataforma) —
+  // ver o cabeçalho de `lib/plataformas-de-anuncio/google/atribuicao.ts`. Best-effort.
+  await extrairEEstamparAtribuicaoGoogle(admin, session.organization_id, contactId, texto);
 
   const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;

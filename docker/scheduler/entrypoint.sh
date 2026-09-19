@@ -64,6 +64,7 @@ CRONS="
 * * * * *|25|api/v1/cron/recover-stuck-messages
 */5 * * * *|25|api/v1/cron/storage-redaction?limit=50
 */5 * * * *|25|api/v1/cron/snooze-watcher
+*/5 * * * *|60|api/v1/cron/handoff-devolucao
 */5 * * * *|60|api/v1/cron/webhook-log-retention
 */5 * * * *|45|api/v1/cron/channel-health
 */10 * * * *|60|api/v1/cron/contact-avatars
@@ -86,6 +87,7 @@ CRONS="
 7 * * * *|60|api/v1/cron/case-stale-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
+23 * * * *|60|api/v1/cron/followup-sem-agente
 # O ANIVERSÁRIO. De hora em hora, e não uma vez ao dia, porque quem decide o
 # momento é o relógio de parede de CADA organização: a rodada só age naquela
 # cujo fuso marca a hora de parabenizar. Uma varredura diária em UTC felicitaria

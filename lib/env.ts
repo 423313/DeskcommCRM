@@ -321,6 +321,18 @@ const schema = z.object({
   GOOGLE_CALENDAR_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CALENDAR_CLIENT_SECRET: z.string().optional().default(""),
 
+  // Google Ads — credencial da INSTALAÇÃO, não da organização (migration 0307).
+  // O developer token pertence a quem construiu o software, não à conta de
+  // anúncios de cada cliente: uma instalação usa o MESMO token pra reportar
+  // conversão em contas diferentes, cada uma com seu próprio refresh token
+  // (esse sim por organização, em ad_platform_connections). Sem tela de
+  // configuração ainda — env-only, como o app OAuth do Google era antes da 0201 —
+  // porque só a instalação PRECISA desta credencial existir; cada organização só
+  // precisa AUTORIZAR (OAuth), nunca ver nem digitar o developer token.
+  GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional().default(""),
+  GOOGLE_ADS_OAUTH_CLIENT_ID: z.string().optional().default(""),
+  GOOGLE_ADS_OAUTH_CLIENT_SECRET: z.string().optional().default(""),
+
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando
   // NUVEMSHOP_ENABLED=true; o runtime já degrada via getConfig()==null.
   NUVEMSHOP_APP_ID: z.string().optional().default(""),
@@ -434,10 +446,20 @@ if (env.NODE_ENV === "production") {
 // `OPENROUTER_API_KEY` entra na condição porque `isAiGatewayConfigured()`
 // (lib/ai/gateway.ts) e `resolveLanguageModel` a tratam como configuração
 // válida no ambiente, assim como gateway e Anthropic.
-if (!env.AI_GATEWAY_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENROUTER_API_KEY) {
+// `OPENAI_API_KEY` entra pelo mesmo motivo, com a diferença que o aviso não
+// precisa esconder: ela atende os pontos do provedor que a ORGANIZAÇÃO escolheu
+// (é o último degrau de `resolverModeloDoPonto`, lib/ai/gateway-binding.ts).
+// Sem esta linha, uma instalação que responde pelo OpenAI lia no boot que
+// "nenhuma chave de IA" estava configurada — issue #1181.
+if (
+  !env.AI_GATEWAY_API_KEY &&
+  !env.ANTHROPIC_API_KEY &&
+  !env.OPENROUTER_API_KEY &&
+  !env.OPENAI_API_KEY
+) {
   console.warn(
     "[env] Nenhuma chave de IA configurada no ambiente " +
-      "(AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY ou OPENROUTER_API_KEY). " +
+      "(AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY ou OPENAI_API_KEY). " +
       "Isto não prova que o agente está sem credencial: cada organização pode ter uma chave " +
       "cadastrada em IA › Credenciais. A falta real só é conhecida quando a resolução completa " +
       "do turno não encontra chave em nenhum degrau.",

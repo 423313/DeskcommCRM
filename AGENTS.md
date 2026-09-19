@@ -68,8 +68,12 @@ flowchart LR
 
 Superfícies **não-cookie** (cada uma com guard próprio, nunca o cookie de sessão):
 `app/api/v1/cron/` (Bearer `INTERNAL_CRON_SECRET`, fail-closed), `app/api/internal/`
-(`x-internal-secret`), `app/api/mcp/` (Bearer `tok_...` contra `api_tokens`), `app/api/v1/webhooks/`
-(HMAC + path token). Inventário e superfície de ataque: [`docs/threat-model.md`](docs/threat-model.md).
+(`x-internal-secret`), `app/api/mcp/` (Bearer `dsk_...` contra `api_tokens`), `app/api/v1/webhooks/`
+(HMAC + path token), e **parte de `app/api/v1/`** — rotas que aceitam cookie OU bearer pelo helper
+`lib/api/auth-dual.ts`. Esta última cresce rota por rota (decisão do dono em 17/09/2026: converter
+o que cada integração precisar), então o inventário é um comando e não uma lista:
+`git grep -ln "auth-dual" -- app/api/v1`. Rota com o helper **também** precisa de entrada em
+`lib/auth/public-paths.ts`, senão o `proxy.ts` devolve 401 antes do handler. Inventário e superfície de ataque: [`docs/threat-model.md`](docs/threat-model.md).
 
 Turno do agente de IA: inbound WhatsApp → HMAC + idempotência → `event_log` → worker →
 `runAgentTurn` (RAG + tools MCP) → guardrails → adapter WAHA → handoff humano se o gatilho
@@ -346,7 +350,9 @@ cabeçalho passava a mentir por todos eles.
 - Arquivos de invariante de banco em `tests/invariants/` — RLS/isolamento cross-tenant, RBAC,
   governança (G1–G6). Excluídos do `test:unit` de propósito; rodam via `pnpm test:db` **e no job
   `invariants` do CI**. Quantos: `git ls-files 'tests/invariants/*.test.ts' | wc -l`.
-- Specs Playwright em `tests/e2e/`, quase todas no CI (via `e2e.yml`, **obrigatório**). As que
+- Specs Playwright em `tests/e2e/`, quase todas no CI (via `e2e.yml`, **obrigatório**), em todo PR que
+  alcança o que elas medem — PR só de documentação/teste de outra suíte pula as partes
+  (`scripts/pr-alcanca-o-e2e.sh`), e ali o `e2e` verde não prova tela. As que
   ficam de fora estão declaradas em `FORA_DO_CI`, **com o motivo escrito ao lado**. Esta linha
   já afirmou "menos uma" depois de deixarem de ser uma — por isso não conta mais. A issue #63,
   que originou a discussão, está **fechada** e o título dela descreve um estado que já não vale.
@@ -393,9 +399,10 @@ itens envelhecem em ritmos diferentes, e o cabeçalho passava a mentir por todos
   implementações com recibo (`lgpd/requests/[id]/approve` e `admin/tenants`) e, desde este
   commit, uma reutilizável em `lib/api/idempotency.ts`, aplicada em `message-templates`.
   Reconte antes de citar: `grep -rln 'Idempotency-Key' app/api/v1 --include='route.ts'`.
-  **A corrida entre duas requisições simultâneas com a mesma chave segue aberta** —
-  `idempotency_keys.status_code` e `.response_body` são `NOT NULL`, então não há onde gravar
-  "em curso"; fechar exige mudança de schema. Ver issue #778.
+  No helper reutilizável, **a corrida entre duas requisições simultâneas com a mesma chave
+  está fechada** (issue #778, migration 0321): a chave é reservada ANTES do efeito e quem
+  perde recebe 409 `idempotency_in_progress`. Isso vale para quem usa `comIdempotencia` —
+  hoje só `message-templates`; as outras rotas mantêm o recibo delas.
 - **`.env.example` está completo** — medido em 2026-08-14: das 45 chaves de `lib/env.ts`, a
   única ausente é `NODE_ENV`, que não é configuração do operador. Esta linha dizia que faltavam
   6, "incluindo 3 secrets"; os três (`IMPERSONATE_COOKIE_SECRET`, `INTERNAL_CRON_SECRET`,
