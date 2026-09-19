@@ -116,10 +116,13 @@ describe("sidebarGroups", () => {
       "/app/kanban",
       "/app/contacts",
       "/app/tasks",
-      // Chamadas (módulo VoIP, migration 0336): mesmo critério de Tarefas —
-      // quem atende confere ligações perdidas e transcrições no dia a dia.
-      // Reabre a corrida por pixel que este teste vigia; ver navegacao.spec.ts.
-      "/app/calls",
+      // "/app/calls" (telefonia por SIP) NÃO entra aqui, e a ausência é a
+      // decisão: o módulo é OPCIONAL e nasce desligado (doc 27), então a porta
+      // no sidebar custaria um item a TODA instalação — e o vigésimo item é o
+      // que faz o menu rolar em 900px, que é a corrida por pixel que este
+      // teste existe para vigiar. A tela vive no hub do grupo e no ⌘K. Volta
+      // para cá no dia em que o app souber que o módulo está ligado (hoje isso
+      // é profile do compose, não estado que o aplicativo conheça).
     ]);
     expect(NAV_GROUPS.find((g) => g.id === "crm")?.hub?.href).toBe("/app/crm");
   });

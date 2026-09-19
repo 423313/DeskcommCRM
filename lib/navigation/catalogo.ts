@@ -196,9 +196,30 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
-    // Módulo VoIP (migration 0336). No CRM e no sidebar pelo mesmo critério de
+    // Módulo VoIP (migration 0336). No grupo do CRM pelo mesmo critério de
     // Tarefas: quem atende confere ligações perdidas e transcrições no dia a
     // dia, não como revisão deliberada.
+    //
+    // ─── SEM `sidebar`, e a razão não é gosto: a telefonia é MÓDULO OPCIONAL ───
+    //
+    // O dono decidiu (doc 27) que a telefonia por SIP entra desligada por
+    // padrão — quem não liga não tem os contêineres, não tem tronco e não tem
+    // ligação nenhuma para ver. Pôr a porta no sidebar de TODA instalação
+    // custaria a todas elas um item que quase nenhuma usa, e o preço é medido:
+    // `tests/e2e/navegacao.spec.ts` exige que, em 900px, o menu caiba inteiro
+    // sem rolagem, e o vigésimo item o faz rolar.
+    //
+    // O ideal seria mostrá-la SÓ para quem ligou o módulo, e isso hoje não é
+    // possível: "telefonia ligada" é um profile do docker compose (servidor),
+    // não um estado que o aplicativo conheça — o shell não consulta nada de
+    // telefonia, e os dois sinais de banco possíveis (linha em
+    // `voip_trunk_settings`, ou `phone_numbers` ativo) custariam uma consulta
+    // em todo render. Está desenhado na issue do `sidebarSe`.
+    //
+    // A porta NÃO sumiu: ela vive no hub do grupo CRM ("Ver tudo em CRM") e no
+    // ⌘K, que é o mesmo caminho das outras dez entradas de "organizacao".
+    // CONDIÇÃO QUE ENCERRA ESTA EXCEÇÃO: no dia em que o app souber que o
+    // módulo está ligado, o item volta ao sidebar para quem ligou.
     href: "/app/calls",
     label: "Chamadas",
     description: "Histórico de ligações (voz por IA) com transcrição.",
@@ -206,7 +227,6 @@ export const NAV_CATALOG = [
     group: "crm",
     section: "O dia a dia da venda",
     minRole: "manager",
-    sidebar: true,
   },
   {
     // ⚠️ Esta tela nasceu porque a FERRAMENTA já existia sem ela. O agente de IA
