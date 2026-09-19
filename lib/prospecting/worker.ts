@@ -157,7 +157,12 @@ export async function sendNextCandidate(
     throw new ProspectingError(`O canal ainda não permite esta abordagem: ${preflight.motivo}.`);
   const boundary = parseServiceBoundary(p.service_boundary);
   if (!boundary || !p.contact_id || !p.conversation_id)
-    throw new ProspectingError("Destino da abordagem incompleto. Revise a campanha.");
+    // DO CANDIDATO: este não tem contato/conversa resolvidos. O próximo pode ter.
+    throw new ProspectingError(
+      "Destino da abordagem incompleto para este candidato.",
+      422,
+      "candidato",
+    );
   await db.query("begin");
   try {
     await db.query(
@@ -219,7 +224,12 @@ export async function sendNextCandidate(
       },
     });
     if (!generated.ok)
-      throw new ProspectingError(`A IA não produziu uma abordagem: ${generated.reason}.`);
+      // DO CANDIDATO: o modelo não produziu texto para ESTES dados.
+      throw new ProspectingError(
+        `A IA não produziu uma abordagem: ${generated.reason}.`,
+        422,
+        "candidato",
+      );
     await assertProspectingDelivery(admin, guard);
     const authorization = await autorizarContatoParaIA(admin, {
       organizationId: c.organization_id,
@@ -375,16 +385,41 @@ export async function tickProspecting(pool: pg.Pool, admin: SupabaseClient) {
           try {
             await sendNextCandidate(pool, db, admin, c);
           } catch (error) {
-            await db.query(
-              "update prospecting_campaigns set status='paused',error=$3,updated_at=now() where organization_id=$1 and id=$2",
-              [
-                org,
-                c.id,
-                error instanceof ProspectingError
-                  ? error.message
-                  : "Campanha pausada após falha. Confira o histórico antes de retomar.",
-              ],
-            );
+            // DE QUEM É A FALHA decide se a fila para.
+            //
+            // Antes, QUALQUER exceção pausava a campanha inteira: um número
+            // inválido numa lista de mil, um contato que virou bloqueado entre a
+            // busca e o envio, uma instabilidade de um segundo no provedor — e a
+            // lista só voltava se alguém abrisse a tela e retomasse à mão. É o
+            // oposto do que a casa faz em todo lugar: item ruim marca o ITEM.
+            const doCandidato =
+              error instanceof ProspectingError && error.escopo === "candidato";
+            const motivo =
+              error instanceof ProspectingError
+                ? error.message
+                : "Falha inesperada no envio. Confira o histórico antes de retomar.";
+
+            if (doCandidato) {
+              // Marca o candidato e SEGUE: a próxima rodada pega o próximo.
+              // `attempted_at` já foi gravado antes do envio, então ele não
+              // volta para a fila sozinho.
+              await db.query(
+                "update prospecting_candidates set status='failed',error=$3,updated_at=now() where organization_id=$1 and campaign_id=$2 and status='sending'",
+                [org, c.id, motivo],
+              );
+              logger.warn("[prospecting] candidato falhou; a campanha segue", {
+                organization_id: org,
+                campaign_id: c.id,
+                error: motivo,
+              });
+            } else {
+              // Vale para todos: pausar é o certo, e o erro fica na campanha
+              // para a tela explicar a quem for retomar.
+              await db.query(
+                "update prospecting_campaigns set status='paused',error=$3,updated_at=now() where organization_id=$1 and id=$2",
+                [org, c.id, motivo],
+              );
+            }
           }
         }
         await db.query(
