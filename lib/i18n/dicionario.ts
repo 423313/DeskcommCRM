@@ -6462,6 +6462,15 @@ export const DICIONARIO: Traducoes = {
     es: "Sale de esta lista y deja de recibir negocio nuevo. El historial se conserva, y nada se borra.",
   },
   "Excluir de vez": { es: "Eliminar definitivamente" },
+  // A gaveta do arquivo (#979) — a porta de volta do funil arquivado.
+  "Funis arquivados": { es: "Embudos archivados" },
+  "Tirar do arquivo": { es: "Sacar del archivo" },
+  "Funil arquivado não aparece na lista nem recebe negócio novo. Traga de volta para usar outra vez, ou exclua de vez para liberar o nome.": {
+    es: "El embudo archivado no aparece en la lista ni recibe negocio nuevo. Tráelo de vuelta para usarlo otra vez, o elimínalo definitivamente para liberar el nombre.",
+  },
+  "Isso não tem volta: o funil e as etapas dele somem. Se ele já recebeu negócio, a exclusão é recusada e ele continua arquivado.": {
+    es: "Esto no tiene vuelta atrás: el embudo y sus etapas desaparecen. Si ya recibió negocio, la eliminación se rechaza y sigue archivado.",
+  },
   "Novo Lead": { es: "Nuevo Lead" },
   "Não consegui carregar este funil:": { es: "No pude cargar este embudo:" },
   "sem responsável.": { es: "sin responsable." },
@@ -9581,6 +9590,31 @@ export const DICIONARIO: Traducoes = {
   // As frases de recusa do servidor. Três delas não tinham entrada: o argumento
   // de `t()` ali é uma expressão `??`, que o guarda também não resolve.
   "Confira a etiqueta e o novo nome.": { es: "Revisa la etiqueta y el nombre nuevo." },
+  // ── A COR DA ETIQUETA (fatia S6 da #1271) ─────────────────────────────────
+  //
+  // Os oito tons têm NOME além de cor, e é de propósito: quem não distingue
+  // matiz — ou está com o brilho no mínimo, ou usa leitor de tela — escolhe e
+  // reconhece por "Âmbar"/"Roxo". A fileira de tons é a única escolha de cor do
+  // produto, e sem estas entradas ela sairia MUDA para quem escolheu espanhol.
+  //
+  // `"Cor"` NÃO entra aqui: a chave já existe no arquivo (linha ~3312, do
+  // seletor de cor da marca) e repeti-la é TS1117 no `as const` do dicionário.
+  "Confira a etiqueta, o novo nome e a cor.": {
+    es: "Revisa la etiqueta, el nombre nuevo y el color.",
+  },
+  "Cor da etiqueta": { es: "Color de la etiqueta" },
+  "nas listas e nos filtros:": { es: "en las listas y en los filtros:" },
+  "Sem cor": { es: "Sin color" },
+  "Prévia:": { es: "Vista previa:" },
+  "Cor da etiqueta atualizada.": { es: "Color de la etiqueta actualizado." },
+  Amarelo: { es: "Amarillo" },
+  Âmbar: { es: "Ámbar" },
+  Vermelho: { es: "Rojo" },
+  "Verde-água": { es: "Verde agua" },
+  Azul: { es: "Azul" },
+  Índigo: { es: "Índigo" },
+  Roxo: { es: "Morado" },
+  Cinza: { es: "Gris" },
   "Só um gerente ou administrador da organização pode mudar as etiquetas.": {
     es: "Solo un gerente o administrador de la organización puede cambiar las etiquetas.",
   },

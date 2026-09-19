@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
 import { useUser } from "@/hooks/auth/AuthProvider";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
@@ -198,6 +199,7 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={tagOptions.length === 0}>
+            {filters.tag ? <PontoDaEtiqueta tag={filters.tag} className="mr-2" /> : null}
             {tagLabel}
           </Button>
         </DropdownMenuTrigger>
@@ -208,6 +210,7 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
           <DropdownMenuSeparator />
           {tagOptions.map((tag) => (
             <DropdownMenuItem key={tag} onClick={() => onChange({ ...filters, tag })}>
+              <PontoDaEtiqueta tag={tag} className="mr-2" />
               {tag}
             </DropdownMenuItem>
           ))}
