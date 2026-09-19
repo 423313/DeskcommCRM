@@ -8,6 +8,153 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.37.0] — 2026-09-19
+
+### Adicionado
+
+- **Endereços da rede interna liberados por quem administra a instalação** Quem administra a instalação agora consegue apontá-la para um serviço que roda na rede do próprio servidor — um Whisper, um gateway compatível com a API da OpenAI — pela tela **Administração › Destinos internos**, declarando o IP ou a faixa. Sem essa declaração nada muda: o sistema continua recusando `localhost`, `10.`, `192.168.` e as demais faixas internas, tanto no texto do endereço quanto no endereço que o nome resolve. A liberação vale só para o que a INSTALAÇÃO configura (hoje, o serviço de transcrição): o endereço que uma empresa escolhe no painel dela continua sem poder apontar para dentro, esteja liberado ou não, e a chave da instalação continua sem poder sair para um endereço escolhido por ela. E ela dispensa só a recusa por endereço interno — `https` em produção e os protocolos aceitos continuam valendo. Quem já tinha a lista no `.env` (`IA_DESTINOS_INTERNOS_PERMITIDOS`) não precisa fazer nada: ela segue valendo como piso enquanto a tela nunca for usada. Quando a recusa acontece, o aviso na Central diz onde se libera.
+
+- **O filtro por marcador do funil enxerga também as "Tags da conversa"** O filtro por marcador do quadro do funil já olhava o marcador do negócio e o da pessoa. Agora olha também as "Tags da conversa", a caixa do painel do Inbox onde a equipe e a IA marcam a conversa: o seletor oferece as três caixas juntas, sem repetir, e filtrar por um marcador de conversa acha o negócio daquele contato. Vale para qualquer conversa do contato, não só a mais recente. A marcação em lote continua gravando no negócio. Decisão do dono, 19/09. Você não precisa fazer nada.
+
+- **O contato que chega por anúncio guarda também o id do anúncio** Quando alguém clica num anúncio "Clique para o WhatsApp", a origem do contato já registrava o clique, o título e o link do anúncio. O id do próprio anúncio, porém, era descartado sempre que o clique vinha junto — o caso comum —, e sobrevivia só dentro do registro bruto da plataforma. Agora ele é gravado num campo próprio, `ad_id`, tanto pelo canal oficial quanto pelo WhatsApp por QR: ele aparece na origem do contato pela API de contatos e acompanha o negócio que nasce da conversa. Vale para quem chegar a partir desta versão: a origem de quem já está cadastrado não é reescrita. Você não precisa fazer nada. Contribuição de @rafaelbatistazz (#1221).
+
+### Corrigido
+
+- **A validação da chave OpenRouter respeita o gateway da instalação** Quem define `OPENROUTER_BASE_URL` para um gateway compatível via a tela de
+  Credenciais dizer "chave inválida" para a credencial que o agente já estava
+  usando. A validação provava a chave contra `openrouter.ai` fixo, enquanto o
+  agente publicado, o turno do worker e a prova de crédito da instalação já
+  usavam a base configurada.
+
+  A prova agora é `/key` na base da instalação, com
+  `https://openrouter.ai/api/v1` de default quando a variável não existe ou está
+  vazia. Quem não define a variável não tem nada a fazer: o endereço continua o
+  mesmo.
+
+  Crédito: @webtecnica.
+
+- **A visão de ocupação da agenda deixa de ser apagada e recriada a cada atualização** A `calendar_selected_external_events` — a view que responde "esse horário está ocupado?" para a Agenda — era derrubada e recriada duas vezes a cada passada do baseline, ou seja, a cada `update.sh`: o objeto deixava de existir no meio do caminho e nascia de novo com identidade nova. Agora ela é substituída no lugar, sem trocar de OID, e o `drop` continua existindo para um caso só — o clone que ainda está na forma antiga, a que expunha o título do evento, e que por isso migra na primeira atualização.
+
+  Nada a fazer na instalação: nenhuma tela muda, nenhum dado é tocado. A garantia passa a ser medida a cada versão — `pnpm test:db:update` reaplica o baseline sobre um banco já atualizado e fica vermelho se o OID da view mudar, e monta o clone na forma antiga para conferir que ele ainda migra.
+
+- **A contagem das abas do Inbox volta a mostrar número com um marcador filtrado** O Inbox tem um filtro por marcador, e ele enxerga tanto o marcador do contato
+  quanto o da conversa. Com um marcador filtrado, as abas de cima perdiam o
+  número: "Todas", "Fechadas" e "Arquivadas" ficavam sem contagem nenhuma, e o
+  atendente perdia a referência de quantas conversas havia em cada visão.
+
+  A lista de conversas sempre soube procurar o marcador nas duas caixas onde se
+  marca. A contagem das abas pedia outra coisa — igualdade numa coluna de marcador
+  que só existe dentro da conversa —, e o banco recusava a consulta inteira. Não
+  era um número errado: era nenhum número, em todas as abas, sempre que o filtro
+  por marcador estava ligado.
+
+  Agora a contagem pergunta do mesmo jeito que a lista: o marcador vale se estiver
+  no contato ou na conversa, e as abas voltam a estampar a contagem certa sob
+  qualquer marcador. Sem marcador filtrado, a contagem é a que já era.
+
+  Nada muda para quem opera: nenhuma variável nova, nenhum passo na atualização.
+
+- **A credencial usada por versão antiga explica por que não sai e qual é a saída** Uma chave de IA que só é usada por versões antigas de agentes — as que já foram
+  substituídas por uma publicação mais nova — não pode ser excluída: o banco
+  guarda o histórico apontando para ela. A tentativa de excluir, porém, ensinava
+  um caminho que não existe: "aponte essa versão para outra chave". Versão já
+  publicada tem o conteúdo congelado e o próprio banco recusa trocar a chave dela,
+  então quem seguia a instrução batia numa parede sem saber o que fazer.
+
+  Agora a recusa diz a verdade. Ela nomeia o agente e a versão onde o uso está,
+  avisa que esse uso é congelado e que a chave não sai enquanto o histórico
+  existir, e mostra a saída que de fato existe: "Editar credencial". Editar troca a
+  chave — ou só o nome dela — na MESMA credencial, então as versões que já apontam
+  para ela continuam válidas e o próximo atendimento já sai com a chave nova. Com
+  a chave vazada, a recomendação de revogá-la no painel do provedor continua
+  valendo, e a exclusão segue disponível para as chaves que ninguém usa.
+
+  O aviso da tela de credenciais foi junto: passar o mouse na chave em uso conta a
+  mesma história, em vez de prometer o repontar impossível. A contagem que a tela
+  mostra é a mesma que o servidor usa para decidir, nas duas listas.
+
+  Para quem opera, nada muda no banco: nenhuma migração, nenhum ajuste, nada a
+  rodar na atualização. O que muda é o que a tela responde quando a exclusão não é
+  possível.
+
+- **O marcador do contato é gravado em caixa baixa onde você o escrever** O marcador de contato podia ser gravado em caixa mista. Escrever **VIP** na ficha do contato guardava
+  `VIP`; o filtro procurava por `vip` e não achava — o contato marcado não aparecia na lista, sem erro
+  nenhum. Pior na hora de tirar: o marcador já gravado em caixa mista não era alcançado por nenhuma
+  remoção, e o chip seguia na ficha.
+
+  Agora **a mesma regra normaliza o marcador na escrita e na leitura**, em todos os caminhos onde ele
+  entra: a ficha do contato, a importação por CSV, a API e as ações da assistente (MCP). Marcador
+  escrito como **VIP**, com espaço nas pontas ou repetido na mesma lista entra como `vip` — uma vez só.
+  O filtro passa a encontrar o que foi gravado, e a lista de sugestões para de oferecer a mesma
+  etiqueta em duas formas.
+
+  Os marcadores que **já estavam gravados** em caixa mista são ajustados sozinhos na atualização: a
+  migration que acompanha este PR normaliza a coluna de marcadores dos contatos existentes e é
+  idempotente — rodar de novo não muda nada.
+
+  Nada muda para quem opera: nenhuma variável nova, nenhum passo na atualização, nenhum marcador é
+  apagado (o teto de vinte marcadores da importação por CSV continua igual).
+
+- **A aba Atividade deixa de mostrar código no lugar do motivo da parada** Na aba **Atividade**, quando uma ação da automação não era executada, a linha
+  podia mostrar um identificador de máquina no lugar do motivo:
+  `membro_indeterminado`, por exemplo. Acontecia quando o cadastro do contato não
+  dizia quem o atende e a consulta que responderia isso falhava na hora — rede
+  fora do ar, banco sem responder. A ação registrava o código, a tela não tinha
+  frase para ele, e o que sobrava para quem atendia era o código, sem explicação e
+  sem a mensagem do erro, que ficava guardada e não aparecia em lugar nenhum.
+
+  Agora todo motivo que as ações produzem tem frase. Os motivos que apareciam como
+  código passam a aparecer em português — em espanhol também, para quem usa o
+  produto nesse idioma —, dizendo o que aconteceu e o que fazer a respeito.
+
+  A segunda mudança é o **detalhe técnico**. Quando a ação guarda a mensagem crua
+  da falha, ela agora aparece na mesma linha, rotulada como **"Detalhe técnico:"**
+  e em corpo menor, DEPOIS da frase. A frase continua sendo a leitura principal; a
+  mensagem técnica é o que quem dá suporte leva ao time que cuida do servidor, e
+  sem ela não dava para separar "o servidor caiu, tente de novo" de "o cadastro
+  está errado, conserte o cadastro".
+
+  Nada muda para quem opera: nenhuma configuração nova, nenhum ajuste na
+  atualização. As execuções que já estavam registradas também passam a mostrar a
+  frase, porque a tradução acontece na hora de exibir.
+
+  Uma verificação automática passa a vigiar isto: motivo novo que uma ação comece
+  a produzir sem frase em português reprova a esteira, apontando o arquivo e a
+  linha de quem o emitiu — antes de chegar em quem usa.
+
+- **Motivo de perda fora da lista agora é recusado na hora, com a frase certa, em vez de erro do banco** O banco só aceita, como motivo de perda, os 9 códigos do produto somados ao que o funil tem
+  cadastrado em Configurações › Funis — e isso vale inclusive para funil sem cadastro nenhum, que
+  é o caso de toda instalação nova. A janela "Marcar como perdido" só conferia o texto digitado em
+  "Outro" contra essa lista quando o funil JÁ tinha motivos cadastrados. Sem cadastro, qualquer
+  texto passava na tela e era recusado pelo banco no clique, com um erro cru do Postgres
+  (`internal_error` / `lost_reason_invalid`) em vez de uma mensagem que dissesse o que fazer.
+
+  **O que muda é QUANDO a recusa acontece, não o que é aceito.** Texto livre continua não sendo
+  motivo válido; ele passa a ser barrado na hora, com a frase que diz onde cadastrar um motivo
+  novo, em vez de virar erro do banco depois do clique.
+
+  De defesa em profundidade, quem encerra um negócio por `encerraDemanda` — as telas de ganhar e
+  perder, a duplicação de negócio, a automação e a capacidade de encerramento da IA — passa a
+  traduzir essa mesma recusa do banco em 422 `lost_reason_invalid`, como as rotas de arrasto,
+  lote e troca de funil já faziam, em vez de 500 `internal_error`.
+
+- **Reinstalar a versão que falhou deixa de travar a tela de atualização** Quando uma atualização falha e o sistema volta para a versão anterior, a tela de
+  Atualização mostra o aviso da falha sem o botão de atualizar. Ela já sabia
+  reconhecer que a falha tinha sido superada por uma instalação posterior — mas só
+  quando a versão instalada era **outra**.
+
+  Faltava justamente o caso mais comum de dar certo na segunda tentativa:
+  reinstalar a **mesma** versão que falhou. Medido numa instalação real: a versão
+  nova foi anunciada antes de as imagens dos contêineres ficarem prontas, a
+  atualização falhou com "imagem não encontrada" e, meia hora depois, a mesma
+  versão instalou sem nenhum problema. A tela continuou anunciando a falha e, sem
+  botão, bloqueou a versão seguinte que já havia saído.
+
+  Agora quem desfaz o engano é o próprio sistema em execução: se o aplicativo que
+  responde já está rodando a versão que o aviso diz ter falhado, o aviso sai e o
+  botão volta. Numa falha de verdade, em que o sistema voltou mesmo para a versão
+  anterior, o aviso continua aparecendo como antes, com o comando para retornar.
+
 ## [1.36.0] — 2026-09-19
 
 ### Adicionado
@@ -6012,7 +6159,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.36.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.37.0...HEAD
+[1.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.36.0...v1.37.0
 [1.36.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.35.1...v1.36.0
 [1.35.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.35.0...v1.35.1
 [1.35.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.34.0...v1.35.0
