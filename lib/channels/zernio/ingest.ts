@@ -1,4 +1,5 @@
 import type { SocialMessage } from "../social/parser";
+import { ehCanalDeConversa } from "@/lib/channels/canais-de-conversa";
 /**
  * Ingestão do canal intermediado: webhook → contato, conversa, mensagem.
  *
@@ -151,6 +152,19 @@ export async function ingestZernioInbound(
   );
   if (existente) {
     if (input.socialMessage) {
+      // A plataforma vai CRUA para uma coluna com CHECK. Num clone cujo banco
+      // ainda não conhece esta rede, o INSERT volta 23514 — e como o provedor
+      // REENTREGA o webhook, isso vira 500 eterno, com a tela mostrando a conta
+      // ligada e a conversa nunca aparecendo. Recusar aqui troca o laço infinito
+      // por uma linha de log que diz o nome da rede e o que falta.
+      if (!ehCanalDeConversa(input.socialMessage.platform)) {
+        logger.error("zernio: rede sem canal correspondente no banco — conversa não atualizada", {
+          organization_id: input.organizationId,
+          platform: input.socialMessage.platform,
+          detalhe: "falta o valor no CHECK de conversations.channel (migration)",
+        });
+        return { status: "ignored", reason: "canal_desconhecido" };
+      }
       const { error } = await admin
         .from("conversations")
         .update({ channel: input.socialMessage.platform })
@@ -226,6 +240,16 @@ export async function ingestZernioInbound(
   });
   if (!conversationId) return { status: "ignored", reason: "conversa_nao_resolvida" };
   if (input.socialMessage) {
+    // Mesma guarda do ramo acima: sem ela, rede nova = 23514 reentregue para
+    // sempre. Ver `lib/channels/canais-de-conversa.ts`.
+    if (!ehCanalDeConversa(input.socialMessage.platform)) {
+      logger.error("zernio: rede sem canal correspondente no banco — conversa não atualizada", {
+        organization_id: input.organizationId,
+        platform: input.socialMessage.platform,
+        detalhe: "falta o valor no CHECK de conversations.channel (migration)",
+      });
+      return { status: "ignored", reason: "canal_desconhecido" };
+    }
     const { error } = await admin
       .from("conversations")
       .update({ channel: input.socialMessage.platform })
