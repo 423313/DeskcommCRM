@@ -202,6 +202,15 @@ const schema = z.object({
   TRANSCRIPTION_API_KEY: z.string().optional().default(""),
   TRANSCRIPTION_BASE_URL: z.string().optional().default(""),
   TRANSCRIPTION_MODEL: z.string().optional().default(""),
+  // Destinos internos que o DONO DA INSTALAÇÃO autoriza (decisão 22-d, #1004):
+  // IPv4 e faixas CIDR IPv4 que a saída pode alcançar mesmo sendo rede interna,
+  // e só para destinos que a própria INSTALAÇÃO configura (nunca o endereço que
+  // uma organização escolhe). O BANCO ESTÁ ACIMA DISTO: a lista vive em
+  // `platform_settings.internal_destinations`, editada em
+  // `/admin/destinos-internos`; esta variável é só o PISO, que vale enquanto a
+  // tela nunca foi usada. Vazio é ausente: sem ela, nada passa. Quem lê é
+  // `lib/automation/destinos-internos-autorizados.ts`.
+  IA_DESTINOS_INTERNOS_PERMITIDOS: z.string().optional().default(""),
 
   // Fusão (Fase 4): DONO ÚNICO dos eventos ai_agent.dispatch_requested.
   // 'engine' (default) = o worker agent-engine é o único consumidor (o cron
