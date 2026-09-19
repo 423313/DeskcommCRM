@@ -13,3 +13,5 @@ Agora ela confere peça por peça, tenta uma segunda vez, e — se ainda faltar 
 E o aviso não toca à toa: quando tudo volta, ele fica calado. Alarme que dispara sem motivo ensina quem opera a ignorar o alarme de verdade.
 
 *(A causa de as peças não terem voltado naquela vez segue desconhecida. O que este ajuste garante é que uma próxima vez não passe despercebida.)*
+
+Trabalho de @paulolimajr77, recortado do #803.

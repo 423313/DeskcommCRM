@@ -9,3 +9,5 @@ A atualização mexe nas regras que separam uma empresa da outra dentro do banco
 Agora a atualização **confere as regras uma a uma** no fim e diz quantas encontrou. Se faltar alguma, ela **não sobe o sistema** e diz exatamente quais faltam: um sistema fora do ar é um problema visível que se resolve em minutos; um sistema no ar sem essas regras não parece problema nenhum.
 
 Durante a parte do banco, o sistema fica parado por alguns segundos — é isso que impede a regra de sumir.
+
+Trabalho de @paulolimajr77, recortado do #803.
