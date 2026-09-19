@@ -24,14 +24,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * chave entregue para operá-la. O precedente que funciona ponta a ponta é
  * `lib/ai/runtime/mcp_token.ts:112-118`.
  *
- * ## O papel é o MÍNIMO, de propósito
+ * ## O papel é `agent`, e o recorte é DELIBERADO (decisão do dono, 19/09)
  *
- * `role:agent` (rank 2) abre as ferramentas de `agent`; as de `ai_operator` e
- * `manager` seguem barradas por `ensureRole` (`lib/mcp/server.ts:74`). Elevar o
- * papel de um parceiro EXTERNO é decisão de produto, não conserto — quem
- * decide é quem responde pelo produto, e enquanto não decide vale o menor
- * privilégio. `scopesRole` (`lib/mcp/auth.ts:49`) lê o primeiro `role:` da
- * lista, então trocar aqui é uma linha.
+ * A chave é de MÁQUINA e nasce numa empresa recém-criada, então vale o menor
+ * privilégio: `role:agent` (rank 2) já cobre 46 das 63 ferramentas — alimentar
+ * dados e conversar, que é o que um parceiro precisa.
+ *
+ * As 17 de fora são as de `ai_operator` (10) e `manager` (7): configurar
+ * agente e ação de gestão. Ninguém ganha isso por provisionamento automático.
+ * **Quem precisar de mais emite uma chave pela tela** (Configurações › Chaves
+ * de API), onde um humano da empresa decide o papel — não é esquecimento aqui,
+ * é o caminho.
+ *
+ * `scopesRole` (`lib/mcp/auth.ts:49`) lê o primeiro `role:` da lista; o teste
+ * ao lado fixa o conjunto emitido, então acrescentar `role:manager` sem querer
+ * reprova.
  */
 export async function rotateIntegrationApiKey(input: {
   organizationId: string;

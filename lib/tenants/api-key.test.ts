@@ -76,14 +76,23 @@ beforeEach(() => {
 });
 
 describe("a chave abre o que promete", () => {
-  it("nasce com mcp:read e mcp:write — sem eles, todo consumidor de dsk_ responde 403", async () => {
+  // `toEqual` na lista INTEIRA, e não `arrayContaining`: o recorte é
+  // deliberado. Sem `mcp:read`/`mcp:write` a chave não abre nada (todo
+  // consumidor de `dsk_` cobra um dos dois); com `role:manager` ou
+  // `role:ai_operator` acrescentado sem querer, um parceiro EXTERNO ganharia
+  // por provisionamento automático o que só deve sair de uma decisão humana na
+  // tela de Chaves de API. Os dois erros reprovam aqui.
+  it("nasce com mcp:read e mcp:write, e com o papel agent — nada além", async () => {
     await rotateIntegrationApiKey(ENTRADA);
     const [insercao] = inseridas();
     const scopes = (insercao?.args[0] as { scopes: string[] }).scopes;
-    expect(scopes).toEqual(expect.arrayContaining(["mcp:read", "mcp:write"]));
-    // Menor privilégio: o papel de um parceiro externo não sobe sem decisão.
-    expect(scopes.filter((s) => s.startsWith("role:"))).toEqual(["role:agent"]);
-    expect(scopes).toContain("integration:clinicfx");
+    expect(scopes).toEqual([
+      "mcp:read",
+      "mcp:write",
+      "role:agent",
+      "actor:ai_agent",
+      "integration:clinicfx",
+    ]);
   });
 });
 
