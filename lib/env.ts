@@ -240,6 +240,19 @@ const schema = z.object({
    */
   AI_BUDGET_ENFORCEMENT: z.string().optional().default("on"),
 
+  // As duas chaves do MOTOR que também são comportamento da INSTALAÇÃO (issue
+  // #1034): o modo do portão de disclosure do atendimento e a camada semântica
+  // de promessa. Existem em `lib/agent-engine/env.ts` (é lá que o worker as
+  // lê); entram aqui para a tela de admin poder mostrar o PISO que o `.env`
+  // desta instalação declara, em vez de supor o default do produto.
+  //
+  // `z.string()` cru e NUNCA `z.enum`, pelo mesmo motivo da linha acima: um
+  // `z.enum` que lança no import derruba o processo, e derrubar o processo é o
+  // oposto do que um kill switch faz. Quem normaliza é o leitor de cada um:
+  // `pisoDaInstalacao()`, em lib/instalacao/comportamento-servidor.ts.
+  DISCLOSURE_MODE: z.string().optional(),
+  PROMISE_SEMANTIC_ENABLED: z.string().optional(),
+
   // `EVENT_LOG_WORKER_ENABLED` viveu aqui até 2026-08-25 e NUNCA teve leitor: o
   // campo era declarado, documentado no `.env.example` com `false` e lido por
   // ninguém (medido: zero ocorrências fora da própria declaração). Saiu junto
