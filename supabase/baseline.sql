@@ -31777,7 +31777,13 @@ create unique index if not exists contacts_org_social_identity_unique
 comment on column public.contacts.social_identity is
   'Opaque network/account/participant key. Never interpreted as a telephone or WhatsApp identity.';
 
--- Provider constraints include social channels in their single block above.
+-- As duas CHECKs de `channel_sessions` que o provider novo exige NÃO estão
+-- aqui: elas ficam no bloco "provider zernio_social entra nos CHECKs"
+-- (ABAIXO, logo antes da varredura de anon), porque precisam vir DEPOIS da
+-- definição que o dump traz — a última definição é a que vale. Esta linha
+-- afirmava o contrário ("incluídas no bloco único acima") e era falsa: o
+-- apêndice não tocava constraint nenhuma, e toda VPS de cliente batia 23514 na
+-- primeira conexão de rede social.
 alter table public.conversations drop constraint if exists conversations_channel_check;
 alter table public.conversations add constraint conversations_channel_check
   check (channel in ('whatsapp', 'instagram', 'facebook'));
