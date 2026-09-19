@@ -682,6 +682,9 @@ export const AUDIT_ACTIONS = [
   // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
   // responde — a coluna `updated_at` se move por qualquer motivo.
   "ai.credential_updated",
+  // Rodada do canal-mudo-watcher que ABRIU ou FECHOU aviso (doc 11, decisão B).
+  // Só com efeito: varredura diária que não achou nada não é mutação.
+  "channel.canal_mudo_watcher_run",
   // A rodada do cron `followup-sem-agente` que MEXEU em alguma coisa: abriu
   // aviso de fluxo publicado que nenhum agente arma, fechou aviso cujo vínculo
   // apareceu, ou os dois. Rodada sem efeito não audita (CLAUDE.md §Audit log),
@@ -689,6 +692,16 @@ export const AUDIT_ACTIONS = [
   // as duas contagens mais `examinados`, que é o que diferencia "ninguém tinha
   // fluxo desarmado" de "a varredura não rodou".
   "ai.followup_sem_agente_reconciliado",
+  /** POST /api/v1/tenants/provision — organização criada por um sistema externo (doc 38 b). */
+  "tenant.created_by_provisioning",
+  /**
+   * A repetição do provisionamento completou o que a tentativa anterior não
+   * chegou a gravar — hoje, o vínculo de admin do dono. Sai SÓ quando houve
+   * efeito, e é o único registro que a organização nascida de uma tentativa
+   * partida tem: a `tenant.created_by_provisioning` dela nunca saiu, porque a
+   * primeira tentativa morreu antes de chegar nessa linha.
+   */
+  "tenant.provisioning_completed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

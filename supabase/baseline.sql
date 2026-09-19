@@ -10020,6 +10020,16 @@ alter table public.agent_inbox_items
     -- (bloco único por constraint, #159; e a janela de 2000 caracteres que
     -- `tests/unit/midia-nao-lida.test.ts` varre a partir do `add constraint`).
     'followup_sem_agente',
+    -- (migration 0339, doc 11 decisão B) O canal de WhatsApp em modo de teste
+    -- SEM número autorizado não responde a ninguém — e o esquecimento é o
+    -- defeito: as mensagens chegam no Inbox e a IA nunca fala, então quem
+    -- instalou conclui que o produto está quebrado. O cron canal-mudo-watcher
+    -- abre este aviso depois de 3 dias e o FECHA quando deixa de valer.
+    --
+    -- Entra NESTA lista, e não num bloco novo no fim do arquivo: reconstruir a
+    -- mesma constraint em N blocos quebra o `update.sh` de todo clone com
+    -- vocabulário posterior (lição do #159).
+    'canal_mudo_sem_numero',
     'other'
   ));
 
@@ -32130,7 +32140,6 @@ drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_
 create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
-
 -- ---- a regra de automação guarda a CONFIGURAÇÃO do gatilho (migration 0268) ----
 -- O gatilho de data do funil (#989) não nasce de evento: quem o emite é a
 -- varredura `cron/lead-date-field-due`, e ela só sabe onde olhar se a regra
@@ -32342,6 +32351,44 @@ do $f$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $f$;
 -- tests/invariants/travas-de-suporte-cobrem-toda-tabela-na-instalacao.test.ts.
 -- A definição da função está antes da varredura de anon.
 do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+-- ---- Catálogo da DeepSeek (migration 0342) ----
+--
+-- O próximo provedor que a abertura de vocabulário da 0127 existia para
+-- destravar: OpenAI-compatível e com desconto automático de prefixo de cache.
+-- Ids e preços verificados no provedor (`GET /models`; docs oficiais em dólares
+-- por 1M). Preço em CENTAVOS por milhão — entrada (cache miss) 14, saída 28; o
+-- cache hit (0,28¢/1M) não cabe no integer do catálogo e é desconto de
+-- cobrança, não preço de tabela. `ai_pricing` acompanha para o orçamento somar
+-- com o mesmo número. Sem `is_default_for_provider`: a escolha cai no mais
+-- barato com ferramentas, como na OpenRouter.
+insert into public.ai_models
+  (provider, model_id, display_name, description,
+   input_price_per_million_cents, output_price_per_million_cents, supports_tools)
+values
+  ('deepseek', 'deepseek-flash',  'DeepSeek Flash',
+   'O mais barato da DeepSeek, para atendimento de volume. Tem desconto automático do trecho repetido da conversa.',
+   14, 28, true),
+  ('deepseek', 'deepseek-v4-pro', 'DeepSeek V4 Pro',
+   'O mais capaz da linha v4, para conversas que exigem raciocínio. Também desconta o trecho repetido da conversa.',
+   44, 87, true)
+on conflict (provider, model_id) do update set
+  display_name = excluded.display_name,
+  description = excluded.description,
+  input_price_per_million_cents = excluded.input_price_per_million_cents,
+  output_price_per_million_cents = excluded.output_price_per_million_cents,
+  supports_tools = excluded.supports_tools;
+
+insert into public.ai_pricing
+  (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
+values
+  ('deepseek-flash',   14, 28, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo'),
+  ('deepseek-v4-pro',  44, 87, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo')
+on conflict (model) do update set
+  prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
+  completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,
+  notes = excluded.notes,
+  superseded_at = null;
 
 -- ---- módulo suspenso vira ERRO que o kit reporta (migration 0340) ----
 --

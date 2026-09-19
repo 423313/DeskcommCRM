@@ -27,6 +27,7 @@ export type { InboxRefKind } from '@/lib/ai/inbox-destino';
  */
 export type InboxKind =
   | 'case_stale'
+  | 'canal_mudo_sem_numero'
   | 'appointment_outcome_required'
   | 'appointment_recovery_review'
   | 'qr_rescan'
