@@ -543,11 +543,12 @@ Processo padrão (siga sempre):
 
    **E o número livre hoje pode estar tomado quando o seu PR entrar.** A colisão só aparece
    quando o SEGUNDO PR de schema é mesclado — medido em 19/09/2026: **12 PRs abertos colidiam
-   com a `main` com os cinco checks obrigatórios verdes**. Desde então o `verify` **executa** a
-   guarda (`scripts/checar-colisao-de-migration.sh`, que antes só rodava como gancho local e
-   nunca alcançava fork), sobre a **prévia do merge** e contra a base no remoto; e, fora de
-   `pull_request`, ele varre a árvore inteira — nenhum `NNNN` nem timestamp pode aparecer duas
-   vezes na `main`. Antes de escolher o número quando houver outros PRs de schema em voo, peça-o
+   com a `main` com os cinco checks obrigatórios verdes**. O `verify` **já executa** a guarda
+   (`pnpm checar:colisao-de-migration`, o alias de `scripts/checar-colisao-de-migration.sh` —
+   procurar pelo nome do arquivo no `ci.yml` devolve zero e mente), e mesmo assim os 12 passaram:
+   cada um mediu a `main` do dia em que rodou. Por isso há duas camadas a mais: a **prévia velha**
+   reprova quando a `main` ganhou migration desde a base do PR, e fora de `pull_request` o CI varre
+   a árvore inteira — nenhum `NNNN` nem timestamp pode aparecer duas vezes na `main`. Antes de escolher o número quando houver outros PRs de schema em voo, peça-o
    a quem estiver alocando na rodada: **não há reserva, quem mescla primeiro fica com o número**.
    Para ver o que está tomado agora, incluindo o que ainda não foi mesclado:
 

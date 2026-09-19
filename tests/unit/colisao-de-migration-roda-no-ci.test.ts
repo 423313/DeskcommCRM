@@ -1,29 +1,30 @@
 /**
- * A guarda de colisão de número de migration TEM DE SER EXECUTADA PELO CI.
+ * AS DUAS CAMADAS DA GUARDA DE COLISÃO DE MIGRATION TÊM DE CONTINUAR NO CI.
  *
- * Ela existia desde antes, com 7 casos provados em
- * `tests/shell/colisao-de-migration.test.ts`, e ninguém a chamava no CI: só o
- * gancho local e `pnpm checar:colisao-de-migration`. Gancho local não alcança
- * quem contribui de um fork, e PR antigo não o roda de novo — o número que
- * estava livre quando ele nasceu pode ter sido tomado depois.
+ * Camada 1 (já existia, e NINGUÉM a vigiava): `pnpm checar:colisao-de-migration`
+ * na parte 1 do `verify` — o número que o PR acrescenta não pode estar tomado na
+ * base. Sem este arquivo, apagar essa linha sai verde, e a régua vira de novo o
+ * gancho local, que `core.hooksPath` não versiona e fork nenhum roda.
  *
- * Medido em 19/09/2026 sobre os PRs abertos: **12 colidiam com a `main` com os
- * cinco checks obrigatórios VERDES**; um deles com 10 números de uma vez. O
- * defeito só aparece quando o SEGUNDO entra, e aí quem fica com duas migrations
- * de mesmo NNNN é a `main`.
+ * Camada 2 (nova): fora de `pull_request` a camada 1 é INERTE — HEAD é a própria
+ * base e nada foi "acrescentado". Medido em 19/09/2026: o #965 estava verde com
+ * prévia de 1039 commits atrás e cinco números já tomados, porque a guarda dele
+ * rodou contra uma `main` que já não existe. A varredura da árvore fecha essa
+ * fresta: nenhum NNNN nem timestamp repetido pode existir na `main`.
  *
- * Este arquivo guarda as três propriedades que fazem a guarda valer:
- *   1. o CI a INVOCA (existir não é rodar);
- *   2. ela mede contra o REMOTO da base, não contra cópia local;
- *   3. o passo não está desligado por condição que o apague em pull_request.
+ * ⚠️ O NOME DO COMANDO TEM DOIS FORMATOS, e foi assim que eu errei: buscar pelo
+ * ARQUIVO (`checar-colisao-de-migration.sh`) não acha quem o chama pelo ALIAS
+ * (`checar:colisao-de-migration`). Medi zero, concluí "o CI não executa" e
+ * escrevi um PR inteiro em cima disso — até um colega medir na fonte. Por isso
+ * as asserções abaixo casam os DOIS nomes.
  */
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
 const CI = readFileSync(".github/workflows/ci.yml", "utf-8");
+const PKG = JSON.parse(readFileSync("package.json", "utf-8")) as { scripts: Record<string, string> };
 
-/** O bloco do job `verify-parte` — é onde o passo tem de morar. */
 function blocoDoJob(job: string): string {
   const inicio = CI.indexOf(`\n  ${job}:\n`);
   if (inicio < 0) throw new Error(`job ${job} não encontrado`);
@@ -32,7 +33,7 @@ function blocoDoJob(job: string): string {
   return fim < 0 ? resto : resto.slice(0, fim + 1);
 }
 
-describe("a guarda de colisão de migration roda no CI", () => {
+describe("as duas camadas da guarda de colisão rodam no CI", () => {
   const verify = blocoDoJob("verify-parte");
 
   it("controle positivo: o recorte pegou o job que roda a suíte", () => {
@@ -40,34 +41,54 @@ describe("a guarda de colisão de migration roda no CI", () => {
     expect(verify.length).toBeGreaterThan(500);
   });
 
-  it("o CI invoca o script — existir não é rodar", () => {
+  it("o alias existe no package.json e aponta para o script", () => {
+    // O elo que a minha sonda cega não atravessou: é ele que liga o nome usado
+    // no workflow ao arquivo de verdade.
+    expect(PKG.scripts["checar:colisao-de-migration"]).toMatch(/scripts\/checar-colisao-de-migration\.sh/);
+  });
+
+  it("camada 1: o verify invoca a guarda por QUALQUER um dos dois nomes", () => {
+    const invoca =
+      /pnpm checar:colisao-de-migration/.test(verify) ||
+      /bash scripts\/checar-colisao-de-migration\.sh/.test(verify);
     expect(
-      verify,
-      "o passo que chama scripts/checar-colisao-de-migration.sh saiu do verify-parte: a guarda volta a ser só gancho local, que fork nenhum roda",
-    ).toMatch(/bash scripts\/checar-colisao-de-migration\.sh/);
+      invoca,
+      "nenhum passo do verify-parte chama a guarda de colisão, nem pelo alias nem pelo arquivo: a régua volta a ser só o gancho local, que fork nenhum roda",
+    ).toBe(true);
   });
 
-  it("mede contra o REMOTO da base do PR, nunca contra uma cópia local", () => {
-    // `origin/<base>` faz o próprio script buscar a ref no remoto antes de
-    // comparar. Medir contra `main` local mediria uma árvore que pode estar
-    // parada em qualquer ponto do passado — e a colisão nasce justamente do que
-    // entrou na base DEPOIS.
-    expect(verify).toMatch(/checar-colisao-de-migration\.sh origin\/\$\{GITHUB_BASE_REF:-main\}/);
+  it("camada 1 roda em pull_request — não pode ser desligada justamente onde serve", () => {
+    const i = verify.search(/- name: Colisão de número de migration/);
+    expect(i, "o passo da camada 1 sumiu ou foi renomeado").toBeGreaterThan(-1);
+    const passo = verify.slice(i, i + 400);
+    expect(passo.match(/^\s+if: (.*)$/m)?.[1]).toBe("matrix.parte == 1");
   });
 
-  it("o passo não é apagado por condição em pull_request", () => {
-    // `if:` na altura do passo não faz falhar: faz não rodar. Um `github.event_name
-    // != 'pull_request'` aqui desligaria a guarda exatamente onde ela serve.
-    const passo = verify.slice(verify.indexOf("O número da migration já está tomado?"));
-    const condicao = passo.match(/^\s+if: (.*)$/m)?.[1];
-    expect(condicao, "a condição do passo mudou — descreva por que, e confira que ela ainda vale em pull_request").toBe(
-      "matrix.parte == 1",
+  it("camada 1b: a prévia velha reprova SÓ quando as duas coisas valem", () => {
+    // O #965 mostrou que o verde vence: a guarda mediu a `main` de 1039 commits
+    // atrás. O recorte é estreito de propósito — este PR acrescenta migration E
+    // a base ganhou migration desde a prévia. Alargar isto vira "branch sempre
+    // em dia para todo mundo", que é o laço de retrabalho que a fila já pagou.
+    const i = verify.search(/- name: As migrations da main andaram desde a prévia deste PR\?/);
+    expect(i, "o passo da prévia velha saiu do verify").toBeGreaterThan(-1);
+    const passo = verify.slice(i, i + 2200);
+    expect(passo.match(/^\s+if: (.*)$/m)?.[1]).toBe("matrix.parte == 1 && github.event_name == 'pull_request'");
+    // as duas condições, e não uma
+    expect(passo, "sem a saída antecipada, PR que não toca schema seria alcançado").toMatch(
+      /minhas:-0\}" = 0 \]; then\n\s+echo "este PR não acrescenta migration/,
     );
+    expect(passo, "só migration ACRESCENTADA na base conta").toMatch(/status=="added".*supabase\/migrations/s);
+    // e não medir não pode passar
+    expect(passo, "comparação indisponível tem de reprovar, não seguir").toMatch(/NÃO MEDIDO[\s\S]*exit 2/);
   });
 
-  it("código diferente de zero reprova — inclusive o 2 (não consegui medir)", () => {
-    const passo = verify.slice(verify.indexOf("O número da migration já está tomado?"));
-    expect(passo).toMatch(/if \[ "\$codigo" != 0 \]; then/);
-    expect(passo).toMatch(/exit "\$codigo"/);
+  it("camada 2: a varredura da árvore roda FORA de pull_request", () => {
+    const i = verify.search(/- name: A árvore da main tem NNNN ou timestamp repetido\?/);
+    expect(i, "a varredura de duplicata na árvore saiu do verify").toBeGreaterThan(-1);
+    const passo = verify.slice(i, i + 400);
+    expect(
+      passo.match(/^\s+if: (.*)$/m)?.[1],
+      "em pull_request a camada 1 já mede; fora dele é a única que mede",
+    ).toBe("matrix.parte == 1 && github.event_name != 'pull_request'");
   });
 });

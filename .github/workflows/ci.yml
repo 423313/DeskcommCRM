@@ -158,68 +158,6 @@ jobs:
             echo "::warning::a comparação pode ter vindo truncada (${atraso} commits) — cruzamento vazio aqui é NÃO MEDIDO"
           fi
 
-      # O NÚMERO DA MIGRATION QUE ESTE PR ACRESCENTA JÁ ESTÁ TOMADO?
-      #
-      # A guarda existia e NINGUÉM a executava no CI: `scripts/checar-colisao-de-
-      # migration.sh` só rodava como gancho local e `pnpm checar:colisao-de-
-      # migration`. Gancho local não alcança fork — e PR antigo não o roda de
-      # novo, então o número que estava livre no dia em que ele nasceu pode ter
-      # sido tomado por outro PR que entrou depois. Medido em 19/09/2026: 12 PRs
-      # abertos colidiam com a `main` COM OS CINCO CHECKS VERDES, um deles com 10
-      # números de uma vez. A colisão só aparece quando o SEGUNDO PR entra, e aí
-      # é a `main` que fica com duas migrations com o mesmo NNNN.
-      #
-      # Roda sobre a PRÉVIA DO MERGE, não sobre a branch: em `pull_request` o
-      # `actions/checkout` já entrega `refs/pull/N/merge`, e o script busca a
-      # base no REMOTO (nunca uma cópia velha). Branch não é o que entra.
-      #
-      # Fora de pull_request o passo é inerte por construção: HEAD é a própria
-      # base, o diff não tem migration acrescentada e ele sai `OK`.
-      #
-      # Exit 2 (não consegui medir) também REPROVA — é a regra do próprio script,
-      # e gate que volta verde sem ter comparado nada é falha-em-verde.
-      - name: O número da migration já está tomado?
-        if: matrix.parte == 1
-        run: |
-          set -uo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
-            bash scripts/checar-colisao-de-migration.sh origin/${GITHUB_BASE_REF:-main}
-            codigo=$?
-            if [ "$codigo" != 0 ]; then
-              echo "::error title=Número de migration em uso::Renumere o arquivo (NNNN e TIMESTAMP juntos, no mesmo commit). Não escolha o número sozinho quando houver outros PRs de schema em voo: peça ao alocador da rodada — o maestro de PRs de plantão —, porque quem mescla primeiro fica com o número e não há reserva. A regra está em triagem/TRIAGEM.md."
-              exit "$codigo"
-            fi
-            exit 0
-          fi
-          # FORA DE pull_request a guarda por diff é INERTE (HEAD é a própria
-          # base, nada foi "acrescentado"), e é justamente aqui que a duplicata
-          # aparece: o verde de um PR é uma foto do passado — o #965 estava verde
-          # com prévia de 1039 commits atrás e cinco números já tomados. Se uma
-          # duplicata escapar por prévia velha, por administrador que ignora o
-          # check ou por merge fora do fluxo, a `main` reprova NA HORA, em vez de
-          # a descoberta ser o `db push` de um self-hoster.
-          nomes="$(git ls-tree -r --name-only HEAD -- supabase/migrations | grep -E '\.sql$' | sed 's#.*/##')"
-          total="$(grep -c . <<<"$nomes" || true)"
-          # Controle de vivacidade: árvore sem migration nenhuma é sonda cega, não
-          # "está tudo certo". Medido em 19/09/2026: 263 arquivos.
-          if [ "${total:-0}" -lt 100 ]; then
-            echo "::error title=A varredura de duplicata não mediu nada::li ${total:-0} migration(ões) em supabase/migrations — a sonda perdeu o caminho."
-            exit 2
-          fi
-          dup_n="$(grep -oE '^[0-9]{14}_[0-9]{4}' <<<"$nomes" | cut -d_ -f2 | sort | uniq -d)"
-          dup_t="$(grep -oE '^[0-9]{14}' <<<"$nomes" | sort | uniq -d)"
-          if [ -n "$dup_n" ] || [ -n "$dup_t" ]; then
-            for n in $dup_n; do
-              echo "::error title=NNNN duplicado na árvore::${n} aparece em: $(grep -E "^[0-9]{14}_${n}_" <<<"$nomes" | tr '\n' ' ')"
-            done
-            for ts in $dup_t; do
-              echo "::error title=Timestamp duplicado na árvore::${ts} aparece em: $(grep -E "^${ts}_" <<<"$nomes" | tr '\n' ' ')"
-            done
-            echo "Conserto: renumerar o arquivo que entrou por último (NNNN e TIMESTAMP juntos) num PR de forward-fix — migration já aplicada não se edita."
-            exit 1
-          fi
-          echo "OK — ${total} migrations na árvore, nenhum NNNN nem timestamp repetido."
-
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
         # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
@@ -268,6 +206,82 @@ jobs:
       - name: Colisão de número de migration
         if: matrix.parte == 1
         run: pnpm checar:colisao-de-migration
+
+      # A PRÉVIA DESTE PR AINDA MEDE A `main` DE HOJE, NO QUE É SCHEMA?
+      #
+      # O passo acima roda contra a base da PRÉVIA — e a prévia é de quando o run
+      # começou. Medido em 19/09/2026: o #965 está VERDE com prévia de 1039
+      # commits atrás e CINCO números já tomados. O verde não mentiu quando
+      # nasceu; ele venceu.
+      #
+      # Recorte estreito de propósito: só reprova quando as DUAS coisas valem —
+      # este PR acrescenta migration E a base ganhou migration desde a prévia.
+      # PR que não toca schema não é alcançado, e `main` que andou em outras
+      # áreas também não: exigir branch em dia para todo mundo é o laço de
+      # retrabalho que a fila já pagou.
+      - name: As migrations da main andaram desde a prévia deste PR?
+        if: matrix.parte == 1 && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          minhas=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" \
+                     --jq '.[]|select(.status=="added")|.filename' 2>/dev/null \
+                   | grep -cE '^supabase/migrations/[^/]+\.sql$' || true)
+          if [ "${minhas:-0}" = 0 ]; then
+            echo "este PR não acrescenta migration — nada a conferir aqui"; exit 0
+          fi
+          comp=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${GITHUB_BASE_REF:-main}" 2>/dev/null) || {
+            echo "::error::não consegui comparar a base da prévia com a ${GITHUB_BASE_REF:-main} — NÃO MEDIDO, e PR de schema não passa sem esta medida."
+            exit 2; }
+          novas=$(printf '%s' "$comp" | jq -r '[.files[]?|select(.status=="added")|.filename|select(startswith("supabase/migrations/"))]|join(" ")')
+          atraso=$(printf '%s' "$comp" | jq -r '.ahead_by // 0')
+          if [ -n "$novas" ]; then
+            echo "::error title=A prévia deste PR é anterior a migrations que já entraram::a ${GITHUB_BASE_REF:-main} andou ${atraso} commits desde a base desta prévia e ganhou: ${novas}. A guarda de colisão acima mediu a árvore ANTIGA, então o verde dela não vale para o que seria mesclado. Traga a ${GITHUB_BASE_REF:-main} para dentro (git merge origin/${GITHUB_BASE_REF:-main}) e deixe o CI medir de novo."
+            exit 1
+          fi
+          echo "a ${GITHUB_BASE_REF:-main} andou ${atraso} commits desde a prévia, nenhum deles acrescentou migration — a medição acima continua valendo."
+
+      # E A ÁRVORE INTEIRA, fora de pull_request — porque lá o passo acima é
+      # INERTE: em push HEAD é a própria base, nada foi "acrescentado", e ele sai
+      # OK sem medir duplicata nenhuma.
+      #
+      # É nessa fresta que a duplicata entra: o verde de um PR é uma foto do
+      # passado. Medido em 19/09/2026, o #965 estava verde com prévia de 1039
+      # commits atrás e CINCO números já tomados — a guarda dele rodou contra uma
+      # `main` que já não existe. Se algo assim escapar (prévia velha, merge fora
+      # do fluxo, administrador que ignora o check), a `main` reprova na hora, em
+      # vez de a descoberta ser o `db push` de um self-hoster.
+      #
+      # Medido hoje na `main`: 263 migrations, zero duplicatas — nasce verde.
+      # Vigiado por tests/unit/main-sem-migration-duplicada.test.ts.
+      - name: A árvore da main tem NNNN ou timestamp repetido?
+        if: matrix.parte == 1 && github.event_name != 'pull_request'
+        run: |
+          set -uo pipefail
+          nomes="$(git ls-tree -r --name-only HEAD -- supabase/migrations | grep -E '\.sql$' | sed 's#.*/##')"
+          total="$(grep -c . <<<"$nomes" || true)"
+          # Controle de vivacidade: árvore sem migration nenhuma é sonda cega, não
+          # "está tudo certo". Medido em 19/09/2026: 263 arquivos.
+          if [ "${total:-0}" -lt 100 ]; then
+            echo "::error title=A varredura de duplicata não mediu nada::li ${total:-0} migration(ões) em supabase/migrations — a sonda perdeu o caminho."
+            exit 2
+          fi
+          dup_n="$(grep -oE '^[0-9]{14}_[0-9]{4}' <<<"$nomes" | cut -d_ -f2 | sort | uniq -d)"
+          dup_t="$(grep -oE '^[0-9]{14}' <<<"$nomes" | sort | uniq -d)"
+          if [ -n "$dup_n" ] || [ -n "$dup_t" ]; then
+            for n in $dup_n; do
+              echo "::error title=NNNN duplicado na árvore::${n} aparece em: $(grep -E "^[0-9]{14}_${n}_" <<<"$nomes" | tr '\n' ' ')"
+            done
+            for ts in $dup_t; do
+              echo "::error title=Timestamp duplicado na árvore::${ts} aparece em: $(grep -E "^${ts}_" <<<"$nomes" | tr '\n' ' ')"
+            done
+            echo "Conserto: renumerar o arquivo que entrou por último (NNNN e TIMESTAMP juntos) num PR de forward-fix — migration já aplicada não se edita."
+            exit 1
+          fi
+          echo "OK — ${total} migrations na árvore, nenhum NNNN nem timestamp repetido."
 
       # `--project produto` é o `pnpm test:unit` MENOS as cercas, que já
       # rodaram acima; `--shard` divide os arquivos entre as duas partes. Juntos
