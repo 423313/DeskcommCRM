@@ -365,6 +365,15 @@ export const AUDIT_ACTIONS = [
   // é a única tabela que guarda quem desligou o bloqueio de gasto, mudou o
   // portão de divulgação ou passou a exigir assinatura nas entregas.
   "platform.comportamento_updated",
+  // A lista de endereços da rede INTERNA que a instalação pode alcançar
+  // (`platform_settings.internal_destinations`, migration 0324, decisão 22-d).
+  // Auditável pela mesma razão da linha acima e com alcance maior: cada entrada
+  // é uma porta que o servidor passa a poder abrir para dentro da própria rede,
+  // levando junto a credencial da instalação. "Desde quando isto estava
+  // liberado?" não tem resposta em nenhuma outra tabela — a coluna guarda o
+  // estado, não o histórico —, e não há event_log que cubra o tipo (nenhum
+  // handler o consumiria; evento sem consumer é o anti-pattern nº 3).
+  "platform.internal_destinations_updated",
   "platform_google_oauth.updated",
   // A credencial do APP da Meta da INSTALAÇÃO (migration 0257): o App Secret que
   // assina a entrega do webhook e o verify token que responde ao handshake.

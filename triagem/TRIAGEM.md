@@ -93,12 +93,22 @@ Nesta ordem:
    `conclusion`, e o comando é este, sempre, antes de qualquer outra coisa:
 
    ```bash
-   BR=$(gh pr view <n> --json headRefName --jq .headRefName)
-   for id in $(gh api repos/{owner}/{repo}/actions/runs \
-                 --jq "[.workflow_runs[] | select(.head_branch==\"$BR\" and .conclusion==\"action_required\")] | .[].id"); do
+   SHA=$(gh pr view <n> --json headRefOid --jq .headRefOid)
+   for id in $(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$SHA" \
+                 --jq '[.workflow_runs[] | select(.conclusion=="action_required")] | .[].id'); do
      gh api -X POST "repos/{owner}/{repo}/actions/runs/$id/approve"
    done
    ```
+
+   **A chave é o `head_sha`, nunca o nome da branch** — é o achado 17 deste arquivo, aplicado
+   aqui. `head_branch` é um nome que o contribuidor escolhe, e um fork que abriu o PR a partir
+   da `main` dele faz o filtro casar com a `main` do upstream; com dois forks assim ao mesmo
+   tempo, o laço aprova o run do PR errado, que é executar código de terceiro sem revisão.
+   A troca conserta um segundo defeito de brinde: `actions/runs` sem `?head_sha=` devolve as
+   **30 mais recentes** e filtra no cliente, e a densidade deste repo passa de 400 runs/dia —
+   ou seja, as 30 cobrem minutos, e o exemplo do próprio parágrafo abaixo é um PR de **6 dias**.
+   Filtrando no servidor por `head_sha`, o conjunto já nasce pequeno e a paginação deixa de
+   existir como problema.
 
    Medido: o PR #176 ficou **6 dias** aberto e, quando a triagem chegou, os 4 workflows estavam em
    `action_required` desde o primeiro push. A latência de 5h08min que este arquivo cita não é

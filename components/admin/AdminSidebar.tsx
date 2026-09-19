@@ -15,6 +15,7 @@ import {
   Palette,
   Key,
   Gear,
+  Plugs,
   WebhooksLogo,
   ArrowRight,
 } from "@/lib/ui/icons";
@@ -62,6 +63,11 @@ const NAV_ITEMS: NavItem[] = [
   // O rótulo é o do assunto da tela para quem chega por aqui sabendo o que foi
   // mexer, e não o nome de um arquivo de configuração.
   { href: "/admin/sistema", label: "Comportamento", icon: Gear },
+  // A porta da tela que libera endereços da rede interna (decisão 22-d, #1004).
+  // Mesma razão das de cima: o objeto é a MÁQUINA, não uma empresa — e a
+  // decisão pede explicitamente que o lugar onde o dono controla seja visível.
+  // Sem esta linha a tela existiria e só se chegaria nela digitando a URL.
+  { href: "/admin/destinos-internos", label: "Destinos internos", icon: Plugs },
 ];
 
 interface AdminSidebarProps {
