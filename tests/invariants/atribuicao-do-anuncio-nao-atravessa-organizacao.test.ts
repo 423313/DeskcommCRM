@@ -97,6 +97,7 @@ describe("atribuição de anúncio não atravessa a organização", () => {
              has_function_privilege('authenticated', 'public.fn_estampar_atribuicao_de_anuncio(uuid, uuid, text, jsonb)', 'EXECUTE');
       `),
     );
-    expect(linha).toBe("t,f,f");
+    // `boolean || text` escreve o booleano por extenso (`true`), não a forma curta do psql (`t`).
+    expect(linha).toBe("true,false,false");
   });
 });
