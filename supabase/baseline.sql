@@ -27050,7 +27050,7 @@ alter table public.extension_installations add constraint extension_installation
 alter table public.organization_extensions add column if not exists deactivated_by_removal_at timestamptz;
 alter table public.extension_operations drop constraint if exists extension_operations_kind_check;
 alter table public.extension_operations add constraint extension_operations_kind_check
-  check (kind in ('catalog_admission','install','update','revert','removal','configure'));
+  check (kind in ('catalog_admission','install','update','revert','removal','configure','module_install'));
 alter table public.extension_operations drop constraint if exists extension_operations_status_check;
 alter table public.extension_operations add constraint extension_operations_status_check
   check (status in ('preparing','completed','failed','cancelled'));
@@ -31749,9 +31749,9 @@ create trigger trg_platform_smtp_settings_updated_at
 
 -- ---- módulo instalado: instalar e reaplicar, D3 e D6 da ADR-0002 (migration 0340) ----
 --
--- Cópia literal da migration (menos as duas chamadas do fim, que aqui moram no
--- rodapé do arquivo, depois de toda tabela). Entra ANTES da VARREDURA anon
--- porque cria função.
+-- Cópia literal da migration, com duas diferenças: as duas chamadas do fim moram
+-- no rodapé do arquivo, depois de toda tabela; e a CHECK de `kind` ampliada vive no
+-- bloco único dela (0271). Entra ANTES da VARREDURA anon porque cria função.
 -- 0340 — Módulo instalado: D3 e D6 da ADR-0002 (onda 2, issue #1114)
 --
 -- Empilhada sobre a 0325 (#1178, onda 1): chama as provisionadoras, que terminam em
@@ -31789,9 +31789,9 @@ revoke all on public.modulos_instalados from anon, authenticated;
 -- caminho já provado das extensões" (ADR-0002, D3) — chave idempotente, `applied_now`, e a tela
 -- de recibos que já existe. É recibo de PLATAFORMA (organization_id nulo), o que a restrição de
 -- escopo já aceita sem mudança.
-alter table public.extension_operations drop constraint if exists extension_operations_kind_check;
-alter table public.extension_operations add constraint extension_operations_kind_check
-  check (kind in ('catalog_admission','install','update','revert','removal','configure','module_install'));
+-- A lista ampliada com `module_install` NÃO é recriada aqui: ela vive no bloco único da
+-- constraint, no apêndice da migration 0271 — uma constraint, um bloco
+-- (tests/unit/baseline-constraint-reconstruida.test.ts). A migration 0340 faz o drop + add.
 
 -- ── 3. A porta de instalação ─────────────────────────────────────────────────
 create or replace function public.fn_modulo_instalar(p_actor uuid, p_operation uuid, p_modulo text)
