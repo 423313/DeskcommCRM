@@ -360,6 +360,17 @@ export const AUDIT_ACTIONS = [
   // (nenhum handler o consumiria — ver register-handlers.ts) e a troca não
   // deixa rastro em nenhuma outra tabela.
   "platform.signup_mode_updated",
+  // Configuração da INSTALAÇÃO trocada pela tela (migration 0341): credencial de
+  // e-mail, remetente, contatos. Auditável pelo mesmo motivo das vizinhas — é
+  // mutação de plataforma, sem `organization_id`, e "por que parou de enviar
+  // e-mail?" só tem resposta aqui.
+  //
+  // ⚠️ O VALOR NUNCA ENTRA NO metadata, e isto não é zelo: `api_audit_log` é
+  // append-only por schema (nenhum papel tem GRANT de UPDATE/DELETE, nem o
+  // `service_role`), então um segredo que caia ali fica cinco anos e não sai.
+  // O emissor grava só a chave, a natureza e os últimos 4 caracteres.
+  "platform.config_changed",
+  "platform.config_reset",
   // O COMPORTAMENTO da instalação trocado em `platform_settings` pela tela
   // `/admin/sistema` (migration 0331, issue #1034) — irmã da linha de cima, e
   // mutação de plataforma. Auditável porque pergunta "por que a IA não parou no
