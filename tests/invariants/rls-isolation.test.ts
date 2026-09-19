@@ -266,7 +266,7 @@ beforeAll(() => {
             );
         end if;
 
-        -- voip_trunk_settings (migration 0327): credenciais do trunk SIP da
+        -- voip_trunk_settings (migration 0334): credenciais do trunk SIP da
         -- organizacao. PK e o proprio organization_id (um trunk por org), e a
         -- senha cifrada tem o MESMO esquema de ai_provider_credentials -- os
         -- bytea aqui sao so preenchimento minimo pra satisfazer os NOT NULL,
@@ -341,7 +341,7 @@ export const TABLES = [
   "crm_tasks",
   // 0227 — texto de sugestões: org + visibilidade da conversa por authenticated.
   "ai_reply_drafts",
-  // migration 0327 — credenciais do trunk SIP por organizacao. Leitura e
+  // migration 0334 — credenciais do trunk SIP por organizacao. Leitura e
   // qualquer membro da org (a tela de originar chamada precisa saber SE
   // existe trunk configurado); a ESCRITA exige admin (mesmo nivel de
   // ai_provider_credentials) e NAO e medida aqui.

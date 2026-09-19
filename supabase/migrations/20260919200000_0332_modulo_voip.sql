@@ -1,12 +1,12 @@
 -- ============================================================
--- 0325_modulo_voip — ai_agents.channel, phone_numbers, fn_resolve_inbound_number
+-- 0332_modulo_voip — ai_agents.channel, phone_numbers, fn_resolve_inbound_number
 --
 -- RECOMPOSTA. Esta migration existiu no PR #677 como 0232_modulo_voip e foi
 -- apagada por acidente no commit 97eed0955 (que unificou crm_calls em
 -- voice_calls): o apêndice do baseline manteve o bloco, mas o arquivo sumiu,
 -- e quem aplica as migrations em ordem nunca receberia phone_numbers.
 -- O corpo abaixo é o bloco do apêndice, que já descartava crm_calls (ver
--- 0326_voice_calls_sip). Renumerada para acima do máximo da main.
+-- 0333_voice_calls_sip). Renumerada para acima do máximo da main.
 -- ============================================================
 
 --

@@ -1,6 +1,6 @@
 /**
  * Busca o ai_agent configurado como agente de VOZ pra uma org
- * (ai_agents.channel = 'voice', coluna aditiva da migration 0325).
+ * (ai_agents.channel = 'voice', coluna aditiva da migration 0332).
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
