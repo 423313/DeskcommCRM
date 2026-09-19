@@ -126,17 +126,23 @@ test.describe("o canal em modo de teste avisa na Central", () => {
     await expect(avisoNaCentral(page)).toHaveCount(1);
 
     // ── O laço de retorno, pela tela: autorizar um número em Conexões ──────
-    await page.goto("/app/settings/connections");
-    await expect(page.getByText(`WhatsApp mudo ${SUFIXO}`).first()).toBeVisible({
+    // A rota é `/app/connections` — Conexões NÃO mora sob Configurações. Esta
+    // spec apontava para `/app/settings/connections`, que não existe: o teste
+    // pousava no 404 do produto e o único sintoma era "elemento não
+    // encontrado", 60s depois. Os seletores abaixo são os mesmos que
+    // `pre-go-live-whatsapp.spec.ts` já exerce nesta mesma tela — o painel se
+    // abre por "Configurar acesso da IA", e a lista é um campo com rótulo.
+    await page.goto("/app/connections");
+    await expect(page.getByText(`WhatsApp mudo ${SUFIXO}`, { exact: true })).toBeVisible({
       timeout: 60_000,
     });
-    await page.getByRole("button", { name: /modo de teste|lista de teste/i }).first().click();
-    const campo = page.getByRole("textbox").filter({ hasText: "" }).last();
+    await page.getByRole("button", { name: "Configurar acesso da IA" }).click();
+    const campo = page.getByLabel("Números autorizados para teste");
     await campo.fill("+5511999990000");
-    await page
-      .getByRole("button", { name: /salvar lista de teste|ativar modo de teste/i })
-      .first()
-      .click();
+    await page.getByRole("button", { name: "Salvar lista de teste" }).click();
+    // O painel fecha ao salvar: é o sinal de que o PATCH voltou 2xx, e sem ele
+    // o `poll` abaixo esperaria 60s por uma escrita que nunca foi pedida.
+    await expect(campo).not.toBeVisible();
     await expect
       .poll(
         async () => {
