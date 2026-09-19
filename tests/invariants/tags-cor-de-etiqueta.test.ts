@@ -33,7 +33,7 @@ import { GOV_MANAGER, GOV_ORG, GOV_VIEWER, seedGov } from "./gov-helpers";
  */
 
 const pool = new pg.Pool({
-  connectionString: `postgresql://postgres:***@127.0.0.1:${process.env.TEST_DB_PORT ?? 54329}/postgres`,
+  connectionString: `postgresql://postgres:postgres@127.0.0.1:${process.env.TEST_DB_PORT ?? 54329}/postgres`,
   max: 5,
 });
 
