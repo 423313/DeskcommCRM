@@ -560,8 +560,13 @@ describe("worker de mídia: base_url do binding de visão (#855)", () => {
       // A lista autoriza ENDEREÇO, nunca credencial. O degrau que impede a
       // chave que paga a conta de todas as empresas de sair para um endereço
       // escolhido por uma delas (decisão 22-a) é independente desta lista.
+      //
+      // A origem da chave vem do resolvedor (`origemDaChave`), não mais da
+      // comparação com o `.env`. Com a origem padrão ("da organização") este
+      // caso vira uma cópia do 3 — quem recusa é a guarda de endereço — e a
+      // regra de credencial fica sem vigia.
       comDestinosAutorizados("10.1.0.0/16");
-      vi.stubEnv("OPENROUTER_API_KEY", "chave-do-binding");
+      credencial.origemDaChave = "chave_da_instalacao";
       bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "http://10.1.2.7:8080/v1" };
 
       await deriveMessageMedia(eventRow());
