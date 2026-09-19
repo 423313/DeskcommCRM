@@ -123,10 +123,17 @@ begin
       update public.modulos_instalados
         set estado = 'ativo', motivo_suspensao = null, reaplicado_em = now()
         where modulo = r.modulo;
-    exception when others then
-      update public.modulos_instalados
-        set estado = 'suspenso', motivo_suspensao = sqlerrm
-        where modulo = r.modulo;
+    exception
+      -- Disputa de trava com o app no ar NÃO é defeito do módulo: relançar desfaz esta
+      -- passada inteira (nenhum módulo é marcado), e o texto do Postgres — "deadlock
+      -- detected", "could not obtain lock" — é o que o kit reconhece como disputa e o faz
+      -- aplicar de novo. Suspender aqui tiraria do ar um módulo que só precisava esperar.
+      when deadlock_detected or serialization_failure or lock_not_available then
+        raise;
+      when others then
+        update public.modulos_instalados
+          set estado = 'suspenso', motivo_suspensao = sqlerrm
+          where modulo = r.modulo;
     end;
   end loop;
   perform pg_notify('pgrst', 'reload schema');
