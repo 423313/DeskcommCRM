@@ -28,6 +28,10 @@ import { ackToStatus } from "@/lib/types/messaging";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
 import { logger } from "@/lib/logger";
+import {
+  ehNumeroInternoDeAviso,
+  registrarMensagemIgnorada,
+} from "@/lib/escalacao/numero-interno-de-aviso";
 
 export type Admin = ReturnType<typeof createAdminClient>;
 
@@ -604,6 +608,20 @@ async function handleInbound(
     return;
   }
 
+  // ── O NÚMERO INTERNO DE AVISOS NÃO VIRA ATENDIMENTO ─────────────────────
+  //
+  // Aqui, e não em `pos-entrada`: é o INSERT da conversa (logo abaixo) que
+  // dispara o pedido de rodízio pelo banco. Cortar depois já teria criado
+  // contato, conversa e uma "conversa do suporte" na fila de um atendente — e o
+  // "cancelar" que alguém da equipe digitasse bloquearia esse contato.
+  if (await ehNumeroInternoDeAviso(admin, session.organization_id, parsed)) {
+    await registrarMensagemIgnorada(admin, session.organization_id, {
+      direction: "inbound",
+      sessionId: session.id,
+    });
+    return;
+  }
+
   const contactId = await upsertContact(
     admin,
     session.organization_id,
@@ -810,6 +828,21 @@ async function handleOutboundFromUserPhone(
   // duplicata desta guarda, descartando calado justamente o caso que se quer ver.
   if (!ehEnderecavel(parsed)) {
     await avisarChatNaoReconhecido(admin, session.organization_id, session.id, chatId, "outbound");
+    return;
+  }
+
+  // ── O NÚMERO INTERNO DE AVISOS NÃO VIRA ATENDIMENTO ─────────────────────
+  //
+  // ANTES do dedup por `external_id` e do `upsertContact`. O aviso sai por
+  // TRANSPORTE DIRETO e não grava linha em `messages`, então o reconhecimento
+  // de eco não o reconhece como nosso — sem este corte, o próprio aviso que
+  // acabou de sair voltaria pelo webhook, viraria conversa com o número do
+  // plantão e ainda chamaria `pausarIaPorAtendimentoManual` no fim.
+  if (await ehNumeroInternoDeAviso(admin, session.organization_id, parsed)) {
+    await registrarMensagemIgnorada(admin, session.organization_id, {
+      direction: "outbound",
+      sessionId: session.id,
+    });
     return;
   }
 

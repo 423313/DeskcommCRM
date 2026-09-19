@@ -160,6 +160,10 @@ import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
 import { classifyPromise } from '../guardrails/promise/semantic';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
+import {
+  montarBriefingDaPassagem,
+  type BriefingDaPassagem,
+} from '@/lib/escalacao/briefing-da-passagem';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
@@ -297,13 +301,44 @@ export const AGENT_TOOL_DEFS = {
       'chame esta ferramenta — depois dela você não consegue mais falar com ele. Se você não avisar, ' +
       'o sistema manda um aviso padrão no seu lugar. Acionada a ferramenta, encerre o turno. ' +
       'NUNCA diga ao lead que "já chamei alguém" ou "já passei para a equipe" sem ter chamado esta ' +
-      'ferramenta NO MESMO turno — a frase no passado não substitui a ação, e ninguém é avisado de verdade.',
+      'ferramenta NO MESMO turno — a frase no passado não substitui a ação, e ninguém é avisado de verdade. ' +
+      'Preencha por_que, o_que_tentei e cliente_quer — quem assumir só vê o que você escrever aqui.',
     // Schema LARGO para o SDK (o modelo vê o campo); a validação REAL é a whitelist .strict()
     // + guard de prototype pollution dentro de applyRequestHumanHandoff — campo extra/forjado
     // vira erro de ENSINO ao modelo, nunca exceção do SDK nem strip silencioso.
+    //
+    // ⚠️ ESPELHO: as chaves aqui e as de `requestHumanHandoffInputSchema`
+    // (`human-handoff.ts`) são o MESMO conjunto, e
+    // `tests/unit/passagem-tool-schema-espelhado.test.ts` as compara. Campo só
+    // deste lado = o modelo preenche e a whitelist recusa, virando erro de
+    // ensino a cada chamada; campo só do outro = o modelo nunca sabe que existe.
+    //
+    // Os `.describe()` são o ÚNICO lugar onde o modelo aprende o que escrever, e
+    // é por isso que eles trazem exemplo em vez de definição.
     inputSchema: z
       .object({
-        reason: z.string().optional().describe('por que passar ao humano (curto)'),
+        por_que: z
+          .string()
+          .optional()
+          .describe(
+            'em uma frase, por que você não consegue resolver e está passando para uma pessoa',
+          ),
+        o_que_tentei: z
+          .array(
+            z.object({
+              o_que: z
+                .string()
+                .describe('o que você tentou (ex.: "busquei na base a política de desconto")'),
+              desfecho: z.string().optional().describe('no que deu (ex.: "a política só vai até 10%")'),
+            }),
+          )
+          .optional()
+          .describe('o que você já tentou, na ordem — evita que a pessoa refaça o mesmo caminho'),
+        cliente_quer: z
+          .string()
+          .optional()
+          .describe('o que a pessoa está pedindo, nas palavras dela'),
+        reason: z.string().optional().describe('sinônimo antigo de por_que (ainda aceito)'),
       })
       .passthrough(),
   },
@@ -628,7 +663,7 @@ export const TITULO_DO_HANDOFF_POR_ORCAMENTO = 'Teto de gasto com IA atingido �
  *
  * Envolver o turno inteiro é o único desenho que não envelhece: não há lista de
  * auxiliares a manter, e o auxiliar que alguém acrescentar amanhã já nasce
- * coberto. `resumoDoCheckpoint` é uma FUNÇÃO resolvida dentro do catch (e não um
+ * coberto. `briefingDoCheckpoint` é uma FUNÇÃO resolvida dentro do catch (e não um
  * valor pronto), porque no caminho novo a escolta abre antes de o checkpoint ter
  * sido lido — e ler o checkpoint no caminho feliz seria uma query a mais por
  * turno para um texto que quase nunca é usado.
@@ -640,10 +675,13 @@ export async function comHandoffSeOrcamentoAcabar<T>(
     leadId: string;
     conversationId: string;
     /**
-     * Resolvido SÓ no caminho de erro: `buildHandoffSummary(latestCheckpoint(...))`
-     * — do checkpoint durável, zero LLM.
+     * Resolvido SÓ no caminho de erro: montado do checkpoint durável, zero LLM.
+     *
+     * Devolve o BRIEFING inteiro, e não só o texto, porque a linha da passagem
+     * guarda as quatro colunas que ele carrega. Um campo, um significado: "o
+     * contexto que vai para quem assume".
      */
-    resumoDoCheckpoint: () => Promise<string>;
+    briefingDoCheckpoint: () => Promise<BriefingDaPassagem>;
     /**
      * Avisa o lead de que uma pessoa vai assumir, ANTES do handoff.
      *
@@ -661,7 +699,7 @@ export async function comHandoffSeOrcamentoAcabar<T>(
     return await chamada();
   } catch (err) {
     if (!(err instanceof LlmBudgetExceededError)) throw err;
-    const resumo = await ctx.resumoDoCheckpoint();
+    const doCheckpoint = await ctx.briefingDoCheckpoint();
     // AVISA antes de silenciar — ver a nota de ORDEM no gatilho determinístico:
     // `performHumanHandoff` arma a trava que o gate de envio lê, então a única
     // janela em que o aviso passa é ANTES dela.
@@ -682,13 +720,22 @@ export async function comHandoffSeOrcamentoAcabar<T>(
       });
       aviso = { avisado: false, porque: 'erro_no_envio' };
     }
+    // O texto fixo fica NA FRENTE do contexto acumulado, como antes: ele é o que
+    // diz a quem assume que o cliente NÃO pediu uma pessoa — sem isso o
+    // atendente responde a um pedido que não houve. Nenhum modelo é chamado
+    // aqui, e é o ponto: o motivo do desvio é justamente não haver orçamento.
+    const briefing: BriefingDaPassagem = {
+      ...doCheckpoint,
+      body: `${RESUMO_DO_HANDOFF_POR_ORCAMENTO}\n\n${doCheckpoint.body}`,
+    };
     await performHumanHandoff(
       ctx.pool,
       { tenantId: ctx.tenantId, leadId: ctx.leadId, conversationId: ctx.conversationId },
       {
         reason: HANDOFF_REASON_ORCAMENTO,
-        conversationSummary: `${RESUMO_DO_HANDOFF_POR_ORCAMENTO}\n\n${resumo}`,
+        conversationSummary: briefing.body,
         inboxTitle: TITULO_DO_HANDOFF_POR_ORCAMENTO,
+        passagem: { origem: 'teto_de_gasto', motivoCodigo: 'orcamento_de_ia', briefing },
         avisoAoLead: aviso,
         log: ctx.log,
       },
@@ -705,19 +752,21 @@ export async function comHandoffSeOrcamentoAcabar<T>(
  * checkpoint durável. Falhar aqui NÃO pode impedir o handoff: sem resumo o
  * humano assume com menos contexto; sem handoff ele não assume nada.
  */
-async function resumoDoCheckpointDuravel(
+async function briefingDoCheckpointDuravel(
   pool: pg.Pool,
   tenantId: string,
   leadId: string,
   log: Logger,
-): Promise<string> {
+): Promise<BriefingDaPassagem> {
+  const montar = (checkpoint: Awaited<ReturnType<typeof latestCheckpoint>>) =>
+    montarBriefingDaPassagem({ checkpoint, motivo: { codigo: 'orcamento_de_ia' } });
   try {
-    return buildHandoffSummary(await latestCheckpoint(pool, tenantId, leadId));
+    return montar(await latestCheckpoint(pool, tenantId, leadId));
   } catch (err) {
     log.warn('resumo do checkpoint não pôde ser lido — o handoff segue sem ele', {
       error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
     });
-    return buildHandoffSummary(null);
+    return montar(null);
   }
 }
 
@@ -1704,8 +1753,8 @@ export async function runAgentTurn(
       tenantId: job.organization_id,
       leadId: leadIdDoJob,
       conversationId: input.conversationId,
-      resumoDoCheckpoint: () =>
-        resumoDoCheckpointDuravel(pool, job.organization_id, leadIdDoJob, logDaEscolta),
+      briefingDoCheckpoint: () =>
+        briefingDoCheckpointDuravel(pool, job.organization_id, leadIdDoJob, logDaEscolta),
       // O canal nasce DENTRO da closure: instanciá-lo aqui faria todo turno feliz
       // pagar por um adapter que só o caminho de erro usa. Sem `agentActorId` de
       // propósito — quando o teto estoura antes da primeira chamada, não houve
@@ -2246,12 +2295,21 @@ async function executarTurnoDoAgente(
       ...avisoDaEscalacao().base,
       motivo: 'pediu_humano',
     });
+    // `inboundsPendentes` JÁ está em memória (linha acima): a fala literal do
+    // cliente entra no briefing a custo zero. É a diferença entre quem assume
+    // ler "o cliente pediu uma pessoa" e ler o que ele de fato escreveu.
+    const briefing = montarBriefingDaPassagem({
+      checkpoint: previous,
+      pendentesDoCliente: inboundsPendentes,
+      motivo: { codigo: 'requested_human' },
+    });
     await performHumanHandoff(
       pool,
       { tenantId, leadId, conversationId: input.conversationId },
       {
         reason: 'requested_human',
-        conversationSummary: buildHandoffSummary(previous),
+        conversationSummary: briefing.body,
+        passagem: { origem: 'pedido_explicito', motivoCodigo: 'requested_human', briefing },
         avisoAoLead: aviso,
         log: runLog,
       },
@@ -2279,13 +2337,19 @@ async function executarTurnoDoAgente(
       ...avisoDaEscalacao().base,
       motivo: 'suspeita_de_opt_out',
     });
+    const briefing = montarBriefingDaPassagem({
+      checkpoint: previous,
+      pendentesDoCliente: inboundsPendentes,
+      motivo: { codigo: 'suspected_optout' },
+    });
     await performHumanHandoff(
       pool,
       { tenantId, leadId, conversationId: input.conversationId },
       {
         reason: 'suspected_optout',
-        conversationSummary: buildHandoffSummary(previous),
+        conversationSummary: briefing.body,
         inboxTitle: 'Suspeita de opt-out — confirmar bloqueio do contato no CRM',
+        passagem: { origem: 'opt_out_provavel', motivoCodigo: 'suspected_optout', briefing },
         avisoAoLead: aviso,
         log: runLog,
       },
@@ -3297,10 +3361,19 @@ async function executarTurnoDoAgente(
                   motivo: 'pediu_humano',
                 })
               : ({ avisado: true } as const);
+          // O contexto do TURNO vai junto, e sai da closure: `previous` é o
+          // checkpoint durável e `inboundsPendentes` é o que o cliente disse e
+          // ainda não foi respondido — os dois já estão em memória, então o
+          // briefing enriquecido não custa uma consulta a mais.
           const res = await applyRequestHumanHandoff(
             pool,
             { tenantId, leadId, conversationId: input.conversationId },
-            { conversationSummary: buildHandoffSummary(previous), avisoAoLead: aviso, log: runLog },
+            {
+              conversationSummary: buildHandoffSummary(previous),
+              contextoDoTurno: { checkpoint: previous, pendentesDoCliente: inboundsPendentes },
+              avisoAoLead: aviso,
+              log: runLog,
+            },
             raw,
           );
           if (!res.ok) return res; // erro de ensino (payload fora da whitelist)

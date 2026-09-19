@@ -10,8 +10,12 @@ on:
 # `contents: read` cobre os dois, que é o escopo que o próprio modelo de dados do
 # CodeQL prescreve para essas duas actions. O `cache: pnpm` NÃO usa este token
 # (usa ACTIONS_RUNTIME_TOKEN), `pnpm/action-setup` não tem input de token, e
-# nenhum passo `run:` enxerga o token — ele só entra no ambiente via
-# `secrets.GITHUB_TOKEN`, que não aparece em nenhum destes workflows.
+# nenhum passo `run:` enxerga o token por padrão — ele só entra no ambiente via
+# `secrets.GITHUB_TOKEN`. Os passos que o fazem, e por quê, estão ao lado de
+# cada `GH_TOKEN:`; para contar em vez de acreditar nesta linha:
+#   grep -n 'secrets.GITHUB_TOKEN' .github/workflows/ci.yml
+# (Esta linha afirmava "não aparece em nenhum destes workflows" com dois usos já
+# na main — achado 9 da revisão do #1268.)
 #
 # No topo, e não por job, porque os dois jobs precisam do mesmo escopo e job
 # acrescentado depois nasce restrito em vez de herdar o default do repositório.
@@ -206,6 +210,59 @@ jobs:
       - name: Colisão de número de migration
         if: matrix.parte == 1
         run: pnpm checar:colisao-de-migration
+
+      # POR QUE NÃO HÁ UMA CAMADA "o número foi tomado depois da prévia": o
+      # passo acima JÁ É ELA. O script busca a base no remoto no instante do job
+      # (`git fetch +refs/heads/<base>`) e compara contra `git ls-tree` dela —
+      # ou seja, contra a `main` de AGORA, não contra a base da prévia. Escrevi
+      # uma camada 1b antes de enxergar isso; ela era redundante, e ainda por
+      # cima CEGA: usava `gh api compare`, que devolve no máximo 300 arquivos em
+      # ordem alfabética, e `supabase/migrations` cai fora do corte — medido, o
+      # compare do #965 devolve 300 arquivos e ZERO migrations, com cinco
+      # colisões reais. Achado do @Maestro PRs na revisão do #1268.
+      #
+      # O que sobra de verdade é o RUN envelhecer: o verify do #965 terminou em
+      # 16/09 e segue verde. Isso não se conserta dentro do job — quem fecha é o
+      # vigia periódico (.github/workflows/vigia-de-colisao.yml).
+
+      # E A ÁRVORE INTEIRA, fora de pull_request — porque lá o passo acima é
+      # INERTE: em push HEAD é a própria base, nada foi "acrescentado", e ele sai
+      # OK sem medir duplicata nenhuma.
+      #
+      # É nessa fresta que a duplicata entra: o verde de um PR é uma foto do
+      # passado. Medido em 19/09/2026, o #965 estava verde com prévia de 1039
+      # commits atrás e CINCO números já tomados — a guarda dele rodou contra uma
+      # `main` que já não existe. Se algo assim escapar (prévia velha, merge fora
+      # do fluxo, administrador que ignora o check), a `main` reprova na hora, em
+      # vez de a descoberta ser o `db push` de um self-hoster.
+      #
+      # Medido hoje na `main`: 263 migrations, zero duplicatas — nasce verde.
+      # Vigiado por tests/unit/main-sem-migration-duplicada.test.ts.
+      - name: A árvore da main tem NNNN ou timestamp repetido?
+        if: matrix.parte == 1 && github.event_name != 'pull_request'
+        run: |
+          set -uo pipefail
+          nomes="$(git ls-tree -r --name-only HEAD -- supabase/migrations | grep -E '\.sql$' | sed 's#.*/##')"
+          total="$(grep -c . <<<"$nomes" || true)"
+          # Controle de vivacidade: árvore sem migration nenhuma é sonda cega, não
+          # "está tudo certo". Medido em 19/09/2026: 263 arquivos.
+          if [ "${total:-0}" -lt 100 ]; then
+            echo "::error title=A varredura de duplicata não mediu nada::li ${total:-0} migration(ões) em supabase/migrations — a sonda perdeu o caminho."
+            exit 2
+          fi
+          dup_n="$(grep -oE '^[0-9]{14}_[0-9]{4}' <<<"$nomes" | cut -d_ -f2 | sort | uniq -d)"
+          dup_t="$(grep -oE '^[0-9]{14}' <<<"$nomes" | sort | uniq -d)"
+          if [ -n "$dup_n" ] || [ -n "$dup_t" ]; then
+            for n in $dup_n; do
+              echo "::error title=NNNN duplicado na árvore::${n} aparece em: $(grep -E "^[0-9]{14}_${n}_" <<<"$nomes" | tr '\n' ' ')"
+            done
+            for ts in $dup_t; do
+              echo "::error title=Timestamp duplicado na árvore::${ts} aparece em: $(grep -E "^${ts}_" <<<"$nomes" | tr '\n' ' ')"
+            done
+            echo "Conserto: renumerar o arquivo que entrou por último (NNNN e TIMESTAMP juntos) num PR de forward-fix — migration já aplicada não se edita."
+            exit 1
+          fi
+          echo "OK — ${total} migrations na árvore, nenhum NNNN nem timestamp repetido."
 
       # `--project produto` é o `pnpm test:unit` MENOS as cercas, que já
       # rodaram acima; `--shard` divide os arquivos entre as duas partes. Juntos

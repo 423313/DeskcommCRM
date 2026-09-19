@@ -38,6 +38,14 @@ export interface AtritoRaw {
     esperas_caladas: number;
     esperas_medidas: number;
     espera_resposta_p90_s: number | null;
+    /**
+     * O LAÇO DE RETORNO DA PASSAGEM (migration 0294). Numerador e denominador
+     * SEPARADOS, e não uma razão pronta: só assim a borda consegue distinguir
+     * "ninguém repetiu" (0 de 10) de "ninguém voltou a falar" (0 de 0, que é
+     * ausência de dado e sai como `—`).
+     */
+    repeticao_pos_passagem: number;
+    passagens_medidas: number;
   };
   empresa: {
     intervencoes_por_demanda: number | null;
@@ -265,6 +273,22 @@ export function montarPares(
           valor: taxaDeContorno(empresa),
           unidade: "razao",
           nota: t("O time respondeu pelo celular, contornando a ferramenta."),
+        },
+        // ─── O LAÇO DE RETORNO DA PASSAGEM (invariante 7) ─────────────────
+        // Encostada em `pedidos_de_humano` de propósito: aquela medida conta
+        // QUANTAS vezes a IA desistiu; esta diz se a desistência custou caro à
+        // pessoa do outro lado. A pergunta que ela responde é a única que mede
+        // se o cartão da passagem serviu para alguma coisa — se o briefing
+        // chegou a quem assumiu, a repetição cai; se não chegou, ela não muda.
+        {
+          chave: "repeticao_pos_passagem",
+          rotulo: t("Clientes que repetiram depois da passagem"),
+          valor: razao(cliente.repeticao_pos_passagem, cliente.passagens_medidas),
+          unidade: "razao",
+          // A régua viaja com o número (doutrina §3.4 regra 4), e junto vai a
+          // ressalva de escopo: `fn_atrito_metrics` é SECURITY INVOKER, então
+          // dois papéis veem números diferentes de boa-fé.
+          nota: `${cliente.repeticao_pos_passagem} ${t("de")} ${cliente.passagens_medidas} ${t("passagens em que o cliente voltou a falar: ele teve de repetir o que já tinha dito.")} ${t("Limiar de 0,7 e janela de 24h. Quem atende em `visibility_mode='own'` vê só as conversas dele.")}`,
         },
         // O agente respondeu — e a pessoa teve de perguntar de novo. É o dano
         // direto da automação: responder não é resolver.
