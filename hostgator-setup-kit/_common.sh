@@ -1059,6 +1059,14 @@ gravar_cabecalho_do_cron() {  # gravar_cabecalho_do_cron <arquivo> <segredo>
 }
 
 setup_event_log_drain_cron() {
+  # A troca da senha que vazou vive AQUI, e não no corpo do update.sh, porque
+  # esta é a função que o corpo de QUALQUER update.sh já publicado chama depois
+  # de reler este arquivo (bloco 7): o corpo que roda na atualização é o da
+  # versão antiga, e só as funções são as novas. Fora do update.sh (install.sh
+  # nasce marcado; o agent.sh chama a troca por conta própria) não se troca.
+  if [ "$(basename "$0")" = update.sh ] && [ -z "${DESKCOMM_AGENT_REPORT:-}" ]; then
+    trocar_segredo_do_cron_vazado || true
+  fi
   command -v crontab >/dev/null 2>&1 || { c_ylw "⚠ 'crontab' não encontrado — instale o pacote 'cron' e rode de novo pra ativar as automações."; return 0; }
 
   local secret="${INTERNAL_CRON_SECRET:-}"
@@ -1133,6 +1141,115 @@ setup_event_log_drain_cron() {
       && c_grn "✓ eventos pendentes com mais de 7 dias marcados como concluídos" \
       || c_ylw "⚠ não consegui higienizar eventos antigos — confira manualmente a tabela event_log se necessário."
   fi
+}
+
+# ── A senha que o log do sistema já guardou (#1054): trocar UMA vez ─────────
+# Parar de escrever o segredo na linha do crontab (acima) estanca o vazamento
+# daqui para frente; não desfaz o que já foi gravado. Em toda instalação que
+# rodou a linha antiga, o segredo das rotinas está em `/var/log/syslog`, nos
+# arquivos rotacionados e no journal — e continua abrindo as rotas de cron e a
+# de atualização (`lib/auth/cron-auth.ts`, `app/api/v1/system/agent/route.ts`)
+# para quem ler esse log. Esta função troca o segredo sozinha, uma vez na vida
+# da instalação, sem pedir edição de `.env` a ninguém (doutrina de packaging).
+#
+# QUAL segredo: o mesmo que `setup_event_log_drain_cron` punha na linha —
+# `INTERNAL_CRON_SECRET`, ou `INTERNAL_SECRET` quando o primeiro está vazio. O
+# outro nunca foi para o log e fica como está.
+#
+# QUEM LÊ, e por isso a ordem gerar → `.env` → recriar → arquivo do cron:
+#   - o `app` (rotas de cron, /system/agent, /system/relogio/tick, /health) lê
+#     os dois pelo `env_file: .env`, no boot do contêiner;
+#   - o `scheduler` lê só `INTERNAL_SECRET`, por interpolação no compose;
+#   - o `.env.cron-drain` (a linha do drain) e o `agent.sh` (a cada 5 min, do
+#     `.env`, no início de cada execução).
+# O `dc up -d` recria só o que mudou de configuração; o arquivo do cron é
+# regravado logo depois. No intervalo, uma batida de minuto do drain pode
+# levar 401 — a seguinte já vai com a senha nova.
+#
+# QUEM NÃO PODE TROCAR: o `update.sh` dirigido pelo botão da tela. Quem o
+# dirige é o `agent.sh` que já estava rodando, com a senha VELHA numa variável;
+# trocada no meio, o `run_result` dele leva 401 e a tela nunca sabe como a
+# atualização terminou. Nesse caso a troca fica para a próxima execução do
+# `agent.sh` (≤5 min), que é lido do disco a cada vez e já é o novo.
+#
+# Uma vez só: a marca em disco é o que impede gerar senha nova a cada update.
+# A instalação nova nasce marcada (`marcar_segredo_do_cron_como_novo`, no
+# install.sh): a senha dela nunca foi para linha nenhuma.
+#
+# Devolve 0 quando trocou OU quando não havia nada a trocar (e só no primeiro
+# caso deixa SEGREDO_DO_CRON_TROCADO=1); 1 quando tentou e não conseguiu —
+# nesse caso o `.env` volta ao que era e a marca NÃO é gravada, para a próxima
+# execução tentar de novo.
+MARCA_SEGREDO_DO_CRON_NOME=".deskcomm-segredo-do-cron-trocado"
+
+marcar_segredo_do_cron_como_novo() {
+  # Só marca se ESTE host nunca teve a linha antiga: reinstalar por cima de uma
+  # instalação que vazou não pode pular a troca.
+  if { crontab -l 2>/dev/null || true; } | grep -qF 'Authorization: Bearer'; then return 0; fi
+  : > "${PROJECT_DIR:-$PWD}/${MARCA_SEGREDO_DO_CRON_NOME}" 2>/dev/null || true
+}
+
+trocar_segredo_do_cron_vazado() {
+  SEGREDO_DO_CRON_TROCADO=""
+  local dir="${PROJECT_DIR:-$PWD}"
+  local marca="${dir}/${MARCA_SEGREDO_DO_CRON_NOME}" envfile="${dir}/.env"
+  [ -e "$marca" ] && return 0
+
+  local chave=""
+  if [ -n "${INTERNAL_CRON_SECRET:-}" ]; then chave=INTERNAL_CRON_SECRET
+  elif [ -n "${INTERNAL_SECRET:-}" ]; then chave=INTERNAL_SECRET
+  fi
+  # Sem segredo, ou sem nunca ter tido a linha do drain neste host: nada foi
+  # para o log, e trocar seria reiniciar o app à toa.
+  if [ -z "$chave" ] \
+     || ! { crontab -l 2>/dev/null || true; } | grep -qF '/api/v1/cron/event-log-drain'; then
+    : > "$marca" 2>/dev/null || true
+    return 0
+  fi
+
+  # Mesmo cadeado do agent.sh: nunca trocar com uma atualização pelo botão em
+  # andamento (quem a dirige ainda fala com a senha velha), nem duas vezes ao
+  # mesmo tempo (update.sh no terminal e agent.sh no cron).
+  local tem_cadeado=""
+  if command -v flock >/dev/null 2>&1; then
+    exec 8>"${dir}/.update.lock"
+    flock -n 8 || { exec 8>&-; return 0; }
+    tem_cadeado=1
+  fi
+  if [ -e "$marca" ]; then [ -n "$tem_cadeado" ] && exec 8>&-; return 0; fi
+
+  local velho="${!chave}" novo=""
+  novo="$(openssl rand -hex 32 2>/dev/null)" || novo=""
+  if [ -z "$novo" ]; then
+    [ -n "$tem_cadeado" ] && exec 8>&-
+    c_ylw "⚠ não consegui gerar a senha nova das rotinas — tento de novo na próxima atualização."
+    return 1
+  fi
+
+  step "Trocando a senha interna das rotinas (a antiga ficou no log do sistema)"
+  set_env_var "$envfile" "$chave" "$novo"
+  export "${chave}=${novo}"
+  if ! dc up -d >/dev/null 2>&1; then
+    set_env_var "$envfile" "$chave" "$velho"
+    export "${chave}=${velho}"
+    dc up -d >/dev/null 2>&1 || true
+    [ -n "$tem_cadeado" ] && exec 8>&-
+    c_ylw "⚠ não consegui reiniciar o app com a senha nova — mantive a antiga e tento de novo na próxima atualização."
+    return 1
+  fi
+  wait_app_healthy 20 3 >/dev/null \
+    || c_ylw "⚠ o app ainda não respondeu depois da troca — a senha nova já está no .env e segue valendo."
+  gravar_cabecalho_do_cron "${dir}/.env.cron-drain" "$novo" || true
+  : > "$marca" 2>/dev/null || true
+  [ -n "$tem_cadeado" ] && exec 8>&-
+  SEGREDO_DO_CRON_TROCADO=1
+
+  c_grn "✓ senha interna das rotinas trocada — a que ficou gravada no log do sistema não abre mais nada"
+  c_ylw "  Recomendado (não obrigatório): apagar os logs antigos, onde a senha velha aparece."
+  c_ylw "  Numa VPS Ubuntu/Debian, como root:"
+  c_ylw "    sudo truncate -s 0 /var/log/syslog && sudo rm -f /var/log/syslog.*"
+  c_ylw "    sudo journalctl --rotate && sudo journalctl --vacuum-time=1s"
+  return 0
 }
 
 # Ativa (idempotente) o cron do agente de atualização: a cada 5 minutos ele
