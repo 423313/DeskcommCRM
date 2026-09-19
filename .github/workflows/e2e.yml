@@ -508,6 +508,7 @@ jobs:
         prova-painel-provedores.spec.ts
         relatorio-de-atividades.spec.ts
         qa-l12-inbox.spec.ts
+        filtro-por-marcador-pela-tela.spec.ts
         qa-l12-troca-de-funil.spec.ts
         qa-l12-agente-ia.spec.ts
       # ⚠️ A ORDEM DESTA LISTA NÃO DECIDE A ORDEM DE EXECUÇÃO. O Playwright
@@ -842,6 +843,7 @@ jobs:
         extensoes-versao.spec.ts
         motivo-do-publicar-na-tela.spec.ts
         followup-cartoes.spec.ts
+        followup-modelos-de-clinica.spec.ts
         presenca-do-atendente.spec.ts
 
       FORA_DO_CI: >-
@@ -1189,18 +1191,58 @@ jobs:
           # `-k 30` manda SIGKILL 30 s depois do TERM: o TERM deixa o Playwright
           # escrever o relatório, o KILL garante que o job não pare no meio de um
           # spec que ignorou o sinal.
+          # A saída vai para arquivo TAMBÉM, e não só para o log do Actions: é
+          # dela que sai (a) a contagem de casos já vermelhos quando o corte
+          # chega e (b) os specs mais lentos da rodada, no resumo. `PIPESTATUS`
+          # porque com `| tee` o `$?` seria o do tee — sempre 0.
+          SAIDA="${RUNNER_TEMP}/e2e-parte-${PARTE}.log"
           set +e
-          timeout -k 30 --signal=TERM "${FOLGA}s" pnpm exec playwright test --workers=1 $LISTA --reporter=list
-          CODIGO=$?
+          timeout -k 30 --signal=TERM "${FOLGA}s" pnpm exec playwright test --workers=1 $LISTA --reporter=list 2>&1 | tee "$SAIDA"
+          CODIGO=${PIPESTATUS[0]}
           set -e
+          echo "SAIDA_DA_SUITE=${SAIDA}" >> "$GITHUB_ENV"
           SUITE=$(( $(date -u +%s) - INICIO_SUITE ))
           {
             echo "SUITE_SEGUNDOS=${SUITE}"
             echo "CUSTO_FIXO_SEGUNDOS=${DECORRIDO}"
           } >> "$GITHUB_ENV"
           # 124 = o `timeout` cortou; 137 = o KILL da carência chegou antes.
+          # ── O CORTE NÃO PODE AFIRMAR "a parte cresceu" SEM OLHAR O VERMELHO ──
+          #
+          # Medido no #1210 (job 105739419202, parte 1): o `timeout` matou a
+          # suíte ANTES de o Playwright imprimir o sumário, então o único
+          # vestígio do caso que falhou era a linha `✘` no meio do log. O
+          # resumo do job dizia só "a parte cresceu" — e o time saiu
+          # rebalancear a partição. A parte estava saudável (797–933 s de
+          # suíte em quatro rodadas do mesmo dia): o que estourou o relógio foi
+          # UM caso vermelho de `followup-ramos.spec.ts`, que declara
+          # `test.setTimeout(420_000)` e, ao travar, queima 7 min sozinho —
+          # 29% do orçamento. Há specs com 480 e 600 s declarados; qualquer uma
+          # delas, travando, cabe nesta mesma armadilha.
+          #
+          # Então o corte passa a CONTAR os vermelhos antes de diagnosticar.
           if [ "$CODIGO" -eq 124 ] || [ "$CODIGO" -eq 137 ]; then
-            echo "::error title=A parte ${PARTE} estourou o relógio do e2e::a suíte rodou ${SUITE}s e foi interrompida ${FOLGA}s depois de entrar, o job já tinha ${DECORRIDO}s de preparo e o teto é de $(( TETO_SEGUNDOS / 60 )) min (orçamento: $(( ORCAMENTO_SEGUNDOS / 60 )) min). Não é infraestrutura: a parte cresceu."
+            # O padrão casa a linha do reporter `list` pelo FORMATO
+            # (`✘   36 [chromium] › …`), não pelo começo da linha: âncora em
+            # `^` só funciona no arquivo cru, e some no mesmo log baixado pela
+            # API do GitHub, que prefixa carimbo de hora. Uma sonda que depende
+            # do prefixo devolve zero — e zero aqui lê como "não havia vermelho".
+            PADRAO_VERMELHO="✘[[:space:]]+[0-9]+[[:space:]]+\["
+            # FALHA ESPERADA NÃO É VERMELHO. Spec que declara `test.fail(...)`
+            # (catraca de lacuna conhecida) é impressa com o MESMO `✘`, e a rodada
+            # termina verde — medido no run 35388254053, parte 1:
+            # `degradacao-silenciosa.spec.ts` sai com ✘ e o job fecha "150 passed".
+            # Contá-la aqui inverteria o erro: em vez de calar o vermelho, eu
+            # inventaria um.
+            ESPERADAS=$(grep -rlE "^[[:space:]]*test\.fail\(" tests/e2e --include="*.spec.ts" 2>/dev/null | sed "s|.*/||" | paste -sd"|" - || true)
+            SEM_ESPERADAS="tests/e2e/(${ESPERADAS:-nada-casa-aqui}):"
+            VERMELHOS=$(grep -aE "$PADRAO_VERMELHO" "$SAIDA" | grep -acvE "$SEM_ESPERADAS" || true)
+            if [ "${VERMELHOS:-0}" -gt 0 ]; then
+              echo "::error title=A parte ${PARTE} foi cortada pelo relógio, e já havia ${VERMELHOS} caso(s) VERMELHO(s) antes do corte::o corte veio aos ${SUITE}s (preparo de ${DECORRIDO}s, teto de $(( TETO_SEGUNDOS / 60 )) min), mas a suíte NÃO estava só grande: conserte o vermelho abaixo antes de concluir qualquer coisa sobre a partição. Caso que falha por tempo esgotado queima o timeout declarado no próprio spec (há specs com 420–600 s)."
+              grep -aE "$PADRAO_VERMELHO" "$SAIDA" | grep -avE "$SEM_ESPERADAS" | head -10
+            else
+              echo "::error title=A parte ${PARTE} estourou o relógio do e2e::a suíte rodou ${SUITE}s e foi interrompida ${FOLGA}s depois de entrar, o job já tinha ${DECORRIDO}s de preparo e o teto é de $(( TETO_SEGUNDOS / 60 )) min (orçamento: $(( ORCAMENTO_SEGUNDOS / 60 )) min). Nenhum caso vermelho até o corte: a parte cresceu."
+            fi
           fi
           exit "$CODIGO"
         env:
@@ -1259,6 +1301,41 @@ jobs:
             echo "| suíte (Playwright) | ${SUITE}s | — |"
             echo "| **total da parte** | **${TOTAL}s** | orçamento $(( ORCAMENTO_SEGUNDOS / 60 )) min · teto $(( TETO_SEGUNDOS / 60 )) min |"
             echo ""
+            echo ""
+            # ── OS SPECS MAIS LENTOS DA RODADA, NO RESUMO ───────────────────
+            # Quem decide rebalancear precisa do tempo POR SPEC, e ele só
+            # existia no log, linha a linha: para diagnosticar o #1210 foi
+            # preciso baixar o log do job e somar as durações na mão. Com a
+            # tabela abaixo, a próxima partição é decidida lendo o resumo — e
+            # um caso que sozinho come minutos (há specs com `setTimeout` de
+            # 420–600 s) aparece no topo em vez de se esconder na soma.
+            if [ -s "${SAIDA_DA_SUITE:-/inexistente}" ]; then
+              echo "### Os 5 specs mais caros desta parte"
+              echo ""
+              echo "| spec | segundos | casos |"
+              echo "| --- | --- | --- |"
+              awk '
+            match($0, /tests\/e2e\/[A-Za-z0-9._-]+\.spec\.ts/) {
+              nome = substr($0, RSTART + 10, RLENGTH - 10)
+              if (match($0, /\([0-9.]+(ms|s|m)\)[ \r]*$/)) {
+                bruto = substr($0, RSTART + 1, RLENGTH - 2)
+                sub(/[ \r]+$/, "", bruto)
+                if (bruto ~ /ms\)?$/) { sub(/ms.*/, "", bruto); seg = bruto / 1000 }
+                else if (bruto ~ /m\)?$/) { sub(/m.*/, "", bruto); seg = bruto * 60 }
+                else { sub(/s.*/, "", bruto); seg = bruto }
+                total[nome] += seg; casos[nome] += 1; soma += seg; casosTotal += 1
+              }
+            }
+            END {
+              n = 0
+              for (k in total) { ordem[++n] = k }
+              for (i = 1; i < n; i++) for (j = i + 1; j <= n; j++) if (total[ordem[j]] > total[ordem[i]]) { t = ordem[i]; ordem[i] = ordem[j]; ordem[j] = t }
+              for (i = 1; i <= n && i <= 5; i++) printf "| `%s` | %.0f | %d |\n", ordem[i], total[ordem[i]], casos[ordem[i]]
+              printf "| **soma da suíte** | **%.0f** | **%d casos** |\n", soma, casosTotal
+            }
+              ' "$SAIDA_DA_SUITE"
+              echo ""
+            fi
             echo "O teto continua sendo o \`timeout-minutes: $(( TETO_SEGUNDOS / 60 ))\` do job — é ele que"
             echo "denuncia a parte crescendo. Quem corta primeiro é o \`timeout\` que dá"
             echo "$(( MARGEM_SEGUNDOS / 60 )) min de folga à suíte, para o vermelho dizer o NOME do problema"

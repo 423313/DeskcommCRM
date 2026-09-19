@@ -80,6 +80,11 @@ export const KIND_LABEL = {
   // código do erro (`canal_desconectado`, `teto_diario_do_numero`) vira frase no
   // CORPO do aviso, escrito pelo handler; aqui é só o título.
   aviso_de_caso_nao_entregue: "Um aviso de atendimento não chegou ao WhatsApp da equipe",
+  // Diz o que o fluxo NÃO está fazendo, não o que falta no cadastro. "Sem
+  // agente vinculado" descreve a linha do banco; do lado de lá existe gente que
+  // devia estar recebendo mensagem e não recebe, e é isso que faz alguém abrir
+  // o aviso. O passo que conserta fica no corpo.
+  followup_sem_agente: "Um follow-up está publicado e não está disparando",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 

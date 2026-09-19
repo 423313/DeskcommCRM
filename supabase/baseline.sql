@@ -9978,16 +9978,29 @@ alter table public.agent_inbox_items
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
     'case_stale',
-    'other',
     -- (migration 0292) O aviso de caso não chegou ao WhatsApp da equipe,
     -- em definitivo. Nasce com `ref_kind='agent_case'` para levar AO CASO —
     -- que continua esperando — e não a uma tela genérica. A fonte da verdade
     -- sobre "o aviso saiu?" continua sendo `entregas_de_aviso_de_caso`:
     -- qualquer membro apaga um item da Central pelo PostgREST hoje.
-    'aviso_de_caso_nao_entregue'
+    'aviso_de_caso_nao_entregue',
+    -- (migration 0312) O fluxo de follow-up publicado que NUNCA vai disparar:
+    -- gatilho automático (silêncio, etapa, caso, falta) só cria inscrição se
+    -- algum agente publicado arma o ponteiro, e sem esse vínculo os produtores
+    -- saem por `pointers_armados = 0` em silêncio — `active` na tela, morto no
+    -- motor. Entra NESTA lista e no FIM dela, pelas duas razões de sempre
+    -- (bloco único por constraint, #159; e a janela de 2000 caracteres que
+    -- `tests/unit/midia-nao-lida.test.ts` varre a partir do `add constraint`).
+    'followup_sem_agente',
+    'other'
   ));
 
 
+
+-- ---- índice do watcher de follow-up sem agente (migration 0312) ----
+create index if not exists agent_inbox_items_followup_sem_agente_aberto_idx
+  on public.agent_inbox_items (organization_id, ref_id)
+  where kind = 'followup_sem_agente' and status = 'open';
 
 notify pgrst, 'reload schema';
 
