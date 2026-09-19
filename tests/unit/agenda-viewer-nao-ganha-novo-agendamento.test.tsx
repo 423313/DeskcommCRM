@@ -138,6 +138,8 @@ function montar({
   return render(
     <QueryClientProvider client={cliente}>
       <AgendaClient
+        visaoInicial={null}
+        dataInicial={null}
         fusoDeApresentacao="America/Sao_Paulo"
         googleConfigurado={false}
         faltaNoGoogle={[]}

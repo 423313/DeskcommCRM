@@ -94,6 +94,7 @@ describe("a grade estica para caber o que está fora do horário comum", () => {
     responsavelId: "p1",
     comeca: "2026-09-16T06:30:00-03:00",
     termina: "2026-09-16T07:15:00-03:00",
+    origem: "ui" as const,
     situacao: "confirmed" as const,
   };
 
