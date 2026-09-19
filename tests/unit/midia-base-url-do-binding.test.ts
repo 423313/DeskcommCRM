@@ -110,11 +110,17 @@ vi.mock("@/lib/messaging/media/derive", () => ({
 }));
 
 // A credencial do binding resolve — o que está sob teste é o que o worker faz
-// com ela, não a resolução em si.
+// com ela, não a resolução em si. A ORIGEM da chave é o degrau da escada que o
+// resolvedor escolheu (provado em `lib/agent-engine/edge/llm/credentials.test.ts`)
+// e cada caso a escolhe aqui; o padrão é a credencial da própria organização.
+const credencial = vi.hoisted(() => ({
+  origemDaChave: "credencial_da_organizacao" as "credencial_da_organizacao" | "chave_da_instalacao",
+}));
 vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
   resolveOrgLlmConfig: vi.fn(async () => ({
     provider: "openrouter",
     apiKey: "chave-do-binding",
+    origemDaChave: credencial.origemDaChave,
     defaultModel: "gpt-5",
     params: {},
     enabledModels: [],
@@ -245,6 +251,7 @@ beforeEach(() => {
   esquecerDestinosInternos();
   dns.erro = null;
   dns.resposta = [{ address: "93.184.216.34", family: 4 }];
+  credencial.origemDaChave = "credencial_da_organizacao";
   bindingDaVez = BINDING_COM_ENDPOINT;
   linhaDaMensagem = {
     id: "msg1",
@@ -327,13 +334,16 @@ describe("worker de mídia: base_url do binding de visão (#855)", () => {
   });
 
   it("com endereço da organização e chave da INSTALAÇÃO, recusa antes de a chave sair", async () => {
-    // `resolveOrgLlmConfig` devolve "chave-do-binding" neste arquivo. Igualando
-    // a chave do .env a ela, reproduzimos o degrau real da escada de
-    // credenciais: a organização não tem credencial própria e o worker cai na
-    // chave da INSTALAÇÃO — enquanto o endereço continua sendo o que a
-    // organização escolheu no painel. É a combinação que manda a chave que paga
-    // a conta de todas as empresas para um endereço escolhido por uma delas.
-    vi.stubEnv("OPENROUTER_API_KEY", "chave-do-binding");
+    // O degrau real da escada de credenciais: a organização não tem credencial
+    // própria e o resolvedor cai na chave da INSTALAÇÃO — enquanto o endereço
+    // continua sendo o que a organização escolheu no painel. É a combinação que
+    // manda a chave que paga a conta de todas as empresas para um endereço
+    // escolhido por uma delas.
+    //
+    // Até a decisão 22-a entrar no chat, este caso igualava a chave do `.env`
+    // ao plaintext e o worker deduzia a origem por comparação. Agora quem
+    // responde é o resolvedor (`origemDaChave`), a mesma fonte do seam.
+    credencial.origemDaChave = "chave_da_instalacao";
     bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://gateway.publico.exemplo/v1" };
     dns.resposta = [{ address: "93.184.216.34", family: 4 }];
 
@@ -352,10 +362,10 @@ describe("worker de mídia: base_url do binding de visão (#855)", () => {
 
   it("com endereço da organização e credencial DELA, segue enviando", async () => {
     // O controle que separa "recusa a combinação errada" de "recusou tudo":
-    // sem a chave da instalação no ambiente, a chave resolvida é a da
-    // organização e o endereço próprio continua valendo — que é o recurso que
-    // o #855 veio consertar.
-    vi.stubEnv("OPENROUTER_API_KEY", "");
+    // a chave resolvida é a da organização e o endereço próprio continua
+    // valendo — que é o recurso que o #855 veio consertar. Uma variável só
+    // muda em relação ao caso acima: a origem da chave.
+    credencial.origemDaChave = "credencial_da_organizacao";
     bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "https://gateway.publico.exemplo/v1" };
     dns.resposta = [{ address: "93.184.216.34", family: 4 }];
 
