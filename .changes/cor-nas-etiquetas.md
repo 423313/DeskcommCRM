@@ -9,4 +9,6 @@ A cor aparece onde a etiqueta aparece: na lista de conversas, no painel lateral 
 
 Nada muda para as etiquetas que você não pintar: elas continuam exatamente como estavam. E escolher cor para uma etiqueta que ainda não estava no vocabulário (uma que existe só porque alguém escreveu no contato, por exemplo) passa a trazê-la para o vocabulário curado — é o efeito de decidir como ela deve aparecer.
 
+A cor também aparece na hora de ESCOLHER a etiqueta: as sugestões dos editores e a ação em massa do funil mostram o ponto da mesma cor. E a tela de Tags ficou à prova de dado torto: se o campo de etiquetas da organização tiver um valor que não é lista, renomear e pintar não derrubam mais a tela — a primeira alteração que você fizer conserta o campo.
+
 Crédito: @webtecnica.

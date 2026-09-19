@@ -132,7 +132,14 @@ begin
       v_settings := '{}'::jsonb;
     end if;
 
-    v_antes := coalesce(v_settings -> 'tags', '[]'::jsonb);
+    -- (a) tolera `settings.tags` torto (escalar/objeto): a leitura já tolera com
+    -- `jsonb_typeof`, e sem esta guarda o `jsonb_array_elements` levantava
+    -- `cannot extract elements from a scalar` e derrubava a tela inteira numa
+    -- organização com o dado malformado. Lista que não é lista é lista vazia.
+    v_antes := case
+      when jsonb_typeof(v_settings -> 'tags') = 'array' then v_settings -> 'tags'
+      else '[]'::jsonb
+    end;
     v_depois := coalesce(
       (
         select jsonb_agg(entrada.valor order by entrada.ord)
@@ -356,7 +363,12 @@ begin
   end if;
 
   -- (e) o vocabulário da organização, nos dois lugares onde ele mora.
-  v_antes := coalesce(v_settings -> 'tags', '[]'::jsonb);
+  -- Mesma guarda do ramo de renomear: `settings.tags` malformado não pode
+  -- derrubar a cor (a leitura tolera; a escrita agora também).
+  v_antes := case
+    when jsonb_typeof(v_settings -> 'tags') = 'array' then v_settings -> 'tags'
+    else '[]'::jsonb
+  end;
   v_depois := coalesce(
     (
       select jsonb_agg(entrada.valor order by entrada.ord)

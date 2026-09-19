@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
+import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Plus } from "@/lib/ui/icons";
@@ -103,8 +104,9 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
               type="button"
               onClick={() => add(tag)}
               disabled={mutation.isPending || tags.length >= 20}
-              className="rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
             >
+              <PontoDaEtiqueta tag={tag} />
               + {tag}
             </button>
           ))}

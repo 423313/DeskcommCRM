@@ -204,4 +204,49 @@ describe("fatia S6 — a cor da etiqueta", () => {
     const r = await operar(GOV_ORG, "definir_cor", "frio", null, "#6f6f6f");
     expect((r.rows[0].r as { alterou: boolean }).alterou).toBe(false);
   });
+
+  it("`settings.tags` malformado (escalar) não derruba a operação — e a escrita conserta o dado", async () => {
+    // `settings` é jsonb livre: nada no banco impede um `tags` que não é lista.
+    // A LEITURA já tolerava (`case when jsonb_typeof(...) = 'array'`); a ESCRITA
+    // não — o `jsonb_array_elements` levantava `cannot extract elements from a
+    // scalar` e derrubava a TELA INTEIRA (renomear E cor) numa organização que
+    // só tinha o campo torto. A recusa é medida pela MENSAGEM, porque o defeito
+    // era erro genérico de runtime, não regra de negócio: nada a renomear é
+    // vocabulário vazio, e vocabulário vazio tem resposta própria.
+    await limparVocabulario(GOV_ORG);
+    await pool.query(
+      "update public.organizations set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{tags}', '\"vip\"'::jsonb) where id = $1",
+      [GOV_ORG],
+    );
+
+    const erroDoRenomear = await operar(GOV_ORG, "renomear", "vip", "vip2", null)
+      .then(() => null)
+      .catch((e: Error) => e.message);
+    expect(erroDoRenomear ?? "").not.toMatch(/cannot extract elements from a scalar/);
+
+    // e a cor, que também passa pelo mesmo `v_antes`, funciona e CONSERTA:
+    // o vocabulário sai daqui como lista de verdade, com a entrada nova.
+    const r = await operar(GOV_ORG, "definir_cor", "reclamacao", null, "#e54d2e");
+    // O contrato da função é `alterou` (não existe `ok` no retorno — a tela usa
+    // `alterou` para dizer se algo mudou). Aqui o `true` também prova que a
+    // guarda não só evitou o erro: a escrita ACONTECEU e consertou o dado.
+    expect((r.rows[0].r as { alterou: boolean }).alterou).toBe(true);
+    expect(await vocabulario(GOV_ORG)).toEqual([{ tag: "reclamacao", cor: "#e54d2e" }]);
+  });
+
+  it("existe UMA assinatura só da função — a antiga fica para trás", async () => {
+    // O motivo declarado da PR: com DUAS sobrecargas no catálogo, o PostgREST
+    // resolve a chamada pela assinatura ANTIGA (4 argumentos, sem `p_cor`) e a
+    // cor nunca chega ao banco — a tela diz "salvo" e a etiqueta continua cinza.
+    // O teste mede o catálogo, não o caminho feliz: `install` (baseline) e
+    // `update` (migrations) precisam chegar no mesmo estado.
+    const r = await pool.query(
+      "select p.oid::regprocedure::text as assinatura from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'fn_vocabulario_de_tags_operar'",
+    );
+    const assinaturas = r.rows.map((x: { assinatura: string }) => x.assinatura);
+    expect(assinaturas).toHaveLength(1);
+    // `oid::regprocedure::text` escreve SEM espaço depois da vírgula:
+    // `fn_vocabulario_de_tags_operar(uuid,text,text,text,text)`.
+    expect(assinaturas[0]).toMatch(/\(uuid,\s*text,\s*text,\s*text,\s*text\)$/);
+  });
 });
