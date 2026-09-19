@@ -83,7 +83,11 @@ export async function POST(req: NextRequest): Promise<Response> {
   const ip = ipDoCliente(req.headers);
   const balde = ip === null ? null : `tenants_provision:falha:ip:${ip}`;
   const falhas = balde === null ? 0 : await peekRateLimit(balde, 60);
-  const cabecalhosDoLimite =
+  // Tipado como mapa de strings de propósito: o ternário devolveria a UNIÃO
+  // `{} | {…}`, e sob `exactOptionalPropertyTypes` a união espalhada carrega as
+  // chaves como `?: undefined` — que não é `HeadersInit`. O tipo explícito é o
+  // que existe de menos invasivo aqui; alargar `HeadersInit` seria o contrário.
+  const cabecalhosDoLimite: Record<string, string> =
     balde === null
       ? {}
       : {
