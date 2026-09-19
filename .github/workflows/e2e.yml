@@ -1028,14 +1028,29 @@ jobs:
       # DONO do bootstrap (pelo e-mail) e todo delete dela é
       # `.eq("organization_id", …)` — conferido linha a linha antes de somar
       # esta spec à lista. Quem mexer em `orgRow()` reabre esta porta.
+      # ⚠️ ESTA LISTA É FECHADA: só spec de INSTALAÇÃO FRESCA entra aqui, e a
+      # cerca que a mantém fechada está em tests/unit/e2e-cobertura-completa.
+      #
+      # O ambiente desta parte é outro: os passos de semeadura são
+      # `if: matrix.parte != 4`, e no lugar deles ela sobe WAHA, o par Redis e
+      # cria o dono como o `install.sh` faz. A premissa que a `vps-fresh-onboarding`
+      # prova é justamente "o único dado que existe antes dela é o dono".
+      #
+      # Medido em 19/09: `funil-arquivado-volta-pela-tela` entrou aqui e PASSOU —
+      # mas por acoplamento, não por direito. Ela semeia os próprios funis
+      # (`Arquivo E2E`) e chama `scripts/seed-e2e-credentials.ts` no `beforeAll`,
+      # ou seja, ela CRIA no banco da instalação fresca dados que a premissa da
+      # vizinha diz não existirem. Passar assim depende da ordem e morre num
+      # retry. Ela foi para a PARTE_5 (comum, com seeds), e esta lista voltou a
+      # ter só a jornada de instalação.
       SPECS_PARTE_4: >-
         vps-fresh-onboarding.spec.ts
-        funil-arquivado-volta-pela-tela.spec.ts
 
       SPECS_PARTE_5: >-
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         qa-l12-inbox.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
+        funil-arquivado-volta-pela-tela.spec.ts
         followup-builder.spec.ts
         followup-journey.spec.ts
         followup-dossie.spec.ts

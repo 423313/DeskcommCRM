@@ -158,3 +158,8 @@ docker-compose.override.yml
 
 # Marca do kit: a senha das rotinas que vazou no log já foi trocada (#1054)
 .deskcomm-segredo-do-cron-trocado
+
+# Bytecode do Python: a suíte roda scripts em experiments/ e regrava o .pyc a cada
+# rodada. Versionado, ele sujava a árvore de quem rodava os testes.
+__pycache__/
+*.pyc
