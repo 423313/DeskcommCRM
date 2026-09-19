@@ -1552,8 +1552,8 @@ CREATE TABLE IF NOT EXISTS "public"."idempotency_keys" (
     "key" "text" NOT NULL,
     "endpoint" "text" NOT NULL,
     "request_hash" "bytea" NOT NULL,
-    "status_code" integer NOT NULL,
-    "response_body" "jsonb" NOT NULL,
+    "status_code" integer,
+    "response_body" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "expires_at" timestamp with time zone DEFAULT ("now"() + '24:00:00'::interval) NOT NULL
 );
@@ -26452,6 +26452,7 @@ as $$
   ),
   envios as (
     select count(*) filter (where m.sent_via = 'ai')              as por_ia,
+           count(*) filter (where m.sent_via = 'automation')      as por_automacao,
            count(*) filter (where m.sent_via = 'user')            as por_humano_no_sistema,
            count(*) filter (where m.sent_via = 'external_device') as por_humano_fora
       from public.messages m
@@ -26522,6 +26523,7 @@ as $$
       'vetos',                    (select vetados  from vetos),
       'execucoes_medidas',        (select execucoes from vetos),
       'envios_por_ia',            (select por_ia                from envios),
+      'envios_por_automacao',     (select por_automacao         from envios),
       'envios_humano_no_sistema', (select por_humano_no_sistema from envios),
       'envios_humano_fora',       (select por_humano_fora       from envios),
       -- O invariante 4 vira NÚMERO na tela: demanda aberta sem próximo passo é
@@ -27754,6 +27756,28 @@ comment on column public.ad_platform_connections.google_login_customer_id is
 comment on column public.ad_platform_connections.google_conversion_action_id is
   'Qual ação de conversão, dentro de google_customer_id, recebe os envios de venda. Formato: só o id numérico, o resource name completo é montado no transporte.';
 
+-- ---- marcadores do contato no filtro de conversas (migration 0323) ----
+-- Campo calculado do PostgREST: o filtro ?tag= do Inbox casa conversations.tags
+-- OU contacts.tags num único or=, sem lista de ids na URL. SECURITY INVOKER (a
+-- RLS de contacts vale para quem chama); as duas origens de EXECUTE revogadas.
+-- Antes da varredura de anon, como toda função nova do apêndice.
+create or replace function public.tags_do_contato(c public.conversations)
+  returns text[]
+  language sql
+  stable
+  set search_path = public
+as $$
+  select ct.tags from public.contacts ct where ct.id = c.contact_id
+$$;
+
+comment on function public.tags_do_contato(public.conversations) is
+  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0323).';
+
+revoke execute on function public.tags_do_contato(public.conversations) from public, anon;
+grant  execute on function public.tags_do_contato(public.conversations) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -28025,6 +28049,24 @@ notify pgrst, 'reload schema';
 update storage.buckets
 set allowed_mime_types = array['application/pdf', 'text/markdown', 'text/x-markdown', 'text/plain', 'text/csv']
 where id = 'ai-policy';
+-- ---- o recibo de idempotência ganha o estado "em curso" (migration 0321) ----
+-- Issue #778, PR #1189 (@webtecnica). Reserva = `status_code` e `response_body`
+-- nulos, gravada ANTES do efeito; recibo = os dois preenchidos. O `create table`
+-- do corpo já nasce anulável (install); as duas primeiras linhas levam a
+-- nulidade a quem JÁ tinha a tabela (update), onde o `create table if not
+-- exists` é no-op. `drop not null` em coluna já anulável é no-op. O CHECK fecha
+-- o meio-termo (um gravado e o outro não), que nenhum leitor sabe interpretar;
+-- toda linha anterior tem as duas colunas preenchidas e passa sem backfill.
+alter table public.idempotency_keys alter column status_code drop not null;
+alter table public.idempotency_keys alter column response_body drop not null;
+alter table public.idempotency_keys
+  drop constraint if exists idempotency_keys_recibo_ou_reserva;
+alter table public.idempotency_keys
+  add constraint idempotency_keys_recibo_ou_reserva
+  check ((status_code is null) = (response_body is null));
+
+notify pgrst, 'reload schema';
+
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
 --
 -- ⚠️ ESTA CHAMADA É O ÚLTIMO BLOCO DO ARQUIVO. Tabela nova, coluna

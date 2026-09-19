@@ -28,6 +28,8 @@ import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { zoomAte } from "./utils/canvas-do-fluxo";
+
 const CREDS_PATH = ".e2e-creds.json";
 const ARTIFACTS_DIR = "evidence/followup-cartoes";
 /** A máquina roda saturada por outras sessões (login medido em 15s). */
@@ -81,15 +83,46 @@ async function idPorPrefixo(page: Page, prefixo: string): Promise<string[]> {
   return ids;
 }
 
+/**
+ * Arrastar um nó até (x, y) — e CONFERIR que ele chegou.
+ *
+ * Duas coisas que o arrasto solto não garante, as duas medidas no CI:
+ *   - o `mouseDown` num ponto fora da janela não pega nada, e o nó fica onde
+ *     estava (era o que acontecia quando o canvas ampliava sozinho: o 4º nó
+ *     nascia em x=1668 numa janela de 1600);
+ *   - sob carga, o último movimento do arrasto às vezes não chega a ser
+ *     aplicado antes do `mouseUp`, e o nó para no meio do caminho (medido:
+ *     alvo (1288, 679), parou em (1210, 405)).
+ * Nos dois casos o teste seguia e quebrava passos depois, em asserções que não
+ * têm nada a ver. Aqui ele insiste, e só falha se o nó não chegar.
+ */
 async function moverNo(page: Page, nodeId: string, x: number, y: number): Promise<void> {
   const card = page.locator(`[data-testid="node-card-${nodeId}"]`);
-  const box = await card.boundingBox();
+  const perto = (b: { x: number; y: number; width: number } | null): boolean =>
+    !!b && Math.abs(b.x + b.width / 2 - x) < 20 && Math.abs(b.y + 12 - y) < 20;
+  let box = await card.boundingBox();
   if (!box) throw new Error(`nó sem bounding box: ${nodeId}`);
-  await page.mouse.move(box.x + box.width / 2, box.y + 12);
-  await page.mouse.down();
-  await page.mouse.move(x, y, { steps: 10 });
-  await page.mouse.up();
-  await page.waitForTimeout(150);
+  for (let tentativa = 0; tentativa < 3 && !perto(box); tentativa++) {
+    // Relido a cada volta, então o TypeScript não carrega a garantia da linha
+    // acima para dentro do laço — e a guarda vale mesmo: um nó apagado do DOM
+    // entre duas tentativas não tem caixa.
+    if (!box) throw new Error(`nó sem bounding box: ${nodeId}`);
+    const viewport = page.viewportSize();
+    const pega = { x: box.x + box.width / 2, y: box.y + 12 };
+    if (viewport && (pega.x > viewport.width || pega.y > viewport.height || pega.x < 0 || pega.y < 0)) {
+      throw new Error(`o nó ${nodeId} está fora da janela (${JSON.stringify(pega)}): o arrasto não teria o que pegar`);
+    }
+    await page.mouse.move(pega.x, pega.y);
+    await page.mouse.down();
+    await page.mouse.move(x, y, { steps: 10 });
+    // O mesmo ponto de novo antes de soltar: é o que garante que a última
+    // posição foi aplicada, e não engolida junto com o `mouseUp`.
+    await page.mouse.move(x, y);
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+    box = await card.boundingBox();
+  }
+  expect(perto(box), `o nó ${nodeId} não chegou a (${x}, ${y}): está em ${JSON.stringify(box)}`).toBe(true);
 }
 
 /**
@@ -237,8 +270,7 @@ test.describe("o cartão do nó diz o que o motor faz", () => {
     const [repeatId] = await idPorPrefixo(page, "repeat");
     if (!condicaoId || !classifyId || !repeatId) throw new Error("ids de nó ausentes");
 
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 3; i++) await zoomOut.click();
+    await zoomAte(page, 1);
     const canvas = await page.getByTestId("flow-canvas").boundingBox();
     if (!canvas) throw new Error("canvas sem bounding box");
     await moverNo(page, condicaoId, canvas.x + 300, canvas.y + 150);
@@ -350,8 +382,7 @@ test.describe("o cartão do nó diz o que o motor faz", () => {
     const [fimDaEtapa, fimDoResto] = await idPorPrefixo(page, "end");
     if (!gatilhoId || !condicaoId || !fimDaEtapa || !fimDoResto) throw new Error("ids de nó ausentes");
 
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 4; i++) await zoomOut.click();
+    await zoomAte(page, 1);
     const canvas = await page.getByTestId("flow-canvas").boundingBox();
     if (!canvas) throw new Error("canvas sem bounding box");
     await moverNo(page, gatilhoId, canvas.x + 200, canvas.y + 80);
