@@ -10126,6 +10126,25 @@ export const DICIONARIO: Traducoes = {
   'A origem aparece na ficha do contato e no filtro "Site (landing page)" da lista de contatos.': {
     es: 'El origen aparece en la ficha del contacto y en el filtro "Sitio (landing page)" de la lista de contactos.',
   },
+
+  // ─── Funil: dados do cliente (telefone, e-mail e links) no card e no dossiê ───
+  "Este negócio não tem contato vinculado.": { es: "Este negocio no tiene contacto vinculado." },
+  "Não consegui carregar o contato.": { es: "No pude cargar el contacto." },
+  Dados: { es: "Datos" },
+  Links: { es: "Enlaces" },
+  "Abrir no WhatsApp": { es: "Abrir en WhatsApp" },
+  "Ver ficha completa do contato": { es: "Ver la ficha completa del contacto" },
+  "Confira os links marcados: só endereços http(s) valem.": {
+    es: "Revisa los enlaces marcados: solo valen direcciones http(s).",
+  },
+  "Links salvos.": { es: "Enlaces guardados." },
+  "Endereço inválido.": { es: "Dirección inválida." },
+  "Salvar links": { es: "Guardar enlaces" },
+  // Rótulos dos tipos de link (`lib/leads/links-de-contato.ts`) — lidos por
+  // lookup dinâmico, que o teste de cobertura não enxerga. As marcas
+  // (Instagram, Facebook…) não mudam de idioma e ficam de fora.
+  Site: { es: "Sitio web" },
+  "Google Meu Negócio": { es: "Google Mi Negocio" },
 };
 
 /**
