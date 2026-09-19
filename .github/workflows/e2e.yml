@@ -184,7 +184,7 @@ jobs:
       # uma rodada por parte.
       fail-fast: false
       matrix:
-        parte: [1, 2, 3, 4]
+        parte: [1, 2, 3, 4, 5]
     # ─────────────────────────────────────────────────────────────────────────
     # A COBERTURA DEIXA DE SER PROSA DIGITADA À MÃO.
     #
@@ -515,6 +515,60 @@ jobs:
     #
     # O teto de 30 min continua fora de discussão: ele é o que denuncia a suíte
     # crescendo, e foi exatamente o que aconteceu aqui.
+    # ── 2026-09-19: uma QUINTA parte, porque redistribuir três já não cabia ──
+    #
+    # A partição redistribui; ela não desfaz CRESCIMENTO. Medido em 43 rodadas
+    # nossas com as três partes comuns verdes (relógio do JOB, teto 1800s):
+    #
+    #     parte 1 → mediana 1543s · máx 1605 · folga do máx 195s
+    #     parte 2 → mediana 1419s · máx 1571 · folga do máx 229s
+    #     parte 3 → mediana 1551s · máx 1687 · folga do máx 113s
+    #
+    # E a cauda que a mediana esconde apareceu: DOIS cortes por relógio em
+    # 19/09 na parte 3 — 12:26Z (1693s) e 14:16Z (o do #1198, 1339s de suíte
+    # sobre 341s de preparo, exit 124). Nos dois, ZERO caso vermelho: o job
+    # morreu de tamanho, não de defeito, e cada corte reprova um PR que não tem
+    # culpa.
+    #
+    # ⚠️ POR QUE NÃO BASTOU MOVER UM ARQUIVO (a tentativa anterior, medida e
+    # descartada): mover 132s da parte 3 para a 2 levaria a 2 de 1571 para 1703
+    # de pior caso — a MENOR FOLGA DO CONJUNTO cairia de 113s para 97s. Trocar
+    # o estouro de lugar não é consertar.
+    #
+    # ⚠️ E POR QUE NÃO ENCHER A PARTE 4: ela é a da instalação fresca
+    # (`vps-fresh-onboarding`). Os passos de semeadura são `if: matrix.parte != 4`
+    # e no lugar deles ela sobe WAHA, o par Redis e cria o dono como o
+    # `install.sh` faz. Spec comum ali falha por falta de fixture; e semear
+    # dados naquele job sujaria a premissa da única prova da jornada de
+    # instalação. Os ~19 min ociosos dela são INTRANSFERÍVEIS.
+    #
+    # ── A DISTRIBUIÇÃO, escolhida pelo tempo medido por spec ────────────────
+    #
+    # Playwright por parte antes (run 35446998755): 1 = 1135s · 2 = 1089s ·
+    # 3 = 1221s. Total comum 3445s ÷ 4 partes comuns = ~861s de alvo.
+    #
+    #   da 1 → inbox-busca-e-filtros-dizem-a-verdade (217s), qa-l12-inbox (25s),
+    #          filtro-por-marcador-pela-tela (23s)                    −265s
+    #   da 2 → followup-builder (87s), followup-journey (46s),
+    #          followup-dossie (37s), followup-queue (23s), qa-l12-funil (43s)  −236s
+    #   da 3 → i18n-espanhol-na-tela (84s), extensoes-declarativas (72s),
+    #          extensoes-versao (49s), marca-logo (67s), suporte-temporario (57s),
+    #          olhar-telas-do-epico (51s)                             −380s
+    #
+    # Famílias inteiras (`inbox-*`, `followup-*`, `extensoes-*`) andam juntas:
+    # vizinhança compartilha estado de banco dentro da parte, e separar irmãs é
+    # como se descobre isso do jeito caro.
+    #
+    # PREVISÃO (é previsão; a rodada deste PR mede): 870 / 852 / 842 / 880s de
+    # Playwright nas quatro comuns — espalhamento de 38s contra os 132s de hoje.
+    #
+    # ⚠️ `navegacao` (304s, a maior da parte 2) NÃO se move, pela razão medida no
+    # bloco acima: ela reprova fora da parte 2 por estado do banco. A maior
+    # alavanca do relógio é justamente a proibida pela medição.
+    #
+    # NÃO MEDIDO: se as 14 specs movidas passam no estado de banco da parte 5.
+    # É o risco que derrubou a tentativa com `navegacao`, e quem responde é a
+    # rodada deste PR — não esta previsão.
     env:
       # Provider controlado; preview/assistência executam core, ferramentas e gates reais.
       INTERNAL_AGENT_RUN_STUB: "true"
@@ -547,12 +601,9 @@ jobs:
         lote-no-quadro-do-funil.spec.ts
         motivos-de-perda-do-funil.spec.ts
         importar-leads-planilha.spec.ts
-        inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         prova-painel-provedores.spec.ts
         relatorio-de-atividades.spec.ts
-        qa-l12-inbox.spec.ts
         canal-mudo-avisa-na-central.spec.ts
-        filtro-por-marcador-pela-tela.spec.ts
         qa-l12-troca-de-funil.spec.ts
         qa-l12-agente-ia.spec.ts
       # ⚠️ A ORDEM DESTA LISTA NÃO DECIDE A ORDEM DE EXECUÇÃO. O Playwright
@@ -637,13 +688,9 @@ jobs:
         agente-organiza-operacao.spec.ts
         central-de-avisos-capacidades.spec.ts
         escalacao-ciclo.spec.ts
-        followup-builder.spec.ts
-        followup-queue.spec.ts
         distribuicao-atendimento.spec.ts
-        followup-journey.spec.ts
         capacidades-do-agente.spec.ts
         escopo-de-funil-do-agente.spec.ts
-        followup-dossie.spec.ts
         followup-tempo-adaptativo.spec.ts
         gatilho-de-etapa.spec.ts
         gatilho-de-caso.spec.ts
@@ -662,7 +709,6 @@ jobs:
         agenda-caminho-ate-os-horarios.spec.ts
         agenda-google-volta-do-consentimento.spec.ts
         agenda-google-volta-nao-desloga.spec.ts
-        qa-l12-funil.spec.ts
         navegacao.spec.ts
         agenda-google-meet.spec.ts
       # `moeda-da-organizacao` entrou na PARTE_2 em 2026-09-04, ao lado de
@@ -861,22 +907,18 @@ jobs:
         encerramento-atendimento.spec.ts
         passagem-com-contexto.spec.ts
         interface-por-vinculo.spec.ts
-        olhar-telas-do-epico.spec.ts
         pipelines-gestao.spec.ts
         qa-agente-usa-as-maos.spec.ts
         qa-selo-no-funil-usado.spec.ts
         qa-telas-descobertas-w4.spec.ts
         retorno-anti-morte.spec.ts
         webhooks.spec.ts
-        marca-logo.spec.ts
         logo-moldura-no-tema-escuro.spec.ts
         historico-de-captacao.spec.ts
         inbox-quem-manda.spec.ts
         inbox-rotulo-de-origem.spec.ts
         troca-de-organizacao-tem-volta.spec.ts
         organizacoes-criacao-convite-e-cache.spec.ts
-        suporte-temporario.spec.ts
-        i18n-espanhol-na-tela.spec.ts
         inbox-abas-espelham-o-comando.spec.ts
         moeda-da-organizacao.spec.ts
         zona-de-perigo-apaga-dados-de-teste.spec.ts
@@ -889,9 +931,7 @@ jobs:
         qa-sugestao-rejeitada-e-motivo.spec.ts
         qa-l12-agenda-contatos.spec.ts
         qa-l12-tags-radar.spec.ts
-        extensoes-declarativas.spec.ts
         extensoes-recuperacao.spec.ts
-        extensoes-versao.spec.ts
         extensoes-portas-novas.spec.ts
         motivo-do-publicar-na-tela.spec.ts
         followup-cartoes.spec.ts
@@ -925,6 +965,22 @@ jobs:
       # existência do usuário.
       SPECS_PARTE_4: >-
         vps-fresh-onboarding.spec.ts
+
+      SPECS_PARTE_5: >-
+        inbox-busca-e-filtros-dizem-a-verdade.spec.ts
+        qa-l12-inbox.spec.ts
+        filtro-por-marcador-pela-tela.spec.ts
+        followup-builder.spec.ts
+        followup-journey.spec.ts
+        followup-dossie.spec.ts
+        followup-queue.spec.ts
+        qa-l12-funil.spec.ts
+        i18n-espanhol-na-tela.spec.ts
+        extensoes-declarativas.spec.ts
+        extensoes-versao.spec.ts
+        marca-logo.spec.ts
+        suporte-temporario.spec.ts
+        olhar-telas-do-epico.spec.ts
 
       # ─── FORA_DO_CI — as duas que ficaram, e o motivo continua onde sempre ───
       #
@@ -1531,6 +1587,7 @@ jobs:
             2) LISTA="$SPECS_PARTE_2" ;;
             3) LISTA="$SPECS_PARTE_3" ;;
             4) LISTA="$SPECS_PARTE_4" ;;
+            5) LISTA="$SPECS_PARTE_5" ;;
             *) echo "::error::parte ${{ matrix.parte }} sem lista"; exit 1 ;;
           esac
           # Falha alto se a variável vier vazia: sem isto, um typo no nome faria
@@ -1822,7 +1879,7 @@ jobs:
                       dentro { exit }
                     ' .github/workflows/e2e.yml | grep -oE "[a-z0-9-]+\.spec\.ts" | sort -u; }
           NO_DISCO=$(ls tests/e2e/*.spec.ts | wc -l | tr -d " ")
-          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; bloco SPECS_PARTE_4; } | sort -u | wc -l | tr -d " ")
+          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; bloco SPECS_PARTE_4; bloco SPECS_PARTE_5; } | sort -u | wc -l | tr -d " ")
           FORA_LISTA=$(bloco FORA_DO_CI)
           FORA=$(echo "$FORA_LISTA" | grep -c . || true)
           # E o recorte passa a ter CONTROLE, não só um piso.
