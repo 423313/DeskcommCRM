@@ -64,20 +64,32 @@ describe("as duas camadas da guarda de colisão rodam no CI", () => {
     expect(passo.match(/^\s+if: (.*)$/m)?.[1]).toBe("matrix.parte == 1");
   });
 
-  it("camada 1b: a prévia velha reprova SÓ quando as duas coisas valem", () => {
-    // O #965 mostrou que o verde vence: a guarda mediu a `main` de 1039 commits
-    // atrás. O recorte é estreito de propósito — este PR acrescenta migration E
-    // a base ganhou migration desde a prévia. Alargar isto vira "branch sempre
-    // em dia para todo mundo", que é o laço de retrabalho que a fila já pagou.
-    const i = verify.search(/- name: As migrations da main andaram desde a prévia deste PR\?/);
-    expect(i, "o passo da prévia velha saiu do verify").toBeGreaterThan(-1);
-    const passo = verify.slice(i, i + 2200);
+  it("camada 1b: mede COLISÃO com o que a base ganhou, não ATRASO", () => {
+    // O #965 mostrou que o verde vence: o verify dele terminou em 16/09 e segue
+    // verde com cinco números que a `main` ganhou depois. O passo acima não erra
+    // por base velha (o script busca a base no remoto) — o que envelhece é o RUN.
+    //
+    // E o recorte tem de ser COLISÃO, não atraso: há PR deliberadamente atrasado
+    // (o dono do corte pede para não gastar fila) e sem colisão nenhuma. Medir
+    // atraso pintaria esses de vermelho sem defeito, e quem contribui lê isso
+    // como "meu PR quebrou".
+    const i = verify.search(/- name: O número deste PR foi tomado depois da prévia\?/);
+    expect(i, "o passo da colisão pós-prévia saiu do verify").toBeGreaterThan(-1);
+    const passo = verify.slice(i, i + 3200);
     expect(passo.match(/^\s+if: (.*)$/m)?.[1]).toBe("matrix.parte == 1 && github.event_name == 'pull_request'");
-    // as duas condições, e não uma
+
+    // PR que não acrescenta migration sai cedo
     expect(passo, "sem a saída antecipada, PR que não toca schema seria alcançado").toMatch(
-      /minhas:-0\}" = 0 \]; then\n\s+echo "este PR não acrescenta migration/,
+      /if \[ -z "\$minhas" \]; then[\s\S]{0,120}exit 0/,
     );
-    expect(passo, "só migration ACRESCENTADA na base conta").toMatch(/status=="added".*supabase\/migrations/s);
+    // base que não ganhou migration → nada pôde ser tomado (o anti-falso-vermelho)
+    expect(
+      passo,
+      "atraso SEM migration nova na base não pode reprovar — é o caso do PR deliberadamente atrasado",
+    ).toMatch(/if \[ -z "\$delas" \]; then[\s\S]{0,160}exit 0/);
+    // a comparação é por NNNN E por timestamp
+    expect(passo).toMatch(/bate_n=.*grep -E "_\$\{n\}\$"/);
+    expect(passo).toMatch(/bate_t=.*grep -E "\^\$\{ts\}_"/);
     // e não medir não pode passar
     expect(passo, "comparação indisponível tem de reprovar, não seguir").toMatch(/NÃO MEDIDO[\s\S]*exit 2/);
   });

@@ -546,9 +546,10 @@ Processo padrão (siga sempre):
    com a `main` com os cinco checks obrigatórios verdes**. O `verify` **já executa** a guarda
    (`pnpm checar:colisao-de-migration`, o alias de `scripts/checar-colisao-de-migration.sh` —
    procurar pelo nome do arquivo no `ci.yml` devolve zero e mente), e mesmo assim os 12 passaram:
-   cada um mediu a `main` do dia em que rodou. Por isso há duas camadas a mais: a **prévia velha**
-   reprova quando a `main` ganhou migration desde a base do PR, e fora de `pull_request` o CI varre
-   a árvore inteira — nenhum `NNNN` nem timestamp pode aparecer duas vezes na `main`. Antes de escolher o número quando houver outros PRs de schema em voo, peça-o
+   cada um mediu a `main` do dia em que rodou — o `verify` do #965 terminou em 16/09 e segue verde.
+   Por isso há duas camadas a mais: o CI reprova quando **um número deste PR foi tomado** por
+   migration que entrou na base depois da prévia (colisão, nunca atraso — PR atrasado e sem colisão
+   segue verde), e fora de `pull_request` ele varre a árvore inteira — nenhum `NNNN` nem timestamp pode aparecer duas vezes na `main`. Antes de escolher o número quando houver outros PRs de schema em voo, peça-o
    a quem estiver alocando na rodada: **não há reserva, quem mescla primeiro fica com o número**.
    Para ver o que está tomado agora, incluindo o que ainda não foi mesclado:
 

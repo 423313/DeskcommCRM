@@ -207,19 +207,24 @@ jobs:
         if: matrix.parte == 1
         run: pnpm checar:colisao-de-migration
 
-      # A PRÉVIA DESTE PR AINDA MEDE A `main` DE HOJE, NO QUE É SCHEMA?
+      # O NÚMERO DESTE PR FOI TOMADO DEPOIS QUE A PRÉVIA NASCEU?
       #
-      # O passo acima roda contra a base da PRÉVIA — e a prévia é de quando o run
-      # começou. Medido em 19/09/2026: o #965 está VERDE com prévia de 1039
-      # commits atrás e CINCO números já tomados. O verde não mentiu quando
-      # nasceu; ele venceu.
+      # O passo acima re-deriva contra a `main` FRESCA (o script busca a base no
+      # remoto), então ele não erra por base velha. O que envelhece é o RUN: o
+      # verify do #965 terminou em 16/09 e está verde até hoje com CINCO números
+      # que a `main` ganhou depois — naquele minuto eles estavam livres. Nenhuma
+      # lógica dentro do job conserta um job de três dias atrás; o que este passo
+      # faz é fechar a janela para quem roda de agora em diante.
       #
-      # Recorte estreito de propósito: só reprova quando as DUAS coisas valem —
-      # este PR acrescenta migration E a base ganhou migration desde a prévia.
-      # PR que não toca schema não é alcançado, e `main` que andou em outras
-      # áreas também não: exigir branch em dia para todo mundo é o laço de
-      # retrabalho que a fila já pagou.
-      - name: As migrations da main andaram desde a prévia deste PR?
+      # Mede COLISÃO, não ATRASO. Atraso é proxy e pinta de vermelho PR correto:
+      # há PR deliberadamente atrasado (o dono do corte pede para não trazer a
+      # `main` e gastar fila), e nenhum deles colide. Aqui o vermelho exige que o
+      # NNNN — ou o timestamp — que este PR acrescenta seja o MESMO que a base
+      # ganhou depois da prévia. Atraso sem colisão continua ::warning::, no passo
+      # que já existe para isso.
+      #
+      # Vigiado por tests/unit/colisao-de-migration-roda-no-ci.test.ts.
+      - name: O número deste PR foi tomado depois da prévia?
         if: matrix.parte == 1 && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,20 +234,37 @@ jobs:
           set -uo pipefail
           minhas=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" \
                      --jq '.[]|select(.status=="added")|.filename' 2>/dev/null \
-                   | grep -cE '^supabase/migrations/[^/]+\.sql$' || true)
-          if [ "${minhas:-0}" = 0 ]; then
+                   | grep -oE '[0-9]{14}_[0-9]{4}' || true)
+          if [ -z "$minhas" ]; then
             echo "este PR não acrescenta migration — nada a conferir aqui"; exit 0
           fi
           comp=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${GITHUB_BASE_REF:-main}" 2>/dev/null) || {
-            echo "::error::não consegui comparar a base da prévia com a ${GITHUB_BASE_REF:-main} — NÃO MEDIDO, e PR de schema não passa sem esta medida."
+            echo "::error::não consegui comparar a base da prévia com a ${GITHUB_BASE_REF:-main} — NÃO MEDIDO, e PR que acrescenta migration não passa sem esta medida."
             exit 2; }
-          novas=$(printf '%s' "$comp" | jq -r '[.files[]?|select(.status=="added")|.filename|select(startswith("supabase/migrations/"))]|join(" ")')
-          atraso=$(printf '%s' "$comp" | jq -r '.ahead_by // 0')
-          if [ -n "$novas" ]; then
-            echo "::error title=A prévia deste PR é anterior a migrations que já entraram::a ${GITHUB_BASE_REF:-main} andou ${atraso} commits desde a base desta prévia e ganhou: ${novas}. A guarda de colisão acima mediu a árvore ANTIGA, então o verde dela não vale para o que seria mesclado. Traga a ${GITHUB_BASE_REF:-main} para dentro (git merge origin/${GITHUB_BASE_REF:-main}) e deixe o CI medir de novo."
-            exit 1
+          delas=$(printf '%s' "$comp" \
+                  | jq -r '.files[]?|select(.status=="added")|.filename|select(startswith("supabase/migrations/"))' \
+                  | grep -oE '[0-9]{14}_[0-9]{4}' || true)
+          if [ -z "$delas" ]; then
+            echo "a ${GITHUB_BASE_REF:-main} não ganhou migration desde a base desta prévia — nada pôde ser tomado."
+            exit 0
           fi
-          echo "a ${GITHUB_BASE_REF:-main} andou ${atraso} commits desde a prévia, nenhum deles acrescentou migration — a medição acima continua valendo."
+          falhou=0
+          while read -r meu; do
+            [ -z "$meu" ] && continue
+            n="${meu#*_}"; ts="${meu%%_*}"
+            bate_n=$(grep -E "_${n}$" <<<"$delas" | tr '\n' ' ' | sed 's/ *$//')
+            bate_t=$(grep -E "^${ts}_" <<<"$delas" | tr '\n' ' ' | sed 's/ *$//')
+            if [ -n "$bate_n" ]; then
+              echo "::error title=NNNN tomado depois da prévia::o ${n} deste PR foi ocupado por ${bate_n}, que entrou na ${GITHUB_BASE_REF:-main} depois da base desta prévia. Renumere (NNNN e TIMESTAMP juntos) — não há reserva, quem mescla primeiro fica com o número."
+              falhou=1
+            fi
+            if [ -n "$bate_t" ]; then
+              echo "::error title=Timestamp tomado depois da prévia::o ${ts} deste PR foi ocupado por ${bate_t}. O Supabase usa o timestamp como identidade da migration."
+              falhou=1
+            fi
+          done <<<"$minhas"
+          [ "$falhou" = 0 ] || exit 1
+          echo "a ${GITHUB_BASE_REF:-main} ganhou migration desde a prévia, e nenhum número deste PR foi tomado."
 
       # E A ÁRVORE INTEIRA, fora de pull_request — porque lá o passo acima é
       # INERTE: em push HEAD é a própria base, nada foi "acrescentado", e ele sai
