@@ -28,6 +28,48 @@ drop trigger if exists prospecting_refuse_erased on public.prospecting_candidate
 create trigger prospecting_refuse_erased before insert on public.prospecting_candidates
   for each row execute function public.fn_prospecting_refuse_erased_candidate();
 
+-- ---- as duas grafias do nono dígito, em UM lugar ----
+--
+-- Mesma regra de `lib/channels/phone-variants.ts`, e o SQL dela já existia
+-- COPIADO dentro de `fn_aviso_de_caso_*`. Uma terceira cópia é como regra de
+-- telefone diverge: alguém corrige uma e não sabe das outras. Aqui ela vira
+-- função, e o expurgo de LGPD abaixo é o primeiro a consumi-la.
+--
+-- Por que comparar por VARIANTE e não pela string: o mesmo celular é gravado
+-- com e sem o nono dígito por caminhos diferentes (cadastro à mão, importação,
+-- o que o WhatsApp devolve). Comparar a string crua deixa a pessoa no banco
+-- porque uma ponta tem um `9` a mais — e, em expurgo, não alcançar é violação.
+--
+-- A direção que REMOVE o nono confere o que sobra (`6-9` na primeira posição),
+-- como o TypeScript faz: sem isso, um `9` grudado num fixo geraria o número
+-- REAL de outra pessoa, e alcançar terceiro em expurgo é o erro oposto.
+create or replace function public.fn_telefone_variantes(p_telefone text)
+returns text[]
+language sql
+immutable
+set search_path to 'public', 'pg_temp'
+as $$
+  with d as (select regexp_replace(coalesce(p_telefone, ''), '\D', '', 'g') as v)
+  select case
+    when d.v = '' then array[]::text[]
+    when d.v not like '55%' then array[d.v]
+    when length(d.v) = 13
+         and substring(d.v from 5 for 1) = '9'
+         and substring(d.v from 6 for 1) between '6' and '9'
+      then array[d.v, substring(d.v from 1 for 4) || substring(d.v from 6)]
+    when length(d.v) = 12
+         and substring(d.v from 5 for 1) between '6' and '9'
+      then array[d.v, substring(d.v from 1 for 4) || '9' || substring(d.v from 5)]
+    else array[d.v]
+  end
+  from d;
+$$;
+-- Função nova em `public` nasce alcançável pelas DUAS origens (o grant a PUBLIC
+-- que o Postgres dá, e o default privilege do baseline para `anon`): as duas
+-- saem, e só quem precisa entra.
+revoke execute on function public.fn_telefone_variantes(text) from public, anon;
+grant execute on function public.fn_telefone_variantes(text) to service_role;
+
 CREATE OR REPLACE FUNCTION "public"."fn_lgpd_cascade_redact_contact"("p_organization_id" "uuid", "p_contact_id" "uuid", "p_request_id" "uuid") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public', 'extensions', 'pg_temp'
@@ -38,6 +80,12 @@ declare
   v_media_paths text[] := '{}';
   v_anon_label text;
   v_count int;
+  -- As grafias do telefone desta pessoa, capturadas ANTES de o passo 1 zerar
+  -- `contacts.phone_number`. A ordem aqui não é detalhe: o expurgo da
+  -- prospecção roda ~150 linhas depois do `update contacts`, e ler o telefone
+  -- lá embaixo leria NULL — o braço por telefone existiria no código e não
+  -- alcançaria linha nenhuma, que é pior que não existir, porque parece feito.
+  v_variantes text[] := '{}';
 begin
   perform public.fn_service_lock(p_organization_id,p_contact_id);
   select is_anonymized into v_already
@@ -53,6 +101,12 @@ begin
   end if;
 
   v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+
+  -- Capturado AGORA, enquanto o telefone ainda existe (o passo 1 o apaga).
+  select coalesce(public.fn_telefone_variantes(phone_number), '{}')
+    into v_variantes
+    from contacts
+    where id = p_contact_id and organization_id = p_organization_id;
 
   -- Collect media storage paths (we only delete what we own — media_storage_path)
   select coalesce(array_agg(distinct media_storage_path) filter (where media_storage_path is not null), '{}')
@@ -225,8 +279,24 @@ begin
   -- Native discovery stores commercial/person data before the Inbox exists.
   -- Keep only keyed suppression tokens, restricted to the server, to prevent
   -- another extraction from reintroducing this erased candidate.
+  --
+  -- O PREDICADO ALCANÇA POR VÍNCULO **OU** POR TELEFONE, e o segundo braço é o
+  -- que conserta um buraco real: quando o telefone raspado já pertencia a um
+  -- contato conhecido da organização, `lib/prospecting/store.ts` grava o
+  -- candidato como `skipped` e DEIXA `contact_id` nulo de propósito (lá o
+  -- vínculo é o freio de mão do envio, em `worker.ts`). Só pelo `contact_id`,
+  -- essa pessoa — justamente a que a empresa já conhece — pedia exclusão,
+  -- recebia sucesso, a auditoria gravava `lgpd.redact_executed`, e o nome, o
+  -- telefone e o endereço dela seguiam legíveis aqui.
+  --
+  -- Em expurgo os dois erros não têm o mesmo preço: alcançar demais custa um
+  -- registro de prospecção descartado; alcançar de menos é violação legal. Por
+  -- isso o `or`, e por isso a comparação por VARIANTE do nono dígito.
   update prospecting_candidates set suppression_salt = gen_random_bytes(32)
-  where organization_id = p_organization_id and contact_id = p_contact_id
+  where organization_id = p_organization_id
+    and (contact_id = p_contact_id
+         or (phone is not null
+             and regexp_replace(phone, '\D', '', 'g') = any (v_variantes)))
     and suppression_salt is null;
   update prospecting_candidates set
     suppression_place = hmac(convert_to(place_id, 'UTF8'), suppression_salt, 'sha256'),
@@ -239,7 +309,13 @@ begin
       'category', null, 'address', null, 'maps_url', null,
       'rating', null, 'reviews', null, 'emails', '[]'::jsonb, 'socials', '[]'::jsonb),
     status = 'skipped', service_boundary = null, error = null, updated_at = now()
-  where organization_id = p_organization_id and contact_id = p_contact_id;
+  -- MESMO predicado do update acima. Se os dois divergirem, a linha alcançada
+  -- por um e não pelo outro fica com `suppression_salt` semeado e os dados
+  -- pessoais intactos — um estado que parece tratado e não está.
+  where organization_id = p_organization_id
+    and (contact_id = p_contact_id
+         or (phone is not null
+             and regexp_replace(phone, '\D', '', 'g') = any (v_variantes)));
   get diagnostics v_count = row_count;
   v_counts := v_counts || jsonb_build_object('prospecting_candidates', v_count);
 
