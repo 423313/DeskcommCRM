@@ -270,11 +270,12 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
 
     // Sem esta saída o passo é um beco: o diagnóstico está certo e nenhum botão.
     await aviso.getByRole("button", { name: /continuar sem publicar/i }).click();
-    // O wizard ganhou um passo entre treinar e chamar o time: ver o
-    // funcionário atender. Terminar sem nunca tê-lo visto fazer nada era como
-    // o onboarding entregava a pessoa num inbox vazio.
-    await page.waitForURL(/\/onboarding\/testar/, { timeout: 20_000 });
-    await snap(page, "j1.7-testar");
+    // Depois de treinar vem "Onde ele organiza" (J1.26, `/onboarding/funil`),
+    // e só então "Ver ele atender". Medido no run 35401941259 (parte 4): o
+    // clique avançou para `/onboarding/funil` e este `waitForURL` esperava
+    // `/testar`, o passo seguinte. O produto seguiu; a spec é que pulava um passo.
+    await page.waitForURL(/\/onboarding\/funil/, { timeout: 20_000 });
+    await snap(page, "j1.7-funil");
 
     const { data: agents } = await svc
       .from("ai_agents")
@@ -303,6 +304,50 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
     expect(
       (depois.onboarding_state as { ai?: { agent_id?: string } } | null)?.ai?.agent_id,
     ).toBe(agents?.[0]?.id);
+  });
+
+  test("J1.26 onde ele organiza: sem funcionário no ar, oferece um quadro pronto e deixa seguir", async ({ page }) => {
+    // Numa instalação sem chave de IA o agente ficou rascunho (J1.7), então a
+    // sugestão de quadro, que sai do MESMO modelo que vai atender, não tem a
+    // quem pedir. O passo não pode virar beco: diz o porquê, começa de um
+    // modelo pronto e deixa seguir.
+    await login(page);
+    await page.waitForURL(/\/onboarding\/funil/, { timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: /onde ele organiza seus clientes/i })).toBeVisible();
+    await expect(page.getByText(/ainda não está no ar/i)).toBeVisible();
+    await expect(page.getByText(/isso não trava nada/i)).toBeVisible();
+
+    // O que a tela mostra é o que tem de ser gravado: lido da própria tela, não
+    // de uma lista fixa, para o caso valer com qualquer modelo pronto.
+    const nomeDoQuadro = await page.getByLabel("Nome do quadro").inputValue();
+    const colunas = await page.getByLabel(/^Nome da coluna \d+$/).evaluateAll((els) =>
+      els.map((e) => (e as HTMLInputElement).value),
+    );
+    expect(nomeDoQuadro.trim()).not.toBe("");
+    expect(colunas.length).toBeGreaterThan(0);
+    await snap(page, "j1.26-funil-sem-ia");
+
+    await page.getByRole("button", { name: /usar este quadro/i }).click();
+    await page.waitForURL(/\/onboarding\/testar/, { timeout: 20_000 });
+
+    const org = await orgRow();
+    const funil = (org.onboarding_state as { funil?: { pipeline_id?: string } } | null)?.funil;
+    expect(funil?.pipeline_id, "o passo do quadro ficou registrado").toBeTruthy();
+    const { data: pipeline } = await svc
+      .from("crm_pipelines")
+      .select("name")
+      .eq("organization_id", org.id)
+      .eq("id", funil?.pipeline_id ?? "")
+      .maybeSingle();
+    expect(pipeline?.name).toBe(nomeDoQuadro.trim());
+    const { data: etapas } = await svc
+      .from("crm_stages")
+      .select("name")
+      .eq("organization_id", org.id)
+      .eq("pipeline_id", funil?.pipeline_id ?? "");
+    for (const coluna of colunas) {
+      expect(etapas?.map((e) => e.name), `a coluna "${coluna}" da tela foi gravada`).toContain(coluna.trim());
+    }
   });
 
   test("J1.24 ver ele atender: o wizard não termina sem mostrar o funcionário", async ({ page }) => {
