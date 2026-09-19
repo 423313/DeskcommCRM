@@ -14,6 +14,7 @@ import {
   CalendarBlank,
   Palette,
   Key,
+  Plugs,
   WebhooksLogo,
   ArrowRight,
   Gear,
@@ -57,6 +58,11 @@ const NAV_ITEMS: NavItem[] = [
   // razão das duas de cima: é configuração da INSTALAÇÃO, e /admin tem
   // navegação própria (o registro de `lib/navigation/` cobre só `app/app/**`).
   { href: "/admin/cadastro", label: "Cadastro", icon: Key },
+  // A porta da tela que libera endereços da rede interna (decisão 22-d, #1004).
+  // Mesma razão das de cima: o objeto é a MÁQUINA, não uma empresa — e a
+  // decisão pede explicitamente que o lugar onde o dono controla seja visível.
+  // Sem esta linha a tela existiria e só se chegaria nela digitando a URL.
+  { href: "/admin/destinos-internos", label: "Destinos internos", icon: Plugs },
   // A porta da tela que reúne a configuração da INSTALAÇÃO (migration 0290):
   // credenciais e contatos que antes só se trocavam por SSH no `.env`. Vem por
   // último de propósito — as quatro de cima são assuntos específicos e

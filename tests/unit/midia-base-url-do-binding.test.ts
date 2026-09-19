@@ -170,6 +170,9 @@ vi.mock("@/lib/env", async (importOriginal) => {
       get TRANSCRIPTION_MODEL() {
         return transcricaoDoEnv.model;
       },
+      get IA_DESTINOS_INTERNOS_PERMITIDOS() {
+        return destinosInternosDoEnv.valor;
+      },
     },
   };
 });
@@ -185,6 +188,7 @@ function comTranscricaoNoEnv(t: Partial<typeof transcricaoDoEnv> = {}): void {
 }
 
 import { deriveMessageMedia } from "@/workers/media-derive-worker";
+import { esquecerDestinosInternos } from "@/lib/automation/destinos-internos-autorizados";
 import { deriveMediaText, type DeriveDeps } from "@/lib/messaging/media/derive";
 import type { Env } from "@/lib/env";
 
@@ -211,10 +215,34 @@ function depsDaChamada(): DeriveDeps {
   return deps;
 }
 
+/** A lista de destinos internos autorizados pelo dono da instalação (#1004). */
+const destinosInternosDoEnv = vi.hoisted(() => ({ valor: "" }));
+
+/**
+ * Declara a lista do dono como o operador a escreve no `.env`. Quem a lê é o
+ * `env` do app — o mesmo caminho da transcrição acima —, então o caso controla
+ * por aqui, e não por `vi.stubEnv`.
+ */
+function comDestinosAutorizados(valor = ""): void {
+  destinosInternosDoEnv.valor = valor;
+}
+
+/** Os corpos já escritos na Central: é por onde a recusa deixa rastro. */
+function corposDaCentral(): string[] {
+  return inboxInsertMock.mock.calls.map((c) =>
+    String((c[0] as { body?: string } | undefined)?.body ?? ""),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   comTranscricaoNoEnv();
+  comDestinosAutorizados();
+  // A lista é memoizada em `globalThis` com TTL de 30s — sem isto, o primeiro
+  // caso que a lê decide a lista de todos os outros e a suíte fica verde por
+  // motivo nenhum.
+  esquecerDestinosInternos();
   dns.erro = null;
   dns.resposta = [{ address: "93.184.216.34", family: 4 }];
   bindingDaVez = BINDING_COM_ENDPOINT;
@@ -410,5 +438,141 @@ describe("worker de mídia: base_url do binding de visão (#855)", () => {
     expect(provedorDeTranscricaoMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ baseUrl: "https://api.groq.com/openai/v1" }),
     );
+  });
+  /**
+   * A decisão 22-d entrega a alavanca a quem PAGA a máquina — e o escopo
+   * corrigido de 17/09 diz exatamente até onde ela vai. Os seis casos abaixo
+   * são o item 7 da issue #1004, exercitados pelo caminho de produção (o worker
+   * de mídia), e não pela régua isolada:
+   *
+   *   1. interno não listado → recusa
+   *   2. listado, e configurado pela INSTALAÇÃO → passa
+   *   3. listado, mas configurado por uma ORGANIZAÇÃO → recusa
+   *   4. listado, mas com esquema/protocolo que as guardas recusam → recusa
+   *   5. nome cujo endereço resolvido está fora da lista → recusa
+   *   6. interno listado + chave da INSTALAÇÃO numa organização → continua recusando
+   *
+   * O que muda em relação ao PR original: ele autorizava por NOME, dispensava
+   * TODAS as guardas de uma vez e valia também para o endereço que a empresa
+   * escolhe no painel dela. Os casos 3, 4 e 5 são os que prendem as três
+   * correções — sem eles, a válvula devolveria a rede interna a quem a decisão
+   * 22-d diz que não pode alcançá-la.
+   *
+   * ⚠️ NÃO COBERTO, e de propósito: REDIRECIONAMENTO. O caminho de mídia não o
+   * trata hoje — medido na `main` em 18/09 (`git grep -n redirect` vazio em
+   * `workers/media-derive-worker.ts`, `lib/automation/outbound-url.ts` e
+   * `outbound-ip.ts`; controle positivo em `lib/agent-engine/edge/egress.ts` e
+   * `lib/automation/actions/call-webhook.ts`, que usam `redirect: "manual"`).
+   * O item 3 da issue manda "continuar valendo" uma guarda que não existe aqui;
+   * a limitação está escrita no comentário do dono na #1004 e segue ABERTA.
+   */
+  describe("#1004: destinos internos autorizados pela INSTALAÇÃO", () => {
+    it("1. interno que ninguém listou é recusado, e o aviso diz ONDE se libera", async () => {
+      comDestinosAutorizados();
+      comTranscricaoNoEnv({ apiKey: "chave-do-servico", baseUrl: "http://10.1.2.7:8080/v1" });
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+      expect(transcribeDoSvcMock, "a chave saiu para um endereço interno").not.toHaveBeenCalled();
+      expect(texto).not.toContain("transcrição de mentira");
+      const corpos = corposDaCentral();
+      expect(corpos.some((b) => b.includes("unsafe_url:private_host"))).toBe(true);
+      // Sem a porta escrita no aviso, quem pôs a IA na própria rede descobre a
+      // tela por tentativa e erro — que é o defeito de primeira impressão que a
+      // decisão manda fechar ("visível e fácil de acessar").
+      expect(corpos.some((b) => b.includes("Destinos internos"))).toBe(true);
+    });
+
+    it("2. interno listado, e configurado pela INSTALAÇÃO, passa", async () => {
+      comDestinosAutorizados("10.1.0.0/16");
+      comTranscricaoNoEnv({ apiKey: "chave-do-servico", baseUrl: "http://10.1.2.7:8080/v1" });
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+      expect(transcribeDoSvcMock).toHaveBeenCalledTimes(1);
+      expect(texto).toBe("transcrição de mentira");
+    });
+
+    it("3. o MESMO endereço listado, escolhido por uma ORGANIZAÇÃO, é recusado", async () => {
+      // O endereço do caso 2, palavra por palavra, no lugar onde quem escolhe é
+      // o admin da empresa. A decisão 22-d: "a empresa continua sem poder
+      // apontar para dentro sozinha".
+      comDestinosAutorizados("10.1.0.0/16");
+      vi.stubEnv("OPENROUTER_API_KEY", "");
+      bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "http://10.1.2.7:8080/v1" };
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+      expect(factoryMock, "a lista da instalação autorizou o endereço da empresa").not.toHaveBeenCalled();
+      expect(texto).toBeTruthy();
+      const corpos = corposDaCentral();
+      expect(corpos.some((b) => b.includes("unsafe_url:private_host"))).toBe(true);
+      // E o aviso NÃO oferece a lista como saída aqui: oferecê-la mandaria o
+      // admin da empresa pedir ao dono algo que a decisão diz que ele não pode.
+      expect(corpos.some((b) => b.includes("escolhido pela empresa"))).toBe(true);
+    });
+
+    it("4. listado, mas com protocolo que as guardas recusam, continua recusado", async () => {
+      // Lista larga o bastante para cobrir tudo o que é IPv4 — e ainda assim o
+      // literal IPv6 não passa: a lista dispensa a recusa por endereço interno,
+      // e SÓ ela.
+      comDestinosAutorizados("0.0.0.0/0");
+      comTranscricaoNoEnv({ apiKey: "chave-do-servico", baseUrl: "http://[::1]:8080/v1" });
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+      expect(transcribeDoSvcMock).not.toHaveBeenCalled();
+      expect(texto).not.toContain("transcrição de mentira");
+      expect(corposDaCentral().some((b) => b.includes("unsafe_url:ipv6_literal"))).toBe(true);
+    });
+
+    it("5. nome que resolve para endereço FORA da lista é recusado", async () => {
+      comDestinosAutorizados("10.1.0.0/16");
+      comTranscricaoNoEnv({
+        apiKey: "chave-do-servico",
+        baseUrl: "https://coletor.interno.exemplo/v1",
+      });
+      dns.resposta = [{ address: "10.9.9.9", family: 4 }];
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+      expect(transcribeDoSvcMock, "decidiu pelo nome, sem olhar o endereço").not.toHaveBeenCalled();
+      expect(texto).not.toContain("transcrição de mentira");
+      expect(corposDaCentral().some((b) => b.includes("unsafe_url:private_ip"))).toBe(true);
+    });
+
+    it("6. interno listado, com a chave da INSTALAÇÃO numa organização, continua recusando", async () => {
+      // A lista autoriza ENDEREÇO, nunca credencial. O degrau que impede a
+      // chave que paga a conta de todas as empresas de sair para um endereço
+      // escolhido por uma delas (decisão 22-a) é independente desta lista.
+      comDestinosAutorizados("10.1.0.0/16");
+      vi.stubEnv("OPENROUTER_API_KEY", "chave-do-binding");
+      bindingDaVez = { ...BINDING_COM_ENDPOINT, base_url: "http://10.1.2.7:8080/v1" };
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg");
+
+      expect(factoryMock).not.toHaveBeenCalled();
+      expect(texto).toBeTruthy();
+      expect(corposDaCentral().some((b) => b.includes("cadastre a chave da empresa"))).toBe(true);
+    });
+
+    it("CONTROLE: a lista não engole o caminho que já funcionava", async () => {
+      // Sem ele, uma implementação que recusasse TUDO deixaria os seis casos
+      // acima verdes — cinco deles esperam recusa.
+      comDestinosAutorizados("10.1.0.0/16");
+      comTranscricaoNoEnv({ apiKey: "chave-do-servico", baseUrl: "https://api.groq.com/openai/v1" });
+
+      await deriveMessageMedia(eventRow());
+      const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+      expect(transcribeDoSvcMock).toHaveBeenCalledTimes(1);
+      expect(texto).toBe("transcrição de mentira");
+    });
   });
 });
