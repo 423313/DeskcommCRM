@@ -1,4 +1,5 @@
 "use client";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -29,10 +30,10 @@ import { useT } from "@/hooks/i18n/useT";
 import { useCallsQuery, useDialCall, type CallRow } from "@/hooks/calls/useCallsQuery";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 
-function fmtDate(iso: string | null): string {
+function fmtDate(iso: string | null, idioma: string): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString("pt-BR", { hour12: false });
+    return new Date(iso).toLocaleString(idioma, { hour12: false });
   } catch {
     return iso;
   }
@@ -63,8 +64,8 @@ function counterpartNumber(call: CallRow): string {
 /** Identificador de ligações: nome do contato, com fallback pro número — regra única em rotuloDoContato. */
 function counterpartLabel(call: CallRow): string {
   return rotuloDoContato({
-    display_name: call.contact?.display_name ?? null,
-    name: call.contact?.name ?? null,
+    display_name: call.contact?.display_name,
+    name: call.contact?.name,
     phone_number: counterpartNumber(call),
   });
 }
@@ -127,6 +128,9 @@ function DialerDialog() {
 
 export function CallsClient() {
   const t = useT();
+  // A data segue o idioma de quem lê — `tests/unit/i18n-a-data-segue-o-idioma`
+  // reprova `toLocaleString("pt-BR")` fixo.
+  const idioma = useTagDeIdioma();
   const { data: calls, isLoading } = useCallsQuery();
   const [selected, setSelected] = useState<CallRow | null>(null);
 
@@ -168,7 +172,7 @@ export function CallsClient() {
                   className="cursor-pointer"
                   onClick={() => setSelected(call)}
                 >
-                  <TableCell>{fmtDate(call.started_at)}</TableCell>
+                  <TableCell>{fmtDate(call.started_at, idioma)}</TableCell>
                   <TableCell>{call.direction === "outbound" ? t("Saída") : t("Entrada")}</TableCell>
                   <TableCell className="font-medium">{counterpartLabel(call)}</TableCell>
                   <TableCell>
@@ -199,7 +203,7 @@ export function CallsClient() {
                   {t("Chamada com")} {counterpartLabel(selected)}
                 </DialogTitle>
                 <DialogDescription>
-                  {fmtDate(selected.started_at)} ·{" "}
+                  {fmtDate(selected.started_at, idioma)} ·{" "}
                   {selected.direction === "outbound" ? t("Saída") : t("Entrada")} ·{" "}
                   {t(STATUS_LABEL[selected.status])}
                 </DialogDescription>

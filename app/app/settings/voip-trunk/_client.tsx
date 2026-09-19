@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { copyToClipboard } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -72,6 +73,7 @@ export function TrunkSettingsClient({
   canWrite: boolean;
 }) {
   const t = useT();
+  const [copiou, setCopiou] = useState<boolean | null>(null);
   const { data: trunk } = useTrunkSettings(initialData);
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => estadoInicial(trunk));
@@ -145,7 +147,7 @@ retry_interval=60`
             <Label htmlFor="host">{t("Host")}</Label>
             <Input
               id="host"
-              placeholder="sip.seuprovedor.com.br"
+              placeholder="sip.provedor.example"
               value={form.host}
               disabled={!canWrite}
               onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))}
@@ -227,13 +229,24 @@ retry_interval=60`
               )}
             </p>
             <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">{blocoParaColar}</pre>
+            {/*
+              Sempre `copyToClipboard`, nunca a API do navegador direto: ela só
+              existe em contexto seguro, e o self-host servido por http://IP não
+              é um — ali o botão não fazia nada, calado. O helper cai para
+              textarea + execCommand e devolve se funcionou.
+            */}
             <Button
               variant="outline"
               className="w-fit"
-              onClick={() => navigator.clipboard.writeText(blocoParaColar)}
+              onClick={async () => setCopiou(await copyToClipboard(blocoParaColar))}
             >
-              {t("Copiar")}
+              {t(copiou === true ? "Copiado" : "Copiar")}
             </Button>
+            {copiou === false && (
+              <p role="alert" className="text-sm text-muted-foreground">
+                {t("Não consegui copiar. Selecione o bloco acima e copie à mão.")}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

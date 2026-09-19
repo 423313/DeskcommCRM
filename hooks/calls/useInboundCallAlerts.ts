@@ -30,7 +30,7 @@ async function callerName(contactId: string | null, fromNumber: string): Promise
     .eq("id", contactId)
     .maybeSingle();
   const row = data as { display_name?: string | null; name?: string | null } | null;
-  const rotulo = rotuloDoContato({ display_name: row?.display_name ?? null, name: row?.name ?? null, phone_number: fromNumber });
+  const rotulo = rotuloDoContato({ display_name: row?.display_name, name: row?.name, phone_number: fromNumber });
   if (rotulo === SEM_NOME || rotulo === phoneForDisplay(fromNumber)) return null;
   return rotulo;
 }

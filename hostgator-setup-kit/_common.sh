@@ -765,9 +765,13 @@ ghcr_status() {
 # impossíveis, e o kit as construiria na VPS **em silêncio**, do topo da main:
 # app de uma release + worker/scheduler de outro código. Exatamente a mistura de
 # versões que a doutrina existe para proibir, no caminho de primeira impressão.
+# O nome ficou de quando eram três; hoje são quatro, e a lista acompanha a
+# matriz de publish-image.yml — quem cobra é
+# tests/unit/listas-de-imagens-seguem-matriz.test.ts. Renomear a função
+# quebraria o leitor daquele teste sem ganhar nada: o que importa é a lista.
 trio_publicado() {
   local tag="$1" i
-  for i in deskcommcrm deskcomm-worker deskcomm-scheduler; do
+  for i in deskcommcrm deskcomm-worker deskcomm-scheduler deskcomm-voice-agent; do
     [ "$(ghcr_status "$i" "$tag")" = "200" ] || return 1
   done
   return 0

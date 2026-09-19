@@ -33,7 +33,11 @@ import { pcm16ToUlaw, ulawToPcm16 } from "@/lib/voip/ulaw";
 // Fallback só pra quem ainda não configurou nada na aba Voz do agente
 // (config.voice_model) -- normalmente this.ctx.voiceModel já vem preenchido
 // pelo worker, que lê do agente antes de instanciar esta classe.
-const REALTIME_MODEL_FALLBACK = process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime";
+// `??` NÃO serve aqui: o `.env.example` entrega `OPENAI_REALTIME_MODEL=` VAZIA,
+// e quem copia o exemplo receberia a string vazia no lugar do padrão — o nome
+// do modelo iria vazio para a API. Vazio (ou só espaço) conta como ausente,
+// mesma regra de `graphVersion()` em lib/graph-version.ts.
+const REALTIME_MODEL_FALLBACK = process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime";
 
 const FRAME_TYPE = { HANGUP: 0x00, UUID: 0x01, DTMF: 0x03, AUDIO: 0x10 } as const;
 

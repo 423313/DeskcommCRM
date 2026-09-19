@@ -320,15 +320,17 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/ai/credentials",
-    label: "Credenciais de IA",
+    label: "Credenciais",
     description: "A chave do provedor de IA que os agentes usam para pensar.",
     icon: "Key",
-    // "organizacao"/"Sua empresa", não "ia": era alcançável só digitando a
-    // URL -- não tinha `sidebar: true` nem aparecia em nenhum hub, e ninguém
-    // achava. Junto de Billing/Meta Ads (outras "conecte uma conta" do
-    // negócio) é onde quem procura "cadastrar uma chave" de fato olha.
-    group: "organizacao",
-    section: "Sua empresa",
+    // VOLTOU para "ia"/"Montar o agente" na triagem, e a razão de quem tinha
+    // movido VENCEU em vez de estar errada: quando este PR nasceu, a tela não
+    // aparecia em hub nenhum e só se chegava nela digitando a URL. Depois
+    // disso a main ganhou o hub de IA, que a lista — e `tests/unit/nav-hub`
+    // cobra a entrada ali, inclusive em espanhol. Movê-la para "Sua empresa"
+    // agora tiraria a tela do lugar onde o hub promete que ela está.
+    group: "ia",
+    section: "Montar o agente",
     minRole: "manager",
   },
   {
