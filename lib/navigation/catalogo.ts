@@ -259,7 +259,17 @@ export const NAV_CATALOG = [
     icon: "Receipt",
     group: "crm",
     section: "O dia a dia da venda",
-    sidebar: true,
+    // ⚠️ FORA do sidebar, e isto foi MEDIDO, não escolhido por gosto. Com
+    // `sidebar: true` o menu passou a rolar em 1280×900 e o e2e
+    // `navegacao.spec.ts` ("nenhum grupo fica fora da dobra") reprovou — grupo
+    // abaixo da dobra é indistinguível de grupo que não existe. A regra escrita
+    // no comentário de densidade do `Sidebar.tsx` é esta: grupo COM hub não
+    // ganha linha nova no menu, a tela mora dentro do hub. O CRM tem hub desde
+    // Tarefas (PR #546), e raspar 4px de densidade de novo só adiaria a mesma
+    // conversa para a próxima tela.
+    //
+    // O balcão continua a um clique: CRM › Ver tudo em CRM › "O dia a dia da
+    // venda", e pelo ⌘K digitando "comanda".
     minRole: "viewer",
   },
   {

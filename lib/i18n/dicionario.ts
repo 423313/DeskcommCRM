@@ -6911,6 +6911,9 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma comissão no período.": { es: "Ninguna comisión en el período." },
   "Comandas": { es: "Comandas" },
   "Comanda": { es: "Comanda" },
+  "Finalizada": { es: "Finalizada" },
+  "Regra de comissão": { es: "Regla de comisión" },
+  "Lançamento recorrente": { es: "Asiento recurrente" },
   "O que foi feito, por quem, e quanto o cliente paga.": {
     es: "Lo que se hizo, por quién, y cuánto paga el cliente.",
   },

@@ -17,6 +17,7 @@ import { useState } from "react";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { formatCents } from "@/lib/money";
 
 import { ListaDeLancamentos, type Conta, type Lancamento } from "./_lancamentos";
@@ -88,10 +89,11 @@ export function Faturamento({ podeLancar }: { podeLancar: boolean }) {
       ).data,
   });
 
-  const nomeDoContato = (id: string) => {
-    const c = (contatos.data ?? []).find((x) => x.id === id);
-    return c?.display_name ?? c?.name ?? t("Cliente");
-  };
+  const nomeDoContato = (id: string) =>
+    rotuloDoContato(
+      (contatos.data ?? []).find((x) => x.id === id),
+      t,
+    );
 
   const lancamentos = useQuery({
     queryKey: ["lancamentos", de, ate],

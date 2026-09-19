@@ -256,8 +256,15 @@ create trigger trg_financial_entries_imutavel
   for each row execute function public.fn_lancamento_pago_e_imutavel();
 
 -- ─── a numeração que não reinicia ────────────────────────────────────────────
+-- ⚠️ `security invoker` (o default), e NÃO definer, de propósito. Ela só LÊ
+-- `public.sales`, e a RLS daquela tabela já é a cerca: com a sessão de quem
+-- chama, o `max(number)` só enxerga a própria organização. Definer aqui
+-- responderia a qualquer usuário logado qual é o número da próxima comanda de
+-- QUALQUER organização — que é exatamente o volume de vendas do vizinho, o
+-- vazamento que o comentário abaixo diz querer evitar. A varredura
+-- `tests/invariants/definer-membership-varredura.test.ts` mede isso.
 create or replace function public.fn_proximo_numero_de_comanda(p_org uuid)
-returns bigint language sql security definer set search_path = public as $$
+returns bigint language sql stable set search_path = public as $$
   -- `coalesce(max)+1` sob o lock da transação de quem chama. Uma sequence do
   -- Postgres seria global e vazaria volume entre tenants; e o buraco de uma
   -- sequence (números pulados no rollback) faria a numeração de uma comanda

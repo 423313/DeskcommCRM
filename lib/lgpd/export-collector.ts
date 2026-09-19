@@ -123,6 +123,32 @@ export interface AppointmentRow {
 }
 
 /**
+ * A comanda do titular (migrations 0350-0359).
+ *
+ * Entra porque a anonimização APAGA: a 0359 pôs `sales` na cascata de redação
+ * (`notes`, `cancel_reason`, `reverse_reason`), e neste repo redigir e exportar
+ * andam juntos. Valor, forma de pagamento e datas a cascata PRESERVA — é
+ * registro financeiro da organização —, e ainda assim entram aqui pela mesma
+ * razão que `starts_at` da agenda entra: "gastei tanto, em tal dia, pago
+ * assim" é informação a respeito dele, e é a mais legível deste bloco.
+ *
+ * Os ITENS não entram: `sale_items.description` é o nome do serviço, não dado
+ * de pessoa, e a cascata não o toca — as duas pontas continuam espelhadas.
+ */
+export interface SaleRow {
+  id: string;
+  number: number;
+  status: string;
+  total_cents: number;
+  currency: string;
+  notes: string | null;
+  cancel_reason: string | null;
+  reverse_reason: string | null;
+  finalized_at: string | null;
+  created_at: string;
+}
+
+/**
  * Tarefa combinada SOBRE a pessoa (migration 0210).
  *
  * ⚠️ ESTE BLOCO NASCEU COM A OUTRA METADE, e não depois dela. A migration liga o
@@ -368,6 +394,7 @@ export interface ExportPayload {
   orders: OrderRow[];
   activities: ActivityRow[];
   appointments: AppointmentRow[];
+  sales: SaleRow[];
   tasks: TaskRow[];
   webhook_captures: CaptureRow[];
   audit_log_extract: AuditRow[];
@@ -751,6 +778,34 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       });
     } else if (data) {
       appointments = data;
+    }
+  }
+
+  // Comandas — contact_id direto em sales (migrations 0350-0359).
+  //
+  // A 0359 acrescentou esta tabela à cascata de redação; este bloco é a outra
+  // metade, escrita no mesmo PR. Sem ele, o titular pediria acesso e receberia
+  // um relatório que não menciona nenhuma compra que ele fez — o defeito que
+  // `tests/unit/lgpd-exporta-o-que-redige.test.ts` existe para pegar, e que
+  // pegou este bloco antes de ele ser escrito.
+  let sales: SaleRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("sales")
+      .select(
+        "id, number, status, total_cents, currency, notes, cancel_reason, reverse_reason, finalized_at, created_at",
+      )
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] sales load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      sales = data;
     }
   }
 
@@ -1155,6 +1210,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     orders,
     activities,
     appointments,
+    sales,
     tasks,
     webhook_captures,
     audit_log_extract,
@@ -1195,6 +1251,7 @@ function emptyPayload(
     orders: [],
     activities: [],
     appointments: [],
+    sales: [],
     tasks: [],
     webhook_captures: [],
     audit_log_extract: [],
