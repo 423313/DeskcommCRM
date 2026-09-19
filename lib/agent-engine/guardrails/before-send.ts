@@ -452,9 +452,66 @@ export const internalVocabularyGate: Gate = {
  * [...] e te passo assim que tiver a confirmação", "estou confirmando com a equipe os
  * horários disponíveis" — não uma gramática geral de intenção, que erraria para o lado do
  * falso positivo em texto livre de WhatsApp.
+ *
+ * ─── #1019: o SERVIÇO também é substantivo de agenda, e "organizar" é checagem ──
+ *
+ * Medido no relato: com as três capacidades de agenda ligadas, o agente chamou
+ * `crm_list_event_types` 7× (todas com sucesso no `api_audit_log`) e zero vezes
+ * `crm_find_free_slots`; o texto que saiu foi "vou verificar/organizar seu atendimento".
+ * O gate estava armado e passou batido — duas faltas na lista, uma por frase:
+ *
+ *   - SUBSTANTIVO: "atendimento" não estava lá, e é a palavra que este produto usa para
+ *     o serviço que se agenda — o rótulo da capacidade é literalmente "Marcar consulta ou
+ *     sessão". Quem marca é `crm_book_appointment`; quem tem agenda marcada é o serviço,
+ *     com o nome que a TELA dá a ele. `consulta` e `sess[aã]?o` entram pelo mesmo motivo
+ *     (e `sess[aã]?o` aceita a forma sem acento porque o corpo chega normalizado).
+ *   - VERBO: "organizar" não estava na lista. O modelo não prometeu verificar — prometeu
+ *     ORGANIZAR, que é a mesma promessa vazia vista de outro ângulo.
+ *
+ * O falso positivo que se abre com isto é texto de conversa comum ("o atendimento de vocês
+ * é ótimo") — que NÃO casa, porque o padrão continua exigindo as três partes na ordem
+ * (intenção + checagem + substantivo, a ≤80 chars). O preço aceito é o outro lado: com
+ * agenda ativa e sem ferramenta chamada, "vou organizar seu atendimento" não tem versão
+ * aceitável — o agente tem como checar antes de prometer.
+ *
+ * ─── #1038 (item A): o substantivo do SERVIÇO colado ao verbo de checagem ──────
+ *
+ * O recorte da #1019 VETAVA DEMAIS, e isso foi MEDIDO, não suposto: extraído o literal
+ * deste arquivo e rodado contra nove frases, SEIS casavam no head e não casavam na main.
+ * A classe atingida é a de dois dos nichos centrais do produto — clínica e suporte:
+ *
+ *   "Vou confirmar se o plano cobre a consulta"
+ *   "Vou verificar o valor da sessão de fisioterapia"
+ *   "Vou consultar o resultado da sua consulta com o médico"
+ *   "Estou verificando o histórico do seu atendimento anterior"
+ *   "Vou verificar o status do seu pedido e já retorno sobre o atendimento"
+ *   "Vou organizar as informações do seu atendimento"
+ *
+ * Em todas, o substantivo do serviço aparece LONGE do verbo, como ASSUNTO (plano, valor,
+ * resultado, histórico, status, informações) — e o `[^.!?\n]{0,80}` casava assim mesmo.
+ * Com a agenda armada e sem ferramenta chamada no turno, cada uma dessas respostas era
+ * vetada: conteúdo legítimo sobre cobertura de plano, preço e histórico descartado por um
+ * substantivo que estava ali de passagem.
+ *
+ * O recorte estreitado (a "opção 1" do mantenedor): só para os substantivos do SERVIÇO
+ * (`atendimento`, `consulta`, `sess[aã]?o`) o casamento passa a exigir OBJETO DIRETO
+ * COLADO — verbo de checagem, artigo/possessivo OPCIONAL ("o", "a", "seu", "sua",
+ * "nosso"…) e o substantivo, sem nada entre eles. Daí: "vou verificar seu atendimento"
+ * casa (é a promessa do relato #1019, com ou sem artigo), "vou verificar o valor da
+ * sessão" não casa. Os substantivos de AGENDA (`horário`, `agenda`, `disponibilidade`,
+ * `agendamento`, `marcação`, `encaixe`, `vaga`) mantêm a folga de 80 chars: são eles que
+ * carregam as duas frases medidas do incidente original, em que o substantivo vem
+ * QUALIFICADO ("as opções de horário", "os horários disponíveis") e nunca colado.
+ *
+ * Preço declarado: com a agenda armada e sem ferramenta chamada, uma promessa em que o
+ * serviço aparece só como assunto deixa de ser vetada — é o que se paga para parar de
+ * vetar as seis. O que guarda esta fronteira é `tests/unit/gate-agenda-stall.test.ts`
+ * (as SEIS como controle NEGATIVO, ao lado dos controles que continuam vetando e do que
+ * continua passando). Nada aqui foi medido em produção; o custo real de um veto indevido
+ * segue não medido neste repo.
  */
 const AGENDA_STALL_PATTERN =
-  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar)\b[^.!?\n]{0,80}\b(hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b/i;
+  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar|organizando|organizar)\b(?:[^.!?\n]{0,80}\b(?:hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b|\s+(?:[oa]s?\s+)?(?:meu\s+|minha\s+|seu\s+|sua\s+|nosso\s+|nossa\s+|teu\s+|tua\s+)?(?:atendimento|consulta|sess[aã]?o)\b)/i;
 
 /**
  * Padrão irmão do `AGENDA_STALL_PATTERN`, mas para a outra metade do mesmo defeito: não

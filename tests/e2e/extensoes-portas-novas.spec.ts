@@ -34,6 +34,23 @@ const CLI = path.join(process.cwd(), "experiments", "extensoes", "catalog", "cat
 test.use({ trace: "on" });
 test.describe.configure({ mode: "serial" });
 
+/**
+ * TETO DO CASO, declarado — as três specs irmãs declaram o delas (120 s a 480 s) e esta não
+ * declarava nada, ficando com o padrão de 30 s do Playwright.
+ *
+ * Medido: o caso rodou 30,5 s e estourou DENTRO da navegação final, depois de admitir o
+ * catálogo, instalar, ativar, salvar, abrir o hub e abrir o guia. Não é lentidão do produto:
+ * é uma jornada de ponta a ponta que não cabe em 30 s nem numa máquina descansada.
+ *
+ * O valor vem da irmã de escopo equivalente (`extensoes-declarativas`, que também admite,
+ * instala e configura), em vez de um número escolhido por mim — um teto inventado ou vira
+ * apertado demais na primeira máquina cheia, ou esconde lentidão de verdade.
+ *
+ * NÃO MEDIDO: se a navegação final leva menos de um segundo com folga. O orçamento acabou
+ * durante ela, então ela não chegou a ser medida — só sei que o clique aconteceu.
+ */
+test.setTimeout(300_000);
+
 let atores: AtoresDasExtensoes | undefined;
 let bancada: Bancada | undefined;
 
