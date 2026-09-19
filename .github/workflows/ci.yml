@@ -207,64 +207,19 @@ jobs:
         if: matrix.parte == 1
         run: pnpm checar:colisao-de-migration
 
-      # O NÚMERO DESTE PR FOI TOMADO DEPOIS QUE A PRÉVIA NASCEU?
+      # POR QUE NÃO HÁ UMA CAMADA "o número foi tomado depois da prévia": o
+      # passo acima JÁ É ELA. O script busca a base no remoto no instante do job
+      # (`git fetch +refs/heads/<base>`) e compara contra `git ls-tree` dela —
+      # ou seja, contra a `main` de AGORA, não contra a base da prévia. Escrevi
+      # uma camada 1b antes de enxergar isso; ela era redundante, e ainda por
+      # cima CEGA: usava `gh api compare`, que devolve no máximo 300 arquivos em
+      # ordem alfabética, e `supabase/migrations` cai fora do corte — medido, o
+      # compare do #965 devolve 300 arquivos e ZERO migrations, com cinco
+      # colisões reais. Achado do @Maestro PRs na revisão do #1268.
       #
-      # O passo acima re-deriva contra a `main` FRESCA (o script busca a base no
-      # remoto), então ele não erra por base velha. O que envelhece é o RUN: o
-      # verify do #965 terminou em 16/09 e está verde até hoje com CINCO números
-      # que a `main` ganhou depois — naquele minuto eles estavam livres. Nenhuma
-      # lógica dentro do job conserta um job de três dias atrás; o que este passo
-      # faz é fechar a janela para quem roda de agora em diante.
-      #
-      # Mede COLISÃO, não ATRASO. Atraso é proxy e pinta de vermelho PR correto:
-      # há PR deliberadamente atrasado (o dono do corte pede para não trazer a
-      # `main` e gastar fila), e nenhum deles colide. Aqui o vermelho exige que o
-      # NNNN — ou o timestamp — que este PR acrescenta seja o MESMO que a base
-      # ganhou depois da prévia. Atraso sem colisão continua ::warning::, no passo
-      # que já existe para isso.
-      #
-      # Vigiado por tests/unit/colisao-de-migration-roda-no-ci.test.ts.
-      - name: O número deste PR foi tomado depois da prévia?
-        if: matrix.parte == 1 && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -uo pipefail
-          minhas=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" \
-                     --jq '.[]|select(.status=="added")|.filename' 2>/dev/null \
-                   | grep -oE '[0-9]{14}_[0-9]{4}' || true)
-          if [ -z "$minhas" ]; then
-            echo "este PR não acrescenta migration — nada a conferir aqui"; exit 0
-          fi
-          comp=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${GITHUB_BASE_REF:-main}" 2>/dev/null) || {
-            echo "::error::não consegui comparar a base da prévia com a ${GITHUB_BASE_REF:-main} — NÃO MEDIDO, e PR que acrescenta migration não passa sem esta medida."
-            exit 2; }
-          delas=$(printf '%s' "$comp" \
-                  | jq -r '.files[]?|select(.status=="added")|.filename|select(startswith("supabase/migrations/"))' \
-                  | grep -oE '[0-9]{14}_[0-9]{4}' || true)
-          if [ -z "$delas" ]; then
-            echo "a ${GITHUB_BASE_REF:-main} não ganhou migration desde a base desta prévia — nada pôde ser tomado."
-            exit 0
-          fi
-          falhou=0
-          while read -r meu; do
-            [ -z "$meu" ] && continue
-            n="${meu#*_}"; ts="${meu%%_*}"
-            bate_n=$(grep -E "_${n}$" <<<"$delas" | tr '\n' ' ' | sed 's/ *$//')
-            bate_t=$(grep -E "^${ts}_" <<<"$delas" | tr '\n' ' ' | sed 's/ *$//')
-            if [ -n "$bate_n" ]; then
-              echo "::error title=NNNN tomado depois da prévia::o ${n} deste PR foi ocupado por ${bate_n}, que entrou na ${GITHUB_BASE_REF:-main} depois da base desta prévia. Renumere (NNNN e TIMESTAMP juntos) — não há reserva, quem mescla primeiro fica com o número."
-              falhou=1
-            fi
-            if [ -n "$bate_t" ]; then
-              echo "::error title=Timestamp tomado depois da prévia::o ${ts} deste PR foi ocupado por ${bate_t}. O Supabase usa o timestamp como identidade da migration."
-              falhou=1
-            fi
-          done <<<"$minhas"
-          [ "$falhou" = 0 ] || exit 1
-          echo "a ${GITHUB_BASE_REF:-main} ganhou migration desde a prévia, e nenhum número deste PR foi tomado."
+      # O que sobra de verdade é o RUN envelhecer: o verify do #965 terminou em
+      # 16/09 e segue verde. Isso não se conserta dentro do job — quem fecha é o
+      # vigia periódico (.github/workflows/vigia-de-colisao.yml).
 
       # E A ÁRVORE INTEIRA, fora de pull_request — porque lá o passo acima é
       # INERTE: em push HEAD é a própria base, nada foi "acrescentado", e ele sai

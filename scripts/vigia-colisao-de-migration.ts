@@ -98,6 +98,25 @@ export function acao(
   return { tipo: "editar", id: anterior.id };
 }
 
+/**
+ * `gh api --paginate` com `--jq` de ARRAY emite **um array por página**, e o
+ * `JSON.parse` morre no segundo. Medido em 19/09/2026 no #677 (112 comentários,
+ * 2 páginas): "Unexpected non-whitespace character after JSON at position 1".
+ * Achado do @Maestro PRs na revisão do #1268 — a primeira versão deste script
+ * morria no 16º PR da fila, ANTES dos que motivaram o trabalho.
+ */
+export function juntaPaginas<T>(saida: string): T[] {
+  const itens: T[] = [];
+  for (const pedaco of saida.split("\n")) {
+    const linha = pedaco.trim();
+    if (!linha) continue;
+    const parcial = JSON.parse(linha) as T[] | T;
+    if (Array.isArray(parcial)) itens.push(...parcial);
+    else itens.push(parcial);
+  }
+  return itens;
+}
+
 // ── daqui para baixo, só I/O ────────────────────────────────────────────────
 function gh(args: string[]): string {
   return execFileSync("gh", args, { encoding: "utf-8", maxBuffer: 32 * 1024 * 1024 });
@@ -113,40 +132,64 @@ function main(): void {
     .filter((l) => l.endsWith(".sql"));
   if (naBase.length < 100) throw new Error(`li ${naBase.length} migrations na base — a sonda perdeu o caminho`);
 
-  const abertos = JSON.parse(gh(["pr", "list", "--state", "open", "--limit", "200", "--json", "number"])) as {
-    number: number;
-  }[];
-  let avisados = 0;
-  for (const { number } of abertos) {
-    const arquivos = gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", '.[]|select(.status=="added")|.filename'])
-      .split("\n")
-      .filter((f) => /^supabase\/migrations\/[^/]+\.sql$/.test(f));
-    if (arquivos.length === 0) continue;
-
-    const achados = colisoes(arquivos, naBase);
-    const comentarios = JSON.parse(
-      gh(["api", "--paginate", `repos/${repo}/issues/${number}/comments`, "--jq", "[.[]|{id,body}]"]),
-    ) as { id: number; body: string }[];
-    const anterior = comentarios.find((c) => c.body.includes(MARCADOR)) ?? null;
-    const corpo = achados.length > 0 ? corpoDoAviso(achados, naBase) : null;
-    const decisao = acao(anterior, corpo);
-
-    console.log(`#${number}: ${arquivos.length} migration(ões), ${achados.length} colisão(ões) → ${decisao.tipo}`);
-    if (!escrever) continue;
-
-    if (decisao.tipo === "criar") {
-      gh(["pr", "comment", String(number), "--body", corpo!]);
-      gh(["pr", "edit", String(number), "--add-label", ROTULO]);
-      avisados++;
-    } else if (decisao.tipo === "editar") {
-      gh(["api", "-X", "PATCH", `repos/${repo}/issues/comments/${decisao.id}`, "-f", `body=${corpo}`]);
-      avisados++;
+  // O rótulo não nasce sozinho: `gh pr edit --add-label` com rótulo inexistente
+  // ABORTA — e abortaria DEPOIS de já ter comentado. Criar é idempotente.
+  if (escrever) {
+    try {
+      gh(["label", "create", ROTULO, "--color", "B60205", "--description", "o número da migration deste PR foi tomado depois", "--force"]);
+    } catch {
+      // já existe, ou sem permissão para criar: o `--add-label` abaixo dirá.
     }
-    // Colisão resolvida: o rótulo sai, o comentário FICA (o histórico do que
-    // aconteceu é do PR), e nenhuma edição nova é feita.
-    if (achados.length === 0 && anterior) gh(["pr", "edit", String(number), "--remove-label", ROTULO]);
+  }
+
+  const abertos = juntaPaginas<{ number: number }>(
+    gh(["pr", "list", "--state", "open", "--limit", "200", "--json", "number"]),
+  );
+  let avisados = 0;
+  const falhas: string[] = [];
+  for (const { number } of abertos) {
+    // Um PR que falha NÃO derruba a rodada: os que motivaram este trabalho
+    // estão no fim da fila (#1130, #965, #819 e os sete do financeiro).
+    try {
+      const arquivos = gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", '.[]|select(.status=="added")|.filename'])
+        .split("\n")
+        .filter((f) => /^supabase\/migrations\/[^/]+\.sql$/.test(f));
+      if (arquivos.length === 0) continue;
+
+      const achados = colisoes(arquivos, naBase);
+      const comentarios = juntaPaginas<{ id: number; body: string }>(
+        gh(["api", "--paginate", `repos/${repo}/issues/${number}/comments`, "--jq", "[.[]|{id,body}]"]),
+      );
+      const anterior = comentarios.find((c) => c.body.includes(MARCADOR)) ?? null;
+      const corpo = achados.length > 0 ? corpoDoAviso(achados, naBase) : null;
+      const decisao = acao(anterior, corpo);
+
+      console.log(`#${number}: ${arquivos.length} migration(ões), ${achados.length} colisão(ões) → ${decisao.tipo}`);
+      if (!escrever) continue;
+
+      if (decisao.tipo === "criar") {
+        gh(["pr", "comment", String(number), "--body", corpo!]);
+        avisados++;
+      } else if (decisao.tipo === "editar") {
+        gh(["api", "-X", "PATCH", `repos/${repo}/issues/comments/${decisao.id}`, "-f", `body=${corpo}`]);
+        avisados++;
+      }
+      // O rótulo acompanha o estado de AGORA, e entra depois do comentário: se
+      // ele falhar, o aviso já está lá (que é o que serve a quem contribuiu).
+      if (achados.length > 0) gh(["pr", "edit", String(number), "--add-label", ROTULO]);
+      else if (anterior) gh(["pr", "edit", String(number), "--remove-label", ROTULO]);
+    } catch (erro) {
+      falhas.push(`#${number}: ${(erro as Error).message.split("\n")[0]}`);
+    }
   }
   console.log(`${abertos.length} PR(s) abertos lidos; ${avisados} aviso(s) escrito(s).`);
+  if (falhas.length > 0) {
+    // Rodada com buraco não é rodada boa: quem lê o log precisa ver o que ficou
+    // sem medida, e o job precisa reprovar.
+    console.error(`NÃO MEDIDO em ${falhas.length} PR(s):`);
+    for (const f of falhas) console.error(`  ${f}`);
+    process.exitCode = 1;
+  }
 }
 
 if (process.argv[1]?.endsWith("vigia-colisao-de-migration.ts")) main();

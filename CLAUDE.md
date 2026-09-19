@@ -542,7 +542,7 @@ Processo padrão (siga sempre):
    instrução é que estava errada, não ele. Ordene pelo número, nunca pela listagem.
 
    **E o número livre hoje pode estar tomado quando o seu PR entrar.** A colisão só aparece
-   quando o SEGUNDO PR de schema é mesclado — medido em 19/09/2026: **12 PRs abertos colidiam
+   quando o SEGUNDO PR de schema é mesclado — medido em 19/09/2026: **11 PRs abertos colidiam
    com a `main` com os cinco checks obrigatórios verdes**. O `verify` **já executa** a guarda
    (`pnpm checar:colisao-de-migration`, o alias de `scripts/checar-colisao-de-migration.sh` —
    procurar pelo nome do arquivo no `ci.yml` devolve zero e mente), e mesmo assim os 12 passaram:

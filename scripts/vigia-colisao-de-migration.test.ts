@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MARCADOR, acao, colisoes, corpoDoAviso, identidade, proximoLivre } from "./vigia-colisao-de-migration";
+import { MARCADOR, acao, colisoes, corpoDoAviso, identidade, juntaPaginas, proximoLivre } from "./vigia-colisao-de-migration";
 
 const BASE = [
   "supabase/migrations/20260915193743_0263_etapa_de_perda.sql",
@@ -100,5 +100,30 @@ describe("acao — um comentário por PR, editado, nunca repetido", () => {
 
   it("colisão resolvida: não edita nem apaga — o histórico é do PR", () => {
     expect(acao({ id: 7, body: corpo }, null)).toEqual({ tipo: "nada" });
+  });
+});
+
+describe("juntaPaginas — o bug que matou a primeira versão no 16º PR", () => {
+  // `gh api --paginate` com `--jq` de ARRAY emite UM ARRAY POR PÁGINA. Medido no
+  // #677 (112 comentários, 2 páginas): JSON.parse lança "Unexpected
+  // non-whitespace character after JSON at position 1". Sem try/catch por PR,
+  // isso derrubava a rodada ANTES de chegar nos PRs que motivaram o trabalho.
+  it("uma página só continua funcionando", () => {
+    expect(juntaPaginas<{ id: number }>('[{"id":1},{"id":2}]')).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+  it("DUAS páginas viram uma lista — era aqui que o JSON.parse morria", () => {
+    const duasPaginas = '[{"id":1},{"id":2}]\n[{"id":3}]';
+    expect(() => JSON.parse(duasPaginas), "controle: o parse ingênuo tem de morrer").toThrow();
+    expect(juntaPaginas<{ id: number }>(duasPaginas)).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+  });
+
+  it("saída vazia vira lista vazia, não exceção", () => {
+    expect(juntaPaginas("")).toEqual([]);
+    expect(juntaPaginas("\n\n")).toEqual([]);
+  });
+
+  it("objeto por linha (sem colchetes) também é aceito", () => {
+    expect(juntaPaginas<{ id: number }>('{"id":1}\n{"id":2}')).toEqual([{ id: 1 }, { id: 2 }]);
   });
 });
