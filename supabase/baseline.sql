@@ -27035,7 +27035,7 @@ returns setof followup_enrollments
 language sql
 security definer
 set search_path = public
-as $
+as $$
   with orgs as (
     -- Sem a condição de claim aqui de propósito: o lateral abaixo a aplica, e uma
     -- organização cujos vencidos estão todos com lease apenas devolve zero linhas.
@@ -27083,7 +27083,7 @@ as $
      -- invariante de concorrência (followup-schema.test.ts).
      and (e.claimed_until is null or e.claimed_until < now())
   returning e.*;
-$;
+$$;
 
 revoke execute on function fn_claim_due_followup_enrollments(int, int) from public, anon, authenticated;
 grant execute on function fn_claim_due_followup_enrollments(int, int) to service_role;
