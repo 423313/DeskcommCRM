@@ -363,7 +363,17 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
     // não tem chave de IA (ver J1.7; o canal existe desde o QR de J1.5) — e
     // rascunho não responde. A tela tem de dizer isso em vez de oferecer um
     // ensaio que nunca funcionaria.
-    await expect(page.getByText(/rascunho/i)).toBeVisible();
+    //
+    // A asserção mora no aviso (`role="status"`), e não em "a palavra aparece
+    // em algum lugar da página": no run 35407985023 o `getByText(/rascunho/i)`
+    // casou DOIS nós — o `<strong>` da frase e o parágrafo que explica —, os
+    // dois certos, e o strict mode reprovou a sonda, não o produto. Prender o
+    // aviso e exigir as DUAS frases é mais estreito do que era antes: diz o
+    // ESTADO (não foi para o ar) e a CONSEQUÊNCIA (não há o que ensaiar).
+    const aviso = page.getByRole("status").filter({ hasText: /rascunho/i });
+    await expect(aviso).toBeVisible();
+    await expect(aviso).toContainText(/ainda não foi para o ar/i);
+    await expect(aviso).toContainText(/não responde mensagem/i);
     await snap(page, "j1.24-testar-rascunho");
 
     await page.getByRole("button", { name: /^continuar$/i }).click();
