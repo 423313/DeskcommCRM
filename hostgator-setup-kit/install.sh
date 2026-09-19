@@ -2144,6 +2144,9 @@ fi
 # ── 11. Automações (cron do drain de eventos) ───────────────────────────────
 step "Ativando as automações"
 ensure_encryption_key .env
+# A senha desta instalação nasceu agora e vai para um arquivo, nunca para a
+# linha do crontab: não há o que trocar depois (ver trocar_segredo_do_cron_vazado).
+marcar_segredo_do_cron_como_novo
 setup_event_log_drain_cron
 setup_update_agent_cron
 
