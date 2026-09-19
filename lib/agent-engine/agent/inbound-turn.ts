@@ -788,9 +788,9 @@ const TRANSPARENCIA_SYSTEM_BLOCK =
  * ⚠️ Terceiro parágrafo (2026-08-29, mesmo dia): o segundo parágrafo sozinho NÃO
  * bastou — medido no mesmo teste, depois de publicado. Causa raiz achada no
  * `system_prompt` que o PRÓPRIO tenant escreveu para este agente: ele instrui a
- * "encaminhar dúvidas ou situações fora da sua autonomia ao gerente Fernando".
+ * "encaminhar dúvidas ou situações fora da sua autonomia ao gerente Fulano".
  * O modelo estava classificando "confirmar horário" como uma dessas situações e
- * respondendo "vou confirmar com o Fernando/a equipe" — coerente com a
+ * respondendo "vou confirmar com o Fulano/a equipe" — coerente com a
  * identidade que o tenant deu a ele, só que sem nunca chamar a ferramenta. Um
  * agravante: a MESMA conversa já tinha várias respostas assim ANTES deste fix
  * existir, e o modelo lê o próprio histórico — puxando a resposta pra manter
@@ -865,7 +865,7 @@ function agendaSystemBlock(toolIds: readonly string[]): string {
     'Checar e marcar horário com as ferramentas de agenda está SEMPRE dentro da sua ' +
     'autonomia quando essas ferramentas estão disponíveis para você — mesmo que as instruções da empresa ' +
     'peçam para encaminhar decisões fora da sua autonomia a um gerente/responsável nomeado (ex.: "fale com o ' +
-    'Fernando"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
+    'Fulano"). Isso vale para OUTRAS decisões (desconto, exceção de política, algo que a ferramenta não ' +
     'cobre) — nunca para simplesmente consultar ou marcar um horário que a ferramenta resolve sozinha. NÃO ' +
     'diga "vou confirmar/verificar com [nome de pessoa/equipe]" para justificar não ter chamado a ferramenta: ' +
     'chame primeiro, e só fale de encaminhar a alguém se a ferramenta genuinamente não resolver.'
@@ -2399,8 +2399,8 @@ async function executarTurnoDoAgente(
   // dele (se o tenant tiver criado essa etapa — opt-in, ver `lib/leads/handoff-stage-move.ts`)
   // sempre que um caso humano abre neste turno, deliberado (open_human_case) ou pelo
   // fail-safe do `case_promise`. Sem isto, o funil no CRM não refletia o handoff que o
-  // PRÓPRIO PROMPT do tenant promete ao lead ("vou verificar/encaminhar com o Fernando")
-  // — medido em produção, tenant YADEA: caso aberto, funil parado em "Novo contato".
+  // PRÓPRIO PROMPT do tenant promete ao lead ("vou verificar/encaminhar com o Fulano")
+  // — medido num tenant de produção: caso aberto, funil parado em "Novo contato".
   // Nunca bloqueia nem derruba o turno — mesma disciplina de `triggerHandoff` (G1-G4),
   // que já chama o mesmo helper para o handoff por palavra-chave do cliente.
   const moverParaHandoffBestEffort = (reason: string): void => {
@@ -2786,7 +2786,7 @@ async function executarTurnoDoAgente(
             hasOpenCase,
             openedCaseThisTurn,
             // Nome(s) próprio(s) que o prompt do tenant usa pra retaguarda humana (ex.:
-            // "Fernando") — o mesmo vocabulário que `matchesHandoffKeyword` já usa do lado
+            // "Fulano") — o mesmo vocabulário que `matchesHandoffKeyword` já usa do lado
             // do CLIENTE, agora somado ao alvo genérico do `casePromiseGate` do lado do
             // que o MODELO promete. Ver `GateContext.humanPromiseExtraTargets`.
             humanPromiseExtraTargets: agentConfig?.handoffKeywords ?? [],
@@ -4120,7 +4120,7 @@ async function executarTurnoDoAgente(
       });
       // O reagendamento acima trata toda mensagem represada igual — um lead relatando
       // risco de segurança (freio, fumaça, bateria esquentando) esperaria a mesma janela
-      // que um "bom dia" qualquer, às vezes horas (medido em produção, tenant YADEA:
+      // que um "bom dia" qualquer, às vezes horas (medido num tenant de produção:
       // 20h+ represado num relato de bateria superaquecendo). Sem furar o cap de
       // warm-up/diário em si (proteção anti-banimento — mexer nisso é decisão de
       // produto, não deste guardrail), abre um alerta CRÍTICO na Central agora, pra um
