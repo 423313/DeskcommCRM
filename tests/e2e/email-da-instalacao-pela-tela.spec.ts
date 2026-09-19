@@ -220,11 +220,20 @@ test.describe("o servidor de e-mail da instalação, pela tela", () => {
     expect(email, "sem `admin` no .e2e-creds.json").toBeTruthy();
     await loginComTotp(page, email!, secret!);
 
-    const resposta = await page.goto("/admin/email");
+    await page.goto("/admin/email");
 
-    // 404 e não 403: a tela da instalação não anuncia a própria existência a
-    // quem administra uma empresa. Mesma decisão de /admin/meta e /admin/google.
-    expect(resposta?.status(), "a tela da instalação respondeu a um admin de tenant").toBe(404);
+    // O que o produto FAZ, medido: o layout de `/admin/(protected)` roda
+    // `requirePlatformAdmin()` ANTES da página, e quem não tem linha ativa em
+    // `platform_admins` é REDIRECIONADO para `/admin/forbidden`. O `notFound()`
+    // da página é o segundo cadeado (ele vale se o layout for movido) e por isso
+    // nunca chega a rodar aqui.
+    //
+    // Esta asserção pedia 404 e recebia 200 — o 200 da tela de recusa, para onde
+    // o redirect leva. Medir o STATUS da navegação final não distingue "foi
+    // barrado" de "entrou": as duas coisas são 200. Quem distingue é ONDE ele
+    // parou e o que a tela mostra.
+    await expect(page).toHaveURL(/\/admin\/forbidden(\?|$)/);
+    await expect(page.getByTestId("smtp-salvar")).toHaveCount(0);
   });
 });
 
