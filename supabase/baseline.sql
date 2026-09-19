@@ -27952,14 +27952,25 @@ comment on column public.user_organizations.provisional_until_handover is
 create table if not exists public.platform_settings (
   id           smallint    primary key default 1,
   signup_mode  text        not null default 'aberto',
+  -- Comportamento da instalação (0331). NULAS de propósito: null = "a
+  -- instalação não opinou" e quem responde é o arquivo de ambiente, o que faz
+  -- a migration não mudar comportamento de quem nunca abrir a tela.
+  orcamento_de_ia              text,
+  exigir_assinatura_no_webhook boolean,
+  divulgacao_de_pagamento      text,
+  promessa_semantica           boolean,
   updated_at   timestamptz not null default now(),
   updated_by   uuid,
   constraint platform_settings_singleton check (id = 1),
-  constraint platform_settings_signup_mode check (signup_mode in ('aberto', 'so_convite'))
+  constraint platform_settings_signup_mode check (signup_mode in ('aberto', 'so_convite')),
+  constraint platform_settings_orcamento_de_ia
+    check (orcamento_de_ia is null or orcamento_de_ia in ('on', 'avisar', 'off')),
+  constraint platform_settings_divulgacao_de_pagamento
+    check (divulgacao_de_pagamento is null or divulgacao_de_pagamento in ('inject', 'veto'))
 );
 
 comment on table public.platform_settings is
-  'Configuração da INSTALAÇÃO (não do tenant) — linha única id=1. Hoje só a política de cadastro. Lida/escrita apenas server-side (service_role); a ausência da linha significa o default, que é o comportamento anterior à 0253. Ver lib/auth/politica-de-cadastro.ts.';
+  'Configuração da INSTALAÇÃO (não do tenant) — linha única id=1. Hoje a política de cadastro e o COMPORTAMENTO (orçamento de IA, assinatura de webhook, divulgação de pagamento, conferência de promessa). Coluna nula = a instalação não opinou, e quem responde é o arquivo de ambiente. Lida/escrita apenas server-side (service_role); a ausência da linha significa o default. Ver lib/auth/politica-de-cadastro.ts e lib/instalacao/comportamento.ts.';
 
 comment on column public.platform_settings.signup_mode is
   'aberto = qualquer pessoa cria conta em /signup (comportamento histórico). so_convite = só quem chega com convite válido; sem convite, /signup recusa com tela e /auth/confirm NÃO provisiona organização.';
@@ -27977,6 +27988,46 @@ drop trigger if exists trg_platform_settings_touch on public.platform_settings;
 create trigger trg_platform_settings_touch
   before update on public.platform_settings
   for each row execute function public.fn_touch_updated_at();
+
+notify pgrst, 'reload schema';
+
+-- ---- comportamento da instalação (migration 0331) ----
+-- O `create table if not exists` acima só age em instalação NOVA: quem já tem
+-- `platform_settings` (desde a 0253, v1.25.0) passa por ele sem efeito no
+-- `update.sh`, e as quatro colunas nunca nasceriam. Este bloco é o espelho da
+-- migration 0331 e é o que as leva a quem ATUALIZA. NULAS e sem default, de
+-- propósito: null = "a instalação não opinou", e quem responde é o `.env`.
+-- Sem dado a corrigir antes das CHECKs: as colunas nascem nulas, e as CHECKs
+-- aceitam null.
+alter table public.platform_settings
+  add column if not exists orcamento_de_ia              text,
+  add column if not exists exigir_assinatura_no_webhook boolean,
+  add column if not exists divulgacao_de_pagamento      text,
+  add column if not exists promessa_semantica           boolean;
+
+alter table public.platform_settings
+  drop constraint if exists platform_settings_orcamento_de_ia;
+alter table public.platform_settings
+  add constraint platform_settings_orcamento_de_ia
+  check (orcamento_de_ia is null or orcamento_de_ia in ('on', 'avisar', 'off'));
+
+alter table public.platform_settings
+  drop constraint if exists platform_settings_divulgacao_de_pagamento;
+alter table public.platform_settings
+  add constraint platform_settings_divulgacao_de_pagamento
+  check (divulgacao_de_pagamento is null or divulgacao_de_pagamento in ('inject', 'veto'));
+
+comment on column public.platform_settings.orcamento_de_ia is
+  'on = a IA respeita o teto de gasto que cada organização escolheu (default do produto, e o que o .env declara). avisar = a IA responde e apenas avisa quem opera. off = sem proteção de gasto. null = a instalação não opinou; vale AI_BUDGET_ENFORCEMENT do arquivo de ambiente. Só AFROUXA o que a organização escolheu: nunca liga proteção que a empresa não pediu.';
+
+comment on column public.platform_settings.exigir_assinatura_no_webhook is
+  'true = toda entrega de webhook do canal precisa vir assinada com o segredo da sessão; sem assinatura (ou com assinatura errada) a entrega é recusada. null = a instalação não opinou; vale WAHA_WEBHOOK_REQUIRE_SIGNATURE do arquivo de ambiente (default do produto: false).';
+
+comment on column public.platform_settings.divulgacao_de_pagamento is
+  'inject = o texto de divulgação de pagamento entra na primeira mensagem. veto = o envio sem esse texto é bloqueado e devolvido ao modelo com a razão, para ele reescrever. null = a instalação não opinou; vale DISCLOSURE_MODE do arquivo de ambiente (default do produto: inject).';
+
+comment on column public.platform_settings.promessa_semantica is
+  'true = cada envio passa por uma conferência de modelo antes de sair, para não prometer o que a empresa não cumpre (custa uma chamada de modelo por envio). null = a instalação não opinou; vale PROMISE_SEMANTIC_ENABLED do arquivo de ambiente (default do produto: true).';
 
 notify pgrst, 'reload schema';
 
@@ -28275,6 +28326,58 @@ alter table public.platform_settings
 
 comment on column public.platform_settings.internal_destinations is
   'IPv4 e faixas CIDR IPv4 que a INSTALAÇÃO pode alcançar mesmo sendo rede interna — só para destinos configurados pela instalação, nunca por uma organização (decisão 22-d, #1004). null = nunca configurado pela tela: vale IA_DESTINOS_INTERNOS_PERMITIDOS do .env. Array vazio = nada autorizado. Ver lib/automation/destinos-internos-autorizados.ts.';
+
+notify pgrst, 'reload schema';
+
+-- ---- marcador do contato normalizado, no dado que já estava gravado (migration 0335) ----
+-- Issue #1224 (triagem do #1206), @webtecnica. A escrita passou a normalizar o
+-- marcador do contato nos quatro caminhos (ficha, importação por CSV, API e
+-- `crm_manage_tags`) pela MESMA função que o filtro usa para ler
+-- (lib/contacts/tag-normalizada.ts) — sem isso, `?tag=vip` não encontra o contato
+-- marcado como "VIP" e o chip do marcador não sai da ficha por remoção nenhuma.
+-- Este apêndice é o backfill do dado ANTERIOR, e é idempotente por
+-- `is distinct from`: aplicado numa VPS que já recebeu a migration 0335, nenhuma
+-- linha é tocada (o arquivo é aplicado inteiro em quem instala, e de novo em
+-- quem atualiza). A ordem é a mesma da aplicação — corta as pontas, minúsculas,
+-- teto de 40 caracteres, descarta o vazio e tira o repetido — e a ordem de
+-- primeira aparição é preservada (`with ordinality`) para a ficha do contato não
+-- reembaralhar os marcadores de quem já os tinha.
+update public.contacts c
+   set tags = sub.normalizados
+  from (
+    select ct.id, array_agg(ct.tag order by ct.ord) as normalizados
+      from (
+        -- `c2.id` NA CHAVE: sem ele o `distinct on` é global e guarda UMA
+        -- linha por marcador na TABELA INTEIRA — o segundo contato com "VIP"
+        -- perde o marcador, e a deduplicação atravessa organizações. A
+        -- consulta é válida, roda sem erro e sem aviso; o que denuncia é o
+        -- dado. Reproduzido em Postgres 17.6: {VIP,Suporte} virava {suporte}.
+        select distinct on (c2.id, left(lower(btrim(u.x)), 40))
+               c2.id,
+               left(lower(btrim(u.x)), 40) as tag,
+               u.ord
+          from public.contacts c2
+          cross join lateral unnest(c2.tags) with ordinality as u(x, ord)
+         where c2.tags is not null
+           and left(lower(btrim(u.x)), 40) <> ''
+         order by c2.id, left(lower(btrim(u.x)), 40), u.ord
+      ) ct
+     group by ct.id
+  ) sub
+ where c.id = sub.id
+   and c.tags is distinct from sub.normalizados;
+
+-- Marcador que era só espaço vira lista vazia: a sentença acima não alcança
+-- essas linhas (a subconsulta descarta o vazio) e o contato ficaria com um
+-- marcador invisível que nenhum filtro casa e nenhuma tela mostra.
+update public.contacts c
+   set tags = '{}'::text[]
+ where c.tags is not null
+   and cardinality(c.tags) > 0
+   and c.tags is distinct from '{}'::text[]
+   and not exists (
+     select 1 from unnest(c.tags) as x where left(lower(btrim(x)), 40) <> ''
+   );
 
 notify pgrst, 'reload schema';
 
