@@ -13,7 +13,7 @@ import { audit } from "@/lib/audit";
 export async function meetingAction(
   req: Request,
   context: { params: Promise<{ id: string }> },
-  action: "retry" | "deliver",
+  action: "retry" | "deliver" | "resend",
 ) {
   const denied = await requireSupportWrite();
   if (denied) return denied;
@@ -32,7 +32,10 @@ export async function meetingAction(
   if (
     !z.uuid().safeParse(id).success ||
     !parsed.success ||
-    (action === "deliver" && !parsed.data.conversation_id)
+    // `resend` exige a conversa igual ao `deliver`: a entrega tem destino, e
+    // quem reenvia escolhe para onde. Só o `retry` (refazer o link no Google)
+    // não tem conversa nenhuma envolvida.
+    (action !== "retry" && !parsed.data.conversation_id)
   )
     return fail(
       "validation_failed",

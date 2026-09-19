@@ -84,8 +84,21 @@ it("sent só desabilita na fronteira atual; mesmo UUID reaberto aceita novo cliq
     delivery_state: "sent",
     delivery_conversation_id: "conversation",
   };
+  // ⚠️ ESTE CASO MUDOU DE LADO, e o motivo importa.
+  //
+  // Ele cobrava `"Link já enviado"` DESABILITADO. Quem já enviou e precisa
+  // enviar de novo — o cliente apagou a conversa, trocou de número — não tinha
+  // caminho nenhum pelo produto: o botão era a única porta e estava trancada.
+  //
+  // Agora "já enviado" é o RÓTULO da ação de reenviar, e o que impede envio em
+  // dobro é a confirmação (do lado do banco, o `deliver` segue devolvendo
+  // `false` em estado `sent` — é a `resend` que passa reto).
   const view = show({ ...sent, delivery_authorization_current: true });
-  expect(screen.getByRole("button", { name: "Link já enviado" })).toBeDisabled();
+  const reenviar = screen.getByRole("button", { name: "Enviar de novo" });
+  expect(reenviar).toBeEnabled();
+  fireEvent.click(reenviar);
+  expect(screen.getByRole("dialog")).toHaveTextContent(/Mandar de novo/i);
+  expect(api.post).not.toHaveBeenCalled();
   view.unmount();
   show({ ...sent, delivery_authorization_current: false });
   fireEvent.click(screen.getByRole("button", { name: "Enviar link ao cliente" }));
@@ -95,6 +108,56 @@ it("sent só desabilita na fronteira atual; mesmo UUID reaberto aceita novo cliq
       expect.objectContaining({ conversation_id: "conversation" }),
     ),
   );
+});
+it("⛔ confirmar o reenvio dispara `resend`, e não `deliver`", async () => {
+  // Rota separada de propósito: o `deliver` devolve `false` em estado `sent`, e
+  // esse `false` é a proteção contra clique duplo. Se a tela mandasse `deliver`
+  // aqui, o reenvio simplesmente NÃO aconteceria — e o botão novo seria enfeite.
+  show({
+    ...initial,
+    state: "ready",
+    delivery_state: "sent",
+    delivery_conversation_id: "conversation",
+    delivery_authorization_current: true,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar de novo" }));
+  fireEvent.click(screen.getByRole("button", { name: "Mandar de novo" }));
+  await waitFor(() =>
+    expect(api.post).toHaveBeenCalledWith(
+      expect.stringContaining("/resend"),
+      expect.objectContaining({ conversation_id: "conversation" }),
+    ),
+  );
+});
+it("⛔ CONTROLE: cancelar a confirmação não manda nada", () => {
+  // Sem este par, uma tela que disparasse ao ABRIR a confirmação passaria no
+  // caso acima — e mandaria mensagem a quem só quis ver o que o botão faz.
+  show({
+    ...initial,
+    state: "ready",
+    delivery_state: "sent",
+    delivery_conversation_id: "conversation",
+    delivery_authorization_current: true,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar de novo" }));
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(api.post).not.toHaveBeenCalled();
+});
+it("⛔ aguardando CONTINUA trancado — repetir ali empilharia pedido a caminho", () => {
+  // O que destrancou foi só o `sent`. Em `waiting_for_link`/`queued` a entrega
+  // já está na fila, e um segundo pedido não a acelera: duplica.
+  for (const estado of ["waiting_for_link", "queued"]) {
+    const view = show({
+      ...initial,
+      state: "ready",
+      delivery_state: estado,
+      delivery_conversation_id: "conversation",
+      delivery_authorization_current: true,
+    });
+    expect(screen.getByRole("button", { name: "Envio já autorizado" })).toBeDisabled();
+    view.unmount();
+  }
 });
 it("bloqueios explicam autonomia versus opt-out sem sugerir repetir a mesma ação", () => {
   const view = show({ ...initial, delivery_state: "blocked", delivery_error: "force_human" });
