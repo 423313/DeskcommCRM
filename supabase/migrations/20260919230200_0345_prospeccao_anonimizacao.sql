@@ -309,7 +309,7 @@ begin
       'category', null, 'address', null, 'maps_url', null,
       'rating', null, 'reviews', null, 'emails', '[]'::jsonb, 'socials', '[]'::jsonb),
     status = 'skipped', service_boundary = null, error = null, updated_at = now()
-  -- MESMO predicado do update acima. Se os dois divergirem, a linha alcançada
+  -- MESMO predicado do bloco anterior. Se os dois divergirem, a linha alcançada
   -- por um e não pelo outro fica com `suppression_salt` semeado e os dados
   -- pessoais intactos — um estado que parece tratado e não está.
   where organization_id = p_organization_id
