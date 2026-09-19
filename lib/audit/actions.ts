@@ -682,6 +682,9 @@ export const AUDIT_ACTIONS = [
   // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
   // responde — a coluna `updated_at` se move por qualquer motivo.
   "ai.credential_updated",
+  // Rodada do canal-mudo-watcher que ABRIU ou FECHOU aviso (doc 11, decisão B).
+  // Só com efeito: varredura diária que não achou nada não é mutação.
+  "channel.canal_mudo_watcher_run",
   // A rodada do cron `followup-sem-agente` que MEXEU em alguma coisa: abriu
   // aviso de fluxo publicado que nenhum agente arma, fechou aviso cujo vínculo
   // apareceu, ou os dois. Rodada sem efeito não audita (CLAUDE.md §Audit log),
