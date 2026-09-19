@@ -198,7 +198,23 @@ export async function provisionExternalTenant(
     external_id: input.externalId,
   };
 
-  const reencontrar = async (): Promise<{ organizationId: string; ownerId: string } | null> => {
+  /**
+   * Reencontra o provisionamento anterior — e SÓ conclui por replay sobre um
+   * estado completo, completando o que faltar.
+   *
+   * ⚠️ O "e completar" não é zelo: era a MESMA falha do 409 eterno, com o
+   * desfecho pior. O INSERT do vínculo (logo abaixo) morrendo por timeout
+   * deixava a organização criada e sem admin nenhum; na repetição, este
+   * caminho achava a organização, devolvia `replay: true` e a rota respondia
+   * **200 afirmando que estava tudo certo**. Existia uma empresa, ela
+   * aparecia, e ninguém entrava nela — para sempre, porque o próprio caminho
+   * de recuperação era o que carimbava sucesso sobre o estado incompleto. No
+   * 409 pelo menos havia erro visível.
+   */
+  const reencontrarECompletar = async (): Promise<{
+    organizationId: string;
+    ownerId: string;
+  } | null> => {
     // O erro do SELECT NÃO some: falha transitória do PostgREST lida como "não
     // existe" manda o fluxo para o INSERT e o operador recebe `org insert
     // failed` no lugar da causa real.
@@ -219,10 +235,17 @@ export async function provisionExternalTenant(
     if (!ownerId) {
       throw new Error(`provisioning: replay sem admin encontrado para org ${data.id}`);
     }
+    await garantirAdminDaOrganizacao(admin, {
+      organizationId: data.id,
+      ownerId,
+      slug,
+      marcador,
+      requestId: input.requestId,
+    });
     return { organizationId: data.id, ownerId };
   };
 
-  const existente = await reencontrar();
+  const existente = await reencontrarECompletar();
   if (existente) return { ...existente, replay: true };
 
   const ownerId = await ensureExternalOwnerUser(admin, email, input.ownerName, marcador);
@@ -242,7 +265,7 @@ export async function provisionExternalTenant(
 
   if (orgError) {
     if (orgError.code === "23505") {
-      const corrida = await reencontrar();
+      const corrida = await reencontrarECompletar();
       if (corrida) return { ...corrida, replay: true };
     }
     throw new Error(`provisioning: org insert failed: ${orgError.message}`);
@@ -278,6 +301,106 @@ export async function provisionExternalTenant(
   });
 
   return { organizationId: org.id, ownerId, replay: false };
+}
+
+/**
+ * "Este vínculo está VIVO?" — a ÚNICA régua da pergunta, com ou sem
+ * organização escolhida.
+ *
+ * Duas perguntas do provisionamento dependem dela: se a conta que o GoTrue
+ * recusou é órfã (nenhum vínculo vivo com organização NENHUMA) e se o replay
+ * está completo (vínculo vivo de admin com ESTA organização). Escrever o
+ * predicado duas vezes é como as duas divergem — uma ganharia o filtro de
+ * `revoked_at` que a outra perdeu, e o lado sem o filtro passaria a chamar de
+ * vivo o que alguém revogou.
+ *
+ * Erro NÃO vira `null`: "não consegui ler" lido como "não há vínculo" faria a
+ * órfã ser reaproveitada e o replay reinserir por cima de estado que ele não
+ * enxergou.
+ */
+async function vinculoVivo(
+  admin: ReturnType<typeof createAdminClient>,
+  filtro: { userId: string; organizationId?: string },
+): Promise<{ organizationId: string; role: string } | null> {
+  let consulta = admin
+    .from("user_organizations")
+    .select("organization_id, role")
+    .eq("user_id", filtro.userId)
+    .is("revoked_at", null);
+  if (filtro.organizationId) {
+    consulta = consulta.eq("organization_id", filtro.organizationId);
+  }
+  const { data, error } = await consulta.limit(1).maybeSingle();
+  if (error) {
+    throw new Error(`provisioning: busca do vínculo do dono falhou: ${error.message}`);
+  }
+  return data ? { organizationId: data.organization_id, role: data.role } : null;
+}
+
+/**
+ * Completa o vínculo de admin que uma tentativa anterior não chegou a gravar.
+ *
+ * ⚠️ NÃO RESSUSCITA ACESSO QUE UMA PESSOA TIROU, e isso é decisão, não
+ * acidente do INSERT. `user_organizations` tem `unique (user_id,
+ * organization_id)` (baseline.sql:2441), então, quando existe linha revogada
+ * — ou quando um humano rebaixou o dono para `viewer` —, o INSERT volta
+ * `23505` e não muda nada. É o desfecho desejado: um sistema de FORA
+ * devolvendo acesso que o administrador da empresa removeu seria porta nova.
+ * Por isso o `23505` sai daqui em silêncio (nada mudou, nada a auditar) em vez
+ * de virar `update`.
+ *
+ * O caso que ele conserta é o outro: linha nenhuma, porque o INSERT original
+ * morreu no meio.
+ */
+async function garantirAdminDaOrganizacao(
+  admin: ReturnType<typeof createAdminClient>,
+  p: {
+    organizationId: string;
+    ownerId: string;
+    slug: string;
+    marcador: MarcadorDeProvisionamento;
+    requestId?: string;
+  },
+): Promise<void> {
+  const vivo = await vinculoVivo(admin, {
+    userId: p.ownerId,
+    organizationId: p.organizationId,
+  });
+  if (vivo?.role === "admin") return;
+
+  const { error } = await admin.from("user_organizations").insert({
+    user_id: p.ownerId,
+    organization_id: p.organizationId,
+    role: "admin",
+    accepted_at: new Date().toISOString(),
+  });
+  if (error && error.code !== "23505") {
+    throw new Error(`provisioning: completar o vínculo do dono falhou: ${error.message}`);
+  }
+  // Sobrou só `23505`: já havia linha (revogada, rebaixada, ou corrida com
+  // outra chamada). Nada mudou — e o que não teve efeito não audita.
+  if (error) return;
+
+  // O conserto DEIXA RASTRO. Sem esta linha, a organização que nasceu de uma
+  // tentativa partida não tem registro nenhum do que a completou: a
+  // `tenant.created_by_provisioning` nunca saiu (a primeira tentativa morreu
+  // antes dela) e o replay é mudo por natureza.
+  void audit({
+    action: "tenant.provisioning_completed",
+    actorUserId: null,
+    organizationId: p.organizationId,
+    resourceType: "organization",
+    resourceId: p.organizationId,
+    requestId: p.requestId,
+    bypassedRls: true,
+    metadata: {
+      slug: p.slug,
+      integration: p.marcador.integration,
+      external_id: p.marcador.external_id,
+      owner_user_id: p.ownerId,
+      completou: "user_organizations",
+    },
+  });
 }
 
 /**
@@ -435,15 +558,8 @@ async function donoOrfaoDesteProvisionamento(
     return null;
   }
 
-  const { data: vinculo, error: erroDoVinculo } = await admin
-    .from("user_organizations")
-    .select("organization_id")
-    .eq("user_id", conta.id)
-    .is("revoked_at", null)
-    .limit(1)
-    .maybeSingle();
-  if (erroDoVinculo) {
-    throw new Error(`provisioning: busca do vínculo do dono falhou: ${erroDoVinculo.message}`);
-  }
+  // MESMA régua que o replay usa para decidir se está completo (`vinculoVivo`):
+  // a pergunta "este vínculo está vivo?" tem um dono só no arquivo.
+  const vinculo = await vinculoVivo(admin, { userId: conta.id });
   return vinculo ? null : conta.id;
 }

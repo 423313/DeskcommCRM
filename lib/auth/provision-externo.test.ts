@@ -16,7 +16,11 @@ const h = vi.hoisted(() => ({
   membro: null as Record<string, unknown> | null,
   /** Vínculo vivo da conta candidata a órfã (null = órfã de verdade). */
   vinculoDaConta: null as Record<string, unknown> | null,
+  /** Vínculo vivo do dono COM a organização reencontrada (null = replay incompleto). */
+  vinculoDoDonoNaOrg: null as Record<string, unknown> | null,
   erroDoVinculo: null as { message: string } | null,
+  /** Erro do INSERT em `user_organizations` — a falha transitória do 3º caso. */
+  erroDoInsertDoVinculo: null as { code?: string; message: string } | null,
   filtrosDoMembro: [] as unknown[][],
   auditadas: [] as Record<string, unknown>[],
   inseridas: [] as Record<string, unknown>[],
@@ -50,9 +54,19 @@ vi.mock("@/lib/supabase/admin", () => ({
         limit: () => chain,
         maybeSingle: async () => {
           if (tabela === "organizations") return { data: h.org, error: h.erroDaOrg };
-          return filtros.some((f) => f[0] === "user_id")
-            ? { data: h.vinculoDaConta, error: h.erroDoVinculo }
-            : { data: h.membro, error: null };
+          // Três consultas distintas em `user_organizations`, e cada uma
+          // responde uma pergunta diferente. Separadas pelos FILTROS, que é o
+          // que as distingue no banco:
+          //   user_id + organization_id -> o replay está completo?
+          //   user_id                   -> a conta recusada é órfã?
+          //   organization_id + role    -> quem é o admin (findAdminMember)
+          const porUsuario = filtros.some((f) => f[0] === "user_id");
+          const porOrganizacao = filtros.some((f) => f[0] === "organization_id");
+          if (porUsuario && porOrganizacao) {
+            return { data: h.vinculoDoDonoNaOrg, error: h.erroDoVinculo };
+          }
+          if (porUsuario) return { data: h.vinculoDaConta, error: h.erroDoVinculo };
+          return { data: h.membro, error: null };
         },
         insert: (linha: Record<string, unknown>) => {
           h.inseridas.push({ tabela, ...linha });
@@ -63,7 +77,8 @@ vi.mock("@/lib/supabase/admin", () => ({
                   ? { data: null, error: h.erroDoInsertDaOrg }
                   : { data: { id: "org-nova" }, error: null },
             }),
-            then: (ok: (v: unknown) => unknown) => ok({ error: null }),
+            then: (ok: (v: unknown) => unknown) =>
+              ok({ error: tabela === "user_organizations" ? h.erroDoInsertDoVinculo : null }),
           };
         },
       };
@@ -99,7 +114,11 @@ beforeEach(() => {
   h.erroDoInsertDaOrg = null;
   h.membro = null;
   h.vinculoDaConta = null;
+  // Default do replay: estado ÍNTEGRO (o dono já é admin vivo da org). Assim,
+  // todo teste de replay que não diz o contrário exercita o caminho normal.
+  h.vinculoDoDonoNaOrg = { organization_id: "org-1", role: "admin" };
   h.erroDoVinculo = null;
+  h.erroDoInsertDoVinculo = null;
   h.filtrosDoMembro = [];
   h.auditadas = [];
   h.inseridas = [];
@@ -332,5 +351,101 @@ describe("a repetição depois de uma falha transitória PROVISIONA", () => {
     const erro = await provisionExternalTenant(ENTRADA).catch((e: unknown) => e);
     expect(erro).not.toBeInstanceOf(EmailJaTemContaError);
     expect(erro).toMatchObject({ message: expect.stringMatching(/busca do vínculo do dono falhou/) });
+  });
+});
+
+/**
+ * 3º CASO, mesma familia do bloqueador 1 e com desfecho pior.
+ *
+ * O INSERT do vinculo morrendo por timeout deixava a organizacao criada e sem
+ * admin nenhum. Na repeticao, `reencontrar()` achava a organizacao e devolvia
+ * `replay: true` -- a rota respondia 200 AFIRMANDO que estava tudo certo, com
+ * uma empresa que existe, aparece, e na qual ninguem entra. O proprio caminho
+ * de recuperacao era o que carimbava sucesso sobre o estado incompleto.
+ */
+describe("o replay so conclui sobre estado COMPLETO", () => {
+  const ORG_ENCONTRADA = {
+    id: "org-1",
+    created_by: "user-1",
+    settings: { provisioning: MARCADOR },
+  };
+
+  it("vinculo que falhou na 1a tentativa: a repeticao COMPLETA e a org fica com admin", async () => {
+    // --- 1a chamada: a conta e a organizacao nascem, o vinculo morre.
+    h.erroDoInsertDoVinculo = { code: "57014", message: "canceling statement due to statement timeout" };
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toThrow(/membership insert failed/);
+
+    // --- 2a chamada (repeticao): a organizacao esta la, o vinculo nao.
+    h.erroDoInsertDoVinculo = null;
+    h.inseridas = [];
+    h.auditadas = [];
+    h.org = ORG_ENCONTRADA;
+    h.vinculoDoDonoNaOrg = null;
+
+    const r = await provisionExternalTenant(ENTRADA);
+
+    expect(r).toEqual({ organizationId: "org-1", ownerId: "user-1", replay: true });
+    // O que faltava foi GRAVADO -- e como admin.
+    expect(h.inseridas).toContainEqual(
+      expect.objectContaining({
+        tabela: "user_organizations",
+        user_id: "user-1",
+        organization_id: "org-1",
+        role: "admin",
+      }),
+    );
+    // E o conserto deixou rastro.
+    const linha = h.auditadas.find((a) => a.action === "tenant.provisioning_completed");
+    expect(linha?.actorUserId).toBeNull();
+    expect((linha?.metadata as { owner_user_id: string }).owner_user_id).toBe("user-1");
+  });
+
+  // ⚠️ CONTROLE do conserto acima: sem ele, "completa o que falta" pode ter
+  // virado "sempre reinsere", que e outro defeito -- escrita a cada replay.
+  it("replay INTEGRO devolve replay sem refazer nada", async () => {
+    h.org = ORG_ENCONTRADA;
+    h.vinculoDoDonoNaOrg = { organization_id: "org-1", role: "admin" };
+
+    const r = await provisionExternalTenant(ENTRADA);
+
+    expect(r).toEqual({ organizationId: "org-1", ownerId: "user-1", replay: true });
+    expect(h.inseridas).toEqual([]);
+    expect(h.auditadas).toEqual([]);
+  });
+
+  it("vinculo REVOGADO por uma pessoa nao e ressuscitado pelo sistema de fora", async () => {
+    // `unique (user_id, organization_id)` (baseline.sql:2441): a linha existe,
+    // revogada, entao o INSERT volta 23505 e nada muda. O replay conclui, e o
+    // acesso que o administrador da empresa tirou continua tirado.
+    h.org = ORG_ENCONTRADA;
+    h.vinculoDoDonoNaOrg = null;
+    h.erroDoInsertDoVinculo = { code: "23505", message: "duplicate key value" };
+
+    const r = await provisionExternalTenant(ENTRADA);
+
+    expect(r.replay).toBe(true);
+    // Nada mudou -> nada a auditar.
+    expect(h.auditadas).toEqual([]);
+  });
+
+  it("falha ao completar o vinculo NAO vira replay bem-sucedido", async () => {
+    h.org = ORG_ENCONTRADA;
+    h.vinculoDoDonoNaOrg = null;
+    h.erroDoInsertDoVinculo = { code: "57014", message: "timeout do pooler" };
+
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toThrow(
+      /completar o vínculo do dono falhou/,
+    );
+    expect(h.auditadas).toEqual([]);
+  });
+
+  it("erro ao LER o vinculo nao vira 'esta completo' nem 'falta vinculo'", async () => {
+    h.org = ORG_ENCONTRADA;
+    h.erroDoVinculo = { message: "PostgREST fora" };
+
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toThrow(
+      /busca do vínculo do dono falhou/,
+    );
+    expect(h.inseridas).toEqual([]);
   });
 });
