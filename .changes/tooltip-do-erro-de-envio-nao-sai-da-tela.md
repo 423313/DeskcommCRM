@@ -8,4 +8,4 @@ Quando o provedor recusava uma mensagem, o inbox mostrava o motivo num balão de
 
 O balão agora quebra em várias linhas dentro de uma largura máxima. A correção foi feita na classe base do balão, e não no ponto que mostrou o defeito: assim vale para todo balão do produto, inclusive os que mostram texto que vem de fora (a mensagem de erro do provedor, que não está no código e não tem tamanho previsto). Nada muda para os balões curtos.
 
-Crédito: @webtecnica.
+Contribuição de @webtecnica (#1319).
