@@ -227,7 +227,7 @@ describe("varredura: provisionadora de módulo respeita a forma da ADR-0002 (D4)
   });
 });
 
-describe("as rotinas de proteção da D5 existem e protegem (migration 0295)", () => {
+describe("as rotinas de proteção da D5 existem e protegem (migration 0325)", () => {
   afterEach(() => {
     sql(`drop table if exists public.sonda_protecao_0295 cascade;`);
   });
@@ -273,7 +273,7 @@ describe("as rotinas de proteção da D5 existem e protegem (migration 0295)", (
   });
 
   it("não toca em tabela que já decidiu a própria proteção", () => {
-    // A régua da 0295 é `not relrowsecurity`. O módulo que liga a RLS ele mesmo
+    // A régua da 0325 é `not relrowsecurity`. O módulo que liga a RLS ele mesmo
     // — porque quer policy por papel, ou server-only — fica fora do alcance
     // dela. É o que impede a rotina de reabrir as 8 tabelas server-only e de
     // atropelar as 66 com policy por papel que o baseline já tem.

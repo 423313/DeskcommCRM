@@ -25,7 +25,7 @@
  *
  * Um módulo cuja tabela precise de policy por papel, ou que deva ser
  * server-only, liga a RLS dentro da própria provisionadora: a rotina
- * `fn_proteger_tabelas_de_organizacao()` (migration 0295) só enxerga tabela com
+ * `fn_proteger_tabelas_de_organizacao()` (migration 0325) só enxerga tabela com
  * RLS DESLIGADA, então a decisão do módulo prevalece. Nesse caso o módulo passa
  * `protecaoPropria: ["<tabela>", …]`, e o molde confere só o que continua
  * valendo (RLS ligada e `anon` sem privilégio), sem exigir a policy ampla.
@@ -289,7 +289,7 @@ export interface MoldeOpcoes {
   readonly tabelas: readonly string[];
   /**
    * Tabelas cujas policies o próprio módulo define (server-only, ou por papel).
-   * A rotina 0295 não as toca, porque o módulo já ligou a RLS — então aqui só se
+   * A rotina 0325 não as toca, porque o módulo já ligou a RLS — então aqui só se
    * cobra RLS ligada e `anon` sem privilégio, não a policy ampla.
    */
   readonly protecaoPropria?: readonly string[];
@@ -422,7 +422,7 @@ export function moldeDeProvisionadora(opcoes: MoldeOpcoes): void {
         desprotegidas,
         "tabela provisionada sem a proteção que toda tabela de organização tem. A provisionadora " +
           "termina chamando `public.fn_proteger_modulo_provisionado()` na MESMA transação " +
-          "(ADR-0002 D5, migration 0295) — sem isso a tabela nasce com `anon` podendo ler tudo.",
+          "(ADR-0002 D5, migration 0325) — sem isso a tabela nasce com `anon` podendo ler tudo.",
       ).toEqual([]);
     });
 

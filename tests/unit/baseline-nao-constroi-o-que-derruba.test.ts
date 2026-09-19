@@ -53,11 +53,23 @@ import { describe, expect, it } from "vitest";
  *
  * ## Escopo, escrito para não ser lido maior do que é
  *
- * Nome literal, com ou sem `if exists`, mais o laço `foreach t in array[...]`
- * com `format('… %s … public.%I')`. Outras formas dinâmicas ficam fora. CHECK e
- * FOREIGN KEY ficam fora: não constroem índice, e as instâncias medidas validam
- * coluna recriada vazia. Função, grant e trigger ficam fora — a mesma classe
- * existe neles (medido na mesma revisão) e é trabalho próprio.
+ * Nome literal, com ou sem `if exists`, mais DUAS formas de laço com
+ * `execute format(…)`:
+ *
+ * - `foreach t in array[...]`, com a lista de tabelas LITERAL — expandido por
+ *   tabela, porque o conjunto é conhecível ao ler o arquivo;
+ * - `for r in <select …> loop`, a varredura de CATÁLOGO — expandido para UMA
+ *   chave simbólica por comando (a tabela vira `<r>`), porque o conjunto NÃO é
+ *   conhecível estaticamente. Preserva a ordem criar↔derruba dentro do corpo,
+ *   que é o que esta régua cobra, sem inventar uma lista que o SQL não declara.
+ *
+ * A segunda entrou em 2026-09-19: a migration 0325 trocou o laço de 30 tabelas
+ * literais pela varredura, e o controle de vivacidade acusou que o instrumento
+ * tinha ficado cego. Outras formas dinâmicas (um `execute` montado por
+ * concatenação, por exemplo) continuam fora. CHECK e FOREIGN KEY ficam fora:
+ * não constroem índice, e as instâncias medidas validam coluna recriada vazia.
+ * Função, grant e trigger ficam fora — a mesma classe existe neles (medido na
+ * mesma revisão) e é trabalho próprio.
  *
  * Lê texto; que o ciclo install→update sai 0 é o job `invariants` quem mede, e
  * `tests/invariants/indices-redundantes-saem.test.ts` mede o estado final.
@@ -231,7 +243,7 @@ function policiesEmLaco(sql: string, verbo: "create" | "drop"): Ocorrencia[] {
  * — o laço que varre o CATÁLOGO em vez de uma lista literal.
  *
  * A lista de tabelas NÃO é conhecível estaticamente, e isso é de propósito: a
- * migration 0295 trocou o `foreach … in array[30 nomes]` por esta forma
+ * migration 0325 trocou o `foreach … in array[30 nomes]` por esta forma
  * justamente para a proteção alcançar tabela que ainda não existe quando o
  * baseline é escrito. Expandir por tabela aqui seria inventar uma lista que o
  * SQL não declara.
@@ -252,7 +264,7 @@ function policiesEmLacoDeCatalogo(sql: string, verbo: "create" | "drop"): Ocorre
   const achadas: Ocorrencia[] = [];
   const laco = /\bfor\s+(\w+)\s+in\s+(?=[\s\S]{0,2000}?\bselect\b)([\s\S]*?)\bloop\b([\s\S]*?)end\s+loop/gi;
   // O `%s` no NOME é opcional, ao contrário da forma de array. Medido no arquivo
-  // real: a varredura da 0295 usa `tenant_isolation_%s_all` (nome derivado da
+  // real: a varredura da 0325 usa `tenant_isolation_%s_all` (nome derivado da
   // tabela), e a das travas de suporte (0274) usa `support_write_insert` — nome
   // LITERAL sobre tabela dinâmica. Exigir `%s`, como a forma de array faz,
   // deixava a segunda invisível: 1 ocorrência vista de 4 existentes.
@@ -493,7 +505,7 @@ describe("baseline.sql não reconstrói o que ele mesmo derruba ou substitui", (
     expect(paresDeIndice(SQL).length, "nenhum par cria→derruba encontrado — o parser mudou?").toBeGreaterThan(0);
     // ⚠️ ESTE CONTROLE JÁ DISPAROU DE VERDADE, e a história explica o formato de
     // agora. Ele exigia `policiesEmLaco(create) > 10`, contando SÓ a forma
-    // `foreach t in array[...]`. A migration 0295 trocou o laço de 30 tabelas
+    // `foreach t in array[...]`. A migration 0325 trocou o laço de 30 tabelas
     // literais pela varredura de catálogo de `fn_proteger_tabelas_de_organizacao`
     // — e o número caiu de 34 para ZERO num PR que não introduziu defeito
     // nenhum. O controle fez o que devia: acusou que o instrumento tinha ficado

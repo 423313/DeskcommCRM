@@ -6879,11 +6879,11 @@ create table if not exists reentry_knob_pointers (
 -- service role (que bypassa RLS).
 --
 -- A enumeração que morava AQUI virou a função sem parâmetro logo abaixo
--- (migration 0295) — ela é chamada em cada um dos três pontos onde havia laço,
+-- (migration 0325) — ela é chamada em cada um dos três pontos onde havia laço,
 -- e de novo no fim do arquivo.
 -- ============================================================================
 
--- ---- proteções de tabela de organização: o laço vira função (migration 0295) ----
+-- ---- proteções de tabela de organização: o laço vira função (migration 0325) ----
 --
 -- ADR-0002, D5: "Essas rotinas saem do laço do baseline para funções sem
 -- parâmetro, chamadas pelo baseline e pela provisionadora." É a irmã da 0274 —
@@ -6898,7 +6898,7 @@ create table if not exists reentry_knob_pointers (
 -- 8 e atropelaria as policies por papel das 66. Já uma tabela recém-criada — o
 -- que a provisionadora de um módulo produz — nasce com RLS desligada, e é
 -- exatamente ela que esta régua pega. O racional inteiro está no cabeçalho da
--- migration 20260918090000_0295_*.sql.
+-- migration 20260919140000_0295_*.sql.
 --
 -- Idempotente: `drop policy if exists` antes do `create policy`; reaplicar
 -- converge. A definição fica AQUI, antes da varredura de anon (que é, de
@@ -6957,7 +6957,7 @@ revoke execute on function public.fn_proteger_tabelas_de_organizacao() from publ
 revoke execute on function public.fn_proteger_modulo_provisionado() from public, anon, authenticated, service_role;
 
 
--- A rotina da migration 0295 no lugar do laço enumerado: ela varre o catálogo
+-- A rotina da migration 0325 no lugar do laço enumerado: ela varre o catálogo
 -- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
 -- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
 do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
@@ -7672,7 +7672,7 @@ alter table flywheel_distiller_proposals add constraint flywheel_distiller_propo
   check (type in ('playbook_bullet', 'golden_case', 'reentry_trigger', 'org_memory_entry'));
 
 -- RLS (mesmo shape do loop tenant_isolation_* do baseline).
--- A rotina da migration 0295 no lugar do laço enumerado: ela varre o catálogo
+-- A rotina da migration 0325 no lugar do laço enumerado: ela varre o catálogo
 -- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
 -- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
 do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
@@ -7701,7 +7701,7 @@ create index if not exists idx_skill_activations_skill
 
 -- RLS das tabelas org-scoped novas (skill_activations). skill_versions/pointers já
 -- estão no loop tenant_isolation do baseline; a leitura de catálogo é policy extra abaixo.
--- A rotina da migration 0295 no lugar do laço enumerado: ela varre o catálogo
+-- A rotina da migration 0325 no lugar do laço enumerado: ela varre o catálogo
 -- procurando tabela de organização com RLS DESLIGADA, que neste ponto do arquivo
 -- é exatamente o conjunto que a lista enumerava (medido, tabela a tabela).
 do $$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $$;
@@ -28112,7 +28112,7 @@ alter table public.idempotency_keys
 
 notify pgrst, 'reload schema';
 
--- ---- proteção de tabela de organização, depois de toda tabela (migration 0295) ----
+-- ---- proteção de tabela de organização, depois de toda tabela (migration 0325) ----
 --
 -- Auto-curativa e no-op hoje (as 119 tabelas de organização deste baseline já
 -- têm RLS ligada — medido, e cobrado por
