@@ -86,4 +86,12 @@ Em `tests/invariants/modulo-instalado.test.ts`:
   consertada, a próxima reaplicação reativa;
 - superfície: `fn_modulo_instalar` fora de `public`, `anon` e `authenticated`; o registro fechado.
 
+Em `tests/invariants/modulo-suspenso-o-kit-reporta.test.ts`, o caminho do operador: as duas linhas
+do rodapé, lidas do `baseline.sql`, aplicadas com `psql -q -f` sem `ON_ERROR_STOP` (como o
+`reaplicar_baseline` faz) e filtradas pela expressão do kit. Módulo são → nada acusado; módulo
+quebrado com `already exists` → uma linha acusada, nomeando o módulo, e a suspensão persiste.
+
+**Não medido:** o `update.sh` inteiro numa VPS com um módulo suspenso (a tela de atualização, o
+`status` do run). O que está provado é a entrada dele — a linha que o filtro acusa.
+
 `pnpm test:db` local antes de abrir; sabotagem com contagem prevista antes, e commit antes dela.
