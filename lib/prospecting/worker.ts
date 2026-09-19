@@ -397,7 +397,11 @@ export async function tickProspecting(pool: pg.Pool, admin: SupabaseClient) {
       if (!(error instanceof ProspectingError && error.status === 409))
         logger.error("[prospecting] rodada falhou", {
           organization_id: org,
-          error: "prospecting_tick_failed",
+          // Era a constante "prospecting_tick_failed". O erro estava capturado
+          // na variável e descartado na hora de escrever: o log existia e não
+          // dizia nada além de "falhou" — o que é quase pior que não logar,
+          // porque parece cobertura. Agora vai a causa.
+          error: error instanceof Error ? error.message : String(error),
         });
     }
   }
