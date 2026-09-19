@@ -39,11 +39,23 @@ assert_not_contains() { if grep -qF -- "$2" <<<"$1"; then falha "$3" "não esper
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+# ── isolamento do git: nada aqui escreve fora de "$TMP" ─────────────────────────────
+# Um `git -C "$dir" config user.*` grava onde o git RESOLVER o repositório, e não
+# necessariamente em "$dir": um GIT_DIR herdado (rodar de dentro de um hook, de um
+# `rebase --exec`) manda por cima do -C; "$dir" que não é repositório sobe até o pai.
+# Foi assim que "Pessoa <alguem@fork.dev>" parou no .git/config do checkout de quem
+# rodava a suíte e assinou 829 commits da main a partir de 10/09/2026. Três travas:
+#   1. zera o ambiente local do git herdado — o idioma canônico do próprio git;
+#   2. a descoberta de repositório nunca sobe para fora de "$TMP";
+#   3. identidade por ambiente, não por `git config` (NENHUM teste aqui mede o autor).
+unset $(git rev-parse --local-env-vars)
+export GIT_CEILING_DIRECTORIES="$TMP"
+export GIT_AUTHOR_NAME="Teste" GIT_AUTHOR_EMAIL="teste@exemplo.invalid"
+export GIT_COMMITTER_NAME="Teste" GIT_COMMITTER_EMAIL="teste@exemplo.invalid"
 
 # ── um "repositório principal" mínimo, com duas migrations já aplicadas ──────────────
 principal="$TMP/principal"; mkdir -p "$principal/supabase/migrations"
 git -C "$principal" init -q -b main
-git -C "$principal" config user.email "mantenedor@exemplo.com"; git -C "$principal" config user.name "Mantenedor"
 printf 'select 1;\n' > "$principal/supabase/migrations/20260101120000_0262_existente.sql"
 printf 'select 2;\n' > "$principal/supabase/migrations/20260102090000_0261_anterior.sql"
 printf '# leia\n' > "$principal/README.md"
@@ -51,7 +63,6 @@ git -C "$principal" add -A && git -C "$principal" commit -q -m "base"
 
 clonar() { # $1 = destino (traz o gate SOB PROVA, a versão da árvore de trabalho)
   rm -rf "$1"; git clone -q "$principal" "$1"
-  git -C "$1" config user.email "alguem@fork.dev"; git -C "$1" config user.name "Pessoa"
   mkdir -p "$1/scripts"; cp "$GATE_ORIGEM" "$1/scripts/checar-colisao-de-migration.sh"
 }
 gate() { ( cd "$1" && bash scripts/checar-colisao-de-migration.sh "${2:-origin/main}" 2>&1 ); }
@@ -132,12 +143,10 @@ assert_contains "$saida" "0268_rascunho.sql" "acusa o arquivo que entrou pela ma
 echo "8. duplicata que JÁ existia na base não é do PR (linha de base, TRIAGEM.md:934)"
 principal2="$TMP/principal2"; mkdir -p "$principal2/supabase/migrations"
 git -C "$principal2" init -q -b main
-git -C "$principal2" config user.email "mantenedor@exemplo.com"; git -C "$principal2" config user.name "Mantenedor"
 printf 'select 1;\n' > "$principal2/supabase/migrations/20260101120000_0270_um.sql"
 printf 'select 2;\n' > "$principal2/supabase/migrations/20260102090000_0270_dois.sql"
 git -C "$principal2" add -A && git -C "$principal2" commit -q -m "base com divida herdada"
 c="$TMP/c8"; rm -rf "$c"; git clone -q "$principal2" "$c"
-git -C "$c" config user.email "alguem@fork.dev"; git -C "$c" config user.name "Pessoa"
 mkdir -p "$c/scripts"; cp "$GATE_ORIGEM" "$c/scripts/checar-colisao-de-migration.sh"
 git -C "$c" switch -q -c fix/livre
 migrar "$c" "20260916180000_0271_livre.sql"; commit "$c" "migration livre com dívida antiga na base"

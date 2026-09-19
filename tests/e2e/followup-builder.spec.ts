@@ -13,6 +13,8 @@ import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
 
+import { zoomAte } from "./utils/canvas-do-fluxo";
+
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
 
@@ -261,8 +263,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
 
     // fitView pode chegar ao maxZoom (2x) com poucos nós — zoom out garante
     // que todos os handles fiquem dentro do viewport pros drags de conexão.
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -305,8 +306,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     await page.getByTestId("palette-add-action").click();
     await page.getByTestId("palette-add-end").click();
 
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -434,8 +434,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     await page.getByTestId("palette-add-action").click();
     await page.getByTestId("palette-add-end").click();
 
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -591,8 +590,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
 
     await page.getByTestId("palette-add-trigger").click();
     await page.getByTestId("palette-add-end").click();
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    await zoomAte(page, 0.85);
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
       .getAttribute("data-id");
@@ -726,8 +724,7 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     // finishes its first measurement — settle it to a known, stable zoom BEFORE doing
     // any screen-space math below, or the 6 sequential palette adds keep moving the
     // goalposts mid-repositioning (see the 6.2 canvas test for the same caveat).
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 6; i++) await zoomOut.click();
+    await zoomAte(page, 0.7);
     await page.waitForTimeout(300);
 
     // 1b. Spread the 6 nodes into a real branching layout (source above target, siblings

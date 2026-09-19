@@ -80,7 +80,19 @@ async function ehEcoDeEnvioNosso(
     .eq("direction", "outbound")
     // `sent_via` separa o que NASCEU aqui do que veio do celular: a linha do
     // celular é gravada como `external_device` e nunca pode servir de álibi.
-    .in("sent_via", ["ai", "user"])
+    //
+    // `automation` entrou junto do carimbo novo (#652). A mensagem que a REGRA
+    // manda nasceu aqui tanto quanto a da IA e a do composer; sem ela nesta
+    // lista, o eco do próprio envio da regra era lido como resposta pelo celular
+    // e a IA ficava pausada na conversa por causa de uma mensagem que o CRM
+    // mandou sozinho. Lista e carimbo andam juntos: quem escreve estes valores é
+    // `origemDaMensagem`, em `app/api/v1/messages/_handler.ts`.
+    //
+    // `system` ENTRA pela mesma razão, e o sintoma seria idêntico: é o valor que
+    // o envio por TOKEN DE SERVIDOR grava (#866). Fora desta lista, a linha da
+    // integração deixa de ser reconhecida como envio NOSSO, o eco do próprio
+    // envio vira "resposta pelo celular" e cala a IA por três horas.
+    .in("sent_via", ["ai", "user", "automation", "system"])
     // Sem `external_id` = ainda não confirmada pelo canal = ainda em voo. É esta
     // a janela exata em que o eco é indistinguível de digitação humana.
     .is("external_id", null)
