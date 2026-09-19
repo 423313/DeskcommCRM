@@ -10,8 +10,12 @@ on:
 # `contents: read` cobre os dois, que é o escopo que o próprio modelo de dados do
 # CodeQL prescreve para essas duas actions. O `cache: pnpm` NÃO usa este token
 # (usa ACTIONS_RUNTIME_TOKEN), `pnpm/action-setup` não tem input de token, e
-# nenhum passo `run:` enxerga o token — ele só entra no ambiente via
-# `secrets.GITHUB_TOKEN`, que não aparece em nenhum destes workflows.
+# nenhum passo `run:` enxerga o token por padrão — ele só entra no ambiente via
+# `secrets.GITHUB_TOKEN`. Os passos que o fazem, e por quê, estão ao lado de
+# cada `GH_TOKEN:`; para contar em vez de acreditar nesta linha:
+#   grep -n 'secrets.GITHUB_TOKEN' .github/workflows/ci.yml
+# (Esta linha afirmava "não aparece em nenhum destes workflows" com dois usos já
+# na main — achado 9 da revisão do #1268.)
 #
 # No topo, e não por job, porque os dois jobs precisam do mesmo escopo e job
 # acrescentado depois nasce restrito em vez de herdar o default do repositório.

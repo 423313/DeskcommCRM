@@ -42,8 +42,15 @@ jobs:
     timeout-minutes: 10
     steps:
       # `fetch-depth: 0` não é preciso: o script lê a ÁRVORE de origin/main, não
-      # o histórico. O checkout raso já traz a ref.
+      # o histórico.
       - uses: actions/checkout@v7
+
+      # E a ref é buscada EXPLICITAMENTE: não depende de o checkout raso de um
+      # `schedule` ter criado `refs/remotes/origin/main`. Sem ela o script lê zero
+      # migrations, o controle de vivacidade reprova, e o vigia ficaria vermelho
+      # para sempre (achado 11 da revisão do #1268).
+      - name: Buscar a main de agora
+        run: git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
 
       - uses: ./.github/actions/preparar-node
         timeout-minutes: 5

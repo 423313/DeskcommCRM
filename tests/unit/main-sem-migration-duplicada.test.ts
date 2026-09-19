@@ -13,11 +13,11 @@
  * `tests/shell/colisao-de-migration.test.sh`, que não toca no clone de ninguém.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 /** O corpo do passo, recortado do workflow: o teste mede o que o CI roda. */
 const PASSO = (() => {
@@ -35,8 +35,17 @@ const PASSO = (() => {
 })();
 
 /** Um repositório descartável com N migrations, mais as extras pedidas. */
+// Os repositórios descartáveis são apagados no fim: este arquivo roda no projeto
+// `cercas`, o primeiro passo da parte 1 do verify, e lixo em /tmp não é dele
+// deixar (achado 10 da revisão do #1268).
+const CRIADOS: string[] = [];
+afterAll(() => {
+  for (const dir of CRIADOS) rmSync(dir, { recursive: true, force: true });
+});
+
 function repo(quantas: number, extras: string[] = []): string {
   const dir = mkdtempSync(join(tmpdir(), "migr-"));
+  CRIADOS.push(dir);
   mkdirSync(join(dir, "supabase/migrations"), { recursive: true });
   const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, stdio: "pipe" });
   git("init", "-q");

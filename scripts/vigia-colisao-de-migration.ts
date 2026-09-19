@@ -87,15 +87,40 @@ export function corpoDoAviso(achados: Colisao[], naBase: string[]): string {
   ].join("\n");
 }
 
-/** A decisão idempotente: um comentário por PR, editado, nunca repetido. */
+/**
+ * O comentário quando a colisão SUMIU. Deixar o aviso antigo afirmando "o número
+ * foi tomado" num PR que já renumerou é prosa de estado vencida — quem abre o PR
+ * lê uma acusação que não vale mais (achado 8 da revisão do #1268).
+ */
+export function corpoResolvido(): string {
+  return [
+    MARCADOR,
+    "## Resolvido — o número da sua migration está livre",
+    "",
+    "Numa rodada anterior eu avisei que um número deste PR tinha sido tomado. Na medição de agora, contra a `main` atual, nenhuma migration deste PR disputa número nem timestamp. Obrigado por renumerar.",
+    "",
+    "<sub>Eu **não** meço ordem semântica: duas migrations podem não disputar número e mesmo assim depender da ordem entre si. Isso continua sendo leitura humana.</sub>",
+  ].join("\n");
+}
+
+/**
+ * A decisão idempotente: um comentário por PR, editado, nunca repetido.
+ * `corpo === null` = sem colisão agora. Se havia aviso, ele vira "resolvido" UMA
+ * vez; se já é o "resolvido", nada. Sem aviso anterior e sem colisão, silêncio.
+ */
 export function acao(
   anterior: { id: number; body: string } | null,
   corpo: string | null,
-): { tipo: "criar" | "editar" | "nada"; id?: number } {
-  if (corpo === null) return { tipo: "nada" };
-  if (!anterior) return { tipo: "criar" };
+): { tipo: "criar" | "editar" | "nada"; id?: number; corpo?: string } {
+  if (corpo === null) {
+    if (!anterior) return { tipo: "nada" };
+    const resolvido = corpoResolvido();
+    if (anterior.body.trim() === resolvido.trim()) return { tipo: "nada" };
+    return { tipo: "editar", id: anterior.id, corpo: resolvido };
+  }
+  if (!anterior) return { tipo: "criar", corpo };
   if (anterior.body.trim() === corpo.trim()) return { tipo: "nada" };
-  return { tipo: "editar", id: anterior.id };
+  return { tipo: "editar", id: anterior.id, corpo };
 }
 
 /**
@@ -168,10 +193,10 @@ function main(): void {
       if (!escrever) continue;
 
       if (decisao.tipo === "criar") {
-        gh(["pr", "comment", String(number), "--body", corpo!]);
+        gh(["pr", "comment", String(number), "--body", decisao.corpo!]);
         avisados++;
       } else if (decisao.tipo === "editar") {
-        gh(["api", "-X", "PATCH", `repos/${repo}/issues/comments/${decisao.id}`, "-f", `body=${corpo}`]);
+        gh(["api", "-X", "PATCH", `repos/${repo}/issues/comments/${decisao.id}`, "-f", `body=${decisao.corpo}`]);
         avisados++;
       }
       // O rótulo acompanha o estado de AGORA, e entra depois do comentário: se

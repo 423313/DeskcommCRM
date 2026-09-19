@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MARCADOR, acao, colisoes, corpoDoAviso, identidade, juntaPaginas, proximoLivre } from "./vigia-colisao-de-migration";
+import { MARCADOR, acao, colisoes, corpoDoAviso, corpoResolvido, identidade, juntaPaginas, proximoLivre } from "./vigia-colisao-de-migration";
 
 const BASE = [
   "supabase/migrations/20260915193743_0263_etapa_de_perda.sql",
@@ -87,7 +87,7 @@ describe("acao — um comentário por PR, editado, nunca repetido", () => {
   });
 
   it("colisão nova: cria", () => {
-    expect(acao(null, corpo)).toEqual({ tipo: "criar" });
+    expect(acao(null, corpo)).toEqual({ tipo: "criar", corpo });
   });
 
   it("mesmo estado na rodada seguinte: NÃO comenta de novo", () => {
@@ -95,11 +95,21 @@ describe("acao — um comentário por PR, editado, nunca repetido", () => {
   });
 
   it("estado mudou: edita o mesmo comentário", () => {
-    expect(acao({ id: 7, body: "outro" }, corpo)).toEqual({ tipo: "editar", id: 7 });
+    expect(acao({ id: 7, body: "outro" }, corpo)).toEqual({ tipo: "editar", id: 7, corpo });
   });
 
-  it("colisão resolvida: não edita nem apaga — o histórico é do PR", () => {
-    expect(acao({ id: 7, body: corpo }, null)).toEqual({ tipo: "nada" });
+  it("colisão resolvida: o aviso vira 'resolvido' — não fica afirmando o que já não vale", () => {
+    // Achado 8 da revisão do #1268: a primeira versão deixava o comentário
+    // dizendo "o número foi tomado" num PR que já tinha renumerado.
+    const r = acao({ id: 7, body: corpo }, null);
+    expect(r.tipo).toBe("editar");
+    expect(r.id).toBe(7);
+    expect(r.corpo).toContain("Resolvido");
+    expect(r.corpo).toContain(MARCADOR);
+  });
+
+  it("já está 'resolvido': não reescreve a cada rodada", () => {
+    expect(acao({ id: 7, body: corpoResolvido() }, null)).toEqual({ tipo: "nada" });
   });
 });
 
