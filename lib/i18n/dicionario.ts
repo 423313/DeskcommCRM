@@ -6784,6 +6784,28 @@ export const DICIONARIO: Traducoes = {
   },
   "avisa o cliente": { es: "avisa al cliente" },
   "antes": { es: "antes" },
+  "Mensagem do lembrete": { es: "Mensaje del recordatorio" },
+  "Oi {{nome}}! Passando pra lembrar: {{titulo}}, {{dia}} às {{hora}}.": {
+    es: "Hola {{nome}}! Te recuerdo: {{titulo}}, {{dia}} a las {{hora}}.",
+  },
+  "Deixe em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.": {
+    es: "Déjalo en blanco para el texto predeterminado. Variables: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.",
+  },
+  "Quanto antes": { es: "Cuánto antes" },
+  "Unidade": { es: "Unidad" },
+  "minutos": { es: "minutos" },
+  "Mensagem deste lembrete": { es: "Mensaje de este recordatorio" },
+  "Adicionar lembrete": { es: "Agregar recordatorio" },
+  "Deixe a mensagem em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.": {
+    es: "Deja el mensaje en blanco para el texto predeterminado. Variables: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.",
+  },
+  "texto próprio": { es: "texto propio" },
+  "A mensagem do lembrete cabe em 1000 caracteres.": {
+    es: "El mensaje del recordatorio cabe en 1000 caracteres.",
+  },
+  "No máximo 20 lembretes adicionais por tipo.": {
+    es: "Como máximo 20 recordatorios adicionales por tipo.",
+  },
   "O lembrete precisa sair pelo menos 15 minutos antes do compromisso.": { es: "El recordatorio debe salir al menos 15 minutos antes de la cita." },
   "O lembrete não pode sair mais de 7 dias (10080 minutos) antes.": { es: "El recordatorio no puede salir más de 7 días (10080 minutos) antes." },
   "Ação contém": { es: "La acción contiene" },
@@ -7025,7 +7047,7 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar os horários": { es: "No pude cargar los horarios" },
   "Os dias ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista. Numa instalação nova, isso costuma ser a jornada de atendimento que ainda não foi publicada.": { es: "Los días quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista. En una instalación nueva, esto suele ser la jornada de atención que todavía no se publicó." },
   "Nenhum horário livre em": { es: "Ningún horario libre en" },
-  "Os próximos 30 dias são o que está publicado hoje — meses adiante aparecem conforme a data se aproxima.": { es: "Los próximos 30 días son lo que está publicado hoy — los meses siguientes aparecen conforme la fecha se acerca." },
+  "Não há horário livre publicado neste mês.": { es: "No hay horario libre publicado en este mes." },
   "Conferindo a chave com a OpenAI — leva alguns segundos.": { es: "Verificando la clave con OpenAI — toma unos segundos." },
   "Pronto para preparar material.": { es: "Listo para preparar material." },
   "Falta uma chave da OpenAI para o agente aprender o seu material": { es: "Falta una clave de OpenAI para que el agente aprenda tu material" },
@@ -8206,9 +8228,23 @@ export const DICIONARIO: Traducoes = {
   "cliente@empresa.com": { es: "cliente@empresa.com" },
   "Endereço inválido — confira antes de marcar.":
     { es: "Dirección inválida — revísala antes de agendar." },
-  "Preenchido, o Google envia o convite por e-mail para esta pessoa.":
-    { es: "Si se completa, Google envía la invitación por correo a esta persona." },
-
+  "O cliente com e-mail na ficha já recebe o convite. Preencha só se quiser chamar mais alguém.":
+    {
+      es: "El cliente con correo en la ficha ya recibe la invitación. Complétalo solo si quieres llamar a alguien más.",
+    },
+  "Rua, número, sala": { es: "Calle, número, sala" },
+  "Onde o atendimento acontece. Digite para filtrar ou salvar para a próxima vez.":
+    { es: "Dónde ocurre la atención. Escribe para filtrar o guardar para la próxima vez." },
+  "Salvar para os próximos agendamentos": { es: "Guardar para las próximas citas" },
+  "Não foi possível salvar o endereço. Tente novamente.":
+    { es: "No se pudo guardar la dirección. Inténtalo de nuevo." },
+  "Não foi possível carregar os endereços. Tente novamente.":
+    { es: "No se pudieron cargar las direcciones. Inténtalo de nuevo." },
+  "Observação": { es: "Observación" },
+  "O que a equipe precisa lembrar neste horário": {
+    es: "Lo que el equipo necesita recordar en este horario",
+  },
+  "Aparece na descrição do compromisso.": { es: "Aparece en la descripción de la cita." },
 
   // ─── Tarefas (extraídas do PR #418) ───
   "Tarefas": { es: "Tareas" },
