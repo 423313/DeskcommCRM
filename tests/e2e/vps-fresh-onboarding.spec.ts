@@ -392,9 +392,22 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
 
     // Honestidade: sem RESEND_API_KEY nenhum email sai. A UI deve dizer isso
     // e oferecer o link de aceite copiável (nunca redirecionar em silêncio).
-    await expect(page.getByText(/não está configurado neste servidor/i)).toBeVisible({
+    //
+    // A frase que este caso procurava ("não está configurado neste servidor")
+    // não existe mais no produto — `git grep` devolve zero. O texto de hoje é
+    // o do bloco âmbar de `app/onboarding/invite-team/_form.tsx:109`, e a tela
+    // ainda diz a verdade: medido no job 105816595263 (parte 4), ela mostra
+    // "Esta instalação não envia e-mail" com o link e o botão de copiar.
+    await expect(page.getByText(/não envia e-mail/i).first()).toBeVisible({
       timeout: 15_000,
     });
+    // O nome deste caso é "a UI não pode MENTIR que enviou": o controle
+    // negativo é o que o torna verdade, e ele faltava. Nenhuma frase de envio
+    // bem-sucedido pode aparecer numa instalação sem serviço de e-mail.
+    await expect(page.getByText(/convites? enviad/i)).toHaveCount(0);
+    // E a pessoa convidada aparece nominalmente ao lado do link dela, senão
+    // "copie o link" não diz de quem é o link.
+    await expect(page.getByText("atendente@qa.local").first()).toBeVisible();
     const acceptUrl = (
       await page.locator("code", { hasText: /team\/accept-invite/ }).first().innerText()
     ).trim();
