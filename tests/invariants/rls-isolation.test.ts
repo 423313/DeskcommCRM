@@ -103,6 +103,12 @@ beforeAll(() => {
       v_version uuid;
       v_case uuid;
       v_boundary jsonb;
+      v_attendant uuid;
+      v_account uuid;
+      v_method uuid;
+      v_event_type uuid;
+      v_sale uuid;
+      v_sale_item uuid;
     begin
       foreach v_org in array array['${ORG_A}'::uuid, '${ORG_B}'::uuid] loop
         select id into v_sess from public.channel_sessions where organization_id = v_org limit 1;
@@ -321,6 +327,99 @@ beforeAll(() => {
             (organization_id, provider, label, api_key_encrypted, api_key_iv, api_key_tag, api_key_last4)
             values (v_org, 'anthropic', 'rls-invariant', '\\x00'::bytea, '\\x00'::bytea, '\\x00'::bytea, '0000');
         end if;
+
+        -- ─── o módulo financeiro (migrations 0350-0357) ──────────────────
+        --
+        -- Dez tabelas que guardam o que a organização fatura, para quem, por
+        -- quanto, e quanto cada pessoa levou de comissão. Vazar qualquer uma
+        -- entrega ao vizinho o faturamento inteiro: quanto a clínica ao lado
+        -- cobra por consulta, quanto o atendente dela ganha, e quais clientes
+        -- pagaram. A LEITURA das dez é org-scoped SEM gate de papel (o 'agent'
+        -- semeado aqui é controle positivo válido); a ESCRITA exige 'manager'
+        -- no catálogo e 'agent' na comanda, e esse segundo eixo NÃO é medido
+        -- aqui. (sem crase nesta prosa: o bloco inteiro é um template literal
+        -- de JS.)
+        select user_id into v_attendant from public.user_organizations
+          where organization_id = v_org limit 1;
+
+        if not exists (select 1 from public.financial_accounts where organization_id = v_org) then
+          insert into public.financial_accounts (organization_id, name, kind)
+            values (v_org, 'RLS Invariant Caixa', 'cash');
+        end if;
+        select id into v_account from public.financial_accounts
+          where organization_id = v_org limit 1;
+
+        if not exists (select 1 from public.account_plans where organization_id = v_org) then
+          insert into public.account_plans (organization_id, name, direction)
+            values (v_org, 'RLS Invariant Servicos', 'in');
+        end if;
+
+        if not exists (select 1 from public.payment_methods where organization_id = v_org) then
+          insert into public.payment_methods (organization_id, name, account_id)
+            values (v_org, 'RLS Invariant Dinheiro', v_account);
+        end if;
+        select id into v_method from public.payment_methods
+          where organization_id = v_org limit 1;
+
+        -- O tipo de evento é o catálogo de serviços deste produto, e é o alvo
+        -- da regra de comissão e do item da comanda.
+        select id into v_event_type from public.calendar_event_types
+          where organization_id = v_org and slug = 'rls-inv';
+        if v_event_type is null then
+          insert into public.calendar_event_types (organization_id, name, slug, duration_minutes)
+            values (v_org, 'RLS Invariant Servico', 'rls-inv', 30)
+            returning id into v_event_type;
+        end if;
+
+        if not exists (select 1 from public.commission_rules where organization_id = v_org) then
+          insert into public.commission_rules
+            (organization_id, attendant_user_id, event_type_id, percent)
+            values (v_org, v_attendant, v_event_type, 10);
+        end if;
+
+        if not exists (select 1 from public.recurring_entries where organization_id = v_org) then
+          insert into public.recurring_entries
+            (organization_id, name, account_id, direction, amount_cents, day_of_month)
+            values (v_org, 'RLS Invariant Aluguel', v_account, 'out', 100000, 5);
+        end if;
+
+        -- A comanda e o que pende dela. Inserida DIRETO, e não por
+        -- fn_finalizar_comanda: o que se prova aqui é a cerca da LINHA, e
+        -- passar pela função amarraria esta semente ao comportamento dela.
+        if not exists (select 1 from public.sales where organization_id = v_org) then
+          insert into public.sales
+            (organization_id, number, contact_id, attendant_user_id, payment_method_id,
+             status, total_cents)
+            values (v_org, 1, v_contact, v_attendant, v_method, 'open', 5000);
+        end if;
+        select id into v_sale from public.sales where organization_id = v_org limit 1;
+
+        if not exists (select 1 from public.sale_items where organization_id = v_org) then
+          insert into public.sale_items
+            (organization_id, sale_id, event_type_id, description, attendant_user_id,
+             unit_price_cents, total_cents, commission_percent)
+            values (v_org, v_sale, v_event_type, 'RLS Invariant Servico', v_attendant,
+                    5000, 5000, 10);
+        end if;
+        select id into v_sale_item from public.sale_items where organization_id = v_org limit 1;
+
+        if not exists (select 1 from public.commissions where organization_id = v_org) then
+          insert into public.commissions
+            (organization_id, sale_item_id, attendant_user_id, percent, amount_cents)
+            values (v_org, v_sale_item, v_attendant, 10, 500);
+        end if;
+
+        if not exists (select 1 from public.financial_entries where organization_id = v_org) then
+          insert into public.financial_entries
+            (organization_id, account_id, sale_id, direction, amount_cents, description, origin)
+            values (v_org, v_account, v_sale, 'in', 5000, 'RLS invariant recebimento', 'sale');
+        end if;
+
+        if not exists (select 1 from public.loyalty_ledger where organization_id = v_org) then
+          insert into public.loyalty_ledger
+            (organization_id, contact_id, points, reason, sale_id)
+            values (v_org, v_contact, 5, 'RLS invariant ponto', v_sale);
+        end if;
       end loop;
     end
     $seed$;
@@ -406,6 +505,27 @@ export const TABLES = [
   // atendentes da MESMA organização é medido em
   // `passagem-isolamento-e-visibilidade.test.ts`, com `visibility_mode = 'own'`.
   "passagens_de_atendimento",
+  // migrations 0350-0357 — o módulo financeiro. As dez guardam o faturamento
+  // da organização: quanto ela cobra, de quem recebeu, quem atendeu e quanto
+  // cada pessoa levou de comissão. Vazar uma linha entrega ao vizinho o preço
+  // praticado e a carteira de clientes — é o dado comercial mais sensível que
+  // este produto grava, e o único dos dois lados (dinheiro E pessoa).
+  //
+  // A LEITURA das dez é org-scoped sem gate de papel, então o `agent` semeado
+  // aqui é controle positivo legítimo. A ESCRITA tem um segundo eixo que NÃO é
+  // medido nesta lista: `manager` no catálogo (0350/0357) e `agent` na comanda
+  // (0351). Quem for medir a escrita precisa de um usuário `viewer`, que este
+  // seed não tem.
+  "financial_accounts",
+  "payment_methods",
+  "account_plans",
+  "sales",
+  "sale_items",
+  "commission_rules",
+  "commissions",
+  "financial_entries",
+  "loyalty_ledger",
+  "recurring_entries",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"
