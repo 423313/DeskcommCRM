@@ -1,4 +1,4 @@
--- 0345: Redact discovery data through the canonical contact cascade.
+-- 0361: Redact discovery data through the canonical contact cascade.
 -- Suppression tokens are pseudonymous, server-only and used exclusively to
 -- refuse re-import. The API explicitly selects public fields and never exposes them.
 alter table public.prospecting_candidates add column if not exists suppression_salt bytea;

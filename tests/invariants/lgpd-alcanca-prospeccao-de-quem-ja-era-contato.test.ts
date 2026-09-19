@@ -1,5 +1,5 @@
 /**
- * ANONIMIZAR ALCANÇA O CANDIDATO DE PROSPECÇÃO MESMO SEM VÍNCULO — migration 0345.
+ * ANONIMIZAR ALCANÇA O CANDIDATO DE PROSPECÇÃO MESMO SEM VÍNCULO — migration 0361.
  *
  * ## O defeito, e quem ele atinge
  *
@@ -84,7 +84,7 @@ let antesDoExpurgo: { nome: string; telefone: string };
 beforeAll(() => {
   sql(`
     insert into public.organizations (id, slug, legal_name, display_name)
-      values ('${ORG}', 'lgpd-prospec-0345', 'LGPD Prospecção 0345', 'LGPD Prospecção 0345')
+      values ('${ORG}', 'lgpd-prospec-0361', 'LGPD Prospecção 0361', 'LGPD Prospecção 0361')
       on conflict do nothing;
 
     insert into public.contacts (id, organization_id, name, display_name, phone_number)
@@ -94,7 +94,7 @@ beforeAll(() => {
         phone_number = excluded.phone_number, is_anonymized = false, anonymized_at = null;
 
     insert into public.prospecting_campaigns (id, organization_id, request_id, name, search)
-      values ('${CAMPANHA}', '${ORG}', gen_random_uuid(), 'Campanha 0345', '{}'::jsonb)
+      values ('${CAMPANHA}', '${ORG}', gen_random_uuid(), 'Campanha 0361', '{}'::jsonb)
       on conflict (id) do nothing;
 
     -- O candidato do defeito: telefone da MESMA pessoa, grafado SEM o nono
