@@ -9152,7 +9152,6 @@ export const DICIONARIO: Traducoes = {
   "na VPS — a aplicação ainda é manual.": { es: "en la VPS — la aplicación todavía es manual." },
   "Provedor SIP": { es: "Proveedor SIP" },
   Host: { es: "Host" },
-  Porta: { es: "Puerto" },
   "configurada, termina em": { es: "configurada, termina en" },
   "Deixe em branco para manter a atual": { es: "Déjalo en blanco para mantener la actual" },
   "From-domain (opcional)": { es: "From-domain (opcional)" },
