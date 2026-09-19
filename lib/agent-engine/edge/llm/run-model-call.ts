@@ -41,6 +41,11 @@ import { costCents } from './pricing';
 import { chaveDeOrcamentoDaInstalacao } from '../../../instalacao/comportamento';
 import { createDefaultRegistry, type ProviderRegistry } from './providers';
 import { buildStablePrefix } from './stable-prefix';
+import {
+  degrauDoEnderecoProprio,
+  prazoLegivel,
+  RECUSA_A_PARTIR_DE,
+} from './prazo-do-endereco-proprio';
 
 // Call sites FORA da camada importam os tipos daqui — nunca de 'ai' direto
 // (o seam é a única porta). `tool` idem: é como o agente define ToolSet sem
@@ -120,11 +125,22 @@ export class LlmEnderecoExigeChaveDaEmpresaError extends Error {
 export const TITULO_ENDERECO_SEM_CHAVE_DA_EMPRESA =
   'A IA recusou usar o endereço próprio desta empresa sem a chave dela';
 
+/**
+ * O título da fase de AVISO — antes do prazo, a chamada SEGUE, e dizer
+ * "recusou" seria falso na tela de quem administra. Título diferente também
+ * separa a dedup: o aviso do prazo e a recusa de depois são dois itens, e é
+ * assim que a Central conta a história em vez de sobrescrevê-la.
+ */
+export const TITULO_ENDERECO_SEM_CHAVE_PRAZO =
+  `A IA vai deixar de usar o endereço próprio desta empresa sem a chave dela em ${prazoLegivel()}`;
+
 /** O corpo do aviso — só o HOST do endereço, nunca a URL inteira. */
 export function corpoDoAvisoDeEnderecoSemChave(d: {
   purpose: string;
   provider: string;
   baseUrl: string;
+  /** `avisa` antes do prazo (a chamada seguiu), `recusa` depois dele. */
+  degrau: 'avisa' | 'recusa';
 }): string {
   const ponto = PONTO_POR_ID.get(d.purpose)?.rotulo ?? d.purpose;
   // Só o host: uma URL pode carregar usuário e senha (`https://u:s@host`) ou um
@@ -139,9 +155,14 @@ export function corpoDoAvisoDeEnderecoSemChave(d: {
     `O ponto "${ponto}" está configurado em Agente de IA › Provedores para ${destino}, ` +
     `mas esta empresa não tem chave de ${d.provider} cadastrada e validada. ` +
     `A chave de IA da instalação — a que paga a conta de todas as empresas deste servidor — ` +
-    `não é enviada a um endereço escolhido por uma empresa, então a chamada foi recusada antes de sair. ` +
-    `Enquanto isso não for corrigido, as chamadas desse ponto continuam recusadas; quando o ponto faz parte ` +
-    `do atendimento, o agente deixa de responder aos clientes desta empresa. ` +
+    `não é enviada a um endereço escolhido por uma empresa. ` +
+    (d.degrau === 'recusa'
+      ? `A chamada foi recusada antes de sair. Enquanto isso não for corrigido, as chamadas desse ponto ` +
+        `continuam recusadas; quando o ponto faz parte do atendimento, o agente deixa de responder aos ` +
+        `clientes desta empresa. `
+      : `A chamada SEGUIU desta vez, mas isso tem prazo: a partir de ${prazoLegivel()} ela passa a ser ` +
+        `recusada, e quando o ponto faz parte do atendimento o agente deixa de responder aos clientes ` +
+        `desta empresa. Corrija antes dessa data. `) +
     `Para resolver: cadastre a chave da empresa em Agente de IA › Provedores, ` +
     `ou tire o endereço próprio para voltar ao provedor padrão da instalação.`
   );
@@ -201,6 +222,12 @@ export interface RunModelCallInput {
 export interface RunModelCallDeps {
   registry?: ProviderRegistry;
   log?: Logger;
+  /**
+   * O relógio, injetável por causa do degrau de `./prazo-do-endereco-proprio`:
+   * sem ele a virada do prazo nunca é exercitada em teste e o dia do corte vira
+   * surpresa em produção.
+   */
+  agora?: Date;
 }
 
 /**
@@ -403,8 +430,10 @@ async function registrarRecusaDeEnderecoSemChave(d: {
   model: string;
   origem: string;
   baseUrl: string;
+  /** `avisa` antes do prazo (a chamada segue), `recusa` depois dele. */
+  degrau: 'avisa' | 'recusa';
   log?: Logger;
-}): Promise<LlmEnderecoExigeChaveDaEmpresaError> {
+}): Promise<LlmEnderecoExigeChaveDaEmpresaError | null> {
   const erro = new LlmEnderecoExigeChaveDaEmpresaError();
   const comum = {
     organization_id: d.input.tenantId,
@@ -423,8 +452,13 @@ async function registrarRecusaDeEnderecoSemChave(d: {
        )`,
       [
         d.input.tenantId,
-        TITULO_ENDERECO_SEM_CHAVE_DA_EMPRESA,
-        corpoDoAvisoDeEnderecoSemChave({ purpose: d.purpose, provider: d.provider, baseUrl: d.baseUrl }),
+        d.degrau === 'recusa' ? TITULO_ENDERECO_SEM_CHAVE_DA_EMPRESA : TITULO_ENDERECO_SEM_CHAVE_PRAZO,
+        corpoDoAvisoDeEnderecoSemChave({
+          purpose: d.purpose,
+          provider: d.provider,
+          baseUrl: d.baseUrl,
+          degrau: d.degrau,
+        }),
       ],
     );
   } catch (err) {
@@ -432,6 +466,17 @@ async function registrarRecusaDeEnderecoSemChave(d: {
       ...comum,
       ...normalizarErro(err),
     });
+  }
+
+  if (d.degrau === 'avisa') {
+    // A chamada SEGUE até o prazo: gravar uma linha de FALHA em `llm_calls`
+    // para uma chamada que vai acontecer seria mentira na tela de Execuções —
+    // ela vira a linha normal da chamada, logo abaixo, como qualquer outra.
+    d.log?.warn(
+      'llm: endereço da empresa com a chave da instalação — a chamada SEGUE até o prazo',
+      { ...comum, recusa_a_partir_de: RECUSA_A_PARTIR_DE },
+    );
+    return null;
   }
 
   await registrarFalha(d.db, {
@@ -534,8 +579,17 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   // antes do teto: é recusa de configuração, e consultar gasto para uma chamada
   // que não vai sair seria custo à toa. O mesmo corte vale no worker de mídia
   // (`workers/media-derive-worker.ts`), pela mesma fonte.
+  //
+  // ═══ EM DOIS TEMPOS, E O SEGUNDO ENTRA SOZINHO ═══
+  //
+  // Recusar no instante da atualização obrigaria quem opera a agir ANTES de
+  // atualizar — o que, pela régua de versionamento, é major, e major só sai
+  // quando o dono do produto pede (decisão dele, 19/09/2026, doc 40). Então
+  // até `RECUSA_A_PARTIR_DE` a chamada SEGUE e o aviso na Central traz a DATA;
+  // a partir dela, a recusa entra sem ninguém precisar reabrir o assunto.
+  // A regra e o relógio injetável moram em `./prazo-do-endereco-proprio.ts`.
   if (decisao.baseUrl && config.origemDaChave === 'chave_da_instalacao') {
-    throw await registrarRecusaDeEnderecoSemChave({
+    const erroOuNulo = await registrarRecusaDeEnderecoSemChave({
       db,
       input,
       purpose,
@@ -543,8 +597,10 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       model,
       origem: decisao.origem,
       baseUrl: decisao.baseUrl,
+      degrau: degrauDoEnderecoProprio(deps.agora ?? new Date()),
       ...(deps.log ? { log: deps.log } : {}),
     });
+    if (erroOuNulo) throw erroOuNulo;
   }
 
   // ═══ O TETO, LOGO ANTES DE SAIR BYTE ═══

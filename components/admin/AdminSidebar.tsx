@@ -14,6 +14,7 @@ import {
   CalendarBlank,
   Palette,
   Key,
+  EnvelopeSimple,
   Gear,
   Plugs,
   WebhooksLogo,
@@ -58,6 +59,12 @@ const NAV_ITEMS: NavItem[] = [
   // razão das duas de cima: é configuração da INSTALAÇÃO, e /admin tem
   // navegação própria (o registro de `lib/navigation/` cobre só `app/app/**`).
   { href: "/admin/cadastro", label: "Cadastro", icon: Key },
+  // A porta da tela do servidor de e-mail (SMTP) — mesma razão das de cima: um
+  // servidor de e-mail manda o e-mail de todas as empresas desta VPS, então é
+  // configuração da INSTALAÇÃO, e /admin tem navegação própria (o registro de
+  // `lib/navigation/` cobre só `app/app/**`). O rótulo é "E-mail" e não "SMTP"
+  // porque quem instala não precisa conhecer a sigla para achar a tela.
+  { href: "/admin/email", label: "E-mail", icon: EnvelopeSimple },
   // A porta da tela do COMPORTAMENTO da instalação (issue #1034) — mesma razão
   // das três de cima: são chaves da INSTALAÇÃO, e /admin tem navegação própria.
   // O rótulo é o do assunto da tela para quem chega por aqui sabendo o que foi

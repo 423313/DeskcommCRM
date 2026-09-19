@@ -71,6 +71,12 @@ function payload(patch: Partial<ExportPayload> = {}): ExportPayload {
     audit_log_extract: [],
     meeting_deliveries: [],
     voice_calls: [],
+    cases: [],
+    case_events: [],
+    case_chat_messages: [],
+    passagens: [],
+    avisos_de_caso: [],
+    demandas: [],
   appointment_notices: [],
     ...patch,
   };
