@@ -12,6 +12,10 @@ import { gerarAbordagemDeFormulario } from "@/lib/agent-engine/agent/abordagem-d
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import { comSaida } from "./rodape-de-saida";
+import {
+  proximoEnvioDaEsteiraFria,
+  tetoDiarioDaEsteiraFria,
+} from "./ritmo-da-esteira-fria";
 import { parseServiceBoundary } from "@/lib/atendimento/fronteira";
 import { autorizarContatoParaIA } from "@/lib/ai/elegibilidade/autorizacao";
 import { decidirPreGoLiveDoCanalViaSupabase } from "@/lib/ai/elegibilidade/consulta-pre-go-live";
@@ -88,6 +92,22 @@ export async function sendNextCandidate(
     [c.organization_id, c.id],
   );
   const count = counts[0]!;
+  // O TETO DO WARM-UP DESTA ESTEIRA. Os degraus da casa (20 no primeiro dia)
+  // foram calibrados para a esteira de RESPOSTA, onde cada saída tem uma entrada
+  // correspondente. Vinte PRIMEIRAS abordagens saindo de um número novo, todas
+  // para quem nunca falou com a empresa, é o retrato do que a plataforma pune —
+  // e quem perde o número é o cliente que instalou.
+  const idadeEmDias = numberActivatedAt
+    ? Math.floor((now.getTime() - new Date(numberActivatedAt).getTime()) / 86_400_000)
+    : 0; // sem data registrada = degrau mais conservador, como o motor da casa faz
+  const tetoFrio = tetoDiarioDaEsteiraFria(knobs, idadeEmDias);
+  if (tetoFrio !== null && count.total >= tetoFrio) {
+    await db.query(
+      "update prospecting_campaigns set next_send_at=$3 where organization_id=$1 and id=$2",
+      [c.organization_id, c.id, count.retry_at],
+    );
+    return;
+  }
   if (count.campaign >= cfg.daily_limit || count.total >= 50) {
     await db.query(
       "update prospecting_campaigns set next_send_at=$3 where organization_id=$1 and id=$2",
@@ -144,9 +164,18 @@ export async function sendNextCandidate(
       "update prospecting_candidates set status='sending',attempted_at=now(),updated_at=now() where organization_id=$1 and id=$2",
       [c.organization_id, p.id],
     );
+    // O agendamento leva JITTER: o intervalo exato (`now + N minutos`, sempre o
+    // mesmo número de milissegundos) é cadência de robô, que é justamente o que
+    // a detecção de automação procura. A doutrina da casa manda throttle+jitter
+    // em todo envio; aqui faltava. O jitter só ATRASA, nunca adianta, para não
+    // furar o intervalo mínimo que o operador configurou.
     await db.query(
-      "update prospecting_campaigns set next_send_at=now()+($3::int*interval '1 minute') where organization_id=$1 and id=$2",
-      [c.organization_id, c.id, cfg.interval_minutes],
+      "update prospecting_campaigns set next_send_at=$3 where organization_id=$1 and id=$2",
+      [
+        c.organization_id,
+        c.id,
+        proximoEnvioDaEsteiraFria(new Date(), cfg.interval_minutes, knobs),
+      ],
     );
     // Reserve the shared channel budget before the external effect, including uncertain attempts.
     await recordSend(db, c.organization_id, cfg.channel_session_id, now);

@@ -35,6 +35,15 @@ vi.mock("@/lib/agent-engine/pacing/engine", () => ({
   janelaDeEnvioAberta: mocks.open,
   decidePacing: () => ({ allow: true, waitMs: 0 }),
   proximaAberturaDaJanela: () => new Date(Date.now() + 3600000),
+  // O ritmo da esteira fria (`lib/prospecting/ritmo-da-esteira-fria.ts`) deriva
+  // o teto diário DESTA função em vez de manter uma tabela de degraus própria.
+  // O mock precisa dela, senão o import do worker morre antes de qualquer caso
+  // — e a falha aparece como "esperava erro X" em testes que não têm nada a ver.
+  warmupCapFor: (_idade: number, degraus: Array<{ minAgeDays: number; cap: number | null }>) => {
+    let cap: number | null = degraus[0]?.cap ?? null;
+    for (const d of degraus) if (_idade >= d.minAgeDays) cap = d.cap;
+    return cap;
+  },
 }));
 vi.mock("@/lib/env", () => ({ env: {} }));
 vi.mock("@/lib/prospecting/store", () => ({
