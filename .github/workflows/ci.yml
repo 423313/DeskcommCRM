@@ -158,6 +158,37 @@ jobs:
             echo "::warning::a comparação pode ter vindo truncada (${atraso} commits) — cruzamento vazio aqui é NÃO MEDIDO"
           fi
 
+      # O NÚMERO DA MIGRATION QUE ESTE PR ACRESCENTA JÁ ESTÁ TOMADO?
+      #
+      # A guarda existia e NINGUÉM a executava no CI: `scripts/checar-colisao-de-
+      # migration.sh` só rodava como gancho local e `pnpm checar:colisao-de-
+      # migration`. Gancho local não alcança fork — e PR antigo não o roda de
+      # novo, então o número que estava livre no dia em que ele nasceu pode ter
+      # sido tomado por outro PR que entrou depois. Medido em 19/09/2026: 12 PRs
+      # abertos colidiam com a `main` COM OS CINCO CHECKS VERDES, um deles com 10
+      # números de uma vez. A colisão só aparece quando o SEGUNDO PR entra, e aí
+      # é a `main` que fica com duas migrations com o mesmo NNNN.
+      #
+      # Roda sobre a PRÉVIA DO MERGE, não sobre a branch: em `pull_request` o
+      # `actions/checkout` já entrega `refs/pull/N/merge`, e o script busca a
+      # base no REMOTO (nunca uma cópia velha). Branch não é o que entra.
+      #
+      # Fora de pull_request o passo é inerte por construção: HEAD é a própria
+      # base, o diff não tem migration acrescentada e ele sai `OK`.
+      #
+      # Exit 2 (não consegui medir) também REPROVA — é a regra do próprio script,
+      # e gate que volta verde sem ter comparado nada é falha-em-verde.
+      - name: O número da migration já está tomado?
+        if: matrix.parte == 1
+        run: |
+          set -uo pipefail
+          bash scripts/checar-colisao-de-migration.sh origin/${GITHUB_BASE_REF:-main}
+          codigo=$?
+          if [ "$codigo" != 0 ]; then
+            echo "::error title=Número de migration em uso::Renumere o arquivo (NNNN e TIMESTAMP juntos, no mesmo commit). Não escolha o número sozinho quando houver outros PRs de schema em voo: peça ao alocador da rodada — o maestro de PRs de plantão —, porque quem mescla primeiro fica com o número e não há reserva. A regra está em triagem/TRIAGEM.md."
+            exit "$codigo"
+          fi
+
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
         # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
