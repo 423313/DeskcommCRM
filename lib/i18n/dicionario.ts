@@ -6670,6 +6670,8 @@ export const DICIONARIO: Traducoes = {
   "Insistência no pior caso": { es: "Insistencia en el peor caso" },
   "Intervenções humanas por demanda": { es: "Intervenciones humanas por demanda" },
   "Mensagens enviadas por automação": { es: "Mensajes enviados por automatización" },
+  "Mensagens enviadas por integração": { es: "Mensajes enviados por integración" },
+  "Envios feitos por um sistema de fora com token de servidor. Como a automação, não entram no número do agente — e é por isso que ele cai onde há integração.": { es: "Envíos hechos por un sistema externo con token de servidor. Como la automatización, no entran en el número del agente — y por eso él baja donde hay integración." },
   "Mensagens enviadas pelo agente": { es: "Mensajes enviados por el agente" },
   "Negócios ganhos": { es: "Negocios ganados" },
   "O cliente que mais recebeu retornos. A média esconde o exagero pontual.": { es: "El cliente que más retornos recibió. El promedio esconde el exceso puntual." },
