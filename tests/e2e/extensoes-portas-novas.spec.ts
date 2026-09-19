@@ -312,16 +312,32 @@ test("uma extensão de duas portas: a tela diz quais são, e cada botão leva à
   await expect(instalada).toContainText("Funil");
 
   // ── 4. Ativar na organização ─────────────────────────────────────────────
+  // LIGAR NÃO É SALVAR. Esta é a sexta causa: eu clicava no interruptor e seguia em frente,
+  // e a ativação nunca era persistida — por isso o card não chegava ao hub, mesmo com tudo
+  // instalado. O interruptor muda o estado da TELA; quem grava é o botão de salvar, e a
+  // confirmação é a frase. A irmã já fazia os três passos.
   await page.getByTestId(`extension-enabled-${instalacaoId}`).click();
-  await expect(page.getByTestId(`extension-enabled-${instalacaoId}`)).toBeChecked();
+  await expect(page.getByTestId(`extension-enabled-${instalacaoId}`)).toHaveAttribute(
+    "data-state",
+    "checked",
+  );
+  await page.getByTestId(`extension-save-${instalacaoId}`).click();
+  await expect(page.getByText("Configuração salva.", { exact: true })).toBeVisible();
   await page.screenshot({ path: `${EVIDENCE}/2-instalada-e-ativa.png`, fullPage: true });
 
   // ── 5. O guia, e a primeira porta ────────────────────────────────────────
+  // O card no hub tem identificador próprio — buscar pelo TEXTO do manifesto é frágil por
+  // dois motivos: o texto é do pacote (muda com ele) e pode casar com outro lugar da página.
   await page.goto("/app/crm");
-  const cardHub = page.getByText("Falar com quem está esperando").first();
-  await expect(cardHub).toBeVisible();
+  const cardHub = page.getByTestId(`extension-contribution-${instalacaoId}-falar-com-quem-espera`);
+  await expect(cardHub).toBeVisible({ timeout: 30_000 });
+  await expect(cardHub).toContainText("Falar com quem está esperando");
   await cardHub.click();
   await page.waitForURL(/\/app\/extensions\//, { timeout: 30_000 });
+  // A irmã confirma o guia montado antes de usar os botões dele — sem isso, o clique pode cair
+  // num guia ainda carregando e falhar por motivo que não é o do teste.
+  await expect(page.getByTestId("extension-guide")).toBeVisible({ timeout: 30_000 });
+  const urlDoGuia = page.url();
   await page.screenshot({ path: `${EVIDENCE}/3-guia-aberto.png`, fullPage: true });
 
   await page.getByTestId("extension-open-falar-com-quem-espera").click();
@@ -330,7 +346,11 @@ test("uma extensão de duas portas: a tela diz quais são, e cada botão leva à
   await page.screenshot({ path: `${EVIDENCE}/4-abriu-conversas.png`, fullPage: true });
 
   // ── 6. A segunda porta leva a outro lugar ────────────────────────────────
-  await page.goBack();
+  // Volta pela URL guardada, e não por `goBack()`: a navegação anterior foi feita pelo roteador
+  // do app, e o histórico do navegador pode levar ao hub em vez do guia. Endereço explícito é
+  // determinístico; voltar é uma aposta sobre o que o histórico guardou.
+  await page.goto(urlDoGuia);
+  await expect(page.getByTestId("extension-guide")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("extension-open-mover-o-que-parou").click();
   await page.waitForURL(/\/app\/kanban/, { timeout: 30_000 });
   await page.screenshot({ path: `${EVIDENCE}/5-abriu-o-funil.png`, fullPage: true });
