@@ -10170,7 +10170,7 @@ export const DICIONARIO: Traducoes = {
     es: 'El origen aparece en la ficha del contacto y en el filtro "Sitio (landing page)" de la lista de contactos.',
   },
   // ─── Agenda dos colegas (components/agenda/AgendaDosColegas.tsx) ───────────
-  // A opção por organização da migration 0279 (issue #978). As frases de recusa
+  // A opção por organização da migration 0343 (issue #978). As frases de recusa
   // são as que `ClientePelaAgenda` já usa ("Sua sessão expirou…", "Nenhuma
   // empresa ativa.", "Confirme a verificação em duas etapas.", "Não consegui
   // salvar essa mudança agora."), reaproveitadas de propósito: mesma situação,

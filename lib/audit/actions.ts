@@ -510,7 +510,7 @@ export const AUDIT_ACTIONS = [
   // na trilha, indistinguível de "mudaram a duração".
   "agenda.tipo_reativado",
   // A opção da ORGANIZAÇÃO que decide se o Atendente mexe na agenda dos colegas
-  // (issue #978, migration 0279). É ato de gestão como o dos tipos acima: muda o
+  // (issue #978, migration 0343). É ato de gestão como o dos tipos acima: muda o
   // que TODO Atendente pode fazer a partir dali, e sem esta linha a primeira
   // negativa de um colega não teria explicação na trilha — nem como responder
   // "quando foi que desligaram isso?".
