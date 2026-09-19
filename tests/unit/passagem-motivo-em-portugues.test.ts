@@ -64,6 +64,26 @@ const USO_COMO_CHAVE: Array<{ arquivo: string; codigo: string; razao: string }> 
     razao:
       "`channel_ai_access.mode` — comparação, não exibição: a tela mostra t(\"IA em modo de teste\")",
   },
+  // `orcamento_de_ia` é o caso OPOSTO ao de `pre_go_live` acima: lá o literal é
+  // o MESMO conceito nas duas pontas; aqui é colisão de verdade. Na passagem ele
+  // é o MOTIVO ("o limite de gasto com IA foi atingido"). No comportamento da
+  // instalação (bb11d0584, "installation behaviour gets a screen") ele é o NOME
+  // de um campo de configuração que vale `on | avisar | off`. Nenhum dos dois
+  // arquivos abaixo exibe motivo de passagem — os dois usam o literal como CHAVE
+  // de formulário. O guarda casava a string, não o papel; ele reprovou a main na
+  // árvore mesclada do #1180 sem que nenhum dos dois lados tivesse errado.
+  {
+    arquivo: "app/actions/settings/updateComportamento.ts",
+    codigo: "orcamento_de_ia",
+    razao:
+      "chave do schema Zod do comportamento da instalação (`z.enum([\"on\",\"avisar\",\"off\"])`) — outro conceito, não o motivo da passagem",
+  },
+  {
+    arquivo: "app/admin/(protected)/sistema/_form.tsx",
+    codigo: "orcamento_de_ia",
+    razao:
+      "chave do campo no formulário de comportamento da instalação (`trocar(\"orcamento_de_ia\", …)`) — outro conceito, não o motivo da passagem",
+  },
 ];
 
 /** Os arquivos de tela, onde um código cru vira texto no rosto de quem opera. */
