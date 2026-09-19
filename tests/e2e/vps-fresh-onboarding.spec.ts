@@ -452,9 +452,14 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
     await expect(page.getByText("Desativada")).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: /^ativar$/i }).click();
 
-    await expect(
-      page.getByRole("heading", { name: /verificação em duas etapas/i }),
-    ).toBeVisible({ timeout: 20_000 });
+    // O título do DIÁLOGO, e não "o texto aparece em algum lugar": a página de
+    // Segurança tem a seção "Verificação em duas etapas" e o diálogo tem
+    // "Configure a verificação em duas etapas". Medido no run da parte 4 (job
+    // 105825863584): o `getByRole('heading', /verificação em duas etapas/i)`
+    // casava os DOIS e o strict mode reprovava — os dois certos, a sonda é que
+    // não dizia qual. Prender no `#mfa-title` é o que prova que o diálogo ABRIU.
+    await expect(page.locator("#mfa-title")).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator("#mfa-title")).toHaveText(/verificação em duas etapas/i);
     await snap(page, "j1.10-mfa-ativar");
 
     await page.getByRole("button", { name: /iniciar configuração/i }).click();
