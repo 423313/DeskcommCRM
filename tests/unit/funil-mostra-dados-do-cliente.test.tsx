@@ -61,7 +61,7 @@ const CONTATO = {
   email: "ana@exemplo.com",
   phone_number: "+5511999998888",
   updated_at: "2026-09-19T10:00:00Z",
-  custom_fields: { cor_favorita: "azul", link_instagram: "instagram.com/orbita" } as Record<string, unknown>,
+  custom_fields: { cor_favorita: "azul", link_instagram: "instagram.com/loja" } as Record<string, unknown>,
 };
 
 beforeEach(() => {
@@ -85,7 +85,7 @@ describe("ContatoNoCard", () => {
           contact_phone: "+5511999998888",
           contact_email: "ana@exemplo.com",
           contact_links: [
-            { tipo: "instagram", href: "https://www.instagram.com/orbita" },
+            { tipo: "instagram", href: "https://www.instagram.com/loja" },
             { tipo: "google_meu_negocio", href: "https://maps.app.goo.gl/x" },
           ],
         }}
@@ -96,7 +96,7 @@ describe("ContatoNoCard", () => {
     expect(screen.getByText("ana@exemplo.com")).toBeInTheDocument();
 
     const instagram = screen.getByRole("link", { name: "Abrir Instagram" });
-    expect(instagram).toHaveAttribute("href", "https://www.instagram.com/orbita");
+    expect(instagram).toHaveAttribute("href", "https://www.instagram.com/loja");
     expect(instagram).toHaveAttribute("target", "_blank");
     expect(instagram).toHaveAttribute("rel", expect.stringContaining("noopener"));
     expect(screen.getByRole("link", { name: "Abrir Google Meu Negócio" })).toHaveAttribute(
@@ -111,7 +111,7 @@ describe("ContatoNoCard", () => {
         lead={{
           contact_links: [
             { tipo: "site", href: "javascript:alert(1)" },
-            { tipo: "instagram", href: "https://www.instagram.com/orbita" },
+            { tipo: "instagram", href: "https://www.instagram.com/loja" },
           ],
         }}
       />,
@@ -119,7 +119,7 @@ describe("ContatoNoCard", () => {
 
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute("href", "https://www.instagram.com/orbita");
+    expect(links[0]).toHaveAttribute("href", "https://www.instagram.com/loja");
   });
 
   it("⭐ clicar num link NÃO abre o dossiê (o card inteiro tem onClick)", () => {
@@ -127,7 +127,7 @@ describe("ContatoNoCard", () => {
     render(
       <div onClick={abrirDossie}>
         <ContatoNoCard
-          lead={{ contact_links: [{ tipo: "site", href: "https://orbitacompany.com.br/" }] }}
+          lead={{ contact_links: [{ tipo: "site", href: "https://exemplo.com.br/" }] }}
         />
       </div>,
     );
@@ -174,7 +174,7 @@ describe("ContatoDoNegocio — as abas do dossiê", () => {
     comQuery(<ContatoDoNegocio contactId="c-1" pipelineId="p-1" />);
     const formulario = abrirAbaDeLinks();
 
-    expect(within(formulario).getByLabelText("Instagram")).toHaveValue("instagram.com/orbita");
+    expect(within(formulario).getByLabelText("Instagram")).toHaveValue("instagram.com/loja");
     expect(within(formulario).getByLabelText("Site")).toHaveValue("");
     // todos os tipos do catálogo aparecem, inclusive "Google Meu Negócio" e "Outro"
     expect(within(formulario).getByLabelText("Google Meu Negócio")).toBeInTheDocument();
@@ -187,7 +187,7 @@ describe("ContatoDoNegocio — as abas do dossiê", () => {
     const formulario = abrirAbaDeLinks();
 
     fireEvent.change(within(formulario).getByLabelText("Site"), {
-      target: { value: "orbitacompany.com.br" },
+      target: { value: "exemplo.com.br" },
     });
     fireEvent.click(within(formulario).getByRole("button", { name: "Salvar links" }));
 
@@ -195,8 +195,8 @@ describe("ContatoDoNegocio — as abas do dossiê", () => {
     expect(mutateAsync).toHaveBeenCalledWith({
       custom_fields: {
         cor_favorita: "azul", // o campo que NÃO é link sobrevive ao PATCH
-        link_instagram: "instagram.com/orbita",
-        link_site: "orbitacompany.com.br",
+        link_instagram: "instagram.com/loja",
+        link_site: "exemplo.com.br",
       },
     });
     await waitFor(() =>

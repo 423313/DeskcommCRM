@@ -58,8 +58,8 @@ export function chaveDoLink(tipo: TipoDeLink): string {
  *
  * `@usuario` NÃO é aceito: transformá-lo em endereço exigiria hardcodar o host
  * de cada rede aqui, e o código que embarca não nomeia host de terceiro. Pior
- * que recusar seria aceitar por engano — `@orbita.company` casaria como o
- * domínio `orbita.company` — por isso o `@` é recusado ANTES do resto.
+ * que recusar seria aceitar por engano — `@loja.exemplo` casaria como o
+ * domínio `loja.exemplo` — por isso o `@` é recusado ANTES do resto.
  */
 export function normalizarLink(bruto: string | null | undefined): string | null {
   const texto = (bruto ?? "").trim();

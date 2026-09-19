@@ -23,6 +23,7 @@ import {
   type LinksDoContato,
   type TipoDeLink,
 } from "@/lib/leads/links-de-contato";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import type { Contact } from "@/lib/types/contacts";
 
 interface Props {
@@ -86,7 +87,7 @@ function ContatoVinculado({ contactId, pipelineId }: { contactId: string; pipeli
 
 function DadosDoContato({ contato }: { contato: Contact }) {
   const t = useT();
-  const nome = contato.display_name ?? contato.name;
+  const nome = nomeDoContato(contato);
   const digitos = (contato.phone_number ?? "").replace(/\D/g, "");
 
   return (

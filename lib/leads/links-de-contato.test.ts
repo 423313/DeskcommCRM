@@ -25,13 +25,13 @@ describe("normalizarLink — o que vira href", () => {
     expect(normalizarLink("http://exemplo.com.br")).toBe("http://exemplo.com.br/");
   });
 
-  it("⭐ @usuario é recusado — e @orbita.company NÃO vira o domínio orbita.company", () => {
+  it("⭐ @usuario é recusado — e @loja.exemplo NÃO vira o domínio loja.exemplo", () => {
     // O código que embarca não nomeia host de rede social, então não há como
     // transformar handle em endereço. O perigo real não é recusar: é aceitar por
-    // engano, porque `https://@orbita.company` é um URL válido de host
-    // `orbita.company`.
-    expect(normalizarLink("@orbita")).toBeNull();
-    expect(normalizarLink("@orbita.company")).toBeNull();
+    // engano, porque `https://@loja.exemplo` é um URL válido de host
+    // `loja.exemplo`.
+    expect(normalizarLink("@loja")).toBeNull();
+    expect(normalizarLink("@loja.exemplo")).toBeNull();
     expect(normalizarLink("@")).toBeNull();
     expect(normalizarLink("@com espaço")).toBeNull();
   });
@@ -60,25 +60,25 @@ describe("normalizarLink — o que vira href", () => {
 describe("lerLinks / linksParaExibir", () => {
   it("lê só valores string preenchidos, das chaves do catálogo", () => {
     const links = lerLinks({
-      link_instagram: "  instagram.com/orbita  ",
+      link_instagram: "  instagram.com/loja  ",
       link_site: "",
       link_youtube: 42,
       link_desconhecido: "https://x.com",
       cor_favorita: "azul",
     });
-    expect(links).toEqual({ instagram: "instagram.com/orbita" });
+    expect(links).toEqual({ instagram: "instagram.com/loja" });
   });
 
   it("⭐ exibe só o que é válido, na ordem do catálogo", () => {
     const itens = linksParaExibir({
-      link_site: "orbitacompany.com.br",
-      link_instagram: "instagram.com/orbita",
+      link_site: "exemplo.com.br",
+      link_instagram: "instagram.com/loja",
       link_facebook: "javascript:alert(1)",
-      link_tiktok: "@orbita",
+      link_tiktok: "@loja",
     });
     expect(itens).toEqual([
-      { tipo: "instagram", href: "https://instagram.com/orbita" },
-      { tipo: "site", href: "https://orbitacompany.com.br/" },
+      { tipo: "instagram", href: "https://instagram.com/loja" },
+      { tipo: "site", href: "https://exemplo.com.br/" },
     ]);
   });
 
@@ -125,7 +125,7 @@ describe("tiposInvalidos", () => {
   it("aponta o que está preenchido e não vira link", () => {
     expect(
       tiposInvalidos({
-        instagram: "@orbita",
+        instagram: "@loja",
         site: "loja",
         facebook: "javascript:x",
         youtube: "",

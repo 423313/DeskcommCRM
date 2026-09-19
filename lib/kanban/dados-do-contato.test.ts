@@ -27,8 +27,8 @@ describe("anexarDadosDoContato — o que o card do funil recebe do contato", () 
           phone_number: "+5511999998888",
           email: "ana@exemplo.com",
           custom_fields: {
-            link_instagram: "instagram.com/orbita",
-            link_site: "orbitacompany.com.br",
+            link_instagram: "instagram.com/loja",
+            link_site: "exemplo.com.br",
             link_facebook: "javascript:alert(1)",
             cor_favorita: "azul",
           },
@@ -41,8 +41,8 @@ describe("anexarDadosDoContato — o que o card do funil recebe do contato", () 
       contact_phone: "+5511999998888",
       contact_email: "ana@exemplo.com",
       contact_links: [
-        { tipo: "instagram", href: "https://instagram.com/orbita" },
-        { tipo: "site", href: "https://orbitacompany.com.br/" },
+        { tipo: "instagram", href: "https://instagram.com/loja" },
+        { tipo: "site", href: "https://exemplo.com.br/" },
       ],
     });
     // o link perigoso e o campo que não é link não vazam para o card
