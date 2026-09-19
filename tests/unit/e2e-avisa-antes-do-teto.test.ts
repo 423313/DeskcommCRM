@@ -12,8 +12,8 @@
  * caso para descobrir que o problema era o tamanho da parte.
  *
  * O que este arquivo guarda é o PAR: a medição (relógio do job inteiro, não só
- * o do Playwright — o preparo de ambiente custa ~9 min por parte, e o
- * `Initialize containers` dos services custa ~51 s) e o aviso que acontece
+ * o do Playwright — o preparo de ambiente custa ~9 min por parte; até o #983,
+ * o `Initialize containers` dos services somava ~51 s a cada uma) e o aviso que acontece
  * ANTES do corte, nomeando o problema com o número medido.
  *
  * ## Por que ler o YAML em vez de exercitar a rodada
