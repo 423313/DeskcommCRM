@@ -8271,6 +8271,7 @@ export const DICIONARIO: Traducoes = {
   "Falha ao processar o envio do arquivo.": { es: "Falla al procesar el envío del archivo." },
   "O arquivo não está mais guardado. Envie de novo.": { es: "El archivo ya no está guardado. Envíalo de nuevo." },
   "Esta chave de idempotência já foi usada com outro conteúdo.": { es: "Esta clave de idempotencia ya fue usada con otro contenido." },
+  "Um canal está em modo de teste — a IA não responde ninguém nele": { es: "Un canal está en modo de prueba — la IA no responde a nadie en él" },
   "A mesma requisição ainda está em curso. Tente de novo em instantes.": { es: "La misma solicitud todavía está en curso. Inténtalo de nuevo en unos instantes." },
   "Filtros inválidos.": { es: "Filtros inválidos." },
   "Header Idempotency-Key é obrigatório.": { es: "El header Idempotency-Key es obligatorio." },
