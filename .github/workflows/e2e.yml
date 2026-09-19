@@ -862,6 +862,7 @@ jobs:
         extensoes-declarativas.spec.ts
         extensoes-recuperacao.spec.ts
         extensoes-versao.spec.ts
+        extensoes-portas-novas.spec.ts
         motivo-do-publicar-na-tela.spec.ts
         followup-cartoes.spec.ts
         followup-modelos-de-clinica.spec.ts
