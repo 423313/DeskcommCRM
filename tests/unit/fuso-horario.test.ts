@@ -25,6 +25,7 @@ import { describe, expect, it } from "vitest";
  * A LISTA impede o erro de digitação, que é a origem. A CHECAGEM defende a API,
  * que aceita qualquer cliente e não passa pela tela.
  */
+import { DICIONARIO } from "@/lib/i18n/dicionario";
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
 import { FUSOS_OFERECIDOS, FUSO_PADRAO, fusoValido } from "@/lib/tempo/fusos";
 
@@ -128,6 +129,14 @@ describe("os fusos OFERECIDOS — a lista, não o padrão", () => {
     for (const arquivo of ["app/app/settings/tenant/_form.tsx", "app/app/settings/profile/_form.tsx"]) {
       expect(readFileSync(arquivo, "utf8"), arquivo).toContain('"Europe/Lisbon"');
     }
+  });
+
+  // O painel anti-banimento passa o rótulo por `t(f.rotulo)` — chave dinâmica,
+  // que a varredura de `t("...")` literal não enxerga. Luanda entrou sem
+  // tradução e ninguém viu; este caso reprova o próximo rótulo sem entrada.
+  it("todo rótulo oferecido tem entrada no dicionário", () => {
+    const semEntrada = FUSOS_OFERECIDOS.filter((f) => !DICIONARIO[f.rotulo]?.es).map((f) => f.rotulo);
+    expect(semEntrada).toEqual([]);
   });
 
   it("e o padrão de quem não escolheu segue sendo São Paulo", () => {
