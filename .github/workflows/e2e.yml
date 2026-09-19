@@ -5,13 +5,13 @@ name: e2e
 #
 # NÃO conte aqui quantas são: o summary do job CONTA em vez de afirmar, e
 # `tests/unit/e2e-cobertura-completa.test.ts` reprova o build quando uma spec do
-# disco não está em nenhuma das três listas abaixo. Um número escrito nesta linha
+# disco não está em nenhuma das quatro listas abaixo. Um número escrito nesta linha
 # é a quarta fonte da mesma verdade, e as três anteriores já divergiram — este
 # cabeçalho dizia "29 de 33" quando o disco tinha 45 e o job rodava 44.
 #
 # A execução é dividida em DUAS invocações do playwright de propósito: o
 # limitador de login do produto é por IP (60/300s) e no CI todos os specs vêm do
-# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte 1 de 3".
+# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte 1 de 4".
 #
 # É CHECK OBRIGATÓRIO. A régua, para reconferir em vez de acreditar nesta linha:
 #   $ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
@@ -139,6 +139,16 @@ jobs:
   # O teto de 30 min FICA. Ele é o que denuncia a suíte crescendo de novo;
   # subi-lo seria trocar um vermelho honesto por um CI que demora mais a cada
   # mês sem ninguém perceber.
+  #
+  # A parte 4 já custou às outras três: os contêineres dela (WAHA, redis,
+  # serverless-redis-http) eram `services:`, que é chave do JOB e sobe em
+  # TODAS as pernas — o Actions não aceita condição por braço da matriz. Na
+  # parte 1 do run 35124188017, que não usa nenhum deles, "Initialize
+  # containers" foi de 16:53:22.468 a 16:54:13.725 — 51s, quase todos no pull
+  # do WAHA —, com a parte 3 do mesmo run em 26m04s. Agora eles sobem por
+  # `docker run` no passo "Subir WAHA e o par Redis da VPS fresca", com
+  # `if: matrix.parte == 4`. Não os devolva para `services:`: a guarda
+  # `tests/unit/e2e-parte-4-fala-com-os-servicos-do-runner.test.ts` reprova.
   e2e-parte:
     needs: [e2e-alcance]
     if: needs.e2e-alcance.outputs.e2e == 'sim'
@@ -174,7 +184,7 @@ jobs:
       # uma rodada por parte.
       fail-fast: false
       matrix:
-        parte: [1, 2, 3]
+        parte: [1, 2, 3, 4]
     # ─────────────────────────────────────────────────────────────────────────
     # A COBERTURA DEIXA DE SER PROSA DIGITADA À MÃO.
     #
@@ -187,7 +197,7 @@ jobs:
     # Cobertura parcial silenciosa se lê como cobertura total. Agora há UMA fonte
     # por lista, o summary CONTA em vez de afirmar, e
     # `tests/unit/e2e-cobertura-completa.test.ts` reprova o build quando um arquivo
-    # de spec não está em nenhuma das três listas.
+    # de spec não está em nenhuma das quatro listas.
     #
     # FORA_DO_CI exige motivo escrito no próprio nome do bloco abaixo — spec fora
     # do gate sem razão declarada é a dívida voltando pela porta de serviço.
@@ -210,6 +220,31 @@ jobs:
     # tela AGE sobre isso). A spec é a prova pela tela de que os dois, juntos,
     # resolvem a jornada — e ela CONFERE a própria precondição em `beforeAll`,
     # falhando alto em vez de se auto-pular.
+    #
+    # ═══ `aviso-de-caso-chega-no-whatsapp`: O CI NÃO TEM ENDEREÇO PÚBLICO ═══
+    #
+    # Ela prova o envio de verdade do aviso de caso, com um receptor HTTP no
+    # lugar do WhatsApp — e para isso precisa de um `NEXT_PUBLIC_APP_URL`
+    # público, porque o produto RECUSA mandar um aviso cujo link não abriria no
+    # celular de outra pessoa (`lib/escalacao/aviso-ao-suporte.ts`, guarda 9;
+    # `lib/escalacao/aviso-de-teste.ts`, guarda 9).
+    #
+    # O `.env.e2e` grava `NEXT_PUBLIC_APP_URL=http://localhost:$E2E_PORT`, e não
+    # por esquecimento: é o endereço em que o servidor sob teste responde de
+    # verdade, e as três specs de fluxo por e-mail (`password-recovery`,
+    # `reset-password-mfa`, `signup-journey`) quebram se ele apontar para outro
+    # lugar — o browser segue o 3xx e cai onde não há ninguém escutando. O valor
+    # é lido uma vez, no boot (`lib/env.ts`, `safeParse(process.env)`), então não
+    # há como valer só para uma spec: trocá-lo troca para a suíte inteira.
+    #
+    # O que roda no CI é `aviso-de-caso-no-whatsapp.spec.ts`, e ela não pula o
+    # assunto: prova a tela E a RECUSA honesta ponta a ponta (a entrega nasce
+    # `falhou/sem_endereco_publico` e a tela diz isso em português), que é
+    # exatamente o comportamento de uma instalação recém-feita.
+    #
+    # A spec de fora CONFERE a própria precondição e falha alto com a receita de
+    # como rodá-la — `test.skip()` seria um verde que não distingue "passou" de
+    # "nem tentou". A prova local está em `evidence/casos-vivos/aviso/`.
     #
     # ═══ O 429 DE `olhar-telas-do-epico`: RESOLVIDO DUAS VEZES, EM CAMADAS DIFERENTES ═══
     #
@@ -611,6 +646,8 @@ jobs:
         followup-tempo-adaptativo.spec.ts
         gatilho-de-etapa.spec.ts
         gatilho-de-caso.spec.ts
+        conversa-do-caso.spec.ts
+        aviso-de-caso-no-whatsapp.spec.ts
         agenda-ocupacao-do-google-na-grade.spec.ts
         agenda-ocupacao-do-google-no-historico.spec.ts
         followup-publicado-abre-no-construtor.spec.ts
@@ -641,7 +678,11 @@ jobs:
       # Cada item aqui tem o motivo MEDIDO, não presumido — e o gate cobra que a
       # lista exista e some com as outras duas.
       #
-      # `vps-fresh-onboarding` fica fora por DUAS razões, e só a primeira estava
+      # ⚠️ HISTÓRICO: `vps-fresh-onboarding` NÃO está mais fora — desde o PR da
+      # issue #179 ela roda na PARTE_4 (ver o bloco `SPECS_PARTE_4` abaixo). O
+      # registro fica pelas lições, e o fecho dele foi atualizado.
+      #
+      # `vps-fresh-onboarding` ficava fora por DUAS razões, e só a primeira estava
       # escrita — com o número errado, contradito 8 linhas abaixo neste mesmo
       # arquivo, que já usava 17 como controle positivo:
       #
@@ -670,11 +711,14 @@ jobs:
       #
       #       A instância está corrigida (a org sai do dono do bootstrap) e a
       #       classe inteira virou gate: `tests/unit/e2e-nao-escolhe-a-primeira-linha`.
-      #       O que continua valendo aqui é a razão (1): esta suíte não roda no CI
-      #       por dependência externa, não por causa do rig de organização.
+      #       A razão (1) — dependência externa — era a que ainda a segurava, e
+      #       foi a que a PARTE_4 resolveu: WAHA e o par Redis sobem por
+      #       `docker run` só nela, e Resend/Nuvemshop falam com um dublê HTTP real.
       #
-      # Continua sendo a P0 da doutrina de QA Visual: `e2e` verde NÃO prova a
-      # jornada de instalação fresca, que é o produto que se vende.
+      # Ela é a P0 da doutrina de QA Visual, e é por isso que o limite da prova
+      # fica escrito onde ela roda: o WAHA do CI é o CORE, não o Plus (ver o
+      # passo "Subir WAHA e o par Redis da VPS fresca") — a jornada de onboarding é exercitada; o que só
+      # o Plus tem, não.
       #
 # As CINCO specs da missão "Follow-up Vivo" (`followup-linguagem`,
       # `followup-ramos`, `followup-dossie`, `followup-tempo-adaptativo`,
@@ -814,6 +858,7 @@ jobs:
         agenda-presenca-recuperacao.spec.ts
         agenda-google-sync.spec.ts
         encerramento-atendimento.spec.ts
+        passagem-com-contexto.spec.ts
         interface-por-vinculo.spec.ts
         olhar-telas-do-epico.spec.ts
         pipelines-gestao.spec.ts
@@ -834,6 +879,7 @@ jobs:
         inbox-abas-espelham-o-comando.spec.ts
         moeda-da-organizacao.spec.ts
         zona-de-perigo-apaga-dados-de-teste.spec.ts
+        email-da-instalacao-pela-tela.spec.ts
         central-avisos-resolver-em-lote.spec.ts
         voz-desligada-por-padrao.spec.ts
         voz-primeiro-pareamento.spec.ts
@@ -845,15 +891,49 @@ jobs:
         extensoes-declarativas.spec.ts
         extensoes-recuperacao.spec.ts
         extensoes-versao.spec.ts
+        extensoes-portas-novas.spec.ts
         motivo-do-publicar-na-tela.spec.ts
         followup-cartoes.spec.ts
         followup-modelos-de-clinica.spec.ts
         presenca-do-atendente.spec.ts
 
-      FORA_DO_CI: >-
+      # ─── PARTE 4 — a spec de VPS fresca, e por que ela vem sozinha ───
+      #
+      # A `vps-fresh-onboarding` era a última spec fora do CI. A infraestrutura
+      # que faltava chegou em dois lugares:
+      #
+      #  * o passo "Subir WAHA e o par Redis da VPS fresca" (`docker run`, só
+      #    nesta parte): WAHA (devlikeapro/waha) e o par Redis do
+      #    `docker-compose.prod.yml` — `redis:7-alpine` + o
+      #    `hiett/serverless-redis-http` que fala o REST do Upstash;
+      #  * `scripts/duble-saas-e2e.mjs`: dublê HTTP REAL (recebe requisição de
+      #    verdade, na porta, com processo separado) do Resend e do handshake
+      #    OAuth da Nuvemshop. Não é mock em processo — a doutrina de QA visual
+      #    pede receiver real para efeito colateral externo.
+      #
+      # Ela fica SOZINHA numa parte por um motivo que não é relógio: as partes 1
+      # a 3 explicitamente NÃO resetam o banco entre specs (é a vizinhança que
+      # elas escolheram), e a fresca precisa do oposto — a instalação sem dono,
+      # sem tenant, sem fixtures. Por isso os dois passos de semeadura
+      # (`Semear credenciais de teste` e `Semear as fixtures`) recebem
+      # `if: matrix.parte != 4`, e o único dado que existe antes dela é o dono
+      # do bootstrap — criado pelo passo `Criar o dono da instalação`, com o
+      # mesmo `scripts/bootstrap-owner.ts` que o `install.sh` roda na VPS. A
+      # spec EXIGE esse dono como precondição (está no cabeçalho dela, junto de
+      # WAHA e Redis); o que ela afirma é a jornada a partir dali, não a
+      # existência do usuário.
+      SPECS_PARTE_4: >-
         vps-fresh-onboarding.spec.ts
+
+      # ─── FORA_DO_CI — as duas que ficaram, e o motivo continua onde sempre ───
+      #
+      # A `vps-fresh-onboarding` saiu desta lista no PR da issue #179 (a infra
+      # dela está no `SPECS_PARTE_4` logo acima). As duas abaixo continuam
+      # fora, e o motivo delas é o que o job `resumo` imprime no run.
+      FORA_DO_CI: >-
         inbox-tempo-real.spec.ts
         cadastro-sem-confirmacao-de-email.spec.ts
+        aviso-de-caso-chega-no-whatsapp.spec.ts
     steps:
       # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
       #
@@ -885,9 +965,10 @@ jobs:
             # valor e o `timeout-minutes` deixarem de concordar.
             echo "TETO_SEGUNDOS=1800"
             # Corte antecipado, 2 min antes do teto. A margem paga o que o
-            # relógio de passo NÃO vê: o `Initialize containers` dos services
-            # roda antes do primeiro passo (~51 s por perna, medido no #983) e
-            # o envio de artefato/resumo precisa de tempo depois da suíte.
+            # relógio de passo NÃO vê: o que o runner faz antes do primeiro passo
+            # (até o #983 incluía ~51 s de `Initialize containers` em toda
+            # perna; os contêineres agora sobem só na parte 4, dentro de um
+            # passo) e o envio de artefato/resumo depois da suíte.
             echo "MARGEM_SEGUNDOS=120"
             # Piso para a suíte sequer começar: com menos que isto, rodar a
             # suíte é gastar o que resta para ver um cancelamento no meio.
@@ -896,6 +977,99 @@ jobs:
           echo "parte ${{ matrix.parte }}: relógio do job iniciado em $(date -u +%H:%M:%S) UTC"
 
       - uses: actions/checkout@v7
+
+      # ─── Serviços da parte 4 — a spec de VPS fresca (issue #179) ──────────
+      #
+      # Eram `services:` do job, e `services:` é chave do JOB, não do braço da
+      # matriz: subiam nas quatro partes e ficavam ociosos em três. Na parte 1
+      # do run 35124188017, que não usa nenhum deles, "Initialize containers"
+      # custou 51s (quase todos no pull do WAHA), com as partes a ~2 min do
+      # teto de 30. Aqui eles sobem por `docker run` SÓ na parte 4 — a alavanca
+      # que o comentário do teto, no topo deste job, nomeava.
+      #
+      # A rede própria devolve o que `services:` dava de graça: o nome `redis`
+      # resolvendo para o contêiner do Redis, que é o endereço do
+      # serverless-redis-http. As portas publicadas são as mesmas (3000, 6379,
+      # 8079), então o passo "Ligar a VPS fresca" — que espera cada serviço
+      # RESPONDER e falha fechado — não muda. O passo sobe logo no começo do
+      # job para os contêineres ficarem prontos enquanto o Supabase e o build
+      # correm; por isso eles continuam nascendo ANTES de o `.env.e2e` existir.
+      - if: matrix.parte == 4
+        name: Subir WAHA e o par Redis da VPS fresca
+        env:
+          # Tag PINADA, e a MESMA do `docker-compose.prod.yml`: este job existe
+          # para provar o que o self-hoster recebe, e `:latest` deixou de ser
+          # isso em 01/09/2026 (o digest do `latest` virou 2026.8.2 enquanto o
+          # pin segue em 2026.7.2). Medido no run 35095923107: com `:latest` o
+          # contêiner NÃO sobe.
+          WAHA_IMAGE: devlikeapro/waha:latest-2026.7.2
+          REDIS_IMAGE: redis:7-alpine
+          # O MESMO digest do compose: `:latest` é tag móvel. Medido em
+          # 2026-09-16 com `docker buildx imagetools inspect`: o `:latest` de
+          # então É este índice. Bumpar é junto com o compose.
+          SRH_IMAGE: hiett/serverless-redis-http@sha256:5b0bb9239fce53abf87b2018a7a0deb9ec7bd900c5360738fe5fbeeb426f9150
+          # Inerte nesta jornada, e escrito para não parecer que funciona: o job
+          # roda no host, então o 127.0.0.1 de dentro do WAHA é o próprio WAHA.
+          # O que a spec exercita é app→WAHA (o QR), não o webhook de volta.
+          WHATSAPP_HOOK_URL: http://127.0.0.1:3001/api/whatsapp/webhook
+          # A chave do WAHA tem UMA fonte: `.env.e2e`, gerado por
+          # `scripts/gerar-env-e2e.sh` e publicado no ambiente do job. Escrever a
+          # chave aqui foi reprovado pelo guard
+          # `tests/unit/e2e-workflow-honra-o-env.test.ts` (eram DOIS valores
+          # diferentes, e o app levava 401) — e este passo roda ANTES do que
+          # publica o arquivo (é o que deixa o pull correr junto com o resto do
+          # job), então o contêiner não tem como receber o valor da fonte única.
+          #
+          # Daí o `WAHA_NO_API_KEY`: sem ele o WAHA NÃO roda sem chave — ele
+          # SORTEIA uma no boot. Está no pin, em `core/auth/config.js`:
+          # `FromEnv('WAHA_API_KEY', parseBool(process.env.WAHA_NO_API_KEY), rand(), keys)`,
+          # e o `ApiKeyAuthFactory` só cai em `NoAuth` quando a chave resolve
+          # vazia. Medido no run 35100039158: com a chave sorteada, todo
+          # `X-Api-Key` que o CRM manda — o do `.env.e2e` — toma 401, e o
+          # serviço fica de pé e inútil. Com `True` a API é pública (o próprio
+          # contêiner avisa no log: "No API key detected"), e o que este job
+          # exercita é a jornada de onboarding, não o contrato de autenticação do
+          # WAHA — esse tem fonte e teste no produto.
+          WAHA_NO_API_KEY: "True"
+          # O MESMO motor do `docker-compose.prod.yml`
+          # (`WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}`). Sem
+          # esta linha o contêiner cai no default WEBJS — o log do run
+          # 35124188017 mostra `"engine":"WEBJS"` —, e o produto RECUSA essa
+          # sessão: `compatibleSession()` em `lib/waha/client.ts` devolve false
+          # para qualquer engine que não seja NOWEB, e o `createSession` lança.
+          # Com WEBJS a jornada do QR não teria como ficar verde nem com o WAHA
+          # alcançável.
+          #
+          # Limite escrito para não ser descoberto: isto é o WAHA CORE (o mesmo
+          # log diz `"tier":"CORE"`), não o WAHA Plus que a doutrina exige em
+          # produção. A licença do Plus não pode viver num CI que roda PR de
+          # fork sem segredo nenhum. Multi-sessão, retry e S3 — o que só o Plus
+          # tem — NÃO são exercitados aqui; a jornada de onboarding é.
+          WHATSAPP_DEFAULT_ENGINE: NOWEB
+        run: |
+          set -euo pipefail
+          docker network create vps-fresca
+
+          docker run -d --name redis --network vps-fresca --network-alias redis \
+            -p 6379:6379 "$REDIS_IMAGE"
+          # O serverless-redis-http conecta no boot: ele só sobe com o Redis de pé.
+          for _ in $(seq 1 30); do
+            if docker exec redis redis-cli ping 2>/dev/null | grep -q PONG; then break; fi
+            sleep 1
+          done
+          if ! docker exec redis redis-cli ping 2>/dev/null | grep -q PONG; then
+            echo "o redis não respondeu PING em 30s"; docker logs --tail 40 redis 2>&1 || true
+            exit 1
+          fi
+
+          docker run -d --name redis-http --network vps-fresca -p 8079:80 \
+            -e SRH_MODE=env -e SRH_TOKEN=e2e-token-nao-e-segredo \
+            -e SRH_CONNECTION_STRING=redis://redis:6379 "$SRH_IMAGE"
+
+          docker run -d --name waha -p 3000:3000 \
+            -e WHATSAPP_HOOK_URL -e WAHA_NO_API_KEY -e WHATSAPP_DEFAULT_ENGINE "$WAHA_IMAGE"
+
+          docker ps --format '{{.Names}} {{.Image}} {{.Status}} {{.Ports}}'
 
       - uses: ./.github/actions/preparar-node
         # O teto do preâmbulo mora aqui porque passo de composite action não
@@ -949,6 +1123,19 @@ jobs:
         run: |
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
             -v ON_ERROR_STOP=1 -q -f supabase/baseline.sql
+
+      # A chave de cifra dos segredos, como o install.sh semeia em TODA instalação
+      # (`ensure_encryption_key`, em hostgator-setup-kit/_common.sh). Sem ela,
+      # `fn_encrypt_oauth` levanta "NUVEMSHOP_OAUTH_ENCRYPTION_KEY ausente" e
+      # qualquer tela que guarda segredo cifrado recusa o salvamento — medido na
+      # `email-da-instalacao-pela-tela.spec.ts`, a primeira a exercitar isso
+      # pela tela: o log do servidor dizia exatamente essa frase, e a senha do
+      # SMTP nunca chegava ao banco. O ambiente do e2e imita a VPS recém-
+      # instalada; uma VPS recém-instalada TEM essa chave.
+      - name: Semear a chave de cifra dos segredos (o que o install.sh faz)
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -q \
+            -c "insert into private.app_secrets (name, value) values ('nuvemshop_oauth_key', '$(openssl rand -hex 32)') on conflict (name) do nothing;"
 
       # ⚠️ O REALTIME PRECISA REINICIAR DEPOIS DO BASELINE — senão ele assina e
       # não entrega, em silêncio.
@@ -1066,7 +1253,164 @@ jobs:
       # O seed cria 1 org + 4 usuários com os 4 papéis e um TOTP verified de
       # secret conhecido no admin — sem ele, todo spec que loga fica de fora, que
       # era a maior parte da suíte.
-      - name: Semear credenciais de teste
+      # ─── A parte fresca: WAHA, Redis e o dublê de SaaS, antes da spec ──────
+      #
+      # O dublê é exercitado pelo SMOKE antes da spec: se ele não responder o
+      # contrato, o job falha aqui, com a rota nomeada, em vez de falhar seis
+      # minutos depois dentro do Playwright com "elemento não encontrado".
+      - if: matrix.parte == 4
+        name: Ligar a VPS fresca (WAHA, Redis e dublê de SaaS)
+        run: |
+          set -euo pipefail
+
+          # 1. O dublê de Resend/Nuvemshop: processo separado, porta de verdade.
+          nohup node scripts/duble-saas-e2e.mjs >/tmp/duble-saas.log 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3997/__duble/saude >/dev/null; then break; fi
+            sleep 1
+          done
+          cat /tmp/duble-saas.log
+          bash scripts/duble-saas-e2e-smoke.sh
+
+          # 2. O que a spec fresca exige do ambiente (cabeçalho dela):
+          #    WAHA ativo, Redis local, e Resend SEM chave — instalação nova não
+          #    tem chave de SaaS nenhuma, e é isso que a spec cobra.
+          {
+            # `WAHA_API_KEY` NÃO entra aqui: ela vem do `.env.e2e` (fonte única,
+            # já publicada no ambiente do job). Redigitá-la — com outro valor,
+            # que era o caso — é a segunda fonte que o guard
+            # `tests/unit/e2e-workflow-honra-o-env.test.ts` reprova.
+            echo "WAHA_API_BASE_URL=http://127.0.0.1:3000"
+            echo "UPSTASH_REDIS_REST_URL=http://127.0.0.1:8079"
+            echo "UPSTASH_REDIS_REST_TOKEN=e2e-token-nao-e-segredo"
+            echo "RESEND_API_BASE_URL=http://127.0.0.1:3997"
+            echo "RESEND_API_KEY="
+            echo "NUVEMSHOP_AUTH_BASE=http://127.0.0.1:3997"
+            echo "NUVEMSHOP_API_BASE=http://127.0.0.1:3997"
+            echo "NUVEMSHOP_CLIENT_ID=e2e-app-id"
+            echo "NUVEMSHOP_CLIENT_SECRET=e2e-placeholder-nao-e-segredo"
+          } > /tmp/vps-fresca.env
+
+          #    ⚠️ Estes valores vão para DENTRO do `.env.e2e`, não só para o
+          #    `$GITHUB_ENV` — senão o SERVIDOR nunca os vê.
+          #
+          #    O `playwright.config.ts` injeta o `.env.e2e` em `webServer.env`, e
+          #    ali a regra medida (escrita no próprio config) é: chave nos dois
+          #    lados, vence a do `.env.e2e`. O gerador escreve
+          #    `WAHA_API_BASE_URL=…:3999` e `UPSTASH_REDIS_REST_URL=…:3998`
+          #    (portas onde nada escuta), então só anexar ao `$GITHUB_ENV` dava
+          #    3000/8079 ao processo de TESTE e 3999/3998 ao app. Medido no run
+          #    35124188017 (parte 4): o contêiner do WAHA registrou DUAS
+          #    requisições no job inteiro — a sonda deste passo e o `beforeAll`
+          #    da spec, que leem o ambiente do processo —, e nenhuma do app. No
+          #    trace, o POST de sessão do onboarding voltou 502 sem `details`
+          #    (nenhuma resposta HTTP do WAHA) e os 19 GETs de status, 502. As 6
+          #    linhas `redis incr failed … fetch failed` do app são a mesma
+          #    causa, do lado do Redis.
+          #
+          #    Trocar as linhas NO arquivo mantém a fonte única: servidor, testes,
+          #    `.env.local` (copiado logo abaixo) e `$GITHUB_ENV` leem o mesmo.
+          chaves=$(cut -d= -f1 /tmp/vps-fresca.env | paste -sd'|' -)
+          grep -vE "^(${chaves})=" .env.e2e > /tmp/env-e2e-sem-parte-4
+          cat /tmp/env-e2e-sem-parte-4 /tmp/vps-fresca.env > .env.e2e
+          cat /tmp/vps-fresca.env >> "$GITHUB_ENV"
+          echo "--- o que o app da parte 4 recebe do .env.e2e ---"
+          grep -E "^(${chaves})=" .env.e2e
+
+          # 3. A cadeia de Redis, provada pelo protocolo que o produto usa: um
+          #    comando Upstash REST de verdade, que só responde PONG se o
+          #    serverless-redis-http estiver de pé E falando com o redis:7.
+          #
+          #    Falha FECHADO, como o laço do WAHA logo abaixo. A versão anterior
+          #    terminava o `for` sem `exit 1`: nas 30 voltas sem PONG o passo
+          #    seguia verde e o vermelho aparecia minutos depois, dentro do
+          #    Playwright, sem nome. Medido no run 35124188017 (parte 4): a linha
+          #    "pronto" nunca foi impressa, 30,3s de vão entre o smoke do dublê e
+          #    o WAHA, e o passo verde.
+          #
+          #    O `Content-Type` é o motivo de nunca ter passado. Sem ele o `curl
+          #    -d` manda `application/x-www-form-urlencoded`, e o
+          #    serverless-redis-http recusa: HTTP 400 `{"error":"Invalid content
+          #    type. Expected application/json."}`. Com ele: 200
+          #    `{"result":"PONG"}`. Medido contra o MESMO digest do
+          #    `docker-compose.prod.yml`, com o redis:7-alpine atrás. O SDK
+          #    `@upstash/redis` do produto manda o cabeçalho; a sonda tem de
+          #    mandar também, senão prova um protocolo que ninguém usa.
+          redis_pronto=""
+          for _ in $(seq 1 30); do
+            resposta=$(curl -s -X POST \
+              -H "Authorization: Bearer e2e-token-nao-e-segredo" \
+              -H "Content-Type: application/json" \
+              -d '["PING"]' -w ' http=%{http_code}' \
+              http://127.0.0.1:8079/ || true)
+            if printf '%s' "$resposta" | grep -q PONG; then
+              echo "Redis (REST do Upstash) pronto"
+              redis_pronto=1
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "$redis_pronto" ]; then
+            echo "Redis (REST do Upstash) não respondeu PONG em 30s: $resposta"
+            echo "--- o que os contêineres do Redis dizem ---"
+            docker ps -a --filter name=redis --format '{{.Names}} {{.Status}} {{.Ports}}' || true
+            docker logs --tail 40 redis-http 2>&1 || true
+            exit 1
+          fi
+
+          # 4. Alguns scripts leem o disco em vez do ambiente.
+          cp .env.e2e .env.local
+
+          # 5. Espera o WAHA responder DE VERDADE antes de entregar o turno para o
+          #    Playwright, e sonda a rota que o CRM usa (`/api/sessions`, com a
+          #    MESMA chave do `.env.e2e`). O passo antigo esperava
+          #    `curl -sf http://127.0.0.1:3000/api/health`: rota que NÃO EXISTE
+          #    neste pin — o health é `/health` (e exige chave); `/ping` é o único
+          #    endpoint público. Eram 404 a cada volta, 120s de espera e o job
+          #    vermelho em "WAHA não respondeu" (run 35100039158). `/ping` sozinho
+          #    diria apenas que o processo subiu, não que o CRM consegue falar com
+          #    ele.
+          for _ in $(seq 1 60); do
+            ping=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ping || true)
+            sessoes=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Api-Key: $WAHA_API_KEY" \
+              "http://127.0.0.1:3000/api/sessions?all=true" || true)
+            if [ "$ping" = "200" ] && [ "$sessoes" = "200" ]; then
+              echo "WAHA pronto (/ping 200 · /api/sessions 200)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "WAHA não respondeu em 120s: /ping=$ping · /api/sessions=$sessoes"
+          echo "--- o que o contêiner do WAHA diz ---"
+          docker ps -a --filter name=waha --format '{{.Names}} {{.Status}} {{.Ports}}' || true
+          docker logs --tail 40 waha 2>&1 || true
+          exit 1
+
+      # ─── O dono da instalação fresca: o `install.sh` cria, e o CI também ───
+      #
+      # PRECONDIÇÃO da spec, declarada por ela no cabeçalho: "primeiro usuário
+      # criado via scripts/bootstrap-owner.ts (como o install.sh)". Sem este
+      # passo o `beforeAll` dela morre antes do primeiro teste, com
+      # "esta suite APAGA dados da organizacao que resolver aqui, e nao achou o
+      # dono (dono@qa.local)" — a spec é destrutiva e se recusa a escolher a
+      # organização no escuro (a versão antiga escolhia "a primeira" e zerou o
+      # onboarding e a sessão de WhatsApp de uma instalação de trabalho).
+      #
+      # O que este passo NÃO faz: não semeia fixture, não pula wizard, não
+      # inventa tenant. Ele cria exatamente o que o `install.sh` cria numa VPS
+      # recém-instalada — dono (auth, e-mail confirmado), organização, vínculo
+      # como `admin` e a linha em `platform_admins` — e entrega a jornada
+      # (wizard, WhatsApp, convites) para a spec percorrer.
+      #
+      # As credenciais do dono não estão escritas aqui: vêm do `.env.e2e`, que
+      # é a fonte única do ambiente da suíte e já foi publicada no job no passo
+      # "Publicar o .env.e2e no ambiente do job". O script lê o ambiente.
+      - if: matrix.parte == 4
+        name: Criar o dono da instalação (como o install.sh)
+        run: pnpm exec tsx scripts/bootstrap-owner.ts
+
+      - if: matrix.parte != 4
+        name: Semear credenciais de teste
         run: |
           cp .env.e2e .env.local
           pnpm exec tsx scripts/seed-e2e-credentials.ts
@@ -1093,7 +1437,8 @@ jobs:
       # capacidades importa `lib/env.ts` (via lib/ai/embed.ts), que lê
       # `process.env`; o de escalação parseia o `.env.local` por conta própria.
       # Sem a flag o de capacidades morre na validação Zod das 3 vars do Supabase.
-      - name: Semear as fixtures que as specs não semeiam sozinhas
+      - if: matrix.parte != 4
+        name: Semear as fixtures que as specs não semeiam sozinhas
         run: |
           pnpm exec tsx scripts/seed-e2e-escalacao.ts
           pnpm exec tsx --env-file=.env.local scripts/seed-e2e-capacidades-ausentes.ts
@@ -1135,7 +1480,7 @@ jobs:
       # workers, dois specs gerando o mesmo código no mesmo intervalo de 30s
       # fazem o segundo ser recusado como replay. Foi o que derrubava a
       # `reset-password-mfa` (issue #80): ela passa sozinha e falha em paralelo.
-      - name: E2E — parte ${{ matrix.parte }} de 3
+      - name: E2E — parte ${{ matrix.parte }} de 4
         run: |
           set -euo pipefail
           # A lista sai da matrix, e as duas variáveis continuam existindo no
@@ -1146,6 +1491,7 @@ jobs:
             1) LISTA="$SPECS_PARTE_1" ;;
             2) LISTA="$SPECS_PARTE_2" ;;
             3) LISTA="$SPECS_PARTE_3" ;;
+            4) LISTA="$SPECS_PARTE_4" ;;
             *) echo "::error::parte ${{ matrix.parte }} sem lista"; exit 1 ;;
           esac
           # Falha alto se a variável vier vazia: sem isto, um typo no nome faria
@@ -1437,13 +1783,13 @@ jobs:
                       dentro { exit }
                     ' .github/workflows/e2e.yml | grep -oE "[a-z0-9-]+\.spec\.ts" | sort -u; }
           NO_DISCO=$(ls tests/e2e/*.spec.ts | wc -l | tr -d " ")
-          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; } | sort -u | wc -l | tr -d " ")
+          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; bloco SPECS_PARTE_4; } | sort -u | wc -l | tr -d " ")
           FORA_LISTA=$(bloco FORA_DO_CI)
           FORA=$(echo "$FORA_LISTA" | grep -c . || true)
           # E o recorte passa a ter CONTROLE, não só um piso.
           #
           # `tests/unit/e2e-cobertura-completa.test.ts` já garante que toda spec
-          # do disco está em exatamente uma das três listas, sem duplicata e sem
+          # do disco está em exatamente uma das quatro listas, sem duplicata e sem
           # fantasma. Logo `RODOU + FORA` TEM de dar `NO_DISCO` — e quando não
           # der, o recorte leu a mais ou a menos. Sem esta linha, ler a mais é
           # invisível: o passo imprime um número maior e segue verde, que é
@@ -1461,8 +1807,8 @@ jobs:
             echo "**Rodou: ${RODOU} de ${NO_DISCO} specs**, em partes paralelas."
             echo ""
             echo "**Não rodou (${FORA}):**"
-            for s in $FORA_LISTA; do echo "- \`${s}\` — precisa de WAHA + Redis + Resend + Nuvemshop (P0 da doutrina de QA Visual)"; done
+            for s in $FORA_LISTA; do echo "- \`${s}\` — fora do CI de propósito: o motivo de cada uma está no comentário do bloco FORA_DO_CI, no topo deste workflow"; done
             echo ""
             echo "A soma é conferida mecanicamente por \`tests/unit/e2e-cobertura-completa.test.ts\`:"
-            echo "spec no disco que não esteja em nenhuma das três listas reprova o build."
+            echo "spec no disco que não esteja em nenhuma das quatro listas reprova o build."
           } >> "$GITHUB_STEP_SUMMARY"

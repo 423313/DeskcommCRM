@@ -540,6 +540,22 @@ Processo padrão (siga sempre):
    era `_0231_` (timestamp de 05/09). Um contribuidor externo seguiu a instrução antiga ao pé da
    letra, escolheu `0231`, e o `manifest-x-migrations` reprovou o PR dele por colisão — a
    instrução é que estava errada, não ele. Ordene pelo número, nunca pela listagem.
+
+   **E o número livre hoje pode estar tomado quando o seu PR entrar.** A colisão só aparece
+   quando o SEGUNDO PR de schema é mesclado — medido em 19/09/2026: **11 PRs abertos colidiam
+   com a `main` com os cinco checks obrigatórios verdes**. O `verify` **já executa** a guarda
+   (`pnpm checar:colisao-de-migration`, o alias de `scripts/checar-colisao-de-migration.sh` —
+   procurar pelo nome do arquivo no `ci.yml` devolve zero e mente), e mesmo assim os 12 passaram:
+   cada um mediu a `main` do dia em que rodou — o `verify` do #965 terminou em 16/09 e segue verde.
+   Por isso há duas camadas a mais: o CI reprova quando **um número deste PR foi tomado** por
+   migration que entrou na base depois da prévia (colisão, nunca atraso — PR atrasado e sem colisão
+   segue verde), e fora de `pull_request` ele varre a árvore inteira — nenhum `NNNN` nem timestamp pode aparecer duas vezes na `main`. Antes de escolher o número quando houver outros PRs de schema em voo, peça-o
+   a quem estiver alocando na rodada: **não há reserva, quem mescla primeiro fica com o número**.
+   Para ver o que está tomado agora, incluindo o que ainda não foi mesclado:
+
+   ```bash
+   pnpm checar:colisao-de-migration          # mede o SEU PR contra origin/main
+   ```
 2. **Idempotente sempre que possível**: `add column if not exists`, `create ... if not exists`, `create or replace function`. Uma migration deve poder ser re-aplicada sem quebrar nem duplicar efeito.
 3. **Portável em `psql` puro** (clones podem não usar o MCP/CLI Supabase): **sem** `create temporary table ... on commit drop` fora de transação explícita; **sem** `BEGIN`/`COMMIT` explícito (o runner já envolve em transação, como as demais migrations). Prefira CTEs, subqueries de janela e colunas-mapa (ex.: `is_merged_into`) a temp tables.
 4. **Data migrations genéricas**: se a migration corrige/deduplica dados, escreva pensando em QUALQUER banco de clone (não hardcode IDs do seu tenant). Repointe FKs conferindo o catálogo (`information_schema` FK map) para não perder histórico.
@@ -572,6 +588,7 @@ naquele clone — no Claude Code a skill GLOBAL vence a do projeto com o mesmo n
 - `deskcomm-metricas` — desempenho, conversão, custo de IA, funil, relatório
 - `deskcomm-prompt` — afinar o prompt de um agente que não performa
 - `deskcomm-contribuir` — o espelho da triagem, antes do PR; fica quieto para o mantenedor
+- `deskcomm-extensao` — criar extensão em vez de PR no núcleo: régua de destino, contrato do pacote e envio
 - `deskcomm-doutrina` — as três regras que mais custam, antes de escrever código
 
 Os guias têm página pública em [deskcomm.com.br/guias](https://www.deskcomm.com.br/guias), escrita

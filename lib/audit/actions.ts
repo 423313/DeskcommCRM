@@ -358,6 +358,13 @@ export const AUDIT_ACTIONS = [
   // (nenhum handler o consumiria — ver register-handlers.ts) e a troca não
   // deixa rastro em nenhuma outra tabela.
   "platform.signup_mode_updated",
+  // O COMPORTAMENTO da instalação trocado em `platform_settings` pela tela
+  // `/admin/sistema` (migration 0331, issue #1034) — irmã da linha de cima, e
+  // mutação de plataforma. Auditável porque pergunta "por que a IA não parou no
+  // teto?" / "por que a entrega do webhook foi recusada?" só tem resposta aqui:
+  // é a única tabela que guarda quem desligou o bloqueio de gasto, mudou o
+  // portão de divulgação ou passou a exigir assinatura nas entregas.
+  "platform.comportamento_updated",
   // A lista de endereços da rede INTERNA que a instalação pode alcançar
   // (`platform_settings.internal_destinations`, migration 0324, decisão 22-d).
   // Auditável pela mesma razão da linha acima e com alcance maior: cada entrada
@@ -368,6 +375,7 @@ export const AUDIT_ACTIONS = [
   // handler o consumiria; evento sem consumer é o anti-pattern nº 3).
   "platform.internal_destinations_updated",
   "platform_google_oauth.updated",
+  "platform_smtp_settings.updated",
   // A credencial do APP da Meta da INSTALAÇÃO (migration 0257): o App Secret que
   // assina a entrega do webhook e o verify token que responde ao handshake.
   // Auditável pelo mesmo motivo da linha acima, e com alcance maior — quem tem o
@@ -534,6 +542,7 @@ export const AUDIT_ACTIONS = [
   "agenda.appointment_updated",
   "agenda.confirmation_sweep_run",
   "agenda.settings_updated",
+  "agenda.endereco_salvo",
   "agenda.appointment_rescheduled",
   "agenda.appointment_cancelled",
   // Relógio HTTP (Hobby / sem contêiner scheduler): uma batida que alguém
@@ -610,6 +619,64 @@ export const AUDIT_ACTIONS = [
   // Mover um card para OUTRO funil (issue #922) clona o negócio no destino e
   // encerra o original: é a escrita que mexe em DOIS funis de uma vez.
   "lead.moved_to_pipeline",
+  /**
+   * A equipe perguntou à IA sobre um caso (migration 0281). Uma linha por
+   * PERGUNTA, respondida ou não — `respondeu:false` com `error_code` é o que
+   * torna contável "a IA parou de responder à equipe", que sem isto só
+   * apareceria como casos parados na fila.
+   *
+   * ⚠️ SEM O TEXTO. Nem a pergunta, nem a resposta: `api_audit_log` é
+   * append-only, sem UPDATE nem DELETE para papel nenhum — o que entra ali não
+   * sai pela cascata de LGPD.
+   */
+  "ai.case_chat_asked",
+  /**
+   * O aviso de caso no WhatsApp da equipe (migration 0292).
+   *
+   * Três códigos e não um: "saiu", "não saiu em definitivo" e "alguém mudou a
+   * configuração" são perguntas diferentes, feitas por gente diferente. Um
+   * código só obrigaria a abrir o metadata para saber qual dos três aconteceu —
+   * e o painel de auditoria filtra por `action`, não por metadata.
+   *
+   * `ai.case_alert_sent` só quando a entrega virou `enviado`; `ai.case_alert_failed`
+   * só na falha DEFINITIVA (retry não é fato auditável, é o sistema tentando).
+   *
+   * ⚠️ SEM O TEXTO e SEM O NÚMERO INTEIRO. O corpo do aviso nunca entra (ele
+   * carrega o relato do cliente) e o destino entra MASCARADO: `api_audit_log` é
+   * append-only, sem UPDATE nem DELETE para papel nenhum — o que entra ali não
+   * sai pela cascata de LGPD.
+   */
+  "ai.case_alert_sent",
+  "ai.case_alert_failed",
+  "ai.case_alert_settings_changed",
+  /**
+   * O botão "enviar aviso de teste" (onda 8) — e ele é um QUARTO código, não
+   * `ai.case_alert_sent` com um `teste: true` no metadata.
+   *
+   * A razão é de conta, não de gosto: o teste manda uma mensagem de verdade
+   * pelo número da organização e gasta uma do teto diário. Se ele entrasse como
+   * `sent`, quem auditasse "quantos avisos saíram este mês" contaria as
+   * conferências junto — e o painel de auditoria filtra por `action`, nunca por
+   * metadata. Auditado tenha ele saído ou não: o gasto e a tentativa são o
+   * fato, e a razão da recusa é o que responde depois "por que não sai".
+   */
+  "ai.case_alert_test_sent",
+  /**
+   * A cobrança da PASSAGEM que ninguém assumiu (onda 11).
+   *
+   * Código próprio, e não `ai.caso_parado_cobrado` com um campo no metadata:
+   * são duas populações diferentes e a pergunta que se faz depois é diferente.
+   * O caso parado é a IA esperando uma DECISÃO; a passagem esquecida é um
+   * cliente esperando uma RESPOSTA, e ninguém sabe que ele existe. Dos treze
+   * caminhos que passam conversa para uma pessoa, só um nasce de caso — o vigia
+   * de casos não alcançava os outros doze nem por acidente, e um metadata
+   * compartilhado esconderia justamente essa diferença (o painel de auditoria
+   * filtra por `action`, nunca por metadata).
+   *
+   * Audita a RODADA que cobrou, nunca a que varreu e não achou ninguém: rodada
+   * sem efeito não é mutação (`tests/unit/cron-audita-so-quando-ha-efeito.test.ts`).
+   */
+  "ai.passagem_parada_cobrada",
   // A chave de IA girada NO LUGAR (PATCH /ai/credentials/:id). Distinto de
   // `ai.credential_created` e `ai.credential_revalidated`: aqui o id não muda, e
   // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
