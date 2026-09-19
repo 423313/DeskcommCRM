@@ -28,9 +28,11 @@ vi.mock("@/lib/crypto/aes_gcm", () => ({
   decryptKey: () => "chave-da-empresa",
 }));
 
+import { prazoLegivel, RECUSA_A_PARTIR_DE } from "@/lib/agent-engine/edge/llm/prazo-do-endereco-proprio";
 import {
   LlmEnderecoExigeChaveDaEmpresaError,
   TITULO_ENDERECO_SEM_CHAVE_DA_EMPRESA,
+  TITULO_ENDERECO_SEM_CHAVE_PRAZO,
   normalizarErro,
   runModelCall,
 } from "@/lib/agent-engine/edge/llm/run-model-call";
@@ -139,14 +141,26 @@ const cfg = {
   cacheTtl: "1h" as const,
 };
 
-async function chamar(opts: Parameters<typeof poolFalso>[0]) {
+/**
+ * O RELÓGIO É EXPLÍCITO EM TODO CASO, e isso é o assunto desde 19/09/2026.
+ *
+ * A recusa passou a ter DEGRAU: até `RECUSA_A_PARTIR_DE` a chamada segue com
+ * aviso e data; a partir dela, recusa. Um teste que não declara o instante
+ * mediria "o dia em que a suíte rodou" — verde hoje, vermelho no dia do corte,
+ * sem ninguém ter mudado nada. Os casos de RECUSA abaixo passam uma data
+ * DEPOIS do prazo; os de aviso, uma ANTES.
+ */
+const DEPOIS_DO_PRAZO = new Date("2026-11-01T00:00:00.000Z");
+const ANTES_DO_PRAZO = new Date("2026-09-20T00:00:00.000Z");
+
+async function chamar(opts: Parameters<typeof poolFalso>[0] & { agora?: Date }) {
   const { pool, consultas } = poolFalso(opts);
   const { registry, chamadas } = registrySpiao();
   const execucao = runModelCall(
     pool,
     cfg,
     { tenantId: ORG, purpose: "stage_classifier", messages: [{ role: "user", content: "oi" }] },
-    { registry },
+    { registry, agora: opts.agora ?? DEPOIS_DO_PRAZO },
   );
   return { execucao, consultas, chamadas };
 }
@@ -267,5 +281,96 @@ describe("os controles — o que continua funcionando", () => {
       },
     ]);
     expect(avisosNaCentral(consultas)).toHaveLength(0);
+  });
+});
+
+/**
+ * A VIRADA DO PRAZO — a decisão (d) do dono (19/09/2026, doc 40).
+ *
+ * Recusar no instante da atualização obrigaria quem opera a agir ANTES de
+ * atualizar, o que é major pela régua de versionamento, e major só sai quando
+ * ele pedir. Então a mudança entra em dois tempos, e é ESTE arquivo que prova a
+ * virada — com o relógio injetado, porque senão ela nunca é exercitada e o dia
+ * do corte vira surpresa em produção.
+ */
+describe("o degrau do prazo", () => {
+  it("ANTES da data: a chamada SEGUE — ninguém precisa agir para atualizar", async () => {
+    const { execucao, chamadas } = await chamar({
+      baseUrl: ENDERECO_DA_EMPRESA,
+      empresaTemCredencial: false,
+      agora: ANTES_DO_PRAZO,
+    });
+
+    await expect(execucao).resolves.toBeDefined();
+    // E ela sai mesmo — com a chave da instalação, que é o residual declarado
+    // desta janela: o dono escolheu avisar antes de quebrar.
+    expect(chamadas).toHaveLength(1);
+    expect(chamadas[0]!.baseUrl).toBe(ENDERECO_DA_EMPRESA);
+  });
+
+  it("ANTES da data: o aviso na Central traz a DATA ABSOLUTA, não 'em 30 dias'", async () => {
+    const { execucao, consultas } = await chamar({
+      baseUrl: ENDERECO_DA_EMPRESA,
+      empresaTemCredencial: false,
+      agora: ANTES_DO_PRAZO,
+    });
+    await execucao;
+
+    const avisos = avisosNaCentral(consultas);
+    expect(avisos).toHaveLength(1);
+    const [, titulo, corpo] = avisos[0]!.params as [string, string, string];
+    // Título PRÓPRIO: dizer "recusou" seria falso enquanto a chamada segue.
+    expect(titulo).toBe(TITULO_ENDERECO_SEM_CHAVE_PRAZO);
+    expect(titulo).toContain(prazoLegivel());
+    expect(corpo).toContain(prazoLegivel());
+    expect(corpo).toContain("A chamada SEGUIU desta vez");
+    // Quem lê o alerta três semanas depois precisa saber o DIA.
+    expect(corpo, "contagem relativa envelhece na tela").not.toMatch(/em \d+ dias/);
+  });
+
+  it("ANTES da data: NÃO grava falha em llm_calls — a chamada não falhou", async () => {
+    const { execucao, consultas } = await chamar({
+      baseUrl: ENDERECO_DA_EMPRESA,
+      empresaTemCredencial: false,
+      agora: ANTES_DO_PRAZO,
+    });
+    await execucao;
+
+    expect(falhasGravadas(consultas)).toHaveLength(0);
+  });
+
+  it("DEPOIS da data: recusa, sem ninguém ter reaberto o assunto", async () => {
+    const { execucao, chamadas } = await chamar({
+      baseUrl: ENDERECO_DA_EMPRESA,
+      empresaTemCredencial: false,
+      agora: DEPOIS_DO_PRAZO,
+    });
+
+    await expect(execucao).rejects.toBeInstanceOf(LlmEnderecoExigeChaveDaEmpresaError);
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("no INSTANTE exato do prazo já recusa — a borda é do lado seguro", async () => {
+    const { execucao } = await chamar({
+      baseUrl: ENDERECO_DA_EMPRESA,
+      empresaTemCredencial: false,
+      agora: new Date(RECUSA_A_PARTIR_DE),
+    });
+
+    await expect(execucao).rejects.toBeInstanceOf(LlmEnderecoExigeChaveDaEmpresaError);
+  });
+
+  it("empresa COM chave própria não é tocada pelo prazo, nos dois lados da data", async () => {
+    for (const agora of [ANTES_DO_PRAZO, DEPOIS_DO_PRAZO]) {
+      const { execucao, chamadas, consultas } = await chamar({
+        baseUrl: ENDERECO_DA_EMPRESA,
+        empresaTemCredencial: true,
+        credentialId: "cred-1",
+        agora,
+      });
+      await expect(execucao).resolves.toBeDefined();
+      expect(chamadas).toHaveLength(1);
+      expect(avisosNaCentral(consultas)).toHaveLength(0);
+    }
   });
 });

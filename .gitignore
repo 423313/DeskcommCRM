@@ -154,6 +154,7 @@ backups/
 .qa-backups/
 *.dump
 docker-compose.override.yml
+.prova/
 
 # Marca do kit: a senha das rotinas que vazou no log já foi trocada (#1054)
 .deskcomm-segredo-do-cron-trocado

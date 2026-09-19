@@ -489,15 +489,43 @@ jobs:
           set -euo pipefail
           paginas="/changelog /en/changelog /es/changelog"
           faltando="$paginas"
+          corpo=$(mktemp)
+          # Status que NENHUMA espera conserta: a vitrine inteira está fora do ar,
+          # não é a versão que ainda não propagou. Medido em 19/09/2026, quando a
+          # Vercel desativou o deploy por cobrança e devolveu `402` com
+          # `x-vercel-error: DEPLOYMENT_DISABLED` — este passo teria gasto os 47
+          # minutos inteiros para então dizer "a versão não aparece", que é o
+          # diagnóstico errado. O comentário acima já raciocinava sobre isso
+          # ("404 é a vitrine fora do ar, nenhuma espera conserta") e mesmo assim
+          # esperava; agora o raciocínio vira código.
+          definitivo() { case "$1" in 401|402|403|404|410|5??) return 0 ;; *) return 1 ;; esac; }
+          fora_do_ar_seguidas=0
           for tentativa in $(seq 1 35); do
             faltando=""
+            codigos=""
             for p in $paginas; do
+              # UMA requisição serve o corpo E o status. A versão anterior usava
+              # `curl -f`, que descarta o corpo do erro, e só ia buscar o status
+              # depois do laço — então durante 47 minutos ninguém sabia se a
+              # página estava viva.
+              # `|| true`, NUNCA `|| echo 000`: quando a conexão não completa, o
+              # curl já imprime `000` pelo `-w` E sai != 0, então o `echo` de
+              # socorro CONCATENA e a variável vira `000000`. Medido em bancada.
+              codigo=$(curl -sL -o "$corpo" -w '%{http_code}' --max-time 10 "${LP}${p}" 2>/dev/null || true)
+              codigos="${codigos} ${p}=${codigo}"
               # O link para a página da versão, e não o número solto: "1.2.1"
               # aparece dentro de "1.2.10"; o href fecha a aspa.
               # Sem pipeline: sob pipefail, `printf | grep -q` dá "faltando" com a
               # versão listada assim que o HTML tiver quebra de linha depois do link
               # (o grep sai cedo e o printf morre de SIGPIPE, 141).
-              html=$(curl -fsSL --max-time 10 "${LP}${p}" 2>/dev/null || true)
+              # A sonda do link fica com a FORMA que `release-chega-na-lp.test.ts`
+              # reconhece como segura (sem pipeline: sob `pipefail`, um
+              # `printf | grep -q` dá falso-faltando por SIGPIPE). O status entra
+              # como guarda ANTES dela, em vez de virar um `&&` na própria linha:
+              # alargar a cerca para caber no meu código seria trocar a régua pelo
+              # que eu escrevi.
+              html=""
+              if [ "$codigo" = "200" ]; then html=$(cat "$corpo"); fi
               if [[ "$html" == *"href=\"${p}/${VERSAO}\""* ]]; then
                 echo "  ${p}: v${VERSAO} listada"
               else
@@ -505,15 +533,32 @@ jobs:
               fi
             done
             [ -z "$faltando" ] && break
-            echo "tentativa ${tentativa}: ainda falta em${faltando}"
+            # Só desiste cedo quando TODAS as páginas devolvem um status definitivo
+            # em DUAS tentativas seguidas: uma página só pode estar sendo regerada,
+            # e um 5xx isolado durante um deploy se resolve sozinho. As três ao
+            # mesmo tempo, duas vezes, é o site.
+            todas_fora=sim
+            for p in $paginas; do
+              c=$(printf '%s' "$codigos" | tr ' ' '\n' | sed -n "s#^${p}=##p")
+              definitivo "$c" || todas_fora=nao
+            done
+            if [ "$todas_fora" = sim ]; then
+              fora_do_ar_seguidas=$((fora_do_ar_seguidas + 1))
+              if [ "$fora_do_ar_seguidas" -ge 2 ]; then
+                echo "::error::A VITRINE está fora do ar, não é a versão que falta:${codigos}"
+                echo "::error::v${VERSAO} SAIU — tag, release e as três imagens já foram conferidas nos passos anteriores. Quem instalou numa VPS puxa do GHCR e não é alcançado por isto."
+                echo "::error::Não redispare o corte: a tag já existe. Conserte ${LP} e a página se atualiza sozinha."
+                exit 1
+              fi
+            else
+              fora_do_ar_seguidas=0
+            fi
+            echo "tentativa ${tentativa}: ainda falta em${faltando} (status:${codigos})"
             sleep 50
           done
           if [ -n "$faltando" ]; then
-            # O `-f` do curl acima descarta o corpo de um 404 (o `|| true` só impede o set -e de
-            # abortar), e html vazio é indistinguível de "a página existe e não lista a versão".
-            # O status — com -L, como a sonda, para não parar no 3xx de um redirecionamento — diz qual
-            # dos dois: 404 é a vitrine fora do ar (nenhuma espera conserta), 200 é a
-            # versão que não chegou ao CHANGELOG que a LP lê.
+            # Chegar aqui com status 200 é o outro desfecho: a página está viva e
+            # não lista a versão — a versão não chegou ao CHANGELOG que a LP lê.
             for p in $faltando; do
               echo "::error::${LP}${p} respondeu $(curl -sL -o /dev/null -w '%{http_code}' --max-time 10 "${LP}${p}")"
             done

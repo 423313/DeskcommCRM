@@ -627,11 +627,72 @@ export const AUDIT_ACTIONS = [
   // Mover um card para OUTRO funil (issue #922) clona o negócio no destino e
   // encerra o original: é a escrita que mexe em DOIS funis de uma vez.
   "lead.moved_to_pipeline",
+  /**
+   * A equipe perguntou à IA sobre um caso (migration 0281). Uma linha por
+   * PERGUNTA, respondida ou não — `respondeu:false` com `error_code` é o que
+   * torna contável "a IA parou de responder à equipe", que sem isto só
+   * apareceria como casos parados na fila.
+   *
+   * ⚠️ SEM O TEXTO. Nem a pergunta, nem a resposta: `api_audit_log` é
+   * append-only, sem UPDATE nem DELETE para papel nenhum — o que entra ali não
+   * sai pela cascata de LGPD.
+   */
+  "ai.case_chat_asked",
+  /**
+   * O aviso de caso no WhatsApp da equipe (migration 0292).
+   *
+   * Três códigos e não um: "saiu", "não saiu em definitivo" e "alguém mudou a
+   * configuração" são perguntas diferentes, feitas por gente diferente. Um
+   * código só obrigaria a abrir o metadata para saber qual dos três aconteceu —
+   * e o painel de auditoria filtra por `action`, não por metadata.
+   *
+   * `ai.case_alert_sent` só quando a entrega virou `enviado`; `ai.case_alert_failed`
+   * só na falha DEFINITIVA (retry não é fato auditável, é o sistema tentando).
+   *
+   * ⚠️ SEM O TEXTO e SEM O NÚMERO INTEIRO. O corpo do aviso nunca entra (ele
+   * carrega o relato do cliente) e o destino entra MASCARADO: `api_audit_log` é
+   * append-only, sem UPDATE nem DELETE para papel nenhum — o que entra ali não
+   * sai pela cascata de LGPD.
+   */
+  "ai.case_alert_sent",
+  "ai.case_alert_failed",
+  "ai.case_alert_settings_changed",
+  /**
+   * O botão "enviar aviso de teste" (onda 8) — e ele é um QUARTO código, não
+   * `ai.case_alert_sent` com um `teste: true` no metadata.
+   *
+   * A razão é de conta, não de gosto: o teste manda uma mensagem de verdade
+   * pelo número da organização e gasta uma do teto diário. Se ele entrasse como
+   * `sent`, quem auditasse "quantos avisos saíram este mês" contaria as
+   * conferências junto — e o painel de auditoria filtra por `action`, nunca por
+   * metadata. Auditado tenha ele saído ou não: o gasto e a tentativa são o
+   * fato, e a razão da recusa é o que responde depois "por que não sai".
+   */
+  "ai.case_alert_test_sent",
+  /**
+   * A cobrança da PASSAGEM que ninguém assumiu (onda 11).
+   *
+   * Código próprio, e não `ai.caso_parado_cobrado` com um campo no metadata:
+   * são duas populações diferentes e a pergunta que se faz depois é diferente.
+   * O caso parado é a IA esperando uma DECISÃO; a passagem esquecida é um
+   * cliente esperando uma RESPOSTA, e ninguém sabe que ele existe. Dos treze
+   * caminhos que passam conversa para uma pessoa, só um nasce de caso — o vigia
+   * de casos não alcançava os outros doze nem por acidente, e um metadata
+   * compartilhado esconderia justamente essa diferença (o painel de auditoria
+   * filtra por `action`, nunca por metadata).
+   *
+   * Audita a RODADA que cobrou, nunca a que varreu e não achou ninguém: rodada
+   * sem efeito não é mutação (`tests/unit/cron-audita-so-quando-ha-efeito.test.ts`).
+   */
+  "ai.passagem_parada_cobrada",
   // A chave de IA girada NO LUGAR (PATCH /ai/credentials/:id). Distinto de
   // `ai.credential_created` e `ai.credential_revalidated`: aqui o id não muda, e
   // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
   // responde — a coluna `updated_at` se move por qualquer motivo.
   "ai.credential_updated",
+  // Rodada do canal-mudo-watcher que ABRIU ou FECHOU aviso (doc 11, decisão B).
+  // Só com efeito: varredura diária que não achou nada não é mutação.
+  "channel.canal_mudo_watcher_run",
   // A rodada do cron `followup-sem-agente` que MEXEU em alguma coisa: abriu
   // aviso de fluxo publicado que nenhum agente arma, fechou aviso cujo vínculo
   // apareceu, ou os dois. Rodada sem efeito não audita (CLAUDE.md §Audit log),
@@ -639,6 +700,21 @@ export const AUDIT_ACTIONS = [
   // as duas contagens mais `examinados`, que é o que diferencia "ninguém tinha
   // fluxo desarmado" de "a varredura não rodou".
   "ai.followup_sem_agente_reconciliado",
+  /** POST /api/v1/tenants/provision — organização criada por um sistema externo (doc 38 b). */
+  "tenant.created_by_provisioning",
+  /**
+   * A repetição do provisionamento completou o que a tentativa anterior não
+   * chegou a gravar — hoje, o vínculo de admin do dono. Sai SÓ quando houve
+   * efeito, e é o único registro que a organização nascida de uma tentativa
+   * partida tem: a `tenant.created_by_provisioning` dela nunca saiu, porque a
+   * primeira tentativa morreu antes de chegar nessa linha.
+   */
+  "tenant.provisioning_completed",
+  // O funil que VOLTOU do arquivo (#979). Espelha `pipeline.archived`: sem um
+  // código próprio, tirar do arquivo cairia em `pipeline.updated` e sumiria no
+  // meio dos renames — e "quem trouxe este funil de volta, e quando" é a
+  // pergunta que o painel de auditoria só responde filtrando por `action`.
+  "pipeline.unarchived",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

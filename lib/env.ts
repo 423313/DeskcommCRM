@@ -74,6 +74,12 @@ const schema = z.object({
   INTERNAL_SECRET: required("INTERNAL_SECRET"),
   /** Optional dedicated secret for cron endpoints (S-06.07 onwards). */
   INTERNAL_CRON_SECRET: z.string().optional().default(""),
+  /**
+   * Segredo do DONO DA INSTALAÇÃO para `POST /api/v1/tenants/provision` (um
+   * sistema externo cria organizações). Vazio por padrão = a rota não existe
+   * (404); com menos de 32 caracteres também fica desligada.
+   */
+  TENANT_PROVISIONING_SECRET: z.string().optional().default(""),
 
   // Laboratório local de extensões: origem HTTP exata em 127.0.0.1. O cliente
   // recusa a exceção se a URL do app não for loopback. Vazio mantém HTTPS público.
@@ -345,6 +351,30 @@ const schema = z.object({
    */
   JOB_QUEUE_RETENTION_DAYS: z.string().optional().default(""),
   AUDIT_LOG_RETENTION_DAYS: z.string().optional().default(""),
+  /**
+   * Conversa da equipe com a IA sobre um caso (migration 0281). `z.string()`
+   * pela MESMA razão das duas acima: `lib/env.ts` lança na primeira requisição
+   * e o healthcheck é TCP — um `z.coerce.number()` aqui transformaria
+   * `CASE_CHAT_RETENTION_DAYS=noventa` no derrubador do produto inteiro, com o
+   * contêiner marcado `healthy`. Quem interpreta é `lib/retencao/politica.ts`,
+   * onde lixo resolve para o lado seguro e o operador vê o aviso no log.
+   */
+  CASE_CHAT_RETENTION_DAYS: z.string().optional().default(""),
+  /**
+   * Passagem do atendimento para uma pessoa (migration 0291). `z.string()` pela
+   * MESMA razão das três acima — quem interpreta é `lib/retencao/politica.ts`,
+   * onde lixo resolve para o lado seguro e o operador vê o aviso no log, em vez
+   * de o contêiner ficar `healthy` respondendo 500 a tudo.
+   */
+  PASSAGEM_RETENTION_DAYS: z.string().optional().default(""),
+  /**
+   * Registro de entrega do aviso de caso no WhatsApp da equipe (migration
+   * 0292). `z.string()` pela MESMA razão das quatro acima — quem interpreta é
+   * `lib/retencao/politica.ts`, onde lixo resolve para o lado seguro e o
+   * operador vê o aviso no log, em vez de o contêiner ficar `healthy`
+   * respondendo 500 a tudo.
+   */
+  CASE_ALERT_RETENTION_DAYS: z.string().optional().default(""),
 
   // LGPD export (S-08.04)
   LGPD_SIGNING_KEY: z.string().optional().default(""),

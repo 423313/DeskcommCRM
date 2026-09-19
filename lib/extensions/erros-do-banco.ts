@@ -90,6 +90,10 @@ export const SQL_ERRORS: Readonly<Record<string, { message: string; status: numb
     message: "O limite de pacotes desta instalação foi atingido.",
     status: 409,
   },
+  extension_module_unknown: {
+    message: "Este módulo não existe nesta versão do sistema. Atualize a instalação e tente de novo.",
+    status: 404,
+  },
   extension_core_update_in_progress: {
     message: "O sistema está sendo atualizado. Aguarde a conclusão para alterar extensões.",
     status: 409,

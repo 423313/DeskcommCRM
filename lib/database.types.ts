@@ -412,6 +412,89 @@ export type Database = {
           },
         ]
       }
+      agent_case_chat_messages: {
+        Row: {
+          agent_id: string | null
+          author_kind: string
+          author_user_id: string | null
+          body: string | null
+          case_id: string
+          contact_id: string
+          conversation_id: string
+          created_at: string
+          error_code: string | null
+          id: string
+          llm_call_id: string | null
+          organization_id: string
+          redacted_at: string | null
+          service_stale: boolean
+          turn_id: string
+        }
+        Insert: {
+          agent_id?: string | null
+          author_kind: string
+          author_user_id?: string | null
+          body?: string | null
+          case_id: string
+          contact_id: string
+          conversation_id: string
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          llm_call_id?: string | null
+          organization_id: string
+          redacted_at?: string | null
+          service_stale?: boolean
+          turn_id: string
+        }
+        Update: {
+          agent_id?: string | null
+          author_kind?: string
+          author_user_id?: string | null
+          body?: string | null
+          case_id?: string
+          contact_id?: string
+          conversation_id?: string
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          llm_call_id?: string | null
+          organization_id?: string
+          redacted_at?: string | null
+          service_stale?: boolean
+          turn_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_case_chat_messages_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "agent_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_case_chat_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_case_chat_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_case_chat_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_case_events: {
         Row: {
           actor_kind: string
@@ -6681,6 +6764,101 @@ export type Database = {
           },
           {
             foreignKeyName: "pacing_ledger_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      passagens_de_atendimento: {
+        Row: {
+          aviso_motivo_codigo: string | null
+          body: string
+          caso_id: string | null
+          cliente_avisado: boolean | null
+          cobrancas: number
+          contact_id: string
+          content: string | null
+          conversation_id: string
+          criado_em: string
+          id: string
+          motivo_codigo: string
+          motor: string
+          notes: string | null
+          organization_id: string
+          origem: string
+          reconhecido_em: string | null
+          reconhecido_por: string | null
+          tentativas: Json
+          title: string | null
+        }
+        Insert: {
+          aviso_motivo_codigo?: string | null
+          body: string
+          caso_id?: string | null
+          cliente_avisado?: boolean | null
+          cobrancas?: number
+          contact_id: string
+          content?: string | null
+          conversation_id: string
+          criado_em?: string
+          id?: string
+          motivo_codigo: string
+          motor: string
+          notes?: string | null
+          organization_id: string
+          origem: string
+          reconhecido_em?: string | null
+          reconhecido_por?: string | null
+          tentativas?: Json
+          title?: string | null
+        }
+        Update: {
+          aviso_motivo_codigo?: string | null
+          body?: string
+          caso_id?: string | null
+          cliente_avisado?: boolean | null
+          cobrancas?: number
+          contact_id?: string
+          content?: string | null
+          conversation_id?: string
+          criado_em?: string
+          id?: string
+          motivo_codigo?: string
+          motor?: string
+          notes?: string | null
+          organization_id?: string
+          origem?: string
+          reconhecido_em?: string | null
+          reconhecido_por?: string | null
+          tentativas?: Json
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "passagens_de_atendimento_caso_id_fkey"
+            columns: ["caso_id"]
+            isOneToOne: false
+            referencedRelation: "agent_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "passagens_de_atendimento_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "passagens_de_atendimento_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "passagens_de_atendimento_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
