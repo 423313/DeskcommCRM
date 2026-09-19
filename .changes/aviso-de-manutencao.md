@@ -16,3 +16,5 @@ Duas decisões que valem estar escritas:
 - **A página não leva marca nenhuma.** Ela sobe antes de qualquer coisa poder consultar o banco, que é onde a marca da instalação mora — uma página neutra é a única que não mente sobre de quem é o sistema.
 
 Nenhum passo manual foi acrescentado: quem opera continua clicando no mesmo botão.
+
+Trabalho de @paulolimajr77, recortado do #803.

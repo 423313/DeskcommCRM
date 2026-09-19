@@ -9,3 +9,5 @@ A tela oferecia a versão nova **antes de ela estar pronta para instalar**. O av
 Quem clicava nessa janela via a atualização parar no meio.
 
 Agora o sistema **pergunta se há o que baixar** antes de oferecer. E se a VPS estiver sem acesso ao registro, ele **continua oferecendo**: deixar de oferecer para sempre, em silêncio, por causa de um problema de rede seria pior.
+
+Trabalho de @paulolimajr77, recortado do #803.
