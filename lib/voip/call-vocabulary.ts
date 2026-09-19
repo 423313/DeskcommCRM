@@ -2,7 +2,7 @@
  * Vocabulário de voice_calls (provider='sip') / phone_numbers — fonte da
  * verdade em TypeScript pro invariante
  * tests/invariants/vocabulario-banco-x-typescript.test.ts, que compara estes
- * unions contra os CHECK constraints reais do banco (migrations 0332/0333).
+ * unions contra os CHECK constraints reais do banco (migrations 0325/0326).
  * Mudar um valor aqui sem migration correspondente falha o teste; mudar o
  * CHECK sem atualizar aqui, idem.
  *

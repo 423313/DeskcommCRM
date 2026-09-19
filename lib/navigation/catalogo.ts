@@ -196,7 +196,7 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
-    // Módulo VoIP (migration 0332). No CRM e no sidebar pelo mesmo critério de
+    // Módulo VoIP (migration 0325). No CRM e no sidebar pelo mesmo critério de
     // Tarefas: quem atende confere ligações perdidas e transcrições no dia a
     // dia, não como revisão deliberada.
     href: "/app/calls",

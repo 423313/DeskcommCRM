@@ -1,4 +1,4 @@
--- 0333_voice_calls_sip (nasceu 0252 no PR #677; renumerada)
+-- 0326_voice_calls_sip (nasceu 0252 no PR #677; renumerada)
 --
 -- Unifica `crm_calls` (nosso módulo SIP/AudioSocket, ainda não mergeado —
 -- PR #677) dentro de `voice_calls` (WhatsApp/WaCalls, mergeada via #628/#697,

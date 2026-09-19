@@ -9,7 +9,7 @@
  * `endpoint_name` é DERIVADO da organização (`org-<uuid>-trunk-endpoint`),
  * não digitado — é o nome da seção que precisa bater, caractere por
  * caractere, com o bloco `[org-<uuid>-trunk-endpoint]` em `asterisk/pjsip.conf`
- * (aplicado manualmente por enquanto, ver migration 0334). Derivar em vez de
+ * (aplicado manualmente por enquanto, ver migration 0327). Derivar em vez de
  * deixar a pessoa digitar elimina a única forma de os dois lados divergirem.
  */
 import { audit } from "@/lib/audit";
