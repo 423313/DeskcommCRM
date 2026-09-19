@@ -53,6 +53,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   raciocínio continua ligado. A mudança vale só para a DeepSeek — Anthropic, OpenAI, Google
   e OpenRouter não são afetadas.
 
+  Contribuição de @deskcommopp4s-cmd (#1275).
+
 - **Um comando tira esta instalação do Docker sem encostar no resto do servidor** Tirar o CRM de uma VPS era trabalho manual, e o atalho que todo mundo conhece — `docker system
   prune -a` — é o errado: numa VPS que hospeda mais de uma coisa, ele leva junto containers, volumes
   e imagens de aplicações que ninguém pediu para apagar.
@@ -77,6 +79,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Funil arquivado agora tem caminho de volta — dá para ver, tirar do arquivo e excluir** Arquivar um funil era via de mão única: ele sumia da lista de Funis e não havia onde vê-lo de novo, trazê-lo de volta nem excluí-lo. Quem arquivou por engano ficava com um funil invisível, indestrutível, e ainda com o nome dele ocupado — criar outro com o mesmo nome era recusado por um funil que ninguém conseguia enxergar. Agora a tela de Funis tem uma gaveta "Funis arquivados", fechada por padrão e visível para quem gerencia: de lá dá para tirar o funil do arquivo (ele volta para a lista e recebe negócio outra vez) ou excluí-lo de vez. A exclusão continua valendo só para o funil que nunca recebeu negócio, com formulário ou automação apontando para ele; nos outros casos o sistema recusa explicando, e o funil continua arquivado. A lista de funis do dia a dia e os seletores de destino continuam mostrando só os funis vivos. Você não precisa fazer nada.
 
+  A pedido de @rafaelbatistazz, que mediu o defeito na issue #979 e escreveu os testes que definem o conserto (#988).
+
 - **A DeepSeek entra como empresa de inteligência artificial do atendente** A DeepSeek agora aparece na lista de empresas de IA, junto de Anthropic, OpenAI, Google e
   OpenRouter. Dá para cadastrar a chave em "IA › Credenciais" ou no passo de treinar durante a
   instalação, escolher o modelo na tela do assistente e publicar — o agente atende pela DeepSeek
@@ -91,6 +95,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   Pro`, para conversas que exigem raciocínio) e a tela escolhe o mais barato que dá conta quando
   você deixa em branco. Nada muda nas instalações que já usam outro provedor: a opção nasce
   disponível, não ligada.
+
+  Contribuição de @deskcommopp4s-cmd (#1275).
 
 - **Um sistema externo pode criar empresas no CRM, se o dono da instalação ligar** Nova rota `POST /api/v1/tenants/provision`: um sistema de fora cria uma empresa no CRM, com a pessoa dona e uma chave de API para operá-la (com permissão de atendente), sem passar pela tela de cadastro. Repetir o pedido para a mesma empresa não cria outra: devolve a mesma empresa e uma chave nova, e a anterior deixa de valer. Se o e-mail da pessoa dona já tem conta nesta instalação, o pedido é recusado e nada é criado — quem quer essa pessoa numa empresa a convida pela tela da empresa (decisão do dono, 19/09). E se um pedido falhar no meio (o banco fora do ar por um instante, por exemplo), basta o sistema de fora repetir: ele retoma de onde parou e conclui o cadastro — a empresa criada **e** a pessoa dona com acesso a ela —, em vez de ficar dizendo para sempre que aquele e-mail já tem conta, ou de responder "está tudo certo" sobre uma empresa em que ninguém consegue entrar.
 
