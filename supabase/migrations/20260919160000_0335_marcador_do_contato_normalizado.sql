@@ -1,4 +1,4 @@
--- 0324 — O marcador de contato já gravado passa a caixa baixa (issue #1224).
+-- 0335 — O marcador de contato já gravado passa a caixa baixa (issue #1224).
 --
 -- A partir desta versão a ESCRITA normaliza o marcador do contato nos quatro
 -- caminhos — ficha (New/EditContactDialog), importação por CSV
@@ -28,7 +28,12 @@ update public.contacts c
   from (
     select ct.id, array_agg(ct.tag order by ct.ord) as normalizados
       from (
-        select distinct on (left(lower(btrim(u.x)), 40))
+        -- `c2.id` NA CHAVE: sem ele o `distinct on` é global e guarda UMA
+        -- linha por marcador na TABELA INTEIRA — o segundo contato com "VIP"
+        -- perde o marcador, e a deduplicação atravessa organizações. A
+        -- consulta é válida, roda sem erro e sem aviso; o que denuncia é o
+        -- dado. Reproduzido em Postgres 17.6: {VIP,Suporte} virava {suporte}.
+        select distinct on (c2.id, left(lower(btrim(u.x)), 40))
                c2.id,
                left(lower(btrim(u.x)), 40) as tag,
                u.ord
@@ -36,7 +41,7 @@ update public.contacts c
           cross join lateral unnest(c2.tags) with ordinality as u(x, ord)
          where c2.tags is not null
            and left(lower(btrim(u.x)), 40) <> ''
-         order by left(lower(btrim(u.x)), 40), u.ord
+         order by c2.id, left(lower(btrim(u.x)), 40), u.ord
       ) ct
      group by ct.id
   ) sub

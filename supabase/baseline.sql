@@ -28082,14 +28082,14 @@ alter table public.idempotency_keys
 
 notify pgrst, 'reload schema';
 
--- ---- marcador do contato normalizado, no dado que já estava gravado (migration 0324) ----
+-- ---- marcador do contato normalizado, no dado que já estava gravado (migration 0335) ----
 -- Issue #1224 (triagem do #1206), @webtecnica. A escrita passou a normalizar o
 -- marcador do contato nos quatro caminhos (ficha, importação por CSV, API e
 -- `crm_manage_tags`) pela MESMA função que o filtro usa para ler
 -- (lib/contacts/tag-normalizada.ts) — sem isso, `?tag=vip` não encontra o contato
 -- marcado como "VIP" e o chip do marcador não sai da ficha por remoção nenhuma.
 -- Este apêndice é o backfill do dado ANTERIOR, e é idempotente por
--- `is distinct from`: aplicado numa VPS que já recebeu a migration 0324, nenhuma
+-- `is distinct from`: aplicado numa VPS que já recebeu a migration 0335, nenhuma
 -- linha é tocada (o arquivo é aplicado inteiro em quem instala, e de novo em
 -- quem atualiza). A ordem é a mesma da aplicação — corta as pontas, minúsculas,
 -- teto de 40 caracteres, descarta o vazio e tira o repetido — e a ordem de
@@ -28100,7 +28100,12 @@ update public.contacts c
   from (
     select ct.id, array_agg(ct.tag order by ct.ord) as normalizados
       from (
-        select distinct on (left(lower(btrim(u.x)), 40))
+        -- `c2.id` NA CHAVE: sem ele o `distinct on` é global e guarda UMA
+        -- linha por marcador na TABELA INTEIRA — o segundo contato com "VIP"
+        -- perde o marcador, e a deduplicação atravessa organizações. A
+        -- consulta é válida, roda sem erro e sem aviso; o que denuncia é o
+        -- dado. Reproduzido em Postgres 17.6: {VIP,Suporte} virava {suporte}.
+        select distinct on (c2.id, left(lower(btrim(u.x)), 40))
                c2.id,
                left(lower(btrim(u.x)), 40) as tag,
                u.ord
@@ -28108,7 +28113,7 @@ update public.contacts c
           cross join lateral unnest(c2.tags) with ordinality as u(x, ord)
          where c2.tags is not null
            and left(lower(btrim(u.x)), 40) <> ''
-         order by left(lower(btrim(u.x)), 40), u.ord
+         order by c2.id, left(lower(btrim(u.x)), 40), u.ord
       ) ct
      group by ct.id
   ) sub
@@ -28117,7 +28122,7 @@ update public.contacts c
 
 -- Marcador que era só espaço vira lista vazia: a sentença acima não alcança
 -- essas linhas (a subconsulta descarta o vazio) e o contato ficaria com um
--- marcador invisível, que nenhum filtro casa e nenhuma tela mostra.
+-- marcador invisível que nenhum filtro casa e nenhuma tela mostra.
 update public.contacts c
    set tags = '{}'::text[]
  where c.tags is not null
