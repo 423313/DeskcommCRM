@@ -73,7 +73,7 @@ const REMOCOES_DELIBERADAS: Record<string, { valores: string[]; porque: string }
       "e ficou parada; a 0312 reconstruiu a constraint a partir do estado que ENXERGAVA, " +
       "sem o valor da outra. Nenhum dos dois lados errou — na `main` sozinha a 0312 não " +
       "remove nada, porque a 0292 não está lá, e por isso este gate é verde lá. O buraco " +
-      "só existe na árvore em que as duas se encontram. A forward-fix é a 0324 " +
+      "só existe na árvore em que as duas se encontram. A forward-fix é a 0326 " +
       "(`reconciliacao_das_branches_represadas`), que reafirma a UNIÃO medida: os 28 " +
       "valores da 0312 mais o da 0292. O estado FINAL da cadeia tem o valor de volta, " +
       "então nenhum clone fica sem ele. Mesma forma da 0062→0065 acima, 58 dias depois — " +
