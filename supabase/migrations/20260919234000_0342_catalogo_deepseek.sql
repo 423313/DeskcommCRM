@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0265 — CATÁLOGO DA DEEPSEEK
+-- 0342 — CATÁLOGO DA DEEPSEEK
 --
 -- A migration 0127 abriu o vocabulário de `provider` dizendo textualmente que
 -- era para destravar "o próximo provedor". A DeepSeek é esse próximo provedor:
@@ -64,8 +64,8 @@ on conflict (provider, model_id) do update set
 insert into public.ai_pricing
   (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
 values
-  ('deepseek-flash',   14, 28, 'catálogo 0265 — cache hit 0,28¢/1M não cabe no catálogo'),
-  ('deepseek-v4-pro',  44, 87, 'catálogo 0265 — cache hit 0,28¢/1M não cabe no catálogo')
+  ('deepseek-flash',   14, 28, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo'),
+  ('deepseek-v4-pro',  44, 87, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo')
 on conflict (model) do update set
   prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
   completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,

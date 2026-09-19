@@ -32169,7 +32169,7 @@ do $f$ begin perform public.fn_proteger_tabelas_de_organizacao(); end $f$;
 -- A definição da função está antes da varredura de anon.
 do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
 
--- ---- Catálogo da DeepSeek (migration 0265) ----
+-- ---- Catálogo da DeepSeek (migration 0342) ----
 --
 -- O próximo provedor que a abertura de vocabulário da 0127 existia para
 -- destravar: OpenAI-compatível e com desconto automático de prefixo de cache.
@@ -32199,8 +32199,8 @@ on conflict (provider, model_id) do update set
 insert into public.ai_pricing
   (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
 values
-  ('deepseek-flash',   14, 28, 'catálogo 0265 — cache hit 0,28¢/1M não cabe no catálogo'),
-  ('deepseek-v4-pro',  44, 87, 'catálogo 0265 — cache hit 0,28¢/1M não cabe no catálogo')
+  ('deepseek-flash',   14, 28, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo'),
+  ('deepseek-v4-pro',  44, 87, 'catálogo 0342 — cache hit 0,28¢/1M não cabe no catálogo')
 on conflict (model) do update set
   prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
   completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,
