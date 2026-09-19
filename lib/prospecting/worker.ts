@@ -177,7 +177,9 @@ export async function sendNextCandidate(
       leadId: p.contact_id,
       instrucao: `${cfg.instruction}\nFaça uma primeira abordagem curta e transparente. Os dados vieram de pesquisa pública, não de um formulário preenchido pela pessoa. Não invente familiaridade, resultados ou interesse. Uma pergunta por vez. Critérios a confirmar durante a conversa: ${cfg.qualification}`,
       origem: "Pesquisa de empresas",
-      veioDeFormulario: false,
+      // NÃO é `automacao`: a pessoa não entrou em funil nenhum. O prompt do
+      // ramo frio é o único que proíbe afirmar preenchimento — ver blocoDeModo.
+      origemDaAbordagem: "prospeccao_fria",
       dados: {
         Empresa: p.data.name,
         Segmento: p.data.category ?? "",
