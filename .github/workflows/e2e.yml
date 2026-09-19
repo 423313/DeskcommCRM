@@ -980,7 +980,7 @@ jobs:
         followup-modelos-de-clinica.spec.ts
         presenca-do-atendente.spec.ts
 
-      # ─── PARTE 4 — a spec de VPS fresca, e por que ela vem sozinha ───
+      # ─── PARTE 4 — a spec de VPS fresca, e quem pode entrar ao lado dela ───
       #
       # A `vps-fresh-onboarding` era a última spec fora do CI. A infraestrutura
       # que faltava chegou em dois lugares:
@@ -994,10 +994,10 @@ jobs:
       #    OAuth da Nuvemshop. Não é mock em processo — a doutrina de QA visual
       #    pede receiver real para efeito colateral externo.
       #
-      # Ela fica SOZINHA numa parte por um motivo que não é relógio: as partes 1
-      # a 3 explicitamente NÃO resetam o banco entre specs (é a vizinhança que
-      # elas escolheram), e a fresca precisa do oposto — a instalação sem dono,
-      # sem tenant, sem fixtures. Por isso os dois passos de semeadura
+      # Ela veio para cá por um motivo que não é relógio: as partes 1 a 3
+      # explicitamente NÃO resetam o banco entre specs (é a vizinhança que elas
+      # escolheram), e a fresca precisa do oposto — a instalação sem dono, sem
+      # tenant, sem fixtures. Por isso os dois passos de semeadura
       # (`Semear credenciais de teste` e `Semear as fixtures`) recebem
       # `if: matrix.parte != 4`, e o único dado que existe antes dela é o dono
       # do bootstrap — criado pelo passo `Criar o dono da instalação`, com o
@@ -1005,8 +1005,31 @@ jobs:
       # spec EXIGE esse dono como precondição (está no cabeçalho dela, junto de
       # WAHA e Redis); o que ela afirma é a jornada a partir dali, não a
       # existência do usuário.
+      #
+      # `funil-arquivado-volta-pela-tela` entrou aqui, e ela NÃO precisa de WAHA,
+      # Redis, Resend nem Nuvemshop — o critério desta parte deixou de ser só
+      # "depende de serviço externo" e passou a incluir "onde cabe no relógio".
+      # Medido no run 35448173547: as fatias deram 25, 24, (cortada pelo teto) e
+      # 6 minutos, contra `timeout-minutes` de 30 e orçamento de 24. A parte 4 é
+      # a única com folga; pôr esta spec em qualquer uma das outras três mataria
+      # o job por relógio, que é reprovação sem relação com o que se mede.
+      #
+      # ⚠️ ELA SEMEIA O PRÓPRIO DADO, e isso é precondição, não conveniência: os
+      # passos `Semear credenciais de teste` e `Semear as fixtures` são
+      # `if: matrix.parte != 4`, então aqui não existe `.e2e-creds.json`. O
+      # `beforeAll` dela roda `scripts/seed-e2e-credentials.ts` (lê o ambiente,
+      # que já tem o `.env.e2e` publicado no job) e apaga os próprios funis no
+      # `afterAll`.
+      #
+      # ⚠️ E ISSO CRIA UMA SEGUNDA ORGANIZAÇÃO NESTE BANCO, o que seria fatal
+      # para a `vps-fresh-onboarding` na versão dela que resolvia a org com
+      # `.limit(1).single()` sem `where`. Não é mais: `orgRow()` amarra a org ao
+      # DONO do bootstrap (pelo e-mail) e todo delete dela é
+      # `.eq("organization_id", …)` — conferido linha a linha antes de somar
+      # esta spec à lista. Quem mexer em `orgRow()` reabre esta porta.
       SPECS_PARTE_4: >-
         vps-fresh-onboarding.spec.ts
+        funil-arquivado-volta-pela-tela.spec.ts
 
       SPECS_PARTE_5: >-
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts

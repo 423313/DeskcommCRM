@@ -702,6 +702,11 @@ export const AUDIT_ACTIONS = [
    * primeira tentativa morreu antes de chegar nessa linha.
    */
   "tenant.provisioning_completed",
+  // O funil que VOLTOU do arquivo (#979). Espelha `pipeline.archived`: sem um
+  // código próprio, tirar do arquivo cairia em `pipeline.updated` e sumiria no
+  // meio dos renames — e "quem trouxe este funil de volta, e quando" é a
+  // pergunta que o painel de auditoria só responde filtrando por `action`.
+  "pipeline.unarchived",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
