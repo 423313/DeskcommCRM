@@ -74,6 +74,23 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
   // (system_prompt + config direto em `ai_agents`, sem versão) é o que se
   // aplica: mesma tela que já existe pra config geral/modelo/RAG/voz,
   // sem forçar o agente de voz a fingir que tem canal do WhatsApp.
+  //
+  // ─── A EXCEÇÃO AO EDITOR LEGADO, E A CONDIÇÃO QUE A ENCERRA (issue #456) ───
+  //
+  // O editor legado é PROIBIDO no resto desta página, e com razão: editar o
+  // prompt por ele gravava em `ai_agents.system_prompt` enquanto o motor do
+  // WhatsApp lia a linha de `ai_agent_versions` apontada por
+  // `published_version_id` — a tela mostrava um texto e o agente respondia com
+  // outro. Aqui ele é o CERTO pelo mesmo critério: para voz, tela e motor leem
+  // o MESMO lugar (`getActiveVoiceAgent` em `lib/ai/agents.ts` busca
+  // `system_prompt` de `ai_agents`, e `workers/voice-agent/index.ts` manda esse
+  // texto para a Realtime).
+  //
+  // A exceção vale enquanto esse fato valer. No dia em que a voz ganhar versão
+  // publicada e passar a resolver por `published_version_id`, este ramo SAI e a
+  // tela passa ao editor de versões — e quem avisa não é a memória de ninguém:
+  // `tests/unit/prompt-editado-e-o-que-o-motor-executa.test.ts` reprova, no caso
+  // "o motor de voz lê a coluna que o editor legado grava".
   if (agent.channel === "voice") {
     return (
       <div className="flex h-full flex-col gap-6 p-6">
