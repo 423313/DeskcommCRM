@@ -147,3 +147,6 @@ backups/
 # commit posterior de remoção não tira o blob.
 .qa-backups/
 *.dump
+
+# Marca do kit: a senha das rotinas que vazou no log já foi trocada (#1054)
+.deskcomm-segredo-do-cron-trocado
