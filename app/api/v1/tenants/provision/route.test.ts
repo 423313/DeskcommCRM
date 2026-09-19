@@ -28,11 +28,15 @@ vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({
 vi.mock("@/lib/tenants/api-key", () => ({ rotateIntegrationApiKey: h.rotate }));
 vi.mock("@/lib/auth/provision", async (original) => {
   const real = await original<typeof ProvisionModule>();
-  return { ProvisionConflictError: real.ProvisionConflictError, provisionExternalTenant: h.provision };
+  return {
+    ProvisionConflictError: real.ProvisionConflictError,
+    EmailJaTemContaError: real.EmailJaTemContaError,
+    provisionExternalTenant: h.provision,
+  };
 });
 
 const { POST } = await import("./route");
-const { ProvisionConflictError } = await import("@/lib/auth/provision");
+const { ProvisionConflictError, EmailJaTemContaError } = await import("@/lib/auth/provision");
 
 const SEGREDO = "s".repeat(40);
 const CORPO = {
@@ -176,6 +180,16 @@ describe("ligada: o provisionamento", () => {
   it("replay → 200", async () => {
     h.provision.mockResolvedValue({ organizationId: "org-1", ownerId: "user-1", replay: true });
     expect((await POST(pedido(SEGREDO))).status).toBe(200);
+  });
+
+  it("e-mail que já tem conta → 409 com o caminho certo, sem chave (decisão do dono, 19/09)", async () => {
+    h.provision.mockRejectedValue(new EmailJaTemContaError());
+    const res = await POST(pedido(SEGREDO));
+    expect(res.status).toBe(409);
+    const corpo = (await res.json()) as { error: { code: string; message: string } };
+    expect(corpo.error.code).toBe("owner_email_ja_tem_conta");
+    expect(corpo.error.message).toContain("convide a pessoa pela tela da empresa");
+    expect(h.rotate).not.toHaveBeenCalled();
   });
 
   it("slug de organização que não nasceu deste provisionamento → 409, sem chave", async () => {

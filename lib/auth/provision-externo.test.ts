@@ -54,7 +54,8 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
-const { provisionExternalTenant, slugDoProvisionamento, ProvisionConflictError } = await import(
+const { provisionExternalTenant, slugDoProvisionamento, ProvisionConflictError, EmailJaTemContaError } =
+  await import(
   "./provision"
 );
 
@@ -159,24 +160,28 @@ describe("o dono", () => {
     expect(h.listUsers).not.toHaveBeenCalled();
   });
 
-  it("e-mail que já tem conta: acha a conta além da primeira página", async () => {
+  it("e-mail que já tem conta é RECUSADO, e nada é criado (decisão do dono, 19/09)", async () => {
+    // Reaproveitar fazia de uma pessoa que já usa a instalação admin de uma
+    // empresa nova, sem aceite, com o nome escolhido por um sistema de fora.
     h.createUser.mockResolvedValue({
       data: { user: null },
       error: { code: "email_exists", status: 422, message: "email exists" },
     });
-    const outros = Array.from({ length: 1000 }, (_, i) => ({ id: `u-${i}`, email: `u${i}@x.test` }));
-    h.listUsers
-      .mockResolvedValueOnce({ data: { users: outros }, error: null })
-      .mockResolvedValueOnce({
-        data: { users: [{ id: "user-antigo", email: "dona@clinica.test" }] },
-        error: null,
-      });
-    const r = await provisionExternalTenant(ENTRADA);
-    expect(r.ownerId).toBe("user-antigo");
-    expect(h.listUsers).toHaveBeenCalledTimes(2);
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toBeInstanceOf(EmailJaTemContaError);
+    expect(h.inseridas).toEqual([]);
+    expect(h.listUsers).not.toHaveBeenCalled();
   });
 
-  it("erro que não é 'e-mail já existe' não vira busca: falha", async () => {
+  it("a forma antiga do GoTrue (422 'already registered') também é recusa", async () => {
+    h.createUser.mockResolvedValue({
+      data: { user: null },
+      error: { status: 422, message: "A user with this email address has already been registered" },
+    });
+    await expect(provisionExternalTenant(ENTRADA)).rejects.toBeInstanceOf(EmailJaTemContaError);
+    expect(h.inseridas).toEqual([]);
+  });
+
+  it("erro que não é 'e-mail já existe' não vira recusa: falha", async () => {
     h.createUser.mockResolvedValue({
       data: { user: null },
       error: { code: "unexpected_failure", status: 500, message: "boom" },

@@ -248,10 +248,9 @@ export async function provisionExternalTenant(
     throw new Error(`provisioning: membership insert failed: ${memberError.message}`);
   }
 
-  // Ator NULO: quem criou foi um sistema de fora, com o segredo da instalação.
-  // O dono é dado da linha, não o autor da ação — e como o e-mail pode
-  // reaproveitar uma conta existente, creditá-lo deixaria quem chama escolher
-  // qual humano da instalação carimbar.
+  // Ator NULO: quem criou foi um sistema de fora, com o segredo da instalação
+  // (decisão do dono, doc 40, 19/09). O dono é dado da linha, não o autor da
+  // ação — creditá-lo afirmaria que uma pessoa fez o que uma máquina fez.
   void audit({
     action: "tenant.created_by_provisioning",
     actorUserId: null,
@@ -297,17 +296,24 @@ async function findAdminMember(
   return data?.user_id ?? null;
 }
 
-/** Teto da busca paginada por e-mail: 50 páginas de 1000 = 50 mil contas. */
-const PAGINAS_DE_USUARIOS = 50;
-const USUARIOS_POR_PAGINA = 1000;
+/**
+ * O e-mail já tem conta nesta instalação — decisão do dono (doc 40, item 8,
+ * 19/09): recusar, e não reaproveitar.
+ *
+ * Reaproveitar fazia de uma pessoa que já usa a instalação admin de uma
+ * empresa nova, com um aceite que ela nunca deu, e com o NOME dessa empresa
+ * escolhido por um sistema de fora. Quem quer essa pessoa numa empresa a
+ * convida pela tela da empresa, e ela aceita.
+ */
+export class EmailJaTemContaError extends Error {
+  constructor() {
+    super("provisioning_email_ja_tem_conta");
+  }
+}
 
 /**
- * Cria o dono; se o e-mail já tem conta, reaproveita a conta.
- *
- * Tenta criar PRIMEIRO: no caso comum (e-mail novo) não há varredura nenhuma.
- * Só quando o GoTrue responde que o e-mail já existe é que a conta é procurada,
- * página a página — a versão anterior lia UMA página de 200 e, numa instalação
- * com mais contas, não achava a existente e falhava ao criar.
+ * Cria a pessoa dona — e só cria. E-mail que já tem conta é recusado ANTES de
+ * existir organização ou vínculo, então a recusa não deixa nada para trás.
  */
 async function ensureExternalOwnerUser(
   admin: ReturnType<typeof createAdminClient>,
@@ -326,19 +332,6 @@ async function ensureExternalOwnerUser(
   const jaExiste =
     error?.code === "email_exists" ||
     (error?.status === 422 && /already (been )?registered/i.test(error.message));
-  if (!jaExiste) {
-    throw new Error(`provisioning: criar dono falhou: ${error?.message ?? "sem usuário"}`);
-  }
-
-  for (let page = 1; page <= PAGINAS_DE_USUARIOS; page++) {
-    const { data: lista, error: erroDaLista } = await admin.auth.admin.listUsers({
-      page,
-      perPage: USUARIOS_POR_PAGINA,
-    });
-    if (erroDaLista) throw new Error(`provisioning: listar contas falhou: ${erroDaLista.message}`);
-    const achado = lista.users.find((u) => u.email?.toLowerCase() === email);
-    if (achado) return achado.id;
-    if (lista.users.length < USUARIOS_POR_PAGINA) break;
-  }
-  throw new Error("provisioning: o e-mail tem conta, mas ela não foi encontrada na listagem");
+  if (jaExiste) throw new EmailJaTemContaError();
+  throw new Error(`provisioning: criar dono falhou: ${error?.message ?? "sem usuário"}`);
 }

@@ -25,7 +25,11 @@ import type { NextRequest } from "next/server";
 import { checkRateLimit, peekRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
-import { ProvisionConflictError, provisionExternalTenant } from "@/lib/auth/provision";
+import {
+  EmailJaTemContaError,
+  ProvisionConflictError,
+  provisionExternalTenant,
+} from "@/lib/auth/provision";
 import { env } from "@/lib/env";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { logger } from "@/lib/logger";
@@ -142,6 +146,14 @@ export async function POST(req: NextRequest): Promise<Response> {
       },
     );
   } catch (err) {
+    if (err instanceof EmailJaTemContaError) {
+      return fail(
+        "owner_email_ja_tem_conta",
+        "Esse e-mail já tem conta nesta instalação — convide a pessoa pela tela da empresa.",
+        409,
+        { requestId },
+      );
+    }
     if (err instanceof ProvisionConflictError) {
       return fail(
         "provisioning_conflict",
