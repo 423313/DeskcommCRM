@@ -6,6 +6,7 @@
  * compartilhada (mesmo Asterisk pra toda a plataforma hoje), não escolha da
  * organização; grava o valor de VOIP_TRUNK_ENDPOINT.
  */
+import { requireSupportWrite } from "@/lib/impersonate/support";
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
@@ -48,6 +49,14 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
+  // Guarda de EFEITO do acompanhamento administrativo, ANTES do RBAC e do
+  // client de service role: quem está só ACOMPANHANDO a organização de outra
+  // pessoa não escreve por ela. Sem esta linha, um acompanhamento somente
+  // leitura originava ligação, cadastrava número e trocava a credencial do
+  // tronco — em nome do cliente, com a trilha apontando para ele.
+  const acompanhamentoNegado = await requireSupportWrite();
+  if (acompanhamentoNegado) return acompanhamentoNegado;
+
   const requestId = randomUUID();
   const authz = await requireRole("manager", { requestId, resource: "phone_numbers" });
   if (!authz.ok) return authz.response;

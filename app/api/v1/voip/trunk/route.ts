@@ -8,6 +8,7 @@
  * migration 0338. `password` no body é opcional numa atualização (mantém a
  * senha já cifrada se omitida), obrigatório na primeira vez.
  */
+import { requireSupportWrite } from "@/lib/impersonate/support";
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
@@ -50,6 +51,14 @@ export async function GET(): Promise<Response> {
 }
 
 export async function PUT(req: NextRequest): Promise<Response> {
+  // Guarda de EFEITO do acompanhamento administrativo, ANTES do RBAC e do
+  // client de service role: quem está só ACOMPANHANDO a organização de outra
+  // pessoa não escreve por ela. Sem esta linha, um acompanhamento somente
+  // leitura originava ligação, cadastrava número e trocava a credencial do
+  // tronco — em nome do cliente, com a trilha apontando para ele.
+  const acompanhamentoNegado = await requireSupportWrite();
+  if (acompanhamentoNegado) return acompanhamentoNegado;
+
   const requestId = randomUUID();
   const authz = await requireRole("admin", { requestId, resource: "voip_trunk_settings" });
   if (!authz.ok) return authz.response;
