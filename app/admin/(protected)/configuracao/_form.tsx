@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -68,11 +67,20 @@ function CampoEditavel({ linha, idioma }: { linha: LinhaDaTela; idioma: Idioma }
   const t = (s: string) => traduzir(s, idioma);
   const [valor, setValor] = useState("");
   const [salvando, comecar] = useTransition();
-  const router = useRouter();
   const { definicao } = linha;
   // O estado mostrado é LOCAL, inicializado pelo servidor e atualizado pelo
-  // corpo da resposta de cada ação — não pelo `router.refresh()`, que perde a
-  // corrida para os prefetches da barra lateral (ver `ResultadoDaGravacao`).
+  // corpo da resposta de cada ação.
+  //
+  // ⚠️ E NÃO HÁ `router.refresh()` DENTRO DA TRANSIÇÃO — é isso que travava.
+  // A primeira versão deste conserto aplicava `setEstado(r.estado)` e DEPOIS
+  // chamava `router.refresh()` na mesma `startTransition`. O refresh é
+  // atropelado pelos prefetches RSC da barra lateral e nunca completa; como
+  // está DENTRO da transição, ela fica pendente para sempre — e o React retém o
+  // `setEstado` junto até a transição inteira terminar. O retrato da falha no
+  // CI mostrava o campo e o botão `[disabled]` (é o `isPending`), com o estado
+  // velho na tela: a ação não falhou, ela nunca terminou. `revalidatePath` na
+  // própria ação já cuida da coerência da próxima navegação; o refresh aqui não
+  // acrescentava nada além da trava.
   const [estado, setEstado] = useState(linha.estado);
 
   function salvar() {
@@ -82,7 +90,6 @@ function CampoEditavel({ linha, idioma }: { linha: LinhaDaTela; idioma: Idioma }
         setValor("");
         setEstado(r.estado);
         toast.success(t("Pronto, já está valendo."));
-        router.refresh();
       } else {
         toast.error(r.erro);
       }
@@ -95,7 +102,6 @@ function CampoEditavel({ linha, idioma }: { linha: LinhaDaTela; idioma: Idioma }
       if (r.ok) {
         setEstado(r.estado);
         toast.success(t("Voltou para o valor do arquivo de instalação."));
-        router.refresh();
       } else {
         toast.error(r.erro);
       }
