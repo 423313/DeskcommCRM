@@ -331,6 +331,46 @@ o fonte dos quatro sítios e compara o CONJUNTO do trigger com o da constante.
 
 ---
 
+## J31 — A clínica sai do zero em follow-up sem desenhar um grafo `[P0]`
+
+Contexto do código: o motor de follow-up está inteiro desde a 0054, e mesmo assim
+uma instalação nova não tem fluxo NENHUM — ter o primeiro exigia abrir o
+construtor e desenhar nó, ramo e prazo de graça, além de escrever os textos. É
+primeira impressão (`[P0]`) por isso: a tela vazia promete "sem depender de
+alguém lembrar de mandar mensagem" e não entrega nada. `lib/followup/modelos/`
+traz as quatro jornadas de clínica (consulta, exame, cirurgia, falta) e a
+galeria instala uma delas como RASCUNHO, com o gatilho já armado.
+
+Spec: `tests/e2e/followup-modelos-de-clinica.spec.ts` — dirige a tela; o grafo
+que aparece no construtor é o do catálogo, gravado pela rota real
+(`POST /api/v1/ai/followup-flows/from-model`), sem `INSERT` à mão.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J31.1 | Tela vazia de Follow-ups | "Começar de um modelo" aparece ANTES de "Novo fluxo" | **NÃO MEDIDO EM TELA** — o ambiente e2e (stack Supabase local + seed de credenciais) não foi levantado nesta sessão; coberto por unit + rota |
+| J31.2 | Abrir a galeria | as 4 jornadas, cada uma com nº de mensagens, horizonte e o que dispara | **NÃO MEDIDO EM TELA** |
+| J31.3 | Instalar o modelo de falta | cria o fluxo e abre o construtor com o grafo desenhado | **NÃO MEDIDO EM TELA** |
+| J31.4 | O fluxo recém-instalado na lista | badge "Rascunho" — instalar não manda mensagem a paciente nenhum | **NÃO MEDIDO EM TELA**; garantido por `from-model/route.test.ts` ("nasce RASCUNHO") |
+| J31.5 | Modelo de etapa sem etapa escolhida | botão "Instalar" travado; a rota recusa com `trigger_stage_missing` | **UNIT/ROTA PASS**, tela **NÃO MEDIDA** |
+| J31.6 | Instalar o mesmo modelo duas vezes | selo "Já instalado"; a rota responde 409 nomeando o fluxo existente | **UNIT/ROTA PASS**, tela **NÃO MEDIDA** |
+| J31.7 | Viewer na tela | não vê a galeria (`canWrite`) | **NÃO MEDIDO EM TELA** |
+| J31.8 | Todo modelo do catálogo é publicável | `validateFlowForPublish` aprova os 4 sem erro | **PASS** — `lib/followup/modelos/modelos.test.ts` |
+
+⚠️ **O que a galeria NÃO faz, e a tela diz:** publicar e armar o fluxo no agente
+continuam sendo atos de gente. Sem um agente PUBLICADO com o ponteiro em
+`followup.flow_pointer_ids`, gatilho automático não enrolla ninguém
+(`agent-followup-gate.ts`) — fluxo com cara de vivo. A linha está no rodapé do
+diálogo e é asserida na spec.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J31.9 | Fluxo automático publicado que nenhum agente arma | a Central abre um aviso nomeando o fluxo e quando ele dispararia | **PASS (unit)** — `app/api/v1/cron/followup-sem-agente/route.test.ts`; tela **NÃO MEDIDA** |
+| J31.10 | O mesmo fluxo depois de ligado no agente | o aviso é FECHADO pelo próprio cron, sem ninguém tocar nele | **PASS (unit)** |
+| J31.11 | Fluxo manual ou de webhook sem agente | nenhum aviso — eles funcionam sem agente, e o alarme seria falso | **PASS (unit)** |
+| J31.12 | Rodada do cron que não mudou nada | não audita (CLAUDE.md §Audit log) | **PASS (unit)** |
+
+---
+
 ## J9 — Ver o que o follow-up já fez, e intervir sem matá-lo `[P1]`
 
 Contexto do código: o dossiê do enrollment (`/app/ai/followups/enrollments/[id]`,
@@ -950,7 +990,7 @@ ação `send_ai_message`, retomada manual (`lib/escalacao/retomada.ts`).
 | J20.15 | Org SEM versão de agente publicada (caminho legado `ai-response-worker`), gate allowlist, contato não autorizado | IA NÃO responde por este caminho tampouco | **UNIT** — `ai-response-worker-elegibilidade.test.ts` (skip `nao_elegivel_para_ia` antes de ler mensagem/agente; fail-closed em erro de leitura) |
 | J20.16 | Follow-up de TEXTO FIXO drenado inline (`enviarTextoFixoPendente`, sem worker), contato não autorizado | NÃO envia; job vira `done` | **UNIT** — `enviar-texto-fixo.test.ts` "conversa NÃO elegível" (+ fail-closed volta pra `pending`) |
 | J20.17 | Cliente antigo irritado (gate allowlist, não autorizado) → worker de sentimento dispara `low_sentiment` | `triggerHandoff` NÃO dispara: sem "um humano vai te atender", sem mexer no estado da conversa | **UNIT** — `handoff-orchestrator-elegibilidade.test.ts` (`bloqueioPorAllowlist` e `conversa_silenciada` barram; fail-closed em erro) |
-| J20.18 | Eu respondo o cliente à mão pelo meu WhatsApp numa conversa autorizada | IA para naquela conversa por um PRAZO (`PRAZO_DO_SILENCIO_MS`, 60 min) renovado a cada nova fala humana, SEM apagar `ai_authorized_at`; volta sozinha quando o prazo vence, ou antes por "devolver ao automático" | **UNIT** — `atendimento-manual.test.ts` (as duas pontas do prazo medidas pelo motor real `decidirElegibilidade`, renovação, e o que NUNCA encurta: `'infinity'` do handoff formal e janela mais longa) + `waha-ingest-atendimento-manual.test.ts` (via `dispatchWahaEvent` real; eco do próprio envio NÃO pausa) + guarda de fonte no Zernio + fiação em `handoff-fernando-fiacao.test.ts`; **E2E** — `tests/e2e/j20-elegibilidade-atendimento-manual.spec.ts` (webhook `fromMe` genuíno → `bot_silenced_until` finito e futuro, nunca `'infinity'`, + rastro; `ai_authorized_at` intacto; 2ª mensagem RENOVA o prazo; tela mostra o selo; "devolver ao automático" solta a trava e a autorização continua) |
+| J20.18 | Eu respondo o cliente à mão pelo meu WhatsApp numa conversa autorizada | IA para naquela conversa por um PRAZO (`PRAZO_DO_SILENCIO_MS`, 60 min) renovado a cada nova fala humana, SEM apagar `ai_authorized_at`; volta sozinha quando o prazo vence, ou antes por "devolver ao automático" | **UNIT** — `atendimento-manual.test.ts` (as duas pontas do prazo medidas pelo motor real `decidirElegibilidade`, renovação, e o que NUNCA encurta: `'infinity'` do handoff formal e janela mais longa) + `waha-ingest-atendimento-manual.test.ts` (via `dispatchWahaEvent` real; eco do próprio envio NÃO pausa) + guarda de fonte no Zernio + fiação em `handoff-fantasma-fiacao.test.ts`; **E2E** — `tests/e2e/j20-elegibilidade-atendimento-manual.spec.ts` (webhook `fromMe` genuíno → `bot_silenced_until` finito e futuro, nunca `'infinity'`, + rastro; `ai_authorized_at` intacto; 2ª mensagem RENOVA o prazo; tela mostra o selo; "devolver ao automático" solta a trava e a autorização continua) |
 | J20.19 | Worker parado acorda com backlog; dois inbound antigos com o MESMO `sent_at` | a "última inbound" é a mais RECENTE (por `created_at`), nunca a de maior uuid — o evento antigo é pulado | **INVARIANTE** — `tests/invariants/drain-recencia-inbound.test.ts` (Postgres real) + `drain.test.ts` guarda a cláusula `coalesce(sent_at, created_at)` |
 
 **Sabotagem que confirma:** removendo o veto `sem_autorizacao` de

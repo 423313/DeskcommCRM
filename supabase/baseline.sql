@@ -9972,10 +9972,23 @@ alter table public.agent_inbox_items
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
     'case_stale',
+    -- (migration 0312) O fluxo de follow-up publicado que NUNCA vai disparar:
+    -- gatilho automático (silêncio, etapa, caso, falta) só cria inscrição se
+    -- algum agente publicado arma o ponteiro, e sem esse vínculo os produtores
+    -- saem por `pointers_armados = 0` em silêncio — `active` na tela, morto no
+    -- motor. Entra NESTA lista e no FIM dela, pelas duas razões de sempre
+    -- (bloco único por constraint, #159; e a janela de 2000 caracteres que
+    -- `tests/unit/midia-nao-lida.test.ts` varre a partir do `add constraint`).
+    'followup_sem_agente',
     'other'
   ));
 
 
+
+-- ---- índice do watcher de follow-up sem agente (migration 0312) ----
+create index if not exists agent_inbox_items_followup_sem_agente_aberto_idx
+  on public.agent_inbox_items (organization_id, ref_id)
+  where kind = 'followup_sem_agente' and status = 'open';
 
 notify pgrst, 'reload schema';
 
@@ -26453,6 +26466,7 @@ as $$
   envios as (
     select count(*) filter (where m.sent_via = 'ai')              as por_ia,
            count(*) filter (where m.sent_via = 'automation')      as por_automacao,
+           count(*) filter (where m.sent_via = 'system')          as por_integracao,
            count(*) filter (where m.sent_via = 'user')            as por_humano_no_sistema,
            count(*) filter (where m.sent_via = 'external_device') as por_humano_fora
       from public.messages m
@@ -26524,6 +26538,7 @@ as $$
       'execucoes_medidas',        (select execucoes from vetos),
       'envios_por_ia',            (select por_ia                from envios),
       'envios_por_automacao',     (select por_automacao         from envios),
+      'envios_por_integracao',    (select por_integracao        from envios),
       'envios_humano_no_sistema', (select por_humano_no_sistema from envios),
       'envios_humano_fora',       (select por_humano_fora       from envios),
       -- O invariante 4 vira NÚMERO na tela: demanda aberta sem próximo passo é

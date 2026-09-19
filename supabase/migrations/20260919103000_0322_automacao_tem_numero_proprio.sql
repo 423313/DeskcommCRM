@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- 0322_automacao_tem_numero_proprio — a mensagem que a automação manda tem NÚMERO PRÓPRIO (#652)
+-- 0322_automacao_tem_numero_proprio — automação e integração ganham NÚMERO PRÓPRIO (#652, #866)
 --
 -- Decisão do mantenedor (16/09/2026, issue #652): "mensagem que não foi escrita
 -- nem por pessoa nem pela IA ganha categoria própria. O painel de atrito passa a
@@ -173,6 +173,7 @@ as $$
   envios as (
     select count(*) filter (where m.sent_via = 'ai')              as por_ia,
            count(*) filter (where m.sent_via = 'automation')      as por_automacao,
+           count(*) filter (where m.sent_via = 'system')          as por_integracao,
            count(*) filter (where m.sent_via = 'user')            as por_humano_no_sistema,
            count(*) filter (where m.sent_via = 'external_device') as por_humano_fora
       from public.messages m
@@ -244,6 +245,7 @@ as $$
       'execucoes_medidas',        (select execucoes from vetos),
       'envios_por_ia',            (select por_ia                from envios),
       'envios_por_automacao',     (select por_automacao         from envios),
+      'envios_por_integracao',    (select por_integracao        from envios),
       'envios_humano_no_sistema', (select por_humano_no_sistema from envios),
       'envios_humano_fora',       (select por_humano_fora       from envios),
       -- O invariante 4 vira NÚMERO na tela: demanda aberta sem próximo passo é
