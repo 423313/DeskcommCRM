@@ -30,7 +30,7 @@
 # Desde a #1086 ele também mede o estado de um objeto, e não só o texto do
 # baseline: o `pg_class.oid` da view `calendar_selected_external_events`. O que a
 # view tem na forma alvo (`create or replace view`) PRESERVA o OID; o `drop` +
-# `create` que os blocos 0260/0261 faziam a cada passada trocava — o objeto era
+# `create` que os blocos 0225/0261 faziam a cada passada trocava — o objeto era
 # apagado e recriado a cada `update.sh`. A prova da ida (clone antigo, com
 # `select e.*` e o `title`, continua migrando) mora aqui pelo mesmo motivo que a
 # da volta: é o único lugar que re-aplica o arquivo inteiro sobre um banco que já
@@ -118,7 +118,7 @@ colunas_da_view() {
 }
 
 # A view expõe a coluna `title`? É o que separa a forma antiga (`select e.*`, da
-# v1.26.0) da forma alvo, e o que a guarda de forma dos blocos 0260/0261 lê para
+# v1.26.0) da forma alvo, e o que a guarda de forma dos blocos 0225/0261 lê para
 # decidir se derruba. Vírgula nos dois lados: casa a coluna inteira, não pedaço de
 # nome.
 tem_title() {
@@ -225,13 +225,13 @@ oid_depois=$(oid_da_view)
 if [ "$oid_antes" != "$oid_depois" ]; then
   echo "FATAL: o update trocou o OID da view de ocupação ($oid_antes -> $oid_depois):" >&2
   echo "       ela foi derrubada e recriada. 'create or replace view' preserva o OID," >&2
-  echo "       'drop' mais 'create' não — é a guarda de forma dos blocos 0260/0261 do" >&2
+  echo "       'drop' mais 'create' não — é a guarda de forma dos blocos 0225/0261 do" >&2
   echo "       baseline que impede isso, e a issue #1086 é essa." >&2
   exit 1
 fi
 if tem_title; then
   echo "FATAL: a view de ocupação expõe a coluna title depois do update." >&2
-  echo "       Ela nasce da lista explícita dos blocos 0260/0261, sem title; com ele," >&2
+  echo "       Ela nasce da lista explícita dos blocos 0225/0261, sem title; com ele," >&2
   echo "       o texto do compromisso pessoal do Google volta ao alcance do membro." >&2
   exit 1
 fi
@@ -278,7 +278,7 @@ fi
 oid_antes=$(oid_da_view)
 if ! psql_stop < "$BASELINE" >/dev/null; then
   echo "FATAL: o update sobre o clone antigo FALHOU. O clone que ainda tem a view com" >&2
-  echo "       title não sai do lugar sem a guarda de forma dos blocos 0260/0261 —" >&2
+  echo "       title não sai do lugar sem a guarda de forma dos blocos 0225/0261 —" >&2
   echo "       é a migração da issue #1086 que quebrou, não o update em geral." >&2
   exit 1
 fi

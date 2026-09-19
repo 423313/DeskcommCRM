@@ -24851,16 +24851,22 @@ notify pgrst, 'reload schema';
 -- — e o gestor já lê `account_email` em `calendar_connections`. Decisão do dono. O
 -- invariante mede que o colega segue lendo o id.
 --
--- ## A view precisa ser recriada, não substituída no lugar
+-- ## A view só é recriada quando ainda está na forma antiga
 --
 -- `calendar_selected_external_events` era `select e.*`. Com `security_invoker`, o
 -- Postgres confere privilégio de coluna EM NOME DO INVOCADOR para toda coluna
 -- referenciada na definição — inclusive as de um `e.*` que já foi expandido quando
 -- a view nasceu. Deixá-la assim faria TODA leitura de ocupação por membro falhar
--- com `permission denied` no `title`. E não dá para `create or replace view`
--- tirando coluna do meio (o Postgres recusa: "cannot drop columns from view") — por
--- isso `drop` + `create` aqui, com lista explícita. A lista explícita é o conserto
--- de fundo: `e.*` era a forma de a próxima coluna nascer exposta.
+-- com `permission denied` no `title`. E `create or replace view` não tira coluna
+-- do meio (o Postgres recusa: "cannot drop columns from view").
+--
+-- Por isso o `drop` daqui é CONDICIONAL (issue #1086): quem ainda tem o `title` —
+-- a forma da v1.26.0 — cai no `drop` e é recriado; quem já está na forma alvo
+-- passa direto pelo `create or replace`, que PRESERVA o OID. Derrubar e recriar
+-- a view a cada passada deste arquivo era o defeito da issue: o que quebrava a
+-- segunda passada era o `create view` sobre o objeto existente, não a falta do
+-- `drop`. A lista explícita segue sendo o conserto de fundo: `e.*` era a forma de
+-- a próxima coluna nascer exposta, e ela anda junto com a lista da guarda.
 --
 -- ## O que este bloco NÃO faz, de propósito
 --
@@ -24908,7 +24914,8 @@ grant select (
   original_start_time
 ) on public.calendar_external_events to authenticated;
 
--- A MESMA guarda do bloco da 0260, e repetida de propósito: este bloco é medido
+-- A MESMA guarda do bloco da reconciliação do Google (migration 0225), e
+-- repetida de propósito: este bloco é medido
 -- SOZINHO por `tests/invariants/titulo-do-evento-pessoal-fora-do-alcance.test.ts`,
 -- sobre o estado da v1.26.0 (view com `e.*`), então a forma antiga tem de ser
 -- curada aqui também, sem depender do que veio antes no arquivo.
