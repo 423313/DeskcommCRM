@@ -804,6 +804,22 @@ type CategoriaDeHost =
 type EntradaDeHost = { categoria: CategoriaDeHost; motivo: string };
 
 const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
+  // ── prospecção e voz (PR #963): destino de chamada e painel do fornecedor ──
+  "api.apify.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint da plataforma que roda o crawler do Google Places (`lib/prospecting/provider.ts`). É o destino do request, com a chave da PRÓPRIA organização — trocar pelo domínio do revendedor quebraria a chamada, e esconder o nome não esconde para onde o dado vai.",
+  },
+  "api.elevenlabs.io": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint de síntese de voz (`lib/ai/voice/client.ts`), inclusive na guarda que RECUSA qualquer outro host antes de sair (linha 202) — o nome precisa estar escrito ali para a guarda existir.",
+  },
+  "elevenlabs.io": {
+    categoria: "CONSOLE",
+    motivo:
+      "link para a página onde o próprio cliente pega a chave dele (`VoiceAssistantPanel.tsx`), no mesmo padrão dos outros painéis de fornecedor: quem contrata a conta é a organização, e o link leva ao fornecedor, não a nós.",
+  },
   // ── identificador de fio: NÃO é destino de chamada nem texto de tela ──────
   "s.whatsapp.net": {
     categoria: "PROTOCOLO",
@@ -1073,6 +1089,11 @@ describe("catraca de host de terceiro no código que embarca", () => {
       "aistudio.google.com",
       "console.anthropic.com",
       "deskcomm.app",
+      // Decisão escrita (PR #963): painel onde o cliente pega a PRÓPRIA chave de
+      // voz, no mesmo padrão de `platform.openai.com` e `console.anthropic.com`.
+      // Não é destino de chamada — quem fala é `api.elevenlabs.io`, que está
+      // declarado como FORNECEDOR e por isso não precisa entrar aqui.
+      "elevenlabs.io",
       "meet.google.com",
       "meusistema.com",
       "mi-gateway.ejemplo.com",
