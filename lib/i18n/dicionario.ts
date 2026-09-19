@@ -2071,8 +2071,59 @@ export const DICIONARIO: Traducoes = {
   "A IA para de responder ao chegar em": { es: "La IA deja de responder al llegar a" },
   "A parada começa a valer": { es: "La parada empieza a valer" },
   "A parada começa a valer em": { es: "La parada empieza a valer el" },
-  "A proteção de gasto está desligada nesta instalação (AI_BUDGET_ENFORCEMENT=off). O que estiver escolhido aqui não vale enquanto quem cuida do servidor não religar.": {
-    es: "La protección de gasto está apagada en esta instalación (AI_BUDGET_ENFORCEMENT=off). Lo que esté elegido aquí no vale hasta que quien administra el servidor la vuelva a encender.",
+  "A proteção de gasto está desligada nesta instalação. O que estiver escolhido aqui não vale até que alguém religue em Comportamento, no Admin.": {
+    es: "La protección de gasto está apagada en esta instalación. Lo que esté elegido aquí no vale hasta que alguien la vuelva a encender en Comportamiento, en Admin.",
+  },
+  "Comportamento": {
+    es: "Comportamiento",
+  },
+  "Comportamento desta instalação": {
+    es: "Comportamiento de esta instalación",
+  },
+  "Como esta instalação se comporta em operação. Vale para todas as empresas hospedadas aqui.": {
+    es: "Cómo se comporta esta instalación en operación. Vale para todas las empresas alojadas aquí.",
+  },
+  "O que esta instalação faz": {
+    es: "Qué hace esta instalación",
+  },
+  "Cada escolha vale para todas as empresas daqui. Quem cuida do servidor pode declarar um valor no arquivo de ambiente, mas ele só responde até a primeira leitura do banco: a partir daí, manda o que estiver aqui.": {
+    es: "Cada elección vale para todas las empresas de aquí. Quien administra el servidor puede declarar un valor en el archivo de entorno, pero solo responde hasta la primera lectura de la base: a partir de ahí, manda lo que esté aquí.",
+  },
+  "Proteção de gasto de IA": {
+    es: "Protección de gasto de IA",
+  },
+  "Decide o que acontece quando o gasto passa do teto que a empresa escolheu. Não liga a proteção de ninguém: só pode afrouxá-la.": {
+    es: "Decide qué pasa cuando el gasto supera el límite que eligió la empresa. No activa la protección de nadie: solo puede aflojarla.",
+  },
+  "Respeita o teto de cada empresa": {
+    es: "Respeta el límite de cada empresa",
+  },
+  "Só avisa, nunca para a IA": {
+    es: "Solo avisa, nunca detiene la IA",
+  },
+  "Exigir assinatura nas entregas do canal": {
+    es: "Exigir firma en las entregas del canal",
+  },
+  "Ligado, toda entrega de webhook precisa vir assinada com o segredo da sessão. Desligado por padrão porque nem todo servidor de canal assina: ligar sem que ele assine corta a entrada de mensagens.": {
+    es: "Activado, toda entrega de webhook debe venir firmada con el secreto de la sesión. Desactivado por defecto porque no todo servidor de canal firma: activarlo sin que firme corta la entrada de mensajes.",
+  },
+  "Divulgação de pagamento no atendimento": {
+    es: "Divulgación de pago en la atención",
+  },
+  "Injetar acrescenta o texto de divulgação à primeira mensagem. Vetar bloqueia o envio sem ele e devolve ao modelo a razão, para ele reescrever.": {
+    es: "Inyectar agrega el texto de divulgación al primer mensaje. Vetar bloquea el envío sin él y le devuelve al modelo la razón, para que reescriba.",
+  },
+  "Injetar": {
+    es: "Inyectar",
+  },
+  "Vetar": {
+    es: "Vetar",
+  },
+  "Conferência de promessa antes de enviar": {
+    es: "Verificación de promesa antes de enviar",
+  },
+  "Ligado, cada envio passa por uma conferência de modelo para não prometer o que a empresa não cumpre. Custa uma chamada de modelo por envio.": {
+    es: "Activado, cada envío pasa por una verificación de modelo para no prometer lo que la empresa no cumple. Cuesta una llamada de modelo por envío.",
   },
   "Abrimos um aviso na Central de avisos. A IA continua respondendo normalmente.": {
     es: "Abrimos un aviso en la Central de avisos. La IA sigue respondiendo normalmente.",
@@ -2235,8 +2286,8 @@ export const DICIONARIO: Traducoes = {
     es: "Ninguna skill nueva en el catálogo — ya instalaste todo lo que la plataforma ofrece hoy.",
   },
   "Nenhuma versão publicada ainda": { es: "Ninguna versión publicada todavía" },
-  "Nesta instalação a proteção só avisa (AI_BUDGET_ENFORCEMENT=avisar): mesmo com \"Parar a IA\" escolhido, ela vai continuar respondendo.": {
-    es: "En esta instalación la protección solo avisa (AI_BUDGET_ENFORCEMENT=avisar): incluso con \"Detener la IA\" elegido, ella va a seguir respondiendo.",
+  'Nesta instalação a proteção só avisa: mesmo com "Parar a IA" escolhido, ela vai continuar respondendo. Quem administra a instalação escolheu assim em Comportamento, no Admin.': {
+    es: 'En esta instalación la protección solo avisa: incluso con "Detener la IA" elegido, ella va a seguir respondiendo. Quien administra la instalación lo eligió así en Comportamiento, en Admin.',
   },
   "Novo aprendizado": { es: "Nuevo aprendizaje" },
   "Não consegui carregar a configuração de IA": { es: "No pude cargar la configuración de IA" },
@@ -2752,6 +2803,9 @@ export const DICIONARIO: Traducoes = {
   },
   "A IA parou porque o gasto do mês atingiu o limite que você definiu. Ajuste o limite (ou desligue a parada) em Uso de IA › Orçamento.": {
     es: "La IA se detuvo porque el gasto del mes llegó al límite que definiste. Ajusta el límite (o apaga la parada) en Uso de IA › Presupuesto.",
+  },
+  "A chamada foi recusada porque este ponto usa um endereço próprio e a empresa não tem chave cadastrada para ele — a chave da instalação não vai para endereço escolhido pela empresa. Cadastre a chave da empresa em Agente de IA › Provedores, ou tire o endereço próprio do ponto.": {
+    es: "La llamada fue rechazada porque este punto usa una dirección propia y la empresa no tiene clave registrada para él — la clave de la instalación no va a una dirección elegida por la empresa. Registra la clave de la empresa en Agente de IA › Proveedores, o quita la dirección propia del punto.",
   },
   "Não conseguimos classificar esta falha. A mensagem original do provedor está abaixo.": {
     es: "No pudimos clasificar esta falla. El mensaje original del proveedor está abajo.",
@@ -3584,6 +3638,71 @@ export const DICIONARIO: Traducoes = {
   "A IA não devolveu texto. Revise o contexto que você escreveu para ela.": {
     es: "La IA no devolvió texto. Revisa el contexto que le escribiste.",
   },
+  // ─── motivos de parada da aba Atividade (issue #1090) ───
+  // O gate de espanhol resolve a tabela `MOTIVO_DA_PARADA` (ele atravessa
+  // `t(MOTIVO_DA_PARADA[reason])`), mas NÃO enxerga `t(<variável>)`: o valor que
+  // chega por `action.error` e a frase que vem de `detail.explicacao` passam
+  // fora. Estas chaves são acrescentadas à mão pelo motivo de sempre — a tela
+  // desce para o português, calada, quando falta a linha.
+  "Não deu para saber quem atende este contato: a consulta ao sistema falhou na hora (rede ou banco), e não é erro de configuração. Tente de novo em alguns minutos.":
+    {
+      es: "No se pudo saber quién atiende a este contacto: la consulta al sistema falló en ese momento (red o base de datos), y no es un error de configuración. Vuelve a intentarlo en unos minutos.",
+    },
+  "A pessoa escolhida como responsável não é atendente desta equipe. Escolha outra pessoa na automação.":
+    {
+      es: "La persona elegida como responsable no es agente de este equipo. Elige a otra persona en la automatización.",
+    },
+  "A pessoa escolhida como responsável não pode atender — o papel dela é só de visualização. Escolha um atendente.":
+    {
+      es: "La persona elegida como responsable no puede atender — su rol es solo de visualización. Elige a un agente.",
+    },
+  "A ação não recebeu o que precisava (o lead do evento ou a pessoa configurada). Abra a automação e revise.":
+    {
+      es: "La acción no recibió lo que necesitaba (el lead del evento o la persona configurada). Abre la automatización y revísala.",
+    },
+  "Esta ação não tem nenhuma etiqueta escolhida. Abra a automação e escolha pelo menos uma.": {
+    es: "Esta acción no tiene ninguna etiqueta elegida. Abre la automatización y elige al menos una.",
+  },
+  "O evento que disparou a regra não trouxe um lead nem um contato para etiquetar.": {
+    es: "El evento que disparó la regla no trajo un lead ni un contacto para etiquetar.",
+  },
+  "O evento que disparou a regra não trouxe um lead para criar ou mover.": {
+    es: "El evento que disparó la regla no trajo un lead para crear o mover.",
+  },
+  "Mover um lead para outro funil está desligado nesta organização.": {
+    es: "Mover un lead a otro embudo está desactivado en esta organización.",
+  },
+  "O funil escolhido não está ativo, então a inscrição não foi feita. Ative o funil ou escolha outro na automação.":
+    {
+      es: "El embudo elegido no está activo, así que la inscripción no se hizo. Activa el embudo o elige otro en la automatización.",
+    },
+  "O contato já está em um funil ativo — esta ação não inscreve duas vezes.": {
+    es: "El contacto ya está en un embudo activo — esta acción no inscribe dos veces.",
+  },
+  "O contato não autorizou o recebimento de mensagens de marketing.": {
+    es: "El contacto no autorizó recibir mensajes de marketing.",
+  },
+  "O número deste canal ainda não entrou no pré-go-live, então a mensagem escrita pela IA não sai por ele.":
+    {
+      es: "El número de este canal todavía no entró en el pre-go-live, así que el mensaje escrito por la IA no sale por él.",
+    },
+  "Este número está marcado como número de teste do canal.": {
+    es: "Este número está marcado como número de prueba del canal.",
+  },
+  "Este número está fora da lista de teste do canal, então a mensagem escrita pela IA não sai por ele.": {
+    es: "Este número está fuera de la lista de prueba del canal, así que el mensaje escrito por la IA no sale por él.",
+  },
+  "Não deu para saber se este número pode receber a mensagem da IA: a consulta falhou na hora (rede ou banco), e não é erro de configuração. Tente de novo em alguns minutos.":
+    {
+      es: "No se pudo saber si este número puede recibir el mensaje de la IA: la consulta falló en ese momento (red o base de datos), y no es un error de configuración. Vuelve a intentarlo en unos minutos.",
+    },
+  "Esta ação de webhook não tem endereço configurado. Abra a automação e preencha.": {
+    es: "Esta acción de webhook no tiene dirección configurada. Abre la automatización y complétala.",
+  },
+  "A regra usa um tipo de ação que esta instalação não tem (pode ter saído em uma atualização). Abra a automação e escolha outra ação.":
+    {
+      es: "La regla usa un tipo de acción que esta instalación no tiene (puede haber salido en una actualización). Abre la automatización y elige otra acción.",
+    },
   "Título do lead": { es: "Título del lead" },
   "Nome do lead": { es: "Nombre del lead" },
   "Tags do lead": { es: "Etiquetas del lead" },
@@ -6626,6 +6745,28 @@ export const DICIONARIO: Traducoes = {
   },
   "avisa o cliente": { es: "avisa al cliente" },
   "antes": { es: "antes" },
+  "Mensagem do lembrete": { es: "Mensaje del recordatorio" },
+  "Oi {{nome}}! Passando pra lembrar: {{titulo}}, {{dia}} às {{hora}}.": {
+    es: "Hola {{nome}}! Te recuerdo: {{titulo}}, {{dia}} a las {{hora}}.",
+  },
+  "Deixe em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.": {
+    es: "Déjalo en blanco para el texto predeterminado. Variables: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.",
+  },
+  "Quanto antes": { es: "Cuánto antes" },
+  "Unidade": { es: "Unidad" },
+  "minutos": { es: "minutos" },
+  "Mensagem deste lembrete": { es: "Mensaje de este recordatorio" },
+  "Adicionar lembrete": { es: "Agregar recordatorio" },
+  "Deixe a mensagem em branco para o texto padrão. Variáveis: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.": {
+    es: "Deja el mensaje en blanco para el texto predeterminado. Variables: {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}.",
+  },
+  "texto próprio": { es: "texto propio" },
+  "A mensagem do lembrete cabe em 1000 caracteres.": {
+    es: "El mensaje del recordatorio cabe en 1000 caracteres.",
+  },
+  "No máximo 20 lembretes adicionais por tipo.": {
+    es: "Como máximo 20 recordatorios adicionales por tipo.",
+  },
   "O lembrete precisa sair pelo menos 15 minutos antes do compromisso.": { es: "El recordatorio debe salir al menos 15 minutos antes de la cita." },
   "O lembrete não pode sair mais de 7 dias (10080 minutos) antes.": { es: "El recordatorio no puede salir más de 7 días (10080 minutos) antes." },
   "Ação contém": { es: "La acción contiene" },
@@ -6867,7 +7008,7 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar os horários": { es: "No pude cargar los horarios" },
   "Os dias ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista. Numa instalação nova, isso costuma ser a jornada de atendimento que ainda não foi publicada.": { es: "Los días quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista. En una instalación nueva, esto suele ser la jornada de atención que todavía no se publicó." },
   "Nenhum horário livre em": { es: "Ningún horario libre en" },
-  "Os próximos 30 dias são o que está publicado hoje — meses adiante aparecem conforme a data se aproxima.": { es: "Los próximos 30 días son lo que está publicado hoy — los meses siguientes aparecen conforme la fecha se acerca." },
+  "Não há horário livre publicado neste mês.": { es: "No hay horario libre publicado en este mes." },
   "Conferindo a chave com a OpenAI — leva alguns segundos.": { es: "Verificando la clave con OpenAI — toma unos segundos." },
   "Pronto para preparar material.": { es: "Listo para preparar material." },
   "Falta uma chave da OpenAI para o agente aprender o seu material": { es: "Falta una clave de OpenAI para que el agente aprenda tu material" },
@@ -8048,9 +8189,23 @@ export const DICIONARIO: Traducoes = {
   "cliente@empresa.com": { es: "cliente@empresa.com" },
   "Endereço inválido — confira antes de marcar.":
     { es: "Dirección inválida — revísala antes de agendar." },
-  "Preenchido, o Google envia o convite por e-mail para esta pessoa.":
-    { es: "Si se completa, Google envía la invitación por correo a esta persona." },
-
+  "O cliente com e-mail na ficha já recebe o convite. Preencha só se quiser chamar mais alguém.":
+    {
+      es: "El cliente con correo en la ficha ya recibe la invitación. Complétalo solo si quieres llamar a alguien más.",
+    },
+  "Rua, número, sala": { es: "Calle, número, sala" },
+  "Onde o atendimento acontece. Digite para filtrar ou salvar para a próxima vez.":
+    { es: "Dónde ocurre la atención. Escribe para filtrar o guardar para la próxima vez." },
+  "Salvar para os próximos agendamentos": { es: "Guardar para las próximas citas" },
+  "Não foi possível salvar o endereço. Tente novamente.":
+    { es: "No se pudo guardar la dirección. Inténtalo de nuevo." },
+  "Não foi possível carregar os endereços. Tente novamente.":
+    { es: "No se pudieron cargar las direcciones. Inténtalo de nuevo." },
+  "Observação": { es: "Observación" },
+  "O que a equipe precisa lembrar neste horário": {
+    es: "Lo que el equipo necesita recordar en este horario",
+  },
+  "Aparece na descrição do compromisso.": { es: "Aparece en la descripción de la cita." },
 
   // ─── Tarefas (extraídas do PR #418) ───
   "Tarefas": { es: "Tareas" },
@@ -9024,6 +9179,11 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível conferir as orientações instaladas": { es: "No se pudieron comprobar las orientaciones instaladas" },
   "Abra Extensões para tentar novamente e ver o estado registrado no servidor.": { es: "Abre Extensiones para intentarlo de nuevo y ver el estado registrado en el servidor." },
   "Abre Tarefas; não lê seus dados.": { es: "Abre Tareas; no lee tus datos." },
+  "Abre {portas}; não lê seus dados.": { es: "Abre {portas}; no lee tus datos." },
+  "Não abre nenhuma tela e não lê seus dados.": { es: "No abre ninguna pantalla y no lee tus datos." },
+  "Publicado por": { es: "Publicado por" },
+  "O que ela abre": { es: "Qué abre" },
+  "Etiquetas": { es: "Etiquetas" },
   "Não recebe acesso aos dados do CRM.": { es: "No recibe acceso a los datos del CRM." },
   "Texto disponível em português.": { es: "Texto disponible en portugués." },
   "Parte deste conteúdo está disponível apenas em português.": { es: "Parte de este contenido está disponible solo en portugués." },
