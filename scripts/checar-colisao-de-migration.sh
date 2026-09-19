@@ -72,6 +72,29 @@
 # abertos NÃO foram medidos". Número sem régua declarada é o defeito que este repo já
 # paga em outros lugares.
 #
+# ## Os PRs ABERTOS, inclusive de fork (19/09/2026)
+#
+# refs/remotes só tem branch que mora NESTE repositório. A cabeça de um PR de fork vive em
+# refs/pull/N/head, que `git clone` não traz, e o universo acima não a via. Medido: o #677
+# (fork) tinha o 0333, e este gate diria "livre" ao dono do #1176 — dois colegas erraram a
+# redistribuição da madrugada por herdar a população desta ferramenta. Agora a cabeça de
+# cada PR ABERTO entra, com três regras que custaram caro a alguém:
+#
+#   * a população é a LISTA DE ABERTOS (`gh pr list`), nunca o curinga refs/pull/*: a
+#     cabeça persiste depois que o PR fecha — 965 cabeças contra 43 PRs abertos, medido —,
+#     e um fork abandonado com número alto empurraria o "próximo livre" de todo mundo;
+#   * PR listado cuja cabeça não veio é "NÃO MEDIDO: #N", e a saída declara a SOMA
+#     (listados contra medidos) — o lote de fetch com `2>/dev/null` que trouxe ZERO cabeças
+#     calado foi o erro de um colega na mesma noite;
+#   * colisão com outro PR AVISA (::warning no arquivo), não reprova: quem entrar primeiro
+#     fica e o outro renumera — o outro PR pode nunca entrar, e vermelho por coisa fora do
+#     controle do autor treina a ignorar vermelho.
+#
+# A cabeça do PR de quem roda sai da conta por SHA (é o HEAD ou ancestral dele), nunca por
+# nome de branch: `headRefName` de fork colide com o seu (o fork que abre PR da `main` dele).
+# O CI não exporta GH_TOKEN para este passo: lá o bloco declara NÃO MEDIDO e o resto segue
+# igual. O ganho é local, no minuto do push.
+#
 # ## Não medir não é passar
 #
 # Sem base resolvida, este passo REPROVA (exit 2) declarando o NÃO MEDIDO e o comando do
@@ -140,53 +163,125 @@ todos_refs="$(git for-each-ref --format='%(refname)' refs/heads refs/remotes 2>/
 
 # true (exit 0) quando a ref NÃO é a base nem o HEAD: só essas entram na conta de
 # "outras" — a base já foi medida e o HEAD é este PR (o alvo não mede a si mesmo).
+# Ancestral do HEAD também é o próprio PR: a cabeça publicada antes de um commit local, ou
+# de antes de renumerar. Fora do clone raso, onde há history para julgar.
+raso=0; [ -f "$(git rev-parse --git-dir)/shallow" ] && raso=1
 ref_e_de_outrem() {
   local rc
   rc="$(git rev-parse "$1^{commit}" 2>/dev/null || true)"
-  [ -n "$rc" ] && [ "$rc" != "$base_commit" ] && [ "$rc" != "$head_commit" ]
+  [ -n "$rc" ] && [ "$rc" != "$base_commit" ] && [ "$rc" != "$head_commit" ] || return 1
+  [ "$raso" = 1 ] && return 0
+  ! git merge-base --is-ancestor "$rc" "$head_commit" 2>/dev/null
 }
+
+# Só o NNNN do nome canônico <14 dígitos>_<NNNN>_<slug>.sql. `grep -oE '_[0-9]{4}_'`
+# pegava também número do SLUG — `_0277_relatorio_2024_` virava teto 2024 e conselho 2025.
+nnnn_das() { sed -nE 's/^[0-9]{14}_([0-9]{4})_.*$/\1/p'; }
+# O nome de exibição de uma ref: a cabeça buscada de um PR vira "PR aberto #N".
+rotulo() { sed -E 's#^refs/colisao-pr/([0-9]+)$#PR aberto \#\1#'; }
+
+# ── os PRs ABERTOS, inclusive de fork (ver o cabeçalho) ─────────────────────────────────
+erro_gh="$(mktemp)"
+limpar_cabecas() {
+  git for-each-ref --format='%(refname)' refs/colisao-pr 2>/dev/null \
+    | while IFS= read -r r; do git update-ref -d "$r" 2>/dev/null; done
+}
+limpar_cabecas   # sobra de uma rodada interrompida não vira população desta
+trap 'limpar_cabecas; rm -f "$erro_gh"' EXIT
+
+repo_gh=""
+url_origin="$(git remote get-url origin 2>/dev/null || true)"
+case "$url_origin" in
+  *github.com[:/]*) repo_gh="$(sed -E 's#^.*github\.com[:/]##; s#\.git$##' <<<"$url_origin")" ;;
+esac
+prs_listados=""; prs_n_listados=0; prs_medidos=0; prs_falhos=""; prs_motivo=""
+if lista_gh="$(GH_PROMPT_DISABLED=1 gh pr list ${repo_gh:+--repo "$repo_gh"} --state open \
+                 --limit 1000 --json number --jq '.[].number' 2>"$erro_gh")"; then
+  prs_listados="$(grep -E '^[0-9]+$' <<<"$lista_gh" || true)"
+  prs_n_listados="$(grep -c . <<<"$prs_listados" || true)"
+  if [ -n "$prs_listados" ]; then
+    opcoes_pr=(); [ "$raso" = 1 ] && opcoes_pr+=(--depth=1)
+    specs=()
+    while IFS= read -r n; do specs+=("+refs/pull/$n/head:refs/colisao-pr/$n"); done <<<"$prs_listados"
+    # Um lote é uma ida à rede; mas UMA cabeça ausente aborta o lote inteiro. Então, se o
+    # lote falhar, repete um a um — só para NOMEAR quem falhou, nunca para pular calado.
+    if ! git fetch --no-tags -q ${opcoes_pr[@]+"${opcoes_pr[@]}"} origin "${specs[@]}" >/dev/null 2>&1; then
+      while IFS= read -r n; do
+        git fetch --no-tags -q ${opcoes_pr[@]+"${opcoes_pr[@]}"} origin \
+          "+refs/pull/$n/head:refs/colisao-pr/$n" >/dev/null 2>&1 || true
+      done <<<"$prs_listados"
+    fi
+    # Controle de SOMA: todo PR listado virou ref, ou é NÃO MEDIDO nomeado.
+    while IFS= read -r n; do
+      if git rev-parse -q --verify "refs/colisao-pr/$n^{commit}" >/dev/null 2>&1; then
+        prs_medidos=$((prs_medidos + 1))
+      else
+        prs_falhos="${prs_falhos}${prs_falhos:+ }#$n"
+      fi
+    done <<<"$prs_listados"
+  fi
+else
+  prs_motivo="$(grep -m1 . "$erro_gh" 2>/dev/null || true)"
+  [ -z "$prs_motivo" ] && prs_motivo="gh não respondeu"
+fi
+cabecas="$(git for-each-ref --format='%(refname)' refs/colisao-pr 2>/dev/null || true)"
 
 outras_medidas=0
 outras_arvores=""
+arvores_prs=""   # "N<espaço>nome" — sem array associativo: o bash do macOS é o 3.2
 while IFS= read -r ref; do
   [ -z "$ref" ] && continue
   if ref_e_de_outrem "$ref"; then
-    outras_arvores="${outras_arvores}${outras_arvores:+$'\n'}$(git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
-    outras_medidas=$((outras_medidas + 1))
+    arvore="$(git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
+    outras_arvores="${outras_arvores}${outras_arvores:+$'\n'}${arvore}"
+    case "$ref" in
+      refs/colisao-pr/*)
+        arvores_prs="${arvores_prs}${arvores_prs:+$'\n'}$(sed "s#^#${ref##*/} #" <<<"$arvore")" ;;
+      *) outras_medidas=$((outras_medidas + 1)) ;;
+    esac
   fi
-done <<<"$todos_refs"
+done <<<"$(printf '%s\n%s\n' "$todos_refs" "$cabecas")"
 
-# Próximo livre medido no UNIVERSO das três partes: as duas árvores e as outras refs do
-# clone. Olhar só a listagem local é o erro que a complemento-do-ci.md §1 aponta no hook
-# — "compare contra o remoto"; olhar só base+HEAD é o cego da #1155.
-ultimo_base_head="$(printf '%s\n%s\n' "$base_arvore" "$head_arvore" | grep -oE '_[0-9]{4}_' | tr -d _ | sort -n | tail -1)"
-ultimo="$(printf '%s\n%s\n%s\n' "$base_arvore" "$head_arvore" "$outras_arvores" | grep -oE '_[0-9]{4}_' | tr -d _ | sort -n | tail -1)"
+# Próximo livre medido no UNIVERSO: as duas árvores, as outras refs do clone e as cabeças
+# dos PRs abertos. Olhar só a listagem local é o erro que a complemento-do-ci.md §1 aponta
+# no hook — "compare contra o remoto"; olhar só base+HEAD é o cego da #1155; olhar só
+# refs/remotes é o cego dos forks.
+ultimo_base_head="$(printf '%s\n%s\n' "$base_arvore" "$head_arvore" | nnnn_das | sort -n | tail -1)"
+ultimo="$(printf '%s\n%s\n%s\n' "$base_arvore" "$head_arvore" "$outras_arvores" | nnnn_das | sort -n | tail -1)"
 proximo_livre=""
 [ -n "$ultimo" ] && proximo_livre="$(printf '%04d' $((10#$ultimo + 1)))"
 
 # Declara SEMPRE a régua do conselho — número sem escopo declarado é o defeito da #1155.
 escopo_do_proximo_livre() {
-  if [ "$outras_medidas" -gt 0 ]; then
-    echo "Próximo livre medido em '$BASE' ∪ HEAD ∪ $outras_medidas outra(s) ref(s) deste clone: NNNN=${proximo_livre:-?}"
-  else
-    echo "Próximo livre medido em '$BASE' ∪ HEAD: NNNN=${proximo_livre:-?}"
-    echo "::warning::branches locais e outros PRs abertos NÃO foram medidos — confira com a triagem antes de renomear."
+  local regua="'$BASE' ∪ HEAD"
+  [ "$outras_medidas" -gt 0 ] && regua="$regua ∪ $outras_medidas outra(s) ref(s) deste clone"
+  [ "$prs_medidos" -gt 0 ] && regua="$regua ∪ $prs_medidos PR(s) aberto(s)"
+  echo "Próximo livre medido em $regua: NNNN=${proximo_livre:-?}"
+  if [ "$outras_medidas" -eq 0 ]; then
+    echo "::warning::branches locais NÃO foram medidos — confira com a triagem antes de renomear."
   fi
+  if [ -n "$prs_motivo" ]; then
+    echo "::warning::NÃO MEDIDO: PRs abertos (inclusive de fork) — $prs_motivo. Confira com a triagem antes de renomear."
+  else
+    echo "PRs abertos: ${prs_n_listados} listado(s), ${prs_medidos} medido(s)."
+    [ -n "$prs_falhos" ] && echo "::warning::NÃO MEDIDO: ${prs_falhos} — a cabeça não pôde ser buscada; o número desses PRs não entrou na conta."
+  fi
+  return 0
 }
 
 # Se outra ref levantou o teto, NOMEAR quem tem o número: "declarar tomado" sem o dono é
 # a armadilha que a #1155 registra ("a resposta vem 'tomada' apontando para você mesmo").
 # O dono da branch decide renumerá-la ou ceder; aqui só se mede quem é.
-if [ "$outras_medidas" -gt 0 ] && [ -n "$ultimo" ] && [ -n "$ultimo_base_head" ] \
+if [ $((outras_medidas + prs_medidos)) -gt 0 ] && [ -n "$ultimo" ] && [ -n "$ultimo_base_head" ] \
    && [ "$ultimo" -gt "$ultimo_base_head" ]; then
   donos="$(while IFS= read -r ref; do
     [ -z "$ref" ] && continue
     if ref_e_de_outrem "$ref" \
        && git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null \
-          | sed 's#^supabase/migrations/##' | grep -qE "_${ultimo}_"; then
-      echo "$ref"
+          | sed 's#^supabase/migrations/##' | grep -qE "^[0-9]{14}_${ultimo}_"; then
+      rotulo <<<"$ref"
     fi
-  done <<<"$todos_refs" | tr '\n' ' ' | sed 's/ *$//')"
+  done <<<"$(printf '%s\n%s\n' "$todos_refs" "$cabecas")" | tr '\n' ' ' | sed 's/ *$//')"
   echo "::notice::NNNN=${ultimo} (o teto medido) existe em: ${donos:-?} — não é colisão sua; se for branch sua descartável, apagá-la libera o número."
 fi
 
@@ -220,6 +315,21 @@ while IFS= read -r nome; do
     echo "CI REPROVADO: timestamp $ts de '$nome' já existe em '$BASE': $lista"
     echo "  O Supabase usa o timestamp como identidade da migration; dois iguais quebram db push/reset."
     falhou=1
+  fi
+
+  # Outro PR ABERTO (inclusive de fork) com o mesmo NNNN ou timestamp: AVISA no arquivo,
+  # não reprova — quem entrar primeiro fica; o outro PR pode nunca entrar.
+  if [ -n "$arvores_prs" ]; then
+    donos_n="$(grep -E "^[0-9]+ [0-9]{14}_${nnnn}_.+\.sql$" <<<"$arvores_prs" | cut -d' ' -f1 | sort -un \
+                 | sed 's/^/PR aberto #/' | paste -sd, - | sed 's/,/, /g' || true)"
+    donos_t="$(grep -E "^[0-9]+ ${ts}_[0-9]{4}_.+\.sql$" <<<"$arvores_prs" | cut -d' ' -f1 | sort -un \
+                 | sed 's/^/PR aberto #/' | paste -sd, - | sed 's/,/, /g' || true)"
+    if [ -n "$donos_n" ]; then
+      echo "::warning file=$caminho::NNNN=$nnnn também está em: $donos_n — não reprova: quem entrar primeiro fica, e o outro renumera (NNNN e timestamp juntos)."
+    fi
+    if [ -n "$donos_t" ]; then
+      echo "::warning file=$caminho::timestamp $ts também está em: $donos_t — o Supabase usa o timestamp como identidade; quem entrar depois troca o seu."
+    fi
   fi
 
   # A sonda de árvore (TRIAGEM.md:926) restrita às adições: NNNN/timestamp repetidos

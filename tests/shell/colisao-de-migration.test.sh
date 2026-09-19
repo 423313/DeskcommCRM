@@ -25,6 +25,16 @@
 #  10. clone sem outras refs (o raso do CI) declara na própria saída que NÃO as mediu.
 #  11. ref que resolve para o próprio HEAD não vira "quem tem" — o alvo não mede a si
 #      mesmo (a armadilha da #1155).
+#  12. as cabeças dos PRs ABERTOS entram no universo — inclusive de fork, que não moram em
+#      refs/remotes. Medido em 19/09/2026: o #677 (fork) tinha o 0333 e o gate, que só via
+#      refs/heads + refs/remotes, diria "livre" ao dono do #1176. É o controle positivo da
+#      POPULAÇÃO: sem ele, este teste passaria com o universo velho.
+#  13. cabeça de PR FECHADO não entra: refs/pull/*/head persiste depois do fechamento
+#      (965 cabeças contra 43 PRs abertos, medido) e empurraria o "próximo livre".
+#  14. PR listado cuja cabeça não pôde ser buscada vira "NÃO MEDIDO: #N" — nunca pulado.
+#  15. sem gh utilizável, o universo de PRs é declarado NÃO MEDIDO (como o clone raso).
+#  16. número de 4 dígitos no SLUG não vira NNNN (`_0277_relatorio_2024_` não dá 2025).
+#  17. a cabeça do PR de quem roda (ancestral do HEAD) não acusa o próprio número.
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -52,6 +62,23 @@ unset $(git rev-parse --local-env-vars)
 export GIT_CEILING_DIRECTORIES="$TMP"
 export GIT_AUTHOR_NAME="Teste" GIT_AUTHOR_EMAIL="teste@exemplo.invalid"
 export GIT_COMMITTER_NAME="Teste" GIT_COMMITTER_EMAIL="teste@exemplo.invalid"
+
+# ── gh FALSO, para TODOS os casos: sem rede e sem depender do gh de quem roda ──────────
+# Responde `pr list` com os números de FAKE_GH_PRS; com a variável AUSENTE, finge gh
+# indisponível (é o estado do CI, que não exporta GH_TOKEN para o passo do gate).
+mkdir -p "$TMP/bin"
+cat > "$TMP/bin/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "pr" ] && [ "${2:-}" = "list" ] && [ -n "${FAKE_GH_PRS+x}" ]; then
+  for n in $FAKE_GH_PRS; do echo "$n"; done
+  exit 0
+fi
+echo "gh falso: indisponível neste teste" >&2
+exit 1
+GH
+chmod +x "$TMP/bin/gh"
+export PATH="$TMP/bin:$PATH"
+unset FAKE_GH_PRS
 
 # ── um "repositório principal" mínimo, com duas migrations já aplicadas ──────────────
 principal="$TMP/principal"; mkdir -p "$principal/supabase/migrations"
@@ -233,6 +260,83 @@ saida="$(gate "$c")"; code=$?
 assert_exit "$code" 0 "espelho do HEAD não interfere na medição"
 assert_not_contains "$saida" "espelho-do-head" "não nomeia ref que é o próprio HEAD"
 assert_contains "$saida" "refs/heads/outra/resgate" "só o dono de verdade é nomeado"
+
+# ── PRs abertos, inclusive de fork (refs/pull/N/head) ─────────────────────────────────
+# Uma cabeça de PR no principal, como o GitHub guarda: refs/pull/N/head. `git clone` NÃO
+# traz refs/pull — igual ao clone real —, então só o gate buscando é que a enxerga.
+pr_no_principal() { # $1 = número do PR, $2 = nome da migration que a cabeça dele carrega
+  local w="$TMP/cabeca-pr-$1"; rm -rf "$w"; git clone -q "$principal" "$w"
+  printf 'select %s;\n' "$1" > "$w/supabase/migrations/$2"
+  git -C "$w" add -A >/dev/null && git -C "$w" commit -q -m "PR #$1"
+  git -C "$w" push -q origin "HEAD:refs/pull/$1/head"
+}
+gate_prs() { # $1 = PRs abertos que o gh falso lista, $2 = clone
+  ( export FAKE_GH_PRS="$1"; cd "$2" && bash scripts/checar-colisao-de-migration.sh origin/main 2>&1 )
+}
+pr_no_principal 7 "20260917100000_0276_do_fork.sql"
+pr_no_principal 9 "20260917120000_0400_abandonado.sql"
+
+echo "16. PR aberto de FORK com o mesmo NNNN: o gate o enxerga e nomeia (não reprova)"
+c="$TMP/c16"; clonar "$c"; git -C "$c" switch -q -c fix/pr
+migrar "$c" "20260917110000_0276_meu.sql"; commit "$c" "PR com o 0276 que o fork também tem"
+if git -C "$c" rev-parse -q --verify refs/pull/7/head >/dev/null 2>&1; then
+  falha "o caso exige clone SEM refs/pull (como o clone real)" "refs/pull/7/head já existe no clone"
+else
+  ok "cenário montado: o clone não traz refs/pull, igual ao do GitHub"
+fi
+saida="$(gate_prs "7" "$c")"; code=$?
+assert_exit "$code" 0 "número de outro PR não reprova — quem entrar primeiro fica"
+# Âncora no ARQUIVO do PR: o gate velho já emite um ::warning genérico ("não foram
+# medidos"), e "::warning" solto passaria sem ter visto fork nenhum. E "NNNN=0277" aqui
+# também não provaria nada — o próprio PR tem 0276. Quem prova o teto vindo do fork é o 17.
+assert_contains "$saida" "::warning file=supabase/migrations/20260917110000_0276_meu.sql::NNNN=0276" "avisa NO ARQUIVO que colide"
+assert_contains "$saida" "PR aberto #7" "nomeia O PR que tem o mesmo número"
+
+echo "17. cabeça de PR FECHADO não entra: a população é a lista de ABERTOS, nunca o curinga"
+c="$TMP/c17"; clonar "$c"; git -C "$c" switch -q -c fix/pr
+migrar "$c" "20260917130000_0263_meu.sql"; commit "$c" "PR com número livre"
+saida="$(gate_prs "7" "$c")"; code=$?
+assert_exit "$code" 0 "PR com número livre passa"
+assert_contains "$saida" "NNNN=0277" "o teto vem do PR ABERTO #7"
+assert_not_contains "$saida" "0401" "o 0400 do PR fechado #9 não empurra o próximo livre"
+assert_not_contains "$saida" "#9" "o PR fechado não aparece em lugar nenhum"
+
+echo "18. PR listado cuja cabeça não pôde ser buscada: NÃO MEDIDO nomeado, e a soma aparece"
+c="$TMP/c18"; clonar "$c"; git -C "$c" switch -q -c fix/pr
+migrar "$c" "20260917140000_0263_meu.sql"; commit "$c" "PR com número livre"
+saida="$(gate_prs "7 8" "$c")"; code=$?
+assert_exit "$code" 0 "uma cabeça imensurável não reprova o PR (é informação, não ação)"
+assert_contains "$saida" "NÃO MEDIDO: #8" "nomeia QUAL PR ficou de fora"
+assert_contains "$saida" "2 listado(s), 1 medido(s)" "declara a soma: listados contra medidos"
+assert_contains "$saida" "NNNN=0277" "o que foi medido continua valendo"
+
+echo "19. sem gh utilizável, o universo de PRs abertos é declarado NÃO MEDIDO"
+c="$TMP/c19"; clonar "$c"; git -C "$c" switch -q -c fix/pr
+migrar "$c" "20260917150000_0263_meu.sql"; commit "$c" "PR com número livre"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "sem gh o gate segue medindo o resto (degradação limpa)"
+assert_contains "$saida" "NÃO MEDIDO: PRs abertos" "declara que os PRs abertos ficaram de fora"
+
+echo "20. número de 4 dígitos no SLUG não vira NNNN"
+c="$TMP/c20"; clonar "$c"
+git -C "$c" switch -q -c outra/relatorio
+migrar "$c" "20260917160000_0277_relatorio_2024_anual.sql"; commit "$c" "slug com ano"
+git -C "$c" switch -q -c fix/pr origin/main
+migrar "$c" "20260917170000_0263_meu.sql"; commit "$c" "PR com número livre"
+rearmar_gate "$c"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "PR com número livre passa"
+assert_contains "$saida" "NNNN=0278" "o teto é o NNNN da outra ref (0277), não o ano do slug"
+assert_not_contains "$saida" "NNNN=2025" "o 2024 do slug não é número de migration"
+
+echo "21. a cabeça do PR de quem roda (ancestral do HEAD) não acusa o próprio número"
+c="$TMP/c21"; clonar "$c"; git -C "$c" switch -q -c fix/meu
+migrar "$c" "20260917180000_0263_meu.sql"; commit "$c" "PR com 0263"
+git -C "$c" push -q origin "HEAD:refs/pull/5/head"
+printf 'mais uma linha\n' >> "$c/README.md"; commit "$c" "commit local ainda não publicado"
+saida="$(gate_prs "5" "$c")"; code=$?
+assert_exit "$code" 0 "o próprio PR não reprova a si mesmo"
+assert_not_contains "$saida" "PR aberto #5" "a cabeça do próprio PR não vira 'quem tem'"
 
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0
