@@ -66,7 +66,7 @@ export function urlDePoliticaSegura(valor: unknown): string | null {
 
 /**
  * Virou `async` porque o contato do encarregado passou a vir do banco (migration
- * 0290), com o arquivo de instalação como piso. As três chamadas vivem dentro de
+ * 0341), com o arquivo de instalação como piso. As três chamadas vivem dentro de
  * `resolverOperador`, que já era assíncrona — o alcance foi medido antes de
  * mudar a assinatura.
  */

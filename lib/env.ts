@@ -202,6 +202,15 @@ const schema = z.object({
   TRANSCRIPTION_API_KEY: z.string().optional().default(""),
   TRANSCRIPTION_BASE_URL: z.string().optional().default(""),
   TRANSCRIPTION_MODEL: z.string().optional().default(""),
+  // Destinos internos que o DONO DA INSTALAÇÃO autoriza (decisão 22-d, #1004):
+  // IPv4 e faixas CIDR IPv4 que a saída pode alcançar mesmo sendo rede interna,
+  // e só para destinos que a própria INSTALAÇÃO configura (nunca o endereço que
+  // uma organização escolhe). O BANCO ESTÁ ACIMA DISTO: a lista vive em
+  // `platform_settings.internal_destinations`, editada em
+  // `/admin/destinos-internos`; esta variável é só o PISO, que vale enquanto a
+  // tela nunca foi usada. Vazio é ausente: sem ela, nada passa. Quem lê é
+  // `lib/automation/destinos-internos-autorizados.ts`.
+  IA_DESTINOS_INTERNOS_PERMITIDOS: z.string().optional().default(""),
 
   // Fusão (Fase 4): DONO ÚNICO dos eventos ai_agent.dispatch_requested.
   // 'engine' (default) = o worker agent-engine é o único consumidor (o cron
@@ -230,6 +239,19 @@ const schema = z.object({
    * Mesmo raciocínio de APP_ACCENT_HEX, algumas linhas abaixo.
    */
   AI_BUDGET_ENFORCEMENT: z.string().optional().default("on"),
+
+  // As duas chaves do MOTOR que também são comportamento da INSTALAÇÃO (issue
+  // #1034): o modo do portão de disclosure do atendimento e a camada semântica
+  // de promessa. Existem em `lib/agent-engine/env.ts` (é lá que o worker as
+  // lê); entram aqui para a tela de admin poder mostrar o PISO que o `.env`
+  // desta instalação declara, em vez de supor o default do produto.
+  //
+  // `z.string()` cru e NUNCA `z.enum`, pelo mesmo motivo da linha acima: um
+  // `z.enum` que lança no import derruba o processo, e derrubar o processo é o
+  // oposto do que um kill switch faz. Quem normaliza é o leitor de cada um:
+  // `pisoDaInstalacao()`, em lib/instalacao/comportamento-servidor.ts.
+  DISCLOSURE_MODE: z.string().optional(),
+  PROMISE_SEMANTIC_ENABLED: z.string().optional(),
 
   // `EVENT_LOG_WORKER_ENABLED` viveu aqui até 2026-08-25 e NUNCA teve leitor: o
   // campo era declarado, documentado no `.env.example` com `false` e lido por
@@ -446,10 +468,20 @@ if (env.NODE_ENV === "production") {
 // `OPENROUTER_API_KEY` entra na condição porque `isAiGatewayConfigured()`
 // (lib/ai/gateway.ts) e `resolveLanguageModel` a tratam como configuração
 // válida no ambiente, assim como gateway e Anthropic.
-if (!env.AI_GATEWAY_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENROUTER_API_KEY) {
+// `OPENAI_API_KEY` entra pelo mesmo motivo, com a diferença que o aviso não
+// precisa esconder: ela atende os pontos do provedor que a ORGANIZAÇÃO escolheu
+// (é o último degrau de `resolverModeloDoPonto`, lib/ai/gateway-binding.ts).
+// Sem esta linha, uma instalação que responde pelo OpenAI lia no boot que
+// "nenhuma chave de IA" estava configurada — issue #1181.
+if (
+  !env.AI_GATEWAY_API_KEY &&
+  !env.ANTHROPIC_API_KEY &&
+  !env.OPENROUTER_API_KEY &&
+  !env.OPENAI_API_KEY
+) {
   console.warn(
     "[env] Nenhuma chave de IA configurada no ambiente " +
-      "(AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY ou OPENROUTER_API_KEY). " +
+      "(AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY ou OPENAI_API_KEY). " +
       "Isto não prova que o agente está sem credencial: cada organização pode ter uma chave " +
       "cadastrada em IA › Credenciais. A falta real só é conhecida quando a resolução completa " +
       "do turno não encontra chave em nenhum degrau.",

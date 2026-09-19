@@ -2,7 +2,7 @@
  * O PAINEL DE CONFIGURAÇÃO DA INSTALAÇÃO, PELA TELA — como o dono da VPS usa.
  *
  * O produto deste repositório é a experiência de quem instala numa VPS. Até a
- * migration 0290, trocar a chave do serviço de e-mail exigia SSH no servidor,
+ * migration 0341, trocar a chave do serviço de e-mail exigia SSH no servidor,
  * editar o `.env` e recriar os contêineres — o que, para o público do kit, é o
  * mesmo que não ser configurável. Esta bateria prova a jornada inteira pela
  * tela, na ordem em que a pessoa a vive.

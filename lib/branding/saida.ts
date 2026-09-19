@@ -231,7 +231,7 @@ export async function marcaDaSaida(organizationId: string | null): Promise<Marca
  *
  * O que a nota anterior aqui pedia — "quando a coluna entrar, esta função ganha
  * a linha do banco ACIMA do ambiente, na mesma ordem que a marca já usa" — é o
- * que esta versão faz. A migration 0290 trouxe `platform_config`, que guarda uma
+ * que esta versão faz. A migration 0341 trouxe `platform_config`, que guarda uma
  * linha por variável em vez de uma coluna por campo, e o resolvedor devolve a
  * ordem certa: banco acima, arquivo de instalação embaixo.
  *

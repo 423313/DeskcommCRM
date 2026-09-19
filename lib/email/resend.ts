@@ -79,7 +79,7 @@ function criarCliente(key: string | null): Resend | null {
 export function fromAddress(remetente: string | null, fromName?: string): string | null {
   const endereco = (remetente ?? "").trim();
   if (endereco.length === 0) return null;
-  // ⚠️ O ENDEREÇO também é entrada não confiável desde a 0290, e antes não era.
+  // ⚠️ O ENDEREÇO também é entrada não confiável desde a 0341, e antes não era.
   //
   // Enquanto ele vinha só do `.env`, mexer nele exigia SSH na VPS — quem podia
   // fazer isso já tinha o servidor. Agora ele vem de um campo de tela, e um

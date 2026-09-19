@@ -176,9 +176,9 @@ describe("remetente", () => {
     expect(sujo).toBe("Acme evil@x.comBcc: vitima@y.com <nao-responda@revenda.com.br>");
   });
 
-  it("ENDEREÇO com caractere de cabeçalho é recusado — ele virou entrada de tela na 0290", async () => {
+  it("ENDEREÇO com caractere de cabeçalho é recusado — ele virou entrada de tela na 0341", async () => {
     // Enquanto o endereço vinha só do `.env`, mexer nele exigia SSH: quem podia
-    // já tinha o servidor. Desde a 0290 ele vem de um campo do painel, e um
+    // já tinha o servidor. Desde a 0341 ele vem de um campo do painel, e um
     // `\r\n` aqui emenda um cabeçalho novo no `From:` — um `Bcc:` para terceiro,
     // por exemplo. RECUSA em vez de limpar: endereço com caractere de cabeçalho
     // não é endereço a consertar, é endereço a não usar.

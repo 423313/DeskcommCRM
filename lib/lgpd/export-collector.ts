@@ -224,7 +224,7 @@ export interface ExportPayload {
   organization_legal_name: string;
   /** Nome fantasia. Não vai para o rodapé; existe para o JSON do export. */
   organization_display_name: string;
-  /** Encarregado da organização; `null` cai no encarregado da INSTALAÇÃO (0290). */
+  /** Encarregado da organização; `null` cai no encarregado da INSTALAÇÃO (0341). */
   dpo_email: string | null;
   /**
    * A lei que o documento de acesso cita, pronta (`LGPD Art. 18, II (Lei nº

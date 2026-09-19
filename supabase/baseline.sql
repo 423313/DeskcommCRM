@@ -1552,8 +1552,8 @@ CREATE TABLE IF NOT EXISTS "public"."idempotency_keys" (
     "key" "text" NOT NULL,
     "endpoint" "text" NOT NULL,
     "request_hash" "bytea" NOT NULL,
-    "status_code" integer NOT NULL,
-    "response_body" "jsonb" NOT NULL,
+    "status_code" integer,
+    "response_body" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "expires_at" timestamp with time zone DEFAULT ("now"() + '24:00:00'::interval) NOT NULL
 );
@@ -9972,10 +9972,23 @@ alter table public.agent_inbox_items
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
     'case_stale',
+    -- (migration 0312) O fluxo de follow-up publicado que NUNCA vai disparar:
+    -- gatilho automático (silêncio, etapa, caso, falta) só cria inscrição se
+    -- algum agente publicado arma o ponteiro, e sem esse vínculo os produtores
+    -- saem por `pointers_armados = 0` em silêncio — `active` na tela, morto no
+    -- motor. Entra NESTA lista e no FIM dela, pelas duas razões de sempre
+    -- (bloco único por constraint, #159; e a janela de 2000 caracteres que
+    -- `tests/unit/midia-nao-lida.test.ts` varre a partir do `add constraint`).
+    'followup_sem_agente',
     'other'
   ));
 
 
+
+-- ---- índice do watcher de follow-up sem agente (migration 0312) ----
+create index if not exists agent_inbox_items_followup_sem_agente_aberto_idx
+  on public.agent_inbox_items (organization_id, ref_id)
+  where kind = 'followup_sem_agente' and status = 'open';
 
 notify pgrst, 'reload schema';
 
@@ -12494,9 +12507,10 @@ grant execute on function public.fn_aplicar_quadro_do_onboarding(uuid, uuid, tex
 --
 -- A MARCA DO CLIENTE FINAL SE GRAVA EM UMA INSTRUÇÃO SÓ.
 --
--- `organizations.settings` tem três donos com gates diferentes (updateTenant =
--- admin, PATCH de atendimento = manager, régua de atrito = manager) e os três
--- fazem read-modify-write do jsonb INTEIRO, em round-trips HTTP separados. A
+-- `organizations.settings` tem vários donos com gates diferentes, e cada um
+-- faz read-modify-write do jsonb INTEIRO, em round-trips HTTP separados. Quem
+-- são hoje, no código: `git grep -n "update({ settings" -- app lib workers` (a
+-- aba Organização saiu dessa lista no PR #1209). A
 -- perda é medida, não deduzida: `visibility_mode` volta de 'own' para 'all' sem
 -- erro em lugar nenhum — e essa chave é lida DIRETO pela RLS, dentro de
 -- `fn_can_view_conversation`/`fn_can_view_lead`. Um write de COR reverteria, em
@@ -21002,18 +21016,48 @@ returns boolean language sql stable security definer set search_path=public as $
 $$;
 revoke all on function public.fn_google_counts_for_conflicts(uuid,uuid,text) from public,anon;
 grant execute on function public.fn_google_counts_for_conflicts(uuid,uuid,text) to authenticated,service_role;
--- A view é recriada, não substituída no lugar: `create or replace view` não
--- renomeia nem remove coluna (aqui, tirar o `title` é o conserto da 0261 — o
--- membro lê a ocupação do colega, não o texto do compromisso pessoal dele). E o
--- corpo deste arquivo é REAPLICADO a cada update (`test:db`, job `invariants`),
--- então `drop` + `create` é a única forma que sobrevive à segunda passada —
--- `create or replace` sobre a view já recriada sem o `title` responde
--- `cannot change name of view column "starts_at" to "title"` e derruba o run.
--- Lista EXPLÍCITA de propósito: `e.*` é como a próxima coluna do espelho nasceria
+-- A view nasceu como `select e.*` — com o `title` dentro —, e a lista EXPLÍCITA
+-- abaixo é o conserto da 0261: o membro lê a ocupação do colega, não o texto do
+-- compromisso pessoal dele. `e.*` é como a próxima coluna do espelho nasceria
 -- exposta a quem só precisa saber se o horário está ocupado.
-drop view if exists public.calendar_selected_external_events;
+--
+-- O `drop` daqui é CONDICIONAL, e existe por um motivo só: `create or replace
+-- view` não remove nem renomeia coluna, então sobre um clone que ainda tem a
+-- forma antiga — a que sobra é o `title` — ele responde `cannot drop columns
+-- from view` (medido: 16.15) e derruba o run. Quem já está na forma alvo NÃO cai
+-- — passa direto pelo `create or replace` logo abaixo, que PRESERVA o OID. Este
+-- arquivo é reaplicado a cada instalação e a cada update (`test:db`, job
+-- `invariants`), e derrubar + recriar o objeto a cada passada era o defeito da
+-- issue #1086: o que quebrava a segunda passada era o `create view` sobre o
+-- objeto ainda existente, não a falta do `drop`.
+--
+-- A lista desta guarda anda JUNTA com a do `create or replace` (aqui e na 0261):
+-- coluna nova na view entra nas duas, senão a passada seguinte derruba uma view
+-- que já estava certa — e `scripts/test-update-com-dados.sh` fica vermelho nesse
+-- caso, pelo OID.
+do $$
+begin
+  if exists (
+    select 1
+      from pg_attribute a
+      join pg_class c on c.oid = a.attrelid
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname = 'calendar_selected_external_events'
+       and c.relkind = 'v'
+       and a.attnum > 0
+       and not a.attisdropped
+       and a.attname not in (
+         'id','organization_id','connection_id','external_calendar_id','external_event_id',
+         'starts_at','ends_at','is_all_day','status','transparency','external_updated_at',
+         'created_at','updated_at','ical_uid','seen_generation','recurring_event_id','original_start_time'
+       )
+  ) then
+    drop view if exists public.calendar_selected_external_events;
+  end if;
+end $$;
 
-create view public.calendar_selected_external_events with (security_invoker=true) as
+create or replace view public.calendar_selected_external_events with (security_invoker=true) as
  select e.id,e.organization_id,e.connection_id,e.external_calendar_id,e.external_event_id,
   e.starts_at,e.ends_at,e.is_all_day,e.status,e.transparency,e.external_updated_at,
   e.created_at,e.updated_at,e.ical_uid,e.seen_generation,e.recurring_event_id,e.original_start_time
@@ -24821,16 +24865,22 @@ notify pgrst, 'reload schema';
 -- — e o gestor já lê `account_email` em `calendar_connections`. Decisão do dono. O
 -- invariante mede que o colega segue lendo o id.
 --
--- ## A view precisa ser recriada, não substituída no lugar
+-- ## A view só é recriada quando ainda está na forma antiga
 --
 -- `calendar_selected_external_events` era `select e.*`. Com `security_invoker`, o
 -- Postgres confere privilégio de coluna EM NOME DO INVOCADOR para toda coluna
 -- referenciada na definição — inclusive as de um `e.*` que já foi expandido quando
 -- a view nasceu. Deixá-la assim faria TODA leitura de ocupação por membro falhar
--- com `permission denied` no `title`. E não dá para `create or replace view`
--- tirando coluna do meio (o Postgres recusa: "cannot drop columns from view") — por
--- isso `drop` + `create` aqui, com lista explícita. A lista explícita é o conserto
--- de fundo: `e.*` era a forma de a próxima coluna nascer exposta.
+-- com `permission denied` no `title`. E `create or replace view` não tira coluna
+-- do meio (o Postgres recusa: "cannot drop columns from view").
+--
+-- Por isso o `drop` daqui é CONDICIONAL (issue #1086): quem ainda tem o `title` —
+-- a forma da v1.26.0 — cai no `drop` e é recriado; quem já está na forma alvo
+-- passa direto pelo `create or replace`, que PRESERVA o OID. Derrubar e recriar
+-- a view a cada passada deste arquivo era o defeito da issue: o que quebrava a
+-- segunda passada era o `create view` sobre o objeto existente, não a falta do
+-- `drop`. A lista explícita segue sendo o conserto de fundo: `e.*` era a forma de
+-- a próxima coluna nascer exposta, e ela anda junto com a lista da guarda.
 --
 -- ## O que este bloco NÃO faz, de propósito
 --
@@ -24863,10 +24913,11 @@ notify pgrst, 'reload schema';
 --   view, que andam juntos, senão `select *` na view vira 42501) ou não. Estar no
 --   grant não quer dizer "não é pessoal": ver `external_calendar_id`, acima.
 -- * Quem LER esta view de dentro de função não pode usar `begin atomic`: a
---   dependência registrada no catálogo impede o `drop view` + `create view` deste
---   bloco a cada update. Hoje o único leitor é `fn_agenda_ocupacao_google_do_dono`
---   (0260), `language sql` sem `begin atomic`. `fn_google_counts_for_conflicts`
---   não é leitora — é a view que a chama, e essa direção não trava o `drop`.
+--   dependência registrada no catálogo impede o `drop view` condicional da guarda
+--   abaixo, que é o único caminho de quem ainda está na forma antiga (`e.*`). Hoje
+--   o único leitor é `fn_agenda_ocupacao_google_do_dono` (0260), `language sql` sem
+--   `begin atomic`. `fn_google_counts_for_conflicts` não é leitora — é a view que a
+--   chama, e essa direção não trava o `drop`.
 
 revoke select on public.calendar_external_events from authenticated;
 
@@ -24877,9 +24928,35 @@ grant select (
   original_start_time
 ) on public.calendar_external_events to authenticated;
 
-drop view if exists public.calendar_selected_external_events;
+-- A MESMA guarda do bloco da reconciliação do Google (migration 0225), e
+-- repetida de propósito: este bloco é medido
+-- SOZINHO por `tests/invariants/titulo-do-evento-pessoal-fora-do-alcance.test.ts`,
+-- sobre o estado da v1.26.0 (view com `e.*`), então a forma antiga tem de ser
+-- curada aqui também, sem depender do que veio antes no arquivo.
+do $$
+begin
+  if exists (
+    select 1
+      from pg_attribute a
+      join pg_class c on c.oid = a.attrelid
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname = 'calendar_selected_external_events'
+       and c.relkind = 'v'
+       and a.attnum > 0
+       and not a.attisdropped
+       and a.attname not in (
+         'id', 'organization_id', 'connection_id', 'external_calendar_id', 'external_event_id',
+         'starts_at', 'ends_at', 'is_all_day', 'status', 'transparency', 'external_updated_at',
+         'created_at', 'updated_at', 'ical_uid', 'seen_generation', 'recurring_event_id',
+         'original_start_time'
+       )
+  ) then
+    drop view if exists public.calendar_selected_external_events;
+  end if;
+end $$;
 
-create view public.calendar_selected_external_events
+create or replace view public.calendar_selected_external_events
 with (security_invoker = true) as
 select
   e.id, e.organization_id, e.connection_id, e.external_calendar_id,
@@ -26283,6 +26360,127 @@ grant  execute on function public.fn_tags_normalizar(text[], text, text, boolean
 revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) from public, anon;
 grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) to authenticated, service_role;
 
+-- ---- mensagem do lembrete no tipo (migration 0328) ----
+-- O texto que o cron manda no WhatsApp passa a ser do MOLDE. NULL = a frase
+-- padrão ("Passando pra lembrar…"), o comportamento anterior. Distinto de
+-- reminder_template_name, que é o nome do template do provedor oficial.
+alter table public.calendar_event_types
+  add column if not exists reminder_body text;
+
+comment on column public.calendar_event_types.reminder_body is
+  'Texto do lembrete no WhatsApp. NULL = a frase padrão do cron. Variáveis {{nome}}, {{titulo}}, {{dia}}, {{hora}}, {{endereco}}. Distinto de reminder_template_name, que é o nome do template aprovado no provedor oficial.';
+
+-- ---- mensagem por lembrete (migration 0329) ----
+-- Cada extra ganha texto próprio (`reminder_bodies`) e o teto de 3 extras
+-- sobe para 20. O CHECK antigo chama a função pelo nome: `create or replace`
+-- basta. Backfill copia reminder_body para cada extra que já existia, para
+-- a atualização não trocar o texto que o cliente já recebia.
+alter table public.calendar_event_types
+  add column if not exists reminder_bodies jsonb not null default '{}'::jsonb;
+
+create or replace function public.fn_degraus_de_lembrete_validos(p_degraus integer[])
+returns boolean
+language sql
+immutable
+as $$
+  select coalesce(array_length(p_degraus, 1), 0) <= 20
+     and coalesce(bool_and(x between 15 and 10080), true)
+    from unnest(coalesce(p_degraus, '{}'::integer[])) as x;
+$$;
+
+revoke execute on function public.fn_degraus_de_lembrete_validos(integer[]) from public, anon;
+grant execute on function public.fn_degraus_de_lembrete_validos(integer[]) to authenticated, service_role;
+
+create or replace function public.fn_corpos_de_lembrete_validos(p_corpos jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select p_corpos is not null
+     and jsonb_typeof(p_corpos) = 'object'
+     and coalesce((select count(*) from jsonb_object_keys(p_corpos)), 0) <= 20
+     and coalesce((
+       select bool_and(
+         e.key ~ '^[0-9]+$'
+         and jsonb_typeof(e.value) = 'string'
+         and length(e.value #>> '{}') <= 1000
+       )
+       from jsonb_each(p_corpos) as e
+     ), true);
+$$;
+
+revoke execute on function public.fn_corpos_de_lembrete_validos(jsonb) from public, anon;
+grant execute on function public.fn_corpos_de_lembrete_validos(jsonb) to authenticated, service_role;
+
+update public.calendar_event_types
+   set reminder_bodies = coalesce((
+     select jsonb_object_agg(x::text, reminder_body)
+       from unnest(reminder_extra_offsets_minutes) as x
+   ), '{}'::jsonb)
+ where reminder_body is not null
+   and length(trim(reminder_body)) > 0
+   and coalesce(array_length(reminder_extra_offsets_minutes, 1), 0) > 0
+   and reminder_bodies = '{}'::jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'calendar_event_types_corpos_validos'
+       and conrelid = 'public.calendar_event_types'::regclass
+  ) then
+    update public.calendar_event_types
+       set reminder_bodies = '{}'::jsonb
+     where not public.fn_corpos_de_lembrete_validos(reminder_bodies);
+
+    alter table public.calendar_event_types
+      add constraint calendar_event_types_corpos_validos
+      check (public.fn_corpos_de_lembrete_validos(reminder_bodies));
+  end if;
+end $$;
+
+comment on column public.calendar_event_types.reminder_bodies is
+  'Texto de cada lembrete ADICIONAL, chave = minutos antes (string). Extra ausente do mapa usa a frase de fábrica do cron, não reminder_body. Vazio = nenhum extra tem texto próprio.';
+
+-- ---- endereços salvos da agenda (migration 0330) ----
+-- Lista da ORGANIZAÇÃO: salas e unidades que a equipe reusa ao marcar.
+-- Unique por (org, endereço normalizado). Escrita agent+; leitura de membro.
+create table if not exists public.calendar_locations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  address text not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  constraint calendar_locations_endereco_tamanho
+    check (char_length(btrim(address)) between 1 and 300)
+);
+
+create unique index if not exists calendar_locations_org_endereco_key
+  on public.calendar_locations (organization_id, lower(btrim(address)));
+
+comment on table public.calendar_locations is
+  'Endereços da ORGANIZAÇÃO reutilizáveis ao marcar. Não é o endereço de um contato: é o lugar onde se atende (sala, unidade). Unique por org + endereço normalizado.';
+comment on column public.calendar_locations.address is
+  'Texto livre, 1–300 caracteres depois do trim. O mesmo teto de calendar_appointments.location_details.';
+
+alter table public.calendar_locations enable row level security;
+
+drop policy if exists calendar_locations_select on public.calendar_locations;
+create policy calendar_locations_select on public.calendar_locations
+  for select using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+
+drop policy if exists calendar_locations_insert on public.calendar_locations;
+create policy calendar_locations_insert on public.calendar_locations
+  for insert with check (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+revoke all on public.calendar_locations from anon;
+
 -- ---- a transferência entre funis não é perda comercial (migration 0266) ----
 --
 -- Entra ANTES do bloco da varredura anon, que é de propósito o último do arquivo
@@ -26452,6 +26650,8 @@ as $$
   ),
   envios as (
     select count(*) filter (where m.sent_via = 'ai')              as por_ia,
+           count(*) filter (where m.sent_via = 'automation')      as por_automacao,
+           count(*) filter (where m.sent_via = 'system')          as por_integracao,
            count(*) filter (where m.sent_via = 'user')            as por_humano_no_sistema,
            count(*) filter (where m.sent_via = 'external_device') as por_humano_fora
       from public.messages m
@@ -26522,6 +26722,8 @@ as $$
       'vetos',                    (select vetados  from vetos),
       'execucoes_medidas',        (select execucoes from vetos),
       'envios_por_ia',            (select por_ia                from envios),
+      'envios_por_automacao',     (select por_automacao         from envios),
+      'envios_por_integracao',    (select por_integracao        from envios),
       'envios_humano_no_sistema', (select por_humano_no_sistema from envios),
       'envios_humano_fora',       (select por_humano_fora       from envios),
       -- O invariante 4 vira NÚMERO na tela: demanda aberta sem próximo passo é
@@ -27754,6 +27956,347 @@ comment on column public.ad_platform_connections.google_login_customer_id is
 comment on column public.ad_platform_connections.google_conversion_action_id is
   'Qual ação de conversão, dentro de google_customer_id, recebe os envios de venda. Formato: só o id numérico, o resource name completo é montado no transporte.';
 
+-- ---- o banco conhece o perfil declarativo v2 das extensões (migration 0282) ----
+-- 0282 — O banco passa a conhecer o perfil declarativo v2 (ADR-0003)
+--
+-- POR QUE ESTA MIGRATION EXISTE, e por que a ADR-0003 dizia que ela não existiria.
+--
+-- A ADR afirmou "esta ADR não altera o schema", apoiada numa medição PARCIAL: li a validação
+-- do MANIFESTO (0271:356-357), vi que ela fecha o conjunto de CHAVES e não o conteúdo delas,
+-- e concluí sobre o sistema inteiro. Faltou ler até o efeito. A validação do CATÁLOGO, dentro
+-- de `fn_extensions_admit_catalog`, faz duas coisas que a do manifesto não faz:
+--
+--   0271:194   v_entry->'permissions' <> '["navigation.tasks"]'::jsonb   -- valor FIXO
+--   0271:184   v_entry - array[...9 chaves...] <> '{}'::jsonb            -- chave nova é erro
+--
+-- Efeito medido: sem esta migration, um catálogo do perfil v2 é RECUSADO pelo banco — tanto
+-- por declarar outra permissão quanto por trazer o metadado de loja. O contrato novo viveria
+-- só no TypeScript, e a admissão falharia com `extension_invalid_input`.
+--
+-- O QUE MUDA
+--
+-- 1. Permissões viram conjunto fechado, o mesmo de `lib/extensions/capacidades.ts`: lista não
+--    vazia, sem repetição, sem valor desconhecido. A mesma regra dos dois lados.
+-- 2. As cinco chaves de loja passam a ser aceitas NO CATÁLOGO. No manifesto continuam
+--    recusadas: o pacote descreve o que faz, o catálogo revisado descreve de quem é.
+-- 3. `extension_permissions_changed` passa a existir de verdade, em atualizar e em desfazer.
+--
+-- As três funções são reescritas INTEIRAS, com o corpo da 0271 preservado e as alterações
+-- aplicadas aqui, no arquivo — e não por substituição de texto em tempo de execução lendo o
+-- `prosrc` do banco, que dependeria do estado de cada clone e falharia em silêncio.
+--
+-- Idempotente: `create or replace` em todas. Reaplicar não duplica efeito.
+
+create or replace function public.fn_extensions_permissoes_validas(p_permissions jsonb)
+returns boolean language sql immutable set search_path = public, pg_temp as $$
+  select p_permissions is not null
+    and jsonb_typeof(p_permissions) = 'array'
+    and jsonb_array_length(p_permissions) between 1 and 6
+    and not exists (
+      select 1 from jsonb_array_elements(p_permissions) e
+      where jsonb_typeof(e.value) <> 'string'
+         or e.value #>> '{}' not in (
+              'navigation.tasks', 'navigation.inbox', 'navigation.kanban',
+              'navigation.contacts', 'navigation.agenda', 'navigation.radar')
+    )
+    and (select count(distinct e.value) from jsonb_array_elements(p_permissions) e)
+        = jsonb_array_length(p_permissions);
+$$;
+
+revoke execute on function public.fn_extensions_permissoes_validas(jsonb) from public, anon;
+revoke execute on function public.fn_extensions_permissoes_validas(jsonb) from authenticated;
+grant execute on function public.fn_extensions_permissoes_validas(jsonb) to service_role;
+
+create or replace function public.fn_extensions_admit_catalog(p_actor uuid, p_operation uuid, p_snapshot jsonb, p_digest text)
+returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_request jsonb := jsonb_build_object('kind','catalog_admission','actor',p_actor,'snapshot',p_snapshot,'digest',p_digest);
+  v_op public.extension_operations; v_catalog public.extension_catalogs; v_entry jsonb; v_revision integer;
+begin
+  perform public.fn_extensions_assert_actor(p_actor);
+  if p_operation is null then raise exception using errcode='P0001', message='extension_invalid_input'; end if;
+  perform pg_advisory_xact_lock(255,1);
+  perform public.fn_extensions_assert_actor(p_actor);
+  perform pg_advisory_xact_lock(hashtextextended(p_operation::text,255));
+  perform public.fn_extensions_assert_actor(p_actor);
+  select * into v_op from public.extension_operations where id=p_operation;
+  if found then
+    if v_op.request_fingerprint <> public.fn_extensions_fingerprint(v_request) then
+      raise exception using errcode='P0001', message='extension_idempotency_conflict';
+    end if;
+    return to_jsonb(v_op) || jsonb_build_object('applied_now', false);
+  end if;
+  if p_snapshot is null or jsonb_typeof(p_snapshot) <> 'object'
+    or not (p_snapshot ?& array['format_version','origin','revision','entries'])
+    or p_snapshot - array['format_version','origin','revision','entries'] <> '{}'::jsonb
+    or p_snapshot->'format_version' is distinct from '1'::jsonb
+    or jsonb_typeof(p_snapshot->'origin') is distinct from 'string'
+    or p_snapshot->>'origin' !~ '^https?://[^/@?#[:space:]]+$'
+    or jsonb_typeof(p_snapshot->'revision') is distinct from 'number'
+    or p_snapshot->>'revision' !~ '^[1-9][0-9]{0,8}$'
+    or jsonb_typeof(p_snapshot->'entries') is distinct from 'array'
+    or p_digest is null or p_digest !~ '^[a-f0-9]{64}$' then
+    raise exception using errcode='P0001', message='extension_invalid_input';
+  end if;
+  if jsonb_array_length(p_snapshot->'entries') > 128 then
+    raise exception using errcode='P0001', message='extension_invalid_input';
+  end if;
+  for v_entry in select value from jsonb_array_elements(p_snapshot->'entries') loop
+    if jsonb_typeof(v_entry) <> 'object' or not (v_entry ?& array['publisher','name','version','license','host_api','display','permissions','sha256','byte_length'])
+      or v_entry - array['publisher','name','version','license','host_api','display','permissions','sha256','byte_length','publisher_label','homepage','repository','tags','published_at'] <> '{}'::jsonb
+      or exists (select 1 from jsonb_each(v_entry) e where e.value='null'::jsonb)
+      or jsonb_typeof(v_entry->'byte_length') is distinct from 'number'
+      or jsonb_typeof(v_entry->'host_api') is distinct from 'object'
+      or jsonb_typeof(v_entry->'display') is distinct from 'object'
+      or v_entry->>'publisher' !~ '^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$'
+      or v_entry->>'name' !~ '^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$'
+      or v_entry->>'version' !~ '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+      or v_entry->>'sha256' !~ '^[a-f0-9]{64}$'
+      or v_entry->>'byte_length' !~ '^[1-9][0-9]{0,4}$'
+      or v_entry->>'license' <> 'MIT' or not public.fn_extensions_permissoes_validas(v_entry->'permissions') then
+      raise exception using errcode='P0001', message='extension_invalid_input';
+    end if;
+    if (v_entry->>'byte_length')::integer > 65536 then
+      raise exception using errcode='P0001', message='extension_invalid_input';
+    end if;
+  end loop;
+  if exists (select 1 from jsonb_array_elements(p_snapshot->'entries') e
+    group by e->>'publisher', e->>'name', e->>'version' having count(*) > 1) then
+    raise exception using errcode='P0001', message='extension_invalid_input';
+  end if;
+  v_revision := (p_snapshot->>'revision')::integer;
+  select * into v_catalog from public.extension_catalogs where origin=p_snapshot->>'origin';
+  if found and (v_revision < v_catalog.revision or (v_revision = v_catalog.revision
+      and (p_digest <> v_catalog.digest or p_snapshot <> v_catalog.snapshot))) then
+    raise exception using errcode='P0001', message='extension_catalog_revision_conflict';
+  end if;
+  if v_catalog.id is null then
+    if (select count(*) from public.extension_catalogs) >= 8 then
+      raise exception using errcode='P0001',message='extension_catalog_limit';
+    end if;
+    insert into public.extension_catalogs(origin,revision,digest,snapshot,admitted_by)
+      values(p_snapshot->>'origin',v_revision,p_digest,p_snapshot,p_actor) returning * into v_catalog;
+  elsif v_revision > v_catalog.revision then
+    update public.extension_catalogs set revision=v_revision,digest=p_digest,snapshot=p_snapshot,
+      admitted_by=p_actor,admitted_at=now() where id=v_catalog.id returning * into v_catalog;
+    update public.extension_operations set status='cancelled',error_code='extension_catalog_stale',updated_at=now()
+      where catalog_id=v_catalog.id and kind in ('install','update') and status='preparing';
+  end if;
+  insert into public.extension_operations(id,kind,status,actor_id,catalog_id,request,request_fingerprint,result)
+    values(p_operation,'catalog_admission','completed',p_actor,v_catalog.id,v_request,
+      public.fn_extensions_fingerprint(v_request),jsonb_build_object('catalog',to_jsonb(v_catalog))) returning * into v_op;
+  return to_jsonb(v_op) || jsonb_build_object('applied_now', true);
+end $$;
+
+create or replace function public.fn_extensions_finish_install(p_actor uuid, p_operation uuid, p_manifest jsonb, p_sha256 text, p_byte_length integer, p_document text)
+returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_op public.extension_operations; v_catalog public.extension_catalogs;
+  v_artifact public.extension_artifacts; v_install public.extension_installations; v_current public.extension_artifacts;
+  v_previous public.extension_artifacts; v_document_json jsonb; v_active integer := 0;
+begin
+  perform public.fn_extensions_assert_actor(p_actor);
+  perform pg_advisory_xact_lock(255,1);
+  perform public.fn_extensions_assert_actor(p_actor);
+  select * into v_op from public.extension_operations where id=p_operation for update;
+  if not found then raise exception using errcode='P0001',message='extension_operation_not_found'; end if;
+  if v_op.kind not in ('install','update') or v_op.actor_id is distinct from p_actor then
+    raise exception using errcode='P0001',message='extension_operation_conflict';
+  end if;
+  -- Sem autoridade após cancel/fail. Resposta perdida de completed segue verificando payload.
+  if v_op.status in ('cancelled','failed') then return to_jsonb(v_op) || jsonb_build_object('applied_now', false); end if;
+  if p_document is null or octet_length(p_document) not between 1 and 65536
+    or octet_length(p_document) is distinct from p_byte_length
+    or encode(sha256(convert_to(p_document,'UTF8')),'hex') is distinct from p_sha256 then
+    raise exception using errcode='P0001',message='extension_artifact_mismatch';
+  end if;
+  begin
+    v_document_json := p_document::jsonb;
+  exception when invalid_text_representation or untranslatable_character or program_limit_exceeded then
+    raise exception using errcode='P0001',message='extension_artifact_mismatch';
+  end;
+  if v_document_json is distinct from p_manifest then
+    raise exception using errcode='P0001',message='extension_artifact_mismatch';
+  end if;
+  if p_sha256 is distinct from v_op.entry->>'sha256' or p_byte_length is distinct from (v_op.entry->>'byte_length')::integer
+    or p_manifest is null or jsonb_typeof(p_manifest) <> 'object'
+    or not (p_manifest ?& array['format_version','profile','publisher','name','version','license','host_api','permissions','dependencies','data','display','configuration','contributions'])
+    or p_manifest - array['format_version','profile','publisher','name','version','license','host_api','permissions','dependencies','data','display','configuration','contributions'] <> '{}'::jsonb
+    or exists (select 1 from jsonb_each(p_manifest) e where e.value='null'::jsonb)
+    or p_manifest->'format_version' is distinct from '1'::jsonb or p_manifest->>'profile' is distinct from 'declarative'
+    or jsonb_typeof(p_manifest->'configuration') is distinct from 'object'
+    or jsonb_typeof(p_manifest->'contributions') is distinct from 'object'
+    or p_manifest->>'publisher' is distinct from v_op.publisher or p_manifest->>'name' is distinct from v_op.name
+    or p_manifest->>'version' is distinct from v_op.version
+    or p_manifest->'dependencies' <> '[]'::jsonb or p_manifest->'data' <> '{"mode":"none"}'::jsonb
+    or (p_manifest - array['format_version','profile','dependencies','data','configuration','contributions'])
+      is distinct from (v_op.entry - array['sha256','byte_length']) then
+    raise exception using errcode='P0001',message='extension_artifact_mismatch';
+  end if;
+  if v_op.status='completed' then
+    -- Compara com o artefato que ESTA conclusão publicou, não com o ponteiro de agora: um
+    -- "desfazer" posterior não pode fazer a repetição acusar pacote adulterado.
+    select * into v_artifact from public.extension_artifacts
+      where id=coalesce(v_op.result->>'to_artifact_id', v_op.result->'installation'->>'artifact_id')::uuid;
+    if not found or v_artifact.manifest is distinct from p_manifest or v_artifact.document is distinct from p_document then
+      raise exception using errcode='P0001',message='extension_artifact_mismatch';
+    end if;
+    return to_jsonb(v_op) || jsonb_build_object('applied_now', false);
+  end if;
+  if public.fn_extensions_core_update_in_progress() then
+    raise exception using errcode='P0001',message='extension_core_update_in_progress';
+  end if;
+  select * into v_catalog from public.extension_catalogs where id=v_op.catalog_id;
+  if v_catalog.revision is distinct from v_op.admission_revision or v_catalog.digest is distinct from v_op.admission_digest then
+    raise exception using errcode='P0001',message='extension_catalog_stale';
+  end if;
+  select * into v_install from public.extension_installations
+    where catalog_id=v_op.catalog_id and publisher=v_op.publisher and name=v_op.name for update;
+  -- Defesa estrutural: a linha tem de estar na revisão que a preparação viu.
+  if v_install.revision is distinct from (v_op.result->>'from_revision')::integer
+    or (v_op.kind='update' and v_install.removed_at is not null)
+    or (v_op.kind='install' and v_install.id is not null and v_install.removed_at is null) then
+    raise exception using errcode='P0001',message='extension_version_changed';
+  end if;
+  if v_install.id is not null then
+    select * into v_current from public.extension_artifacts where id=v_install.artifact_id;
+    -- A recusa que a spec v1 prometeu para "quando o contrato admitir outra permissão".
+    -- Sem ela, 1.0 -> 1.1 acrescentaria uma porta sem ninguém na organização rever a lista
+    -- que a tela existe para mostrar: o furo entra pela porta lateral da própria propriedade
+    -- que a lista de permissões garante. Mudar o conjunto de portas é outra extensão.
+    if v_op.kind='update' and v_current.id is not null
+      and v_current.manifest->'permissions' is distinct from p_manifest->'permissions' then
+      raise exception using errcode='P0001',message='extension_permissions_changed';
+    end if;
+    select * into v_previous from public.extension_artifacts where id=v_install.previous_artifact_id;
+    if (v_install.version = v_op.version and v_current.sha256 <> p_sha256)
+      or (v_previous.id is not null and v_previous.manifest->>'version' = v_op.version and v_previous.sha256 <> p_sha256) then
+      raise exception using errcode='P0001',message='extension_version_conflict';
+    end if;
+  end if;
+  select * into v_artifact from public.extension_artifacts where sha256=p_sha256;
+  if found then
+    if v_artifact.manifest is distinct from p_manifest or v_artifact.document is distinct from p_document or v_artifact.byte_length <> p_byte_length then
+      raise exception using errcode='P0001',message='extension_artifact_mismatch';
+    end if;
+  else
+    insert into public.extension_artifacts(sha256,byte_length,manifest,document) values(p_sha256,p_byte_length,p_manifest,p_document) returning * into v_artifact;
+  end if;
+  if v_install.id is null then
+    insert into public.extension_installations(catalog_id,artifact_id,publisher,name,version,installed_by)
+      values(v_op.catalog_id,v_artifact.id,v_op.publisher,v_op.name,v_op.version,p_actor) returning * into v_install;
+  elsif v_op.kind='install' then
+    -- Reinstalação de uma linha removida: os vínculos NÃO voltam ativos; cada organização decide.
+    update public.extension_installations set artifact_id=v_artifact.id, version=v_op.version, previous_artifact_id=null,
+      removed_at=null, removed_by=null, installed_by=p_actor, installed_at=now(), revision=revision+1
+      where id=v_install.id returning * into v_install;
+  else
+    update public.extension_installations set previous_artifact_id=artifact_id, artifact_id=v_artifact.id,
+      version=v_op.version, revision=revision+1 where id=v_install.id returning * into v_install;
+    select count(*)::integer into v_active from public.organization_extensions where installation_id=v_install.id and enabled;
+  end if;
+  update public.extension_operations set status='completed',installation_id=v_install.id,
+    result=coalesce(v_op.result,'{}'::jsonb) || jsonb_build_object('installation',to_jsonb(v_install),
+      'to_artifact_id',v_artifact.id,'to_version',v_op.version,'organizations_active',v_active),
+    updated_at=now() where id=p_operation returning * into v_op;
+  return to_jsonb(v_op) || jsonb_build_object('applied_now', true);
+end $$;
+
+create or replace function public.fn_extensions_revert_install(p_actor uuid, p_operation uuid, p_installation uuid,
+  p_expected_installation_revision integer)
+returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_request jsonb := jsonb_build_object('kind','revert','actor',p_actor,'installation',p_installation,
+    'expected_installation_revision',p_expected_installation_revision);
+  v_op public.extension_operations; v_install public.extension_installations; v_from public.extension_installations;
+  v_target public.extension_artifacts; v_active integer;
+begin
+  perform public.fn_extensions_assert_actor(p_actor);
+  if p_operation is null or p_installation is null or p_expected_installation_revision is null
+    or p_expected_installation_revision < 1 then
+    raise exception using errcode='P0001',message='extension_invalid_input';
+  end if;
+  perform pg_advisory_xact_lock(255,1);
+  perform public.fn_extensions_assert_actor(p_actor);
+  perform pg_advisory_xact_lock(hashtextextended(p_operation::text,255));
+  perform public.fn_extensions_assert_actor(p_actor);
+  select * into v_op from public.extension_operations where id=p_operation;
+  if found then
+    if v_op.request_fingerprint <> public.fn_extensions_fingerprint(v_request) then
+      raise exception using errcode='P0001',message='extension_idempotency_conflict';
+    end if;
+    return to_jsonb(v_op) || jsonb_build_object('applied_now', false);
+  end if;
+  if public.fn_extensions_core_update_in_progress() then
+    raise exception using errcode='P0001',message='extension_core_update_in_progress';
+  end if;
+  select * into v_install from public.extension_installations where id=p_installation for update;
+  if not found then raise exception using errcode='P0001',message='extension_installation_not_found'; end if;
+  if v_install.removed_at is not null then raise exception using errcode='P0001',message='extension_removed'; end if;
+  if exists (select 1 from public.extension_operations where kind in ('install','update') and status='preparing'
+    and catalog_id=v_install.catalog_id and publisher=v_install.publisher and name=v_install.name) then
+    raise exception using errcode='P0001',message='extension_preparation_in_progress';
+  end if;
+  if v_install.revision <> p_expected_installation_revision then
+    raise exception using errcode='P0001',message='extension_version_changed';
+  end if;
+  if v_install.previous_artifact_id is null then
+    raise exception using errcode='P0001',message='extension_no_previous_version';
+  end if;
+  select * into v_target from public.extension_artifacts where id=v_install.previous_artifact_id;
+  -- Desfazer tem a mesma regra: voltar a uma versão com outro conjunto de portas mudaria em
+  -- silêncio o que a organização aceitou. Quem precisa disso reinstala e reativa.
+  if v_target.manifest->'permissions' is distinct from
+     (select manifest->'permissions' from public.extension_artifacts where id=v_install.artifact_id) then
+    raise exception using errcode='P0001',message='extension_permissions_changed';
+  end if;
+  v_from := v_install;
+  update public.extension_installations set artifact_id=previous_artifact_id, previous_artifact_id=artifact_id,
+    version=v_target.manifest->>'version', revision=revision+1 where id=p_installation returning * into v_install;
+  select count(*)::integer into v_active from public.organization_extensions where installation_id=p_installation and enabled;
+  insert into public.extension_operations(id,kind,status,actor_id,catalog_id,installation_id,publisher,name,version,
+    request,request_fingerprint,result)
+    values(p_operation,'revert','completed',p_actor,v_install.catalog_id,v_install.id,v_install.publisher,v_install.name,
+      v_install.version,v_request,public.fn_extensions_fingerprint(v_request),
+      jsonb_build_object('installation',to_jsonb(v_install),'from_revision',v_from.revision,'from_artifact_id',v_from.artifact_id,
+        'from_version',v_from.version,'to_artifact_id',v_install.artifact_id,'to_version',v_install.version,
+        'organizations_active',v_active))
+    returning * into v_op;
+  return to_jsonb(v_op) || jsonb_build_object('applied_now', true);
+end $$;
+
+revoke execute on function public.fn_extensions_admit_catalog(uuid, uuid, jsonb, text) from public, anon;
+revoke execute on function public.fn_extensions_admit_catalog(uuid, uuid, jsonb, text) from authenticated;
+grant execute on function public.fn_extensions_admit_catalog(uuid, uuid, jsonb, text) to service_role;
+revoke execute on function public.fn_extensions_finish_install(uuid, uuid, jsonb, text, integer, text) from public, anon;
+revoke execute on function public.fn_extensions_finish_install(uuid, uuid, jsonb, text, integer, text) from authenticated;
+grant execute on function public.fn_extensions_finish_install(uuid, uuid, jsonb, text, integer, text) to service_role;
+revoke execute on function public.fn_extensions_revert_install(uuid, uuid, uuid, integer) from public, anon;
+revoke execute on function public.fn_extensions_revert_install(uuid, uuid, uuid, integer) from authenticated;
+grant execute on function public.fn_extensions_revert_install(uuid, uuid, uuid, integer) to service_role;
+
+-- ---- marcadores do contato no filtro de conversas (migration 0323) ----
+-- Campo calculado do PostgREST: o filtro ?tag= do Inbox casa conversations.tags
+-- OU contacts.tags num único or=, sem lista de ids na URL. SECURITY INVOKER (a
+-- RLS de contacts vale para quem chama); as duas origens de EXECUTE revogadas.
+-- Antes da varredura de anon, como toda função nova do apêndice.
+create or replace function public.tags_do_contato(c public.conversations)
+  returns text[]
+  language sql
+  stable
+  set search_path = public
+as $$
+  select ct.tags from public.contacts ct where ct.id = c.contact_id
+$$;
+
+comment on function public.tags_do_contato(public.conversations) is
+  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0323).';
+
+revoke execute on function public.tags_do_contato(public.conversations) from public, anon;
+grant  execute on function public.tags_do_contato(public.conversations) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -27849,14 +28392,25 @@ comment on column public.user_organizations.provisional_until_handover is
 create table if not exists public.platform_settings (
   id           smallint    primary key default 1,
   signup_mode  text        not null default 'aberto',
+  -- Comportamento da instalação (0331). NULAS de propósito: null = "a
+  -- instalação não opinou" e quem responde é o arquivo de ambiente, o que faz
+  -- a migration não mudar comportamento de quem nunca abrir a tela.
+  orcamento_de_ia              text,
+  exigir_assinatura_no_webhook boolean,
+  divulgacao_de_pagamento      text,
+  promessa_semantica           boolean,
   updated_at   timestamptz not null default now(),
   updated_by   uuid,
   constraint platform_settings_singleton check (id = 1),
-  constraint platform_settings_signup_mode check (signup_mode in ('aberto', 'so_convite'))
+  constraint platform_settings_signup_mode check (signup_mode in ('aberto', 'so_convite')),
+  constraint platform_settings_orcamento_de_ia
+    check (orcamento_de_ia is null or orcamento_de_ia in ('on', 'avisar', 'off')),
+  constraint platform_settings_divulgacao_de_pagamento
+    check (divulgacao_de_pagamento is null or divulgacao_de_pagamento in ('inject', 'veto'))
 );
 
 comment on table public.platform_settings is
-  'Configuração da INSTALAÇÃO (não do tenant) — linha única id=1. Hoje só a política de cadastro. Lida/escrita apenas server-side (service_role); a ausência da linha significa o default, que é o comportamento anterior à 0253. Ver lib/auth/politica-de-cadastro.ts.';
+  'Configuração da INSTALAÇÃO (não do tenant) — linha única id=1. Hoje a política de cadastro e o COMPORTAMENTO (orçamento de IA, assinatura de webhook, divulgação de pagamento, conferência de promessa). Coluna nula = a instalação não opinou, e quem responde é o arquivo de ambiente. Lida/escrita apenas server-side (service_role); a ausência da linha significa o default. Ver lib/auth/politica-de-cadastro.ts e lib/instalacao/comportamento.ts.';
 
 comment on column public.platform_settings.signup_mode is
   'aberto = qualquer pessoa cria conta em /signup (comportamento histórico). so_convite = só quem chega com convite válido; sem convite, /signup recusa com tela e /auth/confirm NÃO provisiona organização.';
@@ -27874,6 +28428,46 @@ drop trigger if exists trg_platform_settings_touch on public.platform_settings;
 create trigger trg_platform_settings_touch
   before update on public.platform_settings
   for each row execute function public.fn_touch_updated_at();
+
+notify pgrst, 'reload schema';
+
+-- ---- comportamento da instalação (migration 0331) ----
+-- O `create table if not exists` acima só age em instalação NOVA: quem já tem
+-- `platform_settings` (desde a 0253, v1.25.0) passa por ele sem efeito no
+-- `update.sh`, e as quatro colunas nunca nasceriam. Este bloco é o espelho da
+-- migration 0331 e é o que as leva a quem ATUALIZA. NULAS e sem default, de
+-- propósito: null = "a instalação não opinou", e quem responde é o `.env`.
+-- Sem dado a corrigir antes das CHECKs: as colunas nascem nulas, e as CHECKs
+-- aceitam null.
+alter table public.platform_settings
+  add column if not exists orcamento_de_ia              text,
+  add column if not exists exigir_assinatura_no_webhook boolean,
+  add column if not exists divulgacao_de_pagamento      text,
+  add column if not exists promessa_semantica           boolean;
+
+alter table public.platform_settings
+  drop constraint if exists platform_settings_orcamento_de_ia;
+alter table public.platform_settings
+  add constraint platform_settings_orcamento_de_ia
+  check (orcamento_de_ia is null or orcamento_de_ia in ('on', 'avisar', 'off'));
+
+alter table public.platform_settings
+  drop constraint if exists platform_settings_divulgacao_de_pagamento;
+alter table public.platform_settings
+  add constraint platform_settings_divulgacao_de_pagamento
+  check (divulgacao_de_pagamento is null or divulgacao_de_pagamento in ('inject', 'veto'));
+
+comment on column public.platform_settings.orcamento_de_ia is
+  'on = a IA respeita o teto de gasto que cada organização escolheu (default do produto, e o que o .env declara). avisar = a IA responde e apenas avisa quem opera. off = sem proteção de gasto. null = a instalação não opinou; vale AI_BUDGET_ENFORCEMENT do arquivo de ambiente. Só AFROUXA o que a organização escolheu: nunca liga proteção que a empresa não pediu.';
+
+comment on column public.platform_settings.exigir_assinatura_no_webhook is
+  'true = toda entrega de webhook do canal precisa vir assinada com o segredo da sessão; sem assinatura (ou com assinatura errada) a entrega é recusada. null = a instalação não opinou; vale WAHA_WEBHOOK_REQUIRE_SIGNATURE do arquivo de ambiente (default do produto: false).';
+
+comment on column public.platform_settings.divulgacao_de_pagamento is
+  'inject = o texto de divulgação de pagamento entra na primeira mensagem. veto = o envio sem esse texto é bloqueado e devolvido ao modelo com a razão, para ele reescrever. null = a instalação não opinou; vale DISCLOSURE_MODE do arquivo de ambiente (default do produto: inject).';
+
+comment on column public.platform_settings.promessa_semantica is
+  'true = cada envio passa por uma conferência de modelo antes de sair, para não prometer o que a empresa não cumpre (custa uma chamada de modelo por envio). null = a instalação não opinou; vale PROMISE_SEMANTIC_ENABLED do arquivo de ambiente (default do produto: true).';
 
 notify pgrst, 'reload schema';
 
@@ -27937,6 +28531,60 @@ comment on column public.automation_rules.trigger_config is
   'Configuração do gatilho (issue #989). Vazio nos gatilhos que nascem de evento. No gatilho lead.date_field_due guarda {pipeline_id, campo, dias} — o campo de data pertence a UM funil, e sem essa dupla a varredura não sabe onde olhar.';
 
 notify pgrst, 'reload schema';
+-- 0311 · O webhook do NÚMERO, registrado pela própria instalação (issue #850, fatia F1).
+--
+-- ─── O que o usuário via ────────────────────────────────────────────────────
+-- Conectar o canal oficial era metade do caminho: o canal ENVIAVA e não RECEBIA até
+-- alguém entrar no painel da Meta, abrir a configuração do webhook, colar a URL de
+-- callback e escolher os campos — por número. Quem não sabia disso (o produto é
+-- self-host para quem NÃO programa) ficava com um canal que parece pronto e cujas
+-- mensagens recebidas simplesmente não existem em lugar nenhum: nem erro, nem log.
+--
+-- ─── O que estas colunas guardam ────────────────────────────────────────────
+-- O DESFECHO do registro automático, não a configuração: a URL que ficou registrada
+-- (`meta_webhook_override_uri`), o motivo da última falha (`..._erro`) e quando foi
+-- (`..._em`). São o que a tela lê para dizer "conectado, webhook pendente: <motivo>"
+-- com botão de tentar de novo — em vez de dizer "conectado" e deixar a descoberta
+-- para a primeira mensagem que nunca chega.
+--
+-- ─── Por que colunas, e não o `metadata` jsonb que já existe na tabela ──────
+-- Porque a TELA consulta este estado a cada render e o desfecho tem três leitores
+-- (GET do canal, POST de conexão, rota de re-registro): chave dentro de jsonb é
+-- contrato que ninguém vê quebrar — o `metadata` da sessão é do ingest/roteamento, e
+-- misturar os dois faz um `update` de lá apagar o desfecho daqui.
+--
+-- ─── Por que registrar DEPOIS de gravar a sessão ────────────────────────────
+-- O GET de verificação da Meta chega no instante em que o override é registrado e
+-- procura a sessão pelo `webhook_path_token`. Registrar antes de a linha existir
+-- devolveria 404, e a Meta marcaria o webhook como inválido — pior que não registrar.
+-- Ordem invertida = defeito, não preferência.
+--
+-- ─── Exposição: nenhuma nova ────────────────────────────────────────────────
+-- A URL registrada contém o `webhook_path_token`, que JÁ vive nesta tabela
+-- (`channel_sessions`, com `GRANT ALL` a anon/authenticated e RLS de isolamento por
+-- organização desde as migrations 0106/0099). Não há coluna nova de segredo, não há
+-- grant novo, não há policy nova: a coluna herda exatamente o acesso das vizinhas.
+-- O que ela NÃO guarda é o token da Meta — esse continua só em
+-- `meta_token_encrypted`, cifrado (fn_encrypt_oauth).
+--
+-- ─── O que NÃO entra aqui, de propósito ─────────────────────────────────────
+-- * `message_template_status_update`: a Meta NÃO aceita override por número para este
+--   tópico — ele continua indo para a URL do app (limite da plataforma, não escolha).
+-- * Limpeza no arquivamento do canal e reaplicação na reconexão: é a fatia F1b, e
+--   roda em cima destas mesmas colunas (`meta_webhook_override_uri` null = desfeito).
+-- * Índice: as três colunas são lidas sempre pela chave primária da sessão.
+
+alter table public.channel_sessions
+  add column if not exists meta_webhook_override_uri text,
+  add column if not exists meta_webhook_override_erro text,
+  add column if not exists meta_webhook_override_em timestamptz;
+
+comment on column public.channel_sessions.meta_webhook_override_uri is
+  'URL de callback registrada na Meta para ESTE número (override por phone_number_id). Nulo = não registrado (ou desfeito). Contém o webhook_path_token, que já é desta tabela.';
+comment on column public.channel_sessions.meta_webhook_override_erro is
+  'Motivo da última falha ao registrar o webhook, como a Graph API devolveu. Não é falha da conexão: o canal envia normalmente; o que depende disto é a ENTREGA. Nulo = última tentativa deu certo.';
+comment on column public.channel_sessions.meta_webhook_override_em is
+  'Quando foi a última TENTATIVA de registrar (sucesso ou falha). A tela usa a data para o operador saber se o estado que ele vê é o de agora.';
 -- ---- a resposta revisada para de segurar a Zona de perigo (migration 0273) ----
 -- A FK inline da 0227 nasceu sem ação de exclusão (NO ACTION) e era a ÚNICA das
 -- quatro que apontam para `public.messages(id)` fora do padrão `on delete set
@@ -27960,8 +28608,8 @@ alter table public.ai_reply_drafts
 
 notify pgrst, 'reload schema';
 
--- ---- a configuração da instalação cabe na tela (migration 0290) ----
--- 0290 — A configuração da INSTALAÇÃO sai do `.env` e passa a caber na tela.
+-- ---- a configuração da instalação cabe na tela (migration 0341) ----
+-- 0341 — A configuração da INSTALAÇÃO sai do `.env` e passa a caber na tela.
 --
 -- ── O problema ───────────────────────────────────────────────────────────────
 --
@@ -28054,7 +28702,7 @@ create table if not exists public.platform_config (
 );
 
 comment on table public.platform_config is
-  'Configuração da INSTALAÇÃO editável pela tela (não do tenant): uma linha por variável, nomeada como a própria variável de ambiente. Linha ausente = usa o .env. Segredo guarda envelope AES-256-GCM cru (lib/crypto/aes_gcm.ts, chave em AI_CRED_AES_KEY, fora do banco de propósito — ver o cabeçalho da migration 0290); knob guarda texto. Lida/escrita só server-side por service_role. Ver lib/instalacao/config.ts.';
+  'Configuração da INSTALAÇÃO editável pela tela (não do tenant): uma linha por variável, nomeada como a própria variável de ambiente. Linha ausente = usa o .env. Segredo guarda envelope AES-256-GCM cru (lib/crypto/aes_gcm.ts, chave em AI_CRED_AES_KEY, fora do banco de propósito — ver o cabeçalho da migration 0341); knob guarda texto. Lida/escrita só server-side por service_role. Ver lib/instalacao/config.ts.';
 
 comment on column public.platform_config.semeado_do_env is
   'true = o valor veio do .env por semeadura automática e pode ser re-semeado. false = uma pessoa escreveu pela tela, e o .env NUNCA sobrescreve. Mesma regra de platform_branding.seeded_from_env (0155).';
@@ -28094,6 +28742,85 @@ notify pgrst, 'reload schema';
 update storage.buckets
 set allowed_mime_types = array['application/pdf', 'text/markdown', 'text/x-markdown', 'text/plain', 'text/csv']
 where id = 'ai-policy';
+-- ---- o recibo de idempotência ganha o estado "em curso" (migration 0321) ----
+-- Issue #778, PR #1189 (@webtecnica). Reserva = `status_code` e `response_body`
+-- nulos, gravada ANTES do efeito; recibo = os dois preenchidos. O `create table`
+-- do corpo já nasce anulável (install); as duas primeiras linhas levam a
+-- nulidade a quem JÁ tinha a tabela (update), onde o `create table if not
+-- exists` é no-op. `drop not null` em coluna já anulável é no-op. O CHECK fecha
+-- o meio-termo (um gravado e o outro não), que nenhum leitor sabe interpretar;
+-- toda linha anterior tem as duas colunas preenchidas e passa sem backfill.
+alter table public.idempotency_keys alter column status_code drop not null;
+alter table public.idempotency_keys alter column response_body drop not null;
+alter table public.idempotency_keys
+  drop constraint if exists idempotency_keys_recibo_ou_reserva;
+alter table public.idempotency_keys
+  add constraint idempotency_keys_recibo_ou_reserva
+  check ((status_code is null) = (response_body is null));
+
+-- ---- destinos internos que o dono da instalação autoriza (migration 0324) ----
+-- Decisão 22-d, #1004. null = nunca configurado pela tela (vale o .env);
+-- '{}' = o dono esvaziou a lista. Idempotente; sem dado tocado.
+alter table public.platform_settings
+  add column if not exists internal_destinations text[];
+
+comment on column public.platform_settings.internal_destinations is
+  'IPv4 e faixas CIDR IPv4 que a INSTALAÇÃO pode alcançar mesmo sendo rede interna — só para destinos configurados pela instalação, nunca por uma organização (decisão 22-d, #1004). null = nunca configurado pela tela: vale IA_DESTINOS_INTERNOS_PERMITIDOS do .env. Array vazio = nada autorizado. Ver lib/automation/destinos-internos-autorizados.ts.';
+
+notify pgrst, 'reload schema';
+
+-- ---- marcador do contato normalizado, no dado que já estava gravado (migration 0335) ----
+-- Issue #1224 (triagem do #1206), @webtecnica. A escrita passou a normalizar o
+-- marcador do contato nos quatro caminhos (ficha, importação por CSV, API e
+-- `crm_manage_tags`) pela MESMA função que o filtro usa para ler
+-- (lib/contacts/tag-normalizada.ts) — sem isso, `?tag=vip` não encontra o contato
+-- marcado como "VIP" e o chip do marcador não sai da ficha por remoção nenhuma.
+-- Este apêndice é o backfill do dado ANTERIOR, e é idempotente por
+-- `is distinct from`: aplicado numa VPS que já recebeu a migration 0335, nenhuma
+-- linha é tocada (o arquivo é aplicado inteiro em quem instala, e de novo em
+-- quem atualiza). A ordem é a mesma da aplicação — corta as pontas, minúsculas,
+-- teto de 40 caracteres, descarta o vazio e tira o repetido — e a ordem de
+-- primeira aparição é preservada (`with ordinality`) para a ficha do contato não
+-- reembaralhar os marcadores de quem já os tinha.
+update public.contacts c
+   set tags = sub.normalizados
+  from (
+    select ct.id, array_agg(ct.tag order by ct.ord) as normalizados
+      from (
+        -- `c2.id` NA CHAVE: sem ele o `distinct on` é global e guarda UMA
+        -- linha por marcador na TABELA INTEIRA — o segundo contato com "VIP"
+        -- perde o marcador, e a deduplicação atravessa organizações. A
+        -- consulta é válida, roda sem erro e sem aviso; o que denuncia é o
+        -- dado. Reproduzido em Postgres 17.6: {VIP,Suporte} virava {suporte}.
+        select distinct on (c2.id, left(lower(btrim(u.x)), 40))
+               c2.id,
+               left(lower(btrim(u.x)), 40) as tag,
+               u.ord
+          from public.contacts c2
+          cross join lateral unnest(c2.tags) with ordinality as u(x, ord)
+         where c2.tags is not null
+           and left(lower(btrim(u.x)), 40) <> ''
+         order by c2.id, left(lower(btrim(u.x)), 40), u.ord
+      ) ct
+     group by ct.id
+  ) sub
+ where c.id = sub.id
+   and c.tags is distinct from sub.normalizados;
+
+-- Marcador que era só espaço vira lista vazia: a sentença acima não alcança
+-- essas linhas (a subconsulta descarta o vazio) e o contato ficaria com um
+-- marcador invisível que nenhum filtro casa e nenhuma tela mostra.
+update public.contacts c
+   set tags = '{}'::text[]
+ where c.tags is not null
+   and cardinality(c.tags) > 0
+   and c.tags is distinct from '{}'::text[]
+   and not exists (
+     select 1 from unnest(c.tags) as x where left(lower(btrim(x)), 40) <> ''
+   );
+
+notify pgrst, 'reload schema';
+
 -- ---- travas do modo somente leitura do suporte, depois de toda tabela (migration 0274) ----
 --
 -- ⚠️ ESTA CHAMADA É O ÚLTIMO BLOCO DO ARQUIVO. Tabela nova, coluna

@@ -2637,6 +2637,8 @@ export type Database = {
           name: string
           organization_id: string
           position: number
+          reminder_body: string | null
+          reminder_bodies: Json
           reminder_enabled: boolean
           reminder_minutes_before: number
           reminder_extra_offsets_minutes: number[]
@@ -2663,6 +2665,8 @@ export type Database = {
           name: string
           organization_id: string
           position?: number
+          reminder_body?: string | null
+          reminder_bodies?: Json
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
@@ -2689,6 +2693,8 @@ export type Database = {
           name?: string
           organization_id?: string
           position?: number
+          reminder_body?: string | null
+          reminder_bodies?: Json
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
@@ -2779,6 +2785,38 @@ export type Database = {
           },
           {
             foreignKeyName: "calendar_external_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_locations: {
+        Row: {
+          address: string
+          created_at: string
+          created_by: string | null
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_locations_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -3002,6 +3040,9 @@ export type Database = {
           meta_phone_number_id: string | null
           meta_token_encrypted: string | null
           meta_waba_id: string | null
+          meta_webhook_override_em: string | null
+          meta_webhook_override_erro: string | null
+          meta_webhook_override_uri: string | null
           metadata: Json
           organization_id: string
           phone_number: string | null
@@ -3035,6 +3076,9 @@ export type Database = {
           meta_phone_number_id?: string | null
           meta_token_encrypted?: string | null
           meta_waba_id?: string | null
+          meta_webhook_override_em?: string | null
+          meta_webhook_override_erro?: string | null
+          meta_webhook_override_uri?: string | null
           metadata?: Json
           organization_id: string
           phone_number?: string | null
@@ -3068,6 +3112,9 @@ export type Database = {
           meta_phone_number_id?: string | null
           meta_token_encrypted?: string | null
           meta_waba_id?: string | null
+          meta_webhook_override_em?: string | null
+          meta_webhook_override_erro?: string | null
+          meta_webhook_override_uri?: string | null
           metadata?: Json
           organization_id?: string
           phone_number?: string | null
@@ -5098,8 +5145,8 @@ export type Database = {
           key: string
           organization_id: string
           request_hash: string
-          response_body: Json
-          status_code: number
+          response_body: Json | null
+          status_code: number | null
         }
         Insert: {
           tenant_creation_trusted?: boolean
@@ -5110,8 +5157,8 @@ export type Database = {
           key: string
           organization_id: string
           request_hash: string
-          response_body: Json
-          status_code: number
+          response_body?: Json | null
+          status_code?: number | null
         }
         Update: {
           tenant_creation_trusted?: boolean
@@ -5122,8 +5169,8 @@ export type Database = {
           key?: string
           organization_id?: string
           request_hash?: string
-          response_body?: Json
-          status_code?: number
+          response_body?: Json | null
+          status_code?: number | null
         }
         Relationships: [
           {
