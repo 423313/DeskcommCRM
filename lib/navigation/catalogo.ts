@@ -196,7 +196,7 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
-    // Módulo VoIP (migration 0336). No grupo do CRM pelo mesmo critério de
+    // Módulo VoIP (migration 0347). No grupo do CRM pelo mesmo critério de
     // Tarefas: quem atende confere ligações perdidas e transcrições no dia a
     // dia, não como revisão deliberada.
     //

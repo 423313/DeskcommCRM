@@ -283,7 +283,7 @@ const PARES: Array<{
     arquivo: "lib/tarefas/tipos.ts",
     simbolo: "SITUACOES_DA_TAREFA",
   },
-  // Módulo VoIP (0336/0337) — status fica de fora: é vocabulário de terceiro
+  // Módulo VoIP (0347/0348) — status fica de fora: é vocabulário de terceiro
   // (binário WaCalls, compartilhado), mapeado na API — não é 1:1 com TS aqui.
   {
     tabela: "voice_calls",

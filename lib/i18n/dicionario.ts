@@ -9155,7 +9155,7 @@ export const DICIONARIO: Traducoes = {
     es: "Este punto usa el modelo definido en la versión publicada del agente; la elección del panel no se aplica.",
   },
 
-  // ─── app/app/settings/voip-trunk (Trunk SIP, migration 0338) ───
+  // ─── app/app/settings/voip-trunk (Trunk SIP, migration 0349) ───
   "Trunk SIP": { es: "Trunk SIP" },
   "Credenciais de registro do seu provedor SIP (Asterisk/AudioSocket). Depois de salvar, aplique o bloco abaixo em": {
     es: "Credenciales de registro de tu proveedor SIP (Asterisk/AudioSocket). Después de guardar, aplica el bloque de abajo en",

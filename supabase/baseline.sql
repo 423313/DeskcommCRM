@@ -31757,16 +31757,16 @@ create trigger trg_platform_smtp_settings_updated_at
   before update on public.platform_smtp_settings
   for each row execute function public.fn_set_updated_at();
 
--- ---- ai_agents.channel + phone_numbers (migration 0336) ----
+-- ---- ai_agents.channel + phone_numbers (migration 0347) ----
 -- ============================================================
--- 0336_modulo_voip — ai_agents.channel, phone_numbers, fn_resolve_inbound_number
+-- 0347_modulo_voip — ai_agents.channel, phone_numbers, fn_resolve_inbound_number
 --
 -- RECOMPOSTA. Esta migration existiu no PR #677 como 0232_modulo_voip e foi
 -- apagada por acidente no commit 97eed0955 (que unificou crm_calls em
 -- voice_calls): o apêndice do baseline manteve o bloco, mas o arquivo sumiu,
 -- e quem aplica as migrations em ordem nunca receberia phone_numbers.
 -- O corpo abaixo é o bloco do apêndice, que já descartava crm_calls (ver
--- 0337_voice_calls_sip). Renumerada para acima do máximo da main.
+-- 0348_voice_calls_sip). Renumerada para acima do máximo da main.
 -- ============================================================
 
 --
@@ -31851,8 +31851,8 @@ grant execute on function public.fn_resolve_inbound_number(text) to service_role
 
 notify pgrst,'reload schema';
 
--- ---- voice_calls ganha o módulo SIP (migration 0337) ----
--- 0337_voice_calls_sip (nasceu 0252 no PR #677; renumerada)
+-- ---- voice_calls ganha o módulo SIP (migration 0348) ----
+-- 0348_voice_calls_sip (nasceu 0252 no PR #677; renumerada)
 --
 -- Unifica `crm_calls` (nosso módulo SIP/AudioSocket, ainda não mergeado —
 -- PR #677) dentro de `voice_calls` (WhatsApp/WaCalls, mergeada via #628/#697,
@@ -32176,8 +32176,8 @@ grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) 
 
 notify pgrst, 'reload schema';
 
--- ---- voip_trunk_settings (migration 0338) ----
--- 0338_voip_trunk_settings (nasceu 0257 no PR #677; renumerada)
+-- ---- voip_trunk_settings (migration 0349) ----
+-- 0349_voip_trunk_settings (nasceu 0257 no PR #677; renumerada)
 --
 -- Tela de configuração de trunk SIP por organização — hoje o único trunk do
 -- módulo de voz (Asterisk/AudioSocket, #677) vive hardcoded em

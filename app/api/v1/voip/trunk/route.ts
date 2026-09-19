@@ -5,7 +5,7 @@
  *                           organização (upsert em organization_id).
  *
  * Aplicar no Asterisk (asterisk/pjsip.conf) continua MANUAL nesta fase — ver
- * migration 0338. `password` no body é opcional numa atualização (mantém a
+ * migration 0349. `password` no body é opcional numa atualização (mantém a
  * senha já cifrada se omitida), obrigatório na primeira vez.
  */
 import { requireSupportWrite } from "@/lib/impersonate/support";

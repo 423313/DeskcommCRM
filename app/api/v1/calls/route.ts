@@ -6,13 +6,13 @@
  * linha pelo asterisk_channel_id e segue o fluxo dele.
  *
  * `voice_calls` é compartilhada com o canal de chamada por WhatsApp (WaCalls,
- * #628/#697) — ver migration 0337. `provider` discrimina as duas origens;
+ * #628/#697) — ver migration 0348. `provider` discrimina as duas origens;
  * o vocabulário de `status` (starting/ringing/connected/ended) é do binário
  * WaCalls upstream, reaproveitado aqui em vez de estender o CHECK. A rota GET
  * traduz isso pra um `status` mais rico na resposta (ver mapStatusParaApi).
  *
  * O endpoint do trunk vem de `voip_trunk_settings` (Configurações > Trunk
- * SIP, migration 0338) — um trunk por organização, cadastrado numa tela em
+ * SIP, migration 0349) — um trunk por organização, cadastrado numa tela em
  * vez de fixo em env. `VOIP_TRUNK_ENDPOINT` continua como fallback pra quem
  * ainda não migrou pra tela (compatibilidade, não fica pra sempre).
  *
