@@ -66,10 +66,11 @@ export function isRunStale(dispatchedAt: string, now: Date): boolean {
  * outra coisa. Então o run só é superado quando o host reporta uma versão que
  * **o run não descreve** — nem a que tentou instalar, nem a que restaurou.
  *
- * O caso que fica de fora é reinstalar À MÃO exatamente a versão que falhou e
- * dessa vez funcionar: ali o rodapé segue nomeando a anterior. Falha
- * conservadora e de propósito — ela empurra para atualizar, enquanto o erro
- * oposto seria anunciar como no ar justamente a versão que quebrou.
+ * Esta prova sozinha não alcança reinstalar À MÃO exatamente a versão que
+ * falhou e dessa vez funcionar: ali o host volta a reportar `to_version`, que o
+ * run descreve, e nada separa. Quem alcança é o segundo degrau,
+ * `rollbackDesmentidoPeloApp`, que pergunta qual versão o processo que responde
+ * está rodando (`APP_VERSION`, gravada dentro da imagem).
  *
  * Falso sempre que falta uma das datas — ausência de prova não é prova de
  * deploy, e o run continua sendo a informação mais específica sobre o que subiu.
@@ -263,33 +264,7 @@ export function textoDaRodadaDoBanco(
   return null;
 }
 
-/**
- * A versão que o PRÓPRIO app está rodando, lida da imagem do contêiner.
- *
- * `APP_IMAGE` é o pino que o `update.sh` escreve no `.env` e que o compose usa
- * para subir este contêiner — `ghcr.io/…/deskcommcrm:1.33.0`. Quem responde a
- * esta requisição é o processo que subiu dessa imagem, então a tag é a única
- * afirmação sobre a versão no ar que não depende de ninguém contar: nem do
- * `git describe` do host (que descreve o CÓDIGO em disco, trocado ANTES de o
- * contêiner subir), nem do run (que descreve o que foi PEDIDO).
- *
- * `null` quando não dá para saber — variável ausente, ou pino por digest
- * (`…@sha256:…`), que não carrega versão nenhuma. Nunca chuta: sem tag legível,
- * quem decide continua sendo quem decidia antes.
- */
-export function versaoDaImagemDoApp(appImage: string | null | undefined): string | null {
-  const valor = (appImage ?? "").trim();
-  if (valor === "" || valor.includes("@")) return null;
-  const barra = valor.lastIndexOf("/");
-  const doisPontos = valor.lastIndexOf(":");
-  // `:` antes da última `/` é porta de registry (`registry:5000/img`), não tag.
-  if (doisPontos <= barra) return null;
-  const tag = valor.slice(doisPontos + 1).trim();
-  if (tag === "" || tag === "latest") return null;
-  return tag;
-}
-
-/** `v1.33.0` e `1.33.0` são a mesma versão — a tag da imagem não leva o `v`. */
+/** `v1.33.0` e `1.33.0` são a mesma versão — a versão da imagem não leva o `v`. */
 function semPrefixoV(versao: string): string {
   return versao.trim().replace(/^v/i, "");
 }
@@ -320,13 +295,26 @@ function semPrefixoV(versao: string): string {
  * subiu — e ninguém precisa contar isso, porque é o próprio processo que está
  * respondendo. Não há relógio aqui, e é de propósito: a imagem não envelhece
  * como um heartbeat, então este degrau não precisa de fim de validade.
+ *
+ * ## A versão vem de DENTRO da imagem (`APP_VERSION`), nunca de `APP_IMAGE`
+ *
+ * `APP_VERSION` é gravada no build (`Dockerfile:97-102`) e viaja com a imagem;
+ * é a mesma que o `/api/v1/health` informa. `APP_IMAGE` não serve, e o motivo é
+ * a ORDEM do rollback: o `update.sh` grava `APP_IMAGE=…:<alvo>` no `.env`
+ * ANTES de puxar e subir, e o `agent.sh` volta a imagem passando `APP_IMAGE`
+ * só pelo SHELL (`agent.sh:313-316`), corrigindo o `.env` DEPOIS (`:323`).
+ * Como o compose usa `env_file: .env` (`docker-compose.prod.yml:38`) e o valor
+ * literal do arquivo vence o do shell, o contêiner revertido responde com
+ * `APP_IMAGE` nomeando a versão que FALHOU — e ler dali daria o rollback por
+ * desmentido justamente quando ele é real, escondendo o aviso e anunciando
+ * como no ar a versão que quebrou.
  */
 export function rollbackDesmentidoPeloApp(
   run: { status?: string | null; to_version?: string | null } | null | undefined,
-  versaoDaImagem: string | null | undefined,
+  versaoEmExecucao: string | null | undefined,
 ): boolean {
   if (run?.status !== "failed_rolled_back" && run?.status !== "failed") return false;
   const alvo = run?.to_version;
-  if (!alvo || !versaoDaImagem) return false;
-  return semPrefixoV(alvo) === semPrefixoV(versaoDaImagem);
+  if (!alvo || !versaoEmExecucao) return false;
+  return semPrefixoV(alvo) === semPrefixoV(versaoEmExecucao);
 }

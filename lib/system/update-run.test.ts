@@ -6,7 +6,6 @@ import {
   rollbackDesmentidoPeloApp,
   rollbackFoiSuperado,
   sucessoJaInstalado,
-  versaoDaImagemDoApp,
   RUN_STALE_AFTER_MS,
 } from "./update-run";
 
@@ -179,28 +178,6 @@ describe("sucessoJaInstalado", () => {
   });
 });
 
-describe("versaoDaImagemDoApp", () => {
-  it("lê a tag da imagem que este contêiner subiu", () => {
-    expect(versaoDaImagemDoApp("ghcr.io/melgarafael/deskcommcrm:1.33.0")).toBe("1.33.0");
-    expect(versaoDaImagemDoApp("  ghcr.io/org/app:v2.0.1  ")).toBe("v2.0.1");
-  });
-
-  it("devolve null quando a tag não afirma versão nenhuma", () => {
-    // Pino por digest, `latest`, variável ausente: nenhum deles carrega versão,
-    // e chutar aqui seria trocar "não sei" por uma afirmação.
-    expect(versaoDaImagemDoApp("ghcr.io/org/app@sha256:abc")).toBeNull();
-    expect(versaoDaImagemDoApp("ghcr.io/org/app:latest")).toBeNull();
-    expect(versaoDaImagemDoApp("ghcr.io/org/app")).toBeNull();
-    expect(versaoDaImagemDoApp("")).toBeNull();
-    expect(versaoDaImagemDoApp(undefined)).toBeNull();
-  });
-
-  it("`:` de porta de registry não é tag", () => {
-    expect(versaoDaImagemDoApp("registry:5000/deskcommcrm")).toBeNull();
-    expect(versaoDaImagemDoApp("registry:5000/deskcommcrm:1.33.0")).toBe("1.33.0");
-  });
-});
-
 describe("rollbackDesmentidoPeloApp", () => {
   const ROLLBACK = { status: "failed_rolled_back", to_version: "v1.33.0" };
 
@@ -222,7 +199,7 @@ describe("rollbackDesmentidoPeloApp", () => {
     expect(rollbackDesmentidoPeloApp(ROLLBACK, "1.32.1")).toBe(false);
   });
 
-  it("sem imagem legível, ou run que não falhou, não afirma nada", () => {
+  it("sem versão legível, ou run que não falhou, não afirma nada", () => {
     expect(rollbackDesmentidoPeloApp(ROLLBACK, null)).toBe(false);
     expect(rollbackDesmentidoPeloApp({ status: "success", to_version: "1.33.0" }, "1.33.0")).toBe(false);
     expect(rollbackDesmentidoPeloApp({ status: "failed_rolled_back" }, "1.33.0")).toBe(false);
