@@ -224,7 +224,7 @@ function ActionLine({ action, run }: { action: AutomationRuleRunActionResult; ru
             {detalheTecnico ? (
               // Subordinado à frase, e não no lugar dela: ver a decisão escrita
               // em `detalheTecnicoDe`.
-              <p className="break-words text-[11px] text-muted-foreground/70">
+              <p className="break-words text-[11px] text-muted-foreground">
                 {t("Detalhe técnico:")} {detalheTecnico}
               </p>
             ) : null}
@@ -255,7 +255,7 @@ function ActionLine({ action, run }: { action: AutomationRuleRunActionResult; ru
             {retorno ? ` ${t("Nova tentativa em")} ${retorno}.` : null}
           </p>
           {detalheTecnico ? (
-            <p className="break-words text-[11px] text-muted-foreground/70">
+            <p className="break-words text-[11px] text-muted-foreground">
               {t("Detalhe técnico:")} {detalheTecnico}
             </p>
           ) : null}
