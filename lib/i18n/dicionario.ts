@@ -9254,6 +9254,8 @@ export const DICIONARIO: Traducoes = {
   "Admissão de catálogo": { es: "Admisión de catálogo" },
   "Instalação": { es: "Instalación" },
   "Operação da plataforma": { es: "Operación de la plataforma" },
+  "Instalação de módulo": { es: "Instalación de módulo" },
+  "Módulo {nome}": { es: "Módulo {nome}" },
   "Confira o catálogo admitido e tente a instalação novamente.": { es: "Comprueba el catálogo admitido e intenta la instalación de nuevo." },
   "Revise o arquivo ou a configuração indicada e tente novamente.": { es: "Revisa el archivo o la configuración indicada e inténtalo de nuevo." },
   "Verificar instalação": { es: "Comprobar instalación" },
