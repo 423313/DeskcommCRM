@@ -48,43 +48,25 @@ const ACTION = join(process.cwd(), ".github/actions/preparar-node/action.yml");
  * quem o sobe tem de dizer por que o trabalho real (não o preâmbulo) cresceu.
  */
 const TETOS: Record<string, { minutos: number; razao: string }> = {
-  "ci.yml::verify": {
-    minutos: 25,
-    // A razão anterior era "p90 594s, máximo 609s em 51 verdes — folga de ~4m45",
-    // e ela VENCEU: a folga de 4m45 não existe mais. Medido em 18/09/2026 sobre
-    // 39 rodadas, o quadro é outro e o teto passou a ser o principal reprovador
-    // do repositório:
-    //
-    //     success     n=19   mediana 11,9 min   MÁX 14,9   ← 0,1 min de folga
-    //     cancelled   n=13   mediana 15,2 min   máx 15,3   ← TODAS no teto
-    //     failure     n= 7   mediana 10,2 min
-    //
-    // UM TERÇO das rodadas morria de relógio, e o desvio entre as 13 é de
-    // SEGUNDOS — variância zero não é humano cancelando, é o teto. Mas o GitHub
-    // entrega isso como `conclusion: cancelled`, idêntico a `gh run cancel`, e
-    // duas sessões gastaram horas caçando um cancelador que não existia.
-    //
-    // O tempo tem dono medido (12 rodadas verdes, passo a passo): `Unit tests`
-    // 10,3 dos 13,2 min — 78% do job. Typecheck 0,9 · lint 0,8 · kit 0,7.
-    //
-    // ⚠️ E SUBIR O TETO **NÃO** É O CONSERTO — é o torniquete. O conserto é
-    // repartir `pnpm test:unit` (issue #1185, com a régua escrita). O que impede
-    // este 25 de virar "CI que engorda em silêncio", que é o risco que esta
-    // catraca existe para barrar, é o passo `Orçamento de tempo do verify`, que
-    // reprova aos 16 min com `::error::` em português. O teto guarda travamento;
-    // o orçamento é que denuncia crescimento.
-    //
-    // QUANDO O #1185 ENTRAR, ESTE NÚMERO DESCE. Teto que sobe e não volta é
-    // exatamente o que a razão anterior protegia.
+  // A suíte foi repartida (issue #1185): o teto vive nas PARTES, e o agregado
+  // `verify` não tem teto (mesma razão do `invariants`).
+  //
+  // A história do número, para ninguém subir de novo sem ler:
+  //   - 15 min com a suíte num job só: 13 de 39 rodadas morriam no teto
+  //     (mediana 15,2 · melhor sucesso 14,9), chegando como `cancelled`,
+  //     indistinguível de cancelamento humano.
+  //   - #1184 subiu para 25 como TORNIQUETE (guarda de travamento) e pôs o passo
+  //     `Orçamento de tempo do verify` a 16 min para denunciar crescimento — e
+  //     escreveu aqui: "QUANDO O #1185 ENTRAR, ESTE NÚMERO DESCE".
+  //   - #1190 repartiu (`verify-parte`, `--shard`): o número desceu para 15, e o
+  //     orçamento para 12. Medido antes da divisão, num verde do #1190: job
+  //     866 s, `Unit tests` 649 s — cada parte roda metade.
+  "ci.yml::verify-parte": {
+    minutos: 15,
     razao:
-      "13 de 39 rodadas morriam no teto de 15 (mediana 15,2; melhor sucesso 14,9 — 0,1 de folga), " +
-      "e chegavam como `cancelled`, indistinguível de cancelamento humano. O 25 é guarda de " +
-      "travamento; quem denuncia crescimento é o passo `Orçamento de tempo do verify` (16 min). " +
-      "Desce quando o #1185 repartir `test:unit`, que é 78% do job. " +
-      "⚠️ O orçamento companheiro subiu 16→19 em 18/09: o 16 saiu de distribuição CENSURADA " +
-      "pelo teto de 15 (quem passava de 15 morria e virava `cancelled`, não `success`), e com " +
-      "a censura removida o máximo real é 16,0 — o orçamento reprovava um verde. Teto e " +
-      "orçamento censuram a medição que os calibra: recalibre DEPOIS de mexer, nunca antes",
+      "a suíte foi repartida em partes (#1185 via #1190); cada parte roda metade de uma suíte " +
+      "que custava 649s de unit num verde. 15 é guarda de travamento; quem denuncia crescimento " +
+      "é o passo `Orçamento de tempo do verify-parte` (12 min por parte, medido em 19/09)",
   },
   // O agregado `invariants` NÃO tem teto de propósito: ele não roda a suíte, só
   // lê o desfecho de `needs`. O teto que denuncia a suíte crescendo vive na perna
@@ -102,31 +84,42 @@ const TETOS: Record<string, { minutos: number; razao: string }> = {
 /**
  * O ORÇAMENTO de cada job que roda a suíte — o número que DENUNCIA crescimento.
  *
- * Existe separado de `TETOS` porque os dois papéis são distintos e foi a confusão
+ * Existe separado de `TETOS` porque os dois papéis são distintos, e foi a confusão
  * entre eles que produziu o defeito de 18/09: o teto é GUARDA DE TRAVAMENTO (mata
  * job pendurado, e o valor quase não importa); o orçamento é DETECTOR (reprova com
- * mensagem legível quando a suíte engorda).
+ * mensagem legível, em português, quando a suíte engorda).
  *
- * ⚠️ POR QUE ESTE MAPA NASCEU: medido em 18/09, o orçamento do `verify` NÃO tinha
- * catraca nenhuma. Sabotei-o de 19 para 30 e a suíte seguiu 5/5 verde — ou seja,
- * qualquer um podia subir o orçamento acima do teto e o detector viraria enfeite,
- * em silêncio, restaurando exatamente o problema que ele foi criado para resolver.
- * O teto tinha catraca; o companheiro dele, não.
+ * ⚠️ POR QUE ESTE MAPA NASCEU: o teto tinha catraca — `TETOS`, que cobra razão
+ * escrita e versionada — e o companheiro dele NÃO TINHA NADA. Medido em 18/09:
+ * subir o `ORCAMENTO_MIN` do `ci.yml` sozinho, sem tocar em mais nada, deixava a
+ * suíte inteira verde. Ou seja, qualquer um podia pôr o orçamento ACIMA do teto e
+ * o detector viraria enfeite, em silêncio, restaurando exatamente o problema que
+ * ele foi criado para resolver. A sabotagem foi refeita em 19/09 contra a régua
+ * nova (partes/matrix) e continuava passando antes deste mapa.
  */
 const ORCAMENTOS: Record<string, { minutos: number; razao: string }> = {
-  "ci.yml::verify": {
-    minutos: 19,
+  // UMA entrada cobre as DUAS partes: o `ORCAMENTO_MIN` vive no `env:` de um
+  // passo único dentro da `matrix`, então as duas partes leem o mesmo número.
+  // Que o passo não fique preso a uma delas é o que o caso
+  // "o orçamento vale para as DUAS partes" abaixo guarda.
+  "ci.yml::verify-parte": {
+    minutos: 12,
     razao:
-      "distribuição NÃO censurada (20 sucessos do `verify` posteriores ao merge de 18:32:12Z, " +
-      "quando o teto subiu para 25): mediana 14,9 · p90 15,8 · p95 15,9 · MÁX 16,0. O 19 é " +
-      "máx+3,0, com 6 min até o teto — então o detector dispara ANTES do corte, que é o que " +
-      "faz o erro legível chegar em vez do `cancelled`. " +
-      "⚠️ O valor anterior (16) veio de distribuição CENSURADA: foi calibrado sobre `máx " +
-      "sucesso 14,9` medido sob o teto de 15, e sob aquele teto todo job que passaria de 15 " +
-      "morria e entrava em `cancelled`, não em `success` — eu medi os SOBREVIVENTES e tratei " +
-      "como a distribuição dos jobs. Com a censura removida, 10 de 31 jobs passam de 15 e o 16 " +
-      "já reprovava 1 verde. LIÇÃO DE MÉTODO: teto e orçamento censuram a medição que os " +
-      "calibra — recalibre DEPOIS de mexer, nunca antes",
+      "MEDIDO em 19/09/2026 sobre todos os jobs `verify-parte` das 240 rodadas completas de " +
+      "ci.yml criadas depois de as partes entrarem na main (18/09 18:37Z): n=286 que EXECUTARAM " +
+      "(260 success + 26 failure) — min 0,9 · mediana 7,2 · p90 8,6 · p95 8,8 · MÁX 9,6; ZERO " +
+      "acima de 10. Parte 1/2 (cercas+typecheck+lint) mediana 8,3 · máx 9,6; parte 2/2 (kit " +
+      "bash) mediana 7,0 · máx 7,5. O 12 é máx+2,4, com 3 min até o teto de 15 — o detector " +
+      "dispara ANTES do corte, que é o que faz chegar `::error::` legível em vez de `cancelled` " +
+      "mudo. Os 100 `cancelled` do intervalo foram CLASSIFICADOS, não descartados em silêncio: " +
+      "87 com zero passos (morreram na fila de runner, nunca rodaram) e 13 cortados por push " +
+      "novo, o mais longo com 6,5 min — NENHUM morreu no teto, então a amostra não é censurada. " +
+      "⚠️ LIÇÃO DE MÉTODO, que vale mais que o número: teto e orçamento CENSURAM a medição que " +
+      "os calibra. Os valores anteriores deste campo (16, depois 19) saíram de `pior sucesso " +
+      "14,9` medido sob um teto de 15, e sob aquele teto o job que passaria de 15 morria e " +
+      "entrava em `cancelled`, não em `success` — era a distribuição dos SOBREVIVENTES tratada " +
+      "como a distribuição dos jobs. Depois de mexer em qualquer um dos dois, ESPERE a " +
+      "distribuição nova, CLASSIFIQUE os `cancelled` e só então recalibre — nunca antes",
   },
 };
 
@@ -232,8 +225,12 @@ describe("o preâmbulo do CI não come o orçamento dos testes", () => {
   it("o orçamento declarado no ci.yml é o do mapa (catraca anti-deriva)", () => {
     const texto = readFileSync(join(DIR_WORKFLOWS, "ci.yml"), "utf8");
     const achados: Record<string, number> = {};
-    // O orçamento vive no `env:` do passo, então a âncora é o nome do passo.
-    const re = /name: Orçamento de tempo do (\w+)\n(?:.*\n)*?\s+ORCAMENTO_MIN: "(\d+)"/g;
+    // O orçamento vive no `env:` do passo, então a âncora é o nome do passo — que
+    // nomeia o JOB guardado (`verify-parte`), para a chave bater com a de `TETOS`
+    // e o invariante "orçamento < teto" ser uma consulta direta. O hífen precisa
+    // entrar na classe: `\w` não o casa, e regex que deixa de casar é o modo de
+    // falha que o controle de vivacidade abaixo existe para pegar.
+    const re = /name: Orçamento de tempo do ([\w-]+)\n(?:.*\n)*?\s+ORCAMENTO_MIN: "(\d+)"/g;
     for (const m of texto.matchAll(re)) achados[`ci.yml::${m[1]!}`] = Number(m[2]!);
 
     // Controle de VIVACIDADE: sem ele, um regex que deixasse de casar daria verde

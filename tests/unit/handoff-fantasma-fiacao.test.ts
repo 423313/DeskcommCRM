@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 
 /**
  * FIAÇÃO — mesmo padrão de `gate-agenda-stall.test.ts`/`gate-vazamento-interno.test.ts`:
- * prova que os pontos de conserto do handoff "fantasma" pro Fernando (achado em
- * produção, tenant YADEA — o bot dizia "vou verificar com o Fernando" repetidas
+ * prova que os pontos de conserto do handoff "fantasma" pro gerente (achado em
+ * produção — o bot dizia "vou verificar com o Fulano" repetidas
  * vezes sem nunca abrir caso nem mover o funil) estão de fato ligados na fonte,
  * não só implementados isolados.
  */
