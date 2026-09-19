@@ -569,6 +569,48 @@ jobs:
     # NÃO MEDIDO: se as 14 specs movidas passam no estado de banco da parte 5.
     # É o risco que derrubou a tentativa com `navegacao`, e quem responde é a
     # rodada deste PR — não esta previsão.
+
+    # ── QUANDO ABRIR A PRÓXIMA PARTE (a regra, para não virar decisão de susto)
+    #
+    # Redistribuir tem fim. A regra tem DOIS gatilhos, e o segundo existe porque
+    # o primeiro sozinho chegaria tarde:
+    #
+    #   (a) a MENOR FOLGA DO CONJUNTO abaixo de 120s em 5 rodadas seguidas com
+    #       todas as partes comuns verdes; ou
+    #   (b) 2 CORTES POR RELÓGIO SEM CASO VERMELHO em 24h.
+    #
+    # Cinco rodadas em (a) porque o espalhamento medido entre rodadas chega a
+    # 180s: uma rodada ruim é ruído, cinco seguidas é tendência.
+    #
+    # E (b) NÃO é redundante com (a): em 19/09 a régua (a) NÃO disparou — as
+    # cinco últimas rodadas completas deram folga 256, 237, 324, 220 e 197s —
+    # enquanto a parte 3 era cortada TRÊS vezes no mesmo dia (12:26Z, 14:16Z no
+    # #1198 e 14:24Z no #1294). A mediana descreve o meio; o teto ceifa a cauda,
+    # e é a cauda que reprova PR de quem não tem culpa.
+    #
+    # SONDA DE (a) — menor folga das últimas 5 rodadas com as comuns verdes:
+    #   gh api --paginate "repos/OWNER/REPO/actions/runs?per_page=100" --jq \
+    #     '.workflow_runs[]|select(.name=="e2e" and .conclusion=="success")|.id' \
+    #   | head -5 | while read r; do gh api "repos/OWNER/REPO/actions/runs/$r/jobs" \
+    #       --jq '[.jobs[]|select((.name|startswith("e2e-parte")) and .conclusion=="success"
+    #             and (.name|test("\\(4\\)")|not))
+    #             |1800-((.completed_at|fromdateiso8601)-(.started_at|fromdateiso8601))]|min'; done
+    #
+    # SONDA DE (b) — cortes por relógio SEM vermelho, nas últimas 24h:
+    #   para cada job `e2e-parte` com conclusion=failure e duração > 1200s, o log
+    #   tem de conter a linha RENDERIZADA
+    #     ##[error]...Nenhum caso vermelho até o corte: a parte cresceu.
+    #
+    # ⚠️ CONTROLE POSITIVO E ARMADILHA DA SONDA (b), medidos em 19/09:
+    #   · `grep '::error title='` devolve ZERO: o Actions RENDERIZA como
+    #     `##[error]`, e o `::error title=` que aparece no log é a linha do
+    #     `echo` que a define. Procure a renderizada.
+    #   · NÃO conte `✘` no log do job para decidir se havia vermelho: o log ecoa
+    #     o script deste passo, e o `✘` DESTE COMENTÁRIO entra na conta — medido,
+    #     deu "1 vermelho" em dois cortes que tinham ZERO. Quem acerta é o passo
+    #     do corte, que conta no ARQUIVO da saída da suíte, não no log do job.
+    #   · Controle positivo obrigatório antes de concluir ausência: rodar a sonda
+    #     contra um corte conhecido (job 105911210567, do #1294) e ver 1.
     env:
       # Provider controlado; preview/assistência executam core, ferramentas e gates reais.
       INTERNAL_AGENT_RUN_STUB: "true"
