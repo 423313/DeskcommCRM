@@ -21027,18 +21027,48 @@ returns boolean language sql stable security definer set search_path=public as $
 $$;
 revoke all on function public.fn_google_counts_for_conflicts(uuid,uuid,text) from public,anon;
 grant execute on function public.fn_google_counts_for_conflicts(uuid,uuid,text) to authenticated,service_role;
--- A view é recriada, não substituída no lugar: `create or replace view` não
--- renomeia nem remove coluna (aqui, tirar o `title` é o conserto da 0261 — o
--- membro lê a ocupação do colega, não o texto do compromisso pessoal dele). E o
--- corpo deste arquivo é REAPLICADO a cada update (`test:db`, job `invariants`),
--- então `drop` + `create` é a única forma que sobrevive à segunda passada —
--- `create or replace` sobre a view já recriada sem o `title` responde
--- `cannot change name of view column "starts_at" to "title"` e derruba o run.
--- Lista EXPLÍCITA de propósito: `e.*` é como a próxima coluna do espelho nasceria
+-- A view nasceu como `select e.*` — com o `title` dentro —, e a lista EXPLÍCITA
+-- abaixo é o conserto da 0261: o membro lê a ocupação do colega, não o texto do
+-- compromisso pessoal dele. `e.*` é como a próxima coluna do espelho nasceria
 -- exposta a quem só precisa saber se o horário está ocupado.
-drop view if exists public.calendar_selected_external_events;
+--
+-- O `drop` daqui é CONDICIONAL, e existe por um motivo só: `create or replace
+-- view` não remove nem renomeia coluna, então sobre um clone que ainda tem a
+-- forma antiga — a que sobra é o `title` — ele responde `cannot drop columns
+-- from view` (medido: 16.15) e derruba o run. Quem já está na forma alvo NÃO cai
+-- — passa direto pelo `create or replace` logo abaixo, que PRESERVA o OID. Este
+-- arquivo é reaplicado a cada instalação e a cada update (`test:db`, job
+-- `invariants`), e derrubar + recriar o objeto a cada passada era o defeito da
+-- issue #1086: o que quebrava a segunda passada era o `create view` sobre o
+-- objeto ainda existente, não a falta do `drop`.
+--
+-- A lista desta guarda anda JUNTA com a do `create or replace` (aqui e na 0261):
+-- coluna nova na view entra nas duas, senão a passada seguinte derruba uma view
+-- que já estava certa — e `scripts/test-update-com-dados.sh` fica vermelho nesse
+-- caso, pelo OID.
+do $$
+begin
+  if exists (
+    select 1
+      from pg_attribute a
+      join pg_class c on c.oid = a.attrelid
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname = 'calendar_selected_external_events'
+       and c.relkind = 'v'
+       and a.attnum > 0
+       and not a.attisdropped
+       and a.attname not in (
+         'id','organization_id','connection_id','external_calendar_id','external_event_id',
+         'starts_at','ends_at','is_all_day','status','transparency','external_updated_at',
+         'created_at','updated_at','ical_uid','seen_generation','recurring_event_id','original_start_time'
+       )
+  ) then
+    drop view if exists public.calendar_selected_external_events;
+  end if;
+end $$;
 
-create view public.calendar_selected_external_events with (security_invoker=true) as
+create or replace view public.calendar_selected_external_events with (security_invoker=true) as
  select e.id,e.organization_id,e.connection_id,e.external_calendar_id,e.external_event_id,
   e.starts_at,e.ends_at,e.is_all_day,e.status,e.transparency,e.external_updated_at,
   e.created_at,e.updated_at,e.ical_uid,e.seen_generation,e.recurring_event_id,e.original_start_time
@@ -24846,16 +24876,22 @@ notify pgrst, 'reload schema';
 -- — e o gestor já lê `account_email` em `calendar_connections`. Decisão do dono. O
 -- invariante mede que o colega segue lendo o id.
 --
--- ## A view precisa ser recriada, não substituída no lugar
+-- ## A view só é recriada quando ainda está na forma antiga
 --
 -- `calendar_selected_external_events` era `select e.*`. Com `security_invoker`, o
 -- Postgres confere privilégio de coluna EM NOME DO INVOCADOR para toda coluna
 -- referenciada na definição — inclusive as de um `e.*` que já foi expandido quando
 -- a view nasceu. Deixá-la assim faria TODA leitura de ocupação por membro falhar
--- com `permission denied` no `title`. E não dá para `create or replace view`
--- tirando coluna do meio (o Postgres recusa: "cannot drop columns from view") — por
--- isso `drop` + `create` aqui, com lista explícita. A lista explícita é o conserto
--- de fundo: `e.*` era a forma de a próxima coluna nascer exposta.
+-- com `permission denied` no `title`. E `create or replace view` não tira coluna
+-- do meio (o Postgres recusa: "cannot drop columns from view").
+--
+-- Por isso o `drop` daqui é CONDICIONAL (issue #1086): quem ainda tem o `title` —
+-- a forma da v1.26.0 — cai no `drop` e é recriado; quem já está na forma alvo
+-- passa direto pelo `create or replace`, que PRESERVA o OID. Derrubar e recriar
+-- a view a cada passada deste arquivo era o defeito da issue: o que quebrava a
+-- segunda passada era o `create view` sobre o objeto existente, não a falta do
+-- `drop`. A lista explícita segue sendo o conserto de fundo: `e.*` era a forma de
+-- a próxima coluna nascer exposta, e ela anda junto com a lista da guarda.
 --
 -- ## O que este bloco NÃO faz, de propósito
 --
@@ -24888,10 +24924,11 @@ notify pgrst, 'reload schema';
 --   view, que andam juntos, senão `select *` na view vira 42501) ou não. Estar no
 --   grant não quer dizer "não é pessoal": ver `external_calendar_id`, acima.
 -- * Quem LER esta view de dentro de função não pode usar `begin atomic`: a
---   dependência registrada no catálogo impede o `drop view` + `create view` deste
---   bloco a cada update. Hoje o único leitor é `fn_agenda_ocupacao_google_do_dono`
---   (0260), `language sql` sem `begin atomic`. `fn_google_counts_for_conflicts`
---   não é leitora — é a view que a chama, e essa direção não trava o `drop`.
+--   dependência registrada no catálogo impede o `drop view` condicional da guarda
+--   abaixo, que é o único caminho de quem ainda está na forma antiga (`e.*`). Hoje
+--   o único leitor é `fn_agenda_ocupacao_google_do_dono` (0260), `language sql` sem
+--   `begin atomic`. `fn_google_counts_for_conflicts` não é leitora — é a view que a
+--   chama, e essa direção não trava o `drop`.
 
 revoke select on public.calendar_external_events from authenticated;
 
@@ -24902,9 +24939,35 @@ grant select (
   original_start_time
 ) on public.calendar_external_events to authenticated;
 
-drop view if exists public.calendar_selected_external_events;
+-- A MESMA guarda do bloco da reconciliação do Google (migration 0225), e
+-- repetida de propósito: este bloco é medido
+-- SOZINHO por `tests/invariants/titulo-do-evento-pessoal-fora-do-alcance.test.ts`,
+-- sobre o estado da v1.26.0 (view com `e.*`), então a forma antiga tem de ser
+-- curada aqui também, sem depender do que veio antes no arquivo.
+do $$
+begin
+  if exists (
+    select 1
+      from pg_attribute a
+      join pg_class c on c.oid = a.attrelid
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname = 'calendar_selected_external_events'
+       and c.relkind = 'v'
+       and a.attnum > 0
+       and not a.attisdropped
+       and a.attname not in (
+         'id', 'organization_id', 'connection_id', 'external_calendar_id', 'external_event_id',
+         'starts_at', 'ends_at', 'is_all_day', 'status', 'transparency', 'external_updated_at',
+         'created_at', 'updated_at', 'ical_uid', 'seen_generation', 'recurring_event_id',
+         'original_start_time'
+       )
+  ) then
+    drop view if exists public.calendar_selected_external_events;
+  end if;
+end $$;
 
-create view public.calendar_selected_external_events
+create or replace view public.calendar_selected_external_events
 with (security_invoker = true) as
 select
   e.id, e.organization_id, e.connection_id, e.external_calendar_id,

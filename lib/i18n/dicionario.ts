@@ -8248,8 +8248,8 @@ export const DICIONARIO: Traducoes = {
     es: "Cambiar la clave aquí mantiene los agentes conectados a ella: en la próxima atención ya usan la clave nueva. Deja la clave en blanco para cambiar solo el nombre.",
   },
   "versão(ões) de agente": { es: "versión(es) de agente" },
-  "Para trocar a chave, use editar; para excluir, aponte essas versões para outra chave.": {
-    es: "Para cambiar la clave, usa editar; para eliminar, apunta esas versiones a otra clave.",
+  "Para trocar a chave, use editar. Para excluir, nenhuma versão pode estar usando a chave — e versão já publicada ou substituída não aceita mais apontar para outra chave, então a exclusão fica travada enquanto esse histórico existir.": {
+    es: "Para cambiar la clave, usa editar. Para eliminar, ninguna versión puede estar usando la clave — y una versión ya publicada o reemplazada no acepta apuntar a otra clave, así que la eliminación queda bloqueada mientras ese historial exista.",
   },
   "Esta ação não pode ser desfeita.": { es: "Esta acción no se puede deshacer." },
   "Cursor inválido.": { es: "Cursor inválido." },
