@@ -30991,6 +30991,8 @@ as $$
   ),
   envios as (
     select count(*) filter (where m.sent_via = 'ai')              as por_ia,
+           count(*) filter (where m.sent_via = 'automation')      as por_automacao,
+           count(*) filter (where m.sent_via = 'system')          as por_integracao,
            count(*) filter (where m.sent_via = 'user')            as por_humano_no_sistema,
            count(*) filter (where m.sent_via = 'external_device') as por_humano_fora
       from public.messages m
@@ -31071,7 +31073,11 @@ as $$
   ),
   eficiencia as (
     select count(*) filter (where status = 'won')  as ganhos,
-           count(*) filter (where status = 'lost') as perdidos
+           count(*) filter (
+             where status = 'lost'
+               -- A transferência entre funis não é perda comercial (migration 0266).
+               and coalesce(lost_reason, '') <> 'moved_to_another_pipeline'
+           ) as perdidos
       from public.crm_leads
      where organization_id = p_org and status in ('won', 'lost')
        and closed_at >= p_from and closed_at < p_to
@@ -31118,6 +31124,8 @@ as $$
       'vetos',                    (select vetados  from vetos),
       'execucoes_medidas',        (select execucoes from vetos),
       'envios_por_ia',            (select por_ia                from envios),
+      'envios_por_automacao',     (select por_automacao         from envios),
+      'envios_por_integracao',    (select por_integracao        from envios),
       'envios_humano_no_sistema', (select por_humano_no_sistema from envios),
       'envios_humano_fora',       (select por_humano_fora       from envios),
       -- O invariante 4 vira NÚMERO na tela: demanda aberta sem próximo passo é
