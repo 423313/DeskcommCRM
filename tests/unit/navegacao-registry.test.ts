@@ -109,11 +109,16 @@ describe("sidebarGroups", () => {
     // O conserto foi o hub — o desenho que o grupo IA já usava —, não mais
     // densidade raspada do `Sidebar.tsx`.
     //
-    // Prospecção é uma ação recorrente com entrada direta, visível somente a admins.
-    // A lista exata mantém explícita a densidade do menu lateral.
+    // A lista é EXATA de propósito. `toContain` deixaria um sexto item entrar
+    // calado no sidebar e reabrir a mesma corrida por pixel.
+    //
+    // `/app/prospecting` NÃO está aqui, e a ausência é decisão, não esquecimento:
+    // a tela existe e é alcançável pelo hub e pelo ⌘K, mas o menu já está no
+    // limite — com ela seriam 20 portas e o e2e reprova por scroll em 900px. A
+    // razão e a condição que encerram a exceção estão ao lado do item, em
+    // `lib/navigation/catalogo.ts`.
     const crm = sidebarGroups(true, null).find((g) => g.group.id === "crm");
     expect(crm?.items.map((i) => i.href)).toEqual([
-      "/app/prospecting",
       "/app/kanban",
       "/app/contacts",
       "/app/tasks",
