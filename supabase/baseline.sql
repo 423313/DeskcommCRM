@@ -31454,7 +31454,7 @@ alter table public.idempotency_keys
   add constraint idempotency_keys_recibo_ou_reserva
   check ((status_code is null) = (response_body is null));
 
--- ---- destinos internos que o dono da instalação autoriza (migration 0324) ----
+-- ---- destinos internos que o dono da instalação autoriza (migration 0326) ----
 -- Decisão 22-d, #1004. null = nunca configurado pela tela (vale o .env);
 -- '{}' = o dono esvaziou a lista. Idempotente; sem dado tocado.
 alter table public.platform_settings
