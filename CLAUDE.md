@@ -152,7 +152,7 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
   além do #275 (que só tinha coberto o vocabulário inequívoco) para o espanhol ganhar a
   camada ambígua e as construções com pronome preso ("escribirme"). Para ver o vocabulário
   em vigor sem confiar nesta linha:
-  `grep -n 'PALAVRAS_DE_OPT_OUT' -A20 lib/opt-out/deteccao.ts`, e as frases de controle em
+  `sed -n '/PALAVRAS_DE_OPT_OUT/,/^]/p' lib/opt-out/deteccao.ts | grep -E '^ *"'`, e as frases de controle em
   `tests/unit/opt-out-deteccao.test.ts`.
 - Mídia: subir pro Supabase Storage primeiro, passar URL ao WAHA (não inline base64)
 - Multi-device: assinar `message.any` (não só `message`); tratar `fromMe=true` sem duplicar
@@ -435,7 +435,17 @@ Checks **obrigatórios** na branch protection da `main` (verificado na configura
     python3 -c "import sys,re; y=sys.stdin.read(); print(sorted({s for _,c in re.findall(r'(FORA_DO_CI):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)}))"
   ```
 
-  Esta frase já dizia "a **única** de fora é `vps-fresh-onboarding`" e estava errada: em 2026-09-04 a variável listava **duas** (`inbox-tempo-real` entrou depois). É o mesmo defeito que o parágrafo acima descreve — afirmação de estado que envelhece —, cometido na frase seguinte à que o denuncia. O que continua verdade e é o que importa: `vps-fresh-onboarding` é a **P0** da doutrina de QA Visual, então `e2e` verde **não** prova a jornada de instalação fresca, que é o produto que se vende.
+  **Esta frase já envelheceu TRÊS vezes, e é o parágrafo que denuncia afirmações que envelhecem.** Ela dizia "a **única** de fora é `vps-fresh-onboarding`" quando a variável já listava duas (2026-09-04, `inbox-tempo-real`); depois seguiu dizendo que a jornada de instalação fresca estava sem gate — e em 2026-09-19 o **#983** (@webtecnica) pôs `vps-fresh-onboarding.spec.ts` para rodar no CI, com WAHA e Redis de verdade, então a frase virou o contrário do estado.
+
+  Por isso ela sai e não volta: a pergunta "a jornada de instalação fresca tem gate?" se responde por **comando**, com o de cima (o que `FORA_DO_CI` declara) e com este, que diz quem o CI **invoca**:
+
+  ```bash
+  git show origin/main:.github/workflows/e2e.yml | python3 -c "import sys,re; y=sys.stdin.read(); print('vps-fresh-onboarding no CI:', 'vps-fresh-onboarding.spec.ts' in {s for _,c in re.findall(r'(SPECS_PARTE_\d+):\s*>-\n((?:[ ]{8,}.*\n)+)',y) for s in re.findall(r'[a-z0-9-]+\.spec\.ts',c)})"
+  ```
+
+  As duas saídas se fecham uma contra a outra porque `tests/unit/e2e-cobertura-completa.test.ts` reprova spec que não esteja nem numa `SPECS_PARTE_*` nem na `FORA_DO_CI`: ausência da primeira saída é presença na segunda, e nenhuma spec cai no vão entre as duas.
+
+  O que **não** envelhece e é o que importa: `vps-fresh-onboarding` é a **P0** da doutrina de QA Visual porque a instalação fresca é o produto que se vende. Ter gate não dispensa a prova pela tela (DoD 12) — gate prova que não regrediu, não que a experiência ficou boa. E a ressalva do começo do item continua de pé: em PR que pula as partes, o verde não prova tela nenhuma, a da instalação fresca inclusive.
 
   **Não confie em `grep` no arquivo inteiro.** `grep -oE '[a-z0-9-]+\.spec\.ts' .github/workflows/e2e.yml | sort -u | wc -l` conta quem é CITADO, não quem é INVOCADO: a `FORA_DO_CI` é uma variável YAML como as outras e entra na conta. (Até 2026-08-14 este parágrafo culpava "menções em comentários", e isso é falso — medido, o conjunto de specs citadas fora de variável é **vazio**.) O que roda são as `SPECS_PARTE_*`:
 
@@ -540,6 +550,22 @@ Processo padrão (siga sempre):
    era `_0231_` (timestamp de 05/09). Um contribuidor externo seguiu a instrução antiga ao pé da
    letra, escolheu `0231`, e o `manifest-x-migrations` reprovou o PR dele por colisão — a
    instrução é que estava errada, não ele. Ordene pelo número, nunca pela listagem.
+
+   **E o número livre hoje pode estar tomado quando o seu PR entrar.** A colisão só aparece
+   quando o SEGUNDO PR de schema é mesclado — medido em 19/09/2026: **11 PRs abertos colidiam
+   com a `main` com os cinco checks obrigatórios verdes**. O `verify` **já executa** a guarda
+   (`pnpm checar:colisao-de-migration`, o alias de `scripts/checar-colisao-de-migration.sh` —
+   procurar pelo nome do arquivo no `ci.yml` devolve zero e mente), e mesmo assim os 12 passaram:
+   cada um mediu a `main` do dia em que rodou — o `verify` do #965 terminou em 16/09 e segue verde.
+   Por isso há duas camadas a mais: o CI reprova quando **um número deste PR foi tomado** por
+   migration que entrou na base depois da prévia (colisão, nunca atraso — PR atrasado e sem colisão
+   segue verde), e fora de `pull_request` ele varre a árvore inteira — nenhum `NNNN` nem timestamp pode aparecer duas vezes na `main`. Antes de escolher o número quando houver outros PRs de schema em voo, peça-o
+   a quem estiver alocando na rodada: **não há reserva, quem mescla primeiro fica com o número**.
+   Para ver o que está tomado agora, incluindo o que ainda não foi mesclado:
+
+   ```bash
+   pnpm checar:colisao-de-migration          # mede o SEU PR contra origin/main
+   ```
 2. **Idempotente sempre que possível**: `add column if not exists`, `create ... if not exists`, `create or replace function`. Uma migration deve poder ser re-aplicada sem quebrar nem duplicar efeito.
 3. **Portável em `psql` puro** (clones podem não usar o MCP/CLI Supabase): **sem** `create temporary table ... on commit drop` fora de transação explícita; **sem** `BEGIN`/`COMMIT` explícito (o runner já envolve em transação, como as demais migrations). Prefira CTEs, subqueries de janela e colunas-mapa (ex.: `is_merged_into`) a temp tables.
 4. **Data migrations genéricas**: se a migration corrige/deduplica dados, escreva pensando em QUALQUER banco de clone (não hardcode IDs do seu tenant). Repointe FKs conferindo o catálogo (`information_schema` FK map) para não perder histórico.
@@ -572,6 +598,7 @@ naquele clone — no Claude Code a skill GLOBAL vence a do projeto com o mesmo n
 - `deskcomm-metricas` — desempenho, conversão, custo de IA, funil, relatório
 - `deskcomm-prompt` — afinar o prompt de um agente que não performa
 - `deskcomm-contribuir` — o espelho da triagem, antes do PR; fica quieto para o mantenedor
+- `deskcomm-extensao` — criar extensão em vez de PR no núcleo: régua de destino, contrato do pacote e envio
 - `deskcomm-doutrina` — as três regras que mais custam, antes de escrever código
 
 Os guias têm página pública em [deskcomm.com.br/guias](https://www.deskcomm.com.br/guias), escrita
