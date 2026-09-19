@@ -161,21 +161,22 @@ head_arvore="$(git ls-tree -r --name-only HEAD -- supabase/migrations 2>/dev/nul
 # ── as outras refs da máquina (issue #1155) ────────────────────────────────────────────
 base_commit="$(git rev-parse "$BASE^{commit}" 2>/dev/null || true)"
 head_commit="$(git rev-parse HEAD^{commit} 2>/dev/null || true)"
-todos_refs="$(git for-each-ref --format='%(refname)' refs/heads refs/remotes 2>/dev/null \
-  | sed '/^refs\/remotes\/origin\/HEAD$/d' || true)"
-
-# true (exit 0) quando a ref NÃO é a base nem o HEAD: só essas entram na conta de
-# "outras" — a base já foi medida e o HEAD é este PR (o alvo não mede a si mesmo).
-# Ancestral do HEAD também é o próprio PR: a cabeça publicada antes de um commit local, ou
-# de antes de renumerar. Fora do clone raso, onde há history para julgar.
+# Só entra na conta a ref que é DE OUTREM: nem a base (já medida), nem o HEAD (este PR), nem
+# ancestral do HEAD — a cabeça do próprio PR publicada antes de um commit local, a main de
+# antes de um merge, as branches já mescladas. O filtro de ancestral é UMA passada pelo grafo
+# (`--no-merged HEAD`), não um `merge-base --is-ancestor` por ref: medido em 19/09/2026 num
+# clone com 2601 refs, a checagem por ref custava 33 ms cada e rodava em dois laços (~3 min);
+# o filtro inteiro custa 0,2 s e deixa 578. No clone raso não há history para julgar
+# ancestralidade — lá a lista vai inteira, como antes.
 raso=0; [ -f "$(git rev-parse --git-dir)/shallow" ] && raso=1
-ref_e_de_outrem() {
-  local rc
-  rc="$(git rev-parse "$1^{commit}" 2>/dev/null || true)"
-  [ -n "$rc" ] && [ "$rc" != "$base_commit" ] && [ "$rc" != "$head_commit" ] || return 1
-  [ "$raso" = 1 ] && return 0
-  ! git merge-base --is-ancestor "$rc" "$head_commit" 2>/dev/null
+filtro_ancestral=(); [ "$raso" = 0 ] && filtro_ancestral=(--no-merged HEAD)
+refs_de_outrem() { # $@ = padrões de ref
+  git for-each-ref ${filtro_ancestral[@]+"${filtro_ancestral[@]}"} \
+      --format='%(objectname) %(refname)' "$@" 2>/dev/null \
+    | awk -v b="$base_commit" -v h="$head_commit" \
+        '$2 != "refs/remotes/origin/HEAD" && $1 != b && $1 != h { print $2 }' || true
 }
+todos_refs="$(refs_de_outrem refs/heads refs/remotes)"
 
 # Só o NNNN do nome canônico <14 dígitos>_<NNNN>_<slug>.sql. `grep -oE '_[0-9]{4}_'`
 # pegava também número do SLUG — `_0277_relatorio_2024_` virava teto 2024 e conselho 2025.
@@ -231,23 +232,23 @@ else
   prs_motivo="$(grep -m1 . "$erro_gh" 2>/dev/null || true)"
   [ -z "$prs_motivo" ] && prs_motivo="gh não respondeu"
 fi
-cabecas="$(git for-each-ref --format='%(refname)' "$ns" 2>/dev/null || true)"
+cabecas="$(refs_de_outrem "$ns")"
 
+# A listagem vai para ARQUIVO ("ref<TAB>nome"), não para uma variável que cresce a cada volta:
+# concatenar string no bash recopia tudo a cada iteração, e são centenas de refs com centenas
+# de migrations cada. O segundo laço (nomear donos) lê daqui, sem chamar o git de novo.
+listagem="$(mktemp)"
+trap 'limpar_cabecas; rm -f "$erro_gh" "$listagem"' EXIT
 outras_medidas=0
-outras_arvores=""
-arvores_prs=""   # "N<espaço>nome" — sem array associativo: o bash do macOS é o 3.2
 while IFS= read -r ref; do
   [ -z "$ref" ] && continue
-  if ref_e_de_outrem "$ref"; then
-    arvore="$(git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
-    outras_arvores="${outras_arvores}${outras_arvores:+$'\n'}${arvore}"
-    case "$ref" in
-      "$ns"/*)
-        arvores_prs="${arvores_prs}${arvores_prs:+$'\n'}$(sed "s#^#${ref##*/} #" <<<"$arvore")" ;;
-      *) outras_medidas=$((outras_medidas + 1)) ;;
-    esac
-  fi
+  git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null \
+    | sed 's#^supabase/migrations/##' | awk -v r="$ref" '{ print r "\t" $0 }' >> "$listagem"
+  case "$ref" in "$ns"/*) ;; *) outras_medidas=$((outras_medidas + 1)) ;; esac
 done <<<"$(printf '%s\n%s\n' "$todos_refs" "$cabecas")"
+outras_arvores="$(cut -f2 "$listagem")"
+# "N<espaço>nome" das cabeças de PR — sem array associativo: o bash do macOS é o 3.2
+arvores_prs="$(awk -F'\t' -v p="$ns/" 'index($1, p) == 1 { print substr($1, length(p) + 1) " " $2 }' "$listagem")"
 
 # Próximo livre medido no UNIVERSO: as duas árvores, as outras refs do clone e as cabeças
 # dos PRs abertos. Olhar só a listagem local é o erro que a complemento-do-ci.md §1 aponta
@@ -281,14 +282,8 @@ escopo_do_proximo_livre() {
 # O dono da branch decide renumerá-la ou ceder; aqui só se mede quem é.
 if [ $((outras_medidas + prs_medidos)) -gt 0 ] && [ -n "$ultimo" ] && [ -n "$ultimo_base_head" ] \
    && [ "$ultimo" -gt "$ultimo_base_head" ]; then
-  donos="$(while IFS= read -r ref; do
-    [ -z "$ref" ] && continue
-    if ref_e_de_outrem "$ref" \
-       && git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null \
-          | sed 's#^supabase/migrations/##' | grep -qE "^[0-9]{14}_${ultimo}_"; then
-      rotulo <<<"$ref"
-    fi
-  done <<<"$(printf '%s\n%s\n' "$todos_refs" "$cabecas")" | tr '\n' ' ' | sed 's/ *$//')"
+  donos="$(grep -E $'\t'"[0-9]{14}_${ultimo}_" "$listagem" | cut -f1 | sort -u | rotulo \
+             | tr '\n' ' ' | sed 's/ *$//' || true)"
   echo "::notice::NNNN=${ultimo} (o teto medido) existe em: ${donos:-?} — não é colisão sua; se for branch sua descartável, apagá-la libera o número."
 fi
 
