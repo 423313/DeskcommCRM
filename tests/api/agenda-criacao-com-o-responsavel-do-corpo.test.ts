@@ -183,17 +183,23 @@ it("Atendente com o responsável de OUTRO no corpo, opção desligada: recusa SE
   expect(deps.audit).not.toHaveBeenCalled();
 });
 
-it("Atendente com o responsável HERDADO do tipo (de um colega), opção desligada: passa", async () => {
+it("Atendente com o responsável HERDADO do tipo (de um colega), opção desligada: recusa SEM escrita", async () => {
+  // O PEDIDO TEXTUAL DO MANTENEDOR NO FIO DA #978 (16/09): "escolher o tipo de
+  // outra pessoa não pode virar atalho". Com a opção desligada, o responsável
+  // PADRÃO do tipo escreve na agenda de um colega tanto quanto o `owner_user_id`
+  // do corpo — então os dois caminhos recusam, e a régua é o `donoId` resolvido.
   const chamadas: string[] = [];
   const inseridos: Record<string, unknown>[] = [];
   const sb = sbDeTeste(tipoDe(OUTRO), false, chamadas, inseridos);
 
-  const salvo = await marcarAgendamentoHandler(sb, ctxDe("agent", DONO), pedido);
+  await expect(marcarAgendamentoHandler(sb, ctxDe("agent", DONO), pedido)).rejects.toMatchObject({
+    status: 403,
+    code: "appointment_do_colega",
+  });
 
-  expect(salvo).toMatchObject({ id: expect.any(String) });
-  expect(inseridos).toHaveLength(1);
-  // O dono gravado é o do TIPO: quem escolheu foi a organização, não o Atendente.
-  expect(inseridos[0]).toMatchObject({ owner_user_id: OUTRO });
+  expect(inseridos).toHaveLength(0);
+  expect(chamadas).not.toContain("inserir:calendar_appointments");
+  expect(deps.audit).not.toHaveBeenCalled();
 });
 
 it("Atendente marcando para SI, opção desligada: passa", async () => {

@@ -136,7 +136,9 @@ it("Atendente no PRÓPRIO compromisso, opção desligada: cancela", async () => 
 
   expect(salvo).toMatchObject({ id: COMPROMISSO, status: "cancelled" });
   expect(chamadas).toContain("rpc:fn_appointment_change");
-  expect(chamadas).toContain("rpc:fn_colegas_podem_mexer_na_agenda");
+  // O PRÓPRIO compromisso não consulta a opção: o dono é quem pede, e a opção só
+  // é lida onde ela pode recortar — no compromisso de TERCEIRO (o caso anterior).
+  expect(chamadas).not.toContain("rpc:fn_colegas_podem_mexer_na_agenda");
 });
 
 it("Gerente no compromisso de um colega, opção desligada: cancela", async () => {
