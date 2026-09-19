@@ -338,6 +338,26 @@ saida="$(gate_prs "5" "$c")"; code=$?
 assert_exit "$code" 0 "o próprio PR não reprova a si mesmo"
 assert_not_contains "$saida" "PR aberto #5" "a cabeça do próprio PR não vira 'quem tem'"
 
+echo "22. duas rodadas ao mesmo tempo não se atropelam (worktrees compartilham as refs)"
+# Todo worktree de um repositório vê as MESMAS refs. Uma rodada que limpa refs/colisao-pr
+# inteiro apaga as cabeças de outra rodada no meio da medição — com 20 sessões numa
+# máquina, isso não é hipótese. A sobra de OUTRA rodada tem de sobreviver, e não pode
+# entrar na população desta.
+c="$TMP/c22"; clonar "$c"; git -C "$c" switch -q -c fix/pr
+migrar "$c" "20260917190000_0263_meu.sql"; commit "$c" "PR com número livre"
+git -C "$c" fetch -q origin "+refs/pull/9/head:refs/colisao-pr/outra-rodada/9"
+saida="$(gate_prs "7" "$c")"; code=$?
+assert_exit "$code" 0 "PR com número livre passa"
+assert_not_contains "$saida" "0401" "a cabeça buscada por OUTRA rodada não entra na população"
+if git -C "$c" rev-parse -q --verify "refs/colisao-pr/outra-rodada/9" >/dev/null 2>&1; then
+  ok "a ref de outra rodada sobreviveu a esta"
+else
+  falha "a ref de outra rodada sobreviveu a esta" "a limpeza desta rodada apagou refs/colisao-pr/outra-rodada/9"
+fi
+sobra="$(git -C "$c" for-each-ref --format='%(refname)' refs/colisao-pr | grep -v '/outra-rodada/' || true)"
+if [ -z "$sobra" ]; then ok "esta rodada limpou só o que era dela"
+else falha "esta rodada limpou só o que era dela" "sobrou: $sobra"; fi
+
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0
 else echo "colisao-de-migration: $falhas de $casos casos vermelhos"; exit 1; fi

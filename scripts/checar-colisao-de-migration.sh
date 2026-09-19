@@ -88,7 +88,10 @@
 #     calado foi o erro de um colega na mesma noite;
 #   * colisão com outro PR AVISA (::warning no arquivo), não reprova: quem entrar primeiro
 #     fica e o outro renumera — o outro PR pode nunca entrar, e vermelho por coisa fora do
-#     controle do autor treina a ignorar vermelho.
+#     controle do autor treina a ignorar vermelho;
+#   * as cabeças buscadas moram num namespace DA RODADA (refs/colisao-pr/<PID>), e a
+#     rodada só apaga o que é dela: todo worktree de um repositório vê as mesmas refs, e
+#     duas sessões rodando isto juntas se atropelariam no meio da medição.
 #
 # A cabeça do PR de quem roda sai da conta por SHA (é o HEAD ou ancestral dele), nunca por
 # nome de branch: `headRefName` de fork colide com o seu (o fork que abre PR da `main` dele).
@@ -178,15 +181,19 @@ ref_e_de_outrem() {
 # pegava também número do SLUG — `_0277_relatorio_2024_` virava teto 2024 e conselho 2025.
 nnnn_das() { sed -nE 's/^[0-9]{14}_([0-9]{4})_.*$/\1/p'; }
 # O nome de exibição de uma ref: a cabeça buscada de um PR vira "PR aberto #N".
-rotulo() { sed -E 's#^refs/colisao-pr/([0-9]+)$#PR aberto \#\1#'; }
+rotulo() { sed -E 's#^refs/colisao-pr/[0-9]+/([0-9]+)$#PR aberto \#\1#'; }
 
 # ── os PRs ABERTOS, inclusive de fork (ver o cabeçalho) ─────────────────────────────────
+# Namespace POR RODADA: todo worktree de um repositório vê as mesmas refs, e com duas
+# sessões rodando isto ao mesmo tempo, limpar refs/colisao-pr inteiro apagaria as cabeças
+# da outra no meio da medição. Cada rodada só lê e só apaga o que é dela.
+ns="refs/colisao-pr/$$"
 erro_gh="$(mktemp)"
 limpar_cabecas() {
-  git for-each-ref --format='%(refname)' refs/colisao-pr 2>/dev/null \
+  git for-each-ref --format='%(refname)' "$ns" 2>/dev/null \
     | while IFS= read -r r; do git update-ref -d "$r" 2>/dev/null; done
 }
-limpar_cabecas   # sobra de uma rodada interrompida não vira população desta
+limpar_cabecas   # PID reaproveitado de uma rodada morta: a sobra dela não vira população
 trap 'limpar_cabecas; rm -f "$erro_gh"' EXIT
 
 repo_gh=""
@@ -202,18 +209,18 @@ if lista_gh="$(GH_PROMPT_DISABLED=1 gh pr list ${repo_gh:+--repo "$repo_gh"} --s
   if [ -n "$prs_listados" ]; then
     opcoes_pr=(); [ "$raso" = 1 ] && opcoes_pr+=(--depth=1)
     specs=()
-    while IFS= read -r n; do specs+=("+refs/pull/$n/head:refs/colisao-pr/$n"); done <<<"$prs_listados"
+    while IFS= read -r n; do specs+=("+refs/pull/$n/head:$ns/$n"); done <<<"$prs_listados"
     # Um lote é uma ida à rede; mas UMA cabeça ausente aborta o lote inteiro. Então, se o
     # lote falhar, repete um a um — só para NOMEAR quem falhou, nunca para pular calado.
     if ! git fetch --no-tags -q ${opcoes_pr[@]+"${opcoes_pr[@]}"} origin "${specs[@]}" >/dev/null 2>&1; then
       while IFS= read -r n; do
         git fetch --no-tags -q ${opcoes_pr[@]+"${opcoes_pr[@]}"} origin \
-          "+refs/pull/$n/head:refs/colisao-pr/$n" >/dev/null 2>&1 || true
+          "+refs/pull/$n/head:$ns/$n" >/dev/null 2>&1 || true
       done <<<"$prs_listados"
     fi
     # Controle de SOMA: todo PR listado virou ref, ou é NÃO MEDIDO nomeado.
     while IFS= read -r n; do
-      if git rev-parse -q --verify "refs/colisao-pr/$n^{commit}" >/dev/null 2>&1; then
+      if git rev-parse -q --verify "$ns/$n^{commit}" >/dev/null 2>&1; then
         prs_medidos=$((prs_medidos + 1))
       else
         prs_falhos="${prs_falhos}${prs_falhos:+ }#$n"
@@ -224,7 +231,7 @@ else
   prs_motivo="$(grep -m1 . "$erro_gh" 2>/dev/null || true)"
   [ -z "$prs_motivo" ] && prs_motivo="gh não respondeu"
 fi
-cabecas="$(git for-each-ref --format='%(refname)' refs/colisao-pr 2>/dev/null || true)"
+cabecas="$(git for-each-ref --format='%(refname)' "$ns" 2>/dev/null || true)"
 
 outras_medidas=0
 outras_arvores=""
@@ -235,7 +242,7 @@ while IFS= read -r ref; do
     arvore="$(git ls-tree -r --name-only "$ref" -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
     outras_arvores="${outras_arvores}${outras_arvores:+$'\n'}${arvore}"
     case "$ref" in
-      refs/colisao-pr/*)
+      "$ns"/*)
         arvores_prs="${arvores_prs}${arvores_prs:+$'\n'}$(sed "s#^#${ref##*/} #" <<<"$arvore")" ;;
       *) outras_medidas=$((outras_medidas + 1)) ;;
     esac
