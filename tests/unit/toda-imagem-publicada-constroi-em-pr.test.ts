@@ -33,7 +33,8 @@ const yml = readFileSync(WORKFLOW, "utf8");
 function receitasPublicadas(): string[] {
   const matriz = yml.match(/matrix:\s*\n\s*include:\s*\n((?:\s+-?\s+\w[^\n]*\n)+)/);
   if (!matriz) return [];
-  return [...matriz[1].matchAll(/dockerfile:\s*(\S+)/g)].map((m) => m[1]);
+  const bloco = matriz[1] ?? "";
+  return [...bloco.matchAll(/dockerfile:\s*(\S+)/g)].flatMap((m) => (m[1] ? [m[1]] : []));
 }
 
 /**
@@ -44,7 +45,7 @@ function receitasPublicadas(): string[] {
  */
 function receitasConstruidasEmPr(): string[] {
   const semMatriz = yml.replace(/matrix:\s*\n\s*include:\s*\n(?:\s+-?\s+\w[^\n]*\n)+/g, "");
-  return [...semMatriz.matchAll(/^\s+file:\s*(Dockerfile\S*)\s*$/gm)].map((m) => m[1]);
+  return [...semMatriz.matchAll(/^\s+file:\s*(Dockerfile\S*)\s*$/gm)].flatMap((m) => (m[1] ? [m[1]] : []));
 }
 
 describe("toda imagem publicada é construída em PR", () => {
@@ -75,7 +76,8 @@ describe("toda imagem publicada é construída em PR", () => {
       "$1          - name: deskcomm-inventada\n            dockerfile: Dockerfile.inventada\n",
     );
     const matriz = sabotado.match(/matrix:\s*\n\s*include:\s*\n((?:\s+-?\s+\w[^\n]*\n)+)/);
-    const publicadas = [...matriz![1].matchAll(/dockerfile:\s*(\S+)/g)].map((m) => m[1]);
+    const bloco = matriz?.[1] ?? "";
+    const publicadas = [...bloco.matchAll(/dockerfile:\s*(\S+)/g)].flatMap((m) => (m[1] ? [m[1]] : []));
     const emPr = new Set(receitasConstruidasEmPr());
 
     expect(publicadas.filter((r) => !emPr.has(r))).toContain("Dockerfile.inventada");
