@@ -571,6 +571,26 @@ jobs:
           cache-from: type=gha,scope=deskcommcrm-scheduler
           cache-to: ${{ github.event_name == 'pull_request' && 'type=gha,mode=max,scope=deskcommcrm-scheduler' || '' }}
 
+      # A QUARTA imagem (módulo opcional de telefonia, #677). Ela entrou na
+      # `main` sem nunca ter sido construída: `build-and-push` tem a matriz com
+      # as quatro, mas não roda em PR, e este job nomeava só worker e scheduler.
+      # O `imagens-ok` ficou verde e o defeito — a receita não copiava
+      # `patches/`, e o `pnpm install` morria com ENOENT — só apareceu no
+      # primeiro build de verdade, já na `main`, com a esteira de publicação
+      # travada. `tests/unit/toda-imagem-publicada-constroi-em-pr.test.ts`
+      # compara a matriz com os builds de PR e reprova quem esquecer a próxima.
+      - name: Build local da imagem do agente de voz (sem push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.voice-agent
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: deskcomm-voice-agent:pr
+          cache-from: type=gha,scope=deskcommcrm-voice-agent
+          cache-to: ${{ github.event_name == 'pull_request' && 'type=gha,mode=max,scope=deskcommcrm-voice-agent' || '' }}
+
       - name: O laço do event_log CARREGA dentro da imagem do worker?
         run: |
           set -euo pipefail
