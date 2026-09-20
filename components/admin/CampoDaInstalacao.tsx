@@ -41,7 +41,13 @@ export interface LinhaDaInstalacao {
  * algo não bate — "então de onde está saindo isso?" — e a tela responde sem que
  * ele precise abrir o servidor.
  */
-export function Origem({ fonte, idioma }: { fonte: "banco" | "ambiente" | "ausente"; idioma: Idioma }) {
+export function Origem({
+  fonte,
+  idioma,
+}: {
+  fonte: "banco" | "ambiente" | "ausente";
+  idioma: Idioma;
+}) {
   const t = (s: string) => traduzir(s, idioma);
   if (fonte === "ausente") {
     return (
@@ -150,11 +156,27 @@ export function CampoEditavel({ linha, idioma }: { linha: LinhaDaInstalacao; idi
           className="min-w-0 flex-1"
           disabled={salvando}
         />
-        <Button onClick={salvar} disabled={salvando || valor.trim().length === 0}>
+        {/*
+          ⚠️ IDENTIDADE POR CHAVE, e não "o primeiro Salvar da tela". Este campo
+          passou a ser desenhado também em `/admin/email`, que JÁ tem um botão
+          "Salvar" — o do servidor SMTP, e ele vem antes no DOM. Um teste (ou um
+          leitor de tela) que procure por rótulo pega o vizinho: foi o que
+          aconteceu, e o caso reprovou salvando a configuração errada.
+        */}
+        <Button
+          data-testid={`salvar-${definicao.chave}`}
+          onClick={salvar}
+          disabled={salvando || valor.trim().length === 0}
+        >
           {t("Salvar")}
         </Button>
         {estado.fonte === "banco" && (
-          <Button variant="outline" onClick={limpar} disabled={salvando}>
+          <Button
+            data-testid={`voltar-${definicao.chave}`}
+            variant="outline"
+            onClick={limpar}
+            disabled={salvando}
+          >
             {t("Voltar ao padrão")}
           </Button>
         )}
@@ -162,4 +184,3 @@ export function CampoEditavel({ linha, idioma }: { linha: LinhaDaInstalacao; idi
     </div>
   );
 }
-

@@ -146,10 +146,10 @@ test.describe("Painel de configuração da instalação", () => {
 
       const campo = page.locator("#config-RESEND_API_KEY");
       await campo.fill(CHAVE_DE_TESTE);
-      await page
-        .getByRole("button", { name: /^salvar$/i })
-        .first()
-        .click();
+      // ⚠️ PELO TESTID DA CHAVE, e não "o primeiro Salvar da tela". Nesta tela
+      // existem DOIS: o do servidor SMTP vem antes no DOM, e `.first()` clicava
+      // nele — o caso reprovou salvando a configuração errada, sem dizer isso.
+      await page.getByTestId("salvar-RESEND_API_KEY").click();
 
       // A confirmação é em português de gente, não "operação concluída".
       await expect(page.getByText(/já está valendo/i)).toBeVisible({ timeout: 15_000 });
@@ -195,7 +195,7 @@ test.describe("Painel de configuração da instalação", () => {
     test("voltar ao padrão devolve a palavra ao arquivo de instalação", async ({ page }) => {
       await page.goto("/admin/email");
 
-      const voltar = page.getByRole("button", { name: /voltar ao padrão/i }).first();
+      const voltar = page.getByTestId("voltar-RESEND_API_KEY");
       await expect(voltar, "sem valor definido na tela não há o que reverter").toBeVisible();
       await voltar.click();
 
