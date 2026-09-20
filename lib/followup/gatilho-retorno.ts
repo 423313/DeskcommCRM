@@ -16,7 +16,7 @@
  *
  * Regras que este produtor respeita:
  *   - um follow-up vivo por contato (`23505` → skip);
- *   - gate do agente publicado (`resolveAgentForAutomaticTrigger`);
+ *   - gate do agente só quando o grafo pede IA (`decidirAgenteDoEnrollmentAutomatico`);
  *   - conversa com humano no comando não dispara;
  *   - primeiro inbound da vida não é retorno;
  *   - trigger Postgres nunca faz HTTP.
@@ -27,7 +27,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
-import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-followup-gate";
+import {
+  decidirAgenteDoEnrollmentAutomatico,
+  noDeGatilhoDoGrafo,
+  type FollowupGateDb,
+  type NoDeGatilho,
+} from "./agent-followup-gate";
 import { gapQualificaRetorno, segmentoCasa } from "./gap-de-retorno";
 
 export const EVENTO_DE_RETORNO = "message.received";
@@ -62,7 +67,7 @@ export interface GatilhoRetornoDb {
     contactId: string,
   ): Promise<EstadoDaConversaDeRetorno | null>;
   carregaEnrollmentVivo(orgId: string, contactId: string): Promise<EnrollmentVivoRef | null>;
-  carregaNoDeGatilho(orgId: string, versionId: string): Promise<string | null>;
+  carregaNoDeGatilho(orgId: string, versionId: string): Promise<NoDeGatilho | null>;
   insereEnrollment(input: {
     service_origin?: unknown;
     event_id?: string;
@@ -195,14 +200,18 @@ export async function aplicaGatilhoDeRetorno(
       continue;
     }
 
-    const agentId = await resolveAgentForAutomaticTrigger(deps.gateDb, row.organization_id, pointer.id);
-    if (agentId === null) {
+    const noDeGatilho = await deps.db.carregaNoDeGatilho(row.organization_id, pointer.active_version_id);
+    if (!noDeGatilho) continue;
+    const { agentId, barrado } = await decidirAgenteDoEnrollmentAutomatico(
+      deps.gateDb,
+      row.organization_id,
+      pointer.id,
+      noDeGatilho.pedeAgente,
+    );
+    if (barrado) {
       summary.pointers_barrados_pelo_gate++;
       continue;
     }
-
-    const noDeGatilho = await deps.db.carregaNoDeGatilho(row.organization_id, pointer.active_version_id);
-    if (!noDeGatilho) continue;
 
     const { inserted, id, reason } = await deps.db.insereEnrollment({
       service_origin: row.payload.service_origin,
@@ -212,7 +221,7 @@ export async function aplicaGatilhoDeRetorno(
       version_id: pointer.active_version_id,
       contact_id: contatoId,
       conversation_id: conversaId,
-      current_node_id: noDeGatilho,
+      current_node_id: noDeGatilho.id,
       agent_id: agentId,
     });
     if (!inserted) {
@@ -226,7 +235,7 @@ export async function aplicaGatilhoDeRetorno(
       await deps.db.insereEventoDoEnrollment({
         organization_id: row.organization_id,
         enrollment_id: id,
-        node_id: noDeGatilho,
+        node_id: noDeGatilho.id,
         event_type: "enrolled_by_inbound_after_silence",
         payload: {
           conversation_id: conversaId,
@@ -344,7 +353,7 @@ export function createSupabaseGatilhoRetornoDb(admin: SupabaseClient): GatilhoRe
       if (error) throw new Error(error.message);
       if (!data) return null;
       const graph = flowGraphSchema.parse(data.graph);
-      return graph.nodes.find((n) => n.type === "trigger")?.id ?? null;
+      return noDeGatilhoDoGrafo(graph);
     },
 
     async insereEnrollment(input) {

@@ -33,6 +33,7 @@ function fakeDb(opts: {
   estado?: EstadoDaConversaDeRetorno | null;
   vivo?: { pointer_id: string } | null;
   noDeGatilho?: string | null;
+  pedeAgente?: boolean;
   jaVivoInsert?: boolean;
   registro: Registro;
 }): GatilhoRetornoDb {
@@ -59,7 +60,8 @@ function fakeDb(opts: {
       return opts.vivo ?? null;
     },
     async carregaNoDeGatilho() {
-      return opts.noDeGatilho === undefined ? "t1" : opts.noDeGatilho;
+      if (opts.noDeGatilho === null) return null;
+      return { id: opts.noDeGatilho ?? "t1", pedeAgente: opts.pedeAgente ?? true };
     },
     async insereEnrollment(input) {
       if (opts.jaVivoInsert) return { inserted: false, id: null };
@@ -222,5 +224,35 @@ describe("aplicaGatilhoDeRetorno — o que dispara", () => {
     expect(reg.enrollments[0]).not.toHaveProperty("next_eval_at");
     expect(reg.eventos[0]?.event_type).toBe("enrolled_by_inbound_after_silence");
     expect(reg.eventos[0]?.payload.threshold_minutes).toBe(1440);
+  });
+
+  it("sem agente, grafo só de texto fixo enrolla com agent_id nulo", async () => {
+    const reg = registro();
+    const s = await aplicaGatilhoDeRetorno(
+      {
+        db: fakeDb({ pointers: [pointerArmado], pedeAgente: false, registro: reg }),
+        gateDb: fakeGate([]),
+        clock: CLOCK,
+      },
+      evento(),
+    );
+    expect(s.enrolled).toBe(1);
+    expect(s.pointers_barrados_pelo_gate).toBe(0);
+    expect(reg.enrollments[0]).toMatchObject({ agent_id: null });
+  });
+
+  it("sem agente, grafo que pede IA é barrado", async () => {
+    const reg = registro();
+    const s = await aplicaGatilhoDeRetorno(
+      {
+        db: fakeDb({ pointers: [pointerArmado], pedeAgente: true, registro: reg }),
+        gateDb: fakeGate([]),
+        clock: CLOCK,
+      },
+      evento(),
+    );
+    expect(s.enrolled).toBe(0);
+    expect(s.pointers_barrados_pelo_gate).toBe(1);
+    expect(reg.enrollments).toHaveLength(0);
   });
 });
