@@ -33689,8 +33689,7 @@ revoke all on function public.fn_meet_delivery_enqueue() from public,anon,authen
 -- Gatilho novo `trg_remarcar_corrige_o_envio` (BEFORE UPDATE): quem JÁ recebeu
 -- e teve `starts_at`/`time_zone` mudados ganha uma correção autorizada pela
 -- mesma pessoa, com espera de 2 min (`nao_antes_de`) para arrastar na grade não
--- virar uma mensagem por arrasto. O enfileirador carrega o `motivo` para o
--- payload e mata o job pendente da geração anterior.
+-- virar uma mensagem por arrasto. O enfileirador carrega o `motivo` ao payload.
 -- ⚠️ ANTES DA VARREDURA anon. Idempotente.
 -- Recorte do PR #803, de @paulolimajr77.
 

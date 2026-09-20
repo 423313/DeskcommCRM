@@ -36,11 +36,17 @@
 -- A 0242 dele mata, dentro do enfileirador, o job pendente da geração
 -- anterior (`meet_delivery_superseded`). Sabotei: removê-la não muda NENHUM
 -- caso — e a razão não é falta de teste, é que a linha é inalcançável.
--- Medido: TODA via que põe o estado em `waiting_for_link` zera o
--- `meeting_delivery_job_id` na mesma instrução — os três `update` de
--- `fn_meet_action` e o `new.meeting_delivery_job_id := null` do gatilho acima.
+-- Medido NESTA árvore (é ela que vai ser mesclada, e ela tem um caminho a
+-- mais que a `main`: o `:= null` do gatilho novo acima):
+--
+--   instruções que põem `state='waiting_for_link'` ......... 5
+--   dessas, que zeram `meeting_delivery_job_id` junto ...... 5
+--
 -- O corpo do enfileirador só roda com `state='waiting_for_link'`, então o
--- `job_id` ali é sempre nulo e o `update` casa zero linha.
+-- `job_id` ali é sempre nulo e um `update` chaveado por ele casa zero linha.
+-- E a linha nem sai de migration aplicada: ela NÃO existe no enfileirador da
+-- `main` — vive só na 0242 do autor, dentro do #803, que segue aberto. Aqui
+-- ela simplesmente não foi trazida; nenhuma migration já aplicada foi editada.
 --
 -- Quem garante a antirrepetição é outra coisa, e ela está provada: o gatilho
 -- só age em `sent`, então a segunda remarcação dentro da janela não cria uma
