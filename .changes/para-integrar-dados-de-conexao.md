@@ -4,9 +4,9 @@ secao: adicionado
 titulo: Dados da conexão para integrar outro sistema (endpoint e IDs) + onde obter o token
 ---
 
-Depois de conectar um número, a tela de **Conexões** ganhou o painel **"Para
-integrar"**: endpoint/base da API, identificadores (`phone_number_id`,
-`waba_id` / conta) e nome da sessão, com um botão para copiar tudo de uma vez.
+Depois de conectar um número, a tela de **Conexões** ganhou o painel
+**"Para integrar"**: endpoint/base da API e os identificadores da conexão
+(`phone_number_id`, `waba_id` / conta), com um botão para copiar tudo de uma vez.
 
 É o que faltava para plugar **outro sistema** no mesmo número sem caçar dado no
 painel do provedor nem reler a documentação:
