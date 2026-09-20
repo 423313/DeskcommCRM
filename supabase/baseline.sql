@@ -33517,8 +33517,13 @@ revoke all on public.channel_integrations from public, anon, authenticated;
 grant all on public.channel_integrations to service_role;
 
 alter table public.contacts add column if not exists social_identity text;
+-- A ficha MESCLADA fica de fora do índice: depois de juntar dois contatos, o
+-- perdedor continua na tabela com `is_merged_into` apontando para o vencedor, e
+-- os dois carregam a mesma identidade social. Sem esta guarda, a junção passa a
+-- falhar com violação de unicidade — e quem junta é o operador, na tela.
 create unique index if not exists contacts_org_social_identity_unique
-  on public.contacts (organization_id, social_identity);
+  on public.contacts (organization_id, social_identity)
+  where social_identity is not null and is_merged_into is null;
 comment on column public.contacts.social_identity is
   'Opaque network/account/participant key. Never interpreted as a telephone or WhatsApp identity.';
 
@@ -33841,6 +33846,31 @@ begin
     and contact_id = p_contact_id;
   get diagnostics v_count = row_count;
   v_counts := v_counts || jsonb_build_object('orders', v_count);
+  -- REAPLICADO AO DERIVAR ESTE APÊNDICE (merge da main, 0359 comanda).
+  -- O Postgres troca o corpo INTEIRO num `create or replace`: um apêndice
+  -- escrito sobre uma versão anterior da função APAGA, em silêncio, o passo
+  -- que outra entrega acrescentou. Anonimizar devolveria SUCESSO com o texto
+  -- da comanda ainda legível — e o SLA marcado como cumprido.
+  -- 6b. sales — a comanda. PRESERVA valor, status e datas, e NÃO desliga o
+  --     contato: a venda é registro financeiro (e fiscal) da organização, e
+  --     desligá-la do contato faria o relatório por cliente deixar de fechar
+  --     com o faturamento do período — divergência muda, meses depois, num
+  --     número que ninguém consegue reconciliar. O contato apontado já é
+  --     `Cliente Anonimizado #N`; o que sai daqui é o TEXTO LIVRE, que é onde
+  --     a pessoa é nomeada de novo ("cliente da Ana, filha da Dona Maria").
+  --     Os itens (`sale_items`) não entram: `description` ali é o nome do
+  --     SERVIÇO, congelado na inclusão, e apagá-lo destruiria o relatório por
+  --     serviço sem tirar dado de pessoa nenhum.
+  update sales set
+    notes = null,
+    cancel_reason = case when cancel_reason is null then null else '[redigido]' end,
+    reverse_reason = case when reverse_reason is null then null else '[redigido]' end,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('sales', v_count);
+
   -- 7. enqueue media for async deletion (idempotent via unique (bucket, object_path))
   if array_length(v_media_paths, 1) > 0 then
     insert into storage_redaction_queue (organization_id, request_id, bucket, object_path)

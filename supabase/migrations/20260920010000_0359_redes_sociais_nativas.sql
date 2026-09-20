@@ -12,8 +12,13 @@ revoke all on public.channel_integrations from public, anon, authenticated;
 grant all on public.channel_integrations to service_role;
 
 alter table public.contacts add column if not exists social_identity text;
+-- A ficha MESCLADA fica de fora do índice: depois de juntar dois contatos, o
+-- perdedor continua na tabela com `is_merged_into` apontando para o vencedor, e
+-- os dois carregam a mesma identidade social. Sem esta guarda, a junção passa a
+-- falhar com violação de unicidade — e quem junta é o operador, na tela.
 create unique index if not exists contacts_org_social_identity_unique
-  on public.contacts (organization_id, social_identity);
+  on public.contacts (organization_id, social_identity)
+  where social_identity is not null and is_merged_into is null;
 comment on column public.contacts.social_identity is
   'Opaque network/account/participant key. Never interpreted as a telephone or WhatsApp identity.';
 
