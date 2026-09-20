@@ -4783,6 +4783,16 @@ export const DICIONARIO: Traducoes = {
   "Para questões de pagamento, fale com quem administra este sistema.": {
     es: "Para temas de pago, habla con quien administra este sistema.",
   },
+  // ─── Configurações: Menu lateral da empresa (issue #1341) ───
+  "Menu lateral": { es: "Menú lateral" },
+  "Aplicar interface": { es: "Aplicar interfaz" },
+  "Menu lateral da empresa salvo.": { es: "Menú lateral de la empresa guardado." },
+  "Não foi possível salvar o menu da empresa.": {
+    es: "No fue posible guardar el menú de la empresa.",
+  },
+  "Escolha as áreas que esta empresa mostra. Cada pessoa escolhe menos do que isto em Equipe — nunca mais — e as áreas essenciais continuam sempre visíveis. As permissões não mudam: o que o papel autoriza segue acessível por link, aviso e busca.": {
+    es: "Elige las áreas que esta empresa muestra. Cada persona elige menos que esto en Equipo — nunca más — y las áreas esenciales siguen siempre visibles. Los permisos no cambian: lo que el rol autoriza sigue accesible por enlace, aviso y búsqueda.",
+  },
   // ─── Configurações: Marca da organização ───
   "você definiu aqui": { es: "tú lo definiste aquí" },
   "é o padrão do sistema": { es: "es el predeterminado del sistema" },
