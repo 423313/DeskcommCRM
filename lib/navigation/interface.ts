@@ -98,3 +98,51 @@ export function homeDaInterface(raw: unknown, platform: boolean, role: Role | nu
     "/app/settings/profile"
   );
 }
+
+/**
+ * O conjunto de portas que uma escolha REALMENTE significa.
+ *
+ * `destinos` e `preset: simplificada` são duas formas de dizer a mesma coisa —
+ * uma lista explícita e um punhado fixo. Tratar as duas como conjuntos é o que
+ * permite combinar escolhas sem uma tabela de casos.
+ */
+function conjuntoEscolhido(s: InterfaceSettings): readonly NavDestinationId[] | undefined {
+  return s.destinos ?? (s.preset === "simplificada" ? SIMPLIFICADA : undefined);
+}
+
+/** Portas essenciais que o catálogo conhece — o que sobra quando não há interseção. */
+const SO_O_ESSENCIAL: readonly NavDestinationId[] = ids.filter((id) =>
+  (PORTAS_ESSENCIAIS as readonly string[]).includes(id),
+);
+
+/**
+ * As portas da EMPRESA ∩ as portas do VÍNCULO (migration 0365).
+ *
+ * A empresa escolhe o universo de portas da instalação; o vínculo escolhe menos
+ * dentro dele — nunca mais. A ordem importa: quem administra a organização não
+ * pode abrir para alguém uma porta que esse alguém já tinha dispensado, e quem
+ * escolhe a própria interface não pode furar a escolha da empresa. Por isso a
+ * combinação é INTERSEÇÃO nos dois eixos, e `simplificada` — que também é um
+ * limite, não um enfeite — sobrevive vindo de qualquer um dos lados.
+ *
+ * Isto é APRESENTAÇÃO, como as duas entradas: o resultado alimenta sidebar, hub,
+ * ⌘K e as telas. Autorização continua sendo `canSee` sobre o papel, aplicada
+ * depois, sobre o conjunto já estreitado. Nenhuma escolha da empresa nega
+ * página, API ou ação.
+ *
+ * E não abre por acidente: sem escolha de nenhum dos lados o resultado é a
+ * interface completa e o papel decide. Com escolha de pelo menos um lado, o
+ * resultado é sempre subconjunto — inclusive no caso sem interseção, onde
+ * sobram só as portas essenciais. Devolver `destinos: []` seria recusado pelo
+ * schema, e `lerInterface` converte valor recusado em interface COMPLETA: uma
+ * falha ABERTA, exatamente o oposto do pretendido aqui.
+ */
+export function combinarInterfaces(daEmpresa: unknown, doVinculo: unknown): InterfaceSettings {
+  const empresa = conjuntoEscolhido(lerInterface(daEmpresa).settings);
+  const vinculo = conjuntoEscolhido(lerInterface(doVinculo).settings);
+  if (!empresa && !vinculo) return INTERFACE_COMPLETA;
+  const soUm = empresa ?? vinculo;
+  if (!empresa || !vinculo) return { preset: "completa", destinos: [...(soUm as readonly NavDestinationId[])] };
+  const comuns = empresa.filter((id) => vinculo.includes(id));
+  return { preset: "completa", destinos: [...(comuns.length > 0 ? comuns : SO_O_ESSENCIAL)] };
+}

@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { lerInterface } from "@/lib/navigation/interface";
+import { combinarInterfaces } from "@/lib/navigation/interface";
 /**
  * Server-side auth helpers — load AuthUser, resolve active org, gate routes.
  *
@@ -32,6 +32,8 @@ interface RawMembershipRow {
 interface OrgJoin {
   display_name: string;
   locale: string | null;
+  /** Portas escolhidas pela EMPRESA (`organizations.interface_settings`, migration 0365). */
+  interface_settings?: unknown;
 }
 
 /**
@@ -166,7 +168,7 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
       supabase
         .from("user_organizations")
         .select(
-          "organization_id, role, interface_settings, accepted_at, organizations(display_name, locale)",
+          "organization_id, role, interface_settings, accepted_at, organizations(display_name, locale, interface_settings)",
         )
         .eq("user_id", user.id)
         .is("revoked_at", null)
@@ -214,7 +216,10 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
       organization_id: row.organization_id,
       organization_name: org?.display_name ?? "—",
       role: row.role as Role,
-      interface_settings: lerInterface(row.interface_settings).settings,
+      // EMPRESA ∩ VÍNCULO (migration 0365): a empresa escolhe o universo de
+      // portas da instalação, o vínculo escolhe menos dentro dele. Até aqui o
+      // vínculo decidia sozinho, então a escolha da empresa não existia.
+      interface_settings: combinarInterfaces(org?.interface_settings, row.interface_settings),
       locale: org?.locale ?? null,
     };
   });
