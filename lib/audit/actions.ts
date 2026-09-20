@@ -128,6 +128,8 @@ export const AUDIT_ACTIONS = [
   // como falha (rodada vazia não vira linha — varredura não é mutação).
   "message.recover_stuck_run",
   "contact.blocked",
+  "phone_number.created",
+  "phone_number.updated",
   "ai.handoff_triggered",
   "ai.reactivated_by_agent",
   "conversation.usable_for_rag_toggled",
@@ -207,7 +209,15 @@ export const AUDIT_ACTIONS = [
   "ai_agent.run_completed",
   "ai_agent.run_failed",
   "channel.connected",
+  "prospecting.changed",
+  // A ABORDAGEM que SAIU (PR #963). Distinta de `prospecting.changed`, que é
+  // configuração: esta é a única linha do produto que fala primeiro com quem
+  // nunca falou com a empresa, e é a resposta a "por que vocês me escreveram?".
+  // Emitida pelo worker quando houve EFEITO (tentativa de envio), nunca em
+  // rodada de cron vazia.
+  "prospecting.approach_sent",
   "channel.pairing_code_requested",
+  "channel.social_configured",
   "channel.ai_access_updated",
   "channel.reconnected",
   // Duas ações distintas de propósito: `deleted` apagou a linha (canal virgem),
@@ -509,6 +519,12 @@ export const AUDIT_ACTIONS = [
   // próprio: como `agenda.tipo_alterado { campos: ["is_active"] }` ele seria,
   // na trilha, indistinguível de "mudaram a duração".
   "agenda.tipo_reativado",
+  // A opção da ORGANIZAÇÃO que decide se o Atendente mexe na agenda dos colegas
+  // (issue #978, migration 0343). É ato de gestão como o dos tipos acima: muda o
+  // que TODO Atendente pode fazer a partir dali, e sem esta linha a primeira
+  // negativa de um colega não teria explicação na trilha — nem como responder
+  // "quando foi que desligaram isso?".
+  "agenda.colegas_podem_mexer_alterado",
   // A rodada que AVISOU alguém do próprio compromisso. Mensagem que saiu para o
   // telefone de um cliente é efeito, e efeito audita — mas só a rodada que
   // enviou: a que varreu e não achou ninguém a avisar não é mutação.
@@ -601,6 +617,12 @@ export const AUDIT_ACTIONS = [
   "crm_task.updated",
   "crm_task.deleted",
   "organization.switched",
+  // Chamada originada via /api/v1/calls (módulo VoIP, migration 0347).
+  // Só o CREATE é auditado aqui — status/transcript são atualizados pelo
+  // worker via admin client, fora do caminho de sessão que este audit cobre.
+  "call.created",
+  "voip_trunk.created",
+  "voip_trunk.updated",
 
   // Chamada de voz WhatsApp (spec 18, migration 0234). Ligá-la vincula um
   // SEGUNDO aparelho ao número que já atende, por um caminho que não é o
@@ -724,6 +746,10 @@ export const AUDIT_ACTIONS = [
   // as duas contagens mais `examinados`, que é o que diferencia "ninguém tinha
   // fluxo desarmado" de "a varredura não rodou".
   "ai.followup_sem_agente_reconciliado",
+  // Ajustes determinísticos de estilo da ORGANIZAÇÃO ligados, desligados ou com
+  // item trocado (PATCH /ai/style-adjustments). O `metadata.ajuste` nomeia o
+  // item; a linha registra a decisão sem expor o prompt do agente.
+  "ai.style_adjustment_changed",
   /** POST /api/v1/tenants/provision — organização criada por um sistema externo (doc 38 b). */
   "tenant.created_by_provisioning",
   /**
@@ -739,6 +765,16 @@ export const AUDIT_ACTIONS = [
   // meio dos renames — e "quem trouxe este funil de volta, e quando" é a
   // pergunta que o painel de auditoria só responde filtrando por `action`.
   "pipeline.unarchived",
+
+  // O banco de dados externo do agente (migration 0372). Dado de terceiro pode
+  // ter PII: a configuração da conexão é auditada, e a LEITURA também — mas o
+  // metadata de `read` carrega só o QUE foi lido (schema/tabela), nunca os
+  // valores de filtro, que viajariam como PII para o log.
+  "external_db_connection.created",
+  "external_db_connection.updated",
+  "external_db_connection.deleted",
+  "external_db_connection.tested",
+  "external_db_connection.read",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
