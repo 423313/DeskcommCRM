@@ -1,5 +1,5 @@
 "use client";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { BarraDeProgressoNavegacao } from "@/components/shell/BarraDeProgressoNavegacao";
@@ -8,6 +8,7 @@ import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessage
 import { useInboundCallAlerts } from "@/hooks/calls/useInboundCallAlerts";
 import { useCrmAlerts } from "@/hooks/notifications/useCrmAlerts";
 import { useNotifyOpenFromServiceWorker } from "@/lib/notifications/notify_open";
+import { FloatingInbox } from "@/components/inbox/FloatingInbox";
 import { estiloDaReserva, useOcupacaoDoRodape } from "@/lib/ui/rodape-ocupado";
 
 interface AppShellProps {
@@ -84,21 +85,29 @@ export function AppShell({ sidebarCollapsed, podeAtender, children }: AppShellPr
           {children}
         </main>
       </div>
-      {/* ── EXPERIMENTO (não é conserto): o atalho DESLIGADO, para ser revertido ──
-          Cinco testids de telas DIFERENTES resolvem a dois elementos no e2e
-          (`tela-agenda`, `flow-builder-shell`, `abrir-novo-tipo`,
-          `opcao-modo-manual`, `opcao-modo-round_robin`) — ou seja, a PÁGINA
-          inteira aparece duas vezes no DOM, não um componente.
+      {/*
+        O ATALHO VIVE NO PRÓPRIO BOUNDARY DE SUSPENSE, e isso não é adorno.
 
-          O diff desta branch contra a main neste arquivo é de DUAS linhas: o
-          import e esta tag. O conteúdo do dock não contém nenhum desses testids
-          (medido), então a causa está na MONTAGEM, não no que ele desenha.
+        Medido: com ele montado direto aqui, CINCO testids de telas diferentes
+        passaram a resolver a dois elementos no e2e — `tela-agenda`,
+        `flow-builder-shell`, `abrir-novo-tipo`, `opcao-modo-manual`,
+        `opcao-modo-round_robin`. Não era um componente duplicado: era a PÁGINA
+        ANTERIOR presa no `<main>` junto com a nova. O snapshot do erro mostra
+        o Inbox desenhado no `<main>` durante um teste de distribuição de
+        atendimento — e o atalho AUSENTE do DOM, ou seja, suspenso.
 
-          Desligar aqui responde por diferença, num run só: se as duplicações
-          sumirem, é o dock; se continuarem, a causa é outra e eu volto a tag
-          sem ter gasto mais nada. Não renomeio testid — dois nós com o mesmo
-          testid é sintoma, e renomear esconde e volta na próxima tela. */}
-      {/* <FloatingInbox /> */}
+        Sem um boundary próprio, a suspensão dele sobe até a árvore da rota e o
+        App Router segura a página anterior visível enquanto resolve. Com o
+        boundary, o que suspende é só ele: a página troca na hora e o atalho
+        aparece quando estiver pronto.
+
+        `fallback={null}` porque não há o que mostrar no lugar — ele é um
+        atalho, não conteúdo. Provado por ablação: desligar a tag zerou as
+        cinco duplicações (0 de 5, com 105 casos rodando).
+      */}
+      <Suspense fallback={null}>
+        <FloatingInbox />
+      </Suspense>
     </div>
   );
 }
