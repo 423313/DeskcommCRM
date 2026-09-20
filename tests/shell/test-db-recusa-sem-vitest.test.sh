@@ -47,9 +47,14 @@ trap 'rm -rf "$tmp"' EXIT
 saida="$(env -i PATH="/usr/bin:/bin" HOME="$tmp" bash "$SCRIPT" tests/invariants/qualquer.test.ts 2>&1 || true)"
 codigo="$(env -i PATH="/usr/bin:/bin" HOME="$tmp" bash "$SCRIPT" tests/invariants/qualquer.test.ts >/dev/null 2>&1; echo $?)"
 checar "recusa com exit 1" "1" "$codigo"
+# ⚠️ ESTE CASO JÁ FOI FRACO, e a sabotagem mostrou: procurar só a palavra
+# "vitest" passava COM e SEM a guarda, porque o erro real do 127
+# (`vitest: comando não encontrado`) também a contém. Um controle que não
+# distingue os dois mundos não mede nada. Agora ele procura a FRASE da guarda.
 case "$saida" in
-  *"vitest"*) echo "  ok: a mensagem nomeia o \`vitest\`";;
-  *) echo "  FALHOU: a mensagem não nomeia o \`vitest\` — saída: $saida" >&2; falhas=$((falhas + 1));;
+  *"a suíte de invariantes não rodaria"*)
+    echo "  ok: a mensagem é a da guarda, não o 127 cru";;
+  *) echo "  FALHOU: não achei a frase da guarda — saída: $saida" >&2; falhas=$((falhas + 1));;
 esac
 case "$saida" in
   *"não está no PATH"*|*"nao esta no PATH"*) echo "  ok: a mensagem diz que é PATH, não schema";;
