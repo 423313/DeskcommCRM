@@ -8,6 +8,34 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.40.0] — 2026-09-19
+
+### Adicionado
+
+- **A configuração do servidor passa a caber na tela, e o painel ganha porta** Quem administra a instalação passa a ter uma tela nova, no **Modo administrador**,
+  onde troca o que antes só se mudava entrando no servidor por
+  linha de comando e editando o arquivo de instalação: a chave do serviço de
+  e-mail, o endereço que aparece como remetente, o e-mail de suporte e o e-mail do
+  encarregado de dados. O que se salva ali **vale na hora**, sem reiniciar nada.
+
+  A tela diz de onde cada valor está vindo — definido ali mesmo, herdado do
+  arquivo de instalação, ou ainda não configurado. É a primeira pergunta de quem
+  vê algo estranho, e até agora ela só se respondia abrindo o servidor.
+
+  Credencial nunca volta para a tela: aparece só o fim dela, o bastante para
+  reconhecer qual está guardada. E o que **não** dá para trocar por ali continua
+  aparecendo, com o motivo escrito em português e o caminho para mudar — em vez de
+  um campo que aceitaria o valor e não faria efeito nenhum.
+
+  O painel de administração também ganhou uma porta no menu do usuário, para quem
+  administra a instalação. Antes só se chegava nele digitando o endereço, ou por
+  um item chamado "Gerenciar organizações" escondido no seletor de organização.
+  Quem não administra a instalação não vê a porta, não abre a tela e não consegue
+  salvar — são três barreiras, e a última existe porque um envio direto, sem
+  passar pela tela, driblaria as duas primeiras.
+
+- **Follow-up ganha horário próprio por agente** Cada agente pode limitar os follow-ups automáticos a dias e horários próprios, sem reduzir o período em que responde mensagens recebidas. Fora da faixa, o envio fica aguardando a próxima abertura no fuso da organização e ainda passa pelas regras anti-ban do número. Crédito: @joaopaulomirandamatias.
+
 ## [1.39.0] — 2026-09-19
 
 ### Adicionado
@@ -32,6 +60,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   O que muda é o esquecimento. Se o canal ficar três dias ligado, em modo de teste e sem nenhum número autorizado, abre um aviso na Central dizendo que a IA não responde a ninguém nele e o que fazer em Conexões. Antes, o sintoma era o pior possível: as mensagens chegavam no Inbox, tudo parecia funcionar, e a IA simplesmente nunca respondia — quem instalou concluía que o produto estava quebrado, não que faltava um clique.
 
   O aviso se resolve sozinho quando deixa de ser verdade: o canal ganhou número autorizado, foi aberto ao público ou foi arquivado. Quem já tem os canais configurados não vê aviso nenhum.
+
+  Construído sobre o modo de teste do WhatsApp, de @rafaelcesardev (#599).
 
 - **As etiquetas ganham cor — e o filtro passa a mostrar a mesma cor que a lista** A tela Configurações › Tags passa a deixar você escolher a COR de cada etiqueta, numa paleta de oito tons. A paleta não foi escolhida a olho: cada tom foi medido contra os outros, inclusive para quem tem daltonismo, e o texto de dentro do marcador é escolhido pelo contraste — cor não deixa etiqueta ilegível.
 
@@ -145,6 +175,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Para quem opera um servidor, nada muda: isto acontece inteiramente na esteira de
   verificação do projeto, antes de qualquer versão ser publicada.
+
+  Crédito da medição: @webtecnica (#1056).
 
 - **O aviso de versão nova só aparece quando ela está pronta para instalar** A tela oferecia a versão nova **antes de ela estar pronta para instalar**. O aviso saía assim que a versão era publicada, mas o pacote que a VPS precisa baixar leva mais uns minutos para ficar pronto.
 
@@ -6617,7 +6649,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.39.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.40.0...HEAD
+[1.40.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.39.0...v1.40.0
 [1.39.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.38.0...v1.39.0
 [1.38.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.37.0...v1.38.0
 [1.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.36.0...v1.37.0
