@@ -3,7 +3,7 @@
  * ARMA o pointer (Task 8.6).
  *
  * Regra (spec 2026-07-21, seletor no agente): um gatilho AUTOMÁTICO
- * (silence/stage_change/conversation_end — `TriggerConfig.kind` em
+ * (silence/stage_change/inbound_after_silence/conversation_end — `TriggerConfig.kind` em
  * `api-schemas.ts`) só pode criar um enrollment para um pointer se algum
  * agente PUBLICADO (`ai_agent_versions.status='published'`) da mesma org tem
  * `followup.enabled=true` e `followup.flow_pointer_ids` inclui esse pointer.

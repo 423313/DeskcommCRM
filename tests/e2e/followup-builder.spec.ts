@@ -1054,6 +1054,7 @@ test.describe("followup flow builder — controle de gatilho na PublishBar (Task
         "Etapa do funil",
         "Falta confirmada pela equipe",
         "Agente pediu ajuda",
+        "Cliente voltou",
         "Automação (Webhooks)",
       ];
       for (const nome of OFERECIDOS) {

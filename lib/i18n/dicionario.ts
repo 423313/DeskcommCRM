@@ -1901,6 +1901,14 @@ export const DICIONARIO: Traducoes = {
   "entrou em": { es: "entró en" },
   em: { es: "en" },
   "Agente pediu ajuda": { es: "El agente pidió ayuda" },
+  "Cliente voltou": { es: "El cliente volvió" },
+  "Tempo sem o cliente falar": { es: "Tiempo sin que el cliente hable" },
+  hora: { es: "hora" },
+  minuto: { es: "minuto" },
+  "O fluxo começa quando o cliente escreve depois de ficar este tempo sem mandar mensagem. Não é o mesmo que silêncio: silêncio avisa enquanto ele some; este avisa quando ele volta.":
+    {
+      es: "El flujo empieza cuando el cliente escribe después de estar este tiempo sin mandar mensaje. No es lo mismo que el silencio: el silencio avisa mientras desaparece; este avisa cuando vuelve.",
+    },
   "quando o agente pede ajuda": { es: "cuando el agente pide ayuda" },
   Manual: { es: "Manual" },
   "indisponível": { es: "no disponible" },
