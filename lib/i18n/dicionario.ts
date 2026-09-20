@@ -1707,6 +1707,16 @@ export const DICIONARIO: Traducoes = {
   "Não consegui criar o fluxo. Tente de novo.": {
     es: "No pude crear el flujo. Intenta de nuevo.",
   },
+  "Não consegui renomear o fluxo. Tente de novo.": {
+    es: "No pude renombrar el flujo. Intenta de nuevo.",
+  },
+  "Renomear fluxo": { es: "Renombrar flujo" },
+  "Só o nome interno muda. Inscrições e a versão publicada continuam as mesmas.": {
+    es: "Solo cambia el nombre interno. Las inscripciones y la versión publicada siguen iguales.",
+  },
+  "Duplicando…": { es: "Duplicando…" },
+  "Fluxo duplicado.": { es: "Flujo duplicado." },
+  "Fluxo renomeado.": { es: "Flujo renombrado." },
   "Novo fluxo de follow-up": { es: "Nuevo flujo de seguimiento" },
   "Nasce como rascunho. Você monta as etapas no editor visual em seguida.": {
     es: "Nace como borrador. Armas las etapas en el editor visual después.",
