@@ -13064,7 +13064,18 @@ notify pgrst, 'reload schema';
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, pelo mesmo motivo das funções
 -- acima: `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts` proíbe `create
 -- function` depois dele.
+-- ⚠️ A ORGANIZAÇÃO É PARÂMETRO OBRIGATÓRIO (issue #1248, migration 0344): o
+-- único limite era o `p_contact` que o CHAMADOR mandava, e a função é security
+-- definer — chamada de service_role com o contato de OUTRA organização estampava
+-- o anúncio lá dentro. O `where` casa `organization_id = p_org` e a organização
+-- alheia casa zero linhas, silenciosamente, como o primeiro-toque.
+-- A assinatura antiga de TRÊS argumentos é derrubada ANTES do create: com as duas
+-- no catálogo, a chamada de três chaves resolveria na ANTIGA (mesmo defeito
+-- medido na 0336) e a organização nunca chegaria ao `where`.
+drop function if exists public.fn_estampar_atribuicao_de_anuncio(uuid, text, jsonb);
+
 create or replace function public.fn_estampar_atribuicao_de_anuncio(
+  p_org uuid,
   p_contact uuid,
   p_platform text,
   p_metadata jsonb
@@ -13080,15 +13091,16 @@ begin
     source_metadata = source_metadata || p_metadata,
     updated_at = now()
   where id = p_contact
+    and organization_id = p_org
     and source_metadata->>'ad_platform' is null;
 end;
 $$;
 
-comment on function public.fn_estampar_atribuicao_de_anuncio(uuid, text, jsonb) is
-  'Grava de qual anúncio (Meta Ads / Google Ads) um contato veio — só na primeira vez. `source_metadata = source_metadata || p_metadata` faz merge, nunca sobrescreve o que fn_upsert_wa_contact já gravou (waha_lid, waha_chat_id, notify_name). A guarda `source_metadata->>''ad_platform'' is null` é o primeiro-toque: clicar em outro anúncio meses depois, numa conversa já aberta, não reescreve de onde a pessoa veio originalmente — o UPDATE casa zero linhas, silenciosamente. security definer + revoke de anon/authenticated: só o backend (admin client no ingest de canal) chama isto.';
+comment on function public.fn_estampar_atribuicao_de_anuncio(uuid, uuid, text, jsonb) is
+  'Grava de qual anúncio (Meta Ads / Google Ads / site) um contato veio — só na primeira vez. `source_metadata = source_metadata || p_metadata` faz merge, nunca sobrescreve o que fn_upsert_wa_contact já gravou (waha_lid, waha_chat_id, notify_name). A guarda `source_metadata->>''ad_platform'' is null` é o primeiro-toque: clicar em outro anúncio meses depois, numa conversa já aberta, não reescreve de onde a pessoa veio originalmente — o UPDATE casa zero linhas, silenciosamente. `organization_id = p_org` (issue #1248): a organização é obrigatória e o contato de OUTRA organização casa zero linhas — escrita cross-tenant barrada no `where`, não no chamador. security definer + revoke de anon/authenticated: só o backend (admin client no ingest de canal) chama isto.';
 
-revoke execute on function public.fn_estampar_atribuicao_de_anuncio(uuid, text, jsonb) from public, anon, authenticated;
-grant  execute on function public.fn_estampar_atribuicao_de_anuncio(uuid, text, jsonb) to service_role;
+revoke execute on function public.fn_estampar_atribuicao_de_anuncio(uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant  execute on function public.fn_estampar_atribuicao_de_anuncio(uuid, uuid, text, jsonb) to service_role;
 
 notify pgrst, 'reload schema';
 
@@ -15971,8 +15983,27 @@ create policy calendar_oauth_nonces_ninguem_le
   using (false);
 
 -- A quarta poda do `data-retention`. Assinatura idêntica às três irmãs
--- (`p_dias`, `p_lote`) para o mesmo laço de lotes servir sem caso especial.
-create or replace function public.fn_expurgar_nonces_de_oauth(p_dias int, p_lote int default 500)
+-- (`p_retencao_dias`, `p_limite`) para o mesmo laço de lotes servir sem caso
+-- especial — e os NOMES são o contrato: o PostgREST resolve sobrecarga pelo
+-- nome do argumento, e é assim que o cron manda
+-- (`app/api/v1/cron/data-retention/route.ts:163`). Nascida na 0190 como
+-- (`p_dias`, `p_lote`), esta poda não achava sobrecarga nenhuma: `PGRST202`
+-- todos os dias, `calendar_oauth_nonces` crescendo para sempre (issue #966).
+--
+-- O drop abaixo é o que faz a ATUALIZAÇÃO receber o conserto: `create or
+-- replace` NÃO troca nome de parâmetro de entrada — o Postgres recusa com
+-- "cannot change name of input parameter", porque o nome faz parte da
+-- identidade da função para quem chama por nome. Sem ele, a instalação que já
+-- existe (e que reaplica este arquivo inteiro pelo `update.sh`) ficaria com a
+-- função antiga. A assinatura `(int, int)` não muda, e o drop leva os ACLs
+-- junto: por isso o `revoke`/`grant` da 0192 se reaplica logo abaixo. O mesmo
+-- conserto, em forma de migration, é a 0364.
+drop function if exists public.fn_expurgar_nonces_de_oauth(int, int);
+
+create or replace function public.fn_expurgar_nonces_de_oauth(
+  p_retencao_dias int default null,
+  p_limite int default null
+)
 returns int
 language plpgsql
 security definer
@@ -15984,15 +16015,17 @@ begin
   -- Piso no CORPO, como as irmãs: um chamador que passe 0 não apaga nonce que
   -- ainda protege. O prazo do state é de 10 minutos, então um dia já é folga
   -- de duas ordens de grandeza.
-  if p_dias is null or p_dias < 1 then
-    p_dias := 1;
+  if p_retencao_dias is null or p_retencao_dias < 1 then
+    p_retencao_dias := 1;
   end if;
 
   with alvo as (
     select nonce
       from public.calendar_oauth_nonces
-     where expira_em < now() - make_interval(days => p_dias)
-     limit greatest(p_lote, 1)
+     where expira_em < now() - make_interval(days => p_retencao_dias)
+     -- 500 era o default DECLARADO na 0190; agora mora no corpo, como nas
+     -- irmãs, e o efeito de quem omite o argumento é o mesmo.
+     limit greatest(coalesce(p_limite, 500), 1)
   )
   delete from public.calendar_oauth_nonces n
    using alvo
@@ -16006,6 +16039,8 @@ end$$;
 -- `authenticated` entra aqui pela migration 0192: as duas irmãs de assinatura
 -- idêntica já o revogavam, e o grant vem do `ALTER DEFAULT PRIVILEGES` do
 -- corpo deste arquivo — omissão que aparece como linha AUSENTE, não errada.
+-- O `drop function` logo acima, da 0364, derrubou a função COM os ACLs dela:
+-- este par é o que repõe o estado que a 0192 deixou, e não redundância com ela.
 revoke execute on function public.fn_expurgar_nonces_de_oauth(int, int) from public, anon, authenticated;
 grant execute on function public.fn_expurgar_nonces_de_oauth(int, int) to service_role;
 -- ---- playbook `agendamento` v2: cita as ferramentas de agenda (migration 0191) ----
@@ -32060,6 +32095,117 @@ end $$;
 revoke execute on function public.fn_reaplicar_modulos_instalados() from public, anon, authenticated, service_role;
 revoke execute on function public.fn_conferir_modulos_instalados() from public, anon, authenticated, service_role;
 
+-- ---- a agenda dos colegas é uma opção da organização (migration 0343) ----
+--
+-- A opção "Atendentes podem mexer na agenda dos colegas" (issue #978), LIGADA
+-- por padrão: `settings.colegas_podem_mexer_na_agenda` ausente = ligada, e só o
+-- booleano `false` explícito desliga. Com ela desligada, o Atendente só mexe no
+-- compromisso de que é dono; Gerente e Administrador seguem mexendo em tudo.
+--
+-- Chave PRÓPRIA de topo, e não `settings.agenda`: `fn_agenda_settings` substitui
+-- o objeto inteiro e recusa chave que não conheça (o mesmo motivo que levou
+-- `cliente_pela_agenda` para `settings.crm` na 0262). Sem backfill: nenhuma
+-- linha de `organizations` é reescrita e quem já instalou não vê mudança.
+--
+-- O núcleo abaixo é a definição em vigor com UM bloco novo (a checagem de dono).
+-- A explicação completa, e para quem a regra vale (pessoa / IA e integração /
+-- canal remoto), está no cabeçalho de
+-- `supabase/migrations/20260919160431_0343_agenda_dos_colegas.sql`.
+create or replace function public.fn_colegas_podem_mexer_na_agenda(p_org uuid)
+returns boolean language sql stable security definer set search_path=public as $$
+ select coalesce(
+   (select (o.settings->'colegas_podem_mexer_na_agenda') is distinct from 'false'::jsonb
+      from public.organizations o where o.id = p_org),
+   true);
+$$;
+
+revoke all on function public.fn_colegas_podem_mexer_na_agenda(uuid) from public,anon;
+grant execute on function public.fn_colegas_podem_mexer_na_agenda(uuid) to authenticated,service_role;
+
+comment on function public.fn_colegas_podem_mexer_na_agenda(uuid) is
+  'A opção "Atendentes podem mexer na agenda dos colegas" desta organização (issue #978). Ausente = ligada: só o booleano false explícito em settings.colegas_podem_mexer_na_agenda desliga.';
+
+create or replace function public.fn_appointment_change_core(p_org uuid,p_id uuid,p_revision bigint,p_patch jsonb,p_remote boolean,p_base jsonb)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare a public.calendar_appointments; contact uuid; origin jsonb; event_id uuid;
+begin
+ if p_remote and (auth.uid() is not null or (p_patch-'starts_at'-'ends_at'-'time_zone'-'status'-'cancellation_reason')<>'{}'::jsonb or coalesce(p_patch->>'status','cancelled')<>'cancelled') then raise exception 'google_patch_forbidden' using errcode='42501';end if;
+ if auth.uid() is not null and (not public.fn_role_at_least(p_org,'agent') or not public.fn_support_write_allowed(p_org)) then raise exception 'appointment_forbidden' using errcode='42501'; end if;
+ if auth.uid() is not null and not public.fn_session_mfa_proven() then raise exception 'appointment_mfa_required' using errcode='42501';end if;
+ select contact_id into contact from public.calendar_appointments where organization_id=p_org and id=p_id;
+ if not found then raise exception 'appointment_not_found' using errcode='P0002'; end if;
+ if contact is not null then perform public.fn_service_lock(p_org,contact); end if;
+ select * into a from public.calendar_appointments where organization_id=p_org and id=p_id for update;
+ if a.contact_id is distinct from contact or a.revision is distinct from p_revision then raise exception 'appointment_stale' using errcode='40001'; end if;
+ -- A AGENDA DO COLEGA É UMA OPÇÃO DA ORGANIZAÇÃO (migration 0343, issue #978).
+ if auth.uid() is not null and not public.fn_role_at_least(p_org,'manager')
+    and not public.fn_colegas_podem_mexer_na_agenda(p_org)
+    and a.owner_user_id is distinct from auth.uid() then
+  raise exception 'appointment_do_colega' using errcode='42501';
+ end if;
+ if p_remote and a.status not in ('pending','confirmed') then raise exception 'google_outcome_protected' using errcode='40001';end if;
+ if a.status='cancelled' then raise exception 'appointment_cancelled' using errcode='22023'; end if;
+ if contact is not null then origin:=jsonb_build_object('kind','command','observed',public.fn_service_observe_command(p_org,contact)); end if;
+ update public.calendar_appointments set
+  google_base_projection=case when p_remote then p_base else google_base_projection end,
+  starts_at=case when p_patch?'starts_at' then (p_patch->>'starts_at')::timestamptz else starts_at end,
+  ends_at=case when p_patch?'ends_at' then (p_patch->>'ends_at')::timestamptz else ends_at end,
+  time_zone=coalesce(p_patch->>'time_zone',time_zone),
+  status=coalesce(p_patch->>'status',status),
+  cancelled_at=case when p_patch->>'status'='cancelled' then now() else cancelled_at end,
+  cancellation_reason=case when p_patch?'cancellation_reason' then p_patch->>'cancellation_reason' else cancellation_reason end,
+  notes=case when p_patch?'notes' then p_patch->>'notes' else notes end,
+  guest_email=case when p_patch?'guest_email' then p_patch->>'guest_email' else guest_email end,
+  outcome_message_id=case when p_patch?'outcome_message_id' then (p_patch->>'outcome_message_id')::uuid else null end,
+  confirmation_next_at=case when p_patch?'confirmation_next_at' then (p_patch->>'confirmation_next_at')::timestamptz else confirmation_next_at end
+ where organization_id=p_org and id=p_id returning * into a;
+ if p_patch?'confirmation_next_at' and (a.confirmation_next_at<=now() or a.confirmation_next_at>now()+interval '24 hours') then raise exception 'appointment_invalid_snooze' using errcode='22023'; end if;
+ update public.followup_enrollments set status='cancelled',cancel_reason='O compromisso mudou. Revise o próximo passo.',completed_at=now(),next_eval_at=null,claimed_until=null
+  where organization_id=p_org and appointment_id=p_id and appointment_revision<>a.revision and status in ('active','waiting_reply','paused_handoff','paused_manual');
+ update public.agent_inbox_items set status='resolved',resolved_at=now()
+  where organization_id=p_org and ref_kind='appointment' and ref_id=p_id and status='open'
+   and (appointment_revision<>a.revision or a.status in ('completed','no_show','cancelled') or p_patch?'confirmation_next_at');
+ if contact is not null and a.status='no_show' and a.outcome_recorded_at is not null and a.revision<>p_revision then
+  insert into public.event_log(organization_id,event_type,entity_kind,entity_id,payload)
+   values(p_org,'appointment.outcome_confirmed','appointment',p_id,
+    jsonb_build_object('appointment_revision',a.revision,'service_origin',origin)) returning id into event_id;
+ end if;
+ return to_jsonb(a);
+end; $$;
+
+revoke all on function public.fn_appointment_change_core(uuid,uuid,bigint,jsonb,boolean,jsonb) from public,anon,authenticated;
+
+create or replace function public.fn_definir_colegas_podem_mexer_na_agenda(p_org uuid,p_ligado boolean)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_atual boolean; v_linhas int;
+begin
+ if p_ligado is null then raise exception 'agenda_dos_colegas_invalido' using errcode='22023'; end if;
+ if auth.uid() is null
+    or not public.fn_role_at_least(p_org,'manager')
+    or not public.fn_support_write_allowed(p_org) then
+  raise exception 'agenda_dos_colegas_forbidden' using errcode='42501';
+ end if;
+ if not public.fn_session_mfa_proven() then raise exception 'mfa_required' using errcode='42501'; end if;
+ v_atual := public.fn_colegas_podem_mexer_na_agenda(p_org);
+ if v_atual is not distinct from p_ligado then
+  return jsonb_build_object('ligado',v_atual,'mudou',false);
+ end if;
+ update public.organizations
+    set settings = coalesce(settings,'{}'::jsonb) || jsonb_build_object('colegas_podem_mexer_na_agenda',to_jsonb(p_ligado))
+  where id = p_org;
+ get diagnostics v_linhas = row_count;
+ if v_linhas = 0 then raise exception 'agenda_dos_colegas_sem_organizacao' using errcode='P0002'; end if;
+ return jsonb_build_object('ligado',p_ligado,'mudou',true);
+end; $$;
+
+revoke all on function public.fn_definir_colegas_podem_mexer_na_agenda(uuid,boolean) from public,anon;
+grant execute on function public.fn_definir_colegas_podem_mexer_na_agenda(uuid,boolean) to authenticated,service_role;
+
+comment on function public.fn_definir_colegas_podem_mexer_na_agenda(uuid,boolean) is
+  'Liga/desliga "Atendentes podem mexer na agenda dos colegas" (issue #978). Gerente ou acima, suporte de escrita e MFA comprovado; ela mesma confere pelo auth.uid(). Grava settings.colegas_podem_mexer_na_agenda e devolve {ligado,mudou}.';
+
+notify pgrst, 'reload schema';
+
 -- ---- catálogo financeiro: contas, formas de pagamento, plano de contas (migration 0350) ----
 -- O CATÁLOGO FINANCEIRO — a primeira camada do módulo de comanda/financeiro.
 --
@@ -33432,6 +33578,258 @@ begin
   );
 end;
 $$;
+
+-- ---- a recusa permanente da agenda não pede repetição (migration 0363) ----
+-- `PT409` no lugar de `40001` nas três recusas PERMANENTES de `fn_meet_action`.
+-- `40001` vira HTTP 500 no PostgREST e o gateway do Supabase reexecuta 5xx sem
+-- limite (docs/runbooks/postgrest-replay-do-gateway.md); `PTxxx` chega como o
+-- status dos três últimos dígitos, e 4xx não é reexecutado. Corpo idêntico ao
+-- da definição acima, com três `errcode` trocados. Idempotente.
+-- Recorte do PR #803, de @paulolimajr77.
+
+create or replace function public.fn_meet_action(p_org uuid,p_id uuid,p_revision text,p_request uuid,p_action text,p_conversation uuid default null)
+returns boolean language plpgsql security definer set search_path=public as $$
+declare a public.calendar_appointments; contact uuid; b jsonb; destination_channel uuid;
+begin
+ if auth.uid() is null or not public.fn_role_at_least(p_org,'agent') or not public.fn_support_write_allowed(p_org) then raise exception 'meet_forbidden' using errcode='42501';end if;
+ if not public.fn_session_mfa_proven() then raise exception 'meet_mfa_required' using errcode='42501';end if;
+ select contact_id into contact from public.calendar_appointments where organization_id=p_org and id=p_id;
+ if contact is not null then perform public.fn_service_lock(p_org,contact);end if;
+ select * into a from public.calendar_appointments where organization_id=p_org and id=p_id for update;
+ if not found or a.owner_user_id is distinct from auth.uid() or not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=auth.uid() and revoked_at is null) then raise exception 'meet_forbidden' using errcode='42501';end if;
+ if a.revision::text is distinct from p_revision or a.meeting_request_id is distinct from p_request or a.status='cancelled' or a.location_kind<>'google_meet'
+  or exists(select 1 from public.contacts where id=a.contact_id and organization_id=p_org and is_anonymized) then raise exception 'meet_stale' using errcode='PT409';end if;
+ if p_action='retry' then
+  if a.google_conflict is not null then raise exception 'google_conflict_requires_choice' using errcode='PT409';end if;
+  if a.meeting_state='ready' then return false;end if;
+  if a.meeting_state<>'failed' then
+   update public.calendar_appointments set meeting_next_attempt_at=now(),google_next_attempt_at=now() where organization_id=p_org and id=p_id;return true;
+  end if;
+  -- Tempo/timeout não provam rejeição. Somente failure recebido gira solicitação.
+  update public.calendar_appointments set meeting_request_id=case when meeting_last_error='google_failure' and meeting_received_at is not null then gen_random_uuid() else meeting_request_id end,
+   meeting_requested_at=case when meeting_last_error='google_failure' and meeting_received_at is not null then null else meeting_requested_at end,
+   meeting_received_at=case when meeting_last_error='google_failure' then null else meeting_received_at end,
+   meeting_state='pending',meeting_attempts=0,meeting_last_error=null,meeting_next_attempt_at=now(),google_next_attempt_at=now() where organization_id=p_org and id=p_id;
+ elsif p_action='deliver' then
+  if a.contact_id is null then raise exception 'meet_conversation_unavailable' using errcode='42501';end if;
+  select channel_session_id into destination_channel from public.conversations where organization_id=p_org and id=p_conversation and contact_id=a.contact_id and not is_group and public.fn_can_view_conversation(organization_id,assigned_to_user_id) for update;
+  if not found then raise exception 'meet_conversation_unavailable' using errcode='42501';end if;
+  b:=public.fn_service_boundary(p_org,p_conversation)-'status'-'demanda_fechada_em'-'service_started_at';
+  if not public.fn_meet_boundary_current(b) then raise exception 'meet_conversation_stale' using errcode='PT409';end if;
+  if a.meeting_delivery->'service_boundary'=b and a.meeting_delivery->>'channel_session_id'=destination_channel::text then
+   if a.meeting_delivery->>'state' in ('waiting_for_link','sent') then return false;end if;
+   if a.meeting_delivery->>'state'='queued' and a.meeting_delivery_job_id is not null then
+    -- Recuperação humana de job morto conserva ledger/identidade. Não duplicar
+    -- uma mensagem aceita antes do crash nem reconstruir fronteira antiga.
+    update public.job_queue set status='pending',locked_by=null,locked_at=null,attempts=0,run_after=now(),last_error=null
+     where organization_id=p_org and id=a.meeting_delivery_job_id and kind='transactional_delivery' and status in ('dead','failed','done');
+    return found;
+   end if;
+  end if;
+  update public.job_queue set status='failed',locked_by=null,locked_at=null,last_error='meet_delivery_superseded' where organization_id=p_org and id=a.meeting_delivery_job_id and kind='transactional_delivery' and status in ('pending','running');
+  update public.calendar_appointments set meeting_delivery=jsonb_build_object('state','waiting_for_link','generation',gen_random_uuid(),'service_boundary',b,'authorized_by',jsonb_build_object('kind','user','id',auth.uid()),'source_operation_id',gen_random_uuid()),meeting_delivery_job_id=null where organization_id=p_org and id=p_id;
+ else raise exception 'meet_action_invalid' using errcode='22023';end if;
+ return true;
+end;$$;
+
+-- ---- reenviar o link do Meet é ação própria (migration 0365) ----
+-- `p_action in ('deliver','resend')`, e o `return false` em estado enviado
+-- passa a valer só para o `deliver` — ele é a proteção contra clique duplo, e
+-- afrouxá-lo daria o reenvio tirando a proteção. `waiting_for_link`/`queued`
+-- continuam trancando os dois. Corpo idêntico ao do bloco da 0363, com o ramo
+-- do envio ampliado. Idempotente.
+-- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon: ela cura só o que veio antes, e
+-- função criada depois nasce exposta a `anon` e fica.
+-- Recorte do PR #803, de @paulolimajr77.
+
+create or replace function public.fn_meet_action(p_org uuid,p_id uuid,p_revision text,p_request uuid,p_action text,p_conversation uuid default null)
+returns boolean language plpgsql security definer set search_path=public as $$
+declare a public.calendar_appointments; contact uuid; b jsonb; destination_channel uuid;
+begin
+ if auth.uid() is null or not public.fn_role_at_least(p_org,'agent') or not public.fn_support_write_allowed(p_org) then raise exception 'meet_forbidden' using errcode='42501';end if;
+ if not public.fn_session_mfa_proven() then raise exception 'meet_mfa_required' using errcode='42501';end if;
+ select contact_id into contact from public.calendar_appointments where organization_id=p_org and id=p_id;
+ if contact is not null then perform public.fn_service_lock(p_org,contact);end if;
+ select * into a from public.calendar_appointments where organization_id=p_org and id=p_id for update;
+ if not found or a.owner_user_id is distinct from auth.uid() or not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=auth.uid() and revoked_at is null) then raise exception 'meet_forbidden' using errcode='42501';end if;
+ if a.revision::text is distinct from p_revision or a.meeting_request_id is distinct from p_request or a.status='cancelled' or a.location_kind<>'google_meet'
+  or exists(select 1 from public.contacts where id=a.contact_id and organization_id=p_org and is_anonymized) then raise exception 'meet_stale' using errcode='PT409';end if;
+ if p_action='retry' then
+  if a.google_conflict is not null then raise exception 'google_conflict_requires_choice' using errcode='PT409';end if;
+  if a.meeting_state='ready' then return false;end if;
+  if a.meeting_state<>'failed' then
+   update public.calendar_appointments set meeting_next_attempt_at=now(),google_next_attempt_at=now() where organization_id=p_org and id=p_id;return true;
+  end if;
+  -- Tempo/timeout não provam rejeição. Somente failure recebido gira solicitação.
+  update public.calendar_appointments set meeting_request_id=case when meeting_last_error='google_failure' and meeting_received_at is not null then gen_random_uuid() else meeting_request_id end,
+   meeting_requested_at=case when meeting_last_error='google_failure' and meeting_received_at is not null then null else meeting_requested_at end,
+   meeting_received_at=case when meeting_last_error='google_failure' then null else meeting_received_at end,
+   meeting_state='pending',meeting_attempts=0,meeting_last_error=null,meeting_next_attempt_at=now(),google_next_attempt_at=now() where organization_id=p_org and id=p_id;
+ elsif p_action in ('deliver','resend') then
+  if a.contact_id is null then raise exception 'meet_conversation_unavailable' using errcode='42501';end if;
+  select channel_session_id into destination_channel from public.conversations where organization_id=p_org and id=p_conversation and contact_id=a.contact_id and not is_group and public.fn_can_view_conversation(organization_id,assigned_to_user_id) for update;
+  if not found then raise exception 'meet_conversation_unavailable' using errcode='42501';end if;
+  b:=public.fn_service_boundary(p_org,p_conversation)-'status'-'demanda_fechada_em'-'service_started_at';
+  if not public.fn_meet_boundary_current(b) then raise exception 'meet_conversation_stale' using errcode='PT409';end if;
+  if a.meeting_delivery->'service_boundary'=b and a.meeting_delivery->>'channel_session_id'=destination_channel::text then
+   -- ⛔ ESTE `return false` É A PROTEÇÃO CONTRA CLIQUE DUPLO, e é por isso que o
+   -- reenvio é uma AÇÃO NOVA em vez de um ramo reescrito. Ele impede a mesma
+   -- mensagem de sair duas vezes por um clique nervoso; se o botão "Enviar de
+   -- novo" apenas reescrevesse este ramo, ganharíamos o reenvio e perderíamos a
+   -- proteção — e envio em dobro para cliente é pior que não-envio.
+   -- `deliver` continua exatamente como era; `resend` passa reto, e quem o
+   -- dispara já confirmou na tela.
+   if p_action='deliver' and a.meeting_delivery->>'state' in ('waiting_for_link','sent') then return false;end if;
+   if a.meeting_delivery->>'state'='queued' and a.meeting_delivery_job_id is not null then
+    -- Recuperação humana de job morto conserva ledger/identidade. Não duplicar
+    -- uma mensagem aceita antes do crash nem reconstruir fronteira antiga.
+    update public.job_queue set status='pending',locked_by=null,locked_at=null,attempts=0,run_after=now(),last_error=null
+     where organization_id=p_org and id=a.meeting_delivery_job_id and kind='transactional_delivery' and status in ('dead','failed','done');
+    return found;
+   end if;
+  end if;
+  update public.job_queue set status='failed',locked_by=null,locked_at=null,last_error='meet_delivery_superseded' where organization_id=p_org and id=a.meeting_delivery_job_id and kind='transactional_delivery' and status in ('pending','running');
+  update public.calendar_appointments set meeting_delivery=jsonb_build_object('state','waiting_for_link','generation',gen_random_uuid(),'service_boundary',b,'authorized_by',jsonb_build_object('kind','user','id',auth.uid()),'source_operation_id',gen_random_uuid()),meeting_delivery_job_id=null where organization_id=p_org and id=p_id;
+ else raise exception 'meet_action_invalid' using errcode='22023';end if;
+ return true;
+end;$$;
+
+-- ---- o compromisso chega ao cliente mesmo sem Google Meet (migration 0366) ----
+-- A exigência de link pronto passa a valer SÓ onde `location_kind='google_meet'`
+-- nas TRÊS pontas: o gatilho que enfileira, o porteiro do envio e a ação que
+-- autoriza. Nada mais muda. ⚠️ ANTES DA VARREDURA anon. Idempotente.
+-- Recorte do PR #803, de @paulolimajr77.
+
+create or replace function public.fn_meet_delivery_current(p_org uuid,p_job uuid,p_worker text,p_acquired_at timestamptz)
+returns boolean language sql stable security definer set search_path=public as $$
+ select exists(select 1 from public.job_queue j join public.calendar_appointments a on a.organization_id=j.organization_id and a.id::text=j.payload->>'appointment_id'
+  join public.contacts c on c.organization_id=a.organization_id and c.id=a.contact_id
+  join public.conversations v on v.organization_id=a.organization_id and v.contact_id=a.contact_id and v.id::text=j.payload->'service_boundary'->>'conversation_id'
+  join public.channel_sessions cs on cs.organization_id=v.organization_id and cs.id=v.channel_session_id
+  join public.organizations o on o.id=a.organization_id and o.status='active'
+  where cs.archived_at is null and a.meeting_delivery->>'channel_session_id'=cs.id::text and j.organization_id=p_org and j.id=p_job and j.kind='transactional_delivery' and j.status='running' and j.locked_by=p_worker and j.locked_at=p_acquired_at
+   and a.contact_id=j.contact_id and not c.is_anonymized and not c.is_blocked and a.status<>'cancelled' and (a.location_kind<>'google_meet' or (a.meeting_state='ready' and a.meeting_url is not null))
+   and a.meeting_request_id::text=j.payload->>'meeting_request_id' and a.meeting_delivery->>'generation'=j.payload->>'delivery_generation'
+   and a.meeting_delivery_job_id=j.id and a.meeting_delivery->>'state'='queued'
+   and exists(select 1 from public.user_organizations where organization_id=p_org and user_id=a.owner_user_id and revoked_at is null)
+   and (a.meeting_delivery->'authorized_by'->>'kind'='ai_agent' or
+    (a.meeting_delivery->'authorized_by'->>'kind'='user' and a.meeting_delivery->'authorized_by'->>'id'=a.owner_user_id::text and exists(
+     select 1 from public.user_organizations u where u.organization_id=p_org and u.user_id=a.owner_user_id and u.revoked_at is null and u.role in ('agent','manager','admin')
+      and (u.role in ('manager','admin') or v.assigned_to_user_id=u.user_id or o.settings->>'visibility_mode'='all'
+       or (coalesce(o.settings->>'visibility_mode','own_and_unassigned')='own_and_unassigned' and v.assigned_to_user_id is null)))))
+   and a.meeting_delivery->'service_boundary'=j.payload->'service_boundary' and public.fn_meet_boundary_current(j.payload->'service_boundary'));
+$$;
+revoke all on function public.fn_meet_delivery_current(uuid,uuid,text,timestamptz) from public,anon,authenticated;
+grant execute on function public.fn_meet_delivery_current(uuid,uuid,text,timestamptz) to service_role;
+
+create or replace function public.fn_meet_action(p_org uuid,p_id uuid,p_revision text,p_request uuid,p_action text,p_conversation uuid default null)
+returns boolean language plpgsql security definer set search_path=public as $$
+declare a public.calendar_appointments; contact uuid; b jsonb; destination_channel uuid;
+begin
+ if auth.uid() is null or not public.fn_role_at_least(p_org,'agent') or not public.fn_support_write_allowed(p_org) then raise exception 'meet_forbidden' using errcode='42501';end if;
+ if not public.fn_session_mfa_proven() then raise exception 'meet_mfa_required' using errcode='42501';end if;
+ select contact_id into contact from public.calendar_appointments where organization_id=p_org and id=p_id;
+ if contact is not null then perform public.fn_service_lock(p_org,contact);end if;
+ select * into a from public.calendar_appointments where organization_id=p_org and id=p_id for update;
+ if not found or a.owner_user_id is distinct from auth.uid() or not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=auth.uid() and revoked_at is null) then raise exception 'meet_forbidden' using errcode='42501';end if;
+ if a.revision::text is distinct from p_revision or a.meeting_request_id is distinct from p_request or a.status='cancelled'
+  or exists(select 1 from public.contacts where id=a.contact_id and organization_id=p_org and is_anonymized) then raise exception 'meet_stale' using errcode='PT409';end if;
+ if p_action='retry' then
+  if a.google_conflict is not null then raise exception 'google_conflict_requires_choice' using errcode='PT409';end if;
+  if a.meeting_state='ready' then return false;end if;
+  if a.meeting_state<>'failed' then
+   update public.calendar_appointments set meeting_next_attempt_at=now(),google_next_attempt_at=now() where organization_id=p_org and id=p_id;return true;
+  end if;
+  -- Tempo/timeout não provam rejeição. Somente failure recebido gira solicitação.
+  update public.calendar_appointments set meeting_request_id=case when meeting_last_error='google_failure' and meeting_received_at is not null then gen_random_uuid() else meeting_request_id end,
+   meeting_requested_at=case when meeting_last_error='google_failure' and meeting_received_at is not null then null else meeting_requested_at end,
+   meeting_received_at=case when meeting_last_error='google_failure' then null else meeting_received_at end,
+   meeting_state='pending',meeting_attempts=0,meeting_last_error=null,meeting_next_attempt_at=now(),google_next_attempt_at=now() where organization_id=p_org and id=p_id;
+ elsif p_action in ('deliver','resend') then
+  if a.contact_id is null then raise exception 'meet_conversation_unavailable' using errcode='42501';end if;
+  select channel_session_id into destination_channel from public.conversations where organization_id=p_org and id=p_conversation and contact_id=a.contact_id and not is_group and public.fn_can_view_conversation(organization_id,assigned_to_user_id) for update;
+  if not found then raise exception 'meet_conversation_unavailable' using errcode='42501';end if;
+  b:=public.fn_service_boundary(p_org,p_conversation)-'status'-'demanda_fechada_em'-'service_started_at';
+  if not public.fn_meet_boundary_current(b) then raise exception 'meet_conversation_stale' using errcode='PT409';end if;
+  if a.meeting_delivery->'service_boundary'=b and a.meeting_delivery->>'channel_session_id'=destination_channel::text then
+   -- ⛔ ESTE `return false` É A PROTEÇÃO CONTRA CLIQUE DUPLO, e é por isso que o
+   -- reenvio é uma AÇÃO NOVA em vez de um ramo reescrito. Ele impede a mesma
+   -- mensagem de sair duas vezes por um clique nervoso; se o botão "Enviar de
+   -- novo" apenas reescrevesse este ramo, ganharíamos o reenvio e perderíamos a
+   -- proteção — e envio em dobro para cliente é pior que não-envio.
+   -- `deliver` continua exatamente como era; `resend` passa reto, e quem o
+   -- dispara já confirmou na tela.
+   if p_action='deliver' and a.meeting_delivery->>'state' in ('waiting_for_link','sent') then return false;end if;
+   if a.meeting_delivery->>'state'='queued' and a.meeting_delivery_job_id is not null then
+    -- Recuperação humana de job morto conserva ledger/identidade. Não duplicar
+    -- uma mensagem aceita antes do crash nem reconstruir fronteira antiga.
+    update public.job_queue set status='pending',locked_by=null,locked_at=null,attempts=0,run_after=now(),last_error=null
+     where organization_id=p_org and id=a.meeting_delivery_job_id and kind='transactional_delivery' and status in ('dead','failed','done');
+    return found;
+   end if;
+  end if;
+  update public.job_queue set status='failed',locked_by=null,locked_at=null,last_error='meet_delivery_superseded' where organization_id=p_org and id=a.meeting_delivery_job_id and kind='transactional_delivery' and status in ('pending','running');
+  update public.calendar_appointments set meeting_delivery=jsonb_build_object('state','waiting_for_link','generation',gen_random_uuid(),'service_boundary',b,'authorized_by',jsonb_build_object('kind','user','id',auth.uid()),'source_operation_id',gen_random_uuid()),meeting_delivery_job_id=null where organization_id=p_org and id=p_id;
+ else raise exception 'meet_action_invalid' using errcode='22023';end if;
+ return true;
+end;$$;
+
+create or replace function public.fn_meet_delivery_enqueue()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare jid uuid; b jsonb;
+begin
+ -- A MESMA ORDEM DE TRAVA das ~20 irmãs: contato PRIMEIRO, job_queue depois.
+ -- Sem esta linha, este gatilho já segurava a linha do compromisso (é BEFORE/
+ -- AFTER na própria calendar_appointments) e ia travar job_queue sem o mutex do
+ -- contato, enquanto fn_meet_redact_contact (0229) pega o mutex do contato e só
+ -- então mexe em job_queue. Duas ordens opostas sobre os mesmos dois recursos =
+ -- deadlock (40P01) sob concorrência, e quem paga é o cliente com anonimização
+ -- LGPD acontecendo enquanto um link de reunião é entregue.
+ perform public.fn_service_lock(new.organization_id,new.contact_id);
+ -- ⚠️ `status` ENTRA AQUI, e a falta dele era um buraco REAL que só apareceu
+ -- ao abrir a entrega para compromisso sem Meet.
+ --
+ -- A guarda olhava só `meeting_state='cancelled'` — o estado do LINK, não do
+ -- compromisso. Enquanto a entrega exigia link pronto isso bastava por
+ -- acidente: cancelar o compromisso cancelava o link junto. Sem Meet não há
+ -- link para cancelar, e um compromisso CANCELADO passava a enfileirar
+ -- entrega. O porteiro do envio recusaria depois (`a.status<>'cancelled'`),
+ -- então o cliente não receberia nada — mas o job nasceria para morrer
+ -- bloqueado, e a tela mostraria uma entrega a caminho que nunca sai.
+ --
+ -- Achado do @paulolimajr77, e foi o teste DELE que o pegou aqui.
+ if new.status='cancelled' or new.meeting_state='cancelled' or new.meeting_delivery->>'state' in ('blocked','stale') then
+  update public.job_queue set status='failed',locked_at=null,locked_by=null,payload='{}',last_error='meet_delivery_stale'
+   where organization_id=new.organization_id and id=new.meeting_delivery_job_id and kind='transactional_delivery' and status in ('pending','running');
+  return new;
+ end if;
+ if new.meeting_state='failed' then perform public.fn_meet_notice(new.organization_id,new.id,'meeting_failed');end if;
+ -- ⛔ ESPERAR O LINK VALE SÓ ONDE O LOCAL É O MEET.
+ --
+ -- Esta é a exigência mais fácil de esquecer e a pior de esquecer: num
+ -- compromisso PRESENCIAL o `meeting_state` é `not_requested` para sempre,
+ -- então a entrega era autorizada, o gatilho passava por aqui, devolvia sem
+ -- enfileirar nada, e a entrega ficava em `waiting_for_link` PARA SEMPRE — em
+ -- silêncio, sem job, sem aviso e sem erro. Foi o teste do autor que a achou.
+ --
+ -- Onde o local É o Meet, nada muda: sem link pronto não sai job, porque
+ -- mandar uma reunião sem como entrar nela é pior que não mandar.
+ if (new.location_kind='google_meet' and new.meeting_state<>'ready')
+  or new.meeting_delivery->>'state'<>'waiting_for_link' then return new;end if;
+ b:=new.meeting_delivery->'service_boundary';
+ if not public.fn_meet_boundary_current(b) then
+  update public.calendar_appointments set meeting_delivery=meeting_delivery||'{"state":"stale","error":"service_boundary_stale"}' where organization_id=new.organization_id and id=new.id;
+  perform public.fn_meet_notice(new.organization_id,new.id,'service_boundary_stale');return new;
+ end if;
+ jid:=gen_random_uuid();
+ insert into public.job_queue(id,organization_id,contact_id,kind,payload,run_after)
+ values(jid,new.organization_id,new.contact_id,'transactional_delivery',jsonb_build_object('appointment_id',new.id,'meeting_request_id',new.meeting_request_id,
+  'delivery_generation',new.meeting_delivery->>'generation','service_boundary',b),now());
+ update public.calendar_appointments set meeting_delivery_job_id=jid,meeting_delivery=meeting_delivery||'{"state":"queued"}'
+  where organization_id=new.organization_id and id=new.id;
+ return new;
+end;$$;
+revoke all on function public.fn_meet_delivery_enqueue() from public,anon,authenticated;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

@@ -8949,6 +8949,8 @@ export type Database = {
       fn_appointment_confirmation_sweep: { Args: { p_limit?: number; p_now?: string }; Returns: number }
       fn_appointment_enrollment_current: { Args: { p_org: string; p_id: string; p_node?: string | null }; Returns: boolean }
       fn_agenda_settings: { Args: { p_org: string; p_config: Json }; Returns: Json }
+      fn_colegas_podem_mexer_na_agenda: { Args: { p_org: string }; Returns: boolean }
+      fn_definir_colegas_podem_mexer_na_agenda: { Args: { p_org: string; p_ligado: boolean }; Returns: Json }
       fn_definir_cliente_pela_agenda: { Args: { p_ligado: boolean; p_org: string }; Returns: Json }
       fn_followup_patch: { Args: { p_org: string; p_id: string; p_revision: number; p_patch: Json }; Returns: number }
       fn_followup_apply_step: { Args: { p_org: string; p_id: string; p_revision: number; p_patch: Json; p_event: Json }; Returns: number }
@@ -9276,7 +9278,12 @@ export type Database = {
       }
       fn_encrypt_oauth: { Args: { plaintext: string }; Returns: string }
       fn_estampar_atribuicao_de_anuncio: {
-        Args: { p_contact: string; p_metadata: Json; p_platform: string }
+        Args: {
+          p_contact: string
+          p_metadata: Json
+          p_org: string
+          p_platform: string
+        }
         Returns: undefined
       }
       fn_expurgar_auditoria_vencida: {

@@ -2286,6 +2286,27 @@ export const DICIONARIO: Traducoes = {
   "Consultas aos seus materiais": { es: "Consultas a tus materiales" },
   "Conteúdo da": { es: "Contenido de la" },
   "Conversas encaminhadas": { es: "Conversaciones encaminadas" },
+  "Mandar ao cliente": { es: "Enviar al cliente" },
+  "Dados não enviados ainda.": { es: "Datos aún no enviados." },
+  "Envio autorizado: aguardando a vez na fila.": { es: "Envío autorizado: esperando su turno en la fila." },
+  "Dados aguardando envio nesta conversa.": { es: "Datos esperando envío en esta conversación." },
+  "Dados enviados na conversa autorizada.": { es: "Datos enviados en la conversación autorizada." },
+  "Conversa que receberá os dados": { es: "Conversación que recibirá los datos" },
+  "Mandar de novo os dados deste compromisso para o cliente?": { es: "¿Enviar de nuevo los datos de este compromiso al cliente?" },
+  "Seu compromisso está marcado para": { es: "Tu compromiso está programado para" },
+  "Enviar de novo": { es: "Enviar de nuevo" },
+  "Confirmar reenvio": { es: "Confirmar reenvío" },
+  "Mandar de novo o link desta reunião para o cliente?": { es: "¿Enviar de nuevo el enlace de esta reunión al cliente?" },
+  "Mandar de novo": { es: "Enviar de nuevo" },
+  "O atendimento desta conversa mudou depois que o link foi criado. Escolha a conversa atual e autorize o envio de novo.": { es: "La atención de esta conversación cambió después de crearse el enlace. Elige la conversación actual y autoriza el envío de nuevo." },
+  "Este cliente está sendo atendido neste instante. Espere alguns segundos e tente de novo.": { es: "Este cliente está siendo atendido en este momento. Espera unos segundos e inténtalo de nuevo." },
+  "Este compromisso mudou enquanto a tela estava aberta. Atualize a página e tente de novo.": { es: "Este compromiso cambió mientras la pantalla estaba abierta. Actualiza la página e inténtalo de nuevo." },
+  "O Google e o CRM discordam sobre este compromisso. Resolva a diferença antes de enviar o link.": { es: "Google y el CRM no coinciden sobre este compromiso. Resuelve la diferencia antes de enviar el enlace." },
+  "Esta conversa não pode receber o link: ela é de outro contato, é um grupo, ou você não tem acesso a ela.": { es: "Esta conversación no puede recibir el enlace: es de otro contacto, es un grupo, o no tienes acceso a ella." },
+  "Confirme a verificação em duas etapas nesta sessão para enviar o link.": { es: "Confirma la verificación en dos pasos en esta sesión para enviar el enlace." },
+  "Só quem é responsável pelo compromisso pode enviar o link dele.": { es: "Solo quien es responsable del compromiso puede enviar su enlace." },
+  "Ação desconhecida para o link do Meet.": { es: "Acción desconocida para el enlace de Meet." },
+  "Não foi possível registrar a ação. O motivo ficou registrado no servidor com o identificador abaixo.": { es: "No se pudo registrar la acción. El motivo quedó registrado en el servidor con el identificador de abajo." },
   "Custo da IA no período": { es: "Costo de la IA en el período" },
   "Custo no período": { es: "Costo en el período" },
   // ── Administração › Destinos internos (decisão 22-d, #1004) ──────────────
@@ -10307,6 +10328,32 @@ export const DICIONARIO: Traducoes = {
   'A origem aparece na ficha do contato e no filtro "Site (landing page)" da lista de contatos.': {
     es: 'El origen aparece en la ficha del contacto y en el filtro "Sitio (landing page)" de la lista de contactos.',
   },
+  // ─── Agenda dos colegas (components/agenda/AgendaDosColegas.tsx) ───────────
+  // A opção por organização da migration 0343 (issue #978). As frases de recusa
+  // são as que `ClientePelaAgenda` já usa ("Sua sessão expirou…", "Nenhuma
+  // empresa ativa.", "Confirme a verificação em duas etapas.", "Não consegui
+  // salvar essa mudança agora."), reaproveitadas de propósito: mesma situação,
+  // mesma frase. Só a do papel é nova, porque aqui o piso é gerente.
+  "Agenda dos colegas": { es: "Agenda de los colegas" },
+  "Atendentes podem mexer na agenda dos colegas": {
+    es: "Los agentes pueden tocar la agenda de sus colegas",
+  },
+  "Com isto ligado, qualquer atendente cancela e remarca o compromisso de qualquer colega — é o comportamento de sempre. Desligado, cada atendente mexe só no compromisso de que é o responsável; gerentes e administradores seguem mexendo em tudo.": {
+    es: "Con esto activado, cualquier agente cancela y reprograma el compromiso de cualquier colega: es el comportamiento de siempre. Desactivado, cada agente toca solo el compromiso del que es responsable; los gerentes y administradores siguen pudiendo con todo.",
+  },
+  "Ligado: qualquer atendente mexe na agenda de qualquer colega.": {
+    es: "Activado: cualquier agente toca la agenda de cualquier colega.",
+  },
+  "Desligado: cada atendente mexe só na própria agenda. Gerentes e administradores continuam mexendo em tudo.": {
+    es: "Desactivado: cada agente toca solo su propia agenda. Los gerentes y administradores siguen pudiendo con todo.",
+  },
+  "Isto não muda o que cada pessoa vê na agenda, só quem pode alterar o compromisso de quem.": {
+    es: "Esto no cambia lo que cada persona ve en la agenda, solo quién puede alterar el compromiso de quién.",
+  },
+  "Só um gerente ou administrador pode mudar essa regra.": {
+    es: "Solo un gerente o administrador puede cambiar esta regla.",
+  },
+
 };
 
 /**
