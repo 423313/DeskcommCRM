@@ -8,6 +8,184 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.40.0] — 2026-09-19
+
+### Adicionado
+
+- **A configuração do servidor passa a caber na tela, e o painel ganha porta** Quem administra a instalação passa a ter uma tela nova, no **Modo administrador**,
+  onde troca o que antes só se mudava entrando no servidor por
+  linha de comando e editando o arquivo de instalação: a chave do serviço de
+  e-mail, o endereço que aparece como remetente, o e-mail de suporte e o e-mail do
+  encarregado de dados. O que se salva ali **vale na hora**, sem reiniciar nada.
+
+  A tela diz de onde cada valor está vindo — definido ali mesmo, herdado do
+  arquivo de instalação, ou ainda não configurado. É a primeira pergunta de quem
+  vê algo estranho, e até agora ela só se respondia abrindo o servidor.
+
+  Credencial nunca volta para a tela: aparece só o fim dela, o bastante para
+  reconhecer qual está guardada. E o que **não** dá para trocar por ali continua
+  aparecendo, com o motivo escrito em português e o caminho para mudar — em vez de
+  um campo que aceitaria o valor e não faria efeito nenhum.
+
+  O painel de administração também ganhou uma porta no menu do usuário, para quem
+  administra a instalação. Antes só se chegava nele digitando o endereço, ou por
+  um item chamado "Gerenciar organizações" escondido no seletor de organização.
+  Quem não administra a instalação não vê a porta, não abre a tela e não consegue
+  salvar — são três barreiras, e a última existe porque um envio direto, sem
+  passar pela tela, driblaria as duas primeiras.
+
+- **Follow-up ganha horário próprio por agente** Cada agente pode limitar os follow-ups automáticos a dias e horários próprios, sem reduzir o período em que responde mensagens recebidas. Fora da faixa, o envio fica aguardando a próxima abertura no fuso da organização e ainda passa pelas regras anti-ban do número. Crédito: @joaopaulomirandamatias.
+
+## [1.39.0] — 2026-09-19
+
+### Adicionado
+
+- **Durante a atualização, o sistema mostra um aviso em vez de um erro do navegador** Enquanto a atualização mexe no banco, o CRM precisa ficar parado por alguns segundos — é o que impede que uma regra de isolamento suma no meio do caminho e a tela fique vazia sem explicação.
+
+  Até agora, quem estivesse com o sistema aberto nesse momento via o erro de conexão do próprio navegador: uma tela branca que não diz de quem é o problema nem quanto tempo dura.
+
+  Passa a aparecer uma página dizendo **"Estamos atualizando o sistema"**, com o aviso de que nada do trabalho se perde. Ela **volta sozinha** para a tela de antes quando o sistema sobe — ninguém precisa recarregar nem saber que houve atualização.
+
+  Duas decisões que valem estar escritas:
+
+  - **Se a atualização der errado no banco, o aviso FICA de pé.** O CRM não volta ao ar com regra de isolamento faltando, e nesse caso a página é a única coisa que explica a quem tentar abrir por que o sistema não responde.
+  - **A página não leva marca nenhuma.** Ela sobe antes de qualquer coisa poder consultar o banco, que é onde a marca da instalação mora — uma página neutra é a única que não mente sobre de quem é o sistema.
+
+  Nenhum passo manual foi acrescentado: quem opera continua clicando no mesmo botão.
+
+  Trabalho de @paulolimajr77, recortado do #803.
+
+- **O canal que está em modo de teste passa a avisar que a IA não responde ninguém** Um canal de WhatsApp recém-conectado nasce em modo de teste: a IA só responde aos números que você autorizar. Isso continua igual, e é o que evita resposta automática por acidente enquanto você monta a instalação.
+
+  O que muda é o esquecimento. Se o canal ficar três dias ligado, em modo de teste e sem nenhum número autorizado, abre um aviso na Central dizendo que a IA não responde a ninguém nele e o que fazer em Conexões. Antes, o sintoma era o pior possível: as mensagens chegavam no Inbox, tudo parecia funcionar, e a IA simplesmente nunca respondia — quem instalou concluía que o produto estava quebrado, não que faltava um clique.
+
+  O aviso se resolve sozinho quando deixa de ser verdade: o canal ganhou número autorizado, foi aberto ao público ou foi arquivado. Quem já tem os canais configurados não vê aviso nenhum.
+
+  Construído sobre o modo de teste do WhatsApp, de @rafaelcesardev (#599).
+
+- **As etiquetas ganham cor — e o filtro passa a mostrar a mesma cor que a lista** A tela Configurações › Tags passa a deixar você escolher a COR de cada etiqueta, numa paleta de oito tons. A paleta não foi escolhida a olho: cada tom foi medido contra os outros, inclusive para quem tem daltonismo, e o texto de dentro do marcador é escolhido pelo contraste — cor não deixa etiqueta ilegível.
+
+  A cor aparece onde a etiqueta aparece: na lista de conversas, no painel lateral do atendimento, na lista e na ficha do contato, no funil e no filtro de etiqueta das três telas, que agora mostra um ponto da mesma cor antes do nome. Numa fila de duzentas conversas é a cor que faz achar "reclamação" antes de ler o texto — e é ela que denuncia a duplicata de vocabulário ("orçamento" e "orçamento novo" em dois tons do mesmo verde) que o número de uso sozinho não mostra.
+
+  Nada muda para as etiquetas que você não pintar: elas continuam exatamente como estavam. E escolher cor para uma etiqueta que ainda não estava no vocabulário (uma que existe só porque alguém escreveu no contato, por exemplo) passa a trazê-la para o vocabulário curado — é o efeito de decidir como ela deve aparecer.
+
+  A cor também aparece na hora de ESCOLHER a etiqueta: as sugestões dos editores e a ação em massa do funil mostram o ponto da mesma cor. E a tela de Tags ficou à prova de dado torto: se o campo de etiquetas da organização tiver um valor que não é lista, renomear e pintar não derrubam mais a tela — a primeira alteração que você fizer conserta o campo.
+
+  Crédito: @webtecnica.
+
+- **O atendente na DeepSeek pode parar de "pensar" antes de responder** A DeepSeek, por padrão, escreve um raciocínio interno antes de cada resposta — e cobra
+  cada palavra dele como texto de saída. Em conversas longas isso pesa: medimos o turno do
+  atendente gastando cerca de oito vezes mais saída do que com a OpenAI e demorando mais
+  para responder, o que anulava a economia do preço mais barato.
+
+  Agora quem cuida do servidor pode desligar esse raciocínio com
+  `DEEPSEEK_THINKING=disabled` no `.env`. Sem configurar nada, tudo segue como está: o
+  raciocínio continua ligado. A mudança vale só para a DeepSeek — Anthropic, OpenAI, Google
+  e OpenRouter não são afetadas.
+
+  Contribuição de @deskcommopp4s-cmd (#1275).
+
+- **Um comando tira esta instalação do Docker sem encostar no resto do servidor** Tirar o CRM de uma VPS era trabalho manual, e o atalho que todo mundo conhece — `docker system
+  prune -a` — é o errado: numa VPS que hospeda mais de uma coisa, ele leva junto containers, volumes
+  e imagens de aplicações que ninguém pediu para apagar.
+
+  Agora existe `desinstalar_docker.sh`, na raiz do repositório. Ele descobre o projeto pelo label que
+  o Docker Compose grava e remove **apenas** os containers, os volumes e as redes internas deste
+  projeto. Ficam intactos: as outras aplicações do mesmo servidor, as imagens, o cache de build, a
+  rede externa do proxy reverso, o código, o `.env`, os backups e um Supabase externo.
+
+  Antes de remover qualquer coisa, o script mostra o daemon escolhido, o nome do projeto, o diretório
+  da instalação e quantos containers, volumes e redes encontrou — e pede que você digite
+  `REMOVER-<nome-do-projeto>` para confirmar. Em rotina automatizada, `--force` pula a pergunta; se a
+  instalação usa um `COMPOSE_PROJECT_NAME` personalizado que não está mais no `.env`, `--project-name`
+  diz qual é. Quando duas cópias do repositório dividem o mesmo nome de projeto e a outra ainda existe
+  no disco, o script para e manda rodar a partir dela, em vez de assumir que os recursos são seus.
+
+  Os volumes incluem as sessões locais do WhatsApp: rode `backup.sh` antes se precisar preservá-las.
+  Quem não executar o script não tem nada a fazer — nenhuma variável nova, nenhum passo na
+  atualização.
+
+  Trabalho de @betoarts, recortado do #714.
+
+- **Funil arquivado agora tem caminho de volta — dá para ver, tirar do arquivo e excluir** Arquivar um funil era via de mão única: ele sumia da lista de Funis e não havia onde vê-lo de novo, trazê-lo de volta nem excluí-lo. Quem arquivou por engano ficava com um funil invisível, indestrutível, e ainda com o nome dele ocupado — criar outro com o mesmo nome era recusado por um funil que ninguém conseguia enxergar. Agora a tela de Funis tem uma gaveta "Funis arquivados", fechada por padrão e visível para quem gerencia: de lá dá para tirar o funil do arquivo (ele volta para a lista e recebe negócio outra vez) ou excluí-lo de vez. A exclusão continua valendo só para o funil que nunca recebeu negócio, com formulário ou automação apontando para ele; nos outros casos o sistema recusa explicando, e o funil continua arquivado. A lista de funis do dia a dia e os seletores de destino continuam mostrando só os funis vivos. Você não precisa fazer nada.
+
+  A pedido de @rafaelbatistazz, que mediu o defeito na issue #979 e escreveu os testes que definem o conserto (#988).
+
+- **A DeepSeek entra como empresa de inteligência artificial do atendente** A DeepSeek agora aparece na lista de empresas de IA, junto de Anthropic, OpenAI, Google e
+  OpenRouter. Dá para cadastrar a chave em "IA › Credenciais" ou no passo de treinar durante a
+  instalação, escolher o modelo na tela do assistente e publicar — o agente atende pela DeepSeek
+  do mesmo jeito que atende pelas outras, com ferramentas (cria o lead, move o card) e com a
+  mesma conferência de chave ao cadastrar.
+
+  A vantagem dela é o custo: além de ser barata por token, a DeepSeek desconta sozinha o trecho
+  repetido da conversa (as instruções do assistente que não mudam), sem você configurar nada. Em
+  um atendimento com roteiro fixo isso baixa a conta de entrada sem perder qualidade.
+
+  Os modelos disponíveis vêm prontos no catálogo (`DeepSeek Flash`, para volume, e `DeepSeek V4
+  Pro`, para conversas que exigem raciocínio) e a tela escolhe o mais barato que dá conta quando
+  você deixa em branco. Nada muda nas instalações que já usam outro provedor: a opção nasce
+  disponível, não ligada.
+
+  Contribuição de @deskcommopp4s-cmd (#1275).
+
+- **Um sistema externo pode criar empresas no CRM, se o dono da instalação ligar** Nova rota `POST /api/v1/tenants/provision`: um sistema de fora cria uma empresa no CRM, com a pessoa dona e uma chave de API para operá-la (com permissão de atendente), sem passar pela tela de cadastro. Repetir o pedido para a mesma empresa não cria outra: devolve a mesma empresa e uma chave nova, e a anterior deixa de valer. Se o e-mail da pessoa dona já tem conta nesta instalação, o pedido é recusado e nada é criado — quem quer essa pessoa numa empresa a convida pela tela da empresa (decisão do dono, 19/09). E se um pedido falhar no meio (o banco fora do ar por um instante, por exemplo), basta o sistema de fora repetir: ele retoma de onde parou e conclui o cadastro — a empresa criada **e** a pessoa dona com acesso a ela —, em vez de ficar dizendo para sempre que aquele e-mail já tem conta, ou de responder "está tudo certo" sobre uma empresa em que ninguém consegue entrar.
+
+  Ela vem **desligada**. Só existe quando o dono da instalação define `TENANT_PROVISIONING_SECRET` no `.env`, com 32 caracteres ou mais (`openssl rand -hex 32`), e entrega esse segredo ao sistema que vai criar empresas. Sem ele, nada muda e a rota responde como se não existisse.
+
+  Contribuição de @faxamkt (#1008).
+
+### Corrigido
+
+- **Se alguma peça do banco não voltar depois da atualização, você fica sabendo** A atualização pausa alguns serviços enquanto mexe no banco e os devolve no fim. **Numa instalação real, eles não voltaram** — e a atualização mesmo assim disse "concluída com sucesso". O sistema ficou sem ler nem gravar até alguém perceber.
+
+  O motivo de ninguém ter percebido é o de sempre por aqui: a volta era **muda**. Se falhasse, não sobrava rastro nenhum.
+
+  Agora ela confere peça por peça, tenta uma segunda vez, e — se ainda faltar alguma — **avisa em vermelho, dizendo o nome de cada uma** e o comando para subir à mão.
+
+  E o aviso não toca à toa: quando tudo volta, ele fica calado. Alarme que dispara sem motivo ensina quem opera a ignorar o alarme de verdade.
+
+  *(A causa de as peças não terem voltado naquela vez segue desconhecida. O que este ajuste garante é que uma próxima vez não passe despercebida.)*
+
+  Trabalho de @paulolimajr77, recortado do #803.
+
+- **A atualização confere as regras de acesso do banco antes de dizer que deu certo** A atualização mexe nas regras que separam uma empresa da outra dentro do banco. Se uma delas sumisse no caminho, o sistema voltava dizendo "concluída com sucesso" e as telas apareciam **vazias** — sem erro nenhum, indistinguível de "não há nada aqui". Custou um dia inteiro numa instalação real, com o funil vazio.
+
+  Agora a atualização **confere as regras uma a uma** no fim e diz quantas encontrou. Se faltar alguma, ela **não sobe o sistema** e diz exatamente quais faltam: um sistema fora do ar é um problema visível que se resolve em minutos; um sistema no ar sem essas regras não parece problema nenhum.
+
+  Durante a parte do banco, o sistema fica parado por alguns segundos — é isso que impede a regra de sumir.
+
+  Trabalho de @paulolimajr77, recortado do #803.
+
+- **O aviso de manutenção deixa de cegar a própria atualização** O aviso que aparece durante a atualização assumia a porta **inteira** — inclusive a conversa que o próprio atualizador tem com o sistema para dizer em que passo está. Ele recebia a página de volta, em vez de uma resposta, e ficava mudo justamente na janela que precisa narrar.
+
+  Agora o aviso responde a **pessoa** com a página e a **máquina** com uma resposta curta de "indisponível". A tela de atualização volta a contar o andamento.
+
+  Medido na instalação real antes do conserto: 18 KB de página dentro do registro de erro do atualizador, a cada atualização.
+
+  Trabalho de @paulolimajr77, recortado do #803.
+
+- **A conta que mantém o aviso de tempo funcionando ficou escrita ao lado do número** O aviso que a verificação automática dá quando uma parte dela passa do tempo
+  previsto depende de uma folga de poucos segundos para conseguir ser escrito
+  antes de a rodada ser encerrada. Essa folga existia e estava correta, mas o
+  número que a sustenta só existia numa conversa — então quem ajustasse a margem
+  no futuro poderia calar o aviso sem perceber.
+
+  Agora a medição está escrita ao lado da constante, com a conta refeita e o
+  limite mínimo declarado.
+
+  Para quem opera um servidor, nada muda: isto acontece inteiramente na esteira de
+  verificação do projeto, antes de qualquer versão ser publicada.
+
+  Crédito da medição: @webtecnica (#1056).
+
+- **O aviso de versão nova só aparece quando ela está pronta para instalar** A tela oferecia a versão nova **antes de ela estar pronta para instalar**. O aviso saía assim que a versão era publicada, mas o pacote que a VPS precisa baixar leva mais uns minutos para ficar pronto.
+
+  Quem clicava nessa janela via a atualização parar no meio.
+
+  Agora o sistema **pergunta se há o que baixar** antes de oferecer. E se a VPS estiver sem acesso ao registro, ele **continua oferecendo**: deixar de oferecer para sempre, em silêncio, por causa de um problema de rede seria pior.
+
+  Trabalho de @paulolimajr77, recortado do #803.
+
 ## [1.38.0] — 2026-09-19
 
 ### Adicionado
@@ -6471,7 +6649,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.38.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.40.0...HEAD
+[1.40.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.39.0...v1.40.0
+[1.39.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.38.0...v1.39.0
 [1.38.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.37.0...v1.38.0
 [1.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.36.0...v1.37.0
 [1.36.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.35.1...v1.36.0

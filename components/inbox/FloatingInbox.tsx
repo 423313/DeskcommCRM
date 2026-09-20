@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePecaDoRodape, type PecaDoRodape } from "@/lib/ui/rodape-ocupado";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
@@ -30,6 +31,30 @@ import type { Message } from "@/lib/types/messaging";
 const ChatThread = dynamic(() => import("./ChatThread").then((m) => m.ChatThread));
 const Composer = dynamic(() => import("./Composer").then((m) => m.Composer));
 
+/**
+ * O QUE ESTE ATALHO OCUPA DO RODAPÉ — e é por aqui, e só por aqui, que a casca
+ * sabe disso.
+ *
+ * A conta é a do CSS daqui: `distancia: 16` é o `bottom-4` do estado
+ * permanente, e `altura: 56` é o `h-14` do gatilho — o que fica visível com o
+ * painel fechado. São PISOS: `usePecaDoRodape` mede a caixa real e só aumenta.
+ *
+ * O `bottom-24` de quando há chamada de voz fica de fora de propósito: nesse
+ * estado o canto já é do `ActiveCallPanel`, que declara a peça dele, e o
+ * contrato reserva o MAIOR alcance — peças no mesmo canto não se somam.
+ *
+ * Por que a declaração mora junto do componente: quem desmonta o atalho
+ * desmonta o registro no mesmo ato, porque é o mesmo objeto. Enquanto a reserva
+ * era um `pb-20` escrito na casca, a guarda de rota tirava o aside e DEIXAVA o
+ * padding — e no Inbox, que tem grid de altura fixa, isso não sobrava espaço:
+ * rolava a tela, com o campo de envio abaixo da dobra.
+ */
+export const ATALHO_DE_MENSAGENS: PecaDoRodape = {
+  dono: "components/inbox/FloatingInbox.tsx",
+  distancia: 16,
+  altura: 56,
+};
+
 /** Mounted in the authenticated shell: navigation does not destroy the draft. */
 export function FloatingInbox() {
   const { activeOrg, user } = useAuth();
@@ -45,6 +70,7 @@ export function FloatingInbox() {
 function InboxDock({ orgId }: { orgId: string }) {
   const t = useT();
   const { call, minha } = useVoiceCall();
+  const ancora = usePecaDoRodape(ATALHO_DE_MENSAGENS);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, { text: string; mode: "reply" | "note" }>>(
@@ -86,6 +112,7 @@ function InboxDock({ orgId }: { orgId: string }) {
   }
   return (
     <aside
+      ref={ancora}
       aria-label={t("Mensagens rápidas")}
       className={cn(
         "fixed right-4 z-40 max-w-[calc(100vw-2rem)]",

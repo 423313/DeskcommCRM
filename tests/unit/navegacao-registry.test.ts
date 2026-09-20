@@ -112,6 +112,12 @@ describe("sidebarGroups", () => {
     // A lista é EXATA de propósito. `toContain` deixaria um sexto item entrar
     // calado no sidebar e reabrir a mesma corrida por pixel.
     //
+    // Comandas NÃO entra: ela chegou pedindo a quarta linha, e o e2e mediu o
+    // menu rolando em 1280×900 — a mesma corrida por pixel que o hub existe
+    // para encerrar. Ela mora dentro do hub, em "O dia a dia da venda", que é
+    // onde o grupo com hub recebe tela nova (ver o comentário no destino, em
+    // lib/navigation/catalogo.ts).
+
     // `/app/prospecting` NÃO está aqui, e a ausência é decisão, não esquecimento:
     // a tela existe e é alcançável pelo hub e pelo ⌘K, mas o menu já está no
     // limite — com ela seriam 20 portas e o e2e reprova por scroll em 900px. A
@@ -123,6 +129,10 @@ describe("sidebarGroups", () => {
       "/app/contacts",
       "/app/tasks",
     ]);
+    // E continua alcançável: o hub é a porta dela.
+    expect(
+      hubSections("crm", true, null).flatMap((s) => s.items.map((i) => i.href)),
+    ).toContain("/app/comandas");
     expect(NAV_GROUPS.find((g) => g.id === "crm")?.hub?.href).toBe("/app/crm");
   });
 
@@ -159,6 +169,7 @@ describe("hubSections", () => {
       "/app/kanban",
       "/app/contacts",
       "/app/tasks",
+      "/app/comandas",
       "/app/products",
       "/app/settings/tenant/pipelines",
     ]);

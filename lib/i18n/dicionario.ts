@@ -314,6 +314,45 @@ export const DICIONARIO: Traducoes = {
   // PACOTES (lib/mcp/tools/pacotes.ts) — rótulo/explicação dos pacotes de
   // capacidade na tela de criar/editar agente (ToolPicker.tsx).
   "Atender e responder": { es: "Atender y responder" },
+
+  // Painel de configuração da instalação (migration 0341) — os motivos pelos
+  // quais uma chave NÃO é editável pela tela. São valores de uma tabela de
+  // rótulo (`MOTIVO_CURTO`), então o teste de cobertura exige TODOS os valores
+  // que a expressão pode assumir, não só os que aparecem hoje.
+  "Necessária para o sistema ligar": { es: "Necesaria para que el sistema arranque" },
+  "É a chave que protege as outras": { es: "Es la clave que protege a las demás" },
+  "Gravada quando o programa foi montado": { es: "Grabada cuando se compiló el programa" },
+  "Tem um par em outro programa do servidor": {
+    es: "Tiene un par en otro programa del servidor",
+  },
+  "Lida por outro programa ao ligar": { es: "La lee otro programa al arrancar" },
+
+  // Painel de configuração da instalação — a tela, o formulário e a porta do
+  // modo administrador no menu do usuário.
+  "Configuração da instalação": { es: "Configuración de la instalación" },
+  "O que este servidor precisa saber para funcionar. O que dá para trocar aqui, você troca e vale na hora — sem mexer no servidor.":
+    {
+      es: "Lo que este servidor necesita saber para funcionar. Lo que se puede cambiar aquí, lo cambias y vale al instante — sin tocar el servidor.",
+    },
+  "Modo administrador": { es: "Modo administrador" },
+  "Configurar este servidor": { es: "Configurar este servidor" },
+  "Não configurado": { es: "Sin configurar" },
+  "Definido aqui nesta tela": { es: "Definido aquí, en esta pantalla" },
+  "Vem do arquivo de instalação do servidor": {
+    es: "Viene del archivo de instalación del servidor",
+  },
+  "Pronto, já está valendo.": { es: "Listo, ya está en vigor." },
+  "Voltou para o valor do arquivo de instalação.": {
+    es: "Volvió al valor del archivo de instalación.",
+  },
+  "Guardado, terminando em": { es: "Guardado, termina en" },
+  "Agora:": { es: "Ahora:" },
+  "Escreva para substituir": { es: "Escribe para reemplazar" },
+  "Escreva para configurar": { es: "Escribe para configurar" },
+  "Voltar ao padrão": { es: "Volver al valor por defecto" },
+  "Não se troca por aqui": { es: "No se cambia por aquí" },
+  "ocultar": { es: "ocultar" },
+  "por quê?": { es: "¿por qué?" },
   "O agente lê a conversa, entende o histórico e responde ao cliente sem pedir que ele repita o que já disse.": {
     es: "El agente lee la conversación, entiende el historial y responde al cliente sin pedirle que repita lo que ya dijo.",
   },
@@ -720,6 +759,35 @@ export const DICIONARIO: Traducoes = {
   "Um atendimento espera decisão da equipe": { es: "Una atención espera decisión del equipo" },
   "Soltar o horário de um pedido não confirmado após (minutos)": { es: "Liberar el horario de una solicitud no confirmada después de (minutos)" },
   "Vale só para tipos de atendimento que pedem confirmação. Enquanto o pedido espera, o horário fica reservado e ninguém mais o pega; passado o prazo sem decisão, ele volta a ser oferecido. O cliente não é avisado, e o pedido continua na fila.": { es: "Vale solo para tipos de atención que piden confirmación. Mientras la solicitud espera, el horario queda reservado y nadie más lo toma; pasado el plazo sin decisión, vuelve a ofrecerse. El cliente no recibe aviso, y la solicitud sigue en la fila." },
+  Financeiro: { es: "Finanzas" },
+  "Onde o dinheiro fica, como o cliente paga e como cada lançamento é classificado.": { es: "Donde queda el dinero, cómo paga el cliente y cómo se clasifica cada movimiento." },
+  "conta removida": { es: "cuenta eliminada" },
+  "Contas": { es: "Cuentas" },
+  "Onde o dinheiro fica. O saldo que aparece nos relatórios é sempre somado dos lançamentos — o valor aqui é só o ponto de partida.": { es: "Donde queda el dinero. El saldo que aparece en los informes siempre se suma de los movimientos — el valor aquí es solo el punto de partida." },
+  "Nome da conta": { es: "Nombre de la cuenta" },
+  "Ex.: Caixa": { es: "Ej.: Caja" },
+  "Tipo da conta": { es: "Tipo de cuenta" },
+  "Adicionar conta": { es: "Agregar cuenta" },
+  "Nenhuma conta cadastrada.": { es: "Ninguna cuenta registrada." },
+  "Formas de pagamento": { es: "Formas de pago" },
+  "Como o cliente paga. A conta escolhida aqui é onde esse dinheiro entra quando a comanda é fechada.": { es: "Cómo paga el cliente. La cuenta elegida aquí es donde entra ese dinero cuando se cierra la comanda." },
+  "Nome da forma de pagamento": { es: "Nombre de la forma de pago" },
+  "Ex.: Pix": { es: "Ej.: Pix" },
+  "Conta de destino": { es: "Cuenta de destino" },
+  "Decidir depois": { es: "Decidir después" },
+  "Adicionar forma": { es: "Agregar forma" },
+  "Nenhuma forma de pagamento cadastrada.": { es: "Ninguna forma de pago registrada." },
+  "sem conta definida": { es: "sin cuenta definida" },
+  "Plano de contas": { es: "Plan de cuentas" },
+  "Como cada lançamento é classificado. Entrada e saída são coisas diferentes.": { es: "Cómo se clasifica cada movimiento. Entrada y salida son cosas distintas." },
+  "Nome do plano de contas": { es: "Nombre del plan de cuentas" },
+  "Ex.: Serviços": { es: "Ej.: Servicios" },
+  "Entrada ou saída": { es: "Entrada o salida" },
+  "Entrada ou saída?": { es: "¿Entrada o salida?" },
+  "Entrada": { es: "Entrada" },
+  "Saída": { es: "Salida" },
+  "Adicionar plano": { es: "Agregar plan" },
+  "Nenhum plano de contas cadastrado.": { es: "Ningún plan de cuentas registrado." },
 
   // ─── Navegação (a barra lateral, presente em toda tela) ───
   Inbox: { es: "Inbox" },
@@ -1350,6 +1418,7 @@ export const DICIONARIO: Traducoes = {
   "Um de cada vez por conversa": { es: "Una a la vez por conversación" },
   "Um de cada vez por cliente": { es: "Una a la vez por cliente" },
   "Só atender em horário de funcionamento": { es: "Solo atender en horario de funcionamiento" },
+  "Só enviar follow-up nestes horários": { es: "Solo enviar seguimiento en estos horarios" },
   Início: { es: "Inicio" },
   Fim: { es: "Fin" },
   Dias: { es: "Días" },
@@ -2412,6 +2481,15 @@ export const DICIONARIO: Traducoes = {
   "Consultas aos seus materiais": { es: "Consultas a tus materiales" },
   "Conteúdo da": { es: "Contenido de la" },
   "Conversas encaminhadas": { es: "Conversaciones encaminadas" },
+  "O atendimento desta conversa mudou depois que o link foi criado. Escolha a conversa atual e autorize o envio de novo.": { es: "La atención de esta conversación cambió después de crearse el enlace. Elige la conversación actual y autoriza el envío de nuevo." },
+  "Este cliente está sendo atendido neste instante. Espere alguns segundos e tente de novo.": { es: "Este cliente está siendo atendido en este momento. Espera unos segundos e inténtalo de nuevo." },
+  "Este compromisso mudou enquanto a tela estava aberta. Atualize a página e tente de novo.": { es: "Este compromiso cambió mientras la pantalla estaba abierta. Actualiza la página e inténtalo de nuevo." },
+  "O Google e o CRM discordam sobre este compromisso. Resolva a diferença antes de enviar o link.": { es: "Google y el CRM no coinciden sobre este compromiso. Resuelve la diferencia antes de enviar el enlace." },
+  "Esta conversa não pode receber o link: ela é de outro contato, é um grupo, ou você não tem acesso a ela.": { es: "Esta conversación no puede recibir el enlace: es de otro contacto, es un grupo, o no tienes acceso a ella." },
+  "Confirme a verificação em duas etapas nesta sessão para enviar o link.": { es: "Confirma la verificación en dos pasos en esta sesión para enviar el enlace." },
+  "Só quem é responsável pelo compromisso pode enviar o link dele.": { es: "Solo quien es responsable del compromiso puede enviar su enlace." },
+  "Ação desconhecida para o link do Meet.": { es: "Acción desconocida para el enlace de Meet." },
+  "Não foi possível registrar a ação. O motivo ficou registrado no servidor com o identificador abaixo.": { es: "No se pudo registrar la acción. El motivo quedó registrado en el servidor con el identificador de abajo." },
   "Custo da IA no período": { es: "Costo de la IA en el período" },
   "Custo no período": { es: "Costo en el período" },
   // ── Administração › Destinos internos (decisão 22-d, #1004) ──────────────
@@ -4377,6 +4455,9 @@ export const DICIONARIO: Traducoes = {
   "Belém (Brasil)": { es: "Belém (Brasil)" },
   "Recife (Brasil)": { es: "Recife (Brasil)" },
   "Fortaleza (Brasil)": { es: "Fortaleza (Brasil)" },
+  "Luanda (Angola)": { es: "Luanda (Angola)" },
+  "Lisboa (Portugal)": { es: "Lisboa (Portugal)" },
+  UTC: { es: "UTC" },
   // ─── Idiomas de definição de template (canal parceiro) ───
   Espanhol: { es: "Español" },
   "Espanhol (Argentina)": { es: "Español (Argentina)" },
@@ -6621,6 +6702,15 @@ export const DICIONARIO: Traducoes = {
     es: "Sale de esta lista y deja de recibir negocio nuevo. El historial se conserva, y nada se borra.",
   },
   "Excluir de vez": { es: "Eliminar definitivamente" },
+  // A gaveta do arquivo (#979) — a porta de volta do funil arquivado.
+  "Funis arquivados": { es: "Embudos archivados" },
+  "Tirar do arquivo": { es: "Sacar del archivo" },
+  "Funil arquivado não aparece na lista nem recebe negócio novo. Traga de volta para usar outra vez, ou exclua de vez para liberar o nome.": {
+    es: "El embudo archivado no aparece en la lista ni recibe negocio nuevo. Tráelo de vuelta para usarlo otra vez, o elimínalo definitivamente para liberar el nombre.",
+  },
+  "Isso não tem volta: o funil e as etapas dele somem. Se ele já recebeu negócio, a exclusão é recusada e ele continua arquivado.": {
+    es: "Esto no tiene vuelta atrás: el embudo y sus etapas desaparecen. Si ya recibió negocio, la eliminación se rechaza y sigue archivado.",
+  },
   "Novo Lead": { es: "Nuevo Lead" },
   "Não consegui carregar este funil:": { es: "No pude cargar este embudo:" },
   "sem responsável.": { es: "sin responsable." },
@@ -6987,6 +7077,115 @@ export const DICIONARIO: Traducoes = {
   "Quem atende": { es: "Quién atiende" },
   "O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.": { es: "Qué se puede agendar, cuánto dura y quién atiende. Esto es lo que la pantalla de agendar y el agente de IA le ofrecen al cliente." },
   "Avisar o cliente antes do compromisso, pelo WhatsApp": { es: "Avisar al cliente antes de la cita, por WhatsApp" },
+  "Lançamentos do período": { es: "Asientos del período" },
+  "Data": { es: "Fecha" },
+  "Já pago": { es: "Ya pagado" },
+  "Lançar": { es: "Registrar" },
+  "Nenhum lançamento no período.": { es: "Ningún asiento en el período." },
+  "de comanda": { es: "de comanda" },
+  "pago": { es: "pagado" },
+  "Pagar": { es: "Pagar" },
+  "Remover lançamento": { es: "Quitar asiento" },
+  "Comissão": { es: "Comisión" },
+  "Quanto cada pessoa recebe por atendimento. Sem regra, a comissão é zero.": {
+    es: "Cuánto recibe cada persona por atención. Sin regla, la comisión es cero.",
+  },
+  "A regra mais específica vence: pessoa e serviço vence pessoa, que vence serviço. Não é o maior percentual que ganha.": {
+    es: "Gana la regla más específica: persona y servicio vence a persona, que vence a servicio. No gana el porcentaje más alto.",
+  },
+  "Pessoa": { es: "Persona" },
+  "Qualquer pessoa": { es: "Cualquier persona" },
+  "Qualquer serviço": { es: "Cualquier servicio" },
+  "Percentual": { es: "Porcentaje" },
+  "Adicionar regra": { es: "Agregar regla" },
+  "Escolha ao menos uma pessoa ou um serviço.": {
+    es: "Elige al menos una persona o un servicio.",
+  },
+  "Nenhuma regra de comissão. Todo item entra com zero.": {
+    es: "Ninguna regla de comisión. Todo ítem entra con cero.",
+  },
+  "Remover regra": { es: "Quitar regla" },
+  "alguém": { es: "alguien" },
+  "um serviço": { es: "un servicio" },
+  "Pontos de fidelidade": { es: "Puntos de fidelidad" },
+  "ponto(s)": { es: "punto(s)" },
+  "Serviços que mais faturaram": { es: "Servicios que más facturaron" },
+  "Nenhum item no período.": { es: "Ningún ítem en el período." },
+  "Clientes que mais gastaram": { es: "Clientes que más gastaron" },
+  "Nenhum cliente no período.": { es: "Ningún cliente en el período." },
+  "Todo mês": { es: "Todos los meses" },
+  "Aluguel, internet, contador. O sistema abre a conta no dia certo.": {
+    es: "Alquiler, internet, contador. El sistema abre la cuenta el día correcto.",
+  },
+  "Nasce como conta a pagar, nunca como paga: o sistema sabe que vence, não sabe se você pagou.": {
+    es: "Nace como cuenta por pagar, nunca como pagada: el sistema sabe que vence, no sabe si pagaste.",
+  },
+  "Nome do lançamento": { es: "Nombre del asiento" },
+  "Ex.: Aluguel": { es: "Ej.: Alquiler" },
+  "Escolha a conta": { es: "Elige la cuenta" },
+  "Dia do mês": { es: "Día del mes" },
+  "Nos meses mais curtos, cai no último dia do mês.": {
+    es: "En los meses más cortos, cae en el último día del mes.",
+  },
+  "Nenhum lançamento recorrente.": { es: "Ningún asiento recurrente." },
+  "Remover lançamento recorrente": { es: "Quitar asiento recurrente" },
+  "Preço padrão": { es: "Precio estándar" },
+  "digite na hora": { es: "escribe en el momento" },
+  "Opcional. Vira o valor sugerido na comanda, e pode ser mudado lá.": {
+    es: "Opcional. Es el valor sugerido en la comanda, y se puede cambiar allí.",
+  },
+  "Atendimentos sem comanda": { es: "Atenciones sin comanda" },
+  "Já aconteceram e ninguém faturou. Marque o que quer cobrar.": {
+    es: "Ya ocurrieron y nadie facturó. Marca lo que quieres cobrar.",
+  },
+  "sem preço no serviço": { es: "sin precio en el servicio" },
+  "Faturar": { es: "Facturar" },
+  "Faturamento": { es: "Facturación" },
+  "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.": {
+    es: "Cuánto entró, de qué forma, y cuánto tiene que recibir cada persona.",
+  },
+  "Não foi possível carregar o período.": { es: "No se pudo cargar el período." },
+  "Entrou": { es: "Entró" },
+  "Saiu": { es: "Salió" },
+  "Saldo": { es: "Saldo" },
+  "Ticket médio": { es: "Ticket promedio" },
+  "comanda(s) finalizada(s)": { es: "comanda(s) finalizada(s)" },
+  "estornada(s)": { es: "anulada(s)" },
+  "faturado": { es: "facturado" },
+  "O faturado soma comandas; o que entrou soma lançamentos pagos. Os dois não precisam bater.": {
+    es: "Lo facturado suma comandas; lo que entró suma asientos pagados. No tienen por qué coincidir.",
+  },
+  "Por forma de pagamento": { es: "Por forma de pago" },
+  "Nenhuma comanda no período.": { es: "Ninguna comanda en el período." },
+  "Comissão por pessoa": { es: "Comisión por persona" },
+  "Nenhuma comissão no período.": { es: "Ninguna comisión en el período." },
+  "Comandas": { es: "Comandas" },
+  "Comanda": { es: "Comanda" },
+  "Finalizada": { es: "Finalizada" },
+  "Regra de comissão": { es: "Regla de comisión" },
+  "Lançamento recorrente": { es: "Asiento recurrente" },
+  "O que foi feito, por quem, e quanto o cliente paga.": {
+    es: "Lo que se hizo, por quién, y cuánto paga el cliente.",
+  },
+  "Nova comanda": { es: "Nueva comanda" },
+  "Nenhuma comanda ainda.": { es: "Todavía no hay comandas." },
+  "Escolha uma comanda à esquerda.": { es: "Elige una comanda a la izquierda." },
+  "estornada": { es: "anulada" },
+  "comissão": { es: "comisión" },
+  "Remover item": { es: "Quitar ítem" },
+  "Total": { es: "Total" },
+  "Serviço": { es: "Servicio" },
+  "Avulso": { es: "Suelto" },
+  "Incluir": { es: "Agregar" },
+  "Forma de pagamento": { es: "Forma de pago" },
+  "Escolha": { es: "Elige" },
+  "Finalizar": { es: "Finalizar" },
+  "Cancelar comanda": { es: "Cancelar comanda" },
+  "Esta forma de pagamento ainda não tem conta de destino. Defina em Configurações › Financeiro.": {
+    es: "Esta forma de pago todavía no tiene cuenta de destino. Defínela en Configuración › Financiero.",
+  },
+  "Motivo do estorno": { es: "Motivo de la anulación" },
+  "Estornar": { es: "Anular" },
   "Quantos minutos antes": { es: "Cuántos minutos antes" },
   "E de novo, quantos minutos antes": { es: "Y de nuevo, cuántos minutos antes" },
   "Opcional. Até 3, separados por vírgula. Ex.: 180 avisa de novo 3 horas antes.": {
@@ -9771,6 +9970,31 @@ export const DICIONARIO: Traducoes = {
   // As frases de recusa do servidor. Três delas não tinham entrada: o argumento
   // de `t()` ali é uma expressão `??`, que o guarda também não resolve.
   "Confira a etiqueta e o novo nome.": { es: "Revisa la etiqueta y el nombre nuevo." },
+  // ── A COR DA ETIQUETA (fatia S6 da #1271) ─────────────────────────────────
+  //
+  // Os oito tons têm NOME além de cor, e é de propósito: quem não distingue
+  // matiz — ou está com o brilho no mínimo, ou usa leitor de tela — escolhe e
+  // reconhece por "Âmbar"/"Roxo". A fileira de tons é a única escolha de cor do
+  // produto, e sem estas entradas ela sairia MUDA para quem escolheu espanhol.
+  //
+  // `"Cor"` NÃO entra aqui: a chave já existe no arquivo (linha ~3312, do
+  // seletor de cor da marca) e repeti-la é TS1117 no `as const` do dicionário.
+  "Confira a etiqueta, o novo nome e a cor.": {
+    es: "Revisa la etiqueta, el nombre nuevo y el color.",
+  },
+  "Cor da etiqueta": { es: "Color de la etiqueta" },
+  "nas listas e nos filtros:": { es: "en las listas y en los filtros:" },
+  "Sem cor": { es: "Sin color" },
+  "Prévia:": { es: "Vista previa:" },
+  "Cor da etiqueta atualizada.": { es: "Color de la etiqueta actualizado." },
+  Amarelo: { es: "Amarillo" },
+  Âmbar: { es: "Ámbar" },
+  Vermelho: { es: "Rojo" },
+  "Verde-água": { es: "Verde agua" },
+  Azul: { es: "Azul" },
+  Índigo: { es: "Índigo" },
+  Roxo: { es: "Morado" },
+  Cinza: { es: "Gris" },
   "Só um gerente ou administrador da organização pode mudar as etiquetas.": {
     es: "Solo un gerente o administrador de la organización puede cambiar las etiquetas.",
   },

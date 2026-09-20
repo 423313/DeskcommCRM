@@ -12,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
+import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
@@ -285,7 +287,18 @@ export function InboxFilters({ value, onChange }: Props) {
                   )}
                   aria-label={t("Filtrar por tag")}
                 >
-                  <SelectValue placeholder={t("Todas as tags")} />
+                  {/* O gatilho mostra o CHIP da etiqueta filtrada, e não o texto
+                      cru: é a mesma cor que a lista mostra ao lado, e é o que
+                      faz o filtro ativo se reconhecer de relance — mesma razão
+                      do `border-accent` acima. Sem filtro, o texto continua
+                      sendo o de sempre (`Todas as tags`). */}
+                  <SelectValue placeholder={t("Todas as tags")}>
+                    {value.tag ? (
+                      <ChipDeEtiqueta tag={value.tag} className="h-5 px-1.5 text-[11px]" />
+                    ) : (
+                      t("Todas as tags")
+                    )}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("Todas as tags")}</SelectItem>
@@ -297,7 +310,14 @@ export function InboxFilters({ value, onChange }: Props) {
                     ...(tagForaDoVocabulario && value.tag ? [value.tag] : []),
                   ].map((tag) => (
                     <SelectItem key={tag} value={tag}>
-                      {tag}
+                      {/* Ponto, não chip: a opção é uma linha de 280 px que já
+                          divide espaço com o filtro de número. O nome continua
+                          sendo o que se lê; a cor só acelera o reconhecimento
+                          de quem já conhece o vocabulário da operação. */}
+                      <span className="inline-flex items-center gap-2">
+                        <PontoDaEtiqueta tag={tag} />
+                        {tag}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

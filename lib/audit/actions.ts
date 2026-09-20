@@ -366,6 +366,17 @@ export const AUDIT_ACTIONS = [
   // (nenhum handler o consumiria — ver register-handlers.ts) e a troca não
   // deixa rastro em nenhuma outra tabela.
   "platform.signup_mode_updated",
+  // Configuração da INSTALAÇÃO trocada pela tela (migration 0341): credencial de
+  // e-mail, remetente, contatos. Auditável pelo mesmo motivo das vizinhas — é
+  // mutação de plataforma, sem `organization_id`, e "por que parou de enviar
+  // e-mail?" só tem resposta aqui.
+  //
+  // ⚠️ O VALOR NUNCA ENTRA NO metadata, e isto não é zelo: `api_audit_log` é
+  // append-only por schema (nenhum papel tem GRANT de UPDATE/DELETE, nem o
+  // `service_role`), então um segredo que caia ali fica cinco anos e não sai.
+  // O emissor grava só a chave, a natureza e os últimos 4 caracteres.
+  "platform.config_changed",
+  "platform.config_reset",
   // O COMPORTAMENTO da instalação trocado em `platform_settings` pela tela
   // `/admin/sistema` (migration 0331, issue #1034) — irmã da linha de cima, e
   // mutação de plataforma. Auditável porque pergunta "por que a IA não parou no
@@ -526,6 +537,27 @@ export const AUDIT_ACTIONS = [
   // seria "sumiu". Só a rodada que expirou alguma coisa; varredura vazia não é
   // mutação.
   "agenda.pendente_expirado",
+  // O catálogo financeiro. Audita porque define PARA ONDE o dinheiro vai: a
+  // forma de pagamento escolhe a conta em que a entrada cai, e mudar isso em
+  // silêncio faria um mês inteiro cair na conta errada sem ninguém saber quem
+  // mexeu.
+  "financeiro.catalogo_criado",
+  "financeiro.catalogo_alterado",
+  "financeiro.catalogo_inativado",
+  "comanda.aberta",
+  "comanda.alterada",
+  "comanda.cancelada",
+  "comanda.item_incluido",
+  "comanda.item_removido",
+  "comanda.finalizada",
+  "comanda.estornada",
+  "financeiro.lancamento_criado",
+  "financeiro.lancamento_pago",
+  "financeiro.lancamento_removido",
+  "fidelidade.ponto_dado",
+  "fidelidade.ponto_resgatado",
+  "financeiro.recorrencia_gerada",
+  "comanda.faturada_em_lote",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta
@@ -710,6 +742,11 @@ export const AUDIT_ACTIONS = [
    * primeira tentativa morreu antes de chegar nessa linha.
    */
   "tenant.provisioning_completed",
+  // O funil que VOLTOU do arquivo (#979). Espelha `pipeline.archived`: sem um
+  // código próprio, tirar do arquivo cairia em `pipeline.updated` e sumiria no
+  // meio dos renames — e "quem trouxe este funil de volta, e quando" é a
+  // pergunta que o painel de auditoria só responde filtrando por `action`.
+  "pipeline.unarchived",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
