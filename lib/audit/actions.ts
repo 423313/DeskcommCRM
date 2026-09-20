@@ -724,6 +724,10 @@ export const AUDIT_ACTIONS = [
   // as duas contagens mais `examinados`, que é o que diferencia "ninguém tinha
   // fluxo desarmado" de "a varredura não rodou".
   "ai.followup_sem_agente_reconciliado",
+  // Ajustes determinísticos de estilo da ORGANIZAÇÃO ligados, desligados ou com
+  // item trocado (PATCH /ai/style-adjustments). O `metadata.ajuste` nomeia o
+  // item; a linha registra a decisão sem expor o prompt do agente.
+  "ai.style_adjustment_changed",
   /** POST /api/v1/tenants/provision — organização criada por um sistema externo (doc 38 b). */
   "tenant.created_by_provisioning",
   /**
