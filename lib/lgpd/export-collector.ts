@@ -359,7 +359,7 @@ export interface VoiceCallRow {
   duration_ms: number | null;
 }
 
-/** Pesquisa e resultado da abordagem ligados ao titular (redação: migration 0361). */
+/** Pesquisa e resultado da abordagem ligados ao titular (redação: migration 0370). */
 export interface ProspectingCandidateRow {
   id: string;
   campaign_id: string;

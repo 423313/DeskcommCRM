@@ -9275,7 +9275,7 @@ alter table public.channel_sessions
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
   -- 'wacalls' (migration 0233, chamada de voz) e 'zernio_social' (migration
-  -- 0359, redes sociais nativas) somados AQUI — UM bloco só por constraint,
+  -- 0368, redes sociais nativas) somados AQUI — UM bloco só por constraint,
   -- doutrina de baseline (não duplicar drop+add por migration).
   check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text]));
 
@@ -9286,7 +9286,7 @@ alter table public.channel_sessions
   add constraint channel_sessions_provider_ref_check check (
     (provider = 'waha'       and waha_session_name    is not null) or
     (provider = 'meta_cloud' and meta_phone_number_id is not null) or
-    -- 'zernio_social' (migration 0359) endereça pelo MESMO `zernio_account_id`:
+    -- 'zernio_social' (migration 0368) endereça pelo MESMO `zernio_account_id`:
     -- é o mesmo intermediário, com outra superfície de canal.
     (provider in ('zernio', 'zernio_social') and zernio_account_id is not null) or
     (provider = 'wacalls'    and wacalls_session_id    is not null)
@@ -33502,7 +33502,7 @@ begin
 end;$$;
 
 
--- APÊNDICE 20260920010000_0359_redes_sociais_nativas.sql
+-- APÊNDICE 20260921030000_0368_redes_sociais_nativas.sql
 -- Social connections reuse channel sessions, the inbox and the outbound ledger.
 -- Credentials are server-only; tenant admins use authenticated API routes.
 create table if not exists public.channel_integrations (
@@ -33539,7 +33539,7 @@ alter table public.conversations add constraint conversations_channel_check
   check (channel in ('whatsapp', 'instagram', 'facebook'));
 
 
--- APÊNDICE 20260920010100_0360_prospeccao_nativa.sql
+-- APÊNDICE 20260921030100_0369_prospeccao_nativa.sql
 -- Native prospecting is an adapter to discovery, CRM creation and existing AI delivery.
 -- Server-only tables: authenticated routes resolve the tenant and authorize every command.
 create table if not exists public.prospecting_settings (
@@ -33599,8 +33599,8 @@ revoke all on public.prospecting_settings, public.prospecting_campaigns, public.
 grant all on public.prospecting_settings, public.prospecting_campaigns, public.prospecting_candidates to service_role;
 notify pgrst, 'reload schema';
 
--- Migration 0361: native prospecting redaction and suppression
--- 0361: Redact discovery data through the canonical contact cascade.
+-- Migration 0370: native prospecting redaction and suppression
+-- 0370: Redact discovery data through the canonical contact cascade.
 -- Suppression tokens are pseudonymous, server-only and used exclusively to
 -- refuse re-import. The API explicitly selects public fields and never exposes them.
 alter table public.prospecting_candidates add column if not exists suppression_salt bytea;
@@ -34185,7 +34185,7 @@ grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) 
 
 notify pgrst, 'reload schema';
 
--- ---- Conversa de configuração da prospecção (migration 0362) ----
+-- ---- Conversa de configuração da prospecção (migration 0371) ----
 -- The administrator's unfinished setup belongs to the campaign, not to Inbox.
 -- Existing rows keep the empty default. Server-only RLS/grants remain unchanged.
 alter table public.prospecting_campaigns
@@ -34193,7 +34193,7 @@ alter table public.prospecting_campaigns
   add column if not exists agent_setup_revision bigint not null default 0;
 notify pgrst, 'reload schema';
 
--- ---- provider "zernio_social" nos CHECKs de channel_sessions (migration 0359) ----
+-- ---- provider "zernio_social" nos CHECKs de channel_sessions (migration 0368) ----
 --
 -- NÃO HÁ BLOCO AQUI, e a ausência é decisão: `zernio_social` foi somado ao
 -- bloco ÚNICO das duas constraints, lá em cima (procure por
