@@ -29,9 +29,9 @@ import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
 
-import { lerCreds } from "./helpers/login-admin";
+import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 
-const creds = lerCreds();
+let creds = lerCreds();
 const EVIDENCE = path.join(process.cwd(), ".superpowers", "evidence");
 mkdirSync(EVIDENCE, { recursive: true });
 
@@ -41,12 +41,17 @@ test.describe.configure({ mode: "serial" });
 
 const CONFIGURACOES = "/app/settings/tenant";
 
+/**
+ * O login é o do projeto, não um escrito aqui.
+ *
+ * A conta de teste tem SEGUNDO FATOR: um `fill` + `click` escrito à mão para em
+ * `/login/mfa` e o `waitForURL(/\/app\//)` estoura em 30 s. Medido no job
+ * 106138530381 — foi exatamente assim que este arquivo reprovou da primeira vez.
+ * `loginComoAdmin` resolve o TOTP e devolve as credenciais (o segredo ROTACIONA
+ * entre rodadas, então o retorno é que vale, não o `lerCreds` do início).
+ */
 async function login(page: Page): Promise<void> {
-  await page.goto("/login");
-  await page.locator("#email").fill(creds.users.admin!.email);
-  await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
-  await page.waitForURL(/\/app\//);
+  creds = await loginComoAdmin(page, creds);
 }
 
 /** Os itens do menu lateral, como a pessoa os vê. */
