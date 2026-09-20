@@ -35382,12 +35382,12 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_meet_delivery_enqueue() from public,anon,authenticated;
--- ---- Cache da hierarquia do anúncio (migration 0375) ----
+-- ---- Cache da hierarquia do anúncio (migration 0380) ----
 -- Nome do anúncio, do conjunto e da campanha por id de anúncio. Existe porque a
 -- conta de anúncios opera em cota baixa e um único anúncio gera centenas de
 -- contatos: sem cache, cada ficha aberta repetiria a mesma pergunta. Mesmo
 -- desenho server-side-only de ad_insights_connections (0214); ver o cabeçalho da
--- migration 0375 para o racional completo.
+-- migration 0380 para o racional completo.
 
 create table if not exists public.ad_hierarchy_cache (
   id uuid primary key default gen_random_uuid(),
