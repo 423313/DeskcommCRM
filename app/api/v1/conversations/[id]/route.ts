@@ -5,6 +5,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
+import { z } from "zod";
 
 import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
@@ -23,9 +24,35 @@ interface RouteCtx {
   params: Promise<{ id: string }>;
 }
 
+/**
+ * O `[id]` da rota é INPUT EXTERNO — tanto quanto um body — e por isso passa por
+ * Zod antes de virar consulta (doutrina: "Zod valida todo input externo").
+ *
+ * Sem isto, `/api/v1/conversations/undefined` chegava ao `.eq("id", …)` de uma
+ * coluna `uuid`, o Postgres devolvia `22P02` (*invalid input syntax*), e o
+ * handler traduzia QUALQUER erro de banco para **500**. Dois estragos:
+ *
+ *  - um 500 evitável no log do servidor, de um id que nunca teve chance;
+ *  - a tela ficava MUDA. `InboxLayout` só acende "Conversa não encontrada ou
+ *    fora do seu acesso" quando o erro é 404 (`isNotFound` é `status === 404`),
+ *    então o usuário via uma conversa vazia — indistinguível de uma conversa
+ *    sem mensagens. Issue #1367.
+ *
+ * **404 e não 422**, e o precedente é da casa: `agenda/agendamentos/[id]`
+ * responde `fail("not_found", …, 404)` para id malformado. Num GET por id, "não
+ * é um uuid" e "não existe" são a mesma resposta para quem pergunta — e devolver
+ * 422 aqui só trocaria o 500 por outro código que a tela também não trata.
+ */
+function idInvalido(id: string): boolean {
+  return !z.uuid().safeParse(id).success;
+}
+
 export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
   const { id } = await ctx.params;
+  if (idInvalido(id)) {
+    return fail("not_found", "Conversa não encontrada.", 404, { requestId });
+  }
   const supabase = await createClient();
 
   const {
@@ -72,6 +99,9 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
 
   const requestId = randomUUID();
   const { id } = await ctx.params;
+  if (idInvalido(id)) {
+    return fail("not_found", "Conversa não encontrada.", 404, { requestId });
+  }
   const supabase = await createClient();
 
   // spec 13 §4: escrita é agent+ (viewer é read-only).
