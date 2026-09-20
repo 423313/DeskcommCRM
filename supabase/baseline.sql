@@ -34112,7 +34112,7 @@ on conflict (model) do update set
   notes = excluded.notes,
   superseded_at = null;
 
--- ---- menu lateral por EMPRESA (migration 0365, issue #1341) ----
+-- ---- menu lateral por EMPRESA (migration 0367, issue #1341) ----
 --
 -- `organizations.interface_settings` é a escolha da EMPRESA: o universo de portas
 -- da instalação, com a mesma forma da escolha por vínculo da 0221. Entra aqui

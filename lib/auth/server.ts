@@ -32,7 +32,7 @@ interface RawMembershipRow {
 interface OrgJoin {
   display_name: string;
   locale: string | null;
-  /** Portas escolhidas pela EMPRESA (`organizations.interface_settings`, migration 0365). */
+  /** Portas escolhidas pela EMPRESA (`organizations.interface_settings`, migration 0367). */
   interface_settings?: unknown;
 }
 
@@ -216,7 +216,7 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
       organization_id: row.organization_id,
       organization_name: org?.display_name ?? "—",
       role: row.role as Role,
-      // EMPRESA ∩ VÍNCULO (migration 0365): a empresa escolhe o universo de
+      // EMPRESA ∩ VÍNCULO (migration 0367): a empresa escolhe o universo de
       // portas da instalação, o vínculo escolhe menos dentro dele. Até aqui o
       // vínculo decidia sozinho, então a escolha da empresa não existia.
       interface_settings: combinarInterfaces(org?.interface_settings, row.interface_settings),

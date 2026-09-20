@@ -74,7 +74,7 @@ export const AUDIT_ACTIONS = [
   "member.invited",
   "team.interface_changed",
   /**
-   * A EMPRESA trocou as portas que mostra (issue #1341, migration 0365). É o
+   * A EMPRESA trocou as portas que mostra (issue #1341, migration 0367). É o
    * degrau acima do `team.interface_changed`: ali a pergunta é "quem tirou o
    * Inbox da Maria", aqui é "quem escondeu o Inbox da instalação inteira, e
    * quando" — pergunta que só tem resposta na trilha, porque a coluna guarda só

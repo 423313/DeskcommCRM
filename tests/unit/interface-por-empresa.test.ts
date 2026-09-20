@@ -1,5 +1,5 @@
 /**
- * Portas por EMPRESA (issue #1341, migration 0365).
+ * Portas por EMPRESA (issue #1341, migration 0367).
  *
  * A escolha por vínculo (0221) é a PESSOA. O que faltava era a escolha da
  * ORGANIZAÇÃO — o universo da instalação, um degrau acima. Estes casos fixam as

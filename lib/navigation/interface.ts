@@ -116,7 +116,7 @@ const SO_O_ESSENCIAL: readonly NavDestinationId[] = ids.filter((id) =>
 );
 
 /**
- * As portas da EMPRESA ∩ as portas do VÍNCULO (migration 0365).
+ * As portas da EMPRESA ∩ as portas do VÍNCULO (migration 0367).
  *
  * A empresa escolhe o universo de portas da instalação; o vínculo escolhe menos
  * dentro dele — nunca mais. A ordem importa: quem administra a organização não
