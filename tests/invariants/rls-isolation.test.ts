@@ -439,6 +439,22 @@ beforeAll(() => {
             (organization_id, contact_id, points, reason, sale_id)
             values (v_org, v_contact, 5, 'RLS invariant ponto', v_sale);
         end if;
+
+        -- migration 0372 — a conexão com o PostgreSQL externo. As três colunas
+        -- de senha são bytea not null e a cifra é do APP (AES-GCM), não do
+        -- banco: aqui vai um envelope QUALQUER, porque o que se mede é a cerca
+        -- de organização, não a cifra. O SELECT lido pelo caso abaixo é o da
+        -- TABELA-base; a view _safe é security_invoker e herda esta mesma
+        -- RLS, então provar a base prova as duas.
+        if not exists (select 1 from public.external_db_connections where organization_id = v_org) then
+          insert into public.external_db_connections
+            (organization_id, label, host, port, database_name, username,
+             password_encrypted, password_iv, password_tag)
+            values (v_org, 'RLS invariant fonte externa', 'db.invariante.interno', 5432,
+                    'outro_crm', 'leitor',
+                    '\\x00'::bytea, '\\x000000000000000000000000'::bytea,
+                    '\\x00000000000000000000000000000000'::bytea);
+        end if;
       end loop;
     end
     $seed$;
@@ -554,6 +570,19 @@ export const TABLES = [
   "financial_entries",
   "loyalty_ledger",
   "recurring_entries",
+  // migration 0372 — a conexão com um PostgreSQL de OUTRO sistema (recorte do
+  // PR #1130, de @vgamkt). Vazar a linha entrega ao vizinho o host, a porta, o
+  // banco e o USUÁRIO do sistema interno dele: metade de uma credencial, e o
+  // mapa de por onde entrar. A senha em si não sai nem para o dono (as três
+  // colunas cifradas só existem na tabela-base; a tela lê a view `_safe`).
+  //
+  // Cabe neste molde porque a policy de SELECT é org-scoped SEM gate de papel
+  // — qualquer membro vê a lista, decisão do dono —, então o `agent` semeado
+  // aqui é controle positivo legítimo. A ESCRITA tem um segundo eixo que este
+  // seed NÃO mede: a policy `for all` exige `fn_role_at_least(org,'admin')`, e
+  // provar isso pediria um usuário abaixo de admin escrevendo. Fica declarado
+  // em vez de parecer coberto.
+  "external_db_connections",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"

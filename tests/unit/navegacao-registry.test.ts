@@ -196,8 +196,49 @@ describe("hubSections", () => {
   });
 
   it("some com a seção que ficou vazia pela permissão", () => {
-    const secoes = hubSections("organizacao", VIEWER.platform, VIEWER.role).map((s) => s.section);
-    expect(secoes).not.toContain("Dados e acesso");
+    /**
+     * Esta asserção era `expect(secoes).not.toContain("Dados e acesso")`, e o
+     * que a fazia passar era um ACIDENTE do catálogo: por um tempo, os dois
+     * destinos daquela seção eram `admin`. Quando "Dados externos" entrou nela
+     * SEM `minRole` — o banco externo é lido por qualquer autenticado, decisão
+     * do dono no #1130 —, a seção passou a existir para o `viewer` e o teste
+     * ficou vermelho. Ele não pegou defeito nenhum: reprovou o CATÁLOGO por uma
+     * mudança que a projeção tratou certo.
+     *
+     * A propriedade não é sobre uma seção nomeada; é sobre TODA seção, em todo
+     * grupo, para todo papel. Escrita assim, ela não envelhece quando alguém
+     * acrescenta, move ou reclassifica um destino.
+     */
+    for (const grupo of NAV_GROUPS) {
+      for (const quem of [VIEWER, AGENT, MANAGER, ADMIN]) {
+        for (const s of hubSections(grupo.id, quem.platform, quem.role)) {
+          expect(
+            s.items.length,
+            `${grupo.id} / "${s.section}" veio vazia para ${quem.role}`,
+          ).toBeGreaterThan(0);
+        }
+      }
+    }
+
+    /**
+     * E a testemunha de que a projeção está mesmo sendo exercitada: precisa
+     * existir ALGUMA seção que o admin vê e o viewer não. Sem isto, o laço
+     * acima seguiria verde num catálogo onde nada é gateado — verde por
+     * ausência de caso, que se lê igual a verde por acerto. A seção sai do
+     * catálogo, nunca escrita à mão.
+     */
+    const secoesDe = (quem: typeof VIEWER | typeof ADMIN) =>
+      new Set(
+        NAV_GROUPS.flatMap((g) =>
+          hubSections(g.id, quem.platform, quem.role).map((s) => `${g.id}/${s.section}`),
+        ),
+      );
+    const doViewer = secoesDe(VIEWER);
+    const somemParaOViewer = [...secoesDe(ADMIN)].filter((s) => !doViewer.has(s));
+    expect(
+      somemParaOViewer.length,
+      "nenhuma seção some para o viewer — a projeção por papel deixou de ser exercitada",
+    ).toBeGreaterThan(0);
   });
 });
 
