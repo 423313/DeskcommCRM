@@ -38,6 +38,12 @@ interface RouteCtx {
  *    então o usuário via uma conversa vazia — indistinguível de uma conversa
  *    sem mensagens. Issue #1367.
  *
+ * **DEPOIS da autorização, nunca antes.** `rbac-matrix.test.ts` pegou a versão
+ * anterior deste conserto: com a guarda no topo, um `viewer` mandando `PATCH`
+ * com id malformado recebia 404 em vez de 403. Quem não pode escrever não pode
+ * nem chegar à pergunta sobre o id — e o mesmo `agenda/agendamentos/[id]` que
+ * serve de precedente aqui valida o uuid DEPOIS do `requireRole`.
+ *
  * **404 e não 422**, e o precedente é da casa: `agenda/agendamentos/[id]`
  * responde `fail("not_found", …, 404)` para id malformado. Num GET por id, "não
  * é um uuid" e "não existe" são a mesma resposta para quem pergunta — e devolver
@@ -50,9 +56,6 @@ function idInvalido(id: string): boolean {
 export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
   const { id } = await ctx.params;
-  if (idInvalido(id)) {
-    return fail("not_found", "Conversa não encontrada.", 404, { requestId });
-  }
   const supabase = await createClient();
 
   const {
@@ -68,6 +71,9 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
   if (!activeOrg) {
     return fail("no_active_org", t("No active organization."), 403, { requestId });
+  }
+  if (idInvalido(id)) {
+    return fail("not_found", "Conversa não encontrada.", 404, { requestId });
   }
 
   try {
@@ -99,9 +105,6 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
 
   const requestId = randomUUID();
   const { id } = await ctx.params;
-  if (idInvalido(id)) {
-    return fail("not_found", "Conversa não encontrada.", 404, { requestId });
-  }
   const supabase = await createClient();
 
   // spec 13 §4: escrita é agent+ (viewer é read-only).
@@ -109,6 +112,9 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (!authz.ok) return authz.response;
   const user = authz.user;
   const activeOrg = authz.org;
+  if (idInvalido(id)) {
+    return fail("not_found", "Conversa não encontrada.", 404, { requestId });
+  }
 
   let input;
   try {
