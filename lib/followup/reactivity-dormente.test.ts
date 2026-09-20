@@ -137,6 +137,8 @@ describe("reatividade — quem não dorme segue igual (não-regressão)", () => 
 
     expect(s.reacted).toBe(1);
     expect(espiao.eventos.map((e) => e.event_type)).toContain("inbound_woke");
+    expect(espiao.patches[0]?.patch.updated_at).toBeUndefined();
+    expect(espiao.patches[0]?.patch.next_eval_at).toBeDefined();
   });
 
   it("espera comum com `cancel_on_reply` é cancelada", async () => {
