@@ -22,9 +22,9 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   - **Desligada:** o Atendente mexe só no compromisso de que é o responsável.
     Gerente e Administrador continuam mexendo em tudo.
 
-  Não há ação para quem opera a VPS, e a escolha vale nos dois lugares onde a regra é
-  aplicada: no banco e na rota que a tela usa. Desligar hoje e religar amanhã volta tudo
-  ao que era, sem atualização.
+  Não há ação para quem opera a VPS, e a escolha vale igual nos dois lugares onde
+  a regra é aplicada: no banco (a alteração e o cancelamento) e na rota que a tela
+  usa. Desligar hoje e religar amanhã volta tudo ao que era, sem atualização.
 
 - **Crie o agente conversando com a IA dentro da campanha** Descreva a oferta e o objetivo em uma conversa. A IA pergunta o que falta e prepara um resumo com abordagem, qualificação, conexão e funil; você pode pedir ajustes antes de confirmar a criação e publicação. As permissões comerciais são preparadas automaticamente e alterações de continuidade do canal pedem uma escolha explícita. O agente fica selecionado ao terminar; o início das abordagens continua separado. Solicitações repetidas recuperam a criação anterior e erros conservam os campos preenchidos. Crédito: @saraivabr.
 
@@ -32,12 +32,13 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Dá para cadastrar contas, formas de pagamento e plano de contas** Uma tela nova em Configurações › Financeiro, com três listas:
 
-  **Contas** — onde o dinheiro fica (caixa, banco). O valor informado é o saldo de
-  partida; o saldo dos relatórios é sempre somado dos lançamentos, nunca um número
-  guardado que pode divergir.
+  **Contas** — onde o dinheiro fica (caixa, banco). O valor que você informa é o
+  saldo de partida; o saldo que aparece nos relatórios é sempre somado dos
+  lançamentos, nunca um número guardado que pode divergir.
 
-  **Formas de pagamento** — como o cliente paga. Cada uma aponta para a conta em que
-  o dinheiro entra; sem conta definida, a forma aparece marcada, porque não fecha venda.
+  **Formas de pagamento** — como o cliente paga. Cada forma aponta para a conta em
+  que aquele dinheiro entra. Uma forma sem conta definida aparece marcada, porque
+  ela não vai conseguir fechar uma venda.
 
   **Plano de contas** — como cada lançamento é classificado, e se é entrada ou
   saída. Escolher entre as duas é obrigatório: um plano de contas em que tudo é a
@@ -92,23 +93,29 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Contribuição de @paulolimajr77 (#803).
 
-- **Conecte um banco de dados de outro sistema e explore-o de dentro do CRM** Quando o seu outro sistema escreve num PostgreSQL — um segundo CRM, um ERP —, esses
-  dados eram invisíveis aqui dentro. É ali que costuma morar o que o cliente pergunta:
-  pedido, assinatura, matrícula, saldo.
+- **Conecte um banco de dados de outro sistema e explore-o de dentro do CRM** Quando o seu outro sistema escreve num PostgreSQL — um segundo CRM, um ERP, a
+  base que a operação usa —, esses dados eram invisíveis aqui dentro. É ali que
+  costuma morar o que o cliente pergunta: pedido, assinatura, matrícula, saldo.
 
-  Agora essa base pode ser cadastrada e consultada em **Organização › Dados e acesso ›
-  Dados externos**. A equipe vê a lista e explora; só um administrador cadastra ou
-  remove a conexão.
+  Agora essa base pode ser cadastrada e consultada pelo próprio CRM. O caminho é
+  **Organização › Dados e acesso › Dados externos**. Qualquer pessoa da equipe vê
+  a lista e explora os dados; só um administrador cadastra, edita ou remove a
+  conexão.
 
-  - **Somente leitura, de verdade.** Transação de leitura obrigatória, com tempo
-    limite, e só consultas de seleção. Nada que o CRM faz altera o banco de origem.
-  - **A senha é cifrada** com a mesma chave das chaves de IA, e nunca é mostrada de
-    volta. Nenhuma variável de ambiente nova.
-  - **Nada de schema fixo:** tabelas e campos são lidos na hora. E os tetos (linhas,
-    filtros, tamanho de resposta) são configurados por conexão.
+  - **Somente leitura, de verdade.** A conexão roda em transação de leitura
+    obrigatória, com tempo limite, e só aceita consultas de seleção. Nada que o
+    CRM faz altera o banco de origem.
+  - **A senha é cifrada** com a mesma chave que o sistema já usa para as chaves de
+    IA, e nunca é mostrada de volta — ao editar, o campo de senha nasce vazio.
+    Nenhuma variável de ambiente nova, nenhum passo manual de atualização.
+  - **Nada de schema fixo.** As tabelas e os campos são lidos na hora, então
+    quando o outro sistema muda, a tela já enxerga o novo formato.
+  - **Os tetos são seus.** Linhas por consulta, filtros e tamanho de resposta são
+    configurados por conexão, dentro de faixas seguras.
 
-  Sem conexão cadastrada, o recurso não faz nada. Quem atualiza numa VPS recebe pelo
-  `update.sh` de sempre.
+  Nada muda para quem não cadastrar nenhuma conexão: sem conexão, o recurso não
+  faz nada. Quem instala ou atualiza numa VPS recebe pelo procedimento de sempre
+  (`update.sh`) — a mudança de banco entra junto do baseline.
 
   Trabalho de @vgamkt, recortado do PR #1130.
 
@@ -215,11 +222,9 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   precisa caber na tela sem rolar, e grupo escondido abaixo da dobra é grupo que
   ninguem encontra. Pelo atalho de busca (Ctrl+K ou Cmd+K), "comanda" leva direto. Crédito: @423313 (#819).
 
-- **Telefonia por SIP com atendimento por IA, como módulo que você liga quando quiser** O CRM passa a atender e fazer ligações de telefone por um tronco SIP, com a IA conduzindo a conversa por voz e a transcrição indo para o histórico do contato. Os números são cadastrados em Conexões › Telefone, cada um apontando para um agente de voz, e as chamadas aparecem em Chamadas, junto das ligações por WhatsApp.
+- **Telefonia por SIP com atendimento por IA, como módulo que você liga quando quiser** O CRM passa a atender e fazer ligações por um tronco SIP, com a IA conduzindo a conversa e a transcrição ficando no histórico do contato. Os números são cadastrados em Conexões › Telefone, cada um apontando para um agente de voz, e as chamadas aparecem em Chamadas, junto das ligações por WhatsApp.
 
-  Quem não usa telefone não recebe nada disso: o módulo nasce DESLIGADO. São dois contêineres novos num profile do compose que só existe se você escrever `telefonia` em `COMPOSE_PROFILES` no `.env` — sem isso o sistema sobe exatamente como hoje, sem porta nova aberta, sem contêiner extra e sem consumo de memória a mais. Para ligar, o `.env.example` traz o passo a passo, e as credenciais do seu provedor SIP ficam em Configurações › Trunk SIP.
-
-  Quando o módulo está ligado, as portas de voz (UDP 5060 e 10000-10200) passam a ser publicadas, porque é o provedor do tronco que precisa alcançá-las; a interface que controla as chamadas continua fechada, só na rede interna do servidor. Crédito: @SnoopyHuman (#677).
+  **O módulo nasce DESLIGADO.** Sem escrever `telefonia` em `COMPOSE_PROFILES` no `.env`, o sistema sobe exatamente como hoje. Para ligar, o `.env.example` traz o passo a passo, e as credenciais do provedor SIP ficam em Configurações › Trunk SIP. Com o módulo ligado, as portas de voz (UDP 5060 e 10000-10200) passam a ser publicadas, porque o provedor do tronco precisa alcançá-las. Crédito: @SnoopyHuman (#677).
 
 - **Conectar WhatsApp por código de pareamento** Conexões e primeiro acesso permitem escolher QR Code ou código de pareamento.
   O administrador informa o telefone completo e digita no celular o código gerado.
@@ -234,17 +239,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ### Corrigido
 
-- **A Agenda abre na semana certa, mesmo à noite de sábado** Quem abrisse a Agenda no fim da noite de sábado via, por um instante, a semana
-  seguinte — e só então a tela se corrigia sozinha. Acontecia porque o servidor
-  calculava a semana pelo relógio dele, em UTC, enquanto a tela usava o fuso de
-  quem estava olhando.
-
-  Agora a semana é calculada no fuso configurado: o da pessoa, em
-  **Configurações › Perfil**, e o da empresa, em **Configurações › Empresa**,
-  quando a pessoa não escolheu nenhum. Se o fuso gravado for inválido, a Agenda
-  abre no padrão em vez de falhar.
-
-  Nada a fazer na atualização.
+- **A Agenda abre na semana certa, mesmo à noite de sábado** Quem abrisse a Agenda no fim da noite de sábado via, por um instante, a semana seguinte, e só então a tela se corrigia. Agora a semana é calculada no fuso configurado: o da pessoa, em **Configurações › Perfil**, e o da empresa, em **Configurações › Empresa**, quando a pessoa não escolheu nenhum. Fuso inválido abre no padrão em vez de falhar. Nada a fazer na atualização.
 
 - **Arquivar um canal oficial devolve o webhook do número à Meta** Conectar um canal oficial da Meta aponta o webhook daquele número para esta instalação. Ao
   arquivar ou excluir o canal, essa configuração ficava órfã na Meta: o token do caminho do
@@ -255,47 +250,38 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   arquivamento (ou a exclusão) que ele pediu acontece do mesmo jeito e a recusa fica no log e
   na auditoria.
 
-- **Estampar atribuição de anúncio passa a exigir a organização** A função que grava de qual anúncio (Meta Ads, Google Ads ou site) um contato veio roda com privilégio elevado, e o único limite era o id do contato que o chamador mandava — o filtro não olhava a organização. Uma chamada com o contato de outra organização — um id vazado, um replay de webhook — estampava o anúncio no contato alheio, por um caminho que a RLS não vê, porque roda como definer.
+- **Estampar atribuição de anúncio passa a exigir a organização** `fn_estampar_atribuicao_de_anuncio` grava de qual anúncio um contato veio, e rodava como `security definer` olhando só o id do contato: uma chamada com id de outra organização estampava o anúncio no contato alheio, por um caminho que a RLS não vê.
 
-  A organização agora é parâmetro obrigatório: contato de outra organização não casa nenhuma linha e nada é gravado — sem erro, para não derrubar o atendimento por causa de atribuição. A assinatura antiga sai do catálogo na mesma migration; mantida, ela seria o caminho de volta para o defeito.
+  A organização passa a ser parâmetro obrigatório, e o `where` a exige: contato de outra organização casa zero linhas e nada é gravado. A assinatura antiga sai do catálogo na mesma migration — mantida, a chamada velha resolveria nela e a organização nunca chegaria ao filtro.
 
-  Para quem opera nada muda: a migration sobe com o deploy e o produto se comporta igual. O que deixa de existir é o caminho que escrevia no contato de outra organização.
+  Para quem opera nada muda: a migration sobe com o deploy.
 
   Contribuição de @webtecnica (#1321).
 
-- **O que a equipe escreve sobre um cliente deixa de ficar congelado no registro de auditoria** Três ações do módulo financeiro — alterar e estornar uma comanda, e lançar pontos de
-  fidelidade — gravavam no registro de auditoria o texto livre que a equipe escreve
-  **sobre a pessoa**.
+- **O que a equipe escreve sobre um cliente deixa de ficar congelado no registro de auditoria** Três ações do módulo financeiro — alterar e estornar comanda, e lançar pontos de fidelidade — gravavam no registro de auditoria o texto livre que a equipe escreve **sobre a pessoa**: a observação, o motivo do estorno, a justificativa dos pontos.
 
-  A auditoria é a única tabela que ninguém pode alterar nem apagar, para que sirva de
-  prova — e era isso que tornava o caso grave: quando um cliente exerce o direito de ser
-  esquecido, a anonimização apaga a observação e **não alcança** a cópia da auditoria.
+  Esse registro é a única tabela que ninguém pode alterar nem apagar, por desenho, para servir de prova — e por isso a anonimização não alcança o que ficou escrito ali. Quando um cliente pedia para ser esquecido, a frase sumia da comanda e sobrevivia na auditoria pelo tempo inteiro de retenção.
 
-  Agora a auditoria guarda o que descreve o **ato** — que a observação mudou, quantos
-  pontos foram lançados — e nunca o texto. "Quem alterou a comanda 42, e quando?"
-  continua respondido, e o texto segue onde a anonimização chega: na comanda e no
-  extrato de fidelidade.
+  Agora a auditoria guarda o que descreve o **ato** — que a observação mudou, que houve motivo e de que tamanho, quantos pontos — e nunca o texto, que segue guardado onde a anonimização chega. Registros gravados antes desta versão continuam como estão: eles não podem ser reescritos, e essa é a razão do conserto.
 
-  Quem opera não precisa fazer nada. Registros anteriores continuam como estão — não
-  podem ser reescritos, e essa é exatamente a razão do
-  conserto.
+- **Uma falha nos classificadores auxiliares não cala mais o agente** Antes de responder, o agente consulta dois auxiliares baratos: um chuta em que
+  etapa do funil a conversa está, e o outro olha se a mensagem do cliente é uma
+  tentativa de manipular o assistente. Os dois são conselheiros — quem decide é o
+  modelo do agente, e nenhum dos dois nunca teve poder de barrar um atendimento.
 
-- **Uma falha nos classificadores auxiliares não cala mais o agente** Antes de responder, o agente consulta dois auxiliares baratos: um chuta a etapa do
-  funil, o outro olha se a mensagem tenta manipular o assistente. Os dois são
-  conselheiros — quem decide é o modelo do agente, e nenhum nunca pôde barrar um
-  atendimento.
-
-  Mesmo assim, se um deles falhasse, o atendimento inteiro parava e o cliente ficava
-  sem resposta. O caso comum não era o provedor cair — era o modelo desses dois pontos,
-  em **Configurações › Provedores de IA**, apontar para algo que não existe mais. O
-  agente estava de pé, a conversa não andava, e nada na tela explicava por quê.
+  Mesmo assim, se um deles falhasse, o atendimento inteiro parava: o cliente ficava
+  sem resposta. E o caso comum não era o provedor cair — era o modelo desses dois
+  pontos, em **Configurações › Provedores de IA**, apontar para algo que não existe
+  mais ou para uma chave revogada. O modelo do agente estava de pé, a conversa não
+  andava, e nada na tela explicava por quê.
 
   Agora a falha do conselheiro é só a falha do conselheiro: o agente responde do
   mesmo jeito, apenas sem o palpite de etapa daquele turno. A falha não some — a
   chamada frustrada fica registrada em **Uso de IA**, como qualquer outra.
 
-  Uma coisa segue interrompendo o atendimento de propósito: o teto de gasto do mês —
-  e aí a conversa continua sendo passada para uma pessoa, como já acontecia.
+  Uma coisa segue interrompendo o atendimento de propósito: o teto de gasto do mês.
+  Quando é ele que barra a chamada, a conversa continua sendo passada para uma
+  pessoa, que é o que já acontecia.
 
   Trabalho de @betoarts, recortado do #714.
 
@@ -325,25 +311,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **A janela de envio do WhatsApp passa a seguir o fuso da empresa** O horário em que o CRM pode mandar mensagem pelo WhatsApp (das 7h às 22h, por padrão) era contado no horário de São Paulo sempre que ninguém tinha escolhido um fuso em Conexões › Proteção de envio, qualquer que fosse o fuso da empresa. Numa empresa em Lisboa, isso virava das 11h às 2h da manhã: a resposta do agente a quem escreveu às 9h esperava até as 11h. Agora, sem fuso escolhido no número, vale o fuso da empresa (Configurações › Organização). Quem escolheu um fuso no número continua com ele, e quem está em São Paulo não percebe diferença. Crédito: @maclevison.
 
-- **Link de conversa quebrado passa a dizer o que aconteceu, em vez de abrir uma tela vazia** Abrir um link de conversa com endereço estragado — copiado pela metade, vindo de
-  um sistema externo, ou de uma conversa que já não existe — levava a uma tela que
-  parecia uma conversa de verdade e estava vazia. Não dava para saber se a conversa
-  não existia, se estava sem mensagens, ou se algo tinha falhado: os três estados
-  tinham a mesma aparência.
+- **Link de conversa quebrado passa a dizer o que aconteceu, em vez de abrir uma tela vazia** Abrir um link de conversa com endereço estragado levava a uma tela que parecia uma conversa de verdade e estava vazia — não dava para distinguir conversa inexistente, conversa sem mensagens e falha.
 
-  Agora a tela diz **"Conversa não encontrada ou fora do seu acesso"**, a mesma
-  mensagem que já aparecia quando o link aponta para conversa de outra empresa.
+  Agora a tela diz **"Conversa não encontrada ou fora do seu acesso"**, a mesma mensagem de quando o link aponta para conversa de outra empresa. Nos bastidores, esse link também deixa de virar erro de servidor no registro da instalação: quem administra a VPS para de ver falhas que nunca foram falha de nada. Nada a fazer na atualização.
 
-  Nos bastidores, esse link também deixa de virar erro de servidor no registro: quem
-  administra a VPS para de ver falhas que nunca foram falha de nada.
-
-  Nada a fazer na atualização.
-
-- **A limpeza das autorizações de agenda usadas volta a rodar** A limpeza diária das autorizações de agenda já usadas e vencidas — a que impede que uma autorização capturada seja reaproveitada — falhava todos os dias e não apagava nada, e a tabela só crescia. A causa era um nome de parâmetro trocado entre a rotina e a função do banco: o banco não encontrava a função e devolvia erro antes de apagar. De quebra, a varredura de anonimizações LGPD interrompidas, que roda logo depois dela no mesmo trabalho agendado, não chegava a acontecer. Agora os dois lados falam a mesma língua, e a instalação que já existe recebe o conserto na atualização — não só as novas. Nada muda na tela e ninguém precisa fazer nada: o que passa a acontecer é a limpeza que a instalação já tinha contratado.
+- **A limpeza das autorizações de agenda usadas volta a rodar** A limpeza diária das autorizações de agenda já usadas e vencidas — a que impede que uma autorização capturada seja reaproveitada — falhava todos os dias sem apagar nada, e a tabela só crescia. A rotina pedia a limpeza por um nome de parâmetro e a função do banco tinha sido criada com outro, então o banco devolvia erro antes de apagar; de quebra, a varredura de anonimizações LGPD interrompidas, que roda logo depois no mesmo trabalho agendado, não chegava a acontecer. Agora os dois lados falam a mesma língua, e a instalação que já existe recebe o conserto na atualização. Ninguém precisa fazer nada.
 
 - **Recusar o envio do link do Meet deixa de virar tentativa repetida** Quando o CRM recusa "Enviar link ao cliente" — porque o compromisso mudou, porque o atendimento daquela conversa mudou, ou porque o Google e o CRM discordam —, a recusa agora chega na hora, com o motivo dela.
 
-  Antes elas saíam com um código que significa "tente de novo", e o sistema acreditava: repetia o pedido três vezes e só então mostrava "Erro inesperado". Quem operava cronometrou **20 segundos** na tela para uma recusa que o banco sabia dizer no primeiro milissegundo. Pior: uma resposta dessas podia ser repetida indefinidamente por baixo, o que já derrubou o sistema inteiro uma vez.
+  Antes essas três recusas saíam com um código que significa "tente de novo", e o sistema acreditava: repetia o mesmo pedido, três vezes, e só então mostrava "Erro inesperado". Quem operava cronometrou **20 segundos** parado na tela para uma recusa que o banco sabia dizer no primeiro milissegundo. Pior: uma resposta dessas podia ser repetida indefinidamente por baixo, o que já derrubou o sistema inteiro uma vez.
 
   Agora cada recusa tem a frase que diz **o que fazer** — atualizar a página, escolher a conversa atual, resolver a diferença com o Google — e não é mais repetida sozinha.
 
