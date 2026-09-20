@@ -26,6 +26,7 @@ import {
   essencial,
   interfaceSettingsSchema,
   interfaceTemDestino,
+  PORTAS_ESSENCIAIS,
   INTERFACE_COMPLETA,
   lerInterface,
   type InterfaceSettings,
@@ -115,6 +116,62 @@ describe("portas por empresa (issue #1341)", () => {
     // o papel só tira: o conjunto do agente é estritamente menor que o do admin
     expect(paraAgente.length).toBeLessThan(paraAdmin.length);
     expect(paraAgente.every((href) => paraAdmin.includes(href))).toBe(true);
+  });
+});
+
+describe("a organização não consegue se trancar do lado de fora", () => {
+  /**
+   * A tela que hospeda esta escolha é `/app/settings/tenant`. Se ela puder ser
+   * ocultada, a organização que a ocultar perde a porta que DESFAZ a decisão —
+   * e não há caminho de volta pela tela, só por banco. É o único item desta
+   * configuração que, ao sumir, leva embora a própria capacidade de reconfigurar.
+   *
+   * Estes casos guardam a PROPRIEDADE (quem administra sempre alcança a tela da
+   * escolha), não a lista: quem trocar o href da tela tem de trocar aqui junto,
+   * e é isso que se quer — a lista e a tela andam juntas ou o teste reprova.
+   */
+  const TELA_DA_ESCOLHA = "/app/settings/tenant";
+
+  it("some de todo jeito? não: escolha mínima, sem interseção e vínculo hostil deixam a tela de pé", () => {
+    const hostis: unknown[] = [
+      { preset: "simplificada" },
+      { preset: "completa", destinos: ["/app/inbox"] },
+      combinarInterfaces({ preset: "completa", destinos: ["/app/inbox"] }, { preset: "completa", destinos: ["/app/kanban"] }),
+      combinarInterfaces({ preset: "simplificada" }, { preset: "completa", destinos: ["/app/tasks"] }),
+    ];
+    for (const escolha of hostis) {
+      expect(
+        hrefs(escolha, "admin"),
+        `a escolha ${JSON.stringify(escolha)} escondeu a tela que desfaz a escolha`,
+      ).toContain(TELA_DA_ESCOLHA);
+    }
+  });
+
+  it("e ela é essencial por PERTENCIMENTO à lista, não por posição nela", () => {
+    // A versão anterior de `essencial` enumerava PORTAS_ESSENCIAIS[0..2]: uma
+    // porta acrescentada à lista não teria efeito nenhum, e a lista passaria a
+    // prometer uma garantia que o código não dava. Este caso mede a garantia
+    // para TODAS as entradas, então ele quebra se alguém voltar a indexar.
+    const metadados = Object.fromEntries(NAV_CATALOG.map((d) => [d.href, d]));
+    for (const porta of PORTAS_ESSENCIAIS) {
+      const d = metadados[porta];
+      expect(d, `${porta} está em PORTAS_ESSENCIAIS e não existe no catálogo`).toBeDefined();
+      expect(essencial(d, "admin"), `${porta} está na lista e não é tratada como essencial`).toBe(true);
+    }
+  });
+
+  it("estar na lista NÃO concede acesso: quem não administra continua sem ver", () => {
+    // Controle negativo — sem ele, o caso acima passaria também se `essencial`
+    // devolvesse `true` para todo mundo, que seria conceder porta de admin a
+    // `agent` em nome de não trancar ninguém.
+    expect(hrefs({ preset: "simplificada" }, "agent")).not.toContain(TELA_DA_ESCOLHA);
+    expect(essencial({ href: TELA_DA_ESCOLHA, minRole: "admin" }, "agent")).toBe(false);
+    expect(essencial({ href: TELA_DA_ESCOLHA, minRole: "admin" }, "admin")).toBe(true);
+  });
+
+  it("controle: uma porta comum continua ocultável — senão a garantia seria vacuidade", () => {
+    // Se TUDO fosse essencial, os casos acima passariam sem medir nada.
+    expect(hrefs({ preset: "completa", destinos: ["/app/inbox"] }, "admin")).not.toContain("/app/kanban");
   });
 });
 

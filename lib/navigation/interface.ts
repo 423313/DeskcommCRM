@@ -26,18 +26,35 @@ const SIMPLIFICADA: readonly NavDestinationId[] = [
   "/app/connections",
 ];
 /** Portas pessoais e recuperação administrativa não são removíveis. Atualização
- * e administração de plataforma têm consumidores próprios com seus gates atuais. */
+ * e administração de plataforma têm consumidores próprios com seus gates atuais.
+ *
+ * `/app/settings/tenant` está aqui porque é a tela que HOSPEDA esta escolha. Sem
+ * ela na lista, uma organização que a ocultasse se trancava do lado de fora: a
+ * porta que desfaz a decisão desaparece junto com as outras, e não há caminho de
+ * volta pela tela — só por banco. Quem administra tem de poder desfazer o que
+ * escolheu, sempre.
+ */
 export const PORTAS_ESSENCIAIS = [
   "/app/settings/profile",
   "/app/settings/security",
   "/app/team",
+  "/app/settings/tenant",
 ] as const;
+
+/**
+ * As essenciais que só valem para quem administra — as outras são pessoais e
+ * valem para todo vínculo. `canSee` continua decidindo depois, pelo `minRole`:
+ * estar aqui impede a organização de ESCONDER, nunca concede acesso a quem o
+ * papel não dá.
+ */
+const ESSENCIAIS_DE_ADMIN: readonly string[] = ["/app/team", "/app/settings/tenant"];
+
 export function essencial(d: NavMetadata, role: Role | null, platform = false): boolean {
-  return (
-    d.href === PORTAS_ESSENCIAIS[0] ||
-    d.href === PORTAS_ESSENCIAIS[1] ||
-    (d.href === PORTAS_ESSENCIAIS[2] && (platform || role === "admin"))
-  );
+  // Por PERTENCIMENTO à lista, nunca por índice: a versão anterior enumerava
+  // `[0]`, `[1]` e `[2]`, então acrescentar uma quarta porta não teria efeito
+  // nenhum e a lista passaria a mentir sobre o que ela garante.
+  if (!(PORTAS_ESSENCIAIS as readonly string[]).includes(d.href)) return false;
+  return ESSENCIAIS_DE_ADMIN.includes(d.href) ? platform || role === "admin" : true;
 }
 export function canSee(
   d: Pick<NavMetadata, "href" | "minRole">,
