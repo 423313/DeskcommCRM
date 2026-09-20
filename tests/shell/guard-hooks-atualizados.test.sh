@@ -14,8 +14,24 @@ set -uo pipefail
 
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
 GUARD="$RAIZ/loop/hooks/guard-hooks-atualizados.sh"
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 casos=0
 falhas=0
+
+# ── isolamento do git: nada aqui escreve fora de "$TMP" ───────────────────────
+# Um `git -C "$dir" config user.*` grava onde o git RESOLVER o repositório, e não
+# necessariamente em "$dir": um GIT_DIR herdado (rodar de dentro de um hook, de um
+# `rebase --exec`) manda por cima do -C; "$dir" que não é repositório sobe até o pai.
+# Foi assim que "Pessoa <alguem@fork.dev>" parou no .git/config do checkout de quem
+# rodava a suíte e assinou 829 commits da main a partir de 10/09/2026. Três travas:
+#   1. zera o ambiente local do git herdado — o idioma canônico do próprio git;
+#   2. a descoberta de repositório nunca sobe para fora de "$TMP";
+#   3. identidade por ambiente, não por `git config` (NENHUM caso aqui mede o autor).
+unset $(git rev-parse --local-env-vars)
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+export GIT_CEILING_DIRECTORIES="$TMP"
+export GIT_AUTHOR_NAME="Teste" GIT_AUTHOR_EMAIL="teste@exemplo.invalid"
+export GIT_COMMITTER_NAME="Teste" GIT_COMMITTER_EMAIL="teste@exemplo.invalid"
 
 checa() { # nome, esperado, obtido
   casos=$((casos + 1))
@@ -30,8 +46,8 @@ checa() { # nome, esperado, obtido
 # Um "remoto" local faz o papel da origin; nada de rede.
 cenario() { # devolve o caminho de um clone com origin/main configurada
   local remoto clone
-  remoto="$(mktemp -d)"
-  clone="$(mktemp -d)"
+  remoto="$(mktemp -d "$TMP/remoto.XXXXXX")"
+  clone="$(mktemp -d "$TMP/clone.XXXXXX")"
   (
     cd "$remoto" || exit 1
     git init -q --bare
@@ -39,9 +55,6 @@ cenario() { # devolve o caminho de um clone com origin/main configurada
   (
     cd "$clone" || exit 1
     git init -q
-    git config user.email t@t
-    git config user.name t
-    git config commit.gpgsign false
     mkdir -p loop/hooks
     printf '#!/usr/bin/env bash\nexit 0\n' > loop/hooks/freeze-invariants.sh
     cp "$GUARD" loop/hooks/guard-hooks-atualizados.sh
@@ -99,13 +112,10 @@ rm -rf "$c"
 
 # ── 4. sem origin/main: NÃO MEDIDO, e segue ───────────────────────────────────
 # Bloquear commit por falta de rede troca um risco raro por travamento diário.
-c="$(mktemp -d)"
+c="$(mktemp -d "$TMP/sem-origin.XXXXXX")"
 (
   cd "$c" || exit 1
   git init -q
-  git config user.email t@t
-  git config user.name t
-  git config commit.gpgsign false
   mkdir -p loop/hooks
   cp "$GUARD" loop/hooks/guard-hooks-atualizados.sh
   git add -A
