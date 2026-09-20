@@ -82,10 +82,14 @@ export async function atualizarInterfaceDaEmpresa(input: InterfaceSettings): Pro
   });
 
   // Mesmo evento que `updateTenant` publica: quem escuta "a empresa mudou" não
-  // deveria descobrir por recarregar a tela.
+  // deveria descobrir por recarregar a tela. É LITERALMENTE o mesmo TIPO — um
+  // tipo novo (`org.interface_changed`) não teria assinante, não entraria no
+  // vocabulário de `fn_event_log_e_registro` (migration 0239) e o fato nasceria
+  // pendente para sempre; o detalhe fino de QUAL campo mudou fica no `audit_log`
+  // (`action: "org.interface_changed"`), que é onde a pergunta é feita.
   await supabase
     .rpc("emit_event", {
-      p_event_type: "org.interface_changed",
+      p_event_type: "org.updated",
       p_entity_kind: "organization",
       p_entity_id: activeOrg.orgId,
       p_payload: { organization_id: activeOrg.orgId },

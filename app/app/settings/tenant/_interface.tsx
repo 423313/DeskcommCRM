@@ -54,7 +54,7 @@ export function InterfaceDaEmpresaForm({ initial, role }: Props) {
         disabled={isPending}
       />
       <Button type="button" size="sm" disabled={isPending} onClick={salvar}>
-        {t("Salvar menu da empresa")}
+        {t("Aplicar interface")}
       </Button>
     </Card>
   );
