@@ -69,7 +69,7 @@ function daLinha(adId: string, linha: LinhaDoCache): HierarquiaDoAnuncio {
 /**
  * ⚠️ EXIGE O ADMIN CLIENT e SEMPRE com `organization_id` no filtro.
  *
- * `ad_hierarchy_cache` tem RLS ligada e zero policies (0374) — pelo client de
+ * `ad_hierarchy_cache` tem RLS ligada e zero policies (0380) — pelo client de
  * sessão isto não devolve nada. E o id do anúncio é da PLATAFORMA: duas
  * organizações podem alcançar a mesma conta, então ler sem a organização
  * mostraria, na ficha de uma, o nome que a outra deu ao anúncio.
