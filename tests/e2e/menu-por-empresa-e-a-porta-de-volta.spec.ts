@@ -54,11 +54,20 @@ async function login(page: Page): Promise<void> {
   creds = await loginComoAdmin(page, creds);
 }
 
-/** Os itens do menu lateral, como a pessoa os vê. */
+/**
+ * Os itens do menu lateral, como a pessoa os vê.
+ *
+ * `page.locator("nav").first()` pega o primeiro `nav` da página, que não é
+ * necessariamente este. O menu tem rótulo próprio, e é por ele que se pergunta.
+ */
+const menuLateral = (page: Page) =>
+  page.getByRole("navigation", { name: "Navegação principal" });
+
 async function itensDoMenu(page: Page): Promise<string[]> {
-  const nav = page.locator("nav").first();
-  await expect(nav).toBeVisible();
-  return (await nav.getByRole("link").allTextContents()).map((t) => t.trim()).filter(Boolean);
+  await expect(menuLateral(page)).toBeVisible();
+  return (await menuLateral(page).getByRole("link").allTextContents())
+    .map((t) => t.trim())
+    .filter(Boolean);
 }
 
 async function escolherPerfil(page: Page, perfil: "Completa" | "Simplificada"): Promise<void> {
@@ -109,13 +118,33 @@ test("o menu da empresa encolhe pela tela — e a porta que desfaz continua lá"
   ).toBeLessThan(antes.length);
   await page.screenshot({ path: `${EVIDENCE}/1359-3-menu-simplificado.png`, fullPage: true });
 
-  // ── 4. A PROVA: a porta de volta sobreviveu ────────────────────────────────
-  // Sem ela, os passos acima seriam um caminho só de ida.
-  const configuracoes = page.locator(`nav a[href="${CONFIGURACOES}"], nav a[href^="/app/settings"]`);
+  // ── 4. A PROVA: a porta de volta sobreviveu, e ela ABRE ────────────────────
+  //
+  // Sem isto, os passos acima seriam um caminho só de ida.
+  //
+  // A prova é CLICAR, não encontrar: um link visível que não leva a lugar nenhum
+  // deixaria a pessoa trancada do mesmo jeito. E o percurso é o de quem não sabe
+  // a URL — que é justamente quem fica preso.
+  //
+  // ⚠️ O grupo de Configurações NÃO mora dentro do `nav` que rola: o Sidebar o
+  // manda para um rodapé fixo (`GRUPO_NO_RODAPE`, `Sidebar.tsx:51-52`), como
+  // link do HUB (`/app/settings`). Procurá-lo dentro do `nav` devolve "não
+  // encontrado" com a porta intacta — foi assim que este caso reprovou na
+  // primeira rodada, e a mensagem acusava trancamento que não existia.
+  const portaDeVolta = page.getByRole("link", { name: /configurações/i }).last();
   await expect(
-    configuracoes.first(),
+    portaDeVolta,
     "a empresa encolheu o menu e perdeu a porta que desfaz a escolha — trancada do lado de fora",
   ).toBeVisible();
+  await portaDeVolta.click();
+  await page.waitForURL(/\/app\/settings/);
+  await page.getByRole("link", { name: /organização/i }).first().click();
+  await page.waitForURL(new RegExp(CONFIGURACOES.replace(/\//g, "\\/")));
+  await expect(
+    page.getByText("Menu lateral", { exact: true }),
+    "chegou em Configurações → Organização e o card que desfaz a escolha não está lá",
+  ).toBeVisible();
+  await page.screenshot({ path: `${EVIDENCE}/1359-4-porta-de-volta.png`, fullPage: true });
 
   // ── 5. E ela funciona: desfazer pela TELA devolve o menu ───────────────────
   await escolherPerfil(page, "Completa");
@@ -125,5 +154,5 @@ test("o menu da empresa encolhe pela tela — e a porta que desfaz continua lá"
     restaurado.length,
     "desfazer pela tela não devolveu o menu ao que era",
   ).toBe(antes.length);
-  await page.screenshot({ path: `${EVIDENCE}/1359-4-menu-restaurado.png`, fullPage: true });
+  await page.screenshot({ path: `${EVIDENCE}/1359-5-menu-restaurado.png`, fullPage: true });
 });
