@@ -219,7 +219,7 @@ describe("hubSections", () => {
      * ausência de caso, que se lê igual a verde por acerto. A seção sai do
      * catálogo, nunca escrita à mão.
      */
-    const secoesDe = (quem: typeof VIEWER) =>
+    const secoesDe = (quem: typeof VIEWER | typeof ADMIN) =>
       new Set(
         NAV_GROUPS.flatMap((g) =>
           hubSections(g.id, quem.platform, quem.role).map((s) => `${g.id}/${s.section}`),
