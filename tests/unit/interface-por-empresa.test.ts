@@ -152,11 +152,13 @@ describe("a organização não consegue se trancar do lado de fora", () => {
     // porta acrescentada à lista não teria efeito nenhum, e a lista passaria a
     // prometer uma garantia que o código não dava. Este caso mede a garantia
     // para TODAS as entradas, então ele quebra se alguém voltar a indexar.
-    const metadados = Object.fromEntries(NAV_CATALOG.map((d) => [d.href, d]));
     for (const porta of PORTAS_ESSENCIAIS) {
-      const d = metadados[porta];
+      // O metadado vem do CATÁLOGO, e não de um literal montado aqui: literal
+      // compila com um `href` que o catálogo já não tem, e o caso ficaria verde
+      // sobre uma porta que não existe mais.
+      const d = NAV_CATALOG.find((item) => item.href === porta);
       expect(d, `${porta} está em PORTAS_ESSENCIAIS e não existe no catálogo`).toBeDefined();
-      expect(essencial(d, "admin"), `${porta} está na lista e não é tratada como essencial`).toBe(true);
+      expect(essencial(d!, "admin"), `${porta} está na lista e não é tratada como essencial`).toBe(true);
     }
   });
 
@@ -164,9 +166,10 @@ describe("a organização não consegue se trancar do lado de fora", () => {
     // Controle negativo — sem ele, o caso acima passaria também se `essencial`
     // devolvesse `true` para todo mundo, que seria conceder porta de admin a
     // `agent` em nome de não trancar ninguém.
+    const tela = NAV_CATALOG.find((d) => d.href === TELA_DA_ESCOLHA)!;
     expect(hrefs({ preset: "simplificada" }, "agent")).not.toContain(TELA_DA_ESCOLHA);
-    expect(essencial({ href: TELA_DA_ESCOLHA, minRole: "admin" }, "agent")).toBe(false);
-    expect(essencial({ href: TELA_DA_ESCOLHA, minRole: "admin" }, "admin")).toBe(true);
+    expect(essencial(tela, "agent")).toBe(false);
+    expect(essencial(tela, "admin")).toBe(true);
   });
 
   it("controle: uma porta comum continua ocultável — senão a garantia seria vacuidade", () => {

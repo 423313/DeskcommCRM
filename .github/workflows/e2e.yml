@@ -752,9 +752,6 @@ jobs:
         agenda-google-volta-do-consentimento.spec.ts
         agenda-google-volta-nao-desloga.spec.ts
         navegacao.spec.ts
-        # Ao lado da `navegacao` de propósito: as duas medem o MENU e as duas mutam a
-        # organização única do banco do CI. Na mesma parte elas correm em sequência;
-        # separadas, uma encolheria o menu que a outra conta. Sem WAHA/Redis/Resend.
         menu-por-empresa-e-a-porta-de-volta.spec.ts
         agenda-google-meet.spec.ts
         painel-de-configuracao-da-instalacao.spec.ts
