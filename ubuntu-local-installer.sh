@@ -99,8 +99,24 @@ WAHA_KEY="deskcomm-local-key"
 WAHA_KEY_HASH=$(echo -n "$WAHA_KEY" | sha512sum | awk '{print $1}')
 
 step "Configurando .env.local (credenciais locais, não versionadas)..."
+# O .env.local de quem já usa este clone aponta para OUTRO ambiente (a nuvem,
+# um QA), e 93 scripts deste repositório o leem. Sobrescrever sem cópia apaga
+# esse ambiente em silêncio — e este instalador roda DENTRO de um clone
+# existente quando acha o package.json. `scripts/local-env.sh` já tinha esta
+# guarda; aqui faltava.
+if [[ -s .env.local ]] && ! grep -q '^DESKCOMM_ENV_MODE=local$' .env.local; then
+  BACKUP=".env.local.cloud-backup"
+  if [[ ! -e "$BACKUP" ]]; then
+    # `cp -p` e não `cp --preserve=mode`: a segunda é do GNU e falha no macOS,
+    # onde o teste desta guarda roda antes de chegar ao Ubuntu do CI.
+    cp -p .env.local "$BACKUP"
+    chmod 600 "$BACKUP"
+    paint 33 "⚠ O .env.local existente NÃO era local; copiei para $BACKUP antes de substituir."
+  fi
+fi
 umask 077
 cat <<EOF > .env.local
+DESKCOMM_ENV_MODE=local
 NODE_ENV=production
 NEXT_PUBLIC_SUPABASE_URL=$API_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY
@@ -141,8 +157,13 @@ step "Subindo os serviços do DeskcommCRM (App, Worker, WAHA, Redis)..."
 step "Criando usuário Administrador..."
 export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
 export SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
-export OWNER_EMAIL="admin@admin.com"
-export OWNER_PASSWORD="AdminPassword123!"
+export OWNER_EMAIL="${OWNER_EMAIL:-admin@admin.com}"
+# A senha NASCE ALEATÓRIA e é impressa no fim. A fixa que estava aqui vinha
+# publicada neste repositório, e o `.env.local` acima aponta a aplicação para
+# o IP da VM na rede (não 127.0.0.1): qualquer máquina da mesma rede alcançaria
+# o CRM com uma credencial que está no GitHub. Quem quiser escolher a senha
+# exporta OWNER_PASSWORD antes de chamar o script.
+export OWNER_PASSWORD="${OWNER_PASSWORD:-$(openssl rand -base64 18)}"
 export OWNER_ORG_NAME="Deskcomm Local"
 export APP_LOCALE="pt-BR"
 
