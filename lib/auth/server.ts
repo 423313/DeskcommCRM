@@ -40,6 +40,7 @@ interface RawMembershipRow {
 interface OrgJoin {
   display_name: string;
   locale: string | null;
+  timezone: string | null;
 }
 
 /** O mesmo `organizations`, alcançado por outro embed: só as portas da EMPRESA. */
@@ -181,10 +182,12 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
         .select(
           // Dois embeds do MESMO `organizations`, como manda o PostgREST quando a
           // mesma relação aparece duas vezes: `organizations(...)` continua sendo
-          // o que a membership sempre trouxe (nome e IDIOMA da empresa — o idioma
-          // decide a tela inteira e não pode depender de um embed que a issue
-          // #1341 acabou de engordar), e o alias traz só as portas da EMPRESA.
-          "organization_id, role, interface_settings, accepted_at, organizations(display_name, locale), interface_da_empresa:organizations(interface_settings)",
+          // o que a membership sempre trouxe (nome, IDIOMA e FUSO da empresa — o
+          // idioma decide a tela inteira e não pode depender de um embed que a
+          // issue #1341 acabou de engordar), e o alias traz só as portas da EMPRESA.
+          // `timezone` veio do main (fuso da organização nas listas, #1290) e convive
+          // com o alias: um embed por relação, sem renomear o que já existia.
+          "organization_id, role, interface_settings, accepted_at, organizations(display_name, locale, timezone), interface_da_empresa:organizations(interface_settings)",
         )
         .eq("user_id", user.id)
         .is("revoked_at", null)
@@ -239,6 +242,7 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
       // vínculo decidia sozinho, então a escolha da empresa não existia.
       interface_settings: combinarInterfaces(empresa?.interface_settings, row.interface_settings),
       locale: org?.locale ?? null,
+      timezone: org?.timezone ?? null,
     };
   });
 
@@ -294,6 +298,7 @@ export const resolveActiveOrg = cache(async (authUser: AuthUser): Promise<Active
     name: ativo.organization_name,
     role: ativo.role,
     interface_settings: ativo.interface_settings,
+    timezone: ativo.timezone ?? null,
   };
 });
 
