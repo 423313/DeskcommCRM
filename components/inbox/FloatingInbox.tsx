@@ -55,6 +55,14 @@ export const ATALHO_DE_MENSAGENS: PecaDoRodape = {
   altura: 56,
 };
 
+/**
+ * O atalho SOBE enquanto existe chamada de voz, porque aí o canto de baixo é do
+ * `ActiveCallPanel`. Fica fora da declaração da peça de propósito: o contrato
+ * reserva o MAIOR alcance, e nesse estado quem declara o alcance é o painel de
+ * chamada, que já está lá. Aqui é só onde este atalho se desenha.
+ */
+const DISTANCIA_ACIMA_DA_CHAMADA = 96;
+
 /** Mounted in the authenticated shell: navigation does not destroy the draft. */
 export function FloatingInbox() {
   const { activeOrg, user } = useAuth();
@@ -114,10 +122,8 @@ function InboxDock({ orgId }: { orgId: string }) {
     <aside
       ref={ancora}
       aria-label={t("Mensagens rápidas")}
-      className={cn(
-        "fixed right-4 z-40 max-w-[calc(100vw-2rem)]",
-        elevated ? "bottom-24" : "bottom-4",
-      )}
+      style={{ bottom: elevated ? DISTANCIA_ACIMA_DA_CHAMADA : ATALHO_DE_MENSAGENS.distancia }}
+      className="fixed right-4 z-40 max-w-[calc(100vw-2rem)]"
       onKeyDown={(event) => {
         if (event.key === "Escape" && !event.defaultPrevented) {
           event.stopPropagation();
