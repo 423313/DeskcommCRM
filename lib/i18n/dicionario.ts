@@ -243,6 +243,13 @@ export const DICIONARIO: Traducoes = {
     es: "No fue posible comunicarse con el servidor. Revisa la dirección, el puerto y la seguridad.",
   },
   "Servidor de e-mail salvo.": { es: "Servidor de correo guardado." },
+  "Serviço externo de envio": { es: "Servicio externo de envío" },
+  "A alternativa ao servidor próprio: um serviço que entrega o e-mail por você. Se as duas coisas estiverem configuradas, o servidor próprio tem preferência.": {
+    es: "La alternativa al servidor propio: un servicio que entrega el correo por usted. Si ambos están configurados, el servidor propio tiene preferencia.",
+  },
+  "O serviço de envio de e-mail — próprio ou externo — fica em E-mail →": {
+    es: "El servicio de envío de correo — propio o externo — está en Correo →",
+  },
   "Servidor de e-mail desta instalação": { es: "Servidor de correo de esta instalación" },
   "Convite de equipe, entrega de dados de LGPD e aviso de prazo saem por aqui. Preencher esta tela é a alternativa a contratar um serviço externo de envio: o e-mail passa a sair pelo seu próprio servidor.": {
     es: "Las invitaciones al equipo, la entrega de datos personales y los avisos de plazo salen por aquí. Completar esta pantalla es la alternativa a contratar un servicio externo de envío: el correo pasa a salir por tu propio servidor.",
