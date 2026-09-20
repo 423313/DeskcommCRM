@@ -109,8 +109,12 @@ describe("os elos que somem sem barulho", () => {
     // para preencher o próprio formulário. Sem este caso, ele volta a ser
     // decorativo no dia em que alguém "simplificar" o resolvedor.
     const servidor = readFileSync("lib/auth/server.ts", "utf8");
+    // ⚠️ O `locale` é cobrado por NOME, e a lista continua aberta: o embed pode
+    // ganhar outra coluna (o fuso ganhou, para a Agenda abrir na semana certa)
+    // sem que isso signifique que o idioma sumiu. Prender a string inteira fazia
+    // este caso reprovar quem ACRESCENTA — o contrário do que ele vigia.
     expect(servidor, "a membership deixou de trazer o idioma da organização").toMatch(
-      /organizations\(display_name, locale\)/,
+      /organizations\((?=[^)]*\blocale\b)[^)]*\)/,
     );
     expect(servidor, "o idioma da sessão parou de cair na organização").toMatch(
       /locale \?\? \(await localeDaOrgAtiva\(memberships\)\)/,
