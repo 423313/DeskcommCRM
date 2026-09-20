@@ -33,7 +33,16 @@ import { NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 
-const auditSpy = vi.fn(async () => undefined);
+interface EventoDeAudit {
+  action: string;
+  metadata?: Record<string, unknown>;
+}
+
+// O espião declara o ARGUMENTO que a rota passa. Sem ele, `mock.calls` é
+// uma tupla vazia e `([e]) => …` não compila (TS2493) — o typecheck roda
+// ANTES dos testes, então um espião sem assinatura reprova o `verify`
+// inteiro sem nenhum caso chegar a rodar.
+const auditSpy = vi.fn(async (_evento: EventoDeAudit) => undefined);
 
 vi.mock("@/lib/audit", () => ({
   audit: auditSpy,
@@ -61,15 +70,10 @@ const NOTA_DA_COMANDA = "paciente Marta chorou na sala e pediu para remarcar";
 const MOTIVO_DO_ESTORNO = "estornado porque a Marta passou mal durante o procedimento";
 const MOTIVO_DA_FIDELIDADE = "bonus porque a Marta indicou a irmã que faz quimio";
 
-interface EventoDeAudit {
-  action: string;
-  metadata?: Record<string, unknown>;
-}
-
 /** Pega o evento de audit da ação pedida — e reprova se ele não existe. */
 function eventoDoAudit(action: string): EventoDeAudit {
   const evento = auditSpy.mock.calls
-    .map(([e]) => e as unknown as EventoDeAudit)
+    .map(([e]) => e)
     .find((e) => e.action === action);
   // CONTROLE POSITIVO. Sem este expect, a ausência da frase mediria a ausência
   // da chamada: rota que parasse de auditar passaria em todos os casos abaixo.
