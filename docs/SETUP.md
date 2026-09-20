@@ -8,6 +8,61 @@
 
 ---
 
+## Instalação local em Ubuntu/VM (PostgreSQL + serviços em Docker)
+
+Em uma VM Ubuntu nova, execute o instalador uma única vez na raiz do clone:
+
+```bash
+chmod +x ubuntu-local-installer.sh
+./ubuntu-local-installer.sh
+```
+
+O instalador sobe o Supabase local em Docker (PostgreSQL com `pgvector`, Auth,
+PostgREST, Storage e Realtime), aplica `supabase/baseline.sql`, e inicia o app,
+worker, scheduler, WAHA e Redis/SRH pelo `docker-compose.local.yml`. As chaves
+ficam somente em `.env.local`, que não é versionado. O primeiro build pode levar
+alguns minutos e precisa de espaço para as imagens do Supabase e do WAHA.
+
+O instalador também cria o usuário inicial e escolhe uma porta livre para o app.
+Não é necessário executá-lo novamente a cada reinício.
+
+### Uso diário
+
+Depois da instalação inicial, use:
+
+```bash
+pnpm local:up
+pnpm local:status
+pnpm local:logs          # ou: bash scripts/local-stack.sh logs worker
+pnpm local:down
+```
+
+`pnpm local:up` verifica se o Supabase local está ativo e confere o `.env.local`.
+Se o arquivo estiver ausente ou incompleto, ele gera automaticamente as URLs e
+chaves locais do PostgreSQL/Supabase, WAHA, Redis/SRH e da aplicação. Se já
+existir um `.env.local` de outro ambiente, ele é preservado como
+`.env.local.cloud-backup` antes da geração local.
+
+Para atualizar o código e aplicar a versão nova:
+
+```bash
+git pull --ff-only
+pnpm local:up
+```
+
+Para aplicar uma alteração manual no `.env.local`, use também `pnpm local:up`,
+pois a aplicação precisa ser recriada e recompilada para carregar as novas
+variáveis. `docker compose restart` sozinho não atualiza o ambiente do
+container.
+
+O endereço e a porta são mostrados ao final do instalador. Se a porta 3000 já
+estiver ocupada, ele escolhe a próxima porta livre. O painel local do Supabase
+fica em `http://127.0.0.1:54323` e o WAHA em `http://127.0.0.1:3030`.
+
+> A cadeia histórica de migrations contém dependências antigas e não é usada
+> para uma instalação fresca. O helper inicia a infraestrutura sem aplicá-la e
+> carrega o baseline versionado, que é o artefato de instalação do self-host.
+
 ## Índice
 
 1. [Antes de começar](#antes-de-começar)
@@ -18,7 +73,7 @@
 6. [Anthropic + Vercel AI Gateway — IA](#4-anthropic--vercel-ai-gateway--ia)
 7. [OpenAI — embeddings do RAG](#5-openai--embeddings-do-rag)
 8. [Sentry — monitoramento de erros](#6-sentry--monitoramento-de-erros)
-9. [E-mail transacional — SMTP ou Resend](#7-e-mail-transacional--smtp-ou-resend)
+9. [SMTP — email transacional](#7-smtp--email-transacional)
 10. [Nuvemshop — integração e-commerce](#8-nuvemshop--integração-e-commerce)
 11. [Chaves geradas localmente](#9-chaves-geradas-localmente--encryption--secrets)
 12. [Verificação final](#verificação-final)
@@ -30,6 +85,7 @@
 ## Antes de começar
 
 **O que você precisa ter instalado:**
+
 - **Node.js 22** — recomendamos via [nvm](https://github.com/nvm-sh/nvm). No repo, rode `nvm use` e ele puxa a versão certa. A suíte `pnpm test:db` exige Node 22+: os testes instanciam o cliente do Supabase, que precisa do `WebSocket` global (nativo só a partir do 22).
 - **Docker Desktop** — pra rodar o WAHA local. [Download](https://www.docker.com/products/docker-desktop/).
 - **pnpm** — `npm install -g pnpm` (gerenciador de pacotes que usamos).
@@ -38,6 +94,7 @@
 - **Cartão de crédito** 💳 — alguns serviços pedem só pra "comprovar identidade" mesmo no plano grátis (Supabase, Sentry). Se ficar dentro do free tier, **não cobram nada**.
 
 **Como o `.env.local` funciona:**
+
 - Fica na **raiz do projeto**: `/seu-caminho/DeskcommCRM/.env.local`.
 - Cada linha é `NOME_DA_VARIAVEL=valor` — sem espaço antes/depois do `=`.
 - Strings com caracteres especiais: envolva em aspas duplas (`"valor com espaço"`).
@@ -53,20 +110,19 @@
 Se você quer rodar o app o mais rápido possível com o mínimo viável:
 
 **🟢 Mínimo pra `pnpm dev` subir sem erro fatal (~15 min):**
+
 1. [Supabase](#1-supabase--banco--auth--storage) — sem isso nada funciona (auth + DB).
 2. [Chaves geradas localmente](#9-chaves-geradas-localmente--encryption--secrets) — `INTERNAL_SECRET`, encryption keys.
 3. [Upstash Redis](#2-upstash-redis--rate-limit--idempotência) — rate limit é gate de várias rotas.
 
-**🟡 Pra testar features de IA (+10 min):**
-4. [Anthropic](#4-anthropic--vercel-ai-gateway--ia) ou Vercel AI Gateway.
-5. [OpenAI](#5-openai--embeddings-do-rag) — embeddings do RAG.
+**🟡 Pra testar features de IA (+10 min):** 4. [Anthropic](#4-anthropic--vercel-ai-gateway--ia) ou Vercel AI Gateway. 5. [OpenAI](#5-openai--embeddings-do-rag) — embeddings do RAG.
 
-**🟡 Pra testar WhatsApp (+15 min):**
-6. [WAHA](#3-waha--whatsapp) + ngrok (precisa URL pública).
+**🟡 Pra testar WhatsApp (+15 min):** 6. [WAHA](#3-waha--whatsapp) + ngrok (precisa URL pública).
 
 **⚪ Pode ficar vazio em dev (degradam graciosamente):**
+
 - [Sentry](#6-sentry--monitoramento-de-erros) — não monitora erros, mas app sobe.
-- [E-mail](#7-e-mail-transacional--smtp-ou-resend) — sem SMTP e sem Resend, o convite vira link na tela e o export de LGPD fica em revisão pendente; o app sobe igual.
+- [SMTP](#7-smtp--email-transacional) — e-mails não saem, mas o app sobe com link de convite copiável.
 - [Nuvemshop](#8-nuvemshop--integração-e-commerce) — UI mostra "Integração não configurada".
 
 ---
@@ -90,11 +146,11 @@ Se você quer rodar o app o mais rápido possível com o mínimo viável:
 
 Na tela **Project Settings → API**:
 
-| Campo no Supabase | Variável no `.env.local` | Detalhe |
-|---|---|---|
-| **Project URL** (ex: `https://abc123.supabase.co`) | `NEXT_PUBLIC_SUPABASE_URL` | URL pública, pode ir pro browser |
-| **Project API keys → `anon` `public`** | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave pública. RLS protege os dados |
-| **Project API keys → `service_role` `secret`** | `SUPABASE_SERVICE_ROLE_KEY` | **CRÍTICA**. Bypassa RLS. Nunca exponha. Nunca commite. |
+| Campo no Supabase                                  | Variável no `.env.local`        | Detalhe                                                 |
+| -------------------------------------------------- | ------------------------------- | ------------------------------------------------------- |
+| **Project URL** (ex: `https://abc123.supabase.co`) | `NEXT_PUBLIC_SUPABASE_URL`      | URL pública, pode ir pro browser                        |
+| **Project API keys → `anon` `public`**             | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave pública. RLS protege os dados                     |
+| **Project API keys → `service_role` `secret`**     | `SUPABASE_SERVICE_ROLE_KEY`     | **CRÍTICA**. Bypassa RLS. Nunca exponha. Nunca commite. |
 
 > ⚠️ **Aviso de segurança:** a `service_role` é o equivalente a senha de root do banco. Se vazar, qualquer pessoa lê/escreve tudo. Em prod, configure rotação trimestral.
 
@@ -140,6 +196,7 @@ de `supabase/baseline.sql`.
 ### Storage bucket
 
 No menu lateral → **Storage** → **New bucket**:
+
 - **Name:** `whatsapp-media`
 - **Public bucket:** **NÃO** (deixe desmarcado — usamos URLs assinadas)
 
@@ -160,9 +217,9 @@ No menu lateral → **Storage** → **New bucket**:
 3. Clique **Create**.
 4. Na tela do banco criado, role até a seção **REST API**. Você vai ver:
 
-| Campo no Upstash | Variável no `.env.local` |
-|---|---|
-| **UPSTASH_REDIS_REST_URL** (botão de copy) | `UPSTASH_REDIS_REST_URL` |
+| Campo no Upstash                                             | Variável no `.env.local`   |
+| ------------------------------------------------------------ | -------------------------- |
+| **UPSTASH_REDIS_REST_URL** (botão de copy)                   | `UPSTASH_REDIS_REST_URL`   |
 | **UPSTASH_REDIS_REST_TOKEN** (clique no olhinho pra revelar) | `UPSTASH_REDIS_REST_TOKEN` |
 
 > 💡 O Upstash mostra os snippets prontos em vários formatos. Use a aba **`.env`** que ele já formata certo — é só colar.
@@ -192,6 +249,7 @@ echo -n "7a3f9b2c1d4e5f..." | shasum -a 512 | awk '{print $1}'
 ```
 
 > ⚠️ **Erro #1 de quem clona o projeto:** confundir plaintext com hash. Memoriza:
+>
 > - O **container WAHA** recebe o **HASH** → vai em `WAHA_API_KEY_SHA512`.
 > - O **app Next.js** envia o **PLAINTEXT** no header `X-Api-Key` → vai em `WAHA_API_KEY`.
 
@@ -324,76 +382,31 @@ SENTRY_DSN=https://abc123@o456.ingest.sentry.io/789
 
 ---
 
-## 7. E-mail transacional — SMTP **ou** Resend
+## 7. SMTP — email transacional
 
-**O que é:** o caminho pelo qual saem convite de equipe, export de LGPD, alarme de SLA
-e afins. Há **dois**, e eles convivem: você escolhe UM, não precisa dos dois, e nenhum
-deles é obrigatório para o app subir.
-
-| | **SMTP** (servidor próprio) | **Resend** (serviço externo) |
-|---|---|---|
-| quando escolher | você já tem servidor de e-mail, ou não quer abrir conta em outro serviço | quer subir rápido sem mexer em servidor de e-mail |
-| onde se configura | tela **Admin › E-mail**, ou as `SMTP_*` do `.env` | as duas chaves `RESEND_*` do `.env` |
-| custo | o do seu servidor | free tier de 3k e-mails/mês, 100/dia |
-
-**Como o sistema escolhe:** se houver SMTP configurado (endereço do servidor **e**
-remetente), a entrega sai por ele; se não houver, sai pela Resend. A decisão é pela
-configuração, não por falha — o sistema não tenta um e cai no outro, para o mesmo
-convite não sair duas vezes. Quem já roda com Resend **não precisa mexer em nada**:
-enquanto o SMTP estiver vazio, tudo segue como antes. A regra mora em
-`lib/email/roteador.ts`.
-
-**Sem nenhum dos dois** o app sobe normalmente: o convite mostra o link de aceite na
-própria tela (para você copiar e mandar como quiser) e o export de LGPD fica em
-revisão pendente, em vez de sumir.
-
----
-
-### 7a. SMTP — pelo seu próprio servidor
-
-Pela tela, que é o caminho recomendado: entre em **Admin › E-mail** (você precisa ser
-o dono da instalação), preencha os campos, use **Testar conexão** e salve. A senha é
-guardada cifrada e a tela nunca a mostra de volta.
-
-Pelo `.env`, para provisionar uma VPS sem abrir a interface:
+Convites de equipe, entrega de export LGPD e alarmes usam o servidor SMTP da sua
+empresa. A configuração preferida fica em **Configurações → E-mail e convites**
+(`/app/settings/resend` por compatibilidade de URL); ela é criptografada no banco
+da instalação. O mesmo transporte também pode ser provisionado no `.env`.
 
 ```env
 SMTP_HOST=smtp.seudominio.com
-SMTP_PORT=587
-SMTP_SECURITY=starttls
-SMTP_USERNAME=nao-responda@seudominio.com
-SMTP_PASSWORD=...
-SMTP_FROM_EMAIL=nao-responda@seudominio.com
+SMTP_PORT=465
+SMTP_SECURITY=tls
+SMTP_USERNAME=suporte@seudominio.com
+SMTP_PASSWORD=uma-senha-de-aplicativo
+SMTP_FROM_EMAIL=suporte@seudominio.com
 SMTP_FROM_NAME=Minha Empresa
 ```
 
-> 💡 Porta **587** com `starttls`, ou **465** com `tls`. No `SMTP_HOST` vai só o
-> endereço: sem `smtp://` na frente e sem `:porta` no fim.
->
-> ℹ️ O que estiver gravado pela tela **vale acima** do `.env`. As variáveis ficam como
-> piso de rollback e como caminho de instalação automatizada.
+Use **465 + `tls`** para SMTP com SSL/TLS implícito, ou **587 + `starttls`**
+para STARTTLS. Em `SMTP_HOST`, informe somente o hostname — sem `smtp://` e sem
+`:465`. O campo de remetente recebe apenas o e-mail, por exemplo
+`suporte@seudominio.com`.
 
----
-
-### 7b. Resend — pelo serviço externo
-
-**O que é:** Serviço de envio de email. Usado pra magic links, reset de senha, exports LGPD, notificações. **Free tier:** 3k emails/mês, 100/dia. Suficiente pra dev e MVP.
-
-1. Acesse <https://resend.com> → **Sign up** com GitHub.
-2. **API Keys → Create API Key**:
-   - **Name:** `deskcomm-dev`
-   - **Permission:** `Sending access` (não `Full access`).
-   - **Domain:** `All domains` (em dev) — em prod, restrinja ao domínio verificado.
-3. Copie a chave (começa com `re_...`). **Ela só aparece uma vez.**
-
-```env
-RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=onboarding@resend.dev
-```
-
-> 💡 O domínio `onboarding@resend.dev` é compartilhado e funciona no plano free pra testes. Em prod, **verifique seu próprio domínio** no Resend (DNS records SPF + DKIM) e use `noreply@seudominio.com`.
->
-> ℹ️ Se você não configurar o Resend, o app sobe normal — só faz `console.log` em vez de enviar emails de verdade. Bom pra dev sem precisar gastar quota.
+> ℹ️ Sem host ou remetente, o app continua funcionando: o convite mostra o link
+> de aceite para copiar e o export LGPD fica em `pending_review`. Não há envio
+> incompleto nem domínio padrão do produto.
 
 ---
 
@@ -412,11 +425,11 @@ RESEND_FROM_EMAIL=onboarding@resend.dev
    - **Scopes:** marque tudo relacionado a `read_orders`, `read_customers`, `read_products`, `write_orders` (pra atualizar status).
 3. Após criar, a tela do app mostra:
 
-| Campo no portal | Variável no `.env.local` |
-|---|---|
+| Campo no portal                                           | Variável no `.env.local`       |
+| --------------------------------------------------------- | ------------------------------ |
 | **App ID** (na URL: `partners.tiendanube.com/apps/12345`) | `NUVEMSHOP_APP_ID` (= `12345`) |
-| **Client ID** | `NUVEMSHOP_CLIENT_ID` |
-| **Client Secret** (clique pra revelar) | `NUVEMSHOP_CLIENT_SECRET` |
+| **Client ID**                                             | `NUVEMSHOP_CLIENT_ID`          |
+| **Client Secret** (clique pra revelar)                    | `NUVEMSHOP_CLIENT_SECRET`      |
 
 ```env
 NUVEMSHOP_APP_ID=12345
@@ -527,36 +540,49 @@ Se algum service vier `"degraded"` ou `"down"`, abra o terminal do `pnpm dev` e 
 ## Troubleshooting
 
 ### `Variáveis de ambiente inválidas` no boot
+
 O Zod (`lib/env.ts`) valida no startup. Olha a lista de erros que ele imprime — fala exatamente qual var está faltando ou com formato errado.
 
 ### `Error: supabaseUrl is required`
+
 Você esqueceu de preencher `NEXT_PUBLIC_SUPABASE_URL` ou tem espaço/aspa errada. Confira se a linha é exatamente `NEXT_PUBLIC_SUPABASE_URL=https://abc.supabase.co` (sem aspas, sem espaço antes do `=`).
 
 ### `Invalid JWT` ao chamar Supabase
+
 A `anon key` ou `service role key` foi colada errada (cortou no meio). JWTs do Supabase são longos (~200 chars). Volte no dashboard e use o botão **Copy** em vez de selecionar manualmente.
 
 ### WAHA retorna 401 `Unauthorized`
+
 Provável: você botou o **hash** em `WAHA_API_KEY` em vez do **plaintext**. Confira: a app envia o que tá no `.env.local` no header — o container WAHA é quem tem o hash (em `WAHA_API_KEY_SHA512`). Refaça o passo 1 do WAHA.
 
 ### Webhook do WAHA não chega
+
 - O ngrok está rodando? (`ngrok http 3000`)
 - A URL do ngrok atual está em `WAHA_WEBHOOK_BASE_URL`? (muda a cada restart no plano free).
 - Você reiniciou o `pnpm dev` depois de mudar o `.env.local`? Variáveis de ambiente são lidas no boot.
 - Confira logs do container: `docker logs deskcomm-waha`.
 
 ### Porta 3000 já em uso
+
 Algum outro processo rodando. Mata com `lsof -ti:3000 | xargs kill -9` ou roda o Next em outra porta: `pnpm dev -- -p 3001` (e atualize `WAHA_WEBHOOK_BASE_URL` no ngrok pra apontar pra nova porta).
 
-### `RESEND_API_KEY is undefined` (mas o app sobe)
-Esperado em dev se você não configurou **nenhum** dos dois caminhos de e-mail (nem SMTP, nem Resend). Emails caem no `console.log`. Só configure se for testar fluxos de email (LGPD export, magic link).
+### SMTP não envia (mas o app sobe)
+
+Confira em **Configurações → E-mail e convites** se o teste de conexão conclui e
+se a combinação de porta e segurança está correta: **465 + TLS** ou **587 +
+STARTTLS**. O host não deve conter `smtp://` ou a porta. Sem SMTP configurado,
+convites continuam com link copiável e o restante do app segue disponível.
 
 ### Migrations não rodam
+
 Confira se você está logado: `supabase login` — vai abrir o browser pra autorizar. Depois `supabase link --project-ref <ref>` de novo.
 
 ### Esqueci a senha do banco do Supabase
+
 **Project Settings → Database → Reset database password**. Lembrando que isso invalida conexões existentes.
 
 ### Docker compose não sobe o WAHA
+
 - Docker Desktop está rodando? Ícone na barra de menus.
 - Em Mac M1/M2/M3, o `platform: linux/amd64` no docker-compose pode dar warning — é normal, só roda mais devagar via emulação. Funciona.
 
