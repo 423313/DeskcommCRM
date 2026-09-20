@@ -55,18 +55,36 @@ const DIVIDA_CONHECIDA: Record<string, string> = {
   system_version: "assinada pela tela de atualização; entrou antes deste gate",
 };
 
-function publicacaoDoBaseline(): Set<string> {
-  const sql = readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8");
+/**
+ * Reproduz, na ordem do arquivo, o que o SQL faz com a publicação
+ * `supabase_realtime`. É pura (recebe o texto) para que o controle de
+ * instrumento abaixo possa alimentá-la com fonte sintética.
+ *
+ * Duas coisas decidem a leitura:
+ *
+ * 1. **O baseline é aplicado INTEIRO e EM ORDEM** — dump primeiro, apêndice
+ *    depois —, e os `add`/`drop` avulsos valem na posição em que aparecem. Por
+ *    isso os eventos são coletados com o índice no arquivo e reproduzidos nessa
+ *    ordem, e não pela primeira ocorrência (CLAUDE.md, item 10).
+ *
+ * 2. **`foreach t in array array[...]` é um idioma GENÉRICO deste baseline**, e
+ *    não a marca da publicação: o mesmo laço liga RLS, cria policy
+ *    `tenant_isolation_%I_all` e cria trigger de `updated_at`. Medido em
+ *    20/09/2026, dos SEIS lotes do arquivo só UM publica (linha 4849). Aceitar o
+ *    idioma inteiro media **29** tabelas onde o arquivo publica **12** — e as 17
+ *    a mais (`financial_accounts`, `sales`, `ai_routers`, `calendar_event_types`…)
+ *    passariam a contar como "tem realtime" sem receber evento nenhum, que é
+ *    exatamente o defeito que este gate existe para pegar. Por isso a captura vai
+ *    até `end loop` e o lote só entra quando o CORPO publica.
+ */
+function publicacaoDe(sql: string): Set<string> {
   const dentro = new Set<string>();
 
-  // O baseline é aplicado INTEIRO e EM ORDEM. O dump traz o primeiro
-  // `foreach t in array array[...]` e o apêndice traz mais cinco lotes, aplicados
-  // um atrás do outro; os add/drop avulsos entram na posição em que aparecem no
-  // arquivo. Ancorar no PRIMEIRO lote mede a publicação morta: media 12 tabelas
-  // onde o arquivo instala 29 (medido em 20/09/2026 — ver CLAUDE.md, item 10).
   const eventos: { idx: number; lote?: string; op?: string; tabela?: string }[] = [];
-  for (const m of sql.matchAll(/foreach\s+t\s+in\s+array\s+array\[(.*?)\]/gs))
+  for (const m of sql.matchAll(/foreach\s+t\s+in\s+array\s+array\[(.*?)\]([\s\S]*?)end loop/gs)) {
+    if (!/alter publication supabase_realtime add table/i.test(m[2]!)) continue;
     eventos.push({ idx: m.index ?? 0, lote: m[1]! });
+  }
   for (const m of sql.matchAll(
     /alter publication supabase_realtime (add|drop) table public\.(\w+)/g,
   ))
@@ -85,6 +103,10 @@ function publicacaoDoBaseline(): Set<string> {
     }
   }
   return dentro;
+}
+
+function publicacaoDoBaseline(): Set<string> {
+  return publicacaoDe(readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8"));
 }
 
 function assinadasNoCodigo(): Map<string, string[]> {
@@ -119,6 +141,30 @@ describe("realtime: assinatura sem publicação nunca recebe evento", () => {
     // assinatura mudar, um dos dois vira zero e o gate passaria a aprovar tudo.
     expect(publicacao.size, "publicação vazia: o extrator do baseline quebrou").toBeGreaterThan(5);
     expect(assinadas.size, "nenhuma assinatura achada: o extrator do código quebrou").toBeGreaterThan(3);
+  });
+
+  it("o extrator lê o CORPO do laço, e não o idioma (controle sobre fonte sintética)", () => {
+    // Controle POSITIVO: sem ele, um extrator que aceite todo
+    // `foreach t in array array[...]` como publicação fica verde — a contagem
+    // só INFLA, e inflada ela aprova justamente a tabela que não recebe evento.
+    // A fonte abaixo tem um lote que publica, um lote que só liga RLS (o idioma
+    // é o mesmo), um `add` avulso e um `drop` posterior.
+    const sintetico = `
+      do $$ begin
+        foreach t in array array['publicada_a','publicada_b'] loop
+          execute format('alter publication supabase_realtime add table public.%I', t);
+        end loop;
+        foreach t in array array['so_rls'] loop
+          execute format('alter table public.%I enable row level security', t);
+        end loop;
+      end $$;
+      alter publication supabase_realtime add table public.avulsa;
+      alter publication supabase_realtime drop table public.publicada_b;
+    `;
+    expect(
+      [...publicacaoDe(sintetico)].sort(),
+      "`so_rls` só liga RLS — se ela aparecer, o extrator voltou a medir o idioma",
+    ).toEqual(["avulsa", "publicada_a"]);
   });
 
   it("nenhuma assinatura NOVA aponta para tabela fora da publicação", () => {
