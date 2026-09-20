@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { BarraDeProgressoNavegacao } from "@/components/shell/BarraDeProgressoNavegacao";
@@ -8,7 +8,6 @@ import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessage
 import { useInboundCallAlerts } from "@/hooks/calls/useInboundCallAlerts";
 import { useCrmAlerts } from "@/hooks/notifications/useCrmAlerts";
 import { useNotifyOpenFromServiceWorker } from "@/lib/notifications/notify_open";
-import { FloatingInbox } from "@/components/inbox/FloatingInbox";
 import { estiloDaReserva, useOcupacaoDoRodape } from "@/lib/ui/rodape-ocupado";
 
 interface AppShellProps {
@@ -85,49 +84,6 @@ export function AppShell({ sidebarCollapsed, podeAtender, children }: AppShellPr
           {children}
         </main>
       </div>
-      {/*
-        O ATALHO VIVE NO PRÓPRIO BOUNDARY DE SUSPENSE — e o porquê aqui está
-        HONESTO, não bonito: o conserto pode estar funcionando por acidente.
-
-        O QUE ESTÁ MEDIDO. Montar este atalho fazia SEIS testids de telas
-        diferentes resolverem a dois elementos no e2e. Desligar a tag zerou os
-        seis no mesmo job (105 casos rodando); pôr este boundary levou de seis
-        para um. A ablação é prova por diferença; o resto abaixo não é.
-
-        O QUE O SEGUNDO NÓ É, medido no trace: `<div hidden id="S:0">` — filho
-        DIRETO do `<body>`, FORA desta árvore, com uma cópia inteira da página
-        dentro. É o BUFFER DE STREAMING do SSR do React. Num stream correto,
-        todo `id="S:N"` tem um `$RC("B:N","S:N")` que o revela e DRENA a caixa;
-        no HTML gravado, o documento fecha sem nunca emitir esse `$RC`
-        (conferido: `S:0` presente, `B:0` presente, `$RC` = ZERO). A caixa fica
-        pendurada no `<body>` para sempre, e todo `getByTestId` casa dois.
-
-        O ancestral comum dos dois nós é o `<body>`, não o `<main>`.
-
-        POR QUE ESTA TAG É O GATILHO: ela renderiza INLINE, como irmã do
-        `<main>`, e é a única coisa que escreve estado compartilhado da casca
-        durante a hidratação (`usePecaDoRodape`) — o que faz o cliente preencher
-        o `<main>` ANTES do reveal que drenaria a caixa.
-
-        POR QUE O BOUNDARY PODE ESTAR ACERTANDO SEM QUE EU SAIBA: ele muda
-        QUANDO o boundary resolve, e isso pode drenar o `#S:0`. Mas nada aqui
-        suspende de verdade na montagem — não há `useSuspenseQuery` em lugar
-        nenhum, e os dois `dynamic()` só renderizam dentro de
-        `CompactConversation`, que exige `selected` truthy (nasce `null`).
-
-        UMA EXPLICAÇÃO QUE ESTE COMENTÁRIO JÁ DEU E QUE ESTÁ FALSIFICADA: que o
-        App Router "segurava a página anterior enquanto resolvia". Isso seria
-        transição de CLIENTE, e os seis sítios são carga de DOCUMENTO
-        (`page.goto`/`page.reload`) — não há página anterior para segurar.
-
-        O experimento que fecha, e que ainda NÃO foi feito: carregar a tela com
-        `javaScriptEnabled: false`. Dois nós sem JS = o servidor mandou dois, e
-        a hidratação não tem parte nisso; um sem e dois com = a janela fecha em
-        torno da hidratação.
-      */}
-      <Suspense fallback={null}>
-        <FloatingInbox />
-      </Suspense>
     </div>
   );
 }

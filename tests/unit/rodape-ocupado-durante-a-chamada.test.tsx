@@ -42,11 +42,6 @@ vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (texto: string) => texto }));
 // As peças da casca que NÃO são o assunto: barra lateral, barra de cima, barra
 // de progresso e os vigias de notificação/presença. Ficam fora para o teste
 // medir o rodapé, e não a rede delas.
-// O atalho de mensagens virou irmão da casca (#963) e é PEÇA do contrato, com
-// teste próprio. Aqui ele sai de cena como a Sidebar e a TopBar saem: este
-// arquivo mede o painel de CHAMADA, e montar o atalho de verdade traria o
-// `useAuth` dele para dentro de um teste que não tem AuthProvider.
-vi.mock("@/components/inbox/FloatingInbox", () => ({ FloatingInbox: () => null }));
 vi.mock("@/components/shell/Sidebar", () => ({ Sidebar: () => null }));
 vi.mock("@/components/shell/TopBar", () => ({ TopBar: () => null }));
 vi.mock("@/components/shell/BarraDeProgressoNavegacao", () => ({
