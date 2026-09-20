@@ -1,0 +1,124 @@
+/**
+ * Menu lateral por EMPRESA — prova pela TELA (DoD item 12, issue #1341, PR #1359).
+ *
+ * Os unitários provam a álgebra (empresa ∩ vínculo ∩ papel) sobre módulos. Isto
+ * prova o que a pessoa faz: abre Configurações → Organização, escolhe menos áreas,
+ * salva, e o menu encolhe de verdade.
+ *
+ * ─── O caso que esta spec existe para guardar ────────────────────────────────
+ *
+ * A pergunta que não é de álgebra: **depois de encolher, dá para voltar?**
+ *
+ * A tela que hospeda a escolha é a própria `/app/settings/tenant`. Se ela puder
+ * ser ocultada, quem administra se tranca do lado de fora — a porta que desfaz a
+ * decisão some junto com as outras, e não há caminho de volta pela tela, só por
+ * banco. Nenhum teste de módulo pega isso como o usuário sente: ele é sobre
+ * navegar depois de ter mudado a navegação.
+ *
+ * Por isso a jornada termina **desfazendo pela tela** o que ela fez na tela.
+ *
+ * ⚠️ ESTA SPEC MUTA A ORGANIZAÇÃO (`organizations.interface_settings`), que é
+ * estado compartilhado com as outras specs da mesma parte — `navegacao.spec.ts`
+ * conta itens do menu. Por isso ela restaura no fim E no `afterAll`: o desfazer
+ * é ao mesmo tempo a asserção que importa e a limpeza.
+ *
+ * Pré-requisito: `.e2e-creds.json` (gerado por `scripts/seed-e2e-credentials.ts`).
+ */
+import { mkdirSync } from "node:fs";
+import * as path from "node:path";
+
+import { test, expect, type Page } from "@playwright/test";
+
+import { lerCreds } from "./helpers/login-admin";
+
+const creds = lerCreds();
+const EVIDENCE = path.join(process.cwd(), ".superpowers", "evidence");
+mkdirSync(EVIDENCE, { recursive: true });
+
+// A jornada é uma sequência: encolher e depois desfazer não são casos
+// independentes, e rodar em paralelo os deixaria disputando a mesma organização.
+test.describe.configure({ mode: "serial" });
+
+const CONFIGURACOES = "/app/settings/tenant";
+
+async function login(page: Page): Promise<void> {
+  await page.goto("/login");
+  await page.locator("#email").fill(creds.users.admin!.email);
+  await page.locator("#password").fill(creds.password);
+  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.waitForURL(/\/app\//);
+}
+
+/** Os itens do menu lateral, como a pessoa os vê. */
+async function itensDoMenu(page: Page): Promise<string[]> {
+  const nav = page.locator("nav").first();
+  await expect(nav).toBeVisible();
+  return (await nav.getByRole("link").allTextContents()).map((t) => t.trim()).filter(Boolean);
+}
+
+async function escolherPerfil(page: Page, perfil: "Completa" | "Simplificada"): Promise<void> {
+  await page.goto(CONFIGURACOES);
+  const cartao = page.getByText("Menu lateral", { exact: true });
+  await expect(cartao, "o card do menu lateral não apareceu em Configurações → Organização").toBeVisible();
+  await page.getByLabel(/perfil de interface/i).selectOption({ label: perfil });
+  await page.getByRole("button", { name: /aplicar interface/i }).click();
+  // A confirmação é a do produto, não um sleep: sem ela, o reload abaixo pode
+  // acontecer antes de a action gravar, e o teste mediria o estado anterior.
+  await expect(page.getByText(/menu lateral da empresa salvo/i)).toBeVisible({ timeout: 15_000 });
+}
+
+test.afterAll(async ({ browser }) => {
+  // Rede de segurança: se um caso falhar no meio, a organização não pode ficar
+  // simplificada para as specs seguintes da mesma parte.
+  const page = await browser.newPage();
+  try {
+    await login(page);
+    await escolherPerfil(page, "Completa");
+  } finally {
+    await page.close();
+  }
+});
+
+test("o menu da empresa encolhe pela tela — e a porta que desfaz continua lá", async ({ page }) => {
+  await login(page);
+
+  // ── 1. Quem não mexeu em nada não vê diferença ─────────────────────────────
+  // A terceira pergunta de aceite do dono. O padrão é a interface COMPLETA, e
+  // ela tem de continuar sendo o que sempre foi.
+  const antes = await itensDoMenu(page);
+  expect(antes.length, "o menu nasceu vazio — a medição seguinte seria vacuidade").toBeGreaterThan(5);
+  await page.screenshot({ path: `${EVIDENCE}/1359-1-menu-completo.png`, fullPage: true });
+
+  // ── 2. A tela nova existe e é achável ──────────────────────────────────────
+  await page.goto(CONFIGURACOES);
+  await expect(page.getByText("Menu lateral", { exact: true })).toBeVisible();
+  await page.screenshot({ path: `${EVIDENCE}/1359-2-card-menu-lateral.png`, fullPage: true });
+
+  // ── 3. Escolher menos áreas encolhe o menu de verdade ──────────────────────
+  await escolherPerfil(page, "Simplificada");
+  await page.goto("/app/inbox");
+  const depois = await itensDoMenu(page);
+  expect(
+    depois.length,
+    `o menu não encolheu: ${antes.length} itens antes, ${depois.length} depois`,
+  ).toBeLessThan(antes.length);
+  await page.screenshot({ path: `${EVIDENCE}/1359-3-menu-simplificado.png`, fullPage: true });
+
+  // ── 4. A PROVA: a porta de volta sobreviveu ────────────────────────────────
+  // Sem ela, os passos acima seriam um caminho só de ida.
+  const configuracoes = page.locator(`nav a[href="${CONFIGURACOES}"], nav a[href^="/app/settings"]`);
+  await expect(
+    configuracoes.first(),
+    "a empresa encolheu o menu e perdeu a porta que desfaz a escolha — trancada do lado de fora",
+  ).toBeVisible();
+
+  // ── 5. E ela funciona: desfazer pela TELA devolve o menu ───────────────────
+  await escolherPerfil(page, "Completa");
+  await page.goto("/app/inbox");
+  const restaurado = await itensDoMenu(page);
+  expect(
+    restaurado.length,
+    "desfazer pela tela não devolveu o menu ao que era",
+  ).toBe(antes.length);
+  await page.screenshot({ path: `${EVIDENCE}/1359-4-menu-restaurado.png`, fullPage: true });
+});
