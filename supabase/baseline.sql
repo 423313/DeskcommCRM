@@ -13064,7 +13064,18 @@ notify pgrst, 'reload schema';
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, pelo mesmo motivo das funções
 -- acima: `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts` proíbe `create
 -- function` depois dele.
+-- ⚠️ A ORGANIZAÇÃO É PARÂMETRO OBRIGATÓRIO (issue #1248, migration 0344): o
+-- único limite era o `p_contact` que o CHAMADOR mandava, e a função é security
+-- definer — chamada de service_role com o contato de OUTRA organização estampava
+-- o anúncio lá dentro. O `where` casa `organization_id = p_org` e a organização
+-- alheia casa zero linhas, silenciosamente, como o primeiro-toque.
+-- A assinatura antiga de TRÊS argumentos é derrubada ANTES do create: com as duas
+-- no catálogo, a chamada de três chaves resolveria na ANTIGA (mesmo defeito
+-- medido na 0336) e a organização nunca chegaria ao `where`.
+drop function if exists public.fn_estampar_atribuicao_de_anuncio(uuid, text, jsonb);
+
 create or replace function public.fn_estampar_atribuicao_de_anuncio(
+  p_org uuid,
   p_contact uuid,
   p_platform text,
   p_metadata jsonb
@@ -13080,15 +13091,16 @@ begin
     source_metadata = source_metadata || p_metadata,
     updated_at = now()
   where id = p_contact
+    and organization_id = p_org
     and source_metadata->>'ad_platform' is null;
 end;
 $$;
 
-comment on function public.fn_estampar_atribuicao_de_anuncio(uuid, text, jsonb) is
-  'Grava de qual anúncio (Meta Ads / Google Ads) um contato veio — só na primeira vez. `source_metadata = source_metadata || p_metadata` faz merge, nunca sobrescreve o que fn_upsert_wa_contact já gravou (waha_lid, waha_chat_id, notify_name). A guarda `source_metadata->>''ad_platform'' is null` é o primeiro-toque: clicar em outro anúncio meses depois, numa conversa já aberta, não reescreve de onde a pessoa veio originalmente — o UPDATE casa zero linhas, silenciosamente. security definer + revoke de anon/authenticated: só o backend (admin client no ingest de canal) chama isto.';
+comment on function public.fn_estampar_atribuicao_de_anuncio(uuid, uuid, text, jsonb) is
+  'Grava de qual anúncio (Meta Ads / Google Ads / site) um contato veio — só na primeira vez. `source_metadata = source_metadata || p_metadata` faz merge, nunca sobrescreve o que fn_upsert_wa_contact já gravou (waha_lid, waha_chat_id, notify_name). A guarda `source_metadata->>''ad_platform'' is null` é o primeiro-toque: clicar em outro anúncio meses depois, numa conversa já aberta, não reescreve de onde a pessoa veio originalmente — o UPDATE casa zero linhas, silenciosamente. `organization_id = p_org` (issue #1248): a organização é obrigatória e o contato de OUTRA organização casa zero linhas — escrita cross-tenant barrada no `where`, não no chamador. security definer + revoke de anon/authenticated: só o backend (admin client no ingest de canal) chama isto.';
 
-revoke execute on function public.fn_estampar_atribuicao_de_anuncio(uuid, text, jsonb) from public, anon, authenticated;
-grant  execute on function public.fn_estampar_atribuicao_de_anuncio(uuid, text, jsonb) to service_role;
+revoke execute on function public.fn_estampar_atribuicao_de_anuncio(uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant  execute on function public.fn_estampar_atribuicao_de_anuncio(uuid, uuid, text, jsonb) to service_role;
 
 notify pgrst, 'reload schema';
 
@@ -15971,8 +15983,27 @@ create policy calendar_oauth_nonces_ninguem_le
   using (false);
 
 -- A quarta poda do `data-retention`. Assinatura idêntica às três irmãs
--- (`p_dias`, `p_lote`) para o mesmo laço de lotes servir sem caso especial.
-create or replace function public.fn_expurgar_nonces_de_oauth(p_dias int, p_lote int default 500)
+-- (`p_retencao_dias`, `p_limite`) para o mesmo laço de lotes servir sem caso
+-- especial — e os NOMES são o contrato: o PostgREST resolve sobrecarga pelo
+-- nome do argumento, e é assim que o cron manda
+-- (`app/api/v1/cron/data-retention/route.ts:163`). Nascida na 0190 como
+-- (`p_dias`, `p_lote`), esta poda não achava sobrecarga nenhuma: `PGRST202`
+-- todos os dias, `calendar_oauth_nonces` crescendo para sempre (issue #966).
+--
+-- O drop abaixo é o que faz a ATUALIZAÇÃO receber o conserto: `create or
+-- replace` NÃO troca nome de parâmetro de entrada — o Postgres recusa com
+-- "cannot change name of input parameter", porque o nome faz parte da
+-- identidade da função para quem chama por nome. Sem ele, a instalação que já
+-- existe (e que reaplica este arquivo inteiro pelo `update.sh`) ficaria com a
+-- função antiga. A assinatura `(int, int)` não muda, e o drop leva os ACLs
+-- junto: por isso o `revoke`/`grant` da 0192 se reaplica logo abaixo. O mesmo
+-- conserto, em forma de migration, é a 0364.
+drop function if exists public.fn_expurgar_nonces_de_oauth(int, int);
+
+create or replace function public.fn_expurgar_nonces_de_oauth(
+  p_retencao_dias int default null,
+  p_limite int default null
+)
 returns int
 language plpgsql
 security definer
@@ -15984,15 +16015,17 @@ begin
   -- Piso no CORPO, como as irmãs: um chamador que passe 0 não apaga nonce que
   -- ainda protege. O prazo do state é de 10 minutos, então um dia já é folga
   -- de duas ordens de grandeza.
-  if p_dias is null or p_dias < 1 then
-    p_dias := 1;
+  if p_retencao_dias is null or p_retencao_dias < 1 then
+    p_retencao_dias := 1;
   end if;
 
   with alvo as (
     select nonce
       from public.calendar_oauth_nonces
-     where expira_em < now() - make_interval(days => p_dias)
-     limit greatest(p_lote, 1)
+     where expira_em < now() - make_interval(days => p_retencao_dias)
+     -- 500 era o default DECLARADO na 0190; agora mora no corpo, como nas
+     -- irmãs, e o efeito de quem omite o argumento é o mesmo.
+     limit greatest(coalesce(p_limite, 500), 1)
   )
   delete from public.calendar_oauth_nonces n
    using alvo
@@ -16006,6 +16039,8 @@ end$$;
 -- `authenticated` entra aqui pela migration 0192: as duas irmãs de assinatura
 -- idêntica já o revogavam, e o grant vem do `ALTER DEFAULT PRIVILEGES` do
 -- corpo deste arquivo — omissão que aparece como linha AUSENTE, não errada.
+-- O `drop function` logo acima, da 0364, derrubou a função COM os ACLs dela:
+-- este par é o que repõe o estado que a 0192 deixou, e não redundância com ela.
 revoke execute on function public.fn_expurgar_nonces_de_oauth(int, int) from public, anon, authenticated;
 grant execute on function public.fn_expurgar_nonces_de_oauth(int, int) to service_role;
 -- ---- playbook `agendamento` v2: cita as ferramentas de agenda (migration 0191) ----
@@ -33543,6 +33578,59 @@ begin
   );
 end;
 $$;
+
+-- ---- a recusa permanente da agenda não pede repetição (migration 0363) ----
+-- `PT409` no lugar de `40001` nas três recusas PERMANENTES de `fn_meet_action`.
+-- `40001` vira HTTP 500 no PostgREST e o gateway do Supabase reexecuta 5xx sem
+-- limite (docs/runbooks/postgrest-replay-do-gateway.md); `PTxxx` chega como o
+-- status dos três últimos dígitos, e 4xx não é reexecutado. Corpo idêntico ao
+-- da definição acima, com três `errcode` trocados. Idempotente.
+-- Recorte do PR #803, de @paulolimajr77.
+
+create or replace function public.fn_meet_action(p_org uuid,p_id uuid,p_revision text,p_request uuid,p_action text,p_conversation uuid default null)
+returns boolean language plpgsql security definer set search_path=public as $$
+declare a public.calendar_appointments; contact uuid; b jsonb; destination_channel uuid;
+begin
+ if auth.uid() is null or not public.fn_role_at_least(p_org,'agent') or not public.fn_support_write_allowed(p_org) then raise exception 'meet_forbidden' using errcode='42501';end if;
+ if not public.fn_session_mfa_proven() then raise exception 'meet_mfa_required' using errcode='42501';end if;
+ select contact_id into contact from public.calendar_appointments where organization_id=p_org and id=p_id;
+ if contact is not null then perform public.fn_service_lock(p_org,contact);end if;
+ select * into a from public.calendar_appointments where organization_id=p_org and id=p_id for update;
+ if not found or a.owner_user_id is distinct from auth.uid() or not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=auth.uid() and revoked_at is null) then raise exception 'meet_forbidden' using errcode='42501';end if;
+ if a.revision::text is distinct from p_revision or a.meeting_request_id is distinct from p_request or a.status='cancelled' or a.location_kind<>'google_meet'
+  or exists(select 1 from public.contacts where id=a.contact_id and organization_id=p_org and is_anonymized) then raise exception 'meet_stale' using errcode='PT409';end if;
+ if p_action='retry' then
+  if a.google_conflict is not null then raise exception 'google_conflict_requires_choice' using errcode='PT409';end if;
+  if a.meeting_state='ready' then return false;end if;
+  if a.meeting_state<>'failed' then
+   update public.calendar_appointments set meeting_next_attempt_at=now(),google_next_attempt_at=now() where organization_id=p_org and id=p_id;return true;
+  end if;
+  -- Tempo/timeout não provam rejeição. Somente failure recebido gira solicitação.
+  update public.calendar_appointments set meeting_request_id=case when meeting_last_error='google_failure' and meeting_received_at is not null then gen_random_uuid() else meeting_request_id end,
+   meeting_requested_at=case when meeting_last_error='google_failure' and meeting_received_at is not null then null else meeting_requested_at end,
+   meeting_received_at=case when meeting_last_error='google_failure' then null else meeting_received_at end,
+   meeting_state='pending',meeting_attempts=0,meeting_last_error=null,meeting_next_attempt_at=now(),google_next_attempt_at=now() where organization_id=p_org and id=p_id;
+ elsif p_action='deliver' then
+  if a.contact_id is null then raise exception 'meet_conversation_unavailable' using errcode='42501';end if;
+  select channel_session_id into destination_channel from public.conversations where organization_id=p_org and id=p_conversation and contact_id=a.contact_id and not is_group and public.fn_can_view_conversation(organization_id,assigned_to_user_id) for update;
+  if not found then raise exception 'meet_conversation_unavailable' using errcode='42501';end if;
+  b:=public.fn_service_boundary(p_org,p_conversation)-'status'-'demanda_fechada_em'-'service_started_at';
+  if not public.fn_meet_boundary_current(b) then raise exception 'meet_conversation_stale' using errcode='PT409';end if;
+  if a.meeting_delivery->'service_boundary'=b and a.meeting_delivery->>'channel_session_id'=destination_channel::text then
+   if a.meeting_delivery->>'state' in ('waiting_for_link','sent') then return false;end if;
+   if a.meeting_delivery->>'state'='queued' and a.meeting_delivery_job_id is not null then
+    -- Recuperação humana de job morto conserva ledger/identidade. Não duplicar
+    -- uma mensagem aceita antes do crash nem reconstruir fronteira antiga.
+    update public.job_queue set status='pending',locked_by=null,locked_at=null,attempts=0,run_after=now(),last_error=null
+     where organization_id=p_org and id=a.meeting_delivery_job_id and kind='transactional_delivery' and status in ('dead','failed','done');
+    return found;
+   end if;
+  end if;
+  update public.job_queue set status='failed',locked_by=null,locked_at=null,last_error='meet_delivery_superseded' where organization_id=p_org and id=a.meeting_delivery_job_id and kind='transactional_delivery' and status in ('pending','running');
+  update public.calendar_appointments set meeting_delivery=jsonb_build_object('state','waiting_for_link','generation',gen_random_uuid(),'service_boundary',b,'authorized_by',jsonb_build_object('kind','user','id',auth.uid()),'source_operation_id',gen_random_uuid()),meeting_delivery_job_id=null where organization_id=p_org and id=p_id;
+ else raise exception 'meet_action_invalid' using errcode='22023';end if;
+ return true;
+end;$$;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
