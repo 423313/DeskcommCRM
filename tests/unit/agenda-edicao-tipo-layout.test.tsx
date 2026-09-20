@@ -37,6 +37,7 @@ const TIPO: TipoRow = {
   default_owner_user_id: "user-1",
   requires_confirmation: false,
   is_active: true,
+  default_price_cents: null,
   reminder_enabled: true,
   reminder_minutes_before: 1440,
   reminder_extra_offsets_minutes: [180],
