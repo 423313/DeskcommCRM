@@ -148,12 +148,34 @@ export async function irParaASemanaSeguinte(page: Page): Promise<string[]> {
   await aguardarGradeHidratada(page);
   const antes = await diasDesenhados(page);
 
+  // ⚠️ O DISCRIMINANTE VAI NA MENSAGEM, JÁ CALCULADO. Este vermelho tem duas
+  // causas possíveis, e elas pedem consertos opostos; sem o discriminante no
+  // log, quem tria refaz a aritmética de fuso no meio da noite — foi o que
+  // aconteceu, e custou três diagnósticos errados antes de alguém olhar o
+  // relógio.
+  //
+  // Os dois números são a semana que a TELA pintou e o domingo pelo relógio do
+  // NAVEGADOR. Nenhum deles é o relógio deste processo: além de a cerca do
+  // módulo proibir (é dele que veio o defeito original), ele deixou de
+  // descrever o servidor desde que a página passa a resolver o fuso de quem
+  // olha (#1350) — a mensagem envelheceria acusando a coisa errada.
+  const semanaDoNavegador = await domingoDoRelogio(page);
+  const suspeita =
+    (antes[0] ?? "") === semanaDoNavegador
+      ? "a tela pintou a semana do próprio navegador → suspeite da hidratação (a leitura " +
+        "ou o clique chegaram antes de o React assumir)"
+      : "a tela pintou uma semana que NÃO é a do relógio do navegador → suspeite do fuso: " +
+        "a pintura veio de um relógio e a comparação, de outro (ver #1350)";
+
   await page.getByTestId("periodo-seguinte").click();
 
   await expect
     .poll(async () => (await diasDesenhados(page))[0] ?? "", {
       timeout: 20_000,
-      message: "a grade não trocou de semana depois do clique em `periodo-seguinte`",
+      message:
+        "a grade não trocou de semana depois do clique em `periodo-seguinte` " +
+        `(lido antes do clique: ${antes[0] ?? "—"}; domingo pelo relógio do navegador: ` +
+        `${semanaDoNavegador}; ${suspeita})`,
     })
     .not.toBe(antes[0] ?? "");
 
@@ -205,6 +227,16 @@ export async function irParaASemanaDoCompromisso(page: Page, instanteISO: string
       "fora da janela que a tela sabe desenhar",
   ).toContain(dia);
   return dia;
+}
+
+/** O mesmo, calculado DENTRO do navegador — que pode estar em outro fuso. */
+async function domingoDoRelogio(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - d.getDay());
+    const dd = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())}`;
+  });
 }
 
 /** Os dias que a grade desenha AGORA, lidos da própria tela. */
