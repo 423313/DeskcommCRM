@@ -159,6 +159,22 @@ it("⛔ aguardando CONTINUA trancado — repetir ali empilharia pedido a caminho
     view.unmount();
   }
 });
+it("⛔ compromisso PRESENCIAL oferece mandar os dados, sem falar em link", () => {
+  // A seção inteira só existia para `google_meet`: num compromisso presencial
+  // não havia botão NENHUM, e a rota devolvia o bloco como `null`. E prometer
+  // "link" onde não há reunião online é prometer o que não existe.
+  show({ ...initial, location_kind: "in_person", state: "not_requested", delivery_state: "none" });
+  expect(screen.getByRole("button", { name: "Mandar ao cliente" })).toBeEnabled();
+  expect(screen.queryByText(/Link ainda não solicitado/i)).not.toBeInTheDocument();
+  expect(screen.getByText(/Dados não enviados ainda/i)).toBeInTheDocument();
+});
+it("⛔ CONTROLE: com Meet, o botão continua esperando o link ficar pronto", () => {
+  // O par que impede o afrouxamento de virar buraco na tela: onde o Meet é o
+  // local, oferecer envio antes do link é oferecer uma reunião sem porta.
+  show({ ...initial, state: "pending", delivery_state: "none" });
+  expect(screen.getByRole("button", { name: "Enviar quando ficar pronto" })).toBeInTheDocument();
+  expect(screen.getByText(/Link não enviado ainda/i)).toBeInTheDocument();
+});
 it("bloqueios explicam autonomia versus opt-out sem sugerir repetir a mesma ação", () => {
   const view = show({ ...initial, delivery_state: "blocked", delivery_error: "force_human" });
   expect(screen.getByText(/sem ativar a IA/)).toBeInTheDocument();
