@@ -128,6 +128,13 @@ describe("sidebarGroups", () => {
       "/app/kanban",
       "/app/contacts",
       "/app/tasks",
+      // "/app/calls" (telefonia por SIP) NÃO entra aqui, e a ausência é a
+      // decisão: o módulo é OPCIONAL e nasce desligado (doc 27), então a porta
+      // no sidebar custaria um item a TODA instalação — e o vigésimo item é o
+      // que faz o menu rolar em 900px, que é a corrida por pixel que este
+      // teste existe para vigiar. A tela vive no hub do grupo e no ⌘K. Volta
+      // para cá no dia em que o app souber que o módulo está ligado (hoje isso
+      // é profile do compose, não estado que o aplicativo conheça).
     ]);
     // E continua alcançável: o hub é a porta dela.
     expect(
@@ -169,6 +176,7 @@ describe("hubSections", () => {
       "/app/kanban",
       "/app/contacts",
       "/app/tasks",
+      "/app/calls",
       "/app/comandas",
       "/app/products",
       "/app/settings/tenant/pipelines",

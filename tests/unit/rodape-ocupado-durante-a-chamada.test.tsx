@@ -57,6 +57,10 @@ vi.mock("@/hooks/notifications/useInboundMessageAlerts", () => ({
   useInboundMessageAlerts: () => {},
 }));
 vi.mock("@/hooks/notifications/useCrmAlerts", () => ({ useCrmAlerts: () => {} }));
+// O AppShell passou a avisar de ligação ao vivo (#677). O hook lê `useActiveOrg`
+// e `usePermission` do AuthProvider, que esta árvore de teste não monta — mesma
+// razão dos três mocks acima, e mesma forma.
+vi.mock("@/hooks/calls/useInboundCallAlerts", () => ({ useInboundCallAlerts: () => {} }));
 vi.mock("@/lib/notifications/notify_open", () => ({ useNotifyOpenFromServiceWorker: () => {} }));
 
 import type { ReactElement } from "react";
