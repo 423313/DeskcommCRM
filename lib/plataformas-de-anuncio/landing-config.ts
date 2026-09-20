@@ -50,3 +50,43 @@ export async function lerConfigDaLanding(
 
   return { whatsappE164: linha.whatsapp_e164, messageTemplate: linha.message_template };
 }
+
+/** A configuração como a TELA precisa dela: inclusive quando está desligada. */
+export interface EstadoDaCaptura extends ConfigDaLanding {
+  habilitada: boolean;
+}
+
+/**
+ * Irmã de `lerConfigDaLanding`, e separada dela de propósito: a rota pública
+ * trata "desligada" como "não existe" (não redireciona), enquanto a tela
+ * precisa MOSTRAR o que está gravado para poder religar. Uma função só, com
+ * bandeira, faria o caminho do clique carregar a necessidade da tela.
+ */
+export async function lerEstadoDaCaptura(
+  admin: SupabaseClient,
+  tabela: TabelaDeLanding,
+  organizationId: string,
+): Promise<EstadoDaCaptura | null> {
+  const { data, error } = await admin
+    .from(tabela)
+    .select("whatsapp_e164, message_template, enabled")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) {
+    logger.error("[plataformas-de-anuncio.landing-config] leitura para a tela falhou", {
+      tabela,
+      organizationId,
+      detalhe: error.message,
+    });
+    return null;
+  }
+  if (!data) return null;
+
+  const linha = data as { whatsapp_e164: string; message_template: string; enabled: boolean };
+  return {
+    whatsappE164: linha.whatsapp_e164,
+    messageTemplate: linha.message_template,
+    habilitada: linha.enabled,
+  };
+}
