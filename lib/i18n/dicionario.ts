@@ -9410,12 +9410,9 @@ export const DICIONARIO: Traducoes = {
   "Histórico de ligações (voz por IA) com transcrição.": {
     es: "Historial de llamadas (voz por IA) con transcripción.",
   },
-  "Data": { es: "Fecha" },
   "Direção": { es: "Dirección" },
   "Quem é": { es: "Quién es" },
   "Atendido por": { es: "Atendido por" },
-  "Saída": { es: "Salida" },
-  "Entrada": { es: "Entrada" },
   "Humano": { es: "Humano" },
   "Nenhuma chamada ainda.": { es: "Ninguna llamada todavía." },
   "Chamada com": { es: "Llamada con" },
