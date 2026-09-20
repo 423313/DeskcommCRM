@@ -2,7 +2,13 @@
  * Pure trigger predicates for the 4 handoff gates (EPIC-06 wave 3).
  *
  *   G1 — checkG1(body)               — usuário pede humano (regex PT-BR).
- *   G3 — checkG3({ confidence, ... }) — bot inseguro (low confidence + uncertainty).
+ *   G3 — checkG3({ confidence, ... }) — bot inseguro. É **OU**, não "+": qualquer um
+ *        dos dois sinais basta (similaridade medida abaixo do limiar, OU marcador de
+ *        incerteza no texto). O "+" que este cabeçalho dizia até 2026-09-20 descrevia um
+ *        gate mais conservador do que o que roda, e quem lesse daqui para decidir se o
+ *        gate é agressivo concluiria o contrário. O código está certo — dois sinais
+ *        independentes de insegurança, e exigir os dois juntos deixaria passar o texto
+ *        que se declara inseguro apoiado em material de boa similaridade.
  *   G4 — checkG4Legal(body)          — termos jurídicos no inbound.
  *   G4 — checkG4Stage(leadId, org)   — lead está em stage `requires_human=true`.
  *
@@ -29,13 +35,24 @@ export function checkG4Legal(body: string): boolean {
 }
 
 export interface CheckG3Input {
-  confidence: number;
+  /**
+   * Similaridade do material de RAG que sustentou a resposta, ou `null` quando
+   * NÃO HOUVE medição (nenhuma citação recuperada).
+   *
+   * `null` não é zero: zero afirma "o material é péssimo", e como todo limiar
+   * plausível é maior que zero, essa afirmação escalava para humano TODA resposta
+   * que não consultou a base — uma saudação respondida perfeitamente inclusive.
+   * Mesma regra de `lib/leads/score-writer.ts` ("zero é uma afirmação") e do
+   * `nao_avaliado` de `lib/leads/classificacao-inicial.ts`.
+   */
+  confidence: number | null;
   outputText: string;
   threshold: number;
 }
 
 export function checkG3(input: CheckG3Input): boolean {
-  const lowConfidence = Number.isFinite(input.confidence) && input.confidence < input.threshold;
+  const houveMedicao = input.confidence !== null && Number.isFinite(input.confidence);
+  const lowConfidence = houveMedicao && (input.confidence as number) < input.threshold;
   return lowConfidence || containsUncertaintyMarkers(input.outputText ?? "");
 }
 
