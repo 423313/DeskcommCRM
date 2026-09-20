@@ -49,12 +49,12 @@ import { join } from "node:path";
 
 import { motivoDoErro, sql } from "./psql-transporte";
 
-/** As tabelas do eixo de anúncios, criadas pelas migrations 0213, 0214 e 0311. */
+/** As tabelas do eixo de anúncios, criadas pelas migrations 0213, 0214 e 0380. */
 const TABELAS = [
   "ad_platform_connections",
   "ad_conversion_dispatches",
   "ad_insights_connections",
-  // 0311. Não guarda segredo: guarda a ESTRATÉGIA de mídia — que campanha
+  // 0380. Não guarda segredo: guarda a ESTRATÉGIA de mídia — que campanha
   // existe, como o conjunto foi segmentado, que criativo está no ar. É o que um
   // concorrente pagaria para ler, e o motivo de a tabela nascer com o mesmo
   // deny-all das irmãs em vez de uma policy de tenant.
