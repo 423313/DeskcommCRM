@@ -243,6 +243,13 @@ export const DICIONARIO: Traducoes = {
     es: "No fue posible comunicarse con el servidor. Revisa la dirección, el puerto y la seguridad.",
   },
   "Servidor de e-mail salvo.": { es: "Servidor de correo guardado." },
+  "Serviço externo de envio": { es: "Servicio externo de envío" },
+  "A alternativa ao servidor próprio: um serviço que entrega o e-mail por você. Se as duas coisas estiverem configuradas, o servidor próprio tem preferência.": {
+    es: "La alternativa al servidor propio: un servicio que entrega el correo por usted. Si ambos están configurados, el servidor propio tiene preferencia.",
+  },
+  "O serviço de envio de e-mail — próprio ou externo — fica em E-mail →": {
+    es: "El servicio de envío de correo — propio o externo — está en Correo →",
+  },
   "Extensões da instalação": { es: "Extensiones de la instalación" },
   "O que este servidor conhece, de onde veio e quem está usando. Instalar e configurar continua sendo feito dentro de cada empresa.": {
     es: "Lo que este servidor conoce, de dónde vino y quién lo está usando. Instalar y configurar se sigue haciendo dentro de cada empresa.",
@@ -2505,6 +2512,8 @@ export const DICIONARIO: Traducoes = {
   "Consultas aos seus materiais": { es: "Consultas a tus materiales" },
   "Conteúdo da": { es: "Contenido de la" },
   "Conversas encaminhadas": { es: "Conversaciones encaminadas" },
+  "O horário da sua reunião mudou. Agora é": { es: "El horario de tu reunión cambió. Ahora es" },
+  "O horário do seu compromisso mudou. Agora é": { es: "El horario de tu compromiso cambió. Ahora es" },
   "Mandar ao cliente": { es: "Enviar al cliente" },
   "Dados não enviados ainda.": { es: "Datos aún no enviados." },
   "Envio autorizado: aguardando a vez na fila.": { es: "Envío autorizado: esperando su turno en la fila." },
