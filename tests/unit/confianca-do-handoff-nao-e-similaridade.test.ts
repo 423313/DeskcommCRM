@@ -92,7 +92,12 @@ describe("a classe inteira: ausência de medição não vira zero nos caminhos d
    * diretórios de IA, para que o PRÓXIMO sítio reprove sozinho em vez de
    * esperar alguém tropeçar nele.
    */
-  const DIRETORIOS = ["lib/ai", "lib/agent-engine", "workers", "app/api/v1/ai", "hooks/ai"];
+  // `app/app/ai` entrou depois do resto, e entrou por mérito: sem ele, a cerca
+  // não alcançava as TELAS de IA — e a primeira ocorrência nova do padrão no
+  // repo apareceu exatamente ali, escrita dentro do PR que existe para extingui-lo
+  // (um `(result.confidence ?? 0)` num render inalcançável). Cerca que não cobre
+  // onde o código de fato é escrito reprova só o que já foi consertado.
+  const DIRETORIOS = ["lib/ai", "lib/agent-engine", "workers", "app/api/v1/ai", "hooks/ai", "app/app/ai"];
   const VOCABULARIO = /(confidence|confianca|confiança|similarity|similaridade|probability|probabilidade|score)/i;
   const INVENTA_ZERO = /\?\?\s*0(?![0-9.])/;
 

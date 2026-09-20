@@ -51,8 +51,14 @@ export interface CheckG3Input {
 }
 
 export function checkG3(input: CheckG3Input): boolean {
-  const houveMedicao = input.confidence !== null && Number.isFinite(input.confidence);
-  const lowConfidence = houveMedicao && (input.confidence as number) < input.threshold;
+  // Desestruturado de propósito: o TypeScript não estreita acesso a PROPRIEDADE
+  // (`input.confidence`) através de um booleano aliasado, então a versão com
+  // `input.confidence` exigia um `as number` — e escape de tipo num arquivo que é
+  // o coração do gate é a primeira coisa que alguém copia. Com o const local o
+  // estreitamento funciona e o cast some, com a mesma semântica.
+  const { confidence } = input;
+  const houveMedicao = confidence !== null && Number.isFinite(confidence);
+  const lowConfidence = houveMedicao && confidence < input.threshold;
   return lowConfidence || containsUncertaintyMarkers(input.outputText ?? "");
 }
 

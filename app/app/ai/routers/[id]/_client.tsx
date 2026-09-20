@@ -634,8 +634,15 @@ function TestPanel({
   // renders checavam `intent_name` e por acaso concordavam — ninguém havia
   // escrito que um vale só com o outro. Bastaria um quarto render sem a guarda
   // para o valor ausente aparecer na tela.
-  const belowThreshold =
-    result?.confidence != null && result.confidence < result.min_confidence;
+  // O valor sai para um const ANTES do JSX para que o TypeScript o estreite lá
+  // dentro. Sem ele, o render precisava de `(result.confidence ?? 0)` — e um
+  // `?? 0` sobre confiança, dentro do PR que existe para extingui-lo, é a
+  // definição de padrão que volta pela porta dos fundos. A cerca em
+  // `tests/unit/confianca-do-handoff-nao-e-similaridade.test.ts` passou a cobrir
+  // `app/app/ai` por causa desta linha.
+  const confianca = result?.confidence ?? null;
+  const abaixoDoMinimo =
+    confianca !== null && result !== undefined && confianca < result.min_confidence;
   return (
     <Card className="space-y-3 p-4">
       <CardHeader className="p-0">
@@ -674,15 +681,15 @@ function TestPanel({
           <div className="rounded-md border border-border/60 p-3 text-sm">
             <p>
               {t("Intenção")}: <span className="font-medium">{result.intent_name ?? t("nenhuma casou")}</span>
-              {result.confidence != null && (
+              {confianca !== null && (
                 <span className="ml-2 text-xs text-muted-foreground">
-                  {t("confiança")} {(result.confidence * 100).toFixed(0)}%
+                  {t("confiança")} {(confianca * 100).toFixed(0)}%
                 </span>
               )}
             </p>
-            {belowThreshold && (
+            {abaixoDoMinimo && confianca !== null && (
               <p className="text-xs text-amber-600">
-                {t("Confiança")} {((result.confidence ?? 0) * 100).toFixed(0)}% — {t("abaixo do mínimo de")}{" "}
+                {t("Confiança")} {(confianca * 100).toFixed(0)}% — {t("abaixo do mínimo de")}{" "}
                 {(result.min_confidence * 100).toFixed(0)}%, {t("cairia no atendimento padrão em produção.")}
               </p>
             )}
