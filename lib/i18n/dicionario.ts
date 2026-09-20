@@ -1903,7 +1903,6 @@ export const DICIONARIO: Traducoes = {
   "Agente pediu ajuda": { es: "El agente pidió ayuda" },
   "Cliente voltou": { es: "El cliente volvió" },
   "Tempo sem o cliente falar": { es: "Tiempo sin que el cliente hable" },
-  hora: { es: "hora" },
   minuto: { es: "minuto" },
   "O fluxo começa quando o cliente escreve depois de ficar este tempo sem mandar mensagem. Não é o mesmo que silêncio: silêncio avisa enquanto ele some; este avisa quando ele volta.":
     {
