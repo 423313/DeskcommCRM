@@ -86,24 +86,44 @@ export function AppShell({ sidebarCollapsed, podeAtender, children }: AppShellPr
         </main>
       </div>
       {/*
-        O ATALHO VIVE NO PRÓPRIO BOUNDARY DE SUSPENSE, e isso não é adorno.
+        O ATALHO VIVE NO PRÓPRIO BOUNDARY DE SUSPENSE — e o porquê aqui está
+        HONESTO, não bonito: o conserto pode estar funcionando por acidente.
 
-        Medido: com ele montado direto aqui, CINCO testids de telas diferentes
-        passaram a resolver a dois elementos no e2e — `tela-agenda`,
-        `flow-builder-shell`, `abrir-novo-tipo`, `opcao-modo-manual`,
-        `opcao-modo-round_robin`. Não era um componente duplicado: era a PÁGINA
-        ANTERIOR presa no `<main>` junto com a nova. O snapshot do erro mostra
-        o Inbox desenhado no `<main>` durante um teste de distribuição de
-        atendimento — e o atalho AUSENTE do DOM, ou seja, suspenso.
+        O QUE ESTÁ MEDIDO. Montar este atalho fazia SEIS testids de telas
+        diferentes resolverem a dois elementos no e2e. Desligar a tag zerou os
+        seis no mesmo job (105 casos rodando); pôr este boundary levou de seis
+        para um. A ablação é prova por diferença; o resto abaixo não é.
 
-        Sem um boundary próprio, a suspensão dele sobe até a árvore da rota e o
-        App Router segura a página anterior visível enquanto resolve. Com o
-        boundary, o que suspende é só ele: a página troca na hora e o atalho
-        aparece quando estiver pronto.
+        O QUE O SEGUNDO NÓ É, medido no trace: `<div hidden id="S:0">` — filho
+        DIRETO do `<body>`, FORA desta árvore, com uma cópia inteira da página
+        dentro. É o BUFFER DE STREAMING do SSR do React. Num stream correto,
+        todo `id="S:N"` tem um `$RC("B:N","S:N")` que o revela e DRENA a caixa;
+        no HTML gravado, o documento fecha sem nunca emitir esse `$RC`
+        (conferido: `S:0` presente, `B:0` presente, `$RC` = ZERO). A caixa fica
+        pendurada no `<body>` para sempre, e todo `getByTestId` casa dois.
 
-        `fallback={null}` porque não há o que mostrar no lugar — ele é um
-        atalho, não conteúdo. Provado por ablação: desligar a tag zerou as
-        cinco duplicações (0 de 5, com 105 casos rodando).
+        O ancestral comum dos dois nós é o `<body>`, não o `<main>`.
+
+        POR QUE ESTA TAG É O GATILHO: ela renderiza INLINE, como irmã do
+        `<main>`, e é a única coisa que escreve estado compartilhado da casca
+        durante a hidratação (`usePecaDoRodape`) — o que faz o cliente preencher
+        o `<main>` ANTES do reveal que drenaria a caixa.
+
+        POR QUE O BOUNDARY PODE ESTAR ACERTANDO SEM QUE EU SAIBA: ele muda
+        QUANDO o boundary resolve, e isso pode drenar o `#S:0`. Mas nada aqui
+        suspende de verdade na montagem — não há `useSuspenseQuery` em lugar
+        nenhum, e os dois `dynamic()` só renderizam dentro de
+        `CompactConversation`, que exige `selected` truthy (nasce `null`).
+
+        UMA EXPLICAÇÃO QUE ESTE COMENTÁRIO JÁ DEU E QUE ESTÁ FALSIFICADA: que o
+        App Router "segurava a página anterior enquanto resolvia". Isso seria
+        transição de CLIENTE, e os seis sítios são carga de DOCUMENTO
+        (`page.goto`/`page.reload`) — não há página anterior para segurar.
+
+        O experimento que fecha, e que ainda NÃO foi feito: carregar a tela com
+        `javaScriptEnabled: false`. Dois nós sem JS = o servidor mandou dois, e
+        a hidratação não tem parte nisso; um sem e dois com = a janela fecha em
+        torno da hidratação.
       */}
       <Suspense fallback={null}>
         <FloatingInbox />
