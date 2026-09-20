@@ -19,6 +19,13 @@ export interface MeetingDetail {
   delivery_conversation_id?: string | null;
   can_manage: boolean;
   destinations: Array<{ id: string; label: string }>;
+  /**
+   * Onde o compromisso acontece. Decide a PROMESSA da seção: onde o local é o
+   * Meet, o que vai ao cliente é o LINK; onde não é, o que vão são os DADOS do
+   * compromisso. Prometer link num compromisso presencial é prometer o que não
+   * existe. Ausente = Meet, que era o único caso que esta seção atendia.
+   */
+  location_kind?: string;
 }
 export function MeetDoCompromisso({
   id,
@@ -48,6 +55,7 @@ export function MeetDoCompromisso({
   const aguardando =
     mesmaConversa && ["waiting_for_link", "queued"].includes(meeting.delivery_state);
   const [confirmando, setConfirmando] = useState(false);
+  const ehMeet = (meeting.location_kind ?? "google_meet") === "google_meet";
   const action = useMutation({
     mutationFn: (kind: "retry" | "deliver" | "resend") =>
       apiClient.post(`/api/v1/agenda/agendamentos/${id}/google/meet/${kind}`, {
@@ -68,21 +76,42 @@ export function MeetDoCompromisso({
     failed: "Não foi possível confirmar o link",
     cancelled: "Solicitação de link cancelada",
   };
-  const deliveryLabel: Record<string, string> = {
-    none: "Link não enviado ainda.",
-    waiting_for_link: "Envio autorizado: aguardando o link ficar pronto.",
-    queued: "Link aguardando envio nesta conversa.",
-    sent: "Link enviado na conversa autorizada.",
-    blocked: "Entrega impedida. Confira o atendimento e o canal antes de autorizar novamente.",
-    stale: "O atendimento mudou. Autorize uma nova entrega na conversa desejada.",
-    failed: "O envio falhou. Confira o canal e tente novamente.",
-  };
+  const deliveryLabel: Record<string, string> = ehMeet
+    ? {
+        none: "Link não enviado ainda.",
+        waiting_for_link: "Envio autorizado: aguardando o link ficar pronto.",
+        queued: "Link aguardando envio nesta conversa.",
+        sent: "Link enviado na conversa autorizada.",
+        blocked:
+          "Entrega impedida. Confira o atendimento e o canal antes de autorizar novamente.",
+        stale: "O atendimento mudou. Autorize uma nova entrega na conversa desejada.",
+        failed: "O envio falhou. Confira o canal e tente novamente.",
+      }
+    : {
+        // Sem Meet o que sai são os DADOS do compromisso, e nenhuma frase fala
+        // de link — inclusive a da fila: não há link para esperar.
+        none: "Dados não enviados ainda.",
+        waiting_for_link: "Envio autorizado: aguardando a vez na fila.",
+        queued: "Dados aguardando envio nesta conversa.",
+        sent: "Dados enviados na conversa autorizada.",
+        blocked:
+          "Entrega impedida. Confira o atendimento e o canal antes de autorizar novamente.",
+        stale: "O atendimento mudou. Autorize uma nova entrega na conversa desejada.",
+        failed: "O envio falhou. Confira o canal e tente novamente.",
+      };
   return (
-    <section className="mt-3 space-y-3 rounded-md border p-3" aria-label={t("Google Meet")}>
-      <h3 className="text-sm font-medium">Google Meet</h3>
-      <p role="status" className="text-sm">
-        {t(stateLabel[meeting.state] ?? "Link ainda não solicitado")}
-      </p>
+    <section
+      className="mt-3 space-y-3 rounded-md border p-3"
+      aria-label={t(ehMeet ? "Google Meet" : "Mandar ao cliente")}
+    >
+      <h3 className="text-sm font-medium">{t(ehMeet ? "Google Meet" : "Mandar ao cliente")}</h3>
+      {/* O estado do LINK só existe onde há link a criar. Num compromisso
+          presencial esta linha diria "Link ainda não solicitado" para sempre. */}
+      {ehMeet ? (
+        <p role="status" className="text-sm">
+          {t(stateLabel[meeting.state] ?? "Link ainda não solicitado")}
+        </p>
+      ) : null}
       {meeting.state === "ready" && meeting.url && (
         <div className="flex flex-wrap gap-2">
           <a
@@ -134,13 +163,13 @@ export function MeetDoCompromisso({
         {t(
           (meeting.delivery_error ? meetingDeliveryErrors[meeting.delivery_error] : null) ??
             deliveryLabel[meeting.delivery_state] ??
-            "Link não enviado ainda.",
+            (ehMeet ? "Link não enviado ainda." : "Dados não enviados ainda."),
         )}
       </p>
       {meeting.can_manage && meeting.state !== "cancelled" && (
         <div className="space-y-2">
           <label htmlFor={`meet-destination-${id}`} className="block text-sm">
-            {t("Conversa que receberá o link")}
+            {t(ehMeet ? "Conversa que receberá o link" : "Conversa que receberá os dados")}
           </label>
           <select
             id={`meet-destination-${id}`}
@@ -160,7 +189,10 @@ export function MeetDoCompromisso({
           </select>
           <Button
             size="sm"
-            disabled={!sendTo || action.isPending || meeting.state === "failed" || aguardando}
+            // `state === "failed"` é falha de CRIAR LINK: só tranca onde há link.
+            disabled={
+              !sendTo || action.isPending || (ehMeet && meeting.state === "failed") || aguardando
+            }
             onClick={() => (jaEnviado ? setConfirmando(true) : action.mutate("deliver"))}
           >
             {t(
@@ -168,9 +200,11 @@ export function MeetDoCompromisso({
                 ? "Envio já autorizado"
                 : jaEnviado
                   ? "Enviar de novo"
-                  : meeting.state === "ready"
-                    ? "Enviar link ao cliente"
-                    : "Enviar quando ficar pronto",
+                  : !ehMeet
+                    ? "Mandar ao cliente"
+                    : meeting.state === "ready"
+                      ? "Enviar link ao cliente"
+                      : "Enviar quando ficar pronto",
             )}
           </Button>
           {confirmando ? (
@@ -184,7 +218,13 @@ export function MeetDoCompromisso({
               aria-label={t("Confirmar reenvio")}
               className="rounded-md border p-3 text-sm"
             >
-              <p>{t("Mandar de novo o link desta reunião para o cliente?")}</p>
+              <p>
+                {t(
+                  ehMeet
+                    ? "Mandar de novo o link desta reunião para o cliente?"
+                    : "Mandar de novo os dados deste compromisso para o cliente?",
+                )}
+              </p>
               <div className="mt-2 flex gap-2">
                 <Button
                   size="sm"
