@@ -109,10 +109,25 @@ describe("os elos que somem sem barulho", () => {
     // para preencher o próprio formulário. Sem este caso, ele volta a ser
     // decorativo no dia em que alguém "simplificar" o resolvedor.
     const servidor = readFileSync("lib/auth/server.ts", "utf8");
-    // ⚠️ O `locale` é cobrado por NOME, e a lista continua aberta: o embed pode
-    // ganhar outra coluna (o fuso ganhou, para a Agenda abrir na semana certa)
-    // sem que isso signifique que o idioma sumiu. Prender a string inteira fazia
-    // este caso reprovar quem ACRESCENTA — o contrário do que ele vigia.
+    // ⚠️ ESTA CERCA FOI AFROUXADA EM 2026-09-20, e o que ela perdeu está escrito
+    // aqui para o próximo não afrouxar mais um degrau sem saber o que sobra.
+    //
+    // Era `/organizations\(display_name, locale\)/` — a lista INTEIRA, na ordem.
+    // Quando o embed ganhou `timezone` (a Agenda passou a abrir a semana no fuso
+    // de quem olha), esta cerca reprovou um ACRÉSCIMO, que é o contrário do que
+    // ela existe para vigiar.
+    //
+    //   o que ela guarda HOJE: o embed da membership traz uma coluna chamada
+    //     `locale`. Medido nos dois sentidos — tirar `locale` da consulta deixa
+    //     este caso vermelho; acrescentar coluna nova o mantém verde.
+    //   o que a versão antiga pegava a mais: só a ORDEM e a lista exata das
+    //     colunas. Nenhuma dessas duas é propriedade do produto: trocar a ordem
+    //     do `select` não muda o que chega à sessão, e a lista fechada só
+    //     produzia alarme em quem acrescentava.
+    //   o que NENHUMA das duas pega: um `locale` que venha de um embed ANINHADO
+    //     (`organizations(display_name, outra(locale))`) satisfaria o padrão sem
+    //     ser a coluna da organização. É o limite conhecido desta sonda — quem
+    //     precisar fechá-lo tem de ler o valor, não o texto do arquivo.
     expect(servidor, "a membership deixou de trazer o idioma da organização").toMatch(
       /organizations\((?=[^)]*\blocale\b)[^)]*\)/,
     );
