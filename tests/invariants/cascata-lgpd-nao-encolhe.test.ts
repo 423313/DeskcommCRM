@@ -69,6 +69,11 @@ const TABELAS_NA_CASCATA = [
   // 0291 — o briefing da passagem: title/body/notes/content e as tentativas.
   // `body` é `not null` e recebe o RÓTULO, não `null`.
   "passagens_de_atendimento",
+  // 0359 — o texto livre da comanda: `notes`, `cancel_reason` e
+  // `reverse_reason`. O valor, o status, as datas e o vínculo com o contato
+  // FICAM: a venda é registro financeiro da organização, e desligá-la faria o
+  // relatório por cliente deixar de fechar com o faturamento do período.
+  "sales",
   "voice_calls", //        0235 — o telefone de quem falou ao telefone
 ] as const;
 
