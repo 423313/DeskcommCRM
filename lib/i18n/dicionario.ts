@@ -2487,6 +2487,8 @@ export const DICIONARIO: Traducoes = {
   "Consultas aos seus materiais": { es: "Consultas a tus materiales" },
   "Conteúdo da": { es: "Contenido de la" },
   "Conversas encaminhadas": { es: "Conversaciones encaminadas" },
+  "O horário da sua reunião mudou. Agora é": { es: "El horario de tu reunión cambió. Ahora es" },
+  "O horário do seu compromisso mudou. Agora é": { es: "El horario de tu compromiso cambió. Ahora es" },
   "Mandar ao cliente": { es: "Enviar al cliente" },
   "Dados não enviados ainda.": { es: "Datos aún no enviados." },
   "Envio autorizado: aguardando a vez na fila.": { es: "Envío autorizado: esperando su turno en la fila." },
