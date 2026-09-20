@@ -2,7 +2,7 @@
  * O vocabulário do módulo de Campanhas — os dois conjuntos de estado e os
  * motivos de exclusão, num lugar só.
  *
- * Os valores são os mesmos do CHECK da migration 0374. Quem mudar um lado muda o
+ * Os valores são os mesmos do CHECK da migration 0375. Quem mudar um lado muda o
  * outro: `tests/invariants/vocabulario-banco-x-typescript.test.ts` varre as
  * colunas que têm CHECK e reprova divergência.
  */

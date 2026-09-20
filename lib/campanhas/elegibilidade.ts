@@ -76,7 +76,7 @@ export interface ContextoDaClassificacao {
   /** Contatos já comprometidos com outra campanha não concluída. */
   jaEmCampanha: ReadonlySet<string>;
   /**
-   * Hashes da lista de exclusão da operação (migration 0375). Decisão de quem
+   * Hashes da lista de exclusão da operação (migration 0376). Decisão de quem
    * opera, diferente do opt-out: aqui não se silencia o atendimento.
    */
   suprimidos: ReadonlySet<string>;

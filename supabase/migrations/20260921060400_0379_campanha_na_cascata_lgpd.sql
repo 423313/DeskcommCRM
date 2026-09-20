@@ -1,4 +1,4 @@
--- 0378 — A CAMPANHA ENTRA NA CASCATA DE ANONIMIZAÇÃO
+-- 0379 — A CAMPANHA ENTRA NA CASCATA DE ANONIMIZAÇÃO
 --
 -- `campaign_recipients` guarda a MENSAGEM dita à pessoa (`rendered_body`) e o
 -- telefone para onde foi (`recipient_address`); `campaign_suppressions` guarda

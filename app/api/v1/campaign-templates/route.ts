@@ -3,7 +3,7 @@
  * POST /api/v1/campaign-templates — guarda uma.
  *
  * Escrita pelo client ADMIN com filtro explícito de organização, como todo o
- * módulo: o papel `authenticated` só tem SELECT (migration 0375). Ver
+ * módulo: o papel `authenticated` só tem SELECT (migration 0376). Ver
  * `tests/unit/campanha-escreve-como-servidor.test.ts`.
  */
 import { randomUUID } from "node:crypto";

@@ -3,7 +3,7 @@
  * POST /api/v1/campaigns — cria um rascunho.
  *
  * Papel: `manager` para tudo. Disparar para uma lista de gente não é gesto de
- * `viewer` nem de `agent`, e a RLS de `campaigns` (migration 0374) exige o mesmo
+ * `viewer` nem de `agent`, e a RLS de `campaigns` (migration 0375) exige o mesmo
  * papel — a porta HTTP e a do PostgREST concordam.
  *
  * Paginação: keyset sobre (created_at DESC, id DESC), o mesmo formato de
@@ -104,14 +104,14 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
   const entrada = parsed.data;
 
-  // Client ADMIN na escrita, e não o da sessão: a migration 0374 concede ao
+  // Client ADMIN na escrita, e não o da sessão: a migration 0375 concede ao
   // papel `authenticated` apenas SELECT (a tela lê; só o servidor escreve), e o
   // PostgREST com o JWT do usuário recebe "permission denied for table
   // campaigns" — medido na VPS em 19/09/2026, pela tela. O isolamento não se
   // perde: `org.orgId` vem do `requireRole()` acima, nunca do corpo, e entra
   // explicitamente em toda consulta abaixo.
   const supabase = createAdminClient();
-  // A conexão é conferida CONTRA A ORGANIZAÇÃO: a FK composta da 0374 recusaria
+  // A conexão é conferida CONTRA A ORGANIZAÇÃO: a FK composta da 0375 recusaria
   // o número de outro tenant, mas a recusa do banco chegaria como erro genérico.
   const { data: canal } = await supabase
     .from("channel_sessions")

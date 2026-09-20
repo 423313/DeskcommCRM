@@ -17,7 +17,7 @@
  * A proteção do NÚMERO (intervalo, janela, teto diário, warm-up) continua em
  * `channel_knobs`, editada em Conexões › Proteção de envio. Isto aqui é o
  * padrão da CAMPANHA, e campanha só sabe ir mais devagar que o número. Duplicar
- * a proteção do canal neste jsonb criaria a segunda fonte que a 0374 recusou.
+ * a proteção do canal neste jsonb criaria a segunda fonte que a 0375 recusou.
  *
  * Ausente = usa o default do produto. Nenhuma instalação precisa abrir esta tela
  * para a campanha funcionar.

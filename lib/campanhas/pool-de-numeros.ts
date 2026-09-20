@@ -1,5 +1,5 @@
 /**
- * Gravar e ler o POOL de números de uma campanha (migration 0376).
+ * Gravar e ler o POOL de números de uma campanha (migration 0377).
  *
  * Fica fora das rotas porque criar e editar fazem a mesma coisa com ele, e
  * porque a regra de "o principal não entra na tabela de vínculo" é fácil de
@@ -49,7 +49,7 @@ export async function gravarPool(
 ): Promise<ResultadoDoPool> {
   const desejados = [...new Set(entrada.extras)].filter((id) => id !== entrada.principal);
 
-  // Todo id é conferido CONTRA A ORGANIZAÇÃO. A FK composta da 0376 recusaria
+  // Todo id é conferido CONTRA A ORGANIZAÇÃO. A FK composta da 0377 recusaria
   // no banco, mas a recusa chegaria como erro genérico — e o operador merece
   // saber qual número foi rejeitado.
   let validos: string[] = [];

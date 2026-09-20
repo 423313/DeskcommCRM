@@ -11,7 +11,7 @@ import { filtroDeAudienciaSchema } from "./audiencia";
  * O ritmo próprio. Todos opcionais e anuláveis: `null` devolve a decisão ao
  * canal, que é o default de quem nunca abriu esta seção.
  *
- * As faixas são as do CHECK da migration 0374 — validação de entrada do
+ * As faixas são as do CHECK da migration 0375 — validação de entrada do
  * operador, não default de comportamento (os números de pacing são fonte única
  * em `lib/agent-engine/pacing/defaults.ts`).
  */
@@ -32,13 +32,13 @@ const baseDaCampanha = {
   lia_ref: z.string().trim().max(120).nullable().optional(),
   audience_filter: filtroDeAudienciaSchema.optional(),
   /**
-   * Os números EXTRAS do rodízio (migration 0376). O principal continua em
+   * Os números EXTRAS do rodízio (migration 0377). O principal continua em
    * `channel_session_id`; estes entram junto. Vazio = campanha de um número só,
    * que é como toda campanha existente se comporta.
    */
   channel_session_ids: z.array(z.string().uuid()).max(10).optional(),
   /**
-   * Onde o card de quem responde nasce, e quem atende (migration 0377).
+   * Onde o card de quem responde nasce, e quem atende (migration 0378).
    * `null` devolve a decisão ao número, que é o comportamento de sempre.
    */
   pipeline_id: z.string().uuid().nullable().optional(),

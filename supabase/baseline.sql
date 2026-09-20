@@ -35301,8 +35301,8 @@ notify pgrst, 'reload schema';
 
 
 
--- ---- campanhas (migration 0374) ----
--- 0374 — CAMPANHAS (Sub-PRD 12 / Spec 12 / Spec 13)
+-- ---- campanhas (migration 0375) ----
+-- 0375 — CAMPANHAS (Sub-PRD 12 / Spec 12 / Spec 13)
 --
 -- ═══ O que nasce aqui, e o que deliberadamente NÃO nasce ═══
 --
@@ -35729,10 +35729,10 @@ grant select on public.campaign_recipients to authenticated;
 grant all on public.campaign_recipients to service_role;
 
 
--- ---- templates e lista de exclusão de campanha (migration 0375) ----
--- 0375 — TEMPLATES E LISTA DE EXCLUSÃO DE CAMPANHA (Spec 12 §2.3 e §2.4)
+-- ---- templates e lista de exclusão de campanha (migration 0376) ----
+-- 0376 — TEMPLATES E LISTA DE EXCLUSÃO DE CAMPANHA (Spec 12 §2.3 e §2.4)
 --
--- As duas tabelas ficaram de fora da 0374 por decisão de escopo do dono
+-- As duas tabelas ficaram de fora da 0375 por decisão de escopo do dono
 -- (2026-09-18: "MVP é texto livre"). Entram agora, pedidas na tela, com a
 -- diferença de que não são mais projeto: cada uma resolve um problema medido.
 --
@@ -35854,7 +35854,7 @@ create trigger trg_redigir_exclusoes_anonimizado
   for each row
   execute function public.fn_redigir_exclusoes_do_contato_anonimizado();
 
--- ═══ RLS — mesmo padrão da 0374 ═══
+-- ═══ RLS — mesmo padrão da 0375 ═══
 -- SELECT para o tenant; escrita a partir de `manager`. Policy `ALL` só-tenancy
 -- em tabela nova é reprovada por `rbac-config-ia-canais.test.ts`.
 alter table public.campaign_templates enable row level security;
@@ -35908,8 +35908,8 @@ grant select on public.campaign_suppressions to authenticated;
 grant all on public.campaign_suppressions to service_role;
 
 
--- ---- rodízio de números na campanha (migration 0376) ----
--- 0376 — RODÍZIO DE NÚMEROS NA CAMPANHA
+-- ---- rodízio de números na campanha (migration 0377) ----
+-- 0377 — RODÍZIO DE NÚMEROS NA CAMPANHA
 --
 -- A campanha falava por UM número (`campaigns.channel_session_id`, not null).
 -- Passa a poder falar por VÁRIOS, escolhidos explicitamente.
@@ -35920,7 +35920,7 @@ grant all on public.campaign_suppressions to service_role;
 -- FK protege contra o número de OUTRA organização entrar na lista, e a checagem
 -- viraria código que alguém esquece. Com linha, a FK composta
 -- `(organization_id, channel_session_id)` recusa no banco — o mesmo padrão da
--- 0260, 0262 e 0374.
+-- 0260, 0262 e 0375.
 --
 -- ═══ O que NÃO muda ═══
 --
@@ -35993,7 +35993,7 @@ create index if not exists idx_campaign_recipients_por_numero
   on public.campaign_recipients (campaign_id, channel_session_id)
   where channel_session_id is not null;
 
--- ═══ RLS — o padrão da 0374/0375 ═══
+-- ═══ RLS — o padrão da 0375/0376 ═══
 alter table public.campaign_channel_sessions enable row level security;
 
 drop policy if exists campaign_channel_sessions_select on public.campaign_channel_sessions;
@@ -36020,8 +36020,8 @@ grant select on public.campaign_channel_sessions to authenticated;
 grant all on public.campaign_channel_sessions to service_role;
 
 
--- ---- campanha declara funil, etapa e agente (migration 0377) ----
--- 0377 — A CAMPANHA DECLARA FUNIL, ETAPA E AGENTE
+-- ---- campanha declara funil, etapa e agente (migration 0378) ----
+-- 0378 — A CAMPANHA DECLARA FUNIL, ETAPA E AGENTE
 --
 -- Três colunas nullable em `campaigns`, e o índice que o degrau novo do
 -- roteamento precisa. Aditiva: campanha que já existe continua com tudo NULL e

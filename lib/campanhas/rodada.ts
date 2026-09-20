@@ -77,7 +77,7 @@ const NUMEROS_POR_RODADA = 10;
 interface CampanhaRow {
   id: string;
   organization_id: string;
-  /** O número PRINCIPAL. O pool efetivo inclui os vinculados (migration 0376). */
+  /** O número PRINCIPAL. O pool efetivo inclui os vinculados (migration 0377). */
   channel_session_id: string;
   name: string;
   message_body: string | null;

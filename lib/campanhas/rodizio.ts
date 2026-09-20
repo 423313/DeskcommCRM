@@ -21,7 +21,7 @@
  * futuro: se um número cair, ou estourar o teto, a parte dele trava e alguém
  * tem de intervir. No envio, o rodízio se adapta sozinho — quem está livre
  * trabalha. O custo é que só depois de enviar se sabe por onde foi, e por isso
- * o destinatário guarda o número (migration 0376).
+ * o destinatário guarda o número (migration 0377).
  *
  * ═══ O que o rodízio NÃO faz ═══
  *

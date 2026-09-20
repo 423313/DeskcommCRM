@@ -1,4 +1,4 @@
--- 0376 — RODÍZIO DE NÚMEROS NA CAMPANHA
+-- 0377 — RODÍZIO DE NÚMEROS NA CAMPANHA
 --
 -- A campanha falava por UM número (`campaigns.channel_session_id`, not null).
 -- Passa a poder falar por VÁRIOS, escolhidos explicitamente.
@@ -9,7 +9,7 @@
 -- FK protege contra o número de OUTRA organização entrar na lista, e a checagem
 -- viraria código que alguém esquece. Com linha, a FK composta
 -- `(organization_id, channel_session_id)` recusa no banco — o mesmo padrão da
--- 0260, 0262 e 0374.
+-- 0260, 0262 e 0375.
 --
 -- ═══ O que NÃO muda ═══
 --
@@ -82,7 +82,7 @@ create index if not exists idx_campaign_recipients_por_numero
   on public.campaign_recipients (campaign_id, channel_session_id)
   where channel_session_id is not null;
 
--- ═══ RLS — o padrão da 0374/0375 ═══
+-- ═══ RLS — o padrão da 0375/0376 ═══
 alter table public.campaign_channel_sessions enable row level security;
 
 drop policy if exists campaign_channel_sessions_select on public.campaign_channel_sessions;

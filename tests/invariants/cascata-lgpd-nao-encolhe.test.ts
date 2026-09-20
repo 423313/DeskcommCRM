@@ -48,12 +48,12 @@ import { sql } from "./psql-transporte";
  * tabela está aqui" é a pergunta que a próxima entrega vai fazer.
  */
 const TABELAS_NA_CASCATA = [
-  // 0374/0375 — `rendered_body` é a MENSAGEM que a pessoa recebeu e
+  // 0375/0376 — `rendered_body` é a MENSAGEM que a pessoa recebeu e
   // `recipient_address` o telefone para onde foi. A LINHA fica (é a prova de
   // que ela esteve na campanha, e apagá-la desfaria a contagem de quem
   // recebeu); o conteúdo sai.
   "campaign_recipients",
-  // 0375 — a cauda do telefone e o motivo. O HASH do endereço PERMANECE: é
+  // 0376 — a cauda do telefone e o motivo. O HASH do endereço PERMANECE: é
   // ele que faz o "não me mande mais" continuar valendo depois da
   // anonimização — apagá-lo faria a pessoa voltar a receber campanha.
   "campaign_suppressions",

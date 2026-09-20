@@ -1,6 +1,6 @@
--- 0375 — TEMPLATES E LISTA DE EXCLUSÃO DE CAMPANHA (Spec 12 §2.3 e §2.4)
+-- 0376 — TEMPLATES E LISTA DE EXCLUSÃO DE CAMPANHA (Spec 12 §2.3 e §2.4)
 --
--- As duas tabelas ficaram de fora da 0374 por decisão de escopo do dono
+-- As duas tabelas ficaram de fora da 0375 por decisão de escopo do dono
 -- (2026-09-18: "MVP é texto livre"). Entram agora, pedidas na tela, com a
 -- diferença de que não são mais projeto: cada uma resolve um problema medido.
 --
@@ -122,7 +122,7 @@ create trigger trg_redigir_exclusoes_anonimizado
   for each row
   execute function public.fn_redigir_exclusoes_do_contato_anonimizado();
 
--- ═══ RLS — mesmo padrão da 0374 ═══
+-- ═══ RLS — mesmo padrão da 0375 ═══
 -- SELECT para o tenant; escrita a partir de `manager`. Policy `ALL` só-tenancy
 -- em tabela nova é reprovada por `rbac-config-ia-canais.test.ts`.
 alter table public.campaign_templates enable row level security;

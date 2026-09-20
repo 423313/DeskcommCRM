@@ -29,7 +29,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * espaço, traço e parêntese, e `+55 (48) 99999-0000` tem de casar com
  * `+5548999990000` — senão a exclusão existe e não pega.
  *
- * O mesmo cálculo está documentado no comentário da coluna (migration 0375):
+ * O mesmo cálculo está documentado no comentário da coluna (migration 0376):
  * mudar um lado sem o outro faz a lista parar de casar, em silêncio.
  */
 export function hashDoEndereco(bruto: string): string {
