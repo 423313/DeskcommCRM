@@ -33782,11 +33782,6 @@ begin
   update public.calendar_appointments set meeting_delivery=meeting_delivery||'{"state":"stale","error":"service_boundary_stale"}' where organization_id=new.organization_id and id=new.id;
   perform public.fn_meet_notice(new.organization_id,new.id,'service_boundary_stale');return new;
  end if;
- -- Um job pendente da geração anterior morre AQUI, e não é deixado para a
- -- vigência descobrir. Assim a antirrepetição vale mesmo com o trabalhador
- -- parado: cinco arrastos seguidos deixam UM job vivo, não cinco.
- update public.job_queue set status='failed',locked_by=null,locked_at=null,last_error='meet_delivery_superseded'
-  where organization_id=new.organization_id and id=new.meeting_delivery_job_id and kind='transactional_delivery' and status in ('pending','running');
  jid:=gen_random_uuid();
  insert into public.job_queue(id,organization_id,contact_id,kind,payload,run_after)
  values(jid,new.organization_id,new.contact_id,'transactional_delivery',jsonb_build_object('appointment_id',new.id,'meeting_request_id',new.meeting_request_id,

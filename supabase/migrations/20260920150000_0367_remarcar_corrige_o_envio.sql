@@ -31,6 +31,22 @@
 --    janela SUBSTITUI a anterior — o job pendente morre no próprio enfileirador.
 --    Sem isso, arrastar o compromisso na grade viraria uma mensagem por arrasto.
 --
+-- ## Uma linha da versão do autor que eu NÃO trouxe, e a medição
+--
+-- A 0242 dele mata, dentro do enfileirador, o job pendente da geração
+-- anterior (`meet_delivery_superseded`). Sabotei: removê-la não muda NENHUM
+-- caso — e a razão não é falta de teste, é que a linha é inalcançável.
+-- Medido: TODA via que põe o estado em `waiting_for_link` zera o
+-- `meeting_delivery_job_id` na mesma instrução — os três `update` de
+-- `fn_meet_action` e o `new.meeting_delivery_job_id := null` do gatilho acima.
+-- O corpo do enfileirador só roda com `state='waiting_for_link'`, então o
+-- `job_id` ali é sempre nulo e o `update` casa zero linha.
+--
+-- Quem garante a antirrepetição é outra coisa, e ela está provada: o gatilho
+-- só age em `sent`, então a segunda remarcação dentro da janela não cria uma
+-- segunda correção. Se houver um caminho em que o `job_id` sobrevive, a linha
+-- volta com um caso que a exercite.
+--
 -- ⚠️ O enfileirador NÃO recria o gatilho: `create or replace function` já troca
 -- o corpo, e recriar o gatilho reintroduziria a janela de apagar-e-criar que a
 -- Onda 1 consertou.
@@ -127,11 +143,6 @@ begin
   update public.calendar_appointments set meeting_delivery=meeting_delivery||'{"state":"stale","error":"service_boundary_stale"}' where organization_id=new.organization_id and id=new.id;
   perform public.fn_meet_notice(new.organization_id,new.id,'service_boundary_stale');return new;
  end if;
- -- Um job pendente da geração anterior morre AQUI, e não é deixado para a
- -- vigência descobrir. Assim a antirrepetição vale mesmo com o trabalhador
- -- parado: cinco arrastos seguidos deixam UM job vivo, não cinco.
- update public.job_queue set status='failed',locked_by=null,locked_at=null,last_error='meet_delivery_superseded'
-  where organization_id=new.organization_id and id=new.meeting_delivery_job_id and kind='transactional_delivery' and status in ('pending','running');
  jid:=gen_random_uuid();
  insert into public.job_queue(id,organization_id,contact_id,kind,payload,run_after)
  values(jid,new.organization_id,new.contact_id,'transactional_delivery',jsonb_build_object('appointment_id',new.id,'meeting_request_id',new.meeting_request_id,
