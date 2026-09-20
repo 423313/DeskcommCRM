@@ -1,11 +1,11 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Conectar o Google Agenda funciona quando o navegador abre por localhost
+titulo: Conectar o Google funciona quando você abre a instalação por localhost
 ---
 
-Quem roda o DeskcommCRM na própria máquina abre a aplicação por `localhost`, enquanto o instalador guardou o endereço de rede do computador. O Google compara o endereço de retorno letra por letra, então o consentimento voltava para o endereço errado e a conexão com a Agenda nunca terminava — sem mensagem que explicasse por quê.
+Quem instala o DeskcommCRM no próprio computador e abre o sistema por `http://localhost:3000` não conseguia terminar a conexão com o Google Agenda: o endereço de retorno oferecido era sempre o que ficou gravado na instalação (o IP da máquina na rede, por exemplo), e o Google compara esse endereço letra por letra. A conexão voltava para outro endereço e nunca se completava.
 
-Agora, quando o navegador abre por `localhost` (ou `127.0.0.1`), o endereço de retorno acompanha. Só endereços da própria máquina valem essa exceção: qualquer outro host continua perdendo para o endereço oficial da instalação, para que um endereço forjado não consiga desviar o código de autorização que o Google devolve. Numa instalação em servidor nada muda.
+Agora, **quando e só quando** o navegador abre o sistema por `localhost` (ou `127.0.0.1`), o endereço de retorno acompanha — e é o mesmo que a tela mostra para você colar no painel do Google. Qualquer outro endereço continua perdendo para o endereço oficial da instalação, então nada muda para quem roda em servidor com domínio próprio.
 
 Contribuição de @betoarts (#714).
