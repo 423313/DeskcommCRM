@@ -11,7 +11,10 @@
  *                          `duplicate` e o handler SAI antes de pausar a IA.
  *                          Nenhuma segunda mensagem, IA acordada.
  *   lado B (terceiro)   -> `external_id` novo entra como linha nova e a IA é
- *                          pausada por atendimento manual.
+ *                          pausada por atendimento manual. A thread do B também
+ *                          é inédita de propósito: a pausa incondicional para
+ *                          qualquer saída está na âncora nova — no ramo de
+ *                          thread já conhecida ela exige `socialMessage`.
  *
  * Este arquivo prova as duas pontas CONTRA POSTGRES DE VERDADE (não há mock de
  * banco: é a própria constraint que distingue os casos) e prova a constraint
@@ -81,6 +84,14 @@ const CONTATO_B = "e2000000-1323-4000-8000-0000000000c1";
 const CONVERSA_B = "e2000000-1323-4000-8000-0000000000c2";
 const TELEFONE_B = "+5511990001325";
 const SAIDA_TERCEIRO = "wamid.SAIDA-DE-TERCEIRO";
+/**
+ * Thread do lado B — também inédita, e por um motivo: a thread do A2 é GRAVADA
+ * na conversa do A2 pelo próprio ingest (coluna `provider_conversation_id`).
+ * Reaproveitar a mesma thread aqui faria a saída do B cair na conversa do A2
+ * (ramo de thread conhecida) em vez da conversa do B, e o teste passaria a
+ * medir outra coisa.
+ */
+const THREAD_TERCEIRO = "6a76a2dc4b8fe115e5f6c3b7";
 
 /** INSERT cru contra a constraint. */
 const CONTATO_CRU = "e2000000-1323-4000-8000-0000000000d1";
@@ -110,25 +121,45 @@ function eventoDaPlataforma(
   msg: Record<string, unknown>,
   over: Record<string, unknown> = {},
 ): Record<string, unknown> {
+  // `participantPhoneNumber` descreve o OUTRO lado (o cliente) e por isso não
+  // vai para dentro de `message`: na saída, quem está lá somos nós.
+  const { participantPhoneNumber, ...dentroDaMensagem } = msg;
+
+  const message: Record<string, unknown> = {
+    id: "m-1323",
+    conversationId: THREAD_DESCONHECIDA,
+    platform: "whatsapp",
+    platformMessageId: "wamid.NAO-USADO",
+    direction: "outgoing",
+    text: "bom dia! seu pedido saiu para entrega",
+    attachments: [],
+    sender: { phoneNumber: TELEFONE_A1, name: "Atendimento" },
+    sentAt: "2026-08-08T01:00:00.000Z",
+    isRead: false,
+    ...dentroDaMensagem,
+  };
+
   return {
     id: "evt-1323-eco",
     // O provider publica o que SAI por ele com este nome de evento; o direção
     // é o que o ingest usa para decidir pausar a IA.
     event: "message.sent",
     account: { id: CONTA_ZERNIO },
-    message: {
-      id: "m-1323",
-      conversationId: THREAD_DESCONHECIDA,
-      platform: "whatsapp",
-      platformMessageId: "wamid.NAO-USADO",
-      direction: "outgoing",
-      text: "bom dia! seu pedido saiu para entrega",
-      attachments: [],
-      sender: { phoneNumber: TELEFONE_A1, name: "Atendimento" },
-      sentAt: "2026-08-08T01:00:00.000Z",
-      isRead: false,
-      ...msg,
+    // ─── Quem está do OUTRO lado da saída ───────────────────────────────────
+    //
+    // Numa mensagem de SAÍDA o `sender` somos NÓS (o payload real traz o número
+    // da empresa). Por isso `parseZernioInbound` IGNORA o sender nesse caso e lê
+    // o cliente de `conversation.participantId` — é lá que o provider entrega o
+    // telefone do participante, SEM o "+" (medido: `595985321822`). Um evento de
+    // saída sem participante não tem identidade nenhuma, e a ingestão para em
+    // `sem_identidade_utilizavel`: foi o que aconteceu com a primeira versão
+    // deste arquivo, que trazia só o `sender`.
+    conversation: {
+      id: String(message.conversationId),
+      participantId: String(participantPhoneNumber ?? TELEFONE_A1).replace(/\D/g, ""),
+      participantName: "Cliente do outro lado",
     },
+    message,
     ...over,
   };
 }
@@ -304,6 +335,7 @@ describe("eco do próprio envio social (Zernio) — #1323 parte 2", () => {
         conversationId: THREAD_CONHECIDA,
         platformMessageId: ECO_A1,
         sender: { phoneNumber: TELEFONE_A1, name: "Atendimento" },
+        participantPhoneNumber: TELEFONE_A1,
       }),
     );
 
@@ -336,6 +368,7 @@ describe("eco do próprio envio social (Zernio) — #1323 parte 2", () => {
         conversationId: THREAD_DESCONHECIDA,
         platformMessageId: ECO_A2,
         sender: { phoneNumber: TELEFONE_A2, name: "Atendimento" },
+        participantPhoneNumber: TELEFONE_A2,
       }),
     );
 
@@ -347,16 +380,17 @@ describe("eco do próprio envio social (Zernio) — #1323 parte 2", () => {
     expect(chamadasDeRede).toEqual([]);
   });
 
-  it("lado B: saída de terceiro com external_id novo entra e PAUSA a IA", async () => {
+  it("lado B: saída de terceiro com external_id e thread inéditos entra e PAUSA a IA", async () => {
     const pausadasAntes = await pausadas();
     const totalAntes = await totalDeMensagens();
 
     const desfecho = await entregar(
       eventoDaPlataforma({
-        conversationId: THREAD_DESCONHECIDA,
+        conversationId: THREAD_TERCEIRO,
         platformMessageId: SAIDA_TERCEIRO,
         text: "oi, sou eu aqui no celular do escritório",
         sender: { phoneNumber: TELEFONE_B, name: "Atendimento" },
+        participantPhoneNumber: TELEFONE_B,
       }),
     );
 
@@ -366,9 +400,31 @@ describe("eco do próprio envio social (Zernio) — #1323 parte 2", () => {
     expect(await contarPorExternalId(SAIDA_TERCEIRO)).toBe(1);
     expect(await totalDeMensagens()).toBe(totalAntes + 1);
 
-    // E a IA é calada: pelo menos uma conversa NOVA ficou com a IA pausada.
+    // Onde a saída caiu? O CRM tem que saber para exigir que a pausa seja
+    // DAQUELA conversa — pausa é por conversa, não por organização.
+    const { rows: destinoRows } = await pool.query<{ conversation_id: string }>(
+      "select conversation_id from messages where organization_id = $1 and external_id = $2",
+      [ORG, SAIDA_TERCEIRO],
+    );
+    expect(destinoRows).toHaveLength(1);
+    const destino = destinoRows[0]!.conversation_id;
+    expect(destino).toBe(CONVERSA_B);
+
+    // E a IA é calada nessa conversa — não em qualquer conversa da organização.
     const pausadasDepois = await pausadas();
-    expect(novas(pausadasAntes, pausadasDepois).length).toBeGreaterThan(0);
+    expect(novas(pausadasAntes, pausadasDepois)).toContain(destino);
+
+    // Prova direta no banco: a conversa ficou com a IA pausada até um instante
+    // no futuro, com motivo registrado.
+    const { rows: pausa } = await pool.query<{
+      bot_silenced_until: string | null;
+      last_handoff_reason: string | null;
+    }>("select bot_silenced_until, last_handoff_reason from conversations where id = $1", [
+      destino,
+    ]);
+    expect(pausa[0]!.bot_silenced_until).not.toBeNull();
+    expect(new Date(pausa[0]!.bot_silenced_until as string).getTime()).toBeGreaterThan(Date.now());
+    expect(pausa[0]!.last_handoff_reason).not.toBeNull();
 
     const comMotivo = await pausadasDeFuturo();
     expect(comMotivo.length).toBeGreaterThan(0);
