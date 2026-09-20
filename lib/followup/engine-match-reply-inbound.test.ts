@@ -110,4 +110,84 @@ describe("match_reply — resposta do lead após wait_started na mesma chave", (
     expect(passos.some((p) => p.current_node_id === "action-7")).toBe(true);
     expect(passos.some((p) => p.current_node_id === "action-6")).toBe(false);
   });
+
+  it("espera recém-estacionada + inbound_woke sem texto desta pergunta não dispara ALWAYS nem no_reply", async () => {
+    // Produção: o "." não casou 1/2/3, o ALWAYS reenviou o menu, o kick
+    // acordou a espera nova com a mesma mensagem, e occupancy+ALWAYS
+    // despejou três menus + o timeout no mesmo request.
+    const passos: Array<Record<string, unknown>> = [];
+    const chaves = new Set(["match_reply-1:6", "match_reply-1:6:wake"]);
+    const eventos: EnrollmentEventRef[] = [
+      {
+        node_id: "match_reply-1",
+        idempotency_key: "match_reply-1:6",
+        event_type: "wait_started",
+        payload: { wake_status: "waiting_reply", next_eval_at: "2026-09-20T21:35:47.000Z" },
+      },
+      {
+        node_id: "match_reply-1",
+        idempotency_key: "match_reply-1:6:wake",
+        event_type: "inbound_woke",
+        payload: {},
+      },
+    ];
+
+    const db = {
+      loadFlowGraph: vi.fn(async () => GRAFO),
+      loadLeadFacts: vi.fn(async () => ({ lead_stage: null, tags: [] })),
+      loadEnrollmentEvents: vi.fn(async () => eventos),
+      loadLastInboundBody: vi.fn(async () => null),
+      loadFlowPointerName: vi.fn(async () => null),
+      insertEnrollmentEvent: vi.fn(async (event: { idempotency_key: string }) => {
+        if (chaves.has(event.idempotency_key)) return { inserted: false };
+        chaves.add(event.idempotency_key);
+        return { inserted: true };
+      }),
+      updateEnrollment: vi.fn(async (_id: string, _org: string, patch: Record<string, unknown>) => {
+        passos.push(patch);
+      }),
+    } as unknown as AdminClient;
+
+    const deps: TickDeps = { db, clock: () => NOW, enqueueJob: async () => {} };
+    await avancarEnrollmentAtivo(deps, { ...enrollment(), steps_taken: 6, next_eval_at: NOW.toISOString() });
+
+    expect(passos.some((p) => p.current_node_id === "action-6")).toBe(false);
+    expect(passos.some((p) => p.current_node_id === "action-7")).toBe(false);
+    expect(passos.some((p) => p.status === "waiting_reply")).toBe(true);
+  });
+
+  it("occupancy sem inbound e sem timeout não cai em no_reply", async () => {
+    const passos: Array<Record<string, unknown>> = [];
+    const chaves = new Set(["match_reply-1:3"]);
+    const eventos: EnrollmentEventRef[] = [
+      {
+        node_id: "match_reply-1",
+        idempotency_key: "match_reply-1:3",
+        event_type: "wait_started",
+        payload: { wake_status: "waiting_reply", next_eval_at: "2026-09-20T21:35:47.000Z" },
+      },
+    ];
+
+    const db = {
+      loadFlowGraph: vi.fn(async () => GRAFO),
+      loadLeadFacts: vi.fn(async () => ({ lead_stage: null, tags: [] })),
+      loadEnrollmentEvents: vi.fn(async () => eventos),
+      loadLastInboundBody: vi.fn(async () => null),
+      loadFlowPointerName: vi.fn(async () => null),
+      insertEnrollmentEvent: vi.fn(async (event: { idempotency_key: string }) => {
+        if (chaves.has(event.idempotency_key)) return { inserted: false };
+        chaves.add(event.idempotency_key);
+        return { inserted: true };
+      }),
+      updateEnrollment: vi.fn(async (_id: string, _org: string, patch: Record<string, unknown>) => {
+        passos.push(patch);
+      }),
+    } as unknown as AdminClient;
+
+    const deps: TickDeps = { db, clock: () => NOW, enqueueJob: async () => {} };
+    await avancarEnrollmentAtivo(deps, { ...enrollment(), steps_taken: 8 });
+
+    expect(passos.some((p) => p.current_node_id === "action-6")).toBe(false);
+    expect(passos.some((p) => p.status === "waiting_reply")).toBe(true);
+  });
 });
