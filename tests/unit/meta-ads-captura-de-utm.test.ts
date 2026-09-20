@@ -49,6 +49,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 import { GET } from "@/app/api/v1/anuncios/meta/[org]/route";
+import { casarClickRef } from "@/lib/plataformas-de-anuncio/meta/captura-de-clique";
 import { textoSemRef } from "@/lib/plataformas-de-anuncio/pagina-de-captura";
 
 const chamar = (query: string) =>
@@ -165,5 +166,52 @@ describe("textoSemRef", () => {
 
   it("template que escreve o placeholder fora de colchetes também sai limpo", () => {
     expect(textoSemRef("Vim pelo site {token}")).toBe("Vim pelo site");
+  });
+});
+
+const ORG = "11111111-1111-1111-1111-111111111111";
+const CONTATO = "33333333-3333-3333-3333-333333333333";
+
+describe("casarClickRef (Meta)", () => {
+  /** O construtor do PostgREST, com os filtros anotados para o caso conferir. */
+  function adminQueDevolve(data: unknown, filtros: Record<string, unknown> = {}) {
+    const construtor = {
+      update: () => construtor,
+      eq: (campo: string, valor: unknown) => {
+        filtros[campo] = valor;
+        return construtor;
+      },
+      is: (campo: string, valor: unknown) => {
+        filtros[campo] = valor;
+        return construtor;
+      },
+      select: () => construtor,
+      maybeSingle: async () => ({ data, error: null }),
+    };
+    return { from: () => construtor };
+  }
+
+  it("consome o ref e devolve as UTMs guardadas no clique", async () => {
+    const filtros: Record<string, unknown> = {};
+    const admin = adminQueDevolve({ utm: { utm_campaign: "black-friday" } }, filtros);
+
+    const casado = await casarClickRef(admin as never, ORG, "K7M2P9", CONTATO);
+
+    expect(casado).toEqual({ utm: { utm_campaign: "black-friday" } });
+    // Organização no filtro é a lição da #236; `matched_at is null` é a trava
+    // de consumo único.
+    expect(filtros.organization_id).toBe(ORG);
+    expect(filtros.token).toBe("K7M2P9");
+    expect(filtros.matched_at).toBeNull();
+  });
+
+  it("ref já consumido não casa (o UPDATE não acha linha)", async () => {
+    const casado = await casarClickRef(adminQueDevolve(null) as never, ORG, "K7M2P9", CONTATO);
+    expect(casado).toBeNull();
+  });
+
+  it("linha sem UTM não vira atribuição", async () => {
+    const casado = await casarClickRef(adminQueDevolve({ utm: {} }) as never, ORG, "K7M2P9", CONTATO);
+    expect(casado).toBeNull();
   });
 });

@@ -30,6 +30,31 @@ const TENTATIVAS_MAXIMAS = 5;
  */
 export type TabelaDeClickRefs = "google_ads_click_refs" | "meta_ads_click_refs";
 
+/**
+ * `[ref:XXXXXX]` — colchetes e prefixo de propósito, para não casar por
+ * acidente com seis caracteres que apareçam à toa no meio de uma mensagem
+ * comum. O alfabeto (sem 0/O/1/I/L) espelha o gerador logo abaixo.
+ *
+ * O padrão é UM SÓ para os dois eixos de captura, e é por isso que ele mora
+ * aqui e não em `google/atribuicao.ts`: quem lê o texto da mensagem não sabe
+ * (nem precisa saber) se aquele ref nasceu de um clique do Google Ads ou do
+ * botão de uma landing page. Quem sabe é a tabela que TEM o ref.
+ */
+export const PADRAO_DO_REF = /\[ref:([2-9A-HJ-NP-Z]{6})\]/;
+
+/**
+ * ─── O desempate entre os dois eixos, declarado ────────────────────────────
+ *
+ * O mesmo `[ref:XXXXXX]` pode, em tese, existir nas duas tabelas da mesma
+ * organização. Cada lado procura na PRÓPRIA tabela, e é isso: a chance de o
+ * mesmo ref nascer nos dois é a mesma de uma colisão interna (32^6 por
+ * organização), que este arquivo já aceita desde a 0306, e o pior desfecho é
+ * escolher entre duas origens que são ambas de anúncio — não um dado de
+ * terceiro. Conferir a tabela irmã a cada clique custaria uma consulta no
+ * caminho de quem clicou num anúncio pago, que é o caminho que não pode
+ * ficar mais lento nem mais frágil.
+ */
+
 function gerarToken(): string {
   let token = "";
   for (let i = 0; i < TAMANHO_DO_TOKEN; i++) {
