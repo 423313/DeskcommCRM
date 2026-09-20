@@ -243,6 +243,38 @@ export const DICIONARIO: Traducoes = {
     es: "No fue posible comunicarse con el servidor. Revisa la dirección, el puerto y la seguridad.",
   },
   "Servidor de e-mail salvo.": { es: "Servidor de correo guardado." },
+  "Serviço externo de envio": { es: "Servicio externo de envío" },
+  "A alternativa ao servidor próprio: um serviço que entrega o e-mail por você. Se as duas coisas estiverem configuradas, o servidor próprio tem preferência.": {
+    es: "La alternativa al servidor propio: un servicio que entrega el correo por usted. Si ambos están configurados, el servidor propio tiene preferencia.",
+  },
+  "O serviço de envio de e-mail — próprio ou externo — fica em E-mail →": {
+    es: "El servicio de envío de correo — propio o externo — está en Correo →",
+  },
+  "Extensões da instalação": { es: "Extensiones de la instalación" },
+  "O que este servidor conhece, de onde veio e quem está usando. Instalar e configurar continua sendo feito dentro de cada empresa.": {
+    es: "Lo que este servidor conoce, de dónde vino y quién lo está usando. Instalar y configurar se sigue haciendo dentro de cada empresa.",
+  },
+  "De onde vêm as extensões": { es: "De dónde vienen las extensiones" },
+  "O catálogo admitido neste servidor. É a origem que o instalador aceita.": {
+    es: "El catálogo admitido en este servidor. Es el origen que el instalador acepta.",
+  },
+  "Nenhum catálogo admitido ainda — enquanto não houver, não há extensão para instalar.": {
+    es: "Ningún catálogo admitido todavía: mientras no haya, no hay extensión para instalar.",
+  },
+  "admitido em": { es: "admitido el" },
+  "impressão digital": { es: "huella digital" },
+  "Instaladas neste servidor": { es: "Instaladas en este servidor" },
+  "Cada extensão é instalada uma vez no servidor e ligada por empresa.": {
+    es: "Cada extensión se instala una vez en el servidor y se activa por empresa.",
+  },
+  "Nenhuma extensão instalada ainda.": { es: "Ninguna extensión instalada todavía." },
+  "Nenhuma empresa usa esta extensão": { es: "Ninguna empresa usa esta extensión" },
+  "empresa(s) com ela ligada": { es: "empresa(s) con ella activada" },
+  "instalada em": { es: "instalada el" },
+  "Para instalar ou configurar uma extensão, entre na empresa:": {
+    es: "Para instalar o configurar una extensión, entre en la empresa:",
+  },
+  "Extensões da empresa →": { es: "Extensiones de la empresa →" },
   "Servidor de e-mail desta instalação": { es: "Servidor de correo de esta instalación" },
   "Convite de equipe, entrega de dados de LGPD e aviso de prazo saem por aqui. Preencher esta tela é a alternativa a contratar um serviço externo de envio: o e-mail passa a sair pelo seu próprio servidor.": {
     es: "Las invitaciones al equipo, la entrega de datos personales y los avisos de plazo salen por aquí. Completar esta pantalla es la alternativa a contratar un servicio externo de envío: el correo pasa a salir por tu propio servidor.",
@@ -2480,6 +2512,8 @@ export const DICIONARIO: Traducoes = {
   "Consultas aos seus materiais": { es: "Consultas a tus materiales" },
   "Conteúdo da": { es: "Contenido de la" },
   "Conversas encaminhadas": { es: "Conversaciones encaminadas" },
+  "O horário da sua reunião mudou. Agora é": { es: "El horario de tu reunión cambió. Ahora es" },
+  "O horário do seu compromisso mudou. Agora é": { es: "El horario de tu compromiso cambió. Ahora es" },
   "Mandar ao cliente": { es: "Enviar al cliente" },
   "Dados não enviados ainda.": { es: "Datos aún no enviados." },
   "Envio autorizado: aguardando a vez na fila.": { es: "Envío autorizado: esperando su turno en la fila." },
@@ -10761,6 +10795,38 @@ export const DICIONARIO: Traducoes = {
   "somente leitura": { es: "solo lectura" },
   "Esta conexão está desativada. Ative-a na lista para consultar os dados.": {
     es: "Esta conexión está desactivada. Actívala en la lista para consultar los datos.",
+  },
+  // ─── Painel "Para integrar" (dados não-secretos da conexão) ───
+  "Para integrar": { es: "Para integrar" },
+  "Copiar dados": { es: "Copiar datos" },
+  "Onde obter o token": { es: "Dónde obtener el token" },
+  "Não foi possível copiar.": { es: "No se pudo copiar." },
+  "Endpoint da API": { es: "Endpoint de la API" },
+  "Estes dados conectam outro sistema ao mesmo número. O token não aparece aqui — o ícone ao lado diz onde obtê-lo no painel do provedor.": {
+    es: "Estos datos conectan otro sistema al mismo número. El token no aparece aquí — el ícono de al lado indica dónde obtenerlo en el panel del proveedor.",
+  },
+  "O token de acesso é criado no painel da Meta: Configurações do Business → Usuários do sistema → gerar token permanente.": {
+    es: "El token de acceso se crea en el panel de Meta: Configuración del Business → Usuarios del sistema → generar token permanente.",
+  },
+  "A chave de API está no painel do provedor, na conta conectada — este CRM não a exibe de volta.": {
+    es: "La clave de API está en el panel del proveedor, en la cuenta conectada — este CRM no la muestra de vuelta.",
+  },
+  "O webhook de um número aponta para um só destino. Para os dois CRMs receberem ao mesmo tempo, um deles precisa reencaminhar as mensagens ao outro.": {
+    es: "El webhook de un número apunta a un solo destino. Para que los dos CRM reciban al mismo tiempo, uno de ellos debe reenviar los mensajes al otro.",
+  },
+  "Um número tem um único webhook.": { es: "Un número tiene un único webhook." },
+  "Para operar em dois CRMs ao mesmo tempo, configure o reencaminhamento de mensagens.": {
+    es: "Para operar en dos CRM a la vez, configure el reenvío de mensajes.",
+  },
+  "No canal por QR a credencial é interna desta instalação e não serve para fora. Para ligar outro CRM ao mesmo número, conecte-o por uma sessão própria (novo QR).": {
+    es: "En el canal por QR la credencial es interna de esta instalación y no sirve afuera. Para conectar otro CRM al mismo número, conéctalo con una sesión propia (nuevo QR).",
+  },
+  "Dois dispositivos vinculados recebem as mesmas mensagens — se os dois tiverem atendimento automático, o cliente pode receber resposta dupla.": {
+    es: "Dos dispositivos vinculados reciben los mismos mensajes — si ambos tienen atención automática, el cliente puede recibir respuesta doble.",
+  },
+  "Não compartilhe esta sessão.": { es: "No compartas esta sesión." },
+  "Crie uma conexão separada por QR no outro sistema.": {
+    es: "Crea una conexión separada por QR en el otro sistema.",
   },
 };
 
