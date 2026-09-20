@@ -9276,7 +9276,12 @@ export type Database = {
       }
       fn_encrypt_oauth: { Args: { plaintext: string }; Returns: string }
       fn_estampar_atribuicao_de_anuncio: {
-        Args: { p_contact: string; p_metadata: Json; p_platform: string }
+        Args: {
+          p_contact: string
+          p_metadata: Json
+          p_org: string
+          p_platform: string
+        }
         Returns: undefined
       }
       fn_expurgar_auditoria_vencida: {
