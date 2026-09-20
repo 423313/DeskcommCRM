@@ -1,4 +1,4 @@
--- 0375 · O anúncio tem nome, e o CRM só tinha o número dele.
+-- 0380 · O anúncio tem nome, e o CRM só tinha o número dele.
 --
 -- ─── O buraco que isto fecha ────────────────────────────────────────────────
 -- O contato que chega por clique-para-WhatsApp traz o id do anúncio e mais nada:
