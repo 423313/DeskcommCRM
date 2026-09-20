@@ -6313,7 +6313,7 @@ snapshots:
       '@jest/schemas': 29.6.3
       '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.4
-      '@types/node': 22.20.3
+      '@types/node': 22.20.4
       '@types/yargs': 17.0.35
       chalk: 4.1.2
 
@@ -7826,7 +7826,7 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 22.20.2
+      '@types/node': 22.20.4
 
   '@types/yargs-parser@21.0.3': {}
 
