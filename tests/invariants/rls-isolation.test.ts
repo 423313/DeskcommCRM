@@ -322,6 +322,25 @@ beforeAll(() => {
             );
         end if;
 
+        -- voip_trunk_settings (migration 0349): credenciais do trunk SIP da
+        -- organizacao. PK e o proprio organization_id (um trunk por org), e a
+        -- senha cifrada tem o MESMO esquema de ai_provider_credentials -- os
+        -- bytea aqui sao so preenchimento minimo pra satisfazer os NOT NULL,
+        -- nunca material real.
+        if not exists (select 1 from public.voip_trunk_settings where organization_id = v_org) then
+          insert into public.voip_trunk_settings
+            (organization_id, host, username, password_encrypted, password_iv, password_tag, password_last4, endpoint_name)
+            values (v_org, 'sip.rls-invariant.test', 'rls-user', '\\x00'::bytea, '\\x00'::bytea, '\\x00'::bytea, '0000', 'org-' || v_org::text || '-trunk-endpoint');
+        end if;
+
+        -- phone_numbers (SIP module, #677): numeros (DID) que a org cadastrou
+        -- pra receber ligacoes. 'number' e UNIQUE global, entao cada org
+        -- precisa de um valor distinto -- sufixado pelo proprio v_org.
+        if not exists (select 1 from public.phone_numbers where organization_id = v_org) then
+          insert into public.phone_numbers (organization_id, number, trunk_endpoint)
+            values (v_org, 'rls-' || v_org::text, 'trunk-endpoint');
+        end if;
+
         if not exists (select 1 from public.ai_provider_credentials where organization_id = v_org) then
           insert into public.ai_provider_credentials
             (organization_id, provider, label, api_key_encrypted, api_key_iv, api_key_tag, api_key_last4)
@@ -420,6 +439,22 @@ beforeAll(() => {
             (organization_id, contact_id, points, reason, sale_id)
             values (v_org, v_contact, 5, 'RLS invariant ponto', v_sale);
         end if;
+
+        -- migration 0372 — a conexão com o PostgreSQL externo. As três colunas
+        -- de senha são bytea not null e a cifra é do APP (AES-GCM), não do
+        -- banco: aqui vai um envelope QUALQUER, porque o que se mede é a cerca
+        -- de organização, não a cifra. O SELECT lido pelo caso abaixo é o da
+        -- TABELA-base; a view _safe é security_invoker e herda esta mesma
+        -- RLS, então provar a base prova as duas.
+        if not exists (select 1 from public.external_db_connections where organization_id = v_org) then
+          insert into public.external_db_connections
+            (organization_id, label, host, port, database_name, username,
+             password_encrypted, password_iv, password_tag)
+            values (v_org, 'RLS invariant fonte externa', 'db.invariante.interno', 5432,
+                    'outro_crm', 'leitor',
+                    '\\x00'::bytea, '\\x000000000000000000000000'::bytea,
+                    '\\x00000000000000000000000000000000'::bytea);
+        end if;
       end loop;
     end
     $seed$;
@@ -471,6 +506,15 @@ export const TABLES = [
   "crm_tasks",
   // 0227 — texto de sugestões: org + visibilidade da conversa por authenticated.
   "ai_reply_drafts",
+  // migration 0349 — credenciais do trunk SIP por organizacao. Leitura e
+  // qualquer membro da org (a tela de originar chamada precisa saber SE
+  // existe trunk configurado); a ESCRITA exige admin (mesmo nivel de
+  // ai_provider_credentials) e NAO e medida aqui.
+  "voip_trunk_settings",
+  // phone_numbers (SIP module, #677): numeros (DID) que recebem ligacao.
+  // Leitura/escrita org-scoped (sem segundo eixo medido aqui -- ver a nota
+  // de DIVIDA_RBAC_CONHECIDA em rbac-config-ia-canais.test.ts).
+  "phone_numbers",
   // 0232/0235 — chamada de voz. Guarda `peer_phone` (telefone da outra ponta) e
   // `owner_user_id` (quem atendeu): vazar a linha entrega ao vizinho com quem a
   // organização falou, quando, por quanto tempo e por meio de quem. A policy
@@ -526,6 +570,19 @@ export const TABLES = [
   "financial_entries",
   "loyalty_ledger",
   "recurring_entries",
+  // migration 0372 — a conexão com um PostgreSQL de OUTRO sistema (recorte do
+  // PR #1130, de @vgamkt). Vazar a linha entrega ao vizinho o host, a porta, o
+  // banco e o USUÁRIO do sistema interno dele: metade de uma credencial, e o
+  // mapa de por onde entrar. A senha em si não sai nem para o dono (as três
+  // colunas cifradas só existem na tabela-base; a tela lê a view `_safe`).
+  //
+  // Cabe neste molde porque a policy de SELECT é org-scoped SEM gate de papel
+  // — qualquer membro vê a lista, decisão do dono —, então o `agent` semeado
+  // aqui é controle positivo legítimo. A ESCRITA tem um segundo eixo que este
+  // seed NÃO mede: a policy `for all` exige `fn_role_at_least(org,'admin')`, e
+  // provar isso pediria um usuário abaixo de admin escrevendo. Fica declarado
+  // em vez de parecer coberto.
+  "external_db_connections",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"
