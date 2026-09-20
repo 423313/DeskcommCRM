@@ -10483,7 +10483,6 @@ export const DICIONARIO: Traducoes = {
   },
   "Nome da conexão": { es: "Nombre de la conexión" },
   "Ex: CRM de assinaturas": { es: "Ej: CRM de suscripciones" },
-  "Host": { es: "Host" },
   "Banco de dados": { es: "Base de datos" },
   "Guardada — preencha só para trocar": { es: "Guardada — completa solo para cambiarla" },
   "Segurança da conexão (TLS)": { es: "Seguridad de la conexión (TLS)" },
