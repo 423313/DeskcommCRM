@@ -250,6 +250,31 @@ export const DICIONARIO: Traducoes = {
   "O serviço de envio de e-mail — próprio ou externo — fica em E-mail →": {
     es: "El servicio de envío de correo — propio o externo — está en Correo →",
   },
+  "Extensões da instalação": { es: "Extensiones de la instalación" },
+  "O que este servidor conhece, de onde veio e quem está usando. Instalar e configurar continua sendo feito dentro de cada empresa.": {
+    es: "Lo que este servidor conoce, de dónde vino y quién lo está usando. Instalar y configurar se sigue haciendo dentro de cada empresa.",
+  },
+  "De onde vêm as extensões": { es: "De dónde vienen las extensiones" },
+  "O catálogo admitido neste servidor. É a origem que o instalador aceita.": {
+    es: "El catálogo admitido en este servidor. Es el origen que el instalador acepta.",
+  },
+  "Nenhum catálogo admitido ainda — enquanto não houver, não há extensão para instalar.": {
+    es: "Ningún catálogo admitido todavía: mientras no haya, no hay extensión para instalar.",
+  },
+  "admitido em": { es: "admitido el" },
+  "impressão digital": { es: "huella digital" },
+  "Instaladas neste servidor": { es: "Instaladas en este servidor" },
+  "Cada extensão é instalada uma vez no servidor e ligada por empresa.": {
+    es: "Cada extensión se instala una vez en el servidor y se activa por empresa.",
+  },
+  "Nenhuma extensão instalada ainda.": { es: "Ninguna extensión instalada todavía." },
+  "Nenhuma empresa usa esta extensão": { es: "Ninguna empresa usa esta extensión" },
+  "empresa(s) com ela ligada": { es: "empresa(s) con ella activada" },
+  "instalada em": { es: "instalada el" },
+  "Para instalar ou configurar uma extensão, entre na empresa:": {
+    es: "Para instalar o configurar una extensión, entre en la empresa:",
+  },
+  "Extensões da empresa →": { es: "Extensiones de la empresa →" },
   "Servidor de e-mail desta instalação": { es: "Servidor de correo de esta instalación" },
   "Convite de equipe, entrega de dados de LGPD e aviso de prazo saem por aqui. Preencher esta tela é a alternativa a contratar um serviço externo de envio: o e-mail passa a sair pelo seu próprio servidor.": {
     es: "Las invitaciones al equipo, la entrega de datos personales y los avisos de plazo salen por aquí. Completar esta pantalla es la alternativa a contratar un servicio externo de envío: el correo pasa a salir por tu propio servidor.",
@@ -767,16 +792,20 @@ export const DICIONARIO: Traducoes = {
   "Vale só para tipos de atendimento que pedem confirmação. Enquanto o pedido espera, o horário fica reservado e ninguém mais o pega; passado o prazo sem decisão, ele volta a ser oferecido. O cliente não é avisado, e o pedido continua na fila.": { es: "Vale solo para tipos de atención que piden confirmación. Mientras la solicitud espera, el horario queda reservado y nadie más lo toma; pasado el plazo sin decisión, vuelve a ofrecerse. El cliente no recibe aviso, y la solicitud sigue en la fila." },
   Financeiro: { es: "Finanzas" },
   "Onde o dinheiro fica, como o cliente paga e como cada lançamento é classificado.": { es: "Donde queda el dinero, cómo paga el cliente y cómo se clasifica cada movimiento." },
+  "Contas, formas de pagamento e como cada lançamento é classificado.": { es: "Cuentas, formas de pago y cómo se clasifica cada movimiento." },
   "conta removida": { es: "cuenta eliminada" },
   "Contas": { es: "Cuentas" },
   "Onde o dinheiro fica. O saldo que aparece nos relatórios é sempre somado dos lançamentos — o valor aqui é só o ponto de partida.": { es: "Donde queda el dinero. El saldo que aparece en los informes siempre se suma de los movimientos — el valor aquí es solo el punto de partida." },
   "Nome da conta": { es: "Nombre de la cuenta" },
   "Ex.: Caixa": { es: "Ej.: Caja" },
   "Tipo da conta": { es: "Tipo de cuenta" },
+  "Caixa": { es: "Caja" },
+  "Banco": { es: "Banco" },
+  "Outra": { es: "Otra" },
   "Adicionar conta": { es: "Agregar cuenta" },
   "Nenhuma conta cadastrada.": { es: "Ninguna cuenta registrada." },
   "Formas de pagamento": { es: "Formas de pago" },
-  "Como o cliente paga. A conta escolhida aqui é onde esse dinheiro entra quando a comanda é fechada.": { es: "Cómo paga el cliente. La cuenta elegida aquí es donde entra ese dinero cuando se cierra la comanda." },
+  "Como o cliente paga. A conta escolhida aqui é onde esse dinheiro entra quando a comanda é fechada.": { es: "Cómo paga el cliente. La cuenta elegida aquí es donde entra ese dinero cuando se cierra la orden de servicio." },
   "Nome da forma de pagamento": { es: "Nombre de la forma de pago" },
   "Ex.: Pix": { es: "Ej.: Pix" },
   "Conta de destino": { es: "Cuenta de destino" },
@@ -4758,6 +4787,16 @@ export const DICIONARIO: Traducoes = {
   "Para questões de pagamento, fale com quem administra este sistema.": {
     es: "Para temas de pago, habla con quien administra este sistema.",
   },
+  // ─── Configurações: Menu lateral da empresa (issue #1341) ───
+  "Menu lateral": { es: "Menú lateral" },
+  "Aplicar interface": { es: "Aplicar interfaz" },
+  "Menu lateral da empresa salvo.": { es: "Menú lateral de la empresa guardado." },
+  "Não foi possível salvar o menu da empresa.": {
+    es: "No fue posible guardar el menú de la empresa.",
+  },
+  "Escolha as áreas que esta empresa mostra. Cada pessoa escolhe menos do que isto em Equipe — nunca mais — e as áreas essenciais continuam sempre visíveis. As permissões não mudam: o que o papel autoriza segue acessível por link, aviso e busca.": {
+    es: "Elige las áreas que esta empresa muestra. Cada persona elige menos que esto en Equipo — nunca más — y las áreas esenciales siguen siempre visibles. Los permisos no cambian: lo que el rol autoriza sigue accesible por enlace, aviso y búsqueda.",
+  },
   // ─── Configurações: Marca da organização ───
   "você definiu aqui": { es: "tú lo definiste aquí" },
   "é o padrão do sistema": { es: "es el predeterminado del sistema" },
@@ -7108,7 +7147,7 @@ export const DICIONARIO: Traducoes = {
   "Já pago": { es: "Ya pagado" },
   "Lançar": { es: "Registrar" },
   "Nenhum lançamento no período.": { es: "Ningún asiento en el período." },
-  "de comanda": { es: "de comanda" },
+  "de comanda": { es: "de orden de servicio" },
   "pago": { es: "pagado" },
   "Pagar": { es: "Pagar" },
   "Remover lançamento": { es: "Quitar asiento" },
@@ -7158,9 +7197,9 @@ export const DICIONARIO: Traducoes = {
   "Preço padrão": { es: "Precio estándar" },
   "digite na hora": { es: "escribe en el momento" },
   "Opcional. Vira o valor sugerido na comanda, e pode ser mudado lá.": {
-    es: "Opcional. Es el valor sugerido en la comanda, y se puede cambiar allí.",
+    es: "Opcional. Es el valor sugerido en la orden de servicio, y se puede cambiar allí.",
   },
-  "Atendimentos sem comanda": { es: "Atenciones sin comanda" },
+  "Atendimentos sem comanda": { es: "Atenciones sin orden de servicio" },
   "Já aconteceram e ninguém faturou. Marque o que quer cobrar.": {
     es: "Ya ocurrieron y nadie facturó. Marca lo que quieres cobrar.",
   },
@@ -7175,27 +7214,27 @@ export const DICIONARIO: Traducoes = {
   "Saiu": { es: "Salió" },
   "Saldo": { es: "Saldo" },
   "Ticket médio": { es: "Ticket promedio" },
-  "comanda(s) finalizada(s)": { es: "comanda(s) finalizada(s)" },
+  "comanda(s) finalizada(s)": { es: "orden(es) de servicio finalizada(s)" },
   "estornada(s)": { es: "anulada(s)" },
   "faturado": { es: "facturado" },
   "O faturado soma comandas; o que entrou soma lançamentos pagos. Os dois não precisam bater.": {
-    es: "Lo facturado suma comandas; lo que entró suma asientos pagados. No tienen por qué coincidir.",
+    es: "Lo facturado suma órdenes de servicio; lo que entró suma asientos pagados. No tienen por qué coincidir.",
   },
   "Por forma de pagamento": { es: "Por forma de pago" },
-  "Nenhuma comanda no período.": { es: "Ninguna comanda en el período." },
+  "Nenhuma comanda no período.": { es: "Ninguna orden de servicio en el período." },
   "Comissão por pessoa": { es: "Comisión por persona" },
   "Nenhuma comissão no período.": { es: "Ninguna comisión en el período." },
-  "Comandas": { es: "Comandas" },
-  "Comanda": { es: "Comanda" },
+  "Comandas": { es: "Órdenes de servicio" },
+  "Comanda": { es: "Orden de servicio" },
   "Finalizada": { es: "Finalizada" },
   "Regra de comissão": { es: "Regla de comisión" },
   "Lançamento recorrente": { es: "Asiento recurrente" },
   "O que foi feito, por quem, e quanto o cliente paga.": {
     es: "Lo que se hizo, por quién, y cuánto paga el cliente.",
   },
-  "Nova comanda": { es: "Nueva comanda" },
-  "Nenhuma comanda ainda.": { es: "Todavía no hay comandas." },
-  "Escolha uma comanda à esquerda.": { es: "Elige una comanda a la izquierda." },
+  "Nova comanda": { es: "Nueva orden de servicio" },
+  "Nenhuma comanda ainda.": { es: "Todavía no hay órdenes de servicio." },
+  "Escolha uma comanda à esquerda.": { es: "Elige una orden de servicio a la izquierda." },
   "estornada": { es: "anulada" },
   "comissão": { es: "comisión" },
   "Remover item": { es: "Quitar ítem" },
@@ -7206,9 +7245,9 @@ export const DICIONARIO: Traducoes = {
   "Forma de pagamento": { es: "Forma de pago" },
   "Escolha": { es: "Elige" },
   "Finalizar": { es: "Finalizar" },
-  "Cancelar comanda": { es: "Cancelar comanda" },
+  "Cancelar comanda": { es: "Cancelar orden de servicio" },
   "Esta forma de pagamento ainda não tem conta de destino. Defina em Configurações › Financeiro.": {
-    es: "Esta forma de pago todavía no tiene cuenta de destino. Defínela en Configuración › Financiero.",
+    es: "Esta forma de pago todavía no tiene cuenta de destino. Defínela en Configuración › Finanzas.",
   },
   "Motivo do estorno": { es: "Motivo de la anulación" },
   "Estornar": { es: "Anular" },
@@ -11208,6 +11247,41 @@ export const DICIONARIO: Traducoes = {
   "Tirar da lista": { es: "Quitar de la lista" },
   "Uma mensagem que chega depois desse prazo é conversa nova, não resposta à campanha. Isso muda o número de respostas que a tela mostra, inclusive das campanhas já enviadas.": {
     es: "Un mensaje que llega después de ese plazo es una conversación nueva, no una respuesta a la campaña. Eso cambia la cantidad de respuestas que muestra la pantalla, incluso de las campañas ya enviadas.",
+  },
+  "Fale com uma lista de contatos que você escolhe, no ritmo do número.": {
+    es: "Envía mensajes a una lista de contactos que elijas, al ritmo del número.",
+  },
+  // ─── Painel "Para integrar" (dados não-secretos da conexão) ───
+  "Para integrar": { es: "Para integrar" },
+  "Copiar dados": { es: "Copiar datos" },
+  "Onde obter o token": { es: "Dónde obtener el token" },
+  "Não foi possível copiar.": { es: "No se pudo copiar." },
+  "Endpoint da API": { es: "Endpoint de la API" },
+  "Estes dados conectam outro sistema ao mesmo número. O token não aparece aqui — o ícone ao lado diz onde obtê-lo no painel do provedor.": {
+    es: "Estos datos conectan otro sistema al mismo número. El token no aparece aquí — el ícono de al lado indica dónde obtenerlo en el panel del proveedor.",
+  },
+  "O token de acesso é criado no painel da Meta: Configurações do Business → Usuários do sistema → gerar token permanente.": {
+    es: "El token de acceso se crea en el panel de Meta: Configuración del Business → Usuarios del sistema → generar token permanente.",
+  },
+  "A chave de API está no painel do provedor, na conta conectada — este CRM não a exibe de volta.": {
+    es: "La clave de API está en el panel del proveedor, en la cuenta conectada — este CRM no la muestra de vuelta.",
+  },
+  "O webhook de um número aponta para um só destino. Para os dois CRMs receberem ao mesmo tempo, um deles precisa reencaminhar as mensagens ao outro.": {
+    es: "El webhook de un número apunta a un solo destino. Para que los dos CRM reciban al mismo tiempo, uno de ellos debe reenviar los mensajes al otro.",
+  },
+  "Um número tem um único webhook.": { es: "Un número tiene un único webhook." },
+  "Para operar em dois CRMs ao mesmo tempo, configure o reencaminhamento de mensagens.": {
+    es: "Para operar en dos CRM a la vez, configure el reenvío de mensajes.",
+  },
+  "No canal por QR a credencial é interna desta instalação e não serve para fora. Para ligar outro CRM ao mesmo número, conecte-o por uma sessão própria (novo QR).": {
+    es: "En el canal por QR la credencial es interna de esta instalación y no sirve afuera. Para conectar otro CRM al mismo número, conéctalo con una sesión propia (nuevo QR).",
+  },
+  "Dois dispositivos vinculados recebem as mesmas mensagens — se os dois tiverem atendimento automático, o cliente pode receber resposta dupla.": {
+    es: "Dos dispositivos vinculados reciben los mismos mensajes — si ambos tienen atención automática, el cliente puede recibir respuesta doble.",
+  },
+  "Não compartilhe esta sessão.": { es: "No compartas esta sesión." },
+  "Crie uma conexão separada por QR no outro sistema.": {
+    es: "Crea una conexión separada por QR en el otro sistema.",
   },
 };
 
