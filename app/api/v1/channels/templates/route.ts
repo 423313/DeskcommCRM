@@ -19,6 +19,7 @@ import { resolveMetaCreds } from "@/lib/channels/meta/credentials";
 import { metaSessionForOrg } from "@/lib/channels/meta/session";
 import { normalizeRejectedReason } from "@/lib/channels/meta/webhook";
 import { deriveTemplateContract, describeAddress } from "@/lib/channels/meta/template-contract";
+import { slotKey } from "@/lib/channels/meta/build-components";
 import { syncTemplates } from "@/lib/channels/meta/template-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -40,6 +41,17 @@ export interface TemplateView {
     key: string;
     expects: string;
     onde: string;
+    /**
+     * A chave de `template_values` para ESTE slot, montada por `slotKey` — a
+     * mesma função que o montador do payload de envio usa.
+     *
+     * A `key` sozinha não endereça: um carrossel de dois cards tem dois slots
+     * com a mesma `key`, e um cabeçalho de mídia colide com o `{{1}}` do corpo.
+     * A tela teria de remontar o prefixo a partir de `onde`, que é rótulo
+     * humano ("cabeçalho", "botão 1 (url)") e não sobrevive a isso. Montar a
+     * chave de dois jeitos é o mismatch voltando pela porta dos fundos.
+     */
+    valueKey: string;
   }>;
   /**
    * Texto de cada componente que carrega parâmetro, INTEIRO e uma vez só.
@@ -124,6 +136,7 @@ export async function GET(): Promise<NextResponse> {
         key: s.key,
         expects: s.expects,
         onde: describeAddress(s.address),
+        valueKey: slotKey(s.address, s.key),
       })),
       previews: textPreviews(row.components),
       // A DEFINIÇÃO crua, como a rota do canal intermediado já devolve.
