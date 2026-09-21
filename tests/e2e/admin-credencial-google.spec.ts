@@ -41,6 +41,9 @@
  *  - A troca de código por token contra o Google de verdade (webjs/consentimento)
  *    — isso é `agenda-google-volta-do-consentimento.spec.ts` e irmãs.
  */
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
@@ -53,6 +56,12 @@ const CLIENT_SECRET_DE_TESTE = "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ade";
 
 const { url, serviceRole } = credenciaisSupabaseDeTeste();
 const admin = createClient(url, serviceRole, { auth: { autoRefreshToken: false, persistSession: false } });
+
+const EVIDENCIA = path.join(process.cwd(), "evidence", "admin-credencial-google");
+function evidencia(nome: string): string {
+  fs.mkdirSync(EVIDENCIA, { recursive: true });
+  return path.join(EVIDENCIA, nome);
+}
 
 /**
  * Apaga a linha singleton — a PRECONDIÇÃO que este arquivo monta para si
@@ -94,6 +103,7 @@ test.describe("Credencial do Google da instalação, pela tela (#370)", () => {
     ).toHaveCount(0);
     await expect(page.getByText(/nunca configurado por aqui/i)).toBeVisible();
     await expect(page.getByTestId("google-salvar")).toBeDisabled();
+    await page.screenshot({ path: evidencia("1-nao-cadastrada.png"), fullPage: true });
 
     // ── Cadastro pela tela ───────────────────────────────────────────────────
     await page.getByTestId("google-client-id").fill(CLIENT_ID_DE_TESTE);
@@ -111,6 +121,7 @@ test.describe("Credencial do Google da instalação, pela tela (#370)", () => {
       "o client_secret voltou preenchido — ele nunca deve ser devolvido pelo servidor",
     ).toHaveValue("");
     await expect(page.getByPlaceholder(/já cadastrada/i)).toBeVisible();
+    await page.screenshot({ path: evidencia("2-cadastrada-segredo-nao-volta.png"), fullPage: true });
 
     const html = await page.content();
     expect(
@@ -121,11 +132,20 @@ test.describe("Credencial do Google da instalação, pela tela (#370)", () => {
     // ── O efeito visível para quem atende: o cartão da Agenda para de pedir
     // SSH e passa a oferecer "Conectar Google" ──────────────────────────────
     await page.goto("/app/agenda");
+    // A rota tem `loading.tsx` (Suspense do App Router): medido nesta spec,
+    // `getByTestId("conectar-google")` resolve a DOIS elementos por uma janela
+    // curta logo após `goto` — uma cópia com `hidden` num ancestral, da
+    // hidratação do streaming ainda assentando. `networkidle` espera esse
+    // assentamento antes de medir; sem ele, a asserção de visibilidade reprova
+    // por "strict mode violation" pegando o instante errado.
+    await page.waitForLoadState("networkidle");
     await expect(
       page.getByTestId("google-nao-configurado"),
       "o cartão da Agenda continuou dizendo que falta configurar, depois do cadastro pela tela",
     ).toHaveCount(0);
+    await expect(page.getByTestId("conectar-google")).toHaveCount(1);
     await expect(page.getByTestId("conectar-google")).toBeVisible();
+    await page.screenshot({ path: evidencia("3-cartao-da-agenda-oferece-conectar.png"), fullPage: true });
   });
 
   test("(2) administrador de ORGANIZAÇÃO não alcança /admin/google — cai no gate antes da página", async ({
