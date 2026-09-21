@@ -23,14 +23,14 @@ function PasswordStrength({ password }: { password: string }) {
   const t = useT();
   const met = PASSWORD_REQUIREMENTS.map((requirement) => requirement.test(password));
   const score = met.filter(Boolean).length;
-  const label = ["Muito fraca", "Fraca", "Razoável", "Boa", "Forte"][score];
+  const label = ["Muito fraca", "Fraca", "Razoável", "Boa", "Forte"][score] ?? "Muito fraca";
   const barColor = [
     "bg-muted",
     "bg-destructive",
     "bg-amber-500",
     "bg-sky-500",
     "bg-emerald-600",
-  ][score];
+  ][score] ?? "bg-muted";
 
   return (
     <div className="space-y-2 pt-1" aria-live="polite">
