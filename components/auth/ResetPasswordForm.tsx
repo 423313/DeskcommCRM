@@ -10,12 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updatePassword } from "@/app/actions/auth/updatePassword";
+import { Eye, EyeSlash } from "@/lib/ui/icons";
 
 export function ResetPasswordForm() {
   const t = useT();
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
   const [needsMfa, setNeedsMfa] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
   const {
     register,
@@ -60,27 +63,57 @@ export function ResetPasswordForm() {
     <form method="post" onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
       <div className="space-y-1.5">
         <Label htmlFor="password">{t("Nova senha")}</Label>
-        <Input
-          id="password"
-          type="password"
-          autoComplete="new-password"
-          autoFocus
-          aria-invalid={errors.password ? true : undefined}
-          {...register("password")}
-        />
+        <div className="relative">
+          <Input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            autoFocus
+            className="pr-12"
+            aria-invalid={errors.password ? true : undefined}
+            {...register("password")}
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
+            aria-label={t(showPassword ? "Ocultar nova senha" : "Mostrar nova senha")}
+            aria-pressed={showPassword}
+            onClick={() => setShowPassword((visible) => !visible)}
+          >
+            {showPassword ? <EyeSlash size={20} aria-hidden /> : <Eye size={20} aria-hidden />}
+          </button>
+        </div>
         {errors.password && (
           <p className="text-xs text-destructive">{t(errors.password.message ?? "")}</p>
         )}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="password_confirm">{t("Confirmar nova senha")}</Label>
-        <Input
-          id="password_confirm"
-          type="password"
-          autoComplete="new-password"
-          aria-invalid={errors.password_confirm ? true : undefined}
-          {...register("password_confirm")}
-        />
+        <div className="relative">
+          <Input
+            id="password_confirm"
+            type={showPasswordConfirm ? "text" : "password"}
+            autoComplete="new-password"
+            className="pr-12"
+            aria-invalid={errors.password_confirm ? true : undefined}
+            {...register("password_confirm")}
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
+            aria-label={t(
+              showPasswordConfirm ? "Ocultar confirmação da senha" : "Mostrar confirmação da senha",
+            )}
+            aria-pressed={showPasswordConfirm}
+            onClick={() => setShowPasswordConfirm((visible) => !visible)}
+          >
+            {showPasswordConfirm ? (
+              <EyeSlash size={20} aria-hidden />
+            ) : (
+              <Eye size={20} aria-hidden />
+            )}
+          </button>
+        </div>
         {errors.password_confirm && (
           <p className="text-xs text-destructive">{t(errors.password_confirm.message ?? "")}</p>
         )}
