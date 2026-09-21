@@ -94,6 +94,16 @@ async function abrirFicha(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 10_000 });
 }
 
+// Dois logins neste arquivo NÃO cabem no orçamento padrão de 30 s do
+// `playwright.config.ts`. `loginComoAdmin` guarda o último código TOTP e, quando
+// o segundo login cai na MESMA janela de 30 s, espera a próxima para não repetir
+// código (anti-replay do servidor) — medido no run 35538638028: 23,39 s de espera
+// num teto de 30 s, sobrando ~4 s para o teste inteiro. O aviso `Proteção de envio
+// atualizada.` estava VISÍVEL na tela no instante da morte: faltou relógio, não
+// comportamento. É a convenção de toda spec desta casa que loga (104 delas
+// declaram o próprio teto).
+test.describe.configure({ timeout: 120_000 });
+
 test.describe("Proteção de envio: o Switch sabe dizer 'não mexi'", () => {
   let sessionId = "";
   let orgId = "";
