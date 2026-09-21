@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
+import { audit } from "@/lib/audit";
 import { aplicarConvite } from "@/lib/auth/aplicar-convite";
 import { decidirConviteDoSignup } from "@/lib/auth/convite-no-signup";
 import { ensureTenantForUser, vinculoAtivo } from "@/lib/auth/provision";
 import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
+import { acessoFoiRevogado } from "@/lib/auth/vinculo-revogado";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -26,6 +28,7 @@ vi.mock("@/lib/auth/provision", () => ({
   vinculoAtivo: vi.fn(async () => null),
 }));
 vi.mock("@/lib/auth/politica-de-cadastro", () => ({ modoDeCadastro: vi.fn(async () => "aberto") }));
+vi.mock("@/lib/auth/vinculo-revogado", () => ({ acessoFoiRevogado: vi.fn(async () => false) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/env", () => ({ env: { NEXT_PUBLIC_APP_URL: "http://localhost:3000" } }));
 
@@ -80,6 +83,7 @@ describe("GET /auth/callback", () => {
     vi.mocked(decidirConviteDoSignup).mockReturnValue({ tipo: "provisionar" });
     vi.mocked(vinculoAtivo).mockResolvedValue(null);
     vi.mocked(modoDeCadastro).mockResolvedValue("aberto");
+    vi.mocked(acessoFoiRevogado).mockResolvedValue(false);
   });
 
   it("conta nova com convite na URL: grava o vínculo e entra no app, sem empresa nova", async () => {
@@ -196,5 +200,71 @@ describe("GET /auth/callback", () => {
     const res = await GET(requisicao("code=abc"));
 
     expect(destino(res)).toBe("/get-started");
+  });
+
+  it("membro com acesso revogado não vira admin de tenant novo: para na porta e diz o motivo", async () => {
+    const { GET } = await comSupabase({ troca: { data: { user: USUARIO }, error: null } });
+    vi.mocked(acessoFoiRevogado).mockResolvedValue(true);
+
+    const res = await GET(requisicao("code=abc"));
+
+    // `vinculoAtivo` não distingue "nunca pertenceu" de "teve o acesso
+    // retirado" — e é essa diferença que impede a revogação de virar
+    // organização nova com `role: "admin"`.
+    expect(destino(res)).toBe("/login?error=acesso_revogado");
+    expect(vi.mocked(ensureTenantForUser)).not.toHaveBeenCalled();
+    expect(vi.mocked(aplicarConvite)).not.toHaveBeenCalled();
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "auth.signup_provision_recusado",
+        actorUserId: USUARIO.id,
+        metadata: expect.objectContaining({ motivo: "acesso_revogado" }),
+      }),
+    );
+  });
+
+  it("a guarda do revogado vem ANTES da decisão de convite: o motivo auditado é o verdadeiro", async () => {
+    const { GET } = await comSupabase({ troca: { data: { user: USUARIO }, error: null } });
+    vi.mocked(acessoFoiRevogado).mockResolvedValue(true);
+
+    const res = await GET(requisicao("code=abc&convite=de-outra-pessoa"));
+
+    // Fora desta ordem a rota auditaria `convite_invalido` — motivo que não é a
+    // verdade sobre o que aconteceu com quem foi revogado.
+    expect(vi.mocked(decidirConviteDoSignup)).not.toHaveBeenCalled();
+    expect(destino(res)).toBe("/login?error=acesso_revogado");
+  });
+
+  it("leitura do vínculo falhou: FALHA FECHADA — não provisiona e a tela diz o motivo", async () => {
+    const { GET } = await comSupabase({ troca: { data: { user: USUARIO }, error: null } });
+    vi.mocked(vinculoAtivo).mockRejectedValueOnce(new Error("sem banco"));
+
+    const res = await GET(requisicao("code=abc"));
+
+    // "não consegui ler" não é "não há vínculo": a rota não pode seguir para o
+    // provisionamento por causa de um tropeço de leitura.
+    expect(destino(res)).toBe("/login?error=entrada_com_google");
+    expect(vi.mocked(ensureTenantForUser)).not.toHaveBeenCalled();
+    expect(vi.mocked(decidirConviteDoSignup)).not.toHaveBeenCalled();
+  });
+
+  it("ramo anônimo não escreve no rastro: sem `code` não há linha de auditoria", async () => {
+    const { GET } = await comSupabase({ troca: { data: null, error: null } });
+
+    const res = await GET(requisicao(""));
+
+    // Rota pública: um GET por requisição de qualquer anônimo não pode virar
+    // escrita em `api_audit_log`.
+    expect(destino(res)).toBe("/login?error=entrada_com_google");
+    expect(vi.mocked(audit)).not.toHaveBeenCalled();
+  });
+
+  it("desistência no Google também não escreve no rastro, mesmo com texto cru gigante na URL", async () => {
+    const { GET } = await comSupabase({ troca: { data: null, error: null } });
+
+    const res = await GET(requisicao(`error=access_denied&error_description=${"x".repeat(4000)}`));
+
+    expect(destino(res)).toBe("/login?error=entrada_com_google_cancelada");
+    expect(vi.mocked(audit)).not.toHaveBeenCalled();
   });
 });

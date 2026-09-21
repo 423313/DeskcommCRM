@@ -49,13 +49,24 @@ type ProvisionOptions = {
 export async function vinculoAtivo(userId: string): Promise<string | null> {
   const admin = createAdminClient();
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from("user_organizations")
     .select("organization_id")
     .eq("user_id", userId)
     .is("revoked_at", null)
     .limit(1)
     .maybeSingle();
+
+  // Erro NÃO vira `null`, pela mesma razão escrita em `vinculoVivo`, ~300 linhas
+  // abaixo: `null` já quer dizer "não pertence a organização nenhuma", e uma
+  // leitura que falhou não é a mesma coisa que um vínculo que não existe. Lido
+  // como equivalente, o soluço de leitura expulsa um membro de casa numa
+  // instalação `so_convite` e, numa instalação aberta, entrega organização nova
+  // a quem já tinha uma. Quem decide o que fazer com a falha é quem chama
+  // (`app/auth/callback/route.ts` degrada para falha FECHADA); aqui ela sobe alto.
+  if (error) {
+    throw new Error(`provisioning: leitura do vínculo ativo falhou: ${error.message}`);
+  }
 
   return data?.organization_id ?? null;
 }

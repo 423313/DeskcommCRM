@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { ensureTenantForUser, vinculoAtivo } from "@/lib/auth/provision";
+import { acessoFoiRevogado } from "@/lib/auth/vinculo-revogado";
 import { decidirConviteDoSignup } from "@/lib/auth/convite-no-signup";
 import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
 import { aplicarConvite } from "@/lib/auth/aplicar-convite";
@@ -65,22 +66,24 @@ export async function GET(request: NextRequest) {
   // consentimento. Não é falha do sistema, e tratar como falha manda a pessoa
   // procurar defeito onde não há — mas também não é sucesso: sem esta linha, a
   // tela de login ficaria em branco, sem dizer nada.
+  //
+  // SEM linha de auditoria aqui — nem no ramo abaixo. Estes dois ramos são o
+  // ponto mais exposto da rota: ela está em `PUBLIC_PATHS` (ancorada) e o `error`
+  // é texto cru de quem chama. Medido na revisão: `?error=<4000 caracteres>`
+  // grava 4.045 bytes em `metadata.reason` (teto de 14.000), e um GET por
+  // requisição de qualquer anônimo grava 1 linha em `api_audit_log` — tabela
+  // append-only com piso de expurgo de 90 dias. A doutrina do irmão desta rota
+  // (`app/api/v1/agenda/google/callback/route.ts`, o comentário antes do audit)
+  // é a mesma e vale aqui: auditoria só DEPOIS do gate, quando quem chama já
+  // provou ser o dono do verificador de PKCE. Quem chega sem `code` não provou
+  // nada; a tela de login diz o que aconteceu, e o rastro não recebe a escrita
+  // ilimitada.
   const erroDoProvedor = url.searchParams.get("error");
   if (erroDoProvedor) {
-    await audit({
-      action: "auth.google_signin_failed",
-      metadata: { motivo: "recusado_no_provedor", reason: erroDoProvedor },
-      requestId,
-    });
     return redirectTo("/login?error=entrada_com_google_cancelada");
   }
 
   if (!code) {
-    await audit({
-      action: "auth.google_signin_failed",
-      metadata: { motivo: "sem_code" },
-      requestId,
-    });
     return redirectTo("/login?error=entrada_com_google");
   }
 
@@ -92,7 +95,12 @@ export async function GET(request: NextRequest) {
   if (error || !data?.user) {
     await audit({
       action: "auth.google_signin_failed",
-      metadata: { motivo: "troca_do_code_falhou", reason: error?.message ?? "no_user" },
+      metadata: {
+        motivo: "troca_do_code_falhou",
+        // Texto de terceiro indo para uma tabela append-only: teto explícito, em
+        // vez de confiar no tamanho que o provedor decidir mandar.
+        reason: (error?.message ?? "no_user").slice(0, 200),
+      },
       requestId,
     });
     return redirectTo("/login?error=entrada_com_google");
@@ -115,7 +123,28 @@ export async function GET(request: NextRequest) {
   // ENTRADA: já existe vínculo. Provisionar ou reaplicar convite aqui seria
   // refazer trabalho que já está feito — e recusar pelo modo de cadastro
   // trancaria do lado de fora quem já é de casa.
-  const organizacaoId = await vinculoAtivo(usuario.id);
+  //
+  // FALHA FECHADA: `vinculoAtivo` lança quando não conseguiu LER, e `null`
+  // continua querendo dizer só "não há vínculo". Sem este catch, um tropeço de
+  // leitura cai no mesmo `null` do primeiro acesso e o resto da rota provisiona
+  // organização nova para quem já tinha uma. A sessão já está firme aqui, então
+  // a saída é a tela de login com o motivo — não um 500.
+  let organizacaoId: string | null;
+  try {
+    organizacaoId = await vinculoAtivo(usuario.id);
+  } catch (e) {
+    await audit({
+      action: "auth.google_signin_failed",
+      actorUserId: usuario.id,
+      metadata: {
+        motivo: "leitura_do_vinculo_falhou",
+        reason: e instanceof Error ? e.message.slice(0, 200) : "erro_desconhecido",
+      },
+      requestId,
+    });
+    return redirectTo("/login?error=entrada_com_google");
+  }
+
   if (organizacaoId) {
     await audit({
       action: "auth.login_success",
@@ -124,6 +153,29 @@ export async function GET(request: NextRequest) {
       requestId,
     });
     return redirectTo(safeNext(next, "/app"));
+  }
+
+  // TERCEIRA população, e ela não estava no desenho: quem TEVE organização e
+  // perdeu o acesso. `vinculoAtivo` só enxerga vínculo vivo (`.is("revoked_at",
+  // null)`), então uma revogação chega aqui parecendo primeiro acesso — e numa
+  // instalação aberta sairia com ORGANIZAÇÃO NOVA, `role: "admin"`, virando um
+  // jeito de a revogação criar tenant em vez de encerrá-lo. A revogação não
+  // apaga o auth user (o `revoke` só carimba `revoked_at`), então este é o único
+  // ponto onde a porta nova pode ser fechada.
+  //
+  // A guarda já existe no repo e estava sendo esquecida só nesta porta: a MESMA
+  // chamada, na MESMA posição do `recoverOrganization.ts:86` — depois de saber
+  // que não há vínculo vivo e ANTES de decidir o convite. A posição é parte do
+  // conserto: fora desta ordem o motivo auditado sairia como `convite_invalido`,
+  // que não é a verdade sobre o que aconteceu com quem foi revogado.
+  if (await acessoFoiRevogado(usuario.id)) {
+    await audit({
+      action: "auth.signup_provision_recusado",
+      actorUserId: usuario.id,
+      metadata: { motivo: "acesso_revogado", provider: "google" },
+      requestId,
+    });
+    return redirectTo("/login?error=acesso_revogado");
   }
 
   // CADASTRO: sem vínculo, este é um primeiro acesso. Daqui para baixo é o
