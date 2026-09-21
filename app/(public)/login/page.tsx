@@ -124,6 +124,20 @@ export default async function LoginPage({
           {t("A entrada com o Google foi cancelada antes de terminar. Nada mudou na sua conta.")}
         </div>
       )}
+      {/* A terceira recusa da entrada com Google: a conta está confirmada, mas o
+          acesso dela foi retirado. Não é convite inválido (não havia convite
+          nenhum) nem falha do Google — é decisão de quem administra, e a tela
+          diz exatamente isso, em vez de mandar a pessoa "tentar de novo". */}
+      {error === "acesso_revogado" && (
+        <div
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          {t(
+            "O acesso desta conta foi retirado por quem administra o sistema — então não criamos uma empresa nova para você. Se o acesso deveria continuar, peça a quem administra para restaurá-lo; se você está entrando em outra equipe, peça um convite.",
+          )}
+        </div>
+      )}
       <LoginForm next={next} />
       <EntrarComGoogle next={next} />
       <div className="space-y-2 text-center text-sm">

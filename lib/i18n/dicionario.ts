@@ -10829,6 +10829,9 @@ export const DICIONARIO: Traducoes = {
   "A entrada com o Google foi cancelada antes de terminar. Nada mudou na sua conta.": {
     es: "La entrada con Google se canceló antes de terminar. Nada cambió en tu cuenta.",
   },
+  "O acesso desta conta foi retirado por quem administra o sistema — então não criamos uma empresa nova para você. Se o acesso deveria continuar, peça a quem administra para restaurá-lo; se você está entrando em outra equipe, peça um convite.": {
+    es: "El acceso de esta cuenta fue retirado por quien administra el sistema — así que no creamos una empresa nueva para ti. Si el acceso debería continuar, pídele a quien administra que lo restaure; si estás entrando en otro equipo, pide una invitación.",
+  },
 
   // ─── Painel "Para integrar" (dados não-secretos da conexão) ───
   "Para integrar": { es: "Para integrar" },
