@@ -242,7 +242,7 @@ if [ -f supabase/baseline.sql ]; then
   manutencao_sobe
   pausar_o_que_fala_com_o_banco
   # Extensões que o schema exige (idempotente; iguais ao install.sh).
-  docker run --rm postgres:17-alpine psql "$(url_do_schema)" -c \
+  pg_container postgres:17-alpine psql "$(url_do_schema)" -c \
     "create extension if not exists vector with schema public; create extension if not exists citext with schema public; create extension if not exists pg_trgm with schema public;" \
     >/dev/null 2>&1 || true
 
@@ -316,7 +316,7 @@ if [ -f supabase/baseline.sql ]; then
     END { for (k in estado) if (estado[k] == "create") print k }
   ' supabase/baseline.sql | sort -u)"
 
-  existentes="$(docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" -t -A -F'|' -c \
+  existentes="$(pg_container -i postgres:17-alpine psql "$(url_do_schema)" -t -A -F'|' -c \
     "select p.polname, c.relname from pg_policy p join pg_class c on c.oid=p.polrelid
        join pg_namespace n on n.oid=c.relnamespace where n.nspname='public';" 2>/dev/null | sort -u)"
 
@@ -367,12 +367,12 @@ if [ -f supabase/baseline.sql ]; then
     ' "$faltam_arq" supabase/baseline.sql)"
 
     if [ -n "$recria" ]; then
-      printf '%s\n' "$recria" | docker run --rm -i postgres:17-alpine \
+      printf '%s\n' "$recria" | pg_container -i postgres:17-alpine \
         psql "$(url_do_schema)" >> "$PROJECT_DIR/.deskcomm-banco.log" 2>&1 || true
     fi
     rm -f "$faltam_arq"
 
-    existentes="$(docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" -t -A -F'|' -c \
+    existentes="$(pg_container -i postgres:17-alpine psql "$(url_do_schema)" -t -A -F'|' -c \
       "select p.polname, c.relname from pg_policy p join pg_class c on c.oid=p.polrelid
          join pg_namespace n on n.oid=c.relnamespace where n.nspname='public';" 2>/dev/null | sort -u)"
     faltando="$(comm -23 <(printf '%s\n' "$esperadas") <(printf '%s\n' "$existentes") || true)"

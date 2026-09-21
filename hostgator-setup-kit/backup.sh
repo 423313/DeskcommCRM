@@ -16,7 +16,7 @@ step "Dump do banco → $BACKUP_DIR/db-$ts.sql.gz"
 # o que a role enxerga, e com uma role menor — a que recomendamos no `.env` de
 # quem usa Supabase próprio — o backup sai PARCIAL e sai verde. Falha silenciosa
 # de backup é a pior das falhas: só aparece na hora de restaurar.
-docker run --rm postgres:17-alpine pg_dump "$(url_do_schema)" --no-owner --no-privileges \
+pg_container postgres:17-alpine pg_dump "$(url_do_schema)" --no-owner --no-privileges \
   | gzip > "$BACKUP_DIR/db-$ts.sql.gz"
 c_grn "✓ banco: $(du -h "$BACKUP_DIR/db-$ts.sql.gz" | awk '{print $1}')"
 

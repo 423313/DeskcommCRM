@@ -14,7 +14,7 @@ read -r -p "Digite 'RESTAURAR' para confirmar: " a
 [ "$a" = "RESTAURAR" ] || die "Cancelado."
 
 step "Restaurando $DUMP"
-gunzip -c "$DUMP" | docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" \
+gunzip -c "$DUMP" | pg_container -i postgres:17-alpine psql "$(url_do_schema)" \
   && c_grn "✓ banco restaurado" || die "Falha na restauração — veja o log acima."
 
 # Restaura o estado das sessões do WhatsApp (WAHA) se o snapshot emparelhado existir

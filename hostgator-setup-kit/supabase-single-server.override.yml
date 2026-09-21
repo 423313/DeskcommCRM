@@ -1,0 +1,29 @@
+# Acrescentado ao Compose oficial do Supabase self-hosted. A rede compartilhada
+# expõe apenas Envoy e Postgres aos containers do CRM. Portas de manutenção no
+# host escutam somente em loopback, nunca na interface pública da VPS.
+
+services:
+  api-gw:
+    ports: !override
+      - "127.0.0.1:${API_GW_HTTP_PORT:-8000}:8000"
+    networks:
+      default:
+        aliases: [envoy, kong]
+      deskcomm_private:
+        aliases: [supabase-envoy]
+
+  db:
+    networks:
+      default: {}
+      deskcomm_private:
+        aliases: [supabase-db]
+
+  supavisor:
+    ports: !override
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION:-6543}:6543"
+
+networks:
+  deskcomm_private:
+    external: true
+    name: ${SINGLE_SERVER_NETWORK:-deskcomm_single_server}

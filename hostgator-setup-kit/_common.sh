@@ -64,6 +64,10 @@ unset _deskcomm_chamador
 # Todo `docker compose` do kit passa por aqui: com proxy externo, um comando sem
 # o override subiria o Caddy e ele iria bater de frente com o proxy da hospedagem.
 dc() {
+  if [ "${SINGLE_SERVER:-0}" = "1" ]; then
+    docker compose -f "$COMPOSE" -f docker-compose.single-server.yml "$@"
+    return
+  fi
   case "${REVERSE_PROXY:-caddy}" in
   traefik) docker compose -f "$COMPOSE" -f "$COMPOSE_TRAEFIK" "$@" ;;
   npm)     docker compose -f "$COMPOSE" -f "$COMPOSE_NPM" "$@" ;;
@@ -75,11 +79,23 @@ dc() {
 # dono. Se a mensagem omitisse o override numa instalação com proxy externo, o
 # próprio dono derrubaria o site seguindo a instrução do kit.
 dc_files() {
+  if [ "${SINGLE_SERVER:-0}" = "1" ]; then
+    printf -- '-f %s -f %s' "$COMPOSE" docker-compose.single-server.yml
+    return
+  fi
   case "${REVERSE_PROXY:-caddy}" in
   traefik) printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_TRAEFIK" ;;
   npm)     printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_NPM" ;;
   *)       printf -- '-f %s' "$COMPOSE" ;;
   esac
+}
+
+# psql/pg_dump efêmeros. No modo single-server o Postgres só é alcançável pela
+# bridge privada (supabase-db), nunca por porta pública.
+pg_container() {
+  local -a rede=()
+  [ -n "${PSQL_DOCKER_NETWORK:-}" ] && rede=(--network "$PSQL_DOCKER_NETWORK")
+  docker run --rm ${rede[@]+"${rede[@]}"} "$@"
 }
 
 # ── QUEM FALA COM O BANCO E PODE SER PARADO ──────────────────────────────────
@@ -708,7 +724,7 @@ url_do_schema() {
 # psql efêmero via container (não exige psql no host). Usa a conexão de schema:
 # os chamadores mexem em `auth.mfa_factors` e `private.app_secrets`, fora do
 # alcance de uma role de app com grants só em `public`.
-psql_run() { docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" -v ON_ERROR_STOP=1 "$@"; }
+psql_run() { pg_container -i postgres:17-alpine psql "$(url_do_schema)" -v ON_ERROR_STOP=1 "$@"; }
 
 # ── Re-aplicar o baseline num banco que JÁ existe ────────────────────────────
 # Chamado pelo `update.sh` e pelo `install.sh` re-executado. Sem `ON_ERROR_STOP`,
@@ -777,7 +793,7 @@ reaplicar_baseline() {
   [ -z "$log" ] || : > "$log"
   while :; do
     rc=0
-    raw="$(docker run --rm -i -v "$arquivo:/b.sql:ro" postgres:17-alpine \
+    raw="$(pg_container -i -v "$arquivo:/b.sql:ro" postgres:17-alpine \
           psql "$(url_do_schema)" -q -f /b.sql 2>&1)" || rc=$?
     [ -z "$log" ] || printf '── passada %s de %s (saída %s) ──\n%s\n' "$BASELINE_PASSADAS" "$tentativas" "$rc" "$raw" >> "$log"
     BASELINE_INESPERADO="$(printf '%s\n' "$raw" | grep -iE 'ERROR|FATAL' | grep -viE "$BASELINE_ERROS_BENIGNOS" || true)"
