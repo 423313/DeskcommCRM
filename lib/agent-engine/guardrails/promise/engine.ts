@@ -45,9 +45,12 @@ const RE_PRICE_REAIS = new RegExp(`${MONEY}\\s*(?:reais|real)\\b`, 'gi');
 // Número monetário europeu: o milhar também vem por ESPAÇO (`1 497,00 €`, com o
 // espaço fino que o `Intl` de pt-PT/fr-FR escreve). Sem isso, o sufixo casaria
 // só `497,00` — o preço lido mil vezes menor viraria veto de um valor legítimo.
-// O lookbehind impede começar no meio de um número (`49.90 €` não vira `90 €`):
-// o que o detector não lê inteiro, ele não lê.
-const MONEY_EU = '(?<![\\d.,])(\\d{1,3}(?:[.\\u0020\\u00a0\\u202f]\\d{3})+(?:,\\d{2})?|\\d+(?:,\\d{2})?)';
+// O lookbehind impede COMEÇAR no meio de um número (`49.90 €` não vira `90 €`)
+// e o lookahead impede PARAR no meio (`€49.90` não vira `€49`, `€1,234.56` — a
+// convenção irlandesa — não vira `€1,23`): o que o detector não lê inteiro, ele
+// não lê.
+const MONEY_EU =
+  '(?<![\\d.,])(\\d{1,3}(?:[.\\u0020\\u00a0\\u202f]\\d{3})+(?:,\\d{2})?|\\d+(?:,\\d{2})?)(?![.,\\u0020\\u00a0\\u202f]?\\d)';
 const RE_PRICE_EUR_PREFIX = new RegExp(`€\\s*${MONEY_EU}`, 'gi');
 const RE_PRICE_EUR_SUFFIX = new RegExp(`${MONEY_EU}\\s*(?:€|euros?\\b|EUR\\b)`, 'gi');
 // Desconto: exige a palavra "desconto"/"off" adjacente ao percentual (conservador —

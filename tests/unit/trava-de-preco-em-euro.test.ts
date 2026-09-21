@@ -30,9 +30,14 @@ describe("a trava reconhece preço em euro", () => {
     expect(precos("Total de € 2 150.")).toEqual([215000]);
   });
 
-  it("não começa no meio de um número: o que não lê inteiro, não lê", () => {
+  it("não começa nem para no meio de um número: o que não lê inteiro, não lê", () => {
     // `49.90 €` não é a convenção portuguesa; ler `90 €` seria inventar preço.
     expect(precos("Custa 49.90 €.")).toEqual([]);
+    // E com o símbolo ANTES: parar em `€49` ou em `€1,23` (123 centavos, da
+    // convenção irlandesa `€1,234.56`) vetaria um preço legítimo.
+    expect(precos("Fica €49.90.")).toEqual([]);
+    expect(precos("Fica €1,234.56 no ano.")).toEqual([]);
+    expect(precos("Fica €49 90.")).toEqual([]);
   });
 
   it("veta abaixo do mínimo e responde na moeda que a mensagem usou", () => {
