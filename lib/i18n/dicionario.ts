@@ -567,15 +567,15 @@ export const DICIONARIO: Traducoes = {
   "Responsáveis por número": { es: "Responsables por número" },
   "A capacidade e o horário de cada pessoa valem para todos os números. A distribuição automática respeita os responsáveis de cada canal.": { es: "La capacidad y el horario de cada persona se aplican a todos los números. La distribución automática respeta los responsables de cada canal." },
   "Conecte um número para escolher os responsáveis.": { es: "Conecta un número para elegir responsables." },
-  "Usa todos os atendentes elegíveis da organização.": { es: "Usa todos los agentes elegibles de la organización." },
+  "Usa todos os atendentes elegíveis da organização.": { es: "Usa todos los asesores elegibles de la organización." },
   "Ninguém configurado — as conversas ficarão na fila.": { es: "Nadie configurado: las conversaciones permanecerán en la cola." },
   "Somente as pessoas selecionadas recebem este número.": { es: "Solo las personas seleccionadas reciben este número." },
-  "Nenhum atendente ativo na equipe.": { es: "No hay agentes activos en el equipo." },
+  "Nenhum atendente ativo na equipe.": { es: "No hay asesores activos en el equipo." },
   "Salvar responsáveis": { es: "Guardar responsables" },
   "Voltar ao padrão da organização": { es: "Volver al valor predeterminado de la organización" },
   "Responsáveis salvos.": { es: "Responsables guardados." },
   "Não foi possível salvar. Tente novamente.": { es: "No se pudo guardar. Inténtalo de nuevo." },
-  "Atendente sem nome": { es: "Agente sin nombre" },
+  "Atendente sem nome": { es: "Asesor sin nombre" },
   "Configurar responsáveis por número": { es: "Configurar responsables por número" },
   "Consulte os responsáveis em Atendimento.": { es: "Consulta los responsables en Atención." },
   "Detalhes para suporte": { es: "Detalles para soporte" },
@@ -889,7 +889,7 @@ export const DICIONARIO: Traducoes = {
   Aberta: { es: "Abierta" },
   Fechada: { es: "Cerrada" },
   "Em atendimento": { es: "En atención" },
-  "Aguardando atendente": { es: "Esperando agente" },
+  "Aguardando atendente": { es: "Esperando asesor" },
   "Automático atendendo": { es: "Automático atendiendo" },
   "Automático pausado": { es: "Automático pausado" },
   // Os motivos do silêncio (lib/inbox/comando-da-conversa.ts). "Automático
@@ -1100,7 +1100,7 @@ export const DICIONARIO: Traducoes = {
     es: "Quién trabaja aquí, con qué rol y cuántas conversaciones puede tomar cada uno.",
   },
   "Quem recebe cada cliente novo, e o que cada atendente enxerga.": {
-    es: "Quién recibe cada cliente nuevo y qué ve cada agente.",
+    es: "Quién recibe cada cliente nuevo y qué ve cada asesor.",
   },
   "Dados da empresa, retenção de dados e encarregado de LGPD.": {
     es: "Datos de la empresa, retención de datos y encargado de LGPD.",
@@ -2009,7 +2009,7 @@ export const DICIONARIO: Traducoes = {
     es: "El proceso automático está ejecutando este seguimiento ahora. Es posible que las acciones de abajo se rechacen durante unos instantes.",
   },
   Retomar: { es: "Reanudar" },
-  "Pular este passo": { es: "Saltar este paso" },
+  "Pular este passo": { es: "Omitir este paso" },
   "O que já aconteceu": { es: "Lo que ya pasó" },
   "Adiar o próximo passo": { es: "Aplazar el próximo paso" },
   "O follow-up continua no mesmo passo e volta a andar no horário que você escolher.": {
@@ -2043,10 +2043,10 @@ export const DICIONARIO: Traducoes = {
     es: "Solo se puede aplazar un seguimiento que está en curso (activo o esperando respuesta).",
   },
   "Só dá para pular o passo de um follow-up que está andando (ativo ou aguardando resposta).": {
-    es: "Solo se puede saltar el paso de un seguimiento que está en curso (activo o esperando respuesta).",
+    es: "Solo se puede omitir el paso de un seguimiento que está en curso (activo o esperando respuesta).",
   },
   "Este passo não tem saída no fluxo — não há para onde pular.": {
-    es: "Este paso no tiene salida en el flujo, así que no hay adónde saltar.",
+    es: "Este paso no tiene salida en el flujo, así que no hay a dónde avanzar.",
   },
   "O caminho escolhido não sai deste passo.": { es: "El camino elegido no sale de este paso." },
   "Este passo tem mais de um caminho. Escolha por onde seguir.": {
@@ -2386,7 +2386,7 @@ export const DICIONARIO: Traducoes = {
   "Remover intenção": { es: "Quitar intención" },
   "Quando escolher esta intenção": { es: "Cuándo elegir esta intención" },
   "Escreva como explicaria para um atendente novo: em que situação o cliente cai aqui.": {
-    es: "Escribe como se lo explicarías a un agente nuevo: en qué situación entra el cliente en esta intención.",
+    es: "Escribe como se lo explicarías a un asesor nuevo: en qué situación entra el cliente en esta intención.",
   },
   "Já existe outra intenção com este nome.": { es: "Ya existe otra intención con este nombre." },
   "Frases de exemplo (opcional)": { es: "Frases de ejemplo (opcional)" },
@@ -2697,7 +2697,7 @@ export const DICIONARIO: Traducoes = {
     es: "Lo que pagaste a los proveedores de IA para que todo esto pasara.",
   },
   "O texto-base que qualquer agente de IA lê antes de responder — como a \"política da casa\" que todo atendente novo teria que decorar.": {
-    es: "El texto base que cualquier agente de IA lee antes de responder, como la \"política de la casa\" que tendría que aprenderse de memoria todo agente nuevo.",
+    es: "El texto base que cualquier agente de IA lee antes de responder, como la \"política de la casa\" que tendría que aprenderse de memoria todo asesor nuevo.",
   },
   "O trabalho do dia a dia: quantas vezes ele usou cada recurso que você deu a ele.": {
     es: "El trabajo del día a día: cuántas veces usó cada recurso que le diste.",
@@ -2956,13 +2956,13 @@ export const DICIONARIO: Traducoes = {
     es: "El lead llega por el formulario y la automatización se ejecuta, pero el mensaje inicial nunca se escribe. El contacto queda en el embudo sin que nadie le hable.",
   },
   "Sugerir resposta ao atendente": {
-    es: "Sugerir respuesta al agente humano",
+    es: "Sugerir respuesta al asesor humano",
   },
   "Escreve um rascunho de resposta para o atendente humano revisar antes de enviar.": {
-    es: "Escribe un borrador de respuesta para que el agente humano lo revise antes de enviarlo.",
+    es: "Escribe un borrador de respuesta para que el asesor humano lo revise antes de enviarlo.",
   },
   "O botão de sugerir resposta não traz nada, e o atendente escreve do zero sem saber por quê.": {
-    es: "El botón de sugerir respuesta no muestra nada y el agente humano escribe desde cero sin saber por qué.",
+    es: "El botón de sugerir respuesta no muestra nada y el asesor humano escribe desde cero sin saber por qué.",
   },
   "Responder (motor antigo)": {
     es: "Responder (motor antiguo)",
@@ -3776,8 +3776,8 @@ export const DICIONARIO: Traducoes = {
   "O agente já sabe que é a PRIMEIRA mensagem, logo depois de a pessoa preencher o formulário, e recebe todos os campos que ela respondeu. Aqui você diz o que fazer com eles — quanto mais concreto, melhor a mensagem.": {
     es: "El agente ya sabe que es el PRIMER mensaje, justo después de que la persona completa el formulario, y recibe todos los campos que respondió. Aquí le indicas qué hacer con ellos. Cuanto más concreto seas, mejor será el mensaje.",
   },
-  Atendente: { es: "Agente" },
-  "Escolha o atendente": { es: "Elige el agente" },
+  Atendente: { es: "Asesor" },
+  "Escolha o atendente": { es: "Elige el asesor" },
   "Endereço (URL)": { es: "Dirección (URL)" },
   "Segredo (opcional)": { es: "Secreto (opcional)" },
   "•••••••• (definido — digite para trocar)": {
@@ -3964,7 +3964,7 @@ export const DICIONARIO: Traducoes = {
   "Criar/mover lead no funil": { es: "Crear/mover lead en el embudo" },
   "Enviar mensagem no WhatsApp": { es: "Enviar mensaje por WhatsApp" },
   "Adicionar tag": { es: "Agregar etiqueta" },
-  "Atribuir a um atendente": { es: "Asignar a un agente" },
+  "Atribuir a um atendente": { es: "Asignar a un asesor" },
   "Avisar outro sistema (webhook)": { es: "Avisar a otro sistema (webhook)" },
   "Esse lead entrou sem contato vinculado, então não havia para quem escrever.": {
     es: "Ese lead entró sin contacto vinculado, así que no había a quién escribirle.",
@@ -4028,11 +4028,11 @@ export const DICIONARIO: Traducoes = {
     },
   "A pessoa escolhida como responsável não é atendente desta equipe. Escolha outra pessoa na automação.":
     {
-      es: "La persona elegida como responsable no es agente de este equipo. Elige a otra persona en la automatización.",
+      es: "La persona elegida como responsable no es asesor de este equipo. Elige a otra persona en la automatización.",
     },
   "A pessoa escolhida como responsável não pode atender — o papel dela é só de visualização. Escolha um atendente.":
     {
-      es: "La persona elegida como responsable no puede atender porque su rol es solo de visualización. Elige a un agente.",
+      es: "La persona elegida como responsable no puede atender porque su rol es solo de visualización. Elige a un asesor.",
     },
   "A ação não recebeu o que precisava (o lead do evento ou a pessoa configurada). Abra a automação e revise.":
     {
@@ -4589,7 +4589,7 @@ export const DICIONARIO: Traducoes = {
     es: "Cuando no hay nadie disponible, el sistema vuelve a intentarlo más tarde. Si se agotan los intentos, la conversación queda en la fila esperando a alguien.",
   },
   "Espera entre tentativas (segundos)": { es: "Espera entre intentos (segundos)" },
-  "O que cada atendente enxerga": { es: "Qué ve cada agente" },
+  "O que cada atendente enxerga": { es: "Qué ve cada asesor" },
   "Restringe apenas quem tem o papel": { es: "Restringe solo a quien tiene el rol" },
   "Gerente e administrador continuam vendo a operação inteira.": {
     es: "Gerente y administrador siguen viendo toda la operación.",
@@ -4602,28 +4602,28 @@ export const DICIONARIO: Traducoes = {
   "Há mudanças não salvas.": { es: "Hay cambios sin guardar." },
   "Cada um pega o que quiser": { es: "Cada uno toma el que quiera" },
   "Todo cliente novo cai numa fila aberta e o primeiro atendente que clicar assume. Simples, e é onde nasce a discussão de quem furou a fila.": {
-    es: "Todo cliente nuevo cae en una fila abierta y lo toma el primer agente que haga clic. Es simple, pero ahí empiezan las discusiones sobre quién se saltó la fila.",
+    es: "Todo cliente nuevo cae en una fila abierta y lo toma el primer asesor que haga clic. Es simple, pero ahí empiezan las discusiones sobre quién se saltó la fila.",
   },
-  "Rodízio automático entre os atendentes": { es: "Rotación automática entre los agentes" },
+  "Rodízio automático entre os atendentes": { es: "Rotación automática entre los asesores" },
   "Cliente 1 vai para o atendente A, cliente 2 para o B, e ao acabar a lista volta ao primeiro. Quem recebe é sempre quem está há mais tempo sem receber — entre os que estão disponíveis e dentro do horário. Ninguém escolhe, então não há fila furada.": {
-    es: "El cliente 1 va al agente A, el cliente 2 al B y, al terminar la lista, vuelve al primero. Siempre recibe quien lleva más tiempo sin recibir, entre los que están disponibles y dentro de su horario. Nadie elige, así que nadie se salta la fila.",
+    es: "El cliente 1 va al asesor A, el cliente 2 al B y, al terminar la lista, vuelve al primero. Siempre recibe quien lleva más tiempo sin recibir, entre los que están disponibles y dentro de su horario. Nadie elige, así que nadie se salta la fila.",
   },
   "Todos veem tudo": { es: "Todos ven todo" },
   "Qualquer atendente abre a conversa e o negócio de qualquer colega.": {
-    es: "Cualquier agente puede abrir la conversación y el negocio de cualquier colega.",
+    es: "Cualquier asesor puede abrir la conversación y el negocio de cualquier colega.",
   },
   "Os seus, mais os que ainda não têm dono": {
     es: "Los tuyos, más los que todavía no tienen dueño",
   },
   "O atendente vê a própria carteira e a fila de quem chegou agora. Não vê o que já é de um colega.": {
-    es: "El agente ve su propia cartera y la fila de clientes recién llegados. No ve lo que ya es de otro colega.",
+    es: "El asesor ve su propia cartera y la fila de clientes recién llegados. No ve lo que ya es de otro colega.",
   },
   "Só os seus": { es: "Solo los tuyos" },
   "O atendente vê apenas o que foi direcionado a ele — nem a fila. Combine com o rodízio: sem alguém distribuindo, ninguém recebe nada e as telas ficam vazias.": {
-    es: "El agente ve solo lo que se le asignó, ni siquiera la fila. Combínalo con la rotación: si nadie distribuye, nadie recibe nada y las pantallas quedan vacías.",
+    es: "El asesor ve solo lo que se le asignó, ni siquiera la fila. Combínalo con la rotación: si nadie distribuye, nadie recibe nada y las pantallas quedan vacías.",
   },
   "Quem recebe cada cliente novo, e o que cada atendente enxerga. As duas decisões andam juntas: distribuir sem restringir deixa todo mundo vendo a carteira do colega; restringir sem distribuir deixa o funil de cada um vazio.": {
-    es: "Quién recibe a cada cliente nuevo y qué ve cada agente. Las dos decisiones van juntas: si distribuyes sin restringir, todos ven la cartera de sus colegas; si restringes sin distribuir, el embudo de cada uno queda vacío.",
+    es: "Quién recibe a cada cliente nuevo y qué ve cada asesor. Las dos decisiones van juntas: si distribuyes sin restringir, todos ven la cartera de sus colegas; si restringes sin distribuir, el embudo de cada uno queda vacío.",
   },
   // ─── Configurações: Atualização do sistema ───
   "Não consegui iniciar a atualização. Tente de novo em instantes.": {
@@ -5185,7 +5185,7 @@ export const DICIONARIO: Traducoes = {
     es: "Selecciona una conversación para verla",
   },
   "Modo somente-leitura. Use “Impersonate” para responder como atendente do tenant.": {
-    es: "Modo de solo lectura. Usa “Impersonate” para responder como agente del tenant.",
+    es: "Modo de solo lectura. Usa “Impersonate” para responder como asesor del tenant.",
   },
   "Sem nome": { es: "Sin nombre" },
   "Buscar mensagem...": { es: "Buscar mensaje..." },
@@ -5290,12 +5290,12 @@ export const DICIONARIO: Traducoes = {
   // ─── Inbox: transferir conversa / atalhos de teclado ───
   "Transferir conversa": { es: "Transferir conversación" },
   "A transferência é imediata: o atendente escolhido vira o responsável agora e a mudança fica registrada no histórico.": {
-    es: "La transferencia es inmediata: el agente elegido pasa a ser el responsable y el cambio queda registrado en el historial.",
+    es: "La transferencia es inmediata: el asesor elegido pasa a ser el responsable y el cambio queda registrado en el historial.",
   },
   "Transferir para": { es: "Transferir a" },
-  "Carregando atendentes…": { es: "Cargando agentes…" },
+  "Carregando atendentes…": { es: "Cargando asesores…" },
   "Nenhum outro atendente disponível nesta organização.": {
-    es: "No hay ningún otro agente disponible en esta organización.",
+    es: "No hay ningún otro asesor disponible en esta organización.",
   },
   "Motivo (opcional)": { es: "Motivo (opcional)" },
   "Ex.: cliente pediu falar com o financeiro": { es: "Ej.: el cliente pidió hablar con finanzas" },
@@ -5709,7 +5709,7 @@ export const DICIONARIO: Traducoes = {
   "Tente de novo no botão abaixo (clicar de novo não cria um segundo agente) ou siga agora e publique depois em": {
     es: "Vuelve a intentarlo con el botón de abajo (volver a hacer clic no crea otro agente) o continúa ahora y publica después en",
   },
-  "Pular": { es: "Saltar" },
+  "Pular": { es: "Omitir" },
   "Criar e continuar": { es: "Crear y continuar" },
 
   // ─── Onboarding: setup-ai (o cérebro / chave de IA) ───
@@ -5829,7 +5829,7 @@ export const DICIONARIO: Traducoes = {
     es: "Recibes un enlace para cada persona y lo mandas por donde quieras: WhatsApp, correo o lo que prefieras. El enlace es la invitación: quien lo abra entra a tu empresa.",
   },
   "Falha:": { es: "Error:" },
-  "Adicione ao menos um email ou clique em Pular.": { es: "Agrega al menos un correo o haz clic en Saltar." },
+  "Adicione ao menos um email ou clique em Pular.": { es: "Agrega al menos un correo o haz clic en Omitir." },
   "convite(s) não puderam ser enviados por email. Copie os links abaixo e envie você mesmo.": {
     es: "invitación(es) no se pudieron enviar por correo. Copia los enlaces de abajo y envíalos por tu cuenta.",
   },
@@ -5852,7 +5852,7 @@ export const DICIONARIO: Traducoes = {
   "Seu funcionário já está de pé. O que ficou para depois continua te esperando.": {
     es: "Tu empleado ya está en marcha. Lo que dejaste para después te sigue esperando.",
   },
-  "você pulou": { es: "lo saltaste" },
+  "você pulou": { es: "lo omitiste" },
   "ainda não": { es: "todavía no" },
   "O que mais tem aqui": { es: "Qué más hay aquí" },
   "Você não precisa mexer em nada disso agora. É só para saber que existe.": {
@@ -5904,7 +5904,7 @@ export const DICIONARIO: Traducoes = {
     es: "Si el cliente pide que se detenga, él para y no vuelve a escribir",
   },
   "E você pode pausar, adiar, pular um passo ou cancelar quando quiser": {
-    es: "Y puedes pausar, posponer, saltar un paso o cancelar cuando quieras",
+    es: "Y puedes pausar, posponer, omitir un paso o cancelar cuando quieras",
   },
   "O que está esfriando": { es: "Lo que se está enfriando" },
   "Quem esfriou e ainda está aberto, para você agir antes de perder.": {
@@ -6356,7 +6356,7 @@ export const DICIONARIO: Traducoes = {
   // ─── App-root-other: páginas de erro, legais e convite (fora do IdiomaProvider) ───
   "403 — Sem permissão": { es: "403 — Sin permiso" },
   "Você não tem acesso a essa área.": { es: "No tienes acceso a esta área." },
-  "Voltar pra Inbox": { es: "Volver a la Bandeja" },
+  "Voltar pra Inbox": { es: "Volver a Inbox" },
   "404 — Página não encontrada": { es: "404 — Página no encontrada" },
   "Verifique o link ou volte pra inbox.": { es: "Verifica el enlace o vuelve a la bandeja." },
   "500 — Erro interno": { es: "500 — Error interno" },
@@ -6681,7 +6681,7 @@ export const DICIONARIO: Traducoes = {
     es: "perderá el acceso al tenant. Puedes deshacerlo volviendo a invitar al miembro.",
   },
   "Acesso revogado.": { es: "Acceso revocado." },
-  "Manual (atendente puxa da fila)": { es: "Manual (el agente toma de la cola)" },
+  "Manual (atendente puxa da fila)": { es: "Manual (el asesor toma de la cola)" },
   "Rodízio (distribui automático)": { es: "Rotación (distribución automática)" },
   "Horário de": { es: "Horario de" },
   "Sem janelas = disponível 24/7. Adicione janelas para restringir o roteamento a horários específicos.": {
@@ -6696,19 +6696,19 @@ export const DICIONARIO: Traducoes = {
   },
   "Modo de roteamento": { es: "Modo de enrutamiento" },
   "Como as conversas novas são distribuídas entre os atendentes da organização.": {
-    es: "Cómo se distribuyen las conversaciones nuevas entre los agentes de la organización.",
+    es: "Cómo se distribuyen las conversaciones nuevas entre los asesores de la organización.",
   },
   "Modo": { es: "Modo" },
   "Balanceamento por carga (em breve)": { es: "Balanceo de carga (próximamente)" },
   "Tentativas máx.": { es: "Intentos máx." },
   "Backoff (s)": { es: "Backoff (s)" },
-  "Atendentes": { es: "Agentes" },
+  "Atendentes": { es: "Asesores" },
   "Status, carga atual e capacidade de cada atendente da organização.": {
-    es: "Estado, carga actual y capacidad de cada agente de la organización.",
+    es: "Estado, carga actual y capacidad de cada asesor de la organización.",
   },
-  "Erro ao carregar atendentes.": { es: "Error al cargar agentes." },
+  "Erro ao carregar atendentes.": { es: "Error al cargar asesores." },
   "Nenhum atendente na organização. Convide membros com papel de atendente ou superior.": {
-    es: "No hay agentes en la organización. Invita a miembros con rol de agente o superior.",
+    es: "No hay asesores en la organización. Invita a miembros con rol de asesor o superior.",
   },
   "Carga": { es: "Carga" },
   "Capacidade": { es: "Capacidad" },
@@ -6807,7 +6807,7 @@ export const DICIONARIO: Traducoes = {
   "Selecionar": { es: "Seleccionar" },
   "Selecionar todos em": { es: "Seleccionar todos en" },
   "Desmarcar todos em": { es: "Desmarcar todos en" },
-  "Abrir esta conversa no Inbox": { es: "Abrir esta conversación en la Bandeja" },
+  "Abrir esta conversa no Inbox": { es: "Abrir esta conversación en Inbox" },
   "conversa sem mensagens": { es: "conversación sin mensajes" },
   "Valor inválido": { es: "Valor inválido" },
   "Lead atualizado": { es: "Lead actualizado" },
@@ -7174,7 +7174,7 @@ export const DICIONARIO: Traducoes = {
   "um serviço": { es: "un servicio" },
   "Pontos de fidelidade": { es: "Puntos de fidelidad" },
   "ponto(s)": { es: "punto(s)" },
-  "Serviços que mais faturaram": { es: "Servicios que más facturaron" },
+  "Serviços que mais faturaram": { es: "Servicios que más ingresos generaron" },
   "Nenhum item no período.": { es: "No hay ítems en el período." },
   "Clientes que mais gastaram": { es: "Clientes que más gastaron" },
   "Nenhum cliente no período.": { es: "No hay clientes en el período." },
@@ -7201,10 +7201,10 @@ export const DICIONARIO: Traducoes = {
   },
   "Atendimentos sem comanda": { es: "Atenciones sin orden de servicio" },
   "Já aconteceram e ninguém faturou. Marque o que quer cobrar.": {
-    es: "Ya se realizaron y no se han facturado. Marca las que quieras cobrar.",
+    es: "Ya se realizaron y nadie las ha cerrado. Marca las que quieras cobrar.",
   },
   "sem preço no serviço": { es: "sin precio en el servicio" },
-  "Faturar": { es: "Facturar" },
+  "Faturar": { es: "Cerrar y cobrar" },
   "Faturamento": { es: "Facturación" },
   "Quanto entrou, de que forma, e quanto cada pessoa tem a receber.": {
     es: "Cuánto entró, de qué forma y cuánto le corresponde a cada persona.",
@@ -7307,14 +7307,14 @@ export const DICIONARIO: Traducoes = {
   "ainda abertas.": { es: "todavía abiertas." },
   "\"—\" significa que não houve dado suficiente para medir, e não que o valor seja zero.": { es: "\"—\" significa que no hubo datos suficientes para medir, no que el valor sea cero." },
   "Erro ao carregar métricas.": { es: "Error al cargar las métricas." },
-  "Todos os atendentes": { es: "Todos los agentes" },
+  "Todos os atendentes": { es: "Todos los asesores" },
   "(você)": { es: "(tú)" },
   "Nenhuma etapa configurada.": { es: "Ninguna etapa configurada." },
-  "Performance por atendente": { es: "Rendimiento por agente" },
+  "Performance por atendente": { es: "Rendimiento por asesor" },
   "Sua performance": { es: "Tu rendimiento" },
   "Sem atividade no período (ganhos/perdidos, conversas ou respostas).": { es: "Sin actividad en el período (ganados/perdidos, conversaciones o respuestas)." },
   "1ª resposta (média)": { es: "1ª respuesta (promedio)" },
-  "Atrito, funil e performance por atendente nos últimos 30 dias.": { es: "Fricción, embudo y rendimiento por agente en los últimos 30 días." },
+  "Atrito, funil e performance por atendente nos últimos 30 dias.": { es: "Fricción, embudo y rendimiento por asesor en los últimos 30 días." },
   "Atrito, seu funil e sua performance nos últimos 30 dias.": { es: "Fricción, tu embudo y tu rendimiento en los últimos 30 días." },
   "Nenhuma demanda em risco": { es: "Ningún caso en riesgo" },
   "Toda demanda aberta teve atividade recente ou já tem um retorno agendado.": { es: "Todos los casos abiertos tuvieron actividad reciente o ya tienen un seguimiento programado." },
@@ -7388,7 +7388,7 @@ export const DICIONARIO: Traducoes = {
   "Respostas humanas fora do sistema": { es: "Respuestas humanas fuera del sistema" },
   "Turnos até o desfecho (mediana)": { es: "Turnos hasta el desenlace (mediana)" },
   "Vetos por execução": { es: "Vetos por ejecución" },
-  "do atendente": { es: "del agente" },
+  "do atendente": { es: "del asesor" },
   "aberto": { es: "abierto" },
   "abertos": { es: "abiertos" },
 
@@ -7482,7 +7482,7 @@ export const DICIONARIO: Traducoes = {
   "regras · espera": { es: "reglas · espera" },
   volta: { es: "vuelta" },
   "grava resposta": { es: "guarda la respuesta" },
-  "pula se já existir": { es: "salta si ya existe" },
+  "pula se já existir": { es: "se omite si ya existe" },
   "confirma se já existir": { es: "confirma si ya existe" },
   "até": { es: "hasta" },
   "voltas": { es: "vueltas" },
@@ -7509,8 +7509,8 @@ export const DICIONARIO: Traducoes = {
   "Opções, separadas por vírgula": { es: "Opciones, separadas por comas" },
   "Sem janelas, o roteamento aceita conversa a qualquer hora — mas a Agenda não oferece NENHUM horário para marcar. Adicione janelas para publicar seus horários de atendimento.": { es: "Sin franjas, el enrutamiento acepta conversaciones a cualquier hora, pero la Agenda no ofrece NINGÚN horario para agendar citas. Agrega franjas para publicar tus horarios de atención." },
   "Nenhuma janela publicada — ninguém consegue marcar com esta pessoa.": { es: "Ninguna franja publicada: nadie puede agendar una cita con esta persona." },
-  "Atendentes e horários de atendimento": { es: "Agentes y horarios de atención" },
-  "Status, carga e capacidade de cada atendente — e a jornada semanal que decide os horários oferecidos na Agenda. Sem ela ninguém consegue marcar.": { es: "Estado, carga y capacidad de cada agente, además de la jornada semanal que define los horarios que se ofrecen en la Agenda. Sin ella, nadie puede agendar citas." },
+  "Atendentes e horários de atendimento": { es: "Asesores y horarios de atención" },
+  "Status, carga e capacidade de cada atendente — e a jornada semanal que decide os horários oferecidos na Agenda. Sem ela ninguém consegue marcar.": { es: "Estado, carga y capacidad de cada asesor, además de la jornada semanal que define los horarios que se ofrecen en la Agenda. Sin ella, nadie puede agendar citas." },
   "Só gerentes e administradores editam os horários de atendimento da equipe. Para publicar os seus, peça a um gerente que abra esta aba e use o botão &ldquo;Editar horário&rdquo; ao lado do seu nome.": { es: "Solo los gerentes y administradores pueden editar los horarios de atención del equipo. Para publicar los tuyos, pide a un gerente que abra esta pestaña y use el botón “Editar horario” junto a tu nombre." },
   " — não publicado": { es: " — no publicado" },
   "Escolha um fluxo publicado": { es: "Elige un flujo publicado" },
@@ -7634,7 +7634,7 @@ export const DICIONARIO: Traducoes = {
   "Execução concluída.": { es: "Ejecución concluida." },
   "Orçamento atualizado": { es: "Presupuesto actualizado" },
   "Conversa transferida.": { es: "Conversación transferida." },
-  "Atendente atualizado.": { es: "Agente actualizado." },
+  "Atendente atualizado.": { es: "Asesor actualizado." },
   "Roteamento atualizado.": { es: "Enrutamiento actualizado." },
   "Papel atualizado.": { es: "Rol actualizado." },
 
@@ -7651,7 +7651,7 @@ export const DICIONARIO: Traducoes = {
   "Recurso não encontrado ou já removido.": { es: "Recurso no encontrado o ya eliminado." },
   "Organização não encontrada.": { es: "Organización no encontrada." },
   "Operação já processada.": { es: "Operación ya procesada." },
-  "Outro atendente já assumiu.": { es: "Otro agente ya lo asumió." },
+  "Outro atendente já assumiu.": { es: "Otro asesor ya lo asumió." },
   "Este caso já foi respondido ou fechado.": { es: "Este caso ya se respondió o se cerró." },
   "Calma — muitas tentativas. Espere alguns segundos.": {
     es: "Calma, son demasiados intentos. Espera unos segundos.",
@@ -7677,7 +7677,7 @@ export const DICIONARIO: Traducoes = {
   "parado há": { es: "parado hace" },
   "Agente:": { es: "Agente:" },
   "sem nome": { es: "sin nombre" },
-  "Com atendente": { es: "Con agente" },
+  "Com atendente": { es: "Con asesor" },
   "Assistente na conversa": { es: "Asistente en la conversación" },
   "Sem dono": { es: "Sin responsable" },
   "Você assumiu a demanda": { es: "Tomaste el caso" },
@@ -7733,7 +7733,7 @@ export const DICIONARIO: Traducoes = {
   "Apenas versões 'draft' podem ser editadas.": { es: "Solo se pueden editar las versiones 'draft'." },
   "Arquivo acima de 50MB.": { es: "El archivo supera los 50MB." },
   "Arquivo excede o limite de 20MB.": { es: "El archivo supera el límite de 20MB." },
-  "Atendente não encontrado na organização.": { es: "Agente no encontrado en la organización." },
+  "Atendente não encontrado na organização.": { es: "Asesor no encontrado en la organización." },
   "Atualização não encontrada.": { es: "Actualización no encontrada." },
   "Audit entry not found": { es: "Entrada de auditoría no encontrada" },
   "Auth indisponível": { es: "Autenticación no disponible" },
@@ -7767,7 +7767,7 @@ export const DICIONARIO: Traducoes = {
   "decision é obrigatório (accept | dismiss).": { es: "decision es obligatorio (accept | dismiss)." },
   "decision e proposal_id são obrigatórios.": { es: "decision y proposal_id son obligatorios." },
   "Demanda não encontrada, ou já encerrada.": { es: "Caso no encontrado o ya cerrado." },
-  "Destino não é um atendente desta organização.": { es: "El destino no es un agente de esta organización." },
+  "Destino não é um atendente desta organização.": { es: "El destino no es un asesor de esta organización." },
   "Dê um nome à etapa — é o que aparece no topo da coluna.": {
     es: "Ponle un nombre a la etapa. Es lo que aparece arriba de la columna.",
   },
@@ -7931,7 +7931,7 @@ export const DICIONARIO: Traducoes = {
   "O evento original deste run foi removido.": { es: "El evento original de este run fue eliminado." },
   "O fim do período precisa ser depois do começo.": { es: "El fin del período debe ser posterior al inicio." },
   "O logo precisa ser PNG ou JPG.": { es: "El logo debe ser PNG o JPG." },
-  "Outro atendente assumiu esta conversa agora.": { es: "Otro agente acaba de asumir esta conversación." },
+  "Outro atendente assumiu esta conversa agora.": { es: "Otro asesor acaba de asumir esta conversación." },
   "Parâmetro 'escopo' inválido.": { es: "Parámetro 'escopo' inválido." },
   "Parâmetros inválidos.": { es: "Parámetros inválidos." },
   "payload fora do contrato do canal": { es: "payload fuera del contrato del canal" },
@@ -8978,7 +8978,7 @@ export const DICIONARIO: Traducoes = {
   "O WhatsApp (WAHA) não está configurado neste ambiente (faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY) — sem ele o número não pode ser desconectado do aparelho.": { es: "WhatsApp (WAHA) no está configurado en este entorno (faltan WAHA_API_BASE_URL y/o WAHA_API_KEY). Sin él, no se puede desconectar el número del dispositivo." },
   "O WhatsApp (WAHA) não está configurado neste ambiente: faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY. Configure-as e tente de novo.": { es: "WhatsApp (WAHA) no está configurado en este entorno: faltan WAHA_API_BASE_URL y/o WAHA_API_KEY. Configúralas e inténtalo de nuevo." },
   "O cabeçalho aceita imagem JPG ou PNG.": { es: "El encabezado acepta imagen JPG o PNG." },
-  "O caso não está aguardando resposta do atendente (awaiting_human).": { es: "El caso no está esperando respuesta del agente (awaiting_human)." },
+  "O caso não está aguardando resposta do atendente (awaiting_human).": { es: "El caso no está esperando respuesta del asesor (awaiting_human)." },
   "O funil que você escolheu como vizinho não está mais na lista. Recarregue a página.": { es: "El embudo que elegiste como vecino ya no está en la lista. Recarga la página." },
   "O modelo em uso não sabe usar as ferramentas do CRM — o agente conversa, mas não registra nada no funil.": { es: "El modelo en uso no puede usar las herramientas del CRM: el agente conversa, pero no registra nada en el embudo." },
   "O próximo passo precisa ter de 3 a 500 caracteres.": { es: "El próximo paso debe tener de 3 a 500 caracteres." },
@@ -8987,11 +8987,11 @@ export const DICIONARIO: Traducoes = {
   "Payload inválido.": { es: "Payload inválido." },
   "Produto não encontrado.": { es: "Producto no encontrado." },
   "Query inválida.": { es: "Query inválida." },
-  "Responsável não é um atendente ativo desta organização.": { es: "El responsable no es un agente activo de esta organización." },
+  "Responsável não é um atendente ativo desta organização.": { es: "El responsable no es un asesor activo de esta organización." },
   "Retomada de contato descartada — decisão registrada": { es: "Reanudación de contacto descartada — decisión registrada" },
   "Salve este token agora — ele não será mostrado novamente.": { es: "Guarda este token ahora — no se mostrará de nuevo." },
-  "Só o próprio atendente ou um manager pode alterar esta disponibilidade.": { es: "Solo el propio agente o un manager puede modificar esta disponibilidad." },
-  "Transferiu a conversa para outro atendente": { es: "Transfirió la conversación a otro agente" },
+  "Só o próprio atendente ou um manager pode alterar esta disponibilidade.": { es: "Solo el propio asesor o un manager puede modificar esta disponibilidad." },
+  "Transferiu a conversa para outro atendente": { es: "Transfirió la conversación a otro asesor" },
   "cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o token não foi gravado": { es: "cifrado no disponible en esta instalación (falta el GUC app.nuvemshop_oauth_key) — no se guardó el token" },
   "cifra indisponível nesta instalação — a chave não foi gravada": { es: "cifrado no disponible en esta instalación — no se guardó la clave" },
   "cursor inválido.": { es: "cursor inválido." },
@@ -9199,7 +9199,7 @@ export const DICIONARIO: Traducoes = {
   "Cancelar um retorno agendado": { es: "Cancelar un seguimiento programado" },
   "Catálogo da loja": { es: "Catálogo de la tienda" },
   "Chamados para uma pessoa": { es: "Casos para una persona" },
-  "Chamar um atendente humano": { es: "Llamar a un agente humano" },
+  "Chamar um atendente humano": { es: "Llamar a un asesor humano" },
   "Compras do cliente": { es: "Compras del cliente" },
   "Confirma o horário que estava esperando a resposta da pessoa, para a equipe saber que ela vem mesmo.": {
     es: "Confirma un horario que estaba a la espera de respuesta de la persona, para que el equipo sepa que sí va a asistir.",
@@ -9310,7 +9310,7 @@ export const DICIONARIO: Traducoes = {
     es: "Muestra los embudos de venta existentes y sus etapas, para que el agente sepa dónde puede poner una oportunidad.",
   },
   "Mostra os horários em que um atendente pode receber, já descontando as folgas dele, o que ele tem marcado e os compromissos da agenda pessoal.": {
-    es: "Muestra los horarios en que un agente puede atender, después de descontar sus días libres, las citas que ya tiene y los compromisos de su agenda personal.",
+    es: "Muestra los horarios en que un asesor puede atender, después de descontar sus días libres, las citas que ya tiene y los compromisos de su agenda personal.",
   },
   "Mostra os retornos combinados com o cliente: o que está marcado, o que já aconteceu e o que foi desmarcado.": {
     es: "Muestra los seguimientos acordados con el cliente: los programados, los que ya se realizaron y los cancelados.",
@@ -9347,7 +9347,7 @@ export const DICIONARIO: Traducoes = {
   },
   "Organização da operação": { es: "Organización de la operación" },
   "Passa a conversa para um atendente, transfere para outra pessoa ou devolve o cliente para a fila de espera.": {
-    es: "Pasa la conversación a un agente, la transfiere a otra persona o devuelve al cliente a la fila de espera.",
+    es: "Pasa la conversación a un asesor, la transfiere a otra persona o devuelve al cliente a la fila de espera.",
   },
   "Pega uma resposta pronta e troca as lacunas pelos dados do cliente, avisando se sobrou alguma sem preencher. Não envia nada.": {
     es: "Toma una respuesta predefinida y reemplaza los espacios en blanco por los datos del cliente, y avisa si quedó alguno sin llenar. No envía nada.",
@@ -9373,7 +9373,7 @@ export const DICIONARIO: Traducoes = {
   "Remarcar um compromisso": { es: "Reprogramar un compromiso" },
   "Renomear ou reordenar uma etapa": { es: "Renombrar o reordenar una etapa" },
   "Reserva um horário do atendente para receber o cliente. A pessoa passa a contar com esse horário, então não é um registro interno.": {
-    es: "Reserva un horario del agente para recibir al cliente. La persona ya cuenta con ese horario, así que no se trata de un registro interno.",
+    es: "Reserva un horario del asesor para recibir al cliente. La persona ya cuenta con ese horario, así que no se trata de un registro interno.",
   },
   "Respostas prontas": { es: "Respuestas rápidas" },
   "Retomar o atendimento automático": { es: "Retomar la atención automática" },
@@ -9735,7 +9735,7 @@ export const DICIONARIO: Traducoes = {
   "Conectar a conta de anúncios para ler o desempenho das campanhas.": { es: "Conectar la cuenta de anuncios para leer el rendimiento de las campañas." },
   "Conecte a loja para trazer pedidos e clientes para dentro do CRM.": { es: "Conecta la tienda para traer pedidos y clientes al CRM." },
   "Devolver ao anúncio as vendas que ele trouxe, e marcar a origem de quem chega pelo site.": { es: "Devolver al anuncio las ventas que trajo, y marcar el origen de quien llega por el sitio." },
-  "Funil e performance por atendente nos últimos 30 dias.": { es: "Embudo y rendimiento por agente en los últimos 30 días." },
+  "Funil e performance por atendente nos últimos 30 dias.": { es: "Embudo y rendimiento por asesor en los últimos 30 días." },
   "O catálogo da loja, com o preço que o atendente de IA responde.": { es: "El catálogo de la tienda, con el precio que responde el agente de IA." },
   "O que se pode marcar, quanto dura, onde acontece e quem atende.": { es: "Qué se puede programar, cuánto dura, dónde se realiza y quién atiende." },
   "Quanto custou cada resultado das campanhas que trazem gente para cá.": { es: "Cuánto costó cada resultado de las campañas que traen gente aquí." },
@@ -10328,7 +10328,7 @@ export const DICIONARIO: Traducoes = {
   "Abrir IA › Provedores": { es: "Abrir IA › Proveedores" },
   "Sua pergunta para a IA": { es: "Tu pregunta para la IA" },
   "Pergunte à IA sobre este caso…": { es: "Pregúntale a la IA sobre este caso…" },
-  "Ctrl + Enter envia. Enter quebra linha.": { es: "Ctrl + Enter envía. Enter salta de línea." },
+  "Ctrl + Enter envia. Enter quebra linha.": { es: "Ctrl + Enter envía. Enter inserta un salto de línea." },
   "Perguntar": { es: "Preguntar" },
   "Perguntando…": { es: "Preguntando…" },
   "Pergunta da equipe": { es: "Pregunta del equipo" },
@@ -10713,16 +10713,16 @@ export const DICIONARIO: Traducoes = {
   // mesma frase. Só a do papel é nova, porque aqui o piso é gerente.
   "Agenda dos colegas": { es: "Agenda de los colegas" },
   "Atendentes podem mexer na agenda dos colegas": {
-    es: "Los agentes pueden modificar la agenda de sus colegas",
+    es: "Los asesores pueden modificar la agenda de sus colegas",
   },
   "Com isto ligado, qualquer atendente cancela e remarca o compromisso de qualquer colega — é o comportamento de sempre. Desligado, cada atendente mexe só no compromisso de que é o responsável; gerentes e administradores seguem mexendo em tudo.": {
-    es: "Con esta opción activada, cualquier agente puede cancelar y reprogramar las citas de cualquier colega, como siempre ha sido. Si la desactivas, cada agente solo puede modificar las citas de las que es responsable. Los gerentes y administradores pueden seguir modificándolo todo.",
+    es: "Con esta opción activada, cualquier asesor puede cancelar y reprogramar las citas de cualquier colega, como siempre ha sido. Si la desactivas, cada asesor solo puede modificar las citas de las que es responsable. Los gerentes y administradores pueden seguir modificándolo todo.",
   },
   "Ligado: qualquer atendente mexe na agenda de qualquer colega.": {
-    es: "Activado: cualquier agente puede modificar la agenda de cualquier colega.",
+    es: "Activado: cualquier asesor puede modificar la agenda de cualquier colega.",
   },
   "Desligado: cada atendente mexe só na própria agenda. Gerentes e administradores continuam mexendo em tudo.": {
-    es: "Desactivado: cada agente solo puede modificar su propia agenda. Los gerentes y administradores pueden seguir modificándolo todo.",
+    es: "Desactivado: cada asesor solo puede modificar su propia agenda. Los gerentes y administradores pueden seguir modificándolo todo.",
   },
   "Isto não muda o que cada pessoa vê na agenda, só quem pode alterar o compromisso de quem.": {
     es: "Esto no cambia lo que cada persona ve en la agenda, solo define quién puede modificar las citas de quién.",
