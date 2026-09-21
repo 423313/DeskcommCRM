@@ -71,6 +71,22 @@ for (const [chave, valor] of Object.entries(PLACEHOLDERS)) {
 
 import "@testing-library/jest-dom/vitest";
 
+// Node 25+ expõe `localStorage`/`sessionStorage` nativos que valem `undefined` sem
+// `--localstorage-file`, e o jsdom não os sobrescreve: `localStorage.clear()` quebrava
+// ~100 testes. Quando o global nativo não serve, devolve o storage do jsdom do arquivo.
+// Em Node 22 o global já é o do jsdom e este bloco não faz nada.
+const jsdomDoArquivo = (globalThis as { jsdom?: { window: Window } }).jsdom;
+if (jsdomDoArquivo) {
+  for (const nome of ["localStorage", "sessionStorage"] as const) {
+    if (typeof globalThis[nome] === "undefined") {
+      Object.defineProperty(globalThis, nome, {
+        configurable: true,
+        get: () => jsdomDoArquivo.window[nome],
+      });
+    }
+  }
+}
+
 // jsdom não implementa ResizeObserver; Radix (ex.: Switch) usa em layout effects.
 if (typeof globalThis.ResizeObserver === "undefined") {
   globalThis.ResizeObserver = class {
