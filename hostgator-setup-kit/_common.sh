@@ -82,6 +82,25 @@ dc_files() {
   esac
 }
 
+# Nome FÍSICO do volume que guarda as sessões do WAHA. `docker compose config
+# --volumes` devolve o nome LÓGICO (`waha-data`); passá-lo direto a `docker run
+# -v` cria/abre outro volume global com esse nome e produz um backup vazio que
+# parece válido. Perguntar ao contêiner pela montagem real mantém o prefixo do
+# projeto Compose (ex.: `deskcommcrm_waha-data`). O fallback cobre instalação
+# ainda sem contêiner e preserva o comportamento histórico do kit.
+volume_waha_data() {
+  local container vol proj
+  container="$(dc ps -a -q waha 2>/dev/null || true)"
+  vol=""
+  if [ -n "$container" ]; then
+    vol="$(docker inspect "$container" \
+      --format '{{range .Mounts}}{{if eq .Destination "/app/.sessions"}}{{.Name}}{{end}}{{end}}' \
+      2>/dev/null || true)"
+  fi
+  proj="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
+  printf '%s' "${vol:-${proj}_waha-data}"
+}
+
 # ── QUEM FALA COM O BANCO E PODE SER PARADO ──────────────────────────────────
 #
 # O `update.sh` aplica o `baseline.sql`, que APAGA e RECRIA cada regra de
