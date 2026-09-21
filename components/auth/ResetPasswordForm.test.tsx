@@ -17,6 +17,8 @@ describe("ResetPasswordForm", () => {
 
     expect(password).toHaveAttribute("type", "password");
     expect(confirmation).toHaveAttribute("type", "password");
+    expect(password).toHaveAttribute("autocomplete", "new-password");
+    expect(confirmation).toHaveAttribute("autocomplete", "new-password");
 
     fireEvent.click(screen.getByRole("button", { name: "Mostrar nova senha" }));
     expect(password).toHaveAttribute("type", "text");
@@ -31,5 +33,21 @@ describe("ResetPasswordForm", () => {
     expect(
       screen.getByRole("button", { name: "Ocultar confirmação da senha" }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("mostra a força da senha e os requisitos conforme a pessoa digita", () => {
+    render(<ResetPasswordForm />);
+
+    const password = screen.getByLabelText("Nova senha");
+    const meter = screen.getByRole("meter", { name: "Força da senha" });
+
+    expect(meter).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByTestId("password-strength-label")).toHaveTextContent("Muito fraca");
+
+    fireEvent.change(password, { target: { value: "Senha123!" } });
+
+    expect(meter).toHaveAttribute("aria-valuenow", "4");
+    expect(meter).toHaveAttribute("aria-valuetext", "Forte");
+    expect(screen.getByTestId("password-strength-label")).toHaveTextContent("Forte");
   });
 });

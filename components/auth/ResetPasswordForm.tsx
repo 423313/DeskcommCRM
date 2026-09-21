@@ -12,6 +12,68 @@ import { Label } from "@/components/ui/label";
 import { updatePassword } from "@/app/actions/auth/updatePassword";
 import { Eye, EyeSlash } from "@/lib/ui/icons";
 
+const PASSWORD_REQUIREMENTS = [
+  { label: "8 ou mais caracteres", test: (value: string) => value.length >= 8 },
+  { label: "Uma letra", test: (value: string) => /[A-Za-zÀ-ÿ]/.test(value) },
+  { label: "Um número", test: (value: string) => /[0-9]/.test(value) },
+  { label: "Um símbolo", test: (value: string) => /[^A-Za-zÀ-ÿ0-9\s]/.test(value) },
+] as const;
+
+function PasswordStrength({ password }: { password: string }) {
+  const t = useT();
+  const met = PASSWORD_REQUIREMENTS.map((requirement) => requirement.test(password));
+  const score = met.filter(Boolean).length;
+  const label = ["Muito fraca", "Fraca", "Razoável", "Boa", "Forte"][score];
+  const barColor = [
+    "bg-muted",
+    "bg-destructive",
+    "bg-amber-500",
+    "bg-sky-500",
+    "bg-emerald-600",
+  ][score];
+
+  return (
+    <div className="space-y-2 pt-1" aria-live="polite">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-muted-foreground">{t("Força da senha")}</span>
+        <span className="font-medium" data-testid="password-strength-label">
+          {t(label)}
+        </span>
+      </div>
+      <div
+        className="grid grid-cols-4 gap-1"
+        role="meter"
+        aria-label={t("Força da senha")}
+        aria-valuemin={0}
+        aria-valuemax={4}
+        aria-valuenow={score}
+        aria-valuetext={t(label)}
+      >
+        {PASSWORD_REQUIREMENTS.map((requirement, index) => (
+          <span
+            key={requirement.label}
+            className={`h-1.5 rounded-full ${index < score ? barColor : "bg-muted"}`}
+          />
+        ))}
+      </div>
+      <ul className="grid gap-1 text-xs sm:grid-cols-2">
+        {PASSWORD_REQUIREMENTS.map((requirement, index) => (
+          <li
+            key={requirement.label}
+            className={
+              met[index]
+                ? "text-emerald-700 dark:text-emerald-400"
+                : "text-muted-foreground"
+            }
+          >
+            <span aria-hidden>{met[index] ? "✓" : "•"}</span> {t(requirement.label)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function ResetPasswordForm() {
   const t = useT();
   const [isPending, startTransition] = useTransition();
@@ -23,11 +85,13 @@ export function ResetPasswordForm() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<ResetPasswordInput>({
     resolver: zodResolver(resetPasswordSchema),
     defaultValues: { password: "", password_confirm: "", mfa_code: "" },
   });
+  const password = watch("password");
 
   const onSubmit = (values: ResetPasswordInput) => {
     setServerError(null);
@@ -60,7 +124,13 @@ export function ResetPasswordForm() {
   };
 
   return (
-    <form method="post" onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+    <form
+      method="post"
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-4"
+      autoComplete="on"
+      noValidate
+    >
       <div className="space-y-1.5">
         <Label htmlFor="password">{t("Nova senha")}</Label>
         <div className="relative">
@@ -86,6 +156,7 @@ export function ResetPasswordForm() {
         {errors.password && (
           <p className="text-xs text-destructive">{t(errors.password.message ?? "")}</p>
         )}
+        <PasswordStrength password={password} />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="password_confirm">{t("Confirmar nova senha")}</Label>
