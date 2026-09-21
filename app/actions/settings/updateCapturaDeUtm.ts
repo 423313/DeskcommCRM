@@ -41,15 +41,22 @@ const entradaSchema = z.object({
   // landing page não precisa ser um canal do CRM.
   //
   // O `+` pode faltar (quem copia do WhatsApp cola sem ele), mas o CÓDIGO DO
-  // PAÍS não: `11 99999-9999` tem dez dígitos e, com um `+` colado na frente,
-  // vira um número dos Estados Unidos que existe e não é o da pessoa. O
-  // tráfego pago iria para lá sem nada quebrar, então aqui isso é recusa com
-  // motivo, não um chute.
+  // PAÍS não: `11 99999-9999` tem ONZE dígitos e, com um `+` colado na frente,
+  // vira `+1 1999999999` — um número dos Estados Unidos que existe e não é o da
+  // pessoa. O tráfego pago iria para lá sem nada quebrar, então aqui isso é
+  // recusa com motivo, não um chute.
+  //
+  // Por que o piso do `+` automático é 12 e não 11: nenhum número BRASILEIRO
+  // local chega a 12 dígitos (DDD de 2 + 9 do celular = 11), então de 12 para
+  // cima o que foi digitado só pode estar carregando código de país. Abaixo
+  // disso a recusa pede o `+` explícito — inclusive para um `+1` americano de
+  // 11 dígitos, que é o preço de não adivinhar país num campo que decide para
+  // onde o tráfego pago é despejado.
   whatsapp_e164: z
     .string()
     .trim()
     .transform((v) => v.replace(/[^\d+]/g, ""))
-    .transform((v) => (v.startsWith("+") || v.length < 11 ? v : `+${v}`))
+    .transform((v) => (v.startsWith("+") || v.length < 12 ? v : `+${v}`))
     .pipe(z.string().regex(/^\+[1-9]\d{9,14}$/, "precisa ser um número com código do país")),
   // O `{token}` é o que o `check` da migration 0381 também cobra: sem ele o
   // ref não tem onde entrar, e a captura viraria um redirecionador mudo.

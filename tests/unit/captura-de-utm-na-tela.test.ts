@@ -101,6 +101,32 @@ describe("updateCapturaDeUtm", () => {
     expect(upserts).toHaveLength(0);
   });
 
+  it("celular brasileiro sem código do país é recusado, não vira número dos EUA", async () => {
+    // O caso acima cobre o formato de DEZ dígitos, extinto no celular desde o
+    // nono dígito. O formato em vigor tem ONZE (DDD 2 + 9), e com o piso do
+    // `+` automático em 11 ele passava: `11999999999` virava `+11999999999`,
+    // casava com a regex e era GRAVADO — um número dos Estados Unidos que
+    // existe. O tráfego pago da organização passaria a tocar o telefone de
+    // outra pessoa sem nada quebrar, que é exatamente o desastre que a guarda
+    // foi escrita para impedir.
+    const resultado = await updateCapturaDeUtm({ ...ENTRADA, whatsapp_e164: "11 99999-9999" });
+
+    expect(resultado.ok).toBe(false);
+    expect(resultado.ok === false && resultado.error).toBe("validation_failed");
+    expect(upserts).toHaveLength(0);
+  });
+
+  it("o `+` automático só começa em doze dígitos", async () => {
+    // A outra borda do mesmo conserto, para o piso não subir de novo por
+    // engano: nenhum número brasileiro LOCAL chega a doze dígitos, então daqui
+    // para cima o digitado só pode estar carregando código de país (55 + fixo
+    // de dez, aqui).
+    const resultado = await updateCapturaDeUtm({ ...ENTRADA, whatsapp_e164: "551199999999" });
+
+    expect(resultado).toEqual({ ok: true });
+    expect(upserts[0]?.valores.whatsapp_e164).toBe("+551199999999");
+  });
+
   it("número digitado sem o `+` é normalizado, não recusado", async () => {
     // Quem copia do WhatsApp cola sem o `+`; recusar isso seria atrito puro,
     // e a coluna tem formato único (E.164 com `+`, igual a contacts.phone_number).
