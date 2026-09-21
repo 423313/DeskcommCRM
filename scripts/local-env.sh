@@ -88,6 +88,14 @@ generate() {
     fi
   fi
 
+  # A chave do WAHA nasce ALEATÓRIA e é derivada UMA vez: o heredoc abaixo é
+  # sem aspas, então dois `$(openssl rand)` produziriam valores diferentes na
+  # chave e no hash, e o app tomaria 401. Sem knob: nenhum terceiro precisa
+  # conhecê-la, e um `${WAHA_API_KEY:-...}` herdaria a chave da nuvem de quem
+  # tiver a variável exportada no shell.
+  local waha_key
+  waha_key="$(openssl rand -hex 24)"
+
   local tmp
   tmp="$(mktemp "${ENV_FILE}.XXXXXX")"
   umask 077
@@ -112,8 +120,8 @@ AI_CRED_AES_KEY=$(openssl rand -base64 32)
 NUVEMSHOP_OAUTH_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 WAHA_API_BASE_URL=http://waha:3000
-WAHA_API_KEY=deskcomm-local-key
-WAHA_API_KEY_SHA512=$(printf '%s' 'deskcomm-local-key' | sha512sum | awk '{print $1}')
+WAHA_API_KEY=$waha_key
+WAHA_API_KEY_SHA512=$(printf '%s' "$waha_key" | sha512sum | awk '{print $1}')
 WAHA_HMAC_SECRET=$(openssl rand -hex 32)
 WAHA_WEBHOOK_REQUIRE_SIGNATURE=false
 WHATSAPP_RESTART_ALL_SESSIONS=True

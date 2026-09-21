@@ -9,6 +9,7 @@ INSTALADOR="$ROOT_DIR/ubuntu-local-installer.sh"
 STACK="$ROOT_DIR/scripts/local-stack.sh"
 SUPA="$ROOT_DIR/scripts/local-supabase.sh"
 ENVGEN="$ROOT_DIR/scripts/local-env.sh"
+COMPOSE="$ROOT_DIR/docker-compose.local.yml"
 FAILS=0
 
 check() {
@@ -40,6 +41,53 @@ check "a senha do dono nasce aleatória" bash -c '
   grep -q "openssl rand" <<<"$(grep "^export OWNER_PASSWORD=" "$1")"' _ "$INSTALADOR"
 check "quem quiser escolher a senha consegue (OWNER_PASSWORD respeitado)" bash -c '
   grep -q "OWNER_PASSWORD:-" "$1"' _ "$INSTALADOR"
+
+# ── A chave da API do WAHA ─────────────────────────────────────────────────
+#
+# Ela comanda a sessão de WhatsApp. Literal no arquivo = publicada NESTE
+# repositório — o mesmo argumento da senha do dono, e pior, porque o painel do
+# WAHA fica de pé. As duas checagens abaixo EXECUTAM as linhas em vez de as
+# lerem: além do literal, elas pegam o erro irmão de derivar a chave e o hash
+# de dois `openssl rand` diferentes, que passa em qualquer grep e rende 401.
+#
+# `sha512sum` é do GNU e não existe no macOS, onde este teste roda antes de
+# chegar ao Ubuntu do CI; o stub abaixo o troca por um marcador visível, porque
+# o que se prova aqui é a PROCEDÊNCIA do hash, não o algoritmo.
+check "instalador: o hash do WAHA deriva da chave, e a chave nasce aleatória" bash -c '
+  sha512sum() { sed "s/^/marca:/"; }
+  eval "$(grep -E "^WAHA_KEY(_HASH)?=" "$1")"
+  [[ "${WAHA_KEY:-}" =~ ^[0-9a-f]{48}$ ]] || exit 1
+  [[ "${WAHA_KEY_HASH:-}" == "marca:$WAHA_KEY" ]]
+' _ "$INSTALADOR"
+
+check "gerador de .env.local: o hash do WAHA deriva da MESMA chave" bash -c '
+  sha512sum() { sed "s/^/marca:/"; }
+  waha_key="canario-0123456789"
+  eval "$(grep -E "^WAHA_API_KEY(_SHA512)?=" "$1")"
+  [[ "${WAHA_API_KEY:-}" == "canario-0123456789" ]] || exit 1
+  [[ "${WAHA_API_KEY_SHA512:-}" == "marca:canario-0123456789" ]]
+' _ "$ENVGEN"
+
+check "gerador de .env.local: a chave do WAHA nasce aleatória" bash -c '
+  grep -qF "waha_key=\"\$(openssl rand" "$1"' _ "$ENVGEN"
+
+# ── O painel do WAHA não atende a rede ─────────────────────────────────────
+#
+# O dashboard está LIGADO neste compose e tem autenticação própria, com o
+# padrão do WAHA — a chave da API não o protege. Publicar a porta sem endereço
+# de bind entrega o comando da sessão de WhatsApp a qualquer máquina da rede da
+# VM. `docker-compose.prod.yml` fecha o mesmo buraco desligando o dashboard e
+# não publicando porta nenhuma; aqui ele serve quem desenvolve, em 127.0.0.1.
+#
+# Range de awk (`/^  waha:/,/^  [a-z]/`) NÃO serve: `  waha:` casa com o próprio
+# padrão de fim e o bloco colapsa em 1 linha — sonda quebrada devolve zero e
+# lê exatamente como "nenhuma porta exposta". Por isso a flag `f`, e por isso a
+# checagem de controle logo abaixo.
+BLOCO_WAHA='awk "/^  waha:/{f=1;next} f && /^  [a-z]/{f=0} f"'
+check "a sonda enxerga o bloco do WAHA no compose" bash -c '
+  eval "$2" "$1" | grep -q WAHA_DASHBOARD_ENABLED' _ "$COMPOSE" "$BLOCO_WAHA"
+check "nenhuma porta do WAHA é publicada sem endereço de bind" bash -c '
+  ! eval "$2" "$1" | grep -qE "^ +- \"[0-9]+:[0-9]+\"$"' _ "$COMPOSE" "$BLOCO_WAHA"
 
 # ── O .env.local de quem já usa o clone ────────────────────────────────────
 #

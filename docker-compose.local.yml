@@ -86,7 +86,15 @@ services:
     image: devlikeapro/waha:latest-2026.7.2
     restart: unless-stopped
     ports:
-      - "3030:3000"
+      # 127.0.0.1 e não 0.0.0.0: o dashboard do WAHA está ligado logo abaixo e
+      # comanda a sessão de WhatsApp — ele tem autenticação própria, com padrão
+      # do WAHA, que a chave da API não protege. Sem endereço de bind, qualquer
+      # máquina da rede da VM alcançaria esse painel. `docker-compose.prod.yml`
+      # resolve o mesmo problema desligando o dashboard ("nunca expor o
+      # dashboard num template público", linha 156) e não publicando porta
+      # nenhuma para o WAHA; aqui ele fica de pé para quem desenvolve, mas só
+      # atende de dentro da própria máquina (de fora, `ssh -L 3030:localhost:3030`).
+      - "127.0.0.1:3030:3000"
     environment:
       # O WAHA recebe o hash com o prefixo para hashear a chave plaintext
       # enviada pelo app em X-Api-Key.

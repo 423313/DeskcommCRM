@@ -95,7 +95,13 @@ CHAVE_AI=$(openssl rand -base64 32)
 INTERNAL_SEC=$(openssl rand -hex 32)
 IMPERSONATE_SEC=$(openssl rand -base64 32)
 WAHA_HMAC=$(openssl rand -hex 32)
-WAHA_KEY="deskcomm-local-key"
+# A chave da API do WAHA NASCE ALEATÓRIA, pelo mesmo motivo da senha do dono:
+# a que estava aqui era literal e está publicada neste repositório, e ela
+# comanda a sessão de WhatsApp. Sem knob de propósito — nenhum terceiro
+# precisa conhecê-la (o app manda o plaintext, o WAHA compara o sha512 abaixo),
+# e um `${WAHA_API_KEY:-...}` herdaria em silêncio a chave da nuvem de quem
+# tiver a variável exportada no shell.
+WAHA_KEY=$(openssl rand -hex 24)
 WAHA_KEY_HASH=$(echo -n "$WAHA_KEY" | sha512sum | awk '{print $1}')
 
 step "Configurando .env.local (credenciais locais, não versionadas)..."
