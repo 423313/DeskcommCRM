@@ -13,3 +13,5 @@ requisição vai, e os SDKs da Anthropic e da OpenAI leem `ANTHROPIC_BASE_URL` d
 ambiente por conta própria, apontando o destino para `localhost`.
 
 O teste passa a isolar essas variáveis, e a devolvê-las depois.
+
+Contribuição de @lussandro (#1427).

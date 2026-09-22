@@ -13,3 +13,5 @@ deslogar, e as mensagens dela seguem as regras de modelo aprovado.
 A lista continua mostrando TODOS os números da organização, inclusive o oficial:
 nada foi escondido nem filtrado. A etiqueta é informação, e o estado da conexão
 (Conectado, Caiu, …) segue no badge de sempre, ao lado dela.
+
+Contribuição de @webtecnica (#1442).
