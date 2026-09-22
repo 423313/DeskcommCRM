@@ -291,14 +291,14 @@ export async function resolveConversationTurn(
   // curta em meio a fluxo) — nunca o histórico completo. Só busca quando há
   // signal: sem inbound (regra 6) o classificador nem roda.
   let recentMessages: ClassifierContextMessage[] = [];
-  if (signalRow !== null) {
-    const { rows: contextRows } = await db.query<{ direction: 'inbound' | 'outbound'; body: string | null }>(
+  if (signalRow !== null && signal !== null) {
+    const { rows: contextRows } = await db.query<ClassifierContextMessage>(
       `select direction,body from messages
        where organization_id=$1 and conversation_id=$2 and body is not null and id<>$3
        order by sent_at desc,created_at desc,id desc limit $4`,
       [input.tenantId, input.conversationId, signalRow.id, CLASSIFIER_CONTEXT_MESSAGES],
     );
-    recentMessages = contextRows.reverse().map((r) => ({ direction: r.direction, body: r.body! }));
+    recentMessages = contextRows.reverse();
   }
 
   return resolveTurnAgent(db, llmCfg, {
