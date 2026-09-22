@@ -1,6 +1,6 @@
 /**
  * A linha "campanhas" da matriz de suspensão (§6a), agora que a superfície
- * EXISTE (migration 0343).
+ * EXISTE (migration 0375).
  *
  * Este arquivo substitui `suspensao-campanha-nao-existe.test.ts`, que era o
  * congelamento: ele ficava vermelho no dia em que alguém criasse disparo em

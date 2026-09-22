@@ -305,7 +305,7 @@ export async function garantirLeadDaConversa(
   // regra que o cabeçalho deste arquivo já declara.
   const ehCliente =
     contato?.first_service_at != null && (await lerClientePelaAgenda(db, organizationId));
-  // A CAMPANHA ganha do padrão quando declara funil (migration 0346): é a
+  // A CAMPANHA ganha do padrão quando declara funil (migration 0378): é a
   // escolha mais específica, e quem montou a campanha sabe onde quer medir o
   // resultado dela. Campanha sem funil declarado, ou conversa que não nasceu de
   // campanha, seguem a regra da 0262 sem diferença nenhuma.

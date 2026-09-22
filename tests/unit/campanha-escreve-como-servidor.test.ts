@@ -5,7 +5,7 @@
  *
  * ## O defeito, medido em 19/09/2026
  *
- * A migration 0343 concede ao papel `authenticated` apenas `SELECT` em
+ * A migration 0375 concede ao papel `authenticated` apenas `SELECT` em
  * `campaigns` e `campaign_recipients` — a tela lê, só o servidor escreve. As
  * rotas de criar e editar usavam `createClient()` (a sessão do usuário, que fala
  * com o PostgREST como `authenticated`), e o banco respondia:
@@ -79,7 +79,7 @@ describe("campanha: quem escreve é o servidor", () => {
     expect(
       infratores,
       "Handler de campanha que escreve com a sessão do usuário. O papel " +
-        "`authenticated` só tem SELECT (migration 0343), então o banco recusa com " +
+        "`authenticated` só tem SELECT (migration 0375), então o banco recusa com " +
         '"permission denied for table campaigns" e o operador vê "Erro interno". ' +
         "Use `createAdminClient()` e filtre `organization_id` à mão, resolvido do " +
         "`requireRole()` — nunca do corpo da requisição.",

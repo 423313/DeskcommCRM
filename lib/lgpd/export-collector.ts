@@ -493,7 +493,7 @@ export interface ExportPayload {
   passagens: PassagemDeAtendimentoRow[];
   avisos_de_caso: AvisoDeCasoEntregaRow[];
   /**
-   * Campanhas que falaram com o titular (migration 0343).
+   * Campanhas que falaram com o titular (migration 0375).
    *
    * Entra pelo mesmo motivo de `voice_calls`: o trigger
    * `trg_redigir_campanhas_anonimizado` APAGA o texto e o telefone destas linhas
@@ -950,7 +950,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
-  // Campanhas — `contact_id` direto em `campaign_recipients` (migration 0343).
+  // Campanhas — `contact_id` direto em `campaign_recipients` (migration 0375).
   let campaign_recipients: CampaignRecipientRow[] = [];
   if (contactId) {
     const { data, error } = await admin
