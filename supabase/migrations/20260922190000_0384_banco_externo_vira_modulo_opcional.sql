@@ -16,13 +16,22 @@
 --
 -- ─── A ATUALIZAÇÃO não desliga ninguém calado ───────────────────────────────
 -- Instalação que JÁ cadastrou conexão estava usando o módulo. Para ela, a chave
--- nasce LIGADA aqui; para todas as outras, não há linha, e o módulo some.
+-- nasce LIGADA aqui; para todas as outras, nasce `desligado`, e o módulo some.
 --
--- `on conflict do nothing`, e não `do update`: o `update.sh` reaplica o baseline
--- a cada atualização, e a linha que uma pessoa gravou (inclusive `desligado`)
--- nunca é reescrita. Idempotente e sem mudar escolha humana.
+-- A linha é gravada SEMPRE, ligada ou desligada — nunca "só se houver conexão".
+-- O `update.sh` reaplica o baseline a cada atualização; se esta primeira vez não
+-- deixasse linha, uma conexão gravada depois (o admin de UMA empresa escreve em
+-- `external_db_connections` direto pelo PostgREST, com o módulo desligado)
+-- ligaria o módulo para a instalação inteira na atualização seguinte, passando
+-- por cima de quem administra o servidor.
+--
+-- `on conflict do nothing`, e não `do update`: da primeira aplicação em diante a
+-- linha existe, e nenhuma reaplicação a reescreve — nem a que a tela gravou.
+-- Idempotente, e só a tela muda a escolha.
 
 insert into public.platform_config (chave, valor, eh_segredo, semeado_do_env)
-select 'MODULO_BANCO_EXTERNO', 'ligado', false, false
-where exists (select 1 from public.external_db_connections)
+select 'MODULO_BANCO_EXTERNO',
+       case when exists (select 1 from public.external_db_connections)
+            then 'ligado' else 'desligado' end,
+       false, false
 on conflict (chave) do nothing;
