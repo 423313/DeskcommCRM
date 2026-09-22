@@ -16,3 +16,5 @@ O classificador agora recebe também as últimas mensagens da conversa (não o
 histórico inteiro) só pra desambiguar respostas curtas — continua rodando a
 cada turno, com o mesmo custo por chamada de antes. Quem não usa o roteador
 por intenção não é afetado.
+
+Trabalho de @marcelovolei15, recortado do PR #1450.
