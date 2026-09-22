@@ -27,9 +27,9 @@ function PasswordStrength({ password }: { password: string }) {
   const barColor = [
     "bg-muted",
     "bg-destructive",
-    "bg-amber-500",
-    "bg-sky-500",
-    "bg-emerald-600",
+    "bg-warning",
+    "bg-info",
+    "bg-success",
   ][score] ?? "bg-muted";
 
   return (
@@ -61,9 +61,7 @@ function PasswordStrength({ password }: { password: string }) {
           <li
             key={requirement.label}
             className={
-              met[index]
-                ? "text-emerald-700 dark:text-emerald-400"
-                : "text-muted-foreground"
+              met[index] ? "text-success-fg" : "text-muted-foreground"
             }
           >
             <span aria-hidden>{met[index] ? "✓" : "•"}</span> {t(requirement.label)}
