@@ -48,11 +48,11 @@ function numero(cru: string): number {
 }
 
 function lerUnico(arquivo: string, padrao: RegExp, oQue: string): number {
-  const achado = padrao.exec(readFileSync(arquivo, "utf8"));
+  const achado = padrao.exec(readFileSync(arquivo, "utf8"))?.[1];
   // Sonda que não acha devolve `undefined` e faria toda a varredura passar em
   // silêncio: o instrumento quebrado lê igual a "está tudo certo".
-  expect(achado?.[1], `não achei ${oQue} em ${arquivo} — a sonda deste gate cegou`).toBeTruthy();
-  return numero(achado![1]);
+  if (!achado) throw new Error(`não achei ${oQue} em ${arquivo} — a sonda deste gate cegou`);
+  return numero(achado);
 }
 
 describe("spec de e2e que loga duas vezes declara o próprio teto", () => {
@@ -79,7 +79,7 @@ describe("spec de e2e que loga duas vezes declara o próprio teto", () => {
 
   it.each(specs.map(({ nome }) => nome))("%s declara um teto que cabe o segundo login", (nome) => {
     const fonte = specs.find((s) => s.nome === nome)!.fonte;
-    const tetos = [...fonte.matchAll(TETO_DECLARADO)].map((m) => numero(m[1] ?? m[2]));
+    const tetos = [...fonte.matchAll(TETO_DECLARADO)].map((m) => numero(m[1] ?? m[2] ?? ""));
 
     // `Math.min()` de lista vazia é `Infinity`, que passaria no `toBeGreaterThan`
     // — o caso SEM teto nenhum, que é exatamente o defeito, leria como aprovado.
