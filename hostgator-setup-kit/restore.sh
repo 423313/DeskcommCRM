@@ -32,4 +32,19 @@ if [ -f "$WAHA_TAR" ]; then
     && c_grn "✓ sessões do WhatsApp restauradas" || c_ylw "⚠ Falha ao restaurar sessões do WhatsApp"
 fi
 
+# Single-server: os anexos voltam junto com o banco (ver backup.sh).
+if [ "${SINGLE_SERVER:-0}" = "1" ]; then
+  STORAGE_TAR="$(dirname "$DUMP")/storage-$(basename "$DUMP" .sql.gz | sed 's/^db-//').tgz"
+  if [ -f "$STORAGE_TAR" ]; then
+    step "Restaurando os arquivos anexados de $STORAGE_TAR"
+    docker run --rm -v "$(dir_do_supabase)/volumes/storage:/data" \
+      -v "$(cd "$(dirname "$STORAGE_TAR")" && pwd):/in:ro" alpine:3.20 \
+      sh -c "find /data -mindepth 1 -delete && tar xzf /in/$(basename "$STORAGE_TAR") -C /data" \
+      && c_grn "✓ anexos restaurados" \
+      || die "Falha ao restaurar os anexos. O banco JÁ foi restaurado: repita o restore."
+  else
+    c_ylw "⚠ Não achei $(basename "$STORAGE_TAR") ao lado do dump: o banco voltou, os ANEXOS não."
+  fi
+fi
+
 c_ylw "Reinicie o app: docker compose $(dc_files) restart app"

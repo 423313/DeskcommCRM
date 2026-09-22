@@ -37,6 +37,19 @@ done
 # em 401. Ver `recusar_projeto_de_outra_arvore` em _common.sh.
 recusar_projeto_de_outra_arvore || die "Atualização interrompida para não quebrar a instalação que está no ar."
 
+# Single-server: o Supabase desta VPS também tem dono. E o e-mail de acesso
+# (GoTrue) acompanha o SMTP do CRM AQUI, antes da decisão de versão: é este
+# comando que o instalador ensina a rodar depois de configurar /admin/email, e
+# "já está na versão mais recente" sairia sem entregar a troca.
+if [ "${SINGLE_SERVER:-0}" = "1" ]; then
+  recusar_supabase_de_outra_arvore || die "Atualização interrompida para não mexer no Supabase de outra instalação."
+  if sincronizar_smtp_do_gotrue; then
+    dc_supabase up -d --no-deps auth >/dev/null 2>&1 || c_ylw "⚠ Não consegui reiniciar o auth do Supabase com o SMTP do CRM."
+  else
+    c_ylw "⚠ Sem SMTP no CRM: 'esqueci a senha' e a confirmação de cadastro não enviam e-mail. Configure em /admin/email e rode o update.sh de novo."
+  fi
+fi
+
 # ── 0. Liga o agente da tela ANTES de qualquer decisão de versão ─────────────
 # Instalar o cron aqui, e não no fim, é o que faz o bootstrap ter fim: os
 # caminhos "já está na versão mais recente" e "essa versão é anterior à sua"
@@ -170,6 +183,12 @@ source "$KIT_DIR/_common.sh"
 # manutenção chegaria uma atualização atrasada, que é exatamente o defeito que a
 # releitura existe para fechar.
 source "$KIT_DIR/manutencao.sh"
+
+# Single-server: o Supabase vai para a versão pinada no código novo ANTES do
+# banco (o passo 4 pausa peças dele, e um `up` depois as religaria).
+if [ "${SINGLE_SERVER:-0}" = "1" ]; then
+  atualizar_supabase_single_server || die "O Supabase desta VPS não subiu (erro acima). NÃO mexi no banco do CRM."
+fi
 
 [ -n "${DESKCOMM_AGENT_REPORT:-}" ] && eval "${DESKCOMM_AGENT_REPORT_CMD}" codigo
 
