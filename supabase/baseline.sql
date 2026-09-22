@@ -35425,6 +35425,20 @@ create trigger trg_ad_hierarchy_cache_updated_at
   before update on public.ad_hierarchy_cache
   for each row execute function public.fn_set_updated_at();
 
+-- ---- Link da mídia salvo no modelo (migration 0382) ----
+-- Valores que o operador salvou para reaproveitar em todo disparo do modelo,
+-- chaveados como template_values. Só link de mídia. Sobrevive à sincronização,
+-- que não lista esta coluna no upsert. Ver o cabeçalho da migration 0382.
+alter table public.meta_templates
+  add column if not exists saved_values jsonb not null default '{}'::jsonb;
+alter table public.meta_templates
+  drop constraint if exists meta_templates_saved_values_objeto;
+alter table public.meta_templates
+  add constraint meta_templates_saved_values_objeto
+  check (jsonb_typeof(saved_values) = 'object');
+comment on column public.meta_templates.saved_values is
+  'Valores que o operador salvou para reaproveitar em todo disparo deste modelo, chaveados como template_values (slotKey: header:1, button0:1). Só link de mídia: a rota de escrita recusa valor de texto, que costuma ser dado de pessoa. Sobrevive à sincronização, que não lista esta coluna no upsert.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
