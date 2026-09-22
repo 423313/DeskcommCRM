@@ -31,7 +31,7 @@ function pool(respostas: Array<{ match: (sql: string) => boolean; rows: unknown[
 }
 
 const pointerQualifica = {
-  match: (sql: string) => sql.includes("inbound_after_silence"),
+  match: (sql: string) => sql.includes("followup_flow_pointers"),
   rows: [
     {
       id: POINTER,
@@ -93,8 +93,10 @@ const conversaLivre = {
   ],
 };
 
+// "waiting_reply" só aparece na consulta de vivos; a do evento de inscrição
+// também cita followup_enrollments (join) e não pode casar aqui.
 const semVivo = {
-  match: (sql: string) => sql.includes("followup_enrollments"),
+  match: (sql: string) => sql.includes("waiting_reply"),
   rows: [],
 };
 
@@ -165,13 +167,40 @@ describe("deveCederTurnoAoRetorno", () => {
     ).toBe(false);
   });
 
+  it("o produtor já inscreveu por ESTA mensagem: cede, mesmo com a inscrição viva", async () => {
+    // Caminho real: pos-entrada drena o event_log (o produtor inscreve e avança
+    // o fluxo) ANTES de pedir o despacho do agente. Quando o drain chega aqui,
+    // a inscrição deste retorno já está viva no slot do contato.
+    const inscritoPorEsta = {
+      match: (sql: string) => sql.includes("enrolled_by_inbound_after_silence"),
+      rows: [{ "?column?": 1 }],
+    };
+    const vivoDesteRetorno = {
+      match: (sql: string) => sql.includes("waiting_reply"),
+      rows: [{ pointer_id: POINTER }],
+    };
+    expect(
+      await deveCederTurnoAoRetorno(
+        pool([pointerQualifica, conversaLivre, inscritoPorEsta, vivoDesteRetorno, inboundOntem, ninguemArma, grafoDeTextoFixo]),
+        pedido,
+      ),
+    ).toBe(true);
+    // Controle: o mesmo slot vivo SEM o evento desta mensagem é outra inscrição — não cede.
+    expect(
+      await deveCederTurnoAoRetorno(
+        pool([pointerQualifica, conversaLivre, vivoDesteRetorno, inboundOntem, ninguemArma, grafoDeTextoFixo]),
+        pedido,
+      ),
+    ).toBe(false);
+  });
+
   it("outro enrollment vivo não cede — este gatilho não enrollaria", async () => {
     expect(
       await deveCederTurnoAoRetorno(
         pool([
           pointerQualifica,
           conversaLivre,
-          { match: (sql: string) => sql.includes("followup_enrollments"), rows: [{ pointer_id: "outro" }] },
+          { match: (sql: string) => sql.includes("waiting_reply"), rows: [{ pointer_id: "outro" }] },
           inboundOntem,
           agenteArma,
           grafoDeTextoFixo,

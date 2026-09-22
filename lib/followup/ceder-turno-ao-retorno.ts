@@ -111,6 +111,24 @@ export async function deveCederTurnoAoRetorno(
     const agora = pedido.agora ?? new Date();
     if (estado.is_group || estado.is_blocked || humanoNoComando(estado, agora)) return false;
 
+    // O produtor costuma rodar ANTES deste drain: `aplicarEfeitosPosEntrada`
+    // drena o event_log na própria requisição e só depois pede o despacho do
+    // agente. Aí a inscrição que ESTA mensagem criou já está viva, e a checagem
+    // de "vivos" abaixo a confundiria com outro fluxo ocupando o slot. O
+    // produtor grava o `message_id` no evento de inscrição: se ele existe, o
+    // fluxo já é a voz deste retorno.
+    const { rows: inscritoPorEsta } = await pool.query(
+      `select 1 from followup_enrollments e
+         join followup_enrollment_events ev
+           on ev.organization_id = e.organization_id and ev.enrollment_id = e.id
+        where e.organization_id = $1 and e.contact_id = $2
+          and ev.event_type = 'enrolled_by_inbound_after_silence'
+          and ev.payload->>'message_id' = $3
+        limit 1`,
+      [pedido.organizationId, pedido.contactId, pedido.messageId],
+    );
+    if (inscritoPorEsta[0]) return true;
+
     const { rows: vivos } = await pool.query<{ pointer_id: string }>(
       `select pointer_id from followup_enrollments
         where organization_id = $1 and contact_id = $2
