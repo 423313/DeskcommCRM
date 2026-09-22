@@ -2476,6 +2476,19 @@ export const DICIONARIO: Traducoes = {
   "Ligado, cada envio passa por uma conferência de modelo para não prometer o que a empresa não cumpre. Custa uma chamada de modelo por envio.": {
     es: "Si está activado, cada envío pasa por una verificación con un modelo para no prometer lo que la empresa no cumple. Cuesta una llamada al modelo por envío.",
   },
+  // ─── app/admin/(protected)/sistema/_form.tsx (módulos opcionais, doc 37) ───
+  "Módulos opcionais": {
+    es: "Módulos opcionales",
+  },
+  "Recursos que a maioria das instalações não usa. Desligados, eles não aparecem para nenhuma empresa daqui.": {
+    es: "Funciones que la mayoría de las instalaciones no usa. Desactivadas, no aparecen para ninguna empresa de esta instalación.",
+  },
+  "Banco de dados externo": {
+    es: "Base de datos externa",
+  },
+  "Ligado, cada empresa pode conectar o banco de outro sistema (um ERP, outro CRM) para o agente consultar. Isso guarda a senha daquele banco neste servidor e abre conexão com ele. Desligado, a tela, o menu e as ferramentas do agente somem.": {
+    es: "Si está activado, cada empresa puede conectar la base de datos de otro sistema (un ERP, otro CRM) para que el agente la consulte. Eso guarda la contraseña de esa base en este servidor y abre una conexión con ella. Si está desactivado, la pantalla, el menú y las herramientas del agente desaparecen.",
+  },
   "Abrimos um aviso na Central de avisos. A IA continua respondendo normalmente.": {
     es: "Abrimos un aviso en la Central de avisos. La IA sigue respondiendo normalmente.",
   },

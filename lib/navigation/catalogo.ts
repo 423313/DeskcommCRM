@@ -1,4 +1,5 @@
 import type { Role } from "@/lib/auth/types";
+import type { ModuloOpcional } from "@/lib/instalacao/modulos";
 
 /**
  * Registro de navegação — a ÚNICA lista de destinos do app do tenant.
@@ -43,6 +44,12 @@ export interface NavMetadata {
   /** Ausente = só no hub. `true` = uso diário, sobe para o sidebar. */
   sidebar?: boolean;
   healthDot?: boolean;
+  /**
+   * A porta de um MÓDULO OPCIONAL da instalação (`lib/instalacao/modulos.ts`).
+   * Com o módulo desligado ela some do menu, do hub e do ⌘K — para todo papel.
+   * É apresentação, como o resto deste arquivo: quem recusa é a tela e a rota.
+   */
+  modulo?: ModuloOpcional;
 }
 
 /**
@@ -868,6 +875,10 @@ export const NAV_CATALOG = [
     section: "Dados e acesso",
     // SEM `sidebar`: o menu de Organização já estourou a dobra uma vez e hub é
     // onde se agrupa por uso. Configurar fonte de dados é tarefa de uma vez.
+    //
+    // Módulo opcional da instalação, desligado por padrão (doc 37): a porta só
+    // existe onde quem administra o servidor o ligou, em `/admin/sistema`.
+    modulo: "banco_externo",
   },
 ] as const satisfies readonly NavMetadata[];
 
