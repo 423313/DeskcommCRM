@@ -2476,6 +2476,19 @@ export const DICIONARIO: Traducoes = {
   "Ligado, cada envio passa por uma conferência de modelo para não prometer o que a empresa não cumpre. Custa uma chamada de modelo por envio.": {
     es: "Si está activado, cada envío pasa por una verificación con un modelo para no prometer lo que la empresa no cumple. Cuesta una llamada al modelo por envío.",
   },
+  // ─── app/admin/(protected)/sistema/_form.tsx (módulos opcionais, doc 37) ───
+  "Módulos opcionais": {
+    es: "Módulos opcionales",
+  },
+  "Recursos que a maioria das instalações não usa. Desligados, eles não aparecem para nenhuma empresa daqui.": {
+    es: "Funciones que la mayoría de las instalaciones no usa. Desactivadas, no aparecen para ninguna empresa de esta instalación.",
+  },
+  "Banco de dados externo": {
+    es: "Base de datos externa",
+  },
+  "Ligado, cada empresa pode conectar o banco de outro sistema (um ERP, outro CRM) para o agente consultar. Isso guarda a senha daquele banco neste servidor e abre conexão com ele. Desligado, a tela, o menu e as ferramentas do agente somem.": {
+    es: "Si está activado, cada empresa puede conectar la base de datos de otro sistema (un ERP, otro CRM) para que el agente la consulte. Eso guarda la contraseña de esa base en este servidor y abre una conexión con ella. Si está desactivado, la pantalla, el menú y las herramientas del agente desaparecen.",
+  },
   "Abrimos um aviso na Central de avisos. A IA continua respondendo normalmente.": {
     es: "Abrimos un aviso en la Central de avisos. La IA sigue respondiendo normalmente.",
   },
@@ -8540,7 +8553,16 @@ export const DICIONARIO: Traducoes = {
   "preço não reconhecido (": { es: "precio no reconocido (" },
   " — escreva assim: 5.499,00": { es: " — escríbelo así: 5.499,00" },
   "custo não reconhecido (": { es: "costo no reconocido (" },
-  "código repetido na planilha (": { es: "código repetido en la hoja (" },
+  'código repetido na planilha ("{codigo}") — já está na linha {linha}': {
+    es: 'código repetido en la hoja ("{codigo}") — ya está en la fila {linha}',
+  },
+  'código repetido na planilha ("{codigo}") — já está na linha {linha}, escrito "{anterior}". Maiúsculas e minúsculas não mudam o código.': {
+    es: 'código repetido en la hoja ("{codigo}") — ya está en la fila {linha}, escrito "{anterior}". Mayúsculas y minúsculas no cambian el código.',
+  },
+  ": este código já está no catálogo escrito ": { es: ": este código ya está en el catálogo escrito " },
+  ". Maiúsculas e minúsculas não mudam o código — escreva igual ao do catálogo para atualizar o produto.": {
+    es: ". Mayúsculas y minúsculas no cambian el código — escríbelo igual que en el catálogo para actualizar el producto.",
+  },
   "nenhuma coluna": { es: "ninguna columna" },
 
   // ─── Análise → Meta Ads e Configurações → Meta Ads (0214) ───
@@ -9249,7 +9271,9 @@ export const DICIONARIO: Traducoes = {
   "Aplicar marcadores": { es: "Aplicar etiquetas" },
   "Aprendizado do assistente": { es: "Aprendizaje del asistente" },
   "Arquivar uma etapa do funil": { es: "Archivar una etapa del embudo" },
+  "Banco de dados conectado": { es: "Base de datos conectada" },
   "Base de conhecimento": { es: "Base de conocimiento" },
+  "Buscar dados no banco conectado": { es: "Buscar datos en la base conectada" },
   "Cadastro de clientes": { es: "Registro de clientes" },
   "Cancelar um retorno agendado": { es: "Cancelar un seguimiento programado" },
   "Catálogo da loja": { es: "Catálogo de la tienda" },
@@ -9309,6 +9333,9 @@ export const DICIONARIO: Traducoes = {
   },
   "Interrompe o atendimento automático e chama uma pessoa, entregando um resumo do que já aconteceu na conversa.": {
     es: "Interrumpe la atención automática y llama a una persona, con un resumen de lo que ya pasó en la conversación.",
+  },
+  "Lê o conteúdo de uma tabela do banco que você conectou, com filtros, para o assistente responder ao cliente com o dado real em vez de estimar.": {
+    es: "Lee el contenido de una tabla de la base que conectaste, con filtros, para que el asistente responda al cliente con el dato real en lugar de estimar.",
   },
   "Ler o histórico da conversa": { es: "Leer el historial de la conversación" },
   "Ler um chamado e o que a pessoa decidiu": { es: "Leer un caso y lo que la persona decidió" },
@@ -9388,6 +9415,9 @@ export const DICIONARIO: Traducoes = {
   "Mostra quais pessoas da equipe estão em atendimento neste momento, quantas conversas cada uma já tem e quem ainda tem espaço para receber mais uma.": {
     es: "Muestra qué personas del equipo están en atención en este momento, cuántas conversaciones tiene cada una y quién todavía tiene espacio para recibir una más.",
   },
+  "Mostra quais tabelas e campos existem no banco de dados que você conectou, para o assistente saber onde procurar o dado antes de responder.": {
+    es: "Muestra qué tablas y campos existen en la base de datos que conectaste, para que el asistente sepa dónde buscar el dato antes de responder.",
+  },
   "Mostra quantas pessoas estão esperando atendimento agora e há quanto tempo, para priorizar quem espera mais.": {
     es: "Muestra cuántas personas están esperando atención ahora y cuánto tiempo llevan así, para priorizar a quien espera más.",
   },
@@ -9445,6 +9475,7 @@ export const DICIONARIO: Traducoes = {
   "Ver as entradas automáticas de contatos": { es: "Ver las entradas automáticas de contactos" },
   "Ver as regras automáticas": { es: "Ver las reglas automáticas" },
   "Ver as respostas prontas": { es: "Ver las respuestas rápidas" },
+  "Ver as tabelas do banco conectado": { es: "Ver las tablas de la base conectada" },
   "Ver horários livres na agenda": { es: "Ver horarios libres en la agenda" },
   "Ver o que a empresa atende": { es: "Ver lo que la empresa atiende" },
   "Ver o que as regras dispararam": { es: "Ver lo que las reglas dispararon" },

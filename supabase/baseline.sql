@@ -36209,6 +36209,22 @@ create trigger trg_external_db_connections_audit
   after insert or update or delete on public.external_db_connections
   for each row execute function public.fn_audit_log_row();
 
+-- ---- o banco externo vira módulo opcional da instalação (migration 0384) ----
+-- Doc 37: desligado por padrão, ligado em /admin/sistema. A chave é a linha
+-- `MODULO_BANCO_EXTERNO` de `platform_config` (0341, bloco acima); sem linha =
+-- desligado. Quem já tinha conexão cadastrada nasce LIGADO, para a atualização
+-- não tirar a função calada; as outras nascem `desligado`. A linha é gravada
+-- SEMPRE na primeira aplicação: sem ela, uma conexão escrita depois pelo admin
+-- de uma empresa ligaria o módulo para todos no `update.sh` seguinte. `do
+-- nothing`: da primeira vez em diante, só a tela muda a escolha. Vem DEPOIS das
+-- duas tabelas que lê.
+insert into public.platform_config (chave, valor, eh_segredo, semeado_do_env)
+select 'MODULO_BANCO_EXTERNO',
+       case when exists (select 1 from public.external_db_connections)
+            then 'ligado' else 'desligado' end,
+       false, false
+on conflict (chave) do nothing;
+
 -- ---- módulos instalados são reaplicados, depois de toda tabela do núcleo (migration 0340) ----
 --
 -- A provisionadora de cada módulo instalado roda de novo, sobre o núcleo já

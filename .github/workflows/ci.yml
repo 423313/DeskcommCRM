@@ -59,6 +59,31 @@ permissions:
 # O grupo é por PR (e não por branch) para reabrir um PR não colidir com o run
 # de outro que aponte para a mesma ref. Vigiado por
 # tests/unit/concorrencia-so-nos-jobs-pesados.test.ts.
+#
+# ── REENTRADA (aprovação, rerun) vai para o grupo DO SEU HEAD ────────────────
+#
+# O GitHub decide quem cancela quem pela ORDEM EM QUE O JOB ENTRA NA FILA, não
+# pela idade do commit. A primeira tentativa de um run nasce do push, na ordem
+# dos pushes, e aí "o último a entrar" é o head novo. A tentativa ≥ 2 não: ela
+# é um run VELHO voltando — aprovação de `action_required` (PR de fork de quem
+# contribui pela primeira vez; a aprovação vira a tentativa 2) ou rerun manual.
+# Com o grupo só por PR, esse run velho entrava por último e cancelava o head
+# ATUAL, que ficava só com `cancelled` e o agregador em `failure` — vermelho
+# para sempre, com o merge automático ligado, sem nenhum run novo para salvá-lo.
+#
+# Medido em 22/09/2026: #1446 (head 096b49930, run 35746675409) e #1431 (head
+# 1119e0ce8, run 35746393767). Os dois runs de cada PR estavam em
+# `action_required` e foram aprovados. O do head NOVO começou primeiro (#1446:
+# 15:21:04Z), o do head VELHO foi aprovado às 15:28:10Z, e o `verify-parte`
+# do head novo foi cancelado dois segundos depois ("Canceling since a higher
+# priority waiting request for ci-verify-parte1-1446 exists"). O run velho
+# terminou verde, medindo um commit que já não era o do PR.
+#
+# Por isso, em `pull_request`, a tentativa ≥ 2 ganha o sufixo
+# `-reentrada-<head>`: ela nunca cancela o head de outro commit, e reruns do
+# MESMO head continuam dividindo um grupo só. O custo é o run velho aprovado
+# rodar até o fim em paralelo, em vez de ser cancelado. A primeira tentativa
+# segue no grupo do PR, e o push novo continua cancelando o velho.
 
 jobs:
   # A suíte de unit em DUAS partes paralelas, e o check obrigatório `verify` é o
@@ -85,7 +110,7 @@ jobs:
     # porquê e a guarda contra fork: comentário do e2e-parte no e2e.yml.
     runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
     concurrency:
-      group: ${{ github.workflow }}-verify-parte${{ matrix.parte }}-${{ github.event.pull_request.number || github.ref }}
+      group: ${{ github.workflow }}-verify-parte${{ matrix.parte }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       # Sem fail-fast: um vermelho numa parte não esconde o da outra.
@@ -495,7 +520,7 @@ jobs:
     runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
     needs: [invariants-alcance]
     concurrency:
-      group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-${{ github.event.pull_request.number || github.ref }}
+      group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       # `false` e não o padrão (`true`): com `fail-fast`, a primeira major que
