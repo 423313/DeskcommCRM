@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger";
 import type { AuthUser } from "@/lib/auth/types";
 
 /**
@@ -48,6 +49,10 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
+// Nome no formato de `caminhoNovoDoLogo` (uuid.png): assim, quando `podeApagar`
+// recusa, a recusa vem do PREFIXO, e não de um nome malformado.
+const LOGO_DA_INSTALACAO = "platform/33333333-3333-4333-8333-333333333333.png";
+const LOGO_DA_ORGANIZACAO = `${ORG_ID}/44444444-4444-4444-8444-444444444444.png`;
 
 /** Só os 8 bytes que `farejarTipo` exige para reconhecer PNG (RFC 2083 §3.1). */
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
@@ -61,23 +66,27 @@ function arquivoPng(): File {
  * tocados, e simula sucesso em tudo. É ele que prova a ASSERÇÃO CENTRAL: para
  * `escopo=organizacao`, `platform_branding` nunca aparece em `fromChamadas`.
  */
-function criarAdminEspiao() {
+function criarAdminEspiao(logoAnteriorDaOrganizacao: string | null = null) {
   const fromChamadas: string[] = [];
   const rpcChamadas: Array<{ nome: string; args: unknown }> = [];
   const removeChamadas: string[] = [];
 
-  const builder = {
-    select: () => builder,
-    eq: () => builder,
-    // "sem logo anterior" — suficiente para provar QUAL tabela é tocada; o
-    // conteúdo do que já estava gravado não muda a ramificação medida aqui.
-    maybeSingle: async () => ({ data: null, error: null }),
-    upsert: async () => ({ error: null }),
-  };
-
   const client = {
     from: (tabela: string) => {
       fromChamadas.push(tabela);
+      // Sem logo anterior, `apagarAnterior()` sai antes de `podeApagar` e o
+      // `remove` nunca é chamado: qualquer asserção sobre `removeChamadas` passa
+      // em branco. O DELETE que prova o Storage precisa de um caminho gravado.
+      const linha =
+        tabela === "organizations" && logoAnteriorDaOrganizacao
+          ? { settings: { branding: { logo_path: logoAnteriorDaOrganizacao } } }
+          : null;
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        maybeSingle: async () => ({ data: linha, error: null }),
+        upsert: async () => ({ error: null }),
+      };
       return builder;
     },
     rpc: async (nome: string, args: unknown) => {
@@ -173,6 +182,47 @@ describe("DELETE /api/v1/marca/logo — escopo organizacao nunca apaga o prefixo
       espiao.removeChamadas.some((caminho) => caminho.startsWith("platform/")),
       `DELETE de escopo=organizacao removeu arquivo sob o prefixo da instalação: ${espiao.removeChamadas.join(", ")}`,
     ).toBe(false);
+  });
+
+  it("logo anterior adulterado para platform/ não é apagado, e a recusa fica no log", async () => {
+    vi.mocked(loadAuthUser).mockResolvedValue(usuarioAdminDeOrganizacao());
+    const espiao = criarAdminEspiao(LOGO_DA_INSTALACAO);
+    vi.mocked(createAdminClient).mockReturnValue(espiao.client as never);
+    const erro = vi.spyOn(logger, "error").mockImplementation(() => undefined);
+    onTestFinished(() => erro.mockRestore());
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(
+      new NextRequest("http://localhost/api/v1/marca/logo?escopo=organizacao", { method: "DELETE" }),
+    );
+
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect(
+      espiao.removeChamadas,
+      "DELETE de escopo=organizacao apagou o logo da INSTALAÇÃO a partir de um caminho adulterado",
+    ).toEqual([]);
+    expect(espiao.fromChamadas).not.toContain("platform_branding");
+    // Recusa silenciosa seria indistinguível de "não havia nada para apagar".
+    expect(erro).toHaveBeenCalledWith(
+      expect.stringContaining("recusei apagar"),
+      expect.objectContaining({ caminho_recusado: LOGO_DA_INSTALACAO }),
+    );
+  });
+
+  it("controle positivo: logo anterior dentro do prefixo da organização é apagado", async () => {
+    vi.mocked(loadAuthUser).mockResolvedValue(usuarioAdminDeOrganizacao());
+    const espiao = criarAdminEspiao(LOGO_DA_ORGANIZACAO);
+    vi.mocked(createAdminClient).mockReturnValue(espiao.client as never);
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(
+      new NextRequest("http://localhost/api/v1/marca/logo?escopo=organizacao", { method: "DELETE" }),
+    );
+
+    expect(res.status, await res.clone().text()).toBe(200);
+    // Sem isto, "não removeu platform/" seria indistinguível de "o espião de
+    // remove nunca é alcançado".
+    expect(espiao.removeChamadas).toEqual([LOGO_DA_ORGANIZACAO]);
   });
 });
 
