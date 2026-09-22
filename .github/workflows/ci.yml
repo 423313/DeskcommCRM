@@ -71,11 +71,22 @@ jobs:
   # e `import` 415 s (run do head d8af02fee). Custo por arquivo se divide por
   # arquivo: cada parte roda metade (`--shard`) e paga metade do jsdom.
   #
-  # Os passos de arquivo inteiro (cercas, typecheck, lint e as três auditorias)
-  # rodam só na parte 1; o kit bash, na parte 2 — é o que equilibra as duas.
-  # É o conserto estrutural da issue #1185, que o #1184 deixou anotado: com ele,
+  # Os passos de arquivo inteiro rodam cada um numa parte só: cercas, typecheck
+  # e as três auditorias na 1; lint e kit bash na 2 — é o que equilibra as duas.
+  # O `--shard` corta por CONTAGEM de arquivos (554/554), não por tempo; quem
+  # equilibra o relógio é onde moram estes passos. A divisão em partes é o
+  # conserto estrutural da issue #1185, que o #1184 deixou anotado: com ele,
   # o teto volta de 25 para 15 (guarda de travamento) e o orçamento desce de 16
   # para 12 — quem denuncia a suíte crescendo é o orçamento, por parte.
+  #
+  # O lint morava na parte 1 até 22/09/2026. Medido nos 24 pares verdes daquele
+  # dia: parte 1 mediana 10,0 min (máx 10,5), parte 2 8,1 (máx 8,7) — a 1
+  # carregava 167 s de passos inteiros contra 42 s da 2, e crescia ~0,4 min/dia
+  # (8,4 em 18/09). Mudar só o lint (63 s) dá 8,9 / 9,1 (máx 9,3 / 9,6); mudar
+  # lint E typecheck só trocaria qual parte pesa (7,8 / 10,1). Isto ADIA, não
+  # cura: a suíte soma ~46 s/dia às duas partes juntas. Quando uma parte chegar
+  # a 11 min (2 de folga até o vermelho do orçamento, aos 13), o conserto é a
+  # terceira parte (matrix + `--shard=N/3`) — reequilibrar de novo não sobra.
   verify-parte:
     # Guarda de travamento. O DETECTOR de crescimento é o passo `Orçamento de
     # tempo` no fim de cada parte; a medição que justifica o número está em
@@ -181,8 +192,9 @@ jobs:
         if: matrix.parte == 1
         run: pnpm typecheck
 
+      # Na parte 2, não na 1: o porquê e a conta estão no cabeçalho do job.
       - name: Lint
-        if: matrix.parte == 1
+        if: matrix.parte == 2
         run: pnpm lint
 
       # Invariante 1 de docs/doctrine/restricao-de-canal.md: nenhuma feature
