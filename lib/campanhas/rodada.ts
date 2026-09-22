@@ -575,7 +575,7 @@ async function numeroDoHistorico(
 }
 
 /** Quantas saíram hoje e na última hora, mais o último envio — o estado do ritmo. */
-async function estadoDeEnvio(
+export async function estadoDeEnvio(
   admin: SupabaseClient,
   campanhaId: string,
   agora: Date,

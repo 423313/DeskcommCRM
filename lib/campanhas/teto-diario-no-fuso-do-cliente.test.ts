@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { dayStartInTz } from "@/lib/agent-engine/pacing/engine";
 
+import { estadoDeEnvio } from "./rodada";
+
 /**
  * O teto diário da campanha conta no fuso DO CLIENTE, nunca em UTC.
  *
@@ -53,5 +55,50 @@ describe("teto diário conta no fuso do cliente", () => {
     const errado = new Date(vinteUmaETrinta);
     errado.setUTCHours(0, 0, 0, 0);
     expect(certo.getTime()).toBeLessThan(errado.getTime());
+  });
+});
+
+/**
+ * Os casos acima comparam as duas contas; estes passam pela função que a
+ * rodada chama. Sem eles, voltar `setUTCHours` para `estadoDeEnvio` deixava o
+ * arquivo verde (medido na triagem: com a linha sabotada, os três casos acima
+ * seguiam passando).
+ */
+describe("estadoDeEnvio conta o dia no fuso que recebe", () => {
+  /** Supabase falso: devolve os envios a partir do corte que a função pedir em `gte`. */
+  function adminComEnvios(enviosEm: string[]) {
+    let corte = "";
+    const consulta: Record<string, unknown> = {
+      select: () => consulta,
+      eq: () => consulta,
+      not: () => consulta,
+      gte: (_coluna: string, valor: string) => ((corte = valor), consulta),
+      order: async () => ({
+        data: enviosEm.filter((s) => s >= corte).map((sent_at) => ({ sent_at })),
+      }),
+    };
+    return { from: () => consulta } as never;
+  }
+
+  const DEZ_DA_MANHA_EM_SP = "2026-09-18T13:00:00.000Z";
+
+  it("às 21h30 em São Paulo, o envio das 10h ainda conta no teto de hoje", async () => {
+    const estado = await estadoDeEnvio(
+      adminComEnvios([DEZ_DA_MANHA_EM_SP]),
+      "c1",
+      new Date("2026-09-19T00:30:00.000Z"),
+      "America/Sao_Paulo",
+    );
+    expect(estado.enviadasHoje).toBe(1);
+  });
+
+  it("no dia local seguinte o teto zera — a campanha não fica presa", async () => {
+    const estado = await estadoDeEnvio(
+      adminComEnvios([DEZ_DA_MANHA_EM_SP]),
+      "c1",
+      new Date("2026-09-19T13:00:00.000Z"), // 10h de 19/09 em SP
+      "America/Sao_Paulo",
+    );
+    expect(estado.enviadasHoje).toBe(0);
   });
 });
