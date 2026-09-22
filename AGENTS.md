@@ -237,6 +237,10 @@ filtra `organization_id` manualmente. Sem gate automático para isso — a respo
 `supabase/migrations/MANIFEST.md`. Nunca edite migration já aplicada; corrija com uma nova.
 Função nova em `public` precisa de `revoke execute ... from public, anon` **e** `grant` — são
 duas origens de `EXECUTE`.
+⚠️ E **não leia o baseline com `grep` no arquivo inteiro**: ele é dump + apêndice, a mesma
+função aparece várias vezes, e quem vale é a **última**. Pergunte ao banco depois de aplicar
+(`pg_get_functiondef`) ou ancore no último `create or replace` (`rfind`, nunca `find`).
+Contar no arquivo responde "o arquivo menciona", não "o banco faz".
 
 **Marca própria (white-label)** — o produto é revendido e o nome não é seu. **Nunca** escreva
 "Deskcomm"/"DeskcommCRM" em código que alcança o usuário: `tests/unit/branding.test.ts` varre
@@ -334,6 +338,23 @@ Convenções: teste ao lado do código (`lib/foo/bar.test.ts`) ou em `tests/{uni
 dentro do include do unit. Fixtures em `tests/fixtures/`, helpers em `tests/helpers/`, setup global
 em `tests/setup/vitest.setup.ts`. Determinismo é regra: teste que depende de ordem ou de rede
 quebra a suíte inteira.
+
+**Locator de tela compartilhada é contrato da suíte, não detalhe do teste.** `getByRole("button",
+{ name: "Entrar" })` casa por **substring** — e `/entrar/i`, que era a forma do login, também: um
+segundo botão com essa palavra na mesma tela ("Entrar com Google") torna o locator ambíguo, e o
+Playwright **recusa clicar** (`strict mode violation`) em vez de escolher. O alcance não fica na
+tela: `/login` é a porta de quase toda spec. Medido em 2026-09-21, um botão a mais ali pôs as 5
+partes do `e2e` vermelhas — 320 violações do mesmo erro em 306 casos, 140 specs citadas no log.
+Quem acrescenta botão ou link numa tela já coberta assume os locators que já existem: ancore com
+`{ name: "Entrar", exact: true }`, forma que a suíte já usa 282× para outros rótulos, e meça antes
+de empurrar:
+
+```bash
+git grep -nE "name: *(\"Entrar\"|'Entrar'|/entrar)" -- tests scripts | grep -vE 'exact: *true'
+```
+
+O conserto é no locator, **nunca** no produto: esconder um botão real para agradar regex de teste
+troca um defeito de teste por um defeito de tela.
 
 O `.env.e2e` é obrigatório e é recusado se apontar para Supabase que não seja `127.0.0.1`/
 `localhost` — a proteção existe porque sem ela a suíte rodaria contra produção (`pnpm e2e:env`
