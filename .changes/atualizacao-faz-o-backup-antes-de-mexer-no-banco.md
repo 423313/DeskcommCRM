@@ -8,4 +8,4 @@ Toda atualização anuncia o passo "Backup de segurança (antes de mexer no banc
 
 Agora o caminho do backup é resolvido antes de o script entrar na pasta do projeto, como o próprio script já mandava fazer. Atualizando de qualquer diretório, o backup roda de verdade e a mensagem de "backup feito" corresponde ao que aconteceu. Quem opera a VPS não precisa fazer nada.
 
-Contribuição de @webtecnica (#__PR__).
+Contribuição de @webtecnica (#1476).
