@@ -958,6 +958,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Conexões ───
   "Números por QR": { es: "Números por QR" },
   "API Oficial (Meta)": { es: "API Oficial (Meta)" },
+  "API oficial": { es: "API oficial" },
   "Provedor parceiro": { es: "Proveedor asociado" },
   Conexão: { es: "Conexión" },
   "Modelos do parceiro": { es: "Plantillas del proveedor" },
