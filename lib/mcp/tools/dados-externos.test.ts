@@ -16,7 +16,7 @@ import { LeituraInvalidaError, lerTabela } from "@/lib/external-db/leitura";
 import type { ConexaoExterna, TabelaExterna } from "@/lib/external-db/types";
 import type { McpContext } from "@/lib/mcp/types";
 
-import { crmDescribeExternalData, crmQueryExternalData } from "./dados-externos";
+import { crmDescribeExternalData, crmQueryExternalData, motivoDoVazioExterno } from "./dados-externos";
 
 const CONEXAO: ConexaoExterna = {
   id: "conn-1",
@@ -263,5 +263,40 @@ describe("crm_query_external_data", () => {
     )) as Record<string, unknown>;
     expect(r.erro).toBeUndefined();
     expect(lerTabela).toHaveBeenCalled();
+  });
+
+  // A versão do #1130 reexecutava SEM filtro quando nada casava e entregava até
+  // 100 linhas ao modelo. Numa tabela de clientes, o CPF que não casa mostraria
+  // os registros de outras pessoas. Aqui o vazio fica vazio.
+  it("filtro que não casa nada devolve vazio, nunca a tabela sem o filtro", async () => {
+    // A 2ª leitura teria linha: é o registro de outra pessoa que não pode vazar.
+    vi.mocked(lerTabela)
+      .mockResolvedValueOnce({ colunas: ["id"], linhas: [], limite: 20, offset: 0 })
+      .mockResolvedValue({ colunas: ["id"], linhas: [{ id: "de-outra-pessoa" }], limite: 20, offset: 0 });
+    const r = (await crmQueryExternalData.handler(
+      {
+        connection_id: "conn-1",
+        schema: "public",
+        tabela: "assinaturas",
+        filtros: [{ coluna: "status", operador: "eq", valor: "nao-existe" }],
+        limite: 20,
+      },
+      ctxFake(),
+    )) as Record<string, unknown>;
+    expect(r.linhas).toEqual([]);
+    expect(r.filtro_sem_resultado).toBeTruthy();
+    expect(lerTabela).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(lerTabela).mock.calls[0]![1].filtros).toHaveLength(1);
+  });
+});
+
+describe("motivoDoVazioExterno — o audit não conta erro como sucesso (#484)", () => {
+  it("erro devolvido ao modelo e consulta sem linha viram motivo; resposta com linha, não", () => {
+    expect(motivoDoVazioExterno({ erro: "acesso_negado", mensagem: "x" })).toBe("acesso_negado");
+    expect(motivoDoVazioExterno({ linhas: [], linhas_devolvidas: 0 })).toBe("nenhuma_linha");
+    expect(motivoDoVazioExterno({ linhas: [{ id: 1 }], linhas_devolvidas: 1 })).toBeNull();
+    expect(motivoDoVazioExterno({ tabelas: [] })).toBeNull();
+    expect(crmQueryExternalData.motivoDoVazio).toBe(motivoDoVazioExterno);
+    expect(crmDescribeExternalData.motivoDoVazio).toBe(motivoDoVazioExterno);
   });
 });

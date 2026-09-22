@@ -126,6 +126,21 @@ async function resolverConexao(ctx: McpContext, connectionId?: string): Promise<
   };
 }
 
+/**
+ * "Não consegui" e "não achei" não são sucesso no audit (#484).
+ *
+ * As duas tools devolvem o erro como TEXTO para o modelo (ele lê e segue a
+ * conversa), então a chamada termina bem e o audit gravaria `success: true` — o
+ * painel de capacidades diria "nenhuma falha" com o host bloqueado ou a tabela
+ * errada. O código do erro é fixo e não carrega dado do cliente.
+ */
+export function motivoDoVazioExterno(resultado: unknown): string | null {
+  if (resultado === null || typeof resultado !== "object") return null;
+  const r = resultado as { erro?: unknown; linhas_devolvidas?: unknown };
+  if (typeof r.erro === "string") return r.erro;
+  return r.linhas_devolvidas === 0 ? "nenhuma_linha" : null;
+}
+
 function mensagemDeAcesso(motivo: string): string {
   switch (motivo) {
     case "nao_encontrada":
@@ -170,6 +185,7 @@ export const crmDescribeExternalData: McpToolDefinition<typeof descreverInputSha
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
+  motivoDoVazio: motivoDoVazioExterno,
   handler: async (input, ctx) => {
     const resolucao = await resolverConexao(ctx, input.connection_id);
     if (!resolucao.ok) return resolucao.resposta;
@@ -279,6 +295,7 @@ export const crmQueryExternalData: McpToolDefinition<typeof consultarInputShape>
   requiresRole: "agent",
   requiresScope: "mcp:read",
   redigirParaAuditoria: redigirConsulta,
+  motivoDoVazio: motivoDoVazioExterno,
   handler: async (input, ctx) => {
     const resolucao = await resolverConexao(ctx, input.connection_id);
     if (!resolucao.ok) return resolucao.resposta;
@@ -401,26 +418,16 @@ export const crmQueryExternalData: McpToolDefinition<typeof consultarInputShape>
       return { erro: "falha_na_leitura", mensagem: "não foi possível consultar o banco externo agora." };
     }
 
-    // C-013: o filtro TINHA valor mas não casou nada (ex.: o cliente digitou
-    // "cb25p"). Em vez de devolver vazio — e a IA concluir "não temos" — reexecuta
-    // SEM filtro e devolve o catálogo, para ela OFERECER as opções mais próximas.
-    let fallbackSemFiltro = false;
-    if (resultado.linhas.length === 0 && pedido.filtros.length > 0) {
-      try {
-        const semFiltro = await lerTabela(
-          acesso.pool,
-          { ...pedido, filtros: [], limite: Math.min(100, acesso.conexao.maxRows) },
-          permitidas,
-          { limiteMax: acesso.conexao.maxRows },
-        );
-        if (semFiltro.linhas.length > 0) {
-          resultado = semFiltro;
-          fallbackSemFiltro = true;
-        }
-      } catch {
-        // mantém o resultado vazio
-      }
-    }
+    // Filtro que não casou nada devolve VAZIO — nunca a tabela sem o filtro.
+    //
+    // A versão do #1130 reexecutava a consulta SEM filtro e entregava até 100
+    // linhas (C-013), pensando num catálogo de produtos em que o cliente erra a
+    // digitação. A tool é genérica: numa tabela de clientes ou de pedidos, o CPF
+    // que não casa entregaria ao modelo — e dali à conversa — os registros de
+    // OUTRAS pessoas. O caso do catálogo segue coberto pelo ensino abaixo: o
+    // modelo repete com um trecho menor do termo, e continua sem concluir "não
+    // temos" antes de tentar.
+    const filtroSemResultado = resultado.linhas.length === 0 && pedido.filtros.length > 0;
 
     // Orçamento de bytes: o teto é o configurado na conexão (o modelo não
     // precisa de uma página inteira de tabela larga para responder).
@@ -447,10 +454,11 @@ export const crmQueryExternalData: McpToolDefinition<typeof consultarInputShape>
       linhas_devolvidas: linhas.length,
       limite_aplicado: resultado.limite,
       ...(truncadoPorBytes ? { truncado: true } : {}),
-      ...(fallbackSemFiltro
+      ...(filtroSemResultado
         ? {
             filtro_sem_resultado:
-              'nenhum registro casou o filtro; o catálogo (até 100 linhas) está abaixo — ofereça as opções mais próximas do que o cliente pediu (ele pode ter errado a digitação).',
+              "nenhum registro casou o filtro. Se o cliente pode ter escrito diferente, repita com " +
+              "`contem` e um trecho menor do termo antes de concluir que o dado não existe.",
           }
         : {}),
       aviso: AVISO_DADOS_NAO_CONFIAVEIS,
