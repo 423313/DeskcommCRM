@@ -22,3 +22,5 @@ Alguns cuidados que valem para quem opera:
 - Para ligar o botão de verdade, o provedor Google precisa estar habilitado no
   projeto Supabase da instalação (Authentication → Providers). Com ele
   desligado, a tela diz exatamente isso, em vez de um erro genérico.
+
+Contribuição de @webtecnica (#1401).
