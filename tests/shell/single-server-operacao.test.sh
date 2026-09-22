@@ -180,6 +180,31 @@ else
   echo "  - pulado: docker compose ausente (a prova do override roda onde ele existe)"
 fi
 
+echo "o CRM alcança o banco do Supabase (supabase-db):"
+if [ -n "$DOCKER_REAL" ] && "$DOCKER_REAL" compose version >/dev/null 2>&1; then
+  # `supabase-db` só existe como apelido na rede supabase_private. Todo serviço
+  # do CRM que recebe SUPABASE_DB_URL apontando para ele precisa estar nela; do
+  # contrário o nome não resolve e o serviço (o worker, motor do agente de IA)
+  # reinicia em loop. O .env é o que o install-single-server.sh grava.
+  CRM="$WORK/crm"; mkdir -p "$CRM"
+  cp "$ROOT/docker-compose.prod.yml" "$ROOT/docker-compose.single-server.yml" "$CRM/"
+  printf '%s\n' 'SUPABASE_DB_URL=postgresql://postgres:x@supabase-db:5432/postgres' \
+    'DOMAIN=crm.exemplo.com' 'SINGLE_SERVER_NETWORK=deskcommcrm_supabase' > "$CRM/.env"
+  sem_rede="$(cd "$CRM" && env -i PATH="$PATH" HOME="$HOME" "$DOCKER_REAL" compose \
+      -f docker-compose.prod.yml -f docker-compose.single-server.yml --profile '*' config --format json 2>/dev/null \
+    | python3 -c '
+import json, sys
+servicos = json.load(sys.stdin)["services"]
+usam = [n for n, s in servicos.items() if "@supabase-db:" in (s.get("environment") or {}).get("SUPABASE_DB_URL", "")]
+assert "worker" in usam, usam  # a sonda não pode passar por não achar ninguém
+print(" ".join(sorted(n for n in usam if "supabase_private" not in (servicos[n].get("networks") or {}))))
+' 2>&1)"; rc=$?
+  check "compose do CRM resolve com todos os profiles" test "$rc" -eq 0
+  check "todo serviço com SUPABASE_DB_URL=@supabase-db está na rede supabase_private" igual "$sem_rede" ''
+else
+  echo "  - pulado: docker compose ausente (a prova do override roda onde ele existe)"
+fi
+
 # ════════════════════════════════════════════════════════════════════════════
 echo "(b) backup e restore levam os anexos:"
 : > "$LOG"

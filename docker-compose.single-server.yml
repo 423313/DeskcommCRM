@@ -7,6 +7,19 @@ services:
       - internal
       - supabase_private
 
+  # O worker e o voice-agent leem SUPABASE_DB_URL=...@supabase-db do .env, e
+  # esse nome só existe na rede supabase_private: fora dela o boot não resolve
+  # o banco e o serviço reinicia em loop (tests/shell/single-server-operacao).
+  worker:
+    networks:
+      - internal
+      - supabase_private
+
+  voice-agent:
+    networks:
+      - internal
+      - supabase_private
+
   caddy:
     volumes:
       - ./Caddyfile.single-server:/etc/caddy/Caddyfile:ro
