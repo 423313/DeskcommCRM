@@ -196,7 +196,7 @@ function makeDb(pointers: Row[], versions: Row[], stages: Row[] = []) {
         }
         return { data: r.data[0], error: null };
       },
-      then(onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) {
+      then(onF: (v: ReturnType<typeof execute>) => unknown, onR?: (e: unknown) => unknown) {
         return Promise.resolve(execute()).then(onF, onR);
       },
     };
@@ -952,7 +952,7 @@ describe("POST /api/v1/ai/followup-flows/:id/duplicate", () => {
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/duplicate/route");
     const res = await POST(req("POST"), ctx(P1));
     expect(res.status).toBe(403);
-    const { data } = await db.from("followup_flow_pointers").select("id");
+    const { data } = await db.from("followup_flow_pointers").select();
     expect(data).toHaveLength(1);
   });
 
