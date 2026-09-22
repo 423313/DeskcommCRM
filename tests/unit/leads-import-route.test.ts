@@ -1,3 +1,6 @@
+// @vitest-environment node
+// Rota de API, sem DOM. Sob jsdom, `req.formData()` lança AssertionError no Node 26 (medido:
+// 11 casos com 422); em ambiente `node` o mesmo teste passa nos Node 22 e 26.
 /**
  * A IMPORTAÇÃO DE LEADS NÃO ACEITA NADA NO ESCURO.
  *
