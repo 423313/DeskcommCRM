@@ -436,6 +436,15 @@ export const AUDIT_ACTIONS = [
   // O `metadata` carrega o id da conta padrão (identificador, não segredo) e um
   // booleano dizendo se o token foi trocado. O token, nem em metadata.
   "ad_insights_connection.updated",
+  // O ENDEREÇO DE CAPTURA da landing page (0381): para qual WhatsApp a rota
+  // pública manda quem clicou no botão, e com que texto. Ação separada das duas
+  // acima pelo mesmo critério delas — aqui não há credencial nenhuma, e a
+  // pergunta que esta trilha responde é "quem apontou o tráfego pago da minha
+  // organização para este número?". Trocar a linha não derruba nada: o
+  // endereço continua respondendo, os anúncios continuam rodando, e os leads
+  // simplesmente passam a chegar noutro WhatsApp — por isso o número vai no
+  // `metadata`, que é o único lugar onde a troca fica visível depois.
+  "captura_de_utm.updated",
   // Desconectar APAGA o token (a 0205 não tem `enabled`, e o porquê está no
   // cabeçalho dela). Auditada à parte de `.updated` porque some uma credencial:
   // a tela de Meta Ads para de funcionar para todo mundo da organização, e a
