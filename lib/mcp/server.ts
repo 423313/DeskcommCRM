@@ -12,10 +12,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 
+import type { ModuloOpcional } from "@/lib/instalacao/modulos";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { auditMcpToolCall } from "./audit";
 import { ensureRole, ensureScope, type McpAuthResult } from "./auth";
 import { allTools } from "./tools";
+import { deModuloDesligado } from "./tools/catalog";
 import { higienizarUuidsDeAterro } from "./uuid-de-aterro";
 import type { McpContext } from "./types";
 
@@ -32,7 +34,16 @@ function summarizeResult(result: unknown): string | undefined {
   return undefined;
 }
 
-export function createMcpServer(auth: McpAuthResult, requestId: string): McpServer {
+/**
+ * `modulosLigados`: os módulos opcionais ligados na instalação. Capacidade de
+ * módulo desligado nem é registrada — o cliente externo não a vê na lista.
+ * Ausente vale como nenhum, pela mesma razão de `pickToolsFromMcp`.
+ */
+export function createMcpServer(
+  auth: McpAuthResult,
+  requestId: string,
+  modulosLigados: readonly ModuloOpcional[] = [],
+): McpServer {
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
@@ -41,6 +52,7 @@ export function createMcpServer(auth: McpAuthResult, requestId: string): McpServ
   const supabase = createAdminClient();
 
   for (const tool of allTools) {
+    if (deModuloDesligado(tool.name, modulosLigados)) continue;
     server.registerTool(
       tool.name,
       {
