@@ -74,7 +74,36 @@ describe("extrairAtribuicaoMeta — referral do webhook oficial", () => {
   });
 });
 
-describe("extrairAtribuicaoWaha — externalAdReplyInfo do Baileys", () => {
+describe("extrairAtribuicaoWaha — externalAdReply do WAHA e forma legada", () => {
+  it("extrai externalAdReply na forma recebida pelo WAHA NOWEB", () => {
+    const r = extrairAtribuicaoWaha({
+      extendedTextMessage: {
+        text: "Quero saber do curso",
+        contextInfo: {
+          ctwaPayload: "dados-do-clique",
+          externalAdReply: {
+            sourceType: "ad",
+            sourceId: "ad-9274",
+            ctwaClid: "clid-9274",
+            title: "Curso de sobrancelhas",
+            body: "Saiba mais",
+            sourceUrl: "https://fb.me/anuncio",
+          },
+        },
+      },
+      messageContextInfo: { deviceListMetadataVersion: 2 },
+    });
+    expect(r).toEqual({
+      plataforma: "meta_ads",
+      sourceId: "clid-9274",
+      adId: "ad-9274",
+      titulo: "Curso de sobrancelhas",
+      corpo: "Saiba mais",
+      sourceUrl: "https://fb.me/anuncio",
+      bruto: expect.objectContaining({ sourceType: "ad" }),
+    });
+  });
+
   it("extrai de extendedTextMessage.contextInfo.externalAdReplyInfo", () => {
     const r = extrairAtribuicaoWaha({
       extendedTextMessage: {
@@ -129,6 +158,16 @@ describe("extrairAtribuicaoWaha — externalAdReplyInfo do Baileys", () => {
           text: "oi",
           contextInfo: {
             externalAdReplyInfo: { sourceType: "post", title: "Promo", ctwaClid: "x" },
+          },
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      extrairAtribuicaoWaha({
+        extendedTextMessage: {
+          contextInfo: {
+            externalAdReply: { sourceType: "post", title: "Publicação", ctwaClid: "x" },
           },
         },
       }),
