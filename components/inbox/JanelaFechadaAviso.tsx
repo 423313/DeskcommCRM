@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
@@ -42,6 +42,15 @@ import { cn } from "@/lib/utils";
  * deste lado. A chave de cada valor é a `valueKey` que a rota calcula com
  * `slotKey`, a MESMA função que monta o payload de envio: cabeçalho de mídia e
  * `{{1}}` do corpo têm a mesma `key` e só o endereço os separa.
+ *
+ * ─── O link salvo no modelo ─────────────────────────────────────────────────
+ *
+ * Link de mídia vale para TODO disparo do modelo, então colar a mesma URL a
+ * cada janela fechada era trabalho repetido e chance de erro. O campo vem
+ * pré-preenchido com o que foi salvo, e "Salvar este link no modelo" grava o
+ * que está no campo — DEPOIS que o envio sai, para um link que a plataforma
+ * recusou não virar o padrão. Só aparece quando a fonte das definições devolve
+ * `savedValues`; fonte que não guarda nada não oferece a caixa.
  */
 /** Um valor que o modelo exige no envio. Espelha `TemplateView['slots'][n]`. */
 interface Slot {
@@ -84,6 +93,8 @@ interface ModeloAprovado {
   slots?: Slot[];
   /** A definição aprovada. É de onde sai o texto que vai no `body` do envio. */
   components?: unknown[];
+  /** Links salvos no modelo, na chave de `template_values`. Ausente = fonte não guarda. */
+  savedValues?: Record<string, string>;
 }
 
 /**
@@ -112,6 +123,9 @@ export function JanelaFechadaAviso({
   const send = useSendMessage();
   const [escolhido, setEscolhido] = useState("");
   const [valores, setValores] = useState<Record<string, string>>({});
+  /** Chaves cujo valor o operador pediu para salvar no modelo. */
+  const [salvar, setSalvar] = useState<Record<string, boolean>>({});
+  const qc = useQueryClient();
 
   const fonte = fonteDeTemplates(provider);
   const { data } = useQuery({
@@ -137,14 +151,36 @@ export function JanelaFechadaAviso({
   // experiência que este conserto existe para acabar.
   const faltando = slots.filter((s) => !(valores[s.valueKey] ?? "").trim());
 
-  /** Trocar de modelo zera os valores: chave de um não vale para o outro. */
+  /** Trocar de modelo zera os valores (chave de um não vale para o outro) e traz os salvos. */
   function escolher(valor: string) {
     setEscolhido(valor);
-    setValores({});
+    const modelo = aprovados.find((tpl) => `${tpl.name}|${tpl.language}` === valor);
+    setValores({ ...(modelo?.savedValues ?? {}) });
+    setSalvar({});
+  }
+
+  /** Grava no modelo os links marcados. Falhar aqui não desfaz o envio, só avisa. */
+  function salvarNoModelo(modelo: ModeloAprovado, enviados: Record<string, string>) {
+    const aSalvar = Object.fromEntries(
+      Object.keys(salvar)
+        .filter((chave) => salvar[chave])
+        .map((chave) => [chave, enviados[chave] ?? ""]),
+    );
+    if (Object.keys(aSalvar).length === 0) return;
+    apiClient
+      .patch(rotaDeTemplates(fonte!), {
+        name: modelo.name,
+        language: modelo.language,
+        values: aSalvar,
+      })
+      .then(() => qc.invalidateQueries({ queryKey: ["templates-da-conversa", fonte] }))
+      .catch(() => toast.error(t("O modelo saiu, mas não consegui salvar o link nele.")));
   }
 
   function enviar() {
     if (!atual) return;
+    const modelo = atual;
+    const enviados = valores;
     send.mutate(
       {
         conversation_id: conversationId,
@@ -181,8 +217,10 @@ export function JanelaFechadaAviso({
             toast.error(enviada.error_message ?? t("Não consegui enviar o modelo."));
             return;
           }
+          salvarNoModelo(modelo, enviados);
           setEscolhido("");
           setValores({});
+          setSalvar({});
           toast.success(t("Modelo enviado — a janela reabre quando o cliente responder."));
         },
         onError: (e: unknown) =>
@@ -257,6 +295,21 @@ export function JanelaFechadaAviso({
                   "focus:outline-hidden focus:ring-1 focus:ring-ring",
                 )}
               />
+              {ehMidia(slot) && atual?.savedValues !== undefined && (
+                <span className="flex items-center gap-1.5 text-[11px] text-amber-900/80 dark:text-amber-200/80">
+                  <input
+                    type="checkbox"
+                    checked={salvar[slot.valueKey] ?? false}
+                    onChange={(e) =>
+                      setSalvar((v) => ({ ...v, [slot.valueKey]: e.target.checked }))
+                    }
+                    disabled={send.isPending}
+                    aria-label={t("Salvar este link no modelo")}
+                  />
+                  {t("Salvar este link no modelo")}
+                  {atual.savedValues[slot.valueKey] ? ` · ${t("já há um link salvo")}` : ""}
+                </span>
+              )}
             </label>
           ))}
           {/* Por que pedir o link se a imagem já está no modelo: o que a Meta

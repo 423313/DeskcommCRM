@@ -2,6 +2,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * GET  /api/v1/channels/templates — o espelho local + o CONTRATO derivado de cada um.
  * POST /api/v1/channels/templates — força um sync com a Graph API.
+ * PATCH /api/v1/channels/templates — salva (ou esquece) o link da mídia de um modelo.
  *
  * O contrato vai derivado no payload, e não guardado no banco, de propósito: guardar
  * o derivado criaria a segunda fonte da verdade que esta fase inteira existe para
@@ -21,6 +22,7 @@ import { normalizeRejectedReason } from "@/lib/channels/meta/webhook";
 import { deriveTemplateContract, describeAddress } from "@/lib/channels/meta/template-contract";
 import { slotKey } from "@/lib/channels/meta/build-components";
 import { syncTemplates } from "@/lib/channels/meta/template-sync";
+import { mesclarValoresSalvos } from "@/lib/channels/meta/valores-salvos";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +63,11 @@ export interface TemplateView {
   previews: Array<{ onde: string; text: string }>;
   /** A definição crua — de onde sai o texto que vai no corpo do envio. */
   components: unknown[];
+  /**
+   * Links de mídia que o operador salvou para este modelo, na chave de
+   * `template_values`. O painel da janela fechada pré-preenche com eles.
+   */
+  savedValues: Record<string, string>;
 }
 
 /** Textos com placeholder, achatados (inclui os de dentro de card de carrossel). */
@@ -105,7 +112,7 @@ export async function GET(): Promise<NextResponse> {
   const { data, error } = await admin
     .from("meta_templates")
     .select(
-      "name, language, status, category, rejected_reason, quality_score, parameter_format, contract_hash, components, synced_at",
+      "name, language, status, category, rejected_reason, quality_score, parameter_format, contract_hash, components, synced_at, saved_values",
     )
     .eq("organization_id", r.orgId)
     .order("status")
@@ -148,6 +155,12 @@ export async function GET(): Promise<NextResponse> {
       // mensagem a partir daqui; sem o campo, ele caía no NOME TÉCNICO do
       // modelo e era isso que o cliente recebia.
       components: (row.components as unknown[]) ?? [],
+      // Filtrado pelo contrato de HOJE: link salvo para um cabeçalho que deixou
+      // de ser mídia não pode pré-preencher nada.
+      savedValues: (() => {
+        const r = mesclarValoresSalvos(contrato, (row.saved_values ?? {}) as Record<string, unknown>, {});
+        return r.ok ? r.valores : {};
+      })(),
     };
   });
 
@@ -205,4 +218,88 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
       requestId,
     });
   }
+}
+
+/**
+ * Salva o link da mídia de um modelo, para o painel da janela fechada
+ * pré-preencher no próximo disparo. Valor vazio esquece o link.
+ *
+ * Só slot de mídia e só `https://` — ver `lib/channels/meta/valores-salvos.ts`.
+ * Mesmo papel do sync (`admin`), e bloqueado em sessão de suporte, porque
+ * escreve na configuração do canal.
+ *
+ * Grava em TODAS as linhas do mesmo nome e idioma da organização: a tela lista
+ * o modelo uma vez só, e dois números oficiais com a mesma definição
+ * divergiriam em silêncio se só um recebesse o link.
+ */
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
+
+  const requestId = randomUUID();
+  const r = await orgOrFail(requestId);
+  if (!r.autorizado) return r.resposta;
+
+  const body = (await req.json().catch(() => null)) as {
+    name?: unknown;
+    language?: unknown;
+    values?: unknown;
+  } | null;
+  const valores = body?.values;
+  if (
+    typeof body?.name !== "string" ||
+    typeof body?.language !== "string" ||
+    !valores ||
+    typeof valores !== "object" ||
+    Array.isArray(valores) ||
+    !Object.values(valores).every((v) => typeof v === "string")
+  ) {
+    return fail("validation_failed", "esperado { name, language, values: { chave: link } }", 422, {
+      requestId,
+    });
+  }
+
+  const admin = createAdminClient();
+  const { data: linhas, error } = await admin
+    .from("meta_templates")
+    .select("id, name, language, parameter_format, components, saved_values")
+    .eq("organization_id", r.orgId)
+    .eq("name", body.name)
+    .eq("language", body.language);
+  if (error) return fail("internal_error", error.message, 500, { requestId });
+  if (!linhas || linhas.length === 0) {
+    return fail("not_found", "modelo não encontrado", 404, { requestId });
+  }
+
+  // Confere TUDO antes de escrever qualquer linha: recusar a segunda depois de
+  // gravar a primeira deixaria os números divergindo.
+  const planos: Array<{ id: string; valores: Record<string, string> }> = [];
+  for (const linha of linhas) {
+    const contrato = deriveTemplateContract({
+      name: linha.name,
+      language: linha.language,
+      parameter_format: linha.parameter_format,
+      components: linha.components as never,
+    });
+    const m = mesclarValoresSalvos(
+      contrato,
+      (linha.saved_values ?? {}) as Record<string, unknown>,
+      valores as Record<string, string>,
+    );
+    if (!m.ok) {
+      return fail("validation_failed", m.motivo, 422, { requestId, details: { chave: m.chave } });
+    }
+    planos.push({ id: linha.id, valores: m.valores });
+  }
+
+  for (const plano of planos) {
+    const { error: erro } = await admin
+      .from("meta_templates")
+      .update({ saved_values: plano.valores })
+      .eq("organization_id", r.orgId)
+      .eq("id", plano.id);
+    if (erro) return fail("internal_error", erro.message, 500, { requestId });
+  }
+
+  return ok({ savedValues: planos[0]!.valores });
 }

@@ -18,7 +18,10 @@ import userEvent from "@testing-library/user-event";
 
 const mutate = vi.fn();
 
+const salvos: { valores: Record<string, string> } = { valores: {} };
+
 vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
   useQuery: () => ({
     data: {
       data: {
@@ -30,6 +33,7 @@ vi.mock("@tanstack/react-query", () => ({
             slots: [
               { key: "1", expects: "image", onde: "cabeçalho", valueKey: "header:1" },
             ],
+            savedValues: salvos.valores,
             components: [{ type: "BODY", text: "Aviso automático." }],
           },
         ],
@@ -66,7 +70,10 @@ function montar() {
 }
 
 describe("JanelaFechadaAviso", () => {
-  beforeEach(() => mutate.mockClear());
+  beforeEach(() => {
+    mutate.mockClear();
+    salvos.valores = {};
+  });
 
   it("não deixa enviar enquanto o modelo tem valor em branco", async () => {
     const user = userEvent.setup();
@@ -102,5 +109,19 @@ describe("JanelaFechadaAviso", () => {
       template_language: "pt_BR",
       template_values: { "header:1": "https://exemplo.com/capa.jpg" },
     });
+  });
+
+  it("o link salvo no modelo já vem preenchido e libera o envio", async () => {
+    salvos.valores = { "header:1": "https://exemplo.com/salva.jpg" };
+    const user = userEvent.setup();
+    montar();
+
+    await user.selectOptions(
+      screen.getByRole("combobox"),
+      "aviso_debriefing_adv|pt_BR",
+    );
+
+    expect(screen.getByRole("textbox")).toHaveValue("https://exemplo.com/salva.jpg");
+    expect(screen.getByRole("button", { name: /Enviar modelo/ })).toBeEnabled();
   });
 });

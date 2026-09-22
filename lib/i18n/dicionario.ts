@@ -5326,6 +5326,11 @@ export const DICIONARIO: Traducoes = {
   },
   "Não consegui enviar o modelo.": { es: "No pude enviar el modelo." },
   "link da imagem": { es: "enlace de la imagen" },
+  "Salvar este link no modelo": { es: "Guardar este enlace en el modelo" },
+  "já há um link salvo": { es: "ya hay un enlace guardado" },
+  "O modelo saiu, mas não consegui salvar o link nele.": {
+    es: "El modelo se envió, pero no pude guardar el enlace en él.",
+  },
   "link do vídeo": { es: "enlace del video" },
   "link do documento": { es: "enlace del documento" },
   "sufixo da URL": { es: "sufijo de la URL" },
