@@ -213,12 +213,15 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
     [setEdges, nodes],
   );
 
+  // O nó de ação nasce com o padrão do gatilho do fluxo. O callback depende só
+  // do `kind` (string), não do objeto `trigger_config`, que é novo a cada refetch.
+  const triggerKindRaw = flow?.trigger_config?.kind;
+  const triggerKind = typeof triggerKindRaw === "string" ? triggerKindRaw : undefined;
+
   const addNodeAt = useCallback(
     (type: NodeType, position: { x: number; y: number }) => {
       const visual = NODE_VISUALS[type];
       const id = `${type}-${nextId.current++}`;
-      const triggerKind =
-        typeof flow?.trigger_config?.kind === "string" ? flow.trigger_config.kind : undefined;
       const config = type === "action" ? configPadraoDaAcao(triggerKind) : visual.defaultConfig();
       const newNode: RFNode = {
         id,
@@ -228,7 +231,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
       };
       setNodes((nds) => nds.concat(newNode));
     },
-    [setNodes, t, flow?.trigger_config],
+    [setNodes, t, triggerKind],
   );
 
   const onPaletteAdd = useCallback(
