@@ -4267,6 +4267,28 @@ export const DICIONARIO: Traducoes = {
   "Guardada cifrada. Depois de gravar ela não é mostrada de novo — para trocar, cole a nova.": {
     es: "Se guarda cifrada y no se vuelve a mostrar. Para cambiarla, pega una nueva.",
   },
+  // ─── Canal parceiro que espelha a Cloud API (recorte do #1130) ───
+  "Informe o token do provedor parceiro.": { es: "Indica el token del proveedor socio." },
+  "Cole o segredo de assinatura do painel do provedor (começa com whsec_).": {
+    es: "Pega el secreto de firma del panel del proveedor (empieza con whsec_).",
+  },
+  "Conecte o número com o token antes de gravar o segredo.": {
+    es: "Conecta el número con el token antes de guardar el secreto.",
+  },
+  "Segredo gravado. O canal passa a receber mensagens.": {
+    es: "Secreto guardado. El canal empieza a recibir mensajes.",
+  },
+  "Não foi possível gravar o segredo.": { es: "No se pudo guardar el secreto." },
+  "Um número oficial (WhatsApp Business) por um parceiro homologado pela Meta. Você cola só o token: o número e a conta são descobertos sozinhos.": {
+    es: "Un número oficial (WhatsApp Business) a través de un socio homologado por Meta. Solo pegas el token: el número y la cuenta se descubren solos.",
+  },
+  "Receber as respostas": { es: "Recibir las respuestas" },
+  "No painel do provedor, cole a URL abaixo no webhook do número e ative a assinatura. Depois cole aqui o segredo que o painel mostrar. Sem o segredo o CRM envia, mas recusa tudo o que chega — a resposta do cliente não entra.": {
+    es: "En el panel del proveedor, pega la URL de abajo en el webhook del número y activa la firma. Después pega aquí el secreto que muestre el panel. Sin el secreto el CRM envía, pero rechaza todo lo que llega: la respuesta del cliente no entra.",
+  },
+  Recebendo: { es: "Recibiendo" },
+  "Não recebe": { es: "No recibe" },
+  "Segredo de assinatura": { es: "Secreto de firma" },
   "Verificando…": { es: "Verificando…" },
   "A credencial é testada contra o provedor antes de ser gravada.": {
     es: "Antes de guardar la credencial, se prueba con el proveedor.",

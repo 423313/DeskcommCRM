@@ -44,6 +44,10 @@ const FONTE: Record<ProviderDeMensagem, FonteDeTemplates | null> = {
   meta_cloud: "oficial",
   zernio: "parceiro",
   zernio_social: null,
+  // Exige modelo fora da janela, mas a gestão de modelos deste canal é a fatia
+  // seguinte do #1130 (`canManageTemplates: false`). `null` = a tela não
+  // oferece seletor, em vez de mandar o operador para uma lista que não existe.
+  datafy: null,
 };
 
 /** `null` quando este canal não trabalha com definições aprovadas. */
