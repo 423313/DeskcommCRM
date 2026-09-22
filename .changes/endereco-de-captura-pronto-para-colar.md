@@ -21,7 +21,9 @@ valendo, sem prazo. E nada muda para quem não configurar o endereço — a seç
 nasce desligada até ser preenchida e salva.
 
 Uma recusa de propósito, para o dinheiro não ir para o lugar errado: o número
-precisa vir com código do país. `11 99999-9999` é recusado com motivo na tela,
-porque um celular brasileiro escrito sem o `55` é indistinguível de um número
-dos Estados Unidos — e um endereço de captura apontado para o país errado não
-quebra nada, só faz o telefone parar de tocar.
+precisa vir com código do país. `11 99999-9999` não é salvo, e o campo pede o
+formato internacional, porque um celular brasileiro escrito sem o `55` é
+indistinguível de um número dos Estados Unidos — e um endereço de captura
+apontado para o país errado não quebra nada, só faz o telefone parar de tocar.
+
+Contribuição de @rafaelbatistazz (#1405, #1409).
