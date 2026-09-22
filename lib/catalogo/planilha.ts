@@ -223,16 +223,24 @@ export function lerPlanilha(
     if (anterior) {
       // As DUAS linhas na mensagem: quem corrige precisa achar o par, e quando
       // a diferença é só a caixa ("IP15" e "ip15") o motivo não salta aos olhos.
+      // A frase inteira é UMA chave com os valores como placeholder: traduzida
+      // aos pedaços, cada trecho novo é mais uma chave que pode faltar.
+      const frase =
+        anterior.codigo === codigo
+          ? _t('código repetido na planilha ("{codigo}") — já está na linha {linha}')
+          : _t(
+              'código repetido na planilha ("{codigo}") — já está na linha {linha}, escrito "{anterior}". Maiúsculas e minúsculas não mudam o código.',
+            );
+      const valores: Record<string, string> = {
+        codigo,
+        linha: String(anterior.linha),
+        anterior: anterior.codigo,
+      };
+      // Uma passada só, com função: o código vem da planilha e um "$&" ou um
+      // "{linha}" dentro dele não pode virar outra coisa.
       erros.push({
         linha: numeroNaPlanilha,
-        motivo:
-          _t("código repetido na planilha (") +
-          `"${codigo}"` +
-          _t(") — já está na linha ") +
-          String(anterior.linha) +
-          (anterior.codigo === codigo
-            ? ""
-            : _t(", escrito ") + `"${anterior.codigo}"` + _t(". Maiúsculas e minúsculas não mudam o código.")),
+        motivo: frase.replace(/\{(codigo|linha|anterior)\}/g, (_, nome: string) => valores[nome]!),
       });
       continue;
     }

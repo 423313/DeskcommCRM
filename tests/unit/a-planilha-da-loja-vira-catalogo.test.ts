@@ -240,6 +240,25 @@ describe("o código não diferencia maiúsculas", () => {
       'código repetido en la hoja ("ip15") — ya está en la fila 2, escrito "IP15". Mayúsculas y minúsculas no cambian el código.',
     );
   });
+
+  it("o código repetido escrito igual também chega inteiro em espanhol", () => {
+    const r = lerPlanilha(
+      planilha("codigo,nome,preco", "IP15,iPhone 15,5499", "IP15,iPhone 15 Pro,7999"),
+      (texto) => traduzir(texto, "es"),
+    );
+
+    if ("erro" in r) throw new Error(r.erro);
+    expect(r.erros[0]?.motivo).toBe('código repetido en la hoja ("IP15") — ya está en la fila 2');
+  });
+
+  it("o código entra na mensagem como foi escrito, mesmo parecendo placeholder", () => {
+    const r = lerPlanilha(planilha("codigo,nome,preco", "X{linha}$&,Um,10", "x{linha}$&,Dois,20"));
+
+    if ("erro" in r) throw new Error(r.erro);
+    expect(r.erros[0]?.motivo).toBe(
+      'código repetido na planilha ("x{linha}$&") — já está na linha 2, escrito "X{linha}$&". Maiúsculas e minúsculas não mudam o código.',
+    );
+  });
 });
 
 describe("a coluna de estoque AUSENTE não é estoque zero", () => {
