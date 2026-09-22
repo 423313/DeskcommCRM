@@ -8487,6 +8487,15 @@ export const DICIONARIO: Traducoes = {
   " — escreva assim: 5.499,00": { es: " — escríbelo así: 5.499,00" },
   "custo não reconhecido (": { es: "costo no reconocido (" },
   "código repetido na planilha (": { es: "código repetido en la hoja (" },
+  ") — já está na linha ": { es: ") — ya está en la fila " },
+  ", escrito ": { es: ", escrito " },
+  ". Maiúsculas e minúsculas não mudam o código.": {
+    es: ". Mayúsculas y minúsculas no cambian el código.",
+  },
+  ": este código já está no catálogo escrito ": { es: ": este código ya está en el catálogo escrito " },
+  ". Maiúsculas e minúsculas não mudam o código — escreva igual ao do catálogo para atualizar o produto.": {
+    es: ". Mayúsculas y minúsculas no cambian el código — escríbelo igual que en el catálogo para actualizar el producto.",
+  },
   "nenhuma coluna": { es: "ninguna columna" },
 
   // ─── Análise → Meta Ads e Configurações → Meta Ads (0214) ───
