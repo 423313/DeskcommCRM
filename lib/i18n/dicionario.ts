@@ -6987,6 +6987,42 @@ export const DICIONARIO: Traducoes = {
   "Não deu para salvar. Tente de novo em instantes.": {
     es: "No se pudo guardar. Inténtalo de nuevo en unos instantes.",
   },
+  // ── Cadastro com aprovação (migration 0383, recorte do PR #714) ──────────
+  "Pedido enviado": { es: "Solicitud enviada" },
+  "Pedido não aprovado": { es: "Solicitud no aprobada" },
+  "Seu pedido para abrir a empresa está com quem administra esta instalação. Quando ele for aprovado, é só entrar de novo.": {
+    es: "Tu solicitud para abrir la empresa está en manos de quien administra esta instalación. Cuando la aprueben, solo tienes que volver a entrar.",
+  },
+  "Quem administra esta instalação não aprovou o pedido. Se você recebeu um convite, use o link que chegou no seu e-mail.": {
+    es: "Quien administra esta instalación no aprobó la solicitud. Si recibiste una invitación, usa el enlace que llegó a tu correo.",
+  },
+  "Sua conta foi confirmada. Nesta instalação, a empresa só é criada depois da aprovação de quem administra. Confira o nome da empresa e envie o pedido.": {
+    es: "Confirmamos tu cuenta. En esta instalación, la empresa solo se crea después de que quien administra la apruebe. Revisa el nombre de la empresa y envía la solicitud.",
+  },
+  "Enviar pedido": { es: "Enviar solicitud" },
+  "Nesta instalação, a empresa só é criada depois da aprovação de quem administra.": {
+    es: "En esta instalación, la empresa solo se crea después de que quien administra la apruebe.",
+  },
+  "Desligado: quem chega sem convite pode criar conta, e a empresa espera a sua aprovação.": {
+    es: "Desactivado: quien llega sin invitación puede crear una cuenta, y la empresa espera tu aprobación.",
+  },
+  "Cadastro com aprovação": { es: "Registro con aprobación" },
+  "Ligado: quem cria conta sem convite pede a empresa, e ela só é criada quando você aprova o pedido nesta tela.": {
+    es: "Activado: quien crea una cuenta sin invitación solicita la empresa, y solo se crea cuando apruebas la solicitud en esta pantalla.",
+  },
+  "Desligado: quem cria conta abre a própria empresa na hora. Ligue se você hospeda várias empresas e quer decidir quem entra.": {
+    es: "Desactivado: quien crea una cuenta abre su propia empresa al instante. Actívalo si alojas varias empresas y quieres decidir quién entra.",
+  },
+  "Este pedido já foi decidido.": { es: "Esta solicitud ya fue resuelta." },
+  "A conta deste pedido não existe mais ou ainda não confirmou o e-mail.": {
+    es: "La cuenta de esta solicitud ya no existe o todavía no confirmó el correo.",
+  },
+  "Pedidos aguardando aprovação": { es: "Solicitudes pendientes de aprobación" },
+  "Aprovar cria a empresa e torna quem pediu administrador dela.": {
+    es: "Aprobar crea la empresa y convierte en administrador a quien la solicitó.",
+  },
+  "Nenhum pedido aguardando.": { es: "No hay solicitudes pendientes." },
+  "Recusar": { es: "Rechazar" },
   "Já tem conta?": { es: "¿Ya tienes cuenta?" },
   "Email ou senha incorretos.": { es: "Correo o contraseña incorrectos." },
   "Erro inesperado. Tente novamente.": { es: "Error inesperado. Intenta de nuevo." },
