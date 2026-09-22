@@ -40,6 +40,14 @@ NS="$(sed -n 's/^IMG_NS="\(.*\)"$/\1/p' "$REPO_ROOT/hostgator-setup-kit/_common.
 export NS
 
 WORK="$(mktemp -d)"
+# Guarda de raio de ação: com TMPDIR apontando para diretório inexistente o
+# `mktemp` acima falha e WORK fica VAZIA — aí "$WORK/bin/docker" vira /bin/docker
+# e os dublês abaixo sobrescrevem os binários da máquina de quem roda (aconteceu
+# uma vez). Sem sandbox próprio não há prova honesta: para antes de plantar nada.
+if [ -z "$WORK" ] || [ ! -d "$WORK" ] || [ "$WORK" = / ]; then
+  echo "abortado: mktemp -d não devolveu um sandbox (WORK='$WORK') — TMPDIR inválido?" >&2
+  exit 1
+fi
 trap 'rm -rf "$WORK"' EXIT
 
 REAL_UNAME="$(command -v uname)"
