@@ -17,7 +17,7 @@
  * quem já está dentro. O agregado é o que fecha isso.
  *
  * Por ESCRITA (30/min) — o mais apertado, e é o que protege o número de
- * WhatsApp. `crm_send_whatsapp_message` é escrita, e o canal por QR (WAHA) é
+ * WhatsApp. `crm_send_whatsapp_message` é escrita, e o canal por QR é
  * cliente não-oficial: o WhatsApp restringe e bane por VOLUME, e bane o
  * NÚMERO, não a sessão. Um agente de terceiro em laço não derruba o servidor —
  * derruba o número da operação, e disso não há desfazer.
