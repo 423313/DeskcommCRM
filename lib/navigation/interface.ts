@@ -74,7 +74,7 @@ export function permitidos(
   role: Role | null,
   modulos?: readonly ModuloOpcional[],
 ): NavMetadata[] {
-  return NAV_CATALOG.filter(
+  return (NAV_CATALOG as readonly NavMetadata[]).filter(
     (d) => canSee(d, platform, role) && (!modulos || !d.modulo || modulos.includes(d.modulo)),
   );
 }
