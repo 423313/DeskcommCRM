@@ -9227,7 +9227,9 @@ export const DICIONARIO: Traducoes = {
   "Aplicar marcadores": { es: "Aplicar etiquetas" },
   "Aprendizado do assistente": { es: "Aprendizaje del asistente" },
   "Arquivar uma etapa do funil": { es: "Archivar una etapa del embudo" },
+  "Banco de dados conectado": { es: "Base de datos conectada" },
   "Base de conhecimento": { es: "Base de conocimiento" },
+  "Buscar dados no banco conectado": { es: "Buscar datos en la base conectada" },
   "Cadastro de clientes": { es: "Registro de clientes" },
   "Cancelar um retorno agendado": { es: "Cancelar un seguimiento programado" },
   "Catálogo da loja": { es: "Catálogo de la tienda" },
@@ -9287,6 +9289,9 @@ export const DICIONARIO: Traducoes = {
   },
   "Interrompe o atendimento automático e chama uma pessoa, entregando um resumo do que já aconteceu na conversa.": {
     es: "Interrumpe la atención automática y llama a una persona, con un resumen de lo que ya pasó en la conversación.",
+  },
+  "Lê o conteúdo de uma tabela do banco que você conectou, com filtros, para o assistente responder ao cliente com o dado real em vez de estimar.": {
+    es: "Lee el contenido de una tabla de la base que conectaste, con filtros, para que el asistente responda al cliente con el dato real en lugar de estimar.",
   },
   "Ler o histórico da conversa": { es: "Leer el historial de la conversación" },
   "Ler um chamado e o que a pessoa decidiu": { es: "Leer un caso y lo que la persona decidió" },
@@ -9366,6 +9371,9 @@ export const DICIONARIO: Traducoes = {
   "Mostra quais pessoas da equipe estão em atendimento neste momento, quantas conversas cada uma já tem e quem ainda tem espaço para receber mais uma.": {
     es: "Muestra qué personas del equipo están en atención en este momento, cuántas conversaciones tiene cada una y quién todavía tiene espacio para recibir una más.",
   },
+  "Mostra quais tabelas e campos existem no banco de dados que você conectou, para o assistente saber onde procurar o dado antes de responder.": {
+    es: "Muestra qué tablas y campos existen en la base de datos que conectaste, para que el asistente sepa dónde buscar el dato antes de responder.",
+  },
   "Mostra quantas pessoas estão esperando atendimento agora e há quanto tempo, para priorizar quem espera mais.": {
     es: "Muestra cuántas personas están esperando atención ahora y cuánto tiempo llevan así, para priorizar a quien espera más.",
   },
@@ -9423,6 +9431,7 @@ export const DICIONARIO: Traducoes = {
   "Ver as entradas automáticas de contatos": { es: "Ver las entradas automáticas de contactos" },
   "Ver as regras automáticas": { es: "Ver las reglas automáticas" },
   "Ver as respostas prontas": { es: "Ver las respuestas rápidas" },
+  "Ver as tabelas do banco conectado": { es: "Ver las tablas de la base conectada" },
   "Ver horários livres na agenda": { es: "Ver horarios libres en la agenda" },
   "Ver o que a empresa atende": { es: "Ver lo que la empresa atiende" },
   "Ver o que as regras dispararam": { es: "Ver lo que las reglas dispararon" },
