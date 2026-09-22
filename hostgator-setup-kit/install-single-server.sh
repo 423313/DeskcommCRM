@@ -104,6 +104,11 @@ set_env_var "$supabase_env" SUPABASE_PUBLIC_URL "https://${domain}"
 set_env_var "$supabase_env" API_EXTERNAL_URL "https://${domain}/auth/v1"
 set_env_var "$supabase_env" SITE_URL "https://${domain}"
 set_env_var "$supabase_env" ADDITIONAL_REDIRECT_URLS "https://${domain}/auth/confirm,https://${domain}/**"
+# Confirmacao de e-mail fica LIGADA: sem ela qualquer pessoa cria conta com
+# um e-mail que nao e dela. Fixada aqui, e nao herdada do default do Supabase,
+# para que um bump do SUPABASE_REF nao a desligue calado. Vigiado por
+# tests/shell/single-server-installer.test.sh.
+set_env_var "$supabase_env" ENABLE_EMAIL_AUTOCONFIRM false
 set_env_var "$supabase_env" PROXY_DOMAIN "$domain"
 set_env_var "$supabase_env" CERTBOT_EMAIL "admin@${domain}"
 set_env_var "$supabase_env" SINGLE_SERVER_NETWORK "$SINGLE_SERVER_NETWORK"
@@ -146,20 +151,15 @@ set_env_var "$app_env" NEXT_PUBLIC_SUPABASE_URL "https://${domain}"
 set_env_var "$app_env" NEXT_PUBLIC_SUPABASE_ANON_KEY "$anon_key"
 set_env_var "$app_env" SUPABASE_SERVICE_ROLE_KEY "$service_key"
 set_env_var "$app_env" SUPABASE_DB_URL "postgresql://postgres:${postgres_password_uri}@supabase-db:5432/postgres"
-set_env_var "$app_env" APP_IMAGE "${IMG_APP}:latest"
-set_env_var "$app_env" WORKER_IMAGE "${IMG_WORKER}:latest"
-set_env_var "$app_env" SCHEDULER_IMAGE "${IMG_SCHEDULER}:latest"
-set_env_var "$app_env" APP_PULL_POLICY always
-set_env_var "$app_env" WORKER_PULL_POLICY always
-set_env_var "$app_env" SCHEDULER_PULL_POLICY always
+# Imagens: nao se grava nada aqui. O install.sh resolve a ultima versao
+# publicada das TRES imagens e grava numero de versao (nunca tag movel).
 set_env_var "$app_env" OWNER_EMAIL "$owner_email"
 set_env_var "$app_env" OWNER_PASSWORD "$owner_password"
 set_env_var "$app_env" APP_NAME DeskcommCRM
 set_env_var "$app_env" APP_LOCALE pt-BR
-set_env_var "$app_env" AI_PROVIDER disabled
-set_env_var "$app_env" ANTHROPIC_API_KEY ""
-set_env_var "$app_env" OPENROUTER_API_KEY ""
-set_env_var "$app_env" OPENAI_API_KEY ""
+# IA: nenhuma chave e gravada, entao ela nasce sem credencial (desligada) e o
+# fim do install.sh aponta o caminho em IA > Credenciais. Chaves NAO sao
+# zeradas: re-rodar este script nao pode apagar uma chave posta depois.
 set_env_var "$app_env" SENTRY_DSN off
 
 step "Configurando o CRM sem perguntas adicionais"
