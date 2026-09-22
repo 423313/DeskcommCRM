@@ -43,9 +43,18 @@ import { RAIZ_DO_REPO } from "./helpers/varrer-codigo";
  */
 const ALVO = "lib/channels/zernio/ingest.ts";
 
-/** Sem comentários: o que se mede é o que o V8 executa, não a prosa ao lado. */
+/**
+ * Sem comentários: o que se mede é o que o V8 executa, não a prosa ao lado.
+ *
+ * O comentário vira UM ESPAÇO, nunca o vazio. Apagá-lo por completo colaria a
+ * linha de cima na de baixo e, quando a prosa está DENTRO da cadeia (entre um
+ * `.select()` e o `.eq()` seguinte), a varredura enxergaria uma cadeia
+ * diferente da que existe. Foi medido: com o corte para vazio, a busca
+ * consertada sumia do corpus e a cerca ficava verde por não ter olhado — o
+ * controle de não-vacuidade abaixo é o que pegou isso.
+ */
 function semComentarios(ts: string): string {
-  return ts.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  return ts.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 }
 
 /**
@@ -112,6 +121,12 @@ describe("busca por social_identity em public.contacts", () => {
 
     // Prosa não é código: o defeito citado num comentário não reprova ninguém.
     expect(buscasPorIdentidadeSocial(`// ${defeito}`)).toEqual([]);
+
+    // ...mas prosa DENTRO da cadeia não pode cegar a varredura. Com o corte de
+    // comentário para vazio, `.select("id")` colava no `.eq()` da linha
+    // seguinte e a cadeia sumia do corpus — verde por não ter olhado.
+    const comProsaNoMeio = `await admin.from("contacts").select("id")\n  // por que a guarda existe\n  .eq("organization_id", org).eq("social_identity", identity).is("is_merged_into", null).maybeSingle();`;
+    expect(buscasPorIdentidadeSocial(comProsaNoMeio).map(ignoraFichaMesclada)).toEqual([true]);
 
     // Outra tabela com o mesmo nome de coluna não é alvo desta cerca.
     expect(
