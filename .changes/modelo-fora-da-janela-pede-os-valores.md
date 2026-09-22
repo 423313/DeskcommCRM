@@ -10,4 +10,7 @@ recusava a mensagem, mas a tela mostrava "Modelo enviado", e o cliente nunca rec
 
 Agora o painel mostra um campo para cada valor que o modelo exige, como o link da imagem
 do cabeçalho, e só libera o botão com todos preenchidos. Se o envio falhar mesmo assim, o
-aviso passa a ser de erro e diz o motivo. Crédito: @rafaelbatistazz.
+aviso passa a ser de erro e diz o motivo.
+
+O link da mídia também pode ficar salvo no modelo: marque "Salvar este link no modelo" e
+ele vem preenchido nos próximos envios. Crédito: @rafaelbatistazz.
