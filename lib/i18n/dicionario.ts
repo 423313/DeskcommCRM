@@ -7078,6 +7078,22 @@ export const DICIONARIO: Traducoes = {
   },
   "Nova senha": { es: "Nueva contraseña" },
   "Confirmar nova senha": { es: "Confirmar nueva contraseña" },
+  "Mostrar nova senha": { es: "Mostrar nueva contraseña" },
+  "Ocultar nova senha": { es: "Ocultar nueva contraseña" },
+  "Mostrar confirmação da senha": { es: "Mostrar confirmación de la contraseña" },
+  "Ocultar confirmação da senha": { es: "Ocultar confirmación de la contraseña" },
+  // Indicador de força (components/auth/ResetPasswordForm.tsx): rótulo e
+  // requisitos vêm de listas, t(label) dinâmico, invisível ao scanner de t().
+  "Força da senha": { es: "Seguridad de la contraseña" },
+  "Muito fraca": { es: "Muy débil" },
+  "Fraca": { es: "Débil" },
+  "Razoável": { es: "Aceptable" },
+  "Boa": { es: "Buena" },
+  "Forte": { es: "Fuerte" },
+  "8 ou mais caracteres": { es: "8 o más caracteres" },
+  "Uma letra": { es: "Una letra" },
+  "Um número": { es: "Un número" },
+  "Um símbolo": { es: "Un símbolo" },
   "Código de verificação (2 etapas)": { es: "Código de verificación (2 pasos)" },
   "Não foi possível criar a conta. Tente novamente.": {
     es: "No se pudo crear la cuenta. Intenta de nuevo.",
@@ -7105,6 +7121,9 @@ export const DICIONARIO: Traducoes = {
   // `errors.campo.message` (não literal, invisível ao scanner de t()).
   "Email inválido": { es: "Correo inválido" },
   "Senha deve ter pelo menos 8 caracteres": { es: "La contraseña debe tener al menos 8 caracteres" },
+  "Senha deve ter pelo menos uma letra": { es: "La contraseña debe tener al menos una letra" },
+  "Senha deve ter pelo menos um número": { es: "La contraseña debe tener al menos un número" },
+  "Senha deve ter pelo menos um símbolo": { es: "La contraseña debe tener al menos un símbolo" },
   "As senhas não coincidem": { es: "Las contraseñas no coinciden" },
 
   // ═══ Agenda, Desempenho, Radar e Respostas rápidas ═══
