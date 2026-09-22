@@ -5339,6 +5339,19 @@ export const DICIONARIO: Traducoes = {
     es: "Plantilla enviada — la ventana se reabre cuando el cliente responda.",
   },
   "Não consegui enviar o modelo.": { es: "No pude enviar la plantilla." },
+  "link da imagem": { es: "enlace de la imagen" },
+  "Salvar este link no modelo": { es: "Guardar este enlace en la plantilla" },
+  "já há um link salvo": { es: "ya hay un enlace guardado" },
+  "O modelo saiu, mas não consegui salvar o link nele.": {
+    es: "La plantilla se envió, pero no pude guardar el enlace en ella.",
+  },
+  "link do vídeo": { es: "enlace del video" },
+  "link do documento": { es: "enlace del documento" },
+  "sufixo da URL": { es: "sufijo de la URL" },
+  "código do cupom": { es: "código del cupón" },
+  "A mídia do modelo entra por link público — a plataforma baixa o arquivo na hora do envio.": {
+    es: "El archivo multimedia de la plantilla va por enlace público: la plataforma lo descarga en el momento del envío.",
+  },
   "Nenhum modelo aprovado ainda. Crie um em": { es: "Todavía no hay ninguna plantilla aprobada. Crea una en" },
   "Conexões → Templates": { es: "Conexiones → Plantillas" },
   "e envie quando a plataforma aprovar.": { es: "y envíala cuando la plataforma la apruebe." },
@@ -7078,6 +7091,22 @@ export const DICIONARIO: Traducoes = {
   },
   "Nova senha": { es: "Nueva contraseña" },
   "Confirmar nova senha": { es: "Confirmar nueva contraseña" },
+  "Mostrar nova senha": { es: "Mostrar nueva contraseña" },
+  "Ocultar nova senha": { es: "Ocultar nueva contraseña" },
+  "Mostrar confirmação da senha": { es: "Mostrar confirmación de la contraseña" },
+  "Ocultar confirmação da senha": { es: "Ocultar confirmación de la contraseña" },
+  // Indicador de força (components/auth/ResetPasswordForm.tsx): rótulo e
+  // requisitos vêm de listas, t(label) dinâmico, invisível ao scanner de t().
+  "Força da senha": { es: "Seguridad de la contraseña" },
+  "Muito fraca": { es: "Muy débil" },
+  "Fraca": { es: "Débil" },
+  "Razoável": { es: "Aceptable" },
+  "Boa": { es: "Buena" },
+  "Forte": { es: "Fuerte" },
+  "8 ou mais caracteres": { es: "8 o más caracteres" },
+  "Uma letra": { es: "Una letra" },
+  "Um número": { es: "Un número" },
+  "Um símbolo": { es: "Un símbolo" },
   "Código de verificação (2 etapas)": { es: "Código de verificación (2 pasos)" },
   "Não foi possível criar a conta. Tente novamente.": {
     es: "No se pudo crear la cuenta. Intenta de nuevo.",
@@ -7105,6 +7134,9 @@ export const DICIONARIO: Traducoes = {
   // `errors.campo.message` (não literal, invisível ao scanner de t()).
   "Email inválido": { es: "Correo inválido" },
   "Senha deve ter pelo menos 8 caracteres": { es: "La contraseña debe tener al menos 8 caracteres" },
+  "Senha deve ter pelo menos uma letra": { es: "La contraseña debe tener al menos una letra" },
+  "Senha deve ter pelo menos um número": { es: "La contraseña debe tener al menos un número" },
+  "Senha deve ter pelo menos um símbolo": { es: "La contraseña debe tener al menos un símbolo" },
   "As senhas não coincidem": { es: "Las contraseñas no coinciden" },
 
   // ═══ Agenda, Desempenho, Radar e Respostas rápidas ═══
@@ -10681,6 +10713,45 @@ export const DICIONARIO: Traducoes = {
     es: "Cambia el número por el WhatsApp de la empresa y el texto por el tuyo, pero deja el código al final:",
   },
   "Olá! Vim pelo site.": { es: "¡Hola! Vengo del sitio." },
+  // ── O endereço de captura de UTM (o ref curto da landing page) ───────────
+  // As macros da plataforma (`{{campaign.name}}` e irmãs) NÃO entram aqui: são
+  // vocabulário da plataforma de anúncio, e traduzi-las quebraria a URL.
+  "Endereço de captura (sem script na página)": {
+    es: "Dirección de captura (sin script en la página)",
+  },
+  "Em vez do link do WhatsApp, o botão da sua página aponta para este endereço. Ele guarda a origem, cria um código curto e abre o WhatsApp com esse código no texto — o visitante não vê nada além do botão de sempre.": {
+    es: "En lugar del enlace de WhatsApp, el botón de tu página apunta a esta dirección. Ella guarda el origen, crea un código corto y abre WhatsApp con ese código en el texto — el visitante no ve nada más que el botón de siempre.",
+  },
+  "Para qual WhatsApp mandar": { es: "A qué WhatsApp enviar" },
+  "Formato internacional, com o código do país. Os números já conectados aparecem como sugestão.": {
+    es: "Formato internacional, con el código del país. Los números ya conectados aparecen como sugerencia.",
+  },
+  "Texto que a pessoa vai enviar": { es: "Texto que la persona va a enviar" },
+  "Precisa conter o campo do código — é onde o código curto entra antes de abrir o WhatsApp.": {
+    es: "Tiene que contener el campo del código — es donde entra el código corto antes de abrir WhatsApp.",
+  },
+  "Endereço de captura ligado": { es: "Dirección de captura activada" },
+  "Desligar faz o endereço parar de responder. Quem já usa o link do WhatsApp direto não é afetado.": {
+    es: "Apagarla hace que la dirección deje de responder. Quien ya usa el enlace de WhatsApp directo no se ve afectado.",
+  },
+  "Cole este endereço no botão da sua página": {
+    es: "Pega esta dirección en el botón de tu página",
+  },
+  "Os campos entre chaves são preenchidos pela própria plataforma de anúncio quando você os põe nos parâmetros de URL do anúncio. Se a sua página serve mais de uma campanha, o botão precisa repassar os parâmetros que a página recebeu — sem isso a conversa entra sem origem.": {
+    es: "Los campos entre llaves los completa la propia plataforma de anuncios cuando los pones en los parámetros de URL del anuncio. Si tu página sirve a más de una campaña, el botón tiene que reenviar los parámetros que la página recibió — sin eso la conversación entra sin origen.",
+  },
+  "Copiar endereço": { es: "Copiar dirección" },
+  "Salvar endereço de captura": { es: "Guardar dirección de captura" },
+  "Informe o número e mantenha o campo do código no texto para poder salvar.": {
+    es: "Informa el número y mantén el campo del código en el texto para poder guardar.",
+  },
+  "Endereço de captura salvo.": { es: "Dirección de captura guardada." },
+  "Só um administrador da organização pode mudar este endereço.": {
+    es: "Solo un administrador de la organización puede cambiar esta dirección.",
+  },
+  "Esta organização ainda não tem um apelido de URL, e o endereço de captura precisa de um. Fale com quem administra o servidor.": {
+    es: "Esta organización todavía no tiene un alias de URL, y la dirección de captura necesita uno. Habla con quien administra el servidor.",
+  },
   // Os NOMES das chaves saíram da frase: a tela os lê de `CHAVES_DE_UTM` e os
   // imprime fora do `t()`. Uma chave nova não mexe mais em tradução nenhuma.
   "Este exemplo foi gerado por esta tela. Os campos que o código aceita são:": {
