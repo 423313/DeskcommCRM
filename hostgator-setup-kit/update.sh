@@ -110,6 +110,10 @@ if [ -n "$MESMA_TAG" ] && [ -z "$FORCE" ] && ! image_desatualizada; then
     manutencao_desce
     c_ylw "⚠ Havia um aviso de manutenção preso de uma atualização anterior — removido."
     c_ylw "  Enquanto ele estava de pé, o CRM respondia 503 para todo mundo."
+    # Aviso preso = a execução anterior morreu no meio (banco e/ou imagem pela
+    # metade); "nada a atualizar" sozinho deixaria o app na imagem antiga.
+    c_ylw "  A atualização anterior não terminou. Para concluí-la:"
+    c_ylw "    bash hostgator-setup-kit/update.sh --to $TARGET_TAG --force"
   fi
   c_grn "✓ Você já está na versão mais recente ($TARGET_TAG). Nada a atualizar."
   exit 0

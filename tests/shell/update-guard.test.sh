@@ -748,6 +748,7 @@ check "  e a saída é mesmo a antecipada" grep -q "Nada a atualizar" "$OUTFILE"
 check "  não rodou o backup (não virou atualização)" test ! -f "$BACKUP_MARK"
 check "  removeu o contêiner do aviso" grep -q "rm -f deskcomm-manutencao" "$DOCKER_LOG"
 check "  e contou a quem opera" grep -q "aviso de manutenção preso" "$OUTFILE"
+check "  e ensina a concluir com --force" grep -q -- "--to v1.1.0 --force" "$OUTFILE"
 : > "$DOCKER_LOG"
 IMAGEM_EM_DIA=1 run_update --to v1.1.0
 check "sem aviso de pé: não mexe em contêiner nenhum" \
