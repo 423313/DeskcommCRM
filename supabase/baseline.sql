@@ -7427,7 +7427,21 @@ from ranked
 where e.id = ranked.id
   and ranked.rn > 1;
 
-drop index if exists idx_followup_enrollments_one_live;
+-- Só derruba a versão por `pointer_id` (issue #1041): numa reaplicação o índice
+-- já é por (organization_id, contact_id), e derrubá-lo aqui o reconstruiria para
+-- a 0145 derrubar e reconstruir de novo adiante.
+do $$
+begin
+  if exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and indexname  = 'idx_followup_enrollments_one_live'
+      and indexdef not ilike '%(organization_id, contact_id)%'
+  ) then
+    execute 'drop index public.idx_followup_enrollments_one_live';
+  end if;
+end
+$$;
 create unique index if not exists idx_followup_enrollments_one_live
   on followup_enrollments (organization_id, contact_id)
   where status in ('active', 'waiting_reply', 'paused_handoff');
@@ -11964,7 +11978,21 @@ exception when duplicate_object then null; end $$;
 -- de copiar a definição EM VIGOR, não a da DDL original — recriar a partir da
 -- linha errada reverte a garantia sem conflito de merge e sem sintoma imediato.
 -- Corrigido na integração; ver a nota no MANIFEST da 0145.
-drop index if exists idx_followup_enrollments_one_live;
+-- Só derruba a versão sem `paused_manual` (issue #1041): numa reaplicação o
+-- índice já está na versão final, e reconstruí-lo deixaria a trava de "um
+-- follow-up vivo por contato" ausente durante o build, com o app no ar.
+do $$
+begin
+  if exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and indexname  = 'idx_followup_enrollments_one_live'
+      and indexdef not ilike '%paused_manual%'
+  ) then
+    execute 'drop index public.idx_followup_enrollments_one_live';
+  end if;
+end
+$$;
 create unique index if not exists idx_followup_enrollments_one_live
   on public.followup_enrollments (organization_id, contact_id)
   where status in ('active','waiting_reply','paused_handoff','paused_manual');
@@ -15518,17 +15546,33 @@ comment on column public.calendar_external_events.transparency is
 -- A cor é DA PESSOA NAQUELA ORGANIZAÇÃO, e por isso mora em user_organizations
 -- e não em auth.users: quem trabalha em duas organizações pode ser verde numa
 -- e azul na outra, e a cor de uma não vaza para a outra.
-alter table public.user_organizations
-  add column if not exists calendar_color text;
+-- ⚠️ A 0186, adiante, troca esta coluna por `calendar_trilha` e a DERRUBA. Sem a
+-- guarda, toda reaplicação do baseline recriaria a coluna e o CHECK aqui para a
+-- 0186 derrubar em seguida: quatro travas exclusivas numa tabela que toda policy
+-- de RLS consulta, e um número de coluna gasto que não volta (issue #1041).
+-- `calendar_trilha` é o sinal de que a 0186 já passou por este banco.
+do $$
+begin
+  if not exists (
+    select 1 from pg_attribute
+    where attrelid = 'public.user_organizations'::regclass
+      and attname = 'calendar_trilha'
+      and not attisdropped
+  ) then
+    alter table public.user_organizations
+      add column if not exists calendar_color text;
 
-alter table public.user_organizations
-  drop constraint if exists user_organizations_calendar_color_format;
-alter table public.user_organizations
-  add constraint user_organizations_calendar_color_format
-  check (calendar_color is null or calendar_color ~ '^#[0-9a-fA-F]{6}$');
+    alter table public.user_organizations
+      drop constraint if exists user_organizations_calendar_color_format;
+    alter table public.user_organizations
+      add constraint user_organizations_calendar_color_format
+      check (calendar_color is null or calendar_color ~ '^#[0-9a-fA-F]{6}$');
 
-comment on column public.user_organizations.calendar_color is
-  'Cor desta pessoa na grade da Agenda, nesta organização. NULL = a tela deriva uma cor estável do user_id, para ninguém nascer sem cor. ⚠️ A policy de SELECT desta tabela é self-OU-manager+: um `agent` NÃO lê a linha dos colegas pelo PostgREST. A tela recebe as cores pela rota que já monta o roster com service role (GET /api/v1/team), não por leitura direta.';
+    comment on column public.user_organizations.calendar_color is
+      'Cor desta pessoa na grade da Agenda, nesta organização. NULL = a tela deriva uma cor estável do user_id, para ninguém nascer sem cor. ⚠️ A policy de SELECT desta tabela é self-OU-manager+: um `agent` NÃO lê a linha dos colegas pelo PostgREST. A tela recebe as cores pela rota que já monta o roster com service role (GET /api/v1/team), não por leitura direta.';
+  end if;
+end
+$$;
 
 drop trigger if exists trg_limpar_vinculos_do_agendamento on public.calendar_appointments;
 create trigger trg_limpar_vinculos_do_agendamento
@@ -15927,10 +15971,23 @@ alter table public.user_organizations
 comment on column public.user_organizations.calendar_trilha is
   'A trilha de cor desta pessoa na grade da Agenda, nesta organização (1..8). NULL = use a derivada de trilhaPadraoDoMembro(user_id), que é estável mas colide para alguns pares — esta coluna existe para quem administra desempatar. A COR de cada trilha vive em app/globals.css (--agenda-pessoa-N) e muda com o tema; guardar hex aqui seria um segundo lugar para a mesma verdade, sem tema escuro. ⚠️ A policy de SELECT desta tabela é self-OU-manager+: um `agent` não lê a linha dos colegas pelo PostgREST, então as trilhas chegam à tela pela rota que monta o roster com service role.';
 
-alter table public.user_organizations
-  drop constraint if exists user_organizations_calendar_color_format;
-alter table public.user_organizations
-  drop column if exists calendar_color;
+-- Só age quando a coluna existe (issue #1041): `drop ... if exists` sem efeito
+-- ainda pede trava exclusiva sobre user_organizations.
+do $$
+begin
+  if exists (
+    select 1 from pg_attribute
+    where attrelid = 'public.user_organizations'::regclass
+      and attname = 'calendar_color'
+      and not attisdropped
+  ) then
+    alter table public.user_organizations
+      drop constraint if exists user_organizations_calendar_color_format;
+    alter table public.user_organizations
+      drop column calendar_color;
+  end if;
+end
+$$;
 
 -- ─── 2 · a cor do tipo de agendamento sai ─────────────────────────────────
 alter table public.calendar_event_types
@@ -20773,19 +20830,68 @@ alter table public.calendar_external_events
  add column if not exists original_start_time jsonb;
 alter table public.calendar_external_events alter column starts_at drop not null;
 alter table public.calendar_external_events alter column ends_at drop not null;
-alter table public.calendar_external_events drop constraint if exists calendar_external_events_periodo_valido;
-alter table public.calendar_external_events add constraint calendar_external_events_periodo_valido
- check(status='cancelled' or (starts_at is not null and ends_at is not null and ends_at>starts_at));
-drop index if exists public.calendar_appointments_google_evento_key;
+-- Os três blocos abaixo só agem quando o banco ainda não chegou à versão da 0225
+-- (issue #1041). Sem a guarda, toda reaplicação revalidava o CHECK varrendo a
+-- tabela, reconstruía o índice único e reescrevia calendar_appointments inteira
+-- para recriar a coluna gerada, tudo sob trava exclusiva e com o app no ar.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'calendar_external_events_periodo_valido'
+      and conrelid = 'public.calendar_external_events'::regclass
+      and pg_get_constraintdef(oid) ilike '%cancelled%'
+  ) then
+    alter table public.calendar_external_events drop constraint if exists calendar_external_events_periodo_valido;
+    alter table public.calendar_external_events add constraint calendar_external_events_periodo_valido
+     check(status='cancelled' or (starts_at is not null and ends_at is not null and ends_at>starts_at));
+  end if;
+end
+$$;
+do $$
+begin
+  if exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and indexname  = 'calendar_appointments_google_evento_key'
+      and indexdef not ilike '%google_calendar_id%'
+  ) then
+    execute 'drop index public.calendar_appointments_google_evento_key';
+  end if;
+end
+$$;
 create unique index if not exists calendar_appointments_google_evento_key
  on public.calendar_appointments(organization_id,google_connection_id,google_calendar_id,google_event_id) where google_event_id is not null;
 -- Nenhum legado é declarado sincronizado sem GET/base. Tupla ambígua fica
 -- preservada e visível; não se adivinha calendário de outra conta/conexão.
-drop index if exists public.calendar_appointments_pendente_no_google_idx;
-drop view if exists public.calendar_google_reconcilable_appointments;
-alter table public.calendar_appointments drop column if exists needs_google_push;
-alter table public.calendar_appointments add column needs_google_push boolean generated always as
- (google_local_revision>google_synced_local_revision and google_conflict is null) stored;
+-- A view é `select a.*` da tabela: ela só precisa sair quando a coluna for
+-- trocada, e volta adiante pelo `create or replace view`.
+do $$
+begin
+  if not exists (
+    select 1 from pg_attribute a
+    join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+    where a.attrelid = 'public.calendar_appointments'::regclass
+      and a.attname = 'needs_google_push'
+      and not a.attisdropped
+      and pg_get_expr(d.adbin, d.adrelid) ilike '%google_local_revision%'
+  ) then
+    drop index if exists public.calendar_appointments_pendente_no_google_idx;
+    drop view if exists public.calendar_google_reconcilable_appointments;
+    alter table public.calendar_appointments drop column if exists needs_google_push;
+    alter table public.calendar_appointments add column needs_google_push boolean generated always as
+     (google_local_revision>google_synced_local_revision and google_conflict is null) stored;
+  end if;
+  if exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and indexname  = 'calendar_appointments_pendente_no_google_idx'
+      and indexdef not ilike '%(google_next_attempt_at)%'
+  ) then
+    execute 'drop index public.calendar_appointments_pendente_no_google_idx';
+  end if;
+end
+$$;
 create index if not exists calendar_appointments_pendente_no_google_idx
  on public.calendar_appointments(google_next_attempt_at) where needs_google_push and owner_user_id is not null;
 
