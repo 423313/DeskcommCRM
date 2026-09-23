@@ -36,7 +36,7 @@ const formSchema = z.object({
   // Derivado das listas (`lib/ai/pontos/provedores.ts`), como a rota.
   provider: z.enum(IDS_COM_CHAVE),
   label: z.string().trim().min(1, "Obrigatório").max(80),
-  api_key: z.string().trim().min(8, "API key muito curta").max(2048),
+  api_key: z.string().trim().min(8, "Chave muito curta").max(2048),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -141,7 +141,7 @@ export function AddCredentialDialog({ open, onOpenChange, providerInicial = "ant
         <DialogHeader>
           <DialogTitle>{t("Adicionar credencial")}</DialogTitle>
           <DialogDescription>
-            {t("A chave é cifrada (AES-GCM) antes de gravar e nunca é retornada em texto claro.")}
+            {t("A chave é guardada cifrada. Depois de salva, só os quatro últimos caracteres aparecem na tela.")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -180,7 +180,7 @@ export function AddCredentialDialog({ open, onOpenChange, providerInicial = "ant
 
           <div className="space-y-2">
             <div className="flex items-baseline justify-between">
-              <Label htmlFor="cred-key">{t("API key")}</Label>
+              <Label htmlFor="cred-key">{t("Chave")}</Label>
               <a
                 className="text-xs underline underline-offset-4"
                 href={provedor.ondePegarAChave}

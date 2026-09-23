@@ -1024,8 +1024,8 @@ export const DICIONARIO: Traducoes = {
     es: "La clave del proveedor de IA que los agentes usan para pensar.",
   },
   Provedores: { es: "Proveedores" },
-  "Qual inteligência atende cada parte do sistema, o que acontece se ela falhar e o Jev, das decisões rápidas.": {
-    es: "Qué inteligencia atiende cada parte del sistema, qué ocurre si falla y Jev, el de las decisiones rápidas.",
+  "Qual inteligência atende cada parte do sistema, o que acontece se ela falhar e onde ligar o Jev, que percebe na hora quando um cliente está irritado.": {
+    es: "Qué inteligencia atiende cada parte del sistema, qué ocurre si falla y dónde activar Jev, que nota al instante cuando un cliente está molesto.",
   },
   Conhecimento: { es: "Conocimiento" },
   "Os materiais que o agente consulta antes de responder sobre o seu negócio.": {
@@ -2278,8 +2278,8 @@ export const DICIONARIO: Traducoes = {
   "Agents que usam esta credencial vão falhar ao executar. Esta ação não pode ser desfeita.": {
     es: "Los agentes que usan esta credencial fallarán al ejecutarse. Esta acción no se puede deshacer.",
   },
-  "A chave é cifrada (AES-GCM) antes de gravar e nunca é retornada em texto claro.": {
-    es: "La clave se cifra (AES-GCM) antes de guardarse y nunca se devuelve en texto plano.",
+  "A chave é guardada cifrada. Depois de salva, só os quatro últimos caracteres aparecem na tela.": {
+    es: "La clave se guarda cifrada. Una vez guardada, solo los cuatro últimos caracteres aparecen en pantalla.",
   },
   "Ex: Produção": { es: "Ej.: Producción" },
   "Credencial salva. Validando…": { es: "Credencial guardada. Validando…" },
@@ -2287,7 +2287,7 @@ export const DICIONARIO: Traducoes = {
   "modelos disponíveis.": { es: "modelos disponibles." },
   "Salvar e validar": { es: "Guardar y validar" },
   "Obrigatório": { es: "Obligatorio" },
-  "API key muito curta": { es: "API key demasiado corta" },
+  "Chave muito curta": { es: "Clave demasiado corta" },
   Casos: { es: "Casos" },
   "Quando a IA trava em algo que só um humano resolve, ela abre um caso aqui — e continua conversando com o cliente enquanto espera sua resposta.":
     {
@@ -3390,7 +3390,6 @@ export const DICIONARIO: Traducoes = {
   "Mostrando só o Jev": { es: "Mostrando solo Jev" },
   "O Jev ainda não mediu nenhuma mensagem.": { es: "Jev todavía no midió ningún mensaje." },
   "Default:": { es: "Predeterminado:" },
-  "API key": { es: "Clave de API" },
 
   // ─── Admin de plataforma: casca (shell, sidebar, banner, impersonate) ───
   "Acesso negado": { es: "Acceso denegado" },
@@ -6690,8 +6689,8 @@ export const DICIONARIO: Traducoes = {
   },
   "não pode ser desfeita": { es: "no se puede deshacer" },
   "7. Segurança": { es: "7. Seguridad" },
-  "O acesso é controlado por conta, senha e papel, com verificação em duas etapas opcional, que quem administra pode tornar obrigatória. Cada organização hospedada só enxerga os próprios dados, e as chaves de integração são guardadas cifradas.": {
-    es: "El acceso se controla con cuenta, contraseña y rol, con verificación en dos pasos opcional, que quien administra puede volver obligatoria. Cada organización alojada solo ve sus propios datos y las claves de integración se guardan cifradas.",
+  "O acesso é controlado por conta, senha e papel. A verificação em duas etapas é opcional para todos e só pode ser exigida de quem administra. Cada organização hospedada só enxerga os próprios dados, e as chaves de integração são guardadas cifradas.": {
+    es: "El acceso se controla con cuenta, contraseña y rol. La verificación en dos pasos es opcional para todos y solo se puede exigir a quien administra. Cada organización alojada solo ve sus propios datos y las claves de integración se guardan cifradas.",
   },
   "8. Encarregado e contato": { es: "8. Encargado y contacto" },
   "Para exercer seus direitos ou tirar dúvidas sobre privacidade, fale com o encarregado de dados:": {

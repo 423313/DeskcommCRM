@@ -76,7 +76,7 @@ export function RotateCredentialDialog({ open, onOpenChange, credential }: Props
     // A chave só é obrigatória a partir de 8 caracteres QUANDO existe uma nova;
     // em branco é "manter a atual", e é isso que impede renomear de girar a chave.
     if (chave !== "" && chave.length < 8) {
-      setErrors({ api_key: t("API key muito curta") });
+      setErrors({ api_key: t("Chave muito curta") });
       return;
     }
 

@@ -293,6 +293,16 @@ describe("GET /api/v1/ai/jev", () => {
     });
   });
 
+  it("falha que o Jev já superou (mediu depois dela) não aparece como última falha", async () => {
+    estado.llmCalls = [
+      chamada({ created_at: "2026-09-22T12:00:00.000Z" }),
+      chamada({ status: "erro", error_code: "jev_limite_de_taxa", created_at: "2026-09-22T11:00:00.000Z" }),
+    ];
+    const { corpo } = await ler();
+    expect(corpo.data.numeros.decisoes).toBe(1);
+    expect(corpo.data.ultima_falha).toBeNull();
+  });
+
   it("pagina: mais de 1000 execuções na semana contam todas", async () => {
     estado.llmCalls = Array.from({ length: 2500 }, () => chamada());
     const { corpo } = await ler();

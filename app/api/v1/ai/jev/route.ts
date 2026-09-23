@@ -72,12 +72,17 @@ function numerosDaSemana(linhas: readonly LinhaDaSemana[]) {
   const custo = doJev.reduce((soma, l) => soma + (l.cost_cents === null ? 0 : Number(l.cost_cents)), 0);
   // A mais recente pela DATA, não pela posição: a ordem da leitura existe para
   // a paginação, e mudar a ordem não pode trocar a falha que o cartão mostra.
-  const falha = doJev
-    .filter((l) => l.status === "erro")
-    .reduce<LinhaDaSemana | null>(
-      (maisNova, l) => (maisNova === null || Date.parse(l.created_at) > Date.parse(maisNova.created_at) ? l : maisNova),
-      null,
-    );
+  const maisNova = (atual: LinhaDaSemana | null, l: LinhaDaSemana) =>
+    atual === null || Date.parse(l.created_at) > Date.parse(atual.created_at) ? l : atual;
+  const ultimaFalha = doJev.filter((l) => l.status === "erro").reduce<LinhaDaSemana | null>(maisNova, null);
+  const ultimoSucesso = medidas.reduce<LinhaDaSemana | null>(maisNova, null);
+  // Só a falha que o Jev ainda não superou (D3: só alarma o que pede ação). Um
+  // 429 passageiro seguido de mil medidas não é notícia pela semana inteira.
+  const falha =
+    ultimaFalha !== null &&
+    (ultimoSucesso === null || Date.parse(ultimaFalha.created_at) > Date.parse(ultimoSucesso.created_at))
+      ? ultimaFalha
+      : null;
   return {
     numeros: {
       dias: DIAS_DOS_NUMEROS,

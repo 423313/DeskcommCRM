@@ -130,7 +130,7 @@ export default async function PrivacyPage() {
         <h2 className="text-base font-semibold">{t("7. Segurança")}</h2>
         <p>
           {t(
-            "O acesso é controlado por conta, senha e papel, com verificação em duas etapas opcional, que quem administra pode tornar obrigatória. Cada organização hospedada só enxerga os próprios dados, e as chaves de integração são guardadas cifradas.",
+            "O acesso é controlado por conta, senha e papel. A verificação em duas etapas é opcional para todos e só pode ser exigida de quem administra. Cada organização hospedada só enxerga os próprios dados, e as chaves de integração são guardadas cifradas.",
           )}
         </p>
       </section>

@@ -123,11 +123,13 @@ describe("CartaoDoJev — (1) sem chave", () => {
     montar(semChave());
     fireEvent.click(screen.getByRole("button", { name: "Colar a chave" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByLabelText(/API key/)).toHaveAttribute("placeholder", "apikey_…");
+    expect(screen.getByLabelText("Chave")).toHaveAttribute("placeholder", "apikey_…");
     expect(screen.getByRole("link", { name: /Pegar chave em/ })).toHaveAttribute(
       "href",
       "https://console.typesafe.ai/keys",
     );
+    // O caminho do leigo passa por este diálogo: sem o jargão que o cartão evita.
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(/API key|AES|token|prompt/i);
   });
 
   it("quem não administra não vê o botão de colar, e sabe por quê", () => {

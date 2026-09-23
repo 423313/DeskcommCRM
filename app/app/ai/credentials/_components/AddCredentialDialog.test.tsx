@@ -35,6 +35,6 @@ describe("AddCredentialDialog — ajuda ao escolher", () => {
 
   it("placeholder da chave é o prefixo do provedor, não 'sk-...' genérico", () => {
     montar();
-    expect(screen.getByLabelText(/API key/)).toHaveAttribute("placeholder", "sk-ant-…");
+    expect(screen.getByLabelText("Chave")).toHaveAttribute("placeholder", "sk-ant-…");
   });
 });
