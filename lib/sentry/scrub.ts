@@ -59,11 +59,18 @@ export function scrubMessage(input: string): string {
     // endereço e deixar o resto dele passar.
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]")
     // Telefone como se escreve no Brasil: +55 opcional, DDD opcional (com ou
-    // sem parênteses), 8 ou 9 dígitos com hífen, espaço ou nada no meio. A
-    // borda (`[^\w-]` antes, `(?![\w-])` depois) é o que impede comer pedaço de
-    // UUID; o padrão de baixo continua pegando o número colado em outro texto.
-    .replace(/(^|[^\w-])(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}[-\s]?\d{4}(?![\w-])/g, "$1[PHONE]")
-    .replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, "[CPF]")
+    // sem parênteses), 8 ou 9 dígitos (o 9 da frente pode vir solto), e hífen,
+    // ponto, espaço ou nada entre os blocos — `11-98765-4321` e `11.98765.4321`
+    // saíam inteiros enquanto a tela prometia apagar o telefone. A borda
+    // (`[^\w-]` antes, `(?![\w-])` depois) é o que impede comer pedaço de UUID;
+    // o padrão de baixo continua pegando o número colado em outro texto.
+    .replace(
+      /(^|[^\w-])(?:\+?55\s?)?(?:\(?\d{2}\)?[-.\s]?)?(?:9[-.\s]?\d{4}|\d{4,5})[-.\s]?\d{4}(?![\w-])/g,
+      "$1[PHONE]",
+    )
+    // CPF com qualquer separador entre os blocos (ponto, espaço, hífen ou nada):
+    // `123 456 789 09` e `123.456.789.09` também são CPF de quem digita rápido.
+    .replace(/\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}/g, "[CPF]")
     .replace(/\+?\d{2}\s?\d{4,5}-?\d{4}/g, "[PHONE]");
 }
 

@@ -86,10 +86,32 @@ describe("scrubMessage", () => {
       "98765-4321",
       "98765 4321",
       "3456-7890",
+      "11-98765-4321",
+      "11.98765.4321",
+      "(11)-98765-4321",
+      "98765.4321",
+      "(11) 9 8765-4321",
+      "+55 (11) 9 8765-4321",
     ]) {
       const out = scrubMessage(`meu zap ${tel}, obrigado`);
       expect(out, tel).not.toMatch(/\d{3}/);
       expect(out, tel).toMatch(/^meu zap .*\[(PHONE|CPF)\], obrigado$/);
+    }
+  });
+
+  // A tela do Jev promete apagar o CPF. Quem digita rápido não segue a máscara.
+  it("apaga CPF com qualquer separador entre os blocos", () => {
+    for (const cpf of [
+      "123.456.789-09",
+      "123 456 789 09",
+      "123.456.789.09",
+      "123-456-789-09",
+      "123.456.789 09",
+      "12345678909",
+    ]) {
+      const out = scrubMessage(`meu cpf ${cpf}, obrigado`);
+      expect(out, cpf).not.toMatch(/\d{3}/);
+      expect(out, cpf).toMatch(/^meu cpf \[(PHONE|CPF)\], obrigado$/);
     }
   });
 
