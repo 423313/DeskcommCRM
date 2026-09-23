@@ -45,6 +45,10 @@
 --    dos gatilhos de redação do schema. Sem ele, um roteiro 'coletando'
 --    continuaria perguntando e regravando dado pessoal depois do esquecimento.
 --
+-- 6. Superfície e status coerentes, por gatilho em `followup_enrollments`:
+--    roteiro de atendimento só existe como 'coletando' (ou terminal), e
+--    'coletando' só existe em roteiro de atendimento.
+--
 -- Idempotente, sem BEGIN/COMMIT. Nenhum dado existente é reescrito: os valores
 -- novos só ampliam conjuntos aceitos.
 
@@ -119,5 +123,46 @@ create trigger trg_contato_anonimizado_encerra_roteiro
   for each row
   when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
   execute function public.fn_contato_anonimizado_encerra_roteiro();
+
+-- A superfície e o status andam juntos, no BANCO. Quem cria enrollment pelo
+-- relógio (gatilhos de etapa, lead, caso, retorno, silêncio, o enroll manual) lê
+-- o pointer pelo `trigger_config`, não pela superfície: um roteiro de
+-- atendimento com gatilho de silêncio viraria enrollment 'active' e o motor de
+-- follow-up executaria as perguntas como passos de relógio. E o inverso — um
+-- 'coletando' num fluxo de follow-up — ocuparia a vaga do roteiro. Uma regra, um
+-- lugar, para todos os produtores de hoje e os que vierem.
+create or replace function public.fn_enrollment_superficie_coerente()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_surface text;
+begin
+  select p.surface into v_surface
+    from public.followup_flow_pointers p
+   where p.id = new.pointer_id;
+  if v_surface = 'atendimento' and new.status not in ('coletando','completed','cancelled','dead') then
+    raise exception 'roteiro de atendimento só roda como coletando (status %)', new.status
+      using errcode = '23514';
+  end if;
+  if v_surface is distinct from 'atendimento' and new.status = 'coletando' then
+    raise exception 'coletando é exclusivo de roteiro de atendimento'
+      using errcode = '23514';
+  end if;
+  return new;
+end
+$$;
+
+revoke all on function public.fn_enrollment_superficie_coerente() from public;
+revoke execute on function public.fn_enrollment_superficie_coerente() from anon;
+revoke execute on function public.fn_enrollment_superficie_coerente() from authenticated;
+
+drop trigger if exists trg_enrollment_superficie_coerente on public.followup_enrollments;
+create trigger trg_enrollment_superficie_coerente
+  before insert or update of status, pointer_id on public.followup_enrollments
+  for each row
+  execute function public.fn_enrollment_superficie_coerente();
 
 notify pgrst, 'reload schema';
