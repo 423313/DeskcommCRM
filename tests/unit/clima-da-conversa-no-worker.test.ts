@@ -286,6 +286,37 @@ describe("D12 — o clima roda com a chave colada pela tela", () => {
     expect(banco.llm_calls[0]).toMatchObject({ provider: "openai", model: "gpt-5.4-nano", status: "ok" });
   });
 
+  // O id padrão do clima é da Anthropic. A empresa que atende pela OpenAI,
+  // sem modelo escolhido para o clima, ficava com ele mudo — e o painel dizia
+  // "Usando o padrão da organização". Agora vale o padrão dela, o par inteiro.
+  it("OpenAI cadastrada em Credenciais, SEM modelo escolhido para o clima: mede com o padrão da organização", async () => {
+    const { resultado, banco } = await rodar({
+      settings: { llm: { provider: "openai", default_model: "gpt-5.6-terra" } },
+      credenciais: [credencial(CRED_OPENAI, "openai", "sk-openai-da-tela")],
+    });
+
+    expect(resultado.skipped, `o worker desistiu: ${resultado.reason ?? "-"}`).toBe(false);
+    expect(generateObject).toHaveBeenCalledTimes(1);
+    expect(banco.llm_calls[0]).toMatchObject({
+      provider: "openai",
+      model: "openai/gpt-5.6-terra",
+      status: "ok",
+    });
+  });
+
+  it("OpenAI só no .env, sem modelo escolhido para o clima: mede com o padrão da organização", async () => {
+    envMock.OPENAI_API_KEY = "sk-openai-da-instalacao";
+    try {
+      const { resultado, banco } = await rodar({
+        settings: { llm: { provider: "openai", default_model: "gpt-5.6-terra" } },
+      });
+      expect(resultado.skipped, `o worker desistiu: ${resultado.reason ?? "-"}`).toBe(false);
+      expect(banco.llm_calls[0]).toMatchObject({ provider: "openai", model: "openai/gpt-5.6-terra" });
+    } finally {
+      envMock.OPENAI_API_KEY = "";
+    }
+  });
+
   it("sem chave em lugar nenhum, pula sem chamar ninguém e sem linha (controle)", async () => {
     // Sem este caso, um worker que medisse com modelo inventado passaria nos
     // dois de cima. E é ele que prova que o `.env` deste arquivo está vazio.

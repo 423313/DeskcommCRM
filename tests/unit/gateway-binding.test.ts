@@ -354,3 +354,64 @@ describe("a credencial da organização só vale para modelo que o provider dela
     expect((r?.model as { modelId?: string }).modelId).toBe("anthropic/claude-haiku-4-5");
   });
 });
+
+/**
+ * A QUEDA PARA O PADRÃO DA ORGANIZAÇÃO — só quando pedida, e com o par inteiro.
+ *
+ * O clima pede um id da Anthropic. Numa empresa que atende pela OpenAI sem
+ * modelo escolhido para ele, nem a credencial dela nem a chave da instalação
+ * executam esse id, e o resolvedor devolvia `null`: clima mudo. Quem pede a
+ * queda recebe o padrão da organização (provedor E modelo de `settings.llm`);
+ * quem não pede — o agente que responde o cliente — segue recebendo `null`,
+ * porque o modelo dele só muda pela publicação.
+ */
+describe("naFaltaUsarOPadraoDaOrganizacao", () => {
+  function adminOpenAI() {
+    return () => ({
+      from: (tabela: string) => {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          not: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          maybeSingle: async () => ({
+            data:
+              tabela === "ai_purpose_bindings"
+                ? null
+                : tabela === "organizations"
+                  ? { settings: { llm: { provider: "openai", default_model: "gpt-5.6-terra" } } }
+                  : { api_key_encrypted: "x", api_key_iv: "y", api_key_tag: "z" },
+          }),
+        };
+        return chain;
+      },
+    });
+  }
+
+  async function importarSemChaveDeInstalacao() {
+    vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient: adminOpenAI() }));
+    // Nenhuma chave de instalação executa o id da Anthropic.
+    vi.doMock("@/lib/ai/gateway", async (orig) => ({
+      ...((await orig()) as Record<string, unknown>),
+      resolveLanguageModel: () => null,
+    }));
+    vi.resetModules();
+    return import("@/lib/ai/gateway-binding");
+  }
+
+  it("sem a opção, o id de outro provedor sem chave nenhuma devolve null (controle)", async () => {
+    const mod = await importarSemChaveDeInstalacao();
+    expect(await mod.resolverModeloDoPonto("bot_respond", ORG, "anthropic/claude-haiku-4-5")).toBeNull();
+  });
+
+  it("com a opção, usa o padrão da organização com a credencial dela", async () => {
+    const mod = await importarSemChaveDeInstalacao();
+    const r = await mod.resolverModeloDoPonto("sentiment_classify", ORG, "anthropic/claude-haiku-4-5", {
+      naFaltaUsarOPadraoDaOrganizacao: true,
+    });
+    expect(r?.origem).toBe("credencial_da_organizacao");
+    expect(r?.modelId).toBe("openai/gpt-5.6-terra");
+    expect((r?.model as { modelId?: string }).modelId).toBe("gpt-5.6-terra");
+  });
+});

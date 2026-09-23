@@ -87,10 +87,16 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     // oferecia "Medir o clima da conversa", aceitava a escolha e dizia
     // "salvo" — e este worker seguia usando o modelo padrão. Botão que não
     // controla nada é pior que botão ausente: gasta a confiança de quem clicou.
+    // O id padrão é da Anthropic: numa empresa que atende pela OpenAI, Google
+    // ou DeepSeek sem modelo escolhido para o clima, ninguém o executa, e o
+    // clima ficava mudo enquanto o painel dizia "Usando o padrão da
+    // organização". A queda para o padrão da organização é o que torna isso
+    // verdade. A rota do cartão do Jev faz a MESMA pergunta.
     const resolvido = await resolverModeloDoPonto(
       "sentiment_classify",
       event.organization_id,
       SENTIMENT_MODEL,
+      { naFaltaUsarOPadraoDaOrganizacao: true },
     );
 
     const messageId =

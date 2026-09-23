@@ -54,10 +54,27 @@ export interface ModeloResolvido {
  * deixá-la de pé faria a próxima pessoa concluir que a chave do `.env` ainda
  * vence a chave que a organização cadastrou na tela.
  */
+export interface OpcoesDoResolvedor {
+  /**
+   * Quando nem a credencial da organização nem a chave da instalação executam
+   * o modelo pedido, usar o padrão da organização (`settings.llm`: provedor e
+   * modelo JUNTOS) em vez de devolver `null`.
+   *
+   * É para o ponto que mede, não para o que conversa: o clima pede um id da
+   * Anthropic, e uma empresa que atende pela OpenAI (ou Google, ou DeepSeek)
+   * sem modelo escolhido para ele ficava com o clima mudo — enquanto o painel
+   * dizia "Usando o padrão da organização" para esse mesmo ponto. O modelo do
+   * agente que responde o cliente é a personalidade dele e muda pela
+   * publicação, nunca por esta queda; por isso é opção, e não regra.
+   */
+  naFaltaUsarOPadraoDaOrganizacao?: boolean;
+}
+
 export async function resolverModeloDoPonto(
   purpose: string,
   organizationId: string,
   padrao: ModelId,
+  opcoes: OpcoesDoResolvedor = {},
 ): Promise<ModeloResolvido | null> {
   const binding = await lerBinding(purpose, organizationId);
 
@@ -83,7 +100,10 @@ export async function resolverModeloDoPonto(
       () => (daOrg !== null ? Promise.resolve(daOrg.provider) : providerDaOrganizacao(organizationId)),
       padrao,
     );
-    return model === null ? null : { model, modelId: String(padrao), origem: "padrao" };
+    if (model !== null) return { model, modelId: String(padrao), origem: "padrao" };
+    return opcoes.naFaltaUsarOPadraoDaOrganizacao === true
+      ? padraoDaOrganizacao(organizationId, daOrg)
+      : null;
   }
 
   const apiKey = await decifrarChave(binding.credential_id, organizationId);
@@ -209,6 +229,33 @@ async function padraoDaInstalacao(
 }
 
 /**
+ * O último recurso de `naFaltaUsarOPadraoDaOrganizacao`: o par (provedor,
+ * modelo) que a organização escolheu, com a credencial dela quando existe e,
+ * sem ela, com a chave da instalação daquele provedor.
+ *
+ * O par vai inteiro — a lição do PR #151. O `modelId` sai com o prefixo do
+ * provedor, porque é ele que diz a `llm_calls` de quem é o gasto.
+ */
+async function padraoDaOrganizacao(
+  organizationId: string,
+  daOrg: { provider: string; apiKey: string } | null,
+): Promise<ModeloResolvido | null> {
+  const llm = await llmDaOrganizacao(organizationId);
+  if (llm === null || llm.defaultModel === null) return null;
+  const modelId =
+    llm.provider === "openrouter" || llm.defaultModel.startsWith(`${llm.provider}/`)
+      ? llm.defaultModel
+      : `${llm.provider}/${llm.defaultModel}`;
+  if (daOrg !== null && daOrg.provider === llm.provider) {
+    const id = idParaOProvider(llm.provider, modelId);
+    const model = id === null ? null : instanciar(llm.provider, daOrg.apiKey, id, null);
+    if (model !== null) return { model, modelId, origem: "credencial_da_organizacao" };
+  }
+  const model = await padraoDaInstalacao(() => Promise.resolve(llm.provider), modelId as ModelId);
+  return model === null ? null : { model, modelId, origem: "padrao" };
+}
+
+/**
  * O provedor que a organização escolheu (Configurações › IA).
  *
  * `credencialDaOrganizacao` já o leu quando havia credencial cadastrada; esta
@@ -217,6 +264,12 @@ async function padraoDaInstalacao(
  * falha devolve `null`, e a escada termina no mesmo desfecho de antes.
  */
 async function providerDaOrganizacao(organizationId: string): Promise<string | null> {
+  return (await llmDaOrganizacao(organizationId))?.provider ?? null;
+}
+
+async function llmDaOrganizacao(
+  organizationId: string,
+): Promise<{ provider: string; defaultModel: string | null } | null> {
   try {
     const admin = createAdminClient();
     // Admin client bypassa RLS: filtro por organização é PROGRAMÁTICO e
@@ -226,8 +279,12 @@ async function providerDaOrganizacao(organizationId: string): Promise<string | n
       .select("settings")
       .eq("id", organizationId)
       .maybeSingle();
-    const provider = (data?.settings as { llm?: { provider?: string } } | null)?.llm?.provider;
-    return typeof provider === "string" && provider !== "" ? provider : null;
+    const llm = (data?.settings as { llm?: { provider?: unknown; default_model?: unknown } } | null)
+      ?.llm;
+    if (typeof llm?.provider !== "string" || llm.provider === "") return null;
+    const defaultModel =
+      typeof llm.default_model === "string" && llm.default_model !== "" ? llm.default_model : null;
+    return { provider: llm.provider, defaultModel };
   } catch (erro) {
     logger.warn("[gateway-binding] não consegui ler o provedor da organização", {
       organization_id: organizationId,

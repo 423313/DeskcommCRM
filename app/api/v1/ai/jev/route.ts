@@ -186,7 +186,9 @@ export async function GET(): Promise<Response> {
       .limit(MENSAGENS_COMPARADAS_MAX),
     // A MESMA pergunta que o worker faz antes de medir: sem ela, o cartão diria
     // "a IA de sempre é a reserva" numa empresa em que ninguém a resolve.
-    resolverModeloDoPonto("sentiment_classify", org.orgId, DEFAULT_CLASSIFIER_MODEL),
+    resolverModeloDoPonto("sentiment_classify", org.orgId, DEFAULT_CLASSIFIER_MODEL, {
+      naFaltaUsarOPadraoDaOrganizacao: true,
+    }),
   ]);
 
   const erro = orgRes.error?.message ?? credsRes.error?.message ?? semana.erro ?? comparadasRes.error?.message;

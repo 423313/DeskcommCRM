@@ -224,7 +224,11 @@ describe("GET /api/v1/ai/jev", () => {
     vi.mocked(resolverModeloDoPonto).mockResolvedValue(null);
     const { corpo } = await ler();
     expect(corpo.data.tem_ia_de_sempre).toBe(false);
-    expect(resolverModeloDoPonto).toHaveBeenCalledWith("sentiment_classify", ORG, expect.any(String));
+    // A mesma pergunta do worker, com a queda para o padrão da organização:
+    // sem ela, a empresa que atende pela OpenAI via "falta a IA principal".
+    expect(resolverModeloDoPonto).toHaveBeenCalledWith("sentiment_classify", ORG, expect.any(String), {
+      naFaltaUsarOPadraoDaOrganizacao: true,
+    });
   });
 
   it("a chave mostrada é a que o Jev usa: a validada, não a mais nova sem teste", async () => {

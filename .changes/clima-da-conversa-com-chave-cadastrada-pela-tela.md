@@ -14,7 +14,8 @@ Agora ele usa a chave cadastrada pela tela. Com a Anthropic ou a OpenRouter, a p
 desta versão o clima passa a ser medido, a conversa com cliente irritado passa para uma
 pessoa, e cada medição aparece em IA › Execuções e entra no gasto de IA do mês.
 
-Com a OpenAI, o Google ou a DeepSeek, a medição só começa quando a chave está cadastrada
-pela tela e há um modelo escolhido em IA › Provedores › "Medir o clima da conversa". Uma
-instalação que só tem a chave da OpenAI no arquivo de configuração continua sem medir o
-clima.
+Com a OpenAI, o Google ou a DeepSeek, sem um modelo escolhido em IA › Provedores › "Medir
+o clima da conversa", o clima passa a ser medido pelo modelo padrão da empresa — o mesmo
+que o painel já dizia estar valendo ali —, com a chave cadastrada pela tela ou com a do
+arquivo de configuração. Esse modelo costuma ser mais caro que o de classificação; para
+gastar menos, escolha um modelo menor nesse mesmo lugar.
