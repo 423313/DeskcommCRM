@@ -2252,6 +2252,15 @@ export const DICIONARIO: Traducoes = {
   "Uma chave só dá acesso a centenas de modelos de dezenas de fabricantes, inclusive os gratuitos. É o caminho mais simples para experimentar sem abrir conta em cada provedor.": {
     es: "Una sola clave da acceso a cientos de modelos de decenas de fabricantes, incluidos los gratuitos. Es la forma más sencilla de experimentar sin abrir una cuenta con cada proveedor.",
   },
+  "Muito barata e desconta sozinha o trecho repetido da conversa, sem você configurar nada — o custo cai para quem atende com um roteiro que não muda.": {
+    es: "Muy barata y descuenta sola la parte repetida de la conversación, sin que configures nada: el costo baja para quien atiende con un guion que no cambia.",
+  },
+  "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em menos de meio segundo. Trabalha junto com a sua IA principal.": {
+    es: "No conversa con el cliente: toma decisiones rápidas y baratas, como notar si el cliente está molesto, en menos de medio segundo. Trabaja junto con tu IA principal.",
+  },
+  "O Jev não conversa com o cliente — falta a chave da sua IA principal.": {
+    es: "Jev no conversa con el cliente: falta la clave de tu IA principal.",
+  },
   Inativa: { es: "Inactiva" },
   "Revalidando…": { es: "Revalidando…" },
   "Credencial removida.": { es: "Credencial eliminada." },
@@ -3034,6 +3043,22 @@ export const DICIONARIO: Traducoes = {
   },
   "Cliente irritado não é mais escalado para um humano, e a insatisfação só aparece quando ele já sumiu.": {
     es: "El cliente molesto deja de escalarse a una persona, y la insatisfacción solo se nota cuando el cliente ya desapareció.",
+  },
+  "Percebe, em menos de meio segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.": {
+    es: "Nota, en menos de medio segundo, si el cliente está molesto, y avisa para pasar la conversación a una persona.",
+  },
+  "Prepara uma resposta com a versão e o conhecimento do agente, sem aplicar alterações ao cliente.": {
+    es: "Prepara una respuesta con la versión y el conocimiento del agente, sin aplicar cambios al cliente.",
+  },
+  "O teste ou a sugestão não consegue preparar a resposta para revisão.": {
+    es: "La prueba o la sugerencia no logra preparar la respuesta para revisión.",
+  },
+  "Montar agente por conversa": { es: "Armar agente conversando" },
+  "Conversa com o administrador e prepara uma proposta de agente para uma campanha. A criação depende da confirmação no resumo.": {
+    es: "Conversa con el administrador y prepara una propuesta de agente para una campaña. La creación depende de la confirmación en el resumen.",
+  },
+  "A conversa de configuração mostra um erro e preserva o que foi escrito; nenhum agente é criado.": {
+    es: "La conversación de configuración muestra un error y conserva lo escrito; no se crea ningún agente.",
   },
   "Ler a resposta ao follow-up": {
     es: "Leer la respuesta al seguimiento",

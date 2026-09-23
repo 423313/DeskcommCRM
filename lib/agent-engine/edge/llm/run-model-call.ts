@@ -869,6 +869,8 @@ export function redigirMensagemDoProvedor(bruto: string): string {
     // `sk-or-v1-…`, `sk-proj-…`, `sk-…`, e as do Google (`AIza…`).
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, '[CHAVE]')
     .replace(/\bAIza[A-Za-z0-9_-]{10,}/g, '[CHAVE]')
+    // A do Jev (`apikey_<hex>_<hex>`), que não tem `sk-` e aparece solta.
+    .replace(/\bapikey_[A-Za-z0-9_]{16,}/g, '[CHAVE]')
     // O header inteiro, em qualquer caixa, com ou sem `Authorization:` na
     // frente — é assim que ele costuma aparecer ecoado num corpo de erro.
     .replace(/\b[Bb]earer\s+[A-Za-z0-9._-]{8,}/g, 'Bearer [CHAVE]')

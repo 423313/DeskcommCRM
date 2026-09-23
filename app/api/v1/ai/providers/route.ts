@@ -194,7 +194,10 @@ export async function GET(): Promise<Response> {
     // mostrá-lo nem trocá-lo (invariante 6: toda configuração tem superfície).
     padrao: padraoDaOrganizacao,
     provedores: PROVEDORES,
-    credenciais: credsRes.data ?? [],
+    // Só chave de quem CONVERSA. A do Jev contada aqui apagaria o aviso "você
+    // ainda não cadastrou nenhuma chave" com a empresa sem IA para atender, e
+    // nenhum ponto desta tela sabe usá-la.
+    credenciais: (credsRes.data ?? []).filter((c) => ehProvedorSuportado(c.provider)),
     modelos,
     podeEditar: roleAtLeast(org.role, "admin"),
   });

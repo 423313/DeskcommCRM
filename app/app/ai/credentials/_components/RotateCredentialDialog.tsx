@@ -24,7 +24,7 @@ import {
   credentialsListQueryKey,
   type CredentialRow,
 } from "@/hooks/ai/useCredentials";
-import { PROVEDORES } from "@/lib/ai/pontos/provedores";
+import { PROVEDORES_COM_CHAVE } from "@/lib/ai/pontos/provedores";
 import { descreverErroDeValidacao } from "@/lib/ai/credenciais/erro-de-validacao";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -55,7 +55,8 @@ export function RotateCredentialDialog({ open, onOpenChange, credential }: Props
   const [apiKey, setApiKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
-  const provedor = PROVEDORES.find((p) => p.id === credential.provider) ?? PROVEDORES[0];
+  const provedor =
+    PROVEDORES_COM_CHAVE.find((p) => p.id === credential.provider) ?? PROVEDORES_COM_CHAVE[0];
 
   const chaveMudou = apiKey.trim() !== "";
   const rotuloMudou = label.trim() !== credential.label;

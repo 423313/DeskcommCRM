@@ -27,18 +27,14 @@ import {
 } from "@/components/ui/select";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
-import {
-  credentialsListQueryKey,
-  type CredentialRow,
-  type Provider,
-} from "@/hooks/ai/useCredentials";
-import { IDS_DE_PROVEDOR, PROVEDORES } from "@/lib/ai/pontos/provedores";
+import { credentialsListQueryKey, type CredentialRow } from "@/hooks/ai/useCredentials";
+import { IDS_COM_CHAVE, PROVEDORES_COM_CHAVE, type ProvedorComChave } from "@/lib/ai/pontos/provedores";
 import { descreverErroDeValidacao } from "@/lib/ai/credenciais/erro-de-validacao";
 import { useT } from "@/hooks/i18n/useT";
 
 const formSchema = z.object({
-  // Derivado da lista única (`lib/ai/pontos/provedores.ts`), como a rota.
-  provider: z.enum(IDS_DE_PROVEDOR),
+  // Derivado das listas (`lib/ai/pontos/provedores.ts`), como a rota.
+  provider: z.enum(IDS_COM_CHAVE),
   label: z.string().trim().min(1, "Obrigatório").max(80),
   api_key: z.string().trim().min(8, "API key muito curta").max(2048),
 });
@@ -58,12 +54,12 @@ export function AddCredentialDialog({ open, onOpenChange }: Props) {
   const t = useT();
   const router = useRouter();
   const qc = useQueryClient();
-  const [provider, setProvider] = useState<Provider>("anthropic");
+  const [provider, setProvider] = useState<ProvedorComChave>("anthropic");
   const [label, setLabel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
-  const provedor = PROVEDORES.find((p) => p.id === provider) ?? PROVEDORES[0];
+  const provedor = PROVEDORES_COM_CHAVE.find((p) => p.id === provider) ?? PROVEDORES_COM_CHAVE[0];
 
   const reset = () => {
     setProvider("anthropic");
@@ -146,12 +142,12 @@ export function AddCredentialDialog({ open, onOpenChange }: Props) {
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="cred-provider">{t("Provedor")}</Label>
-            <Select value={provider} onValueChange={(v) => setProvider(v as Provider)}>
+            <Select value={provider} onValueChange={(v) => setProvider(v as ProvedorComChave)}>
               <SelectTrigger id="cred-provider">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PROVEDORES.map((p) => (
+                {PROVEDORES_COM_CHAVE.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.rotulo}
                   </SelectItem>

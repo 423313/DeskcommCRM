@@ -22,13 +22,22 @@
  * compilador obriga quem chama a tratar a ausência — o fallback deixa de depender
  * de disciplina.
  *
- * ═══ O 422 É DIFERENTE DOS OUTROS ═══
+ * ═══ DOIS EIXOS NA FALHA: `exigeAcao` E `defeitoNosso` ═══
  *
- * 401/429/529/rede são indisponibilidade: o fornecedor não respondeu, e o caminho
- * atual assume sem barulho. O 422 é pergunta MALFORMADA — defeito nosso. Silenciado
- * junto com os demais, um `criterios` quebrado numa edição vira degradação
- * permanente e invisível: tudo cai no fallback para sempre e ninguém percebe. Por
- * isso o resultado carrega `defeitoNosso`, e quem consome liga alerta a ele.
+ * 429/529/5xx/rede/teto são indisponibilidade PASSAGEIRA: o fornecedor não
+ * respondeu, o caminho atual assume sem barulho, e esperar resolve.
+ *
+ * O resto não passa sozinho, e silenciado junto vira degradação permanente e
+ * invisível — tudo cai no caminho atual para sempre e ninguém percebe. Por isso
+ * a falha carrega `exigeAcao`, e quem consome avisa quem pode agir:
+ *
+ *  - 401/403: a chave foi recusada. Ação do OPERADOR (trocar a chave), não
+ *    defeito nosso.
+ *  - 402 e todo 4xx que o fornecedor não documenta: crédito esgotado. O status
+ *    de "sem crédito" NÃO é documentado (o contrato só diz que ele pode recusar
+ *    gerar), então o que não é pergunta ruim nem limite de taxa conta como isso.
+ *  - 400/422: pergunta MALFORMADA ou versão fixada aposentada — o único caso em
+ *    que `defeitoNosso` também é verdadeiro.
  *
  * ═══ VALIDAÇÃO DA RESPOSTA ═══
  *
@@ -40,11 +49,26 @@
  */
 import { z } from "zod";
 
-/** Endpoint do fornecedor. NÃO é knob de política: é o destino intrínseco do provider. */
-export const ENDPOINT_SYSTEM_ONE = "https://api.typesafe.ai/v1/systemone";
+import { env } from "@/lib/env";
 
-/** O modelo de topo. Tag móvel do fornecedor, como `latest` — trocar é decisão de config. */
-const MODELO = "jev-latest";
+/**
+ * A base da API do fornecedor. O destino é intrínseco ao provider; a variável
+ * existe só para o dublê do e2e. Vazio é ausente (`||`, não `??`): quem copia o
+ * `.env.example` recebe a variável PRESENTE e vazia.
+ */
+export function baseDaApiDoJev(): string {
+  const configurada = (env.JEV_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  return configurada || "https://api.typesafe.ai";
+}
+
+/**
+ * VERSÃO FIXADA, não o apelido `jev-latest`. O apelido anda sozinho quando o
+ * fornecedor publica versão nova, e o limiar de passagem para humano foi
+ * calibrado sobre esta — a régua se deslocaria sem deploy e sem rastro. O
+ * próprio fornecedor recomenda fixar quando há limiar ajustado. Se ela for
+ * aposentada, a API responde 400, que vira `contrato_invalido` com `exigeAcao`.
+ */
+export const MODELO_DO_JEV = "jev-1.13.0";
 
 // ── As três primitivas, e só elas ────────────────────────────────────────────
 
@@ -65,11 +89,14 @@ export type Resposta =
 export type MotivoDaAusencia =
   | "sem_credencial"
   | "credencial_invalida"
+  | "sem_credito"
   | "contrato_invalido"
   | "limite_de_taxa"
   | "provedor_sobrecarregado"
   | "provedor_indisponivel"
-  | "resposta_ilegivel";
+  | "resposta_ilegivel"
+  /** O disjuntor (`./disjuntor`) segurou a chamada: nada saiu para a rede. */
+  | "disjuntor_aberto";
 
 export interface UsoDeTokens {
   tokensDeEntrada: number;
@@ -77,23 +104,49 @@ export interface UsoDeTokens {
   tokensDeSaida: number;
 }
 
+export interface FalhaDaDecisao {
+  ok: false;
+  motivo: MotivoDaAusencia;
+  /** Não passa sozinho: alguém precisa agir (trocar chave, pôr crédito, corrigir a pergunta). */
+  exigeAcao: boolean;
+  /** Só 400/422: a pergunta é nossa e está errada. */
+  defeitoNosso: boolean;
+  status: number | null;
+  /** Do cabeçalho `retry-after`, quando o fornecedor o manda. Alimenta o disjuntor. */
+  retryAfterMs?: number;
+}
+
 export type ResultadoDaDecisao =
-  | { ok: true; respostas: Record<string, Resposta>; uso: UsoDeTokens; modelo: string }
-  | { ok: false; motivo: MotivoDaAusencia; defeitoNosso: boolean; status: number | null };
+  | {
+      ok: true;
+      respostas: Record<string, Resposta>;
+      uso: UsoDeTokens;
+      /** A versão que DE FATO respondeu, como a API a devolveu. */
+      modelo: string;
+    }
+  | FalhaDaDecisao;
 
 export interface EntradaDaDecisao {
   chave: string;
   estado: string | Record<string, unknown> | ReadonlyArray<unknown>;
   perguntas: Record<string, Pergunta>;
-  /** Teto por chamada. O fornecedor anuncia 70–500 ms; o default aqui é folgado de propósito. */
+  /** Teto por chamada. */
   tetoMs?: number;
 }
 
 export interface DependenciasDaDecisao {
   fetchImpl?: typeof fetch;
+  /** Base da API. Default: `baseDaApiDoJev()`. */
+  baseUrl?: string;
 }
 
-const TETO_PADRAO_MS = 3_000;
+/**
+ * O dreno de eventos roda os handlers EM SÉRIE, e o clima vem antes do aviso ao
+ * atendente: cada milissegundo aqui atrasa a fila inteira. Medido do Brasil:
+ * p50 361 ms, p95 ~561 ms. 1,5 s cobre a cauda com folga sem somar 3 s ao pior
+ * caso de toda mensagem.
+ */
+export const TETO_PADRAO_MS = 1_500;
 
 // ── Contrato da resposta, validado ───────────────────────────────────────────
 
@@ -139,23 +192,42 @@ function daResposta(a: z.infer<typeof corpoDaResposta>["answers"][string]): Resp
 }
 
 /**
- * Traduz o status HTTP no motivo. O `defeitoNosso` sai daqui junto, porque é a mesma
- * decisão: separar "o fornecedor não respondeu" de "nós perguntamos errado".
+ * Traduz o status HTTP no motivo. `exigeAcao` e `defeitoNosso` saem daqui junto,
+ * porque é a mesma decisão — ver o cabeçalho.
  */
-function doStatus(status: number): { motivo: MotivoDaAusencia; defeitoNosso: boolean } {
-  if (status === 401 || status === 403) return { motivo: "credencial_invalida", defeitoNosso: true };
-  if (status === 422 || status === 400) return { motivo: "contrato_invalido", defeitoNosso: true };
-  if (status === 429) return { motivo: "limite_de_taxa", defeitoNosso: false };
-  if (status === 529) return { motivo: "provedor_sobrecarregado", defeitoNosso: false };
-  return { motivo: "provedor_indisponivel", defeitoNosso: false };
+function doStatus(
+  status: number,
+): Pick<FalhaDaDecisao, "motivo" | "exigeAcao" | "defeitoNosso"> {
+  if (status === 401 || status === 403) {
+    return { motivo: "credencial_invalida", exigeAcao: true, defeitoNosso: false };
+  }
+  if (status === 400 || status === 422) {
+    return { motivo: "contrato_invalido", exigeAcao: true, defeitoNosso: true };
+  }
+  if (status === 429) return { motivo: "limite_de_taxa", exigeAcao: false, defeitoNosso: false };
+  if (status === 529) return { motivo: "provedor_sobrecarregado", exigeAcao: false, defeitoNosso: false };
+  if (status >= 400 && status < 500) {
+    return { motivo: "sem_credito", exigeAcao: true, defeitoNosso: false };
+  }
+  return { motivo: "provedor_indisponivel", exigeAcao: false, defeitoNosso: false };
+}
+
+/** `retry-after` em segundos ou em data HTTP; ausente ou ilegível = `undefined`. */
+function retryAfterMs(res: Response): number | undefined {
+  const bruto = res.headers.get("retry-after");
+  if (bruto === null || bruto.trim() === "") return undefined;
+  const segundos = Number(bruto);
+  if (Number.isFinite(segundos)) return Math.max(0, segundos * 1000);
+  const data = Date.parse(bruto);
+  return Number.isNaN(data) ? undefined : Math.max(0, data - Date.now());
 }
 
 /**
  * Pergunta ao System One. **Nunca lança** — ver o cabeçalho.
  *
  * O `fetch` entra por injeção porque quem chama já traz o seu: em produção é o
- * `allowlistedFetch` do egress (a allowlist vem da CONFIG do binding, nunca
- * hardcoded aqui), e em teste é o dublê.
+ * `allowlistedFetch` do egress (a allowlist deriva da MESMA base, em `./ponto`),
+ * e em teste é o dublê.
  */
 export async function decidir(
   entrada: EntradaDaDecisao,
@@ -164,7 +236,7 @@ export async function decidir(
   if (!entrada.chave.trim()) {
     // Sem credencial não se gasta requisição nem se espera timeout: a ausência é
     // configuração, e o caminho atual assume no mesmo milissegundo.
-    return { ok: false, motivo: "sem_credencial", defeitoNosso: false, status: null };
+    return { ok: false, motivo: "sem_credencial", exigeAcao: false, defeitoNosso: false, status: null };
   }
 
   const questions: Record<string, unknown> = {};
@@ -175,25 +247,30 @@ export async function decidir(
   const abortador = new AbortController();
   const relogio = setTimeout(() => abortador.abort(), entrada.tetoMs ?? TETO_PADRAO_MS);
   try {
-    const res = await (deps.fetchImpl ?? fetch)(ENDPOINT_SYSTEM_ONE, {
+    const res = await (deps.fetchImpl ?? fetch)(`${deps.baseUrl ?? baseDaApiDoJev()}/v1/systemone`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${entrada.chave}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ model: MODELO, state: entrada.estado, questions }),
+      body: JSON.stringify({ model: MODELO_DO_JEV, state: entrada.estado, questions }),
       signal: abortador.signal,
     });
 
     if (!res.ok) {
-      const { motivo, defeitoNosso } = doStatus(res.status);
-      return { ok: false, motivo, defeitoNosso, status: res.status };
+      const espera = retryAfterMs(res);
+      return {
+        ok: false,
+        ...doStatus(res.status),
+        status: res.status,
+        ...(espera !== undefined ? { retryAfterMs: espera } : {}),
+      };
     }
 
     const cru: unknown = await res.json();
     const lido = corpoDaResposta.safeParse(cru);
     if (!lido.success) {
-      return { ok: false, motivo: "resposta_ilegivel", defeitoNosso: false, status: res.status };
+      return { ok: false, motivo: "resposta_ilegivel", exigeAcao: false, defeitoNosso: false, status: res.status };
     }
 
     const respostas: Record<string, Resposta> = {};
@@ -202,7 +279,7 @@ export async function decidir(
     return {
       ok: true,
       respostas,
-      modelo: lido.data.model ?? MODELO,
+      modelo: lido.data.model ?? MODELO_DO_JEV,
       uso: {
         tokensDeEntrada: lido.data.usage?.input_tokens ?? 0,
         tokensDeSaida: lido.data.usage?.output_tokens ?? 0,
@@ -212,7 +289,7 @@ export async function decidir(
     // Rede, abort por teto, JSON impossível de ler: tudo é indisponibilidade do
     // ponto de vista de quem chama, e o caminho atual assume. O erro cru não sobe
     // porque ele carrega URL e cabeçalho — e o cabeçalho tem a chave (regra 8).
-    return { ok: false, motivo: "provedor_indisponivel", defeitoNosso: false, status: null };
+    return { ok: false, motivo: "provedor_indisponivel", exigeAcao: false, defeitoNosso: false, status: null };
   } finally {
     clearTimeout(relogio);
   }

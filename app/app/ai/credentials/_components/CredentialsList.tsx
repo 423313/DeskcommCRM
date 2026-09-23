@@ -4,8 +4,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Plus } from "@/lib/ui/icons";
-import { PROVEDORES } from "@/lib/ai/pontos/provedores";
-import { useCredentialsList, type CredentialRow, type Provider } from "@/hooks/ai/useCredentials";
+import {
+  ehProvedorDeDecisao,
+  ehProvedorSuportado,
+  PROVEDORES_COM_CHAVE,
+  type ProvedorComChave,
+} from "@/lib/ai/pontos/provedores";
+import { useCredentialsList, type CredentialRow } from "@/hooks/ai/useCredentials";
 import { useT } from "@/hooks/i18n/useT";
 import { CredentialCard } from "./CredentialCard";
 import { AddCredentialDialog } from "./AddCredentialDialog";
@@ -16,13 +21,14 @@ interface Props {
   usageMap: Record<string, number>;
 }
 
-// Rótulo e ordem saem da lista única — provedor novo aparece na tela sem que
-// alguém precise lembrar de acrescentá-lo em três lugares.
+// Rótulo e ordem saem das listas — provedor novo aparece na tela sem que
+// alguém precise lembrar de acrescentá-lo em três lugares. A UNIÃO, porque a
+// chave do Jev (que só decide) também mora aqui.
 const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
-  PROVEDORES.map((p) => [p.id, p.rotulo]),
+  PROVEDORES_COM_CHAVE.map((p) => [p.id, p.rotulo]),
 );
 
-const PROVIDER_ORDER: Provider[] = PROVEDORES.map((p) => p.id);
+const PROVIDER_ORDER: ProvedorComChave[] = PROVEDORES_COM_CHAVE.map((p) => p.id);
 
 export function CredentialsList({ initialData, canWrite, usageMap }: Props) {
   const t = useT();
@@ -34,12 +40,18 @@ export function CredentialsList({ initialData, canWrite, usageMap }: Props) {
   // Construído a partir da lista única: escrito à mão, o dia em que um
   // provedor novo entra é o dia em que as credenciais dele somem da tela sem
   // ninguém ver (aconteceu com a OpenRouter).
-  const grouped: Partial<Record<Provider, CredentialRow[]>> = Object.fromEntries(
-    PROVEDORES.map((p) => [p.id, [] as CredentialRow[]]),
+  const grouped: Partial<Record<ProvedorComChave, CredentialRow[]>> = Object.fromEntries(
+    PROVEDORES_COM_CHAVE.map((p) => [p.id, [] as CredentialRow[]]),
   );
   for (const c of credentials) {
     grouped[c.provider]?.push(c);
   }
+
+  // Só a chave do Jev não faz o atendimento funcionar: ele decide, não conversa.
+  // Sem este aviso a tela sairia do estado vazio e pareceria pronta.
+  const soDecisao =
+    credentials.some((c) => ehProvedorDeDecisao(c.provider)) &&
+    !credentials.some((c) => c.is_active && ehProvedorSuportado(c.provider));
 
   if (credentials.length === 0) {
     return (
@@ -64,6 +76,13 @@ export function CredentialsList({ initialData, canWrite, usageMap }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
+      {soDecisao && (
+        <Card className="border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-so-decisao">
+          <p className="text-sm">
+            {t("O Jev não conversa com o cliente — falta a chave da sua IA principal.")}
+          </p>
+        </Card>
+      )}
       <div className="flex sm:justify-end">
         {canWrite && (
           <Button onClick={() => setAddOpen(true)} className="w-full sm:w-auto">

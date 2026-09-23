@@ -3,18 +3,46 @@
  *
  * `llm_calls.error_message` é lido pela tela de Execuções, e o texto de erro de
  * um provedor às vezes ecoa o que recebeu — inclusive o cabeçalho com a chave.
- * `redigirMensagemDoProvedor` existe para trocar a chave por `[CHAVE]`.
+ * Dois redatores se somam: `redigirMensagemDoProvedor` (segredo) e
+ * `scrubMessage` (dado do titular, e também o que vai ao Sentry e ao Jev).
  *
- * Os quatro padrões dele NUNCA casaram: o arquivo tinha o byte de backspace
- * (0x08) onde devia estar `\b`, e o regex exigia um backspace antes da chave.
- * Nenhum teste os exercitava — o defeito apareceu ao escrever o caso da chave
- * do Jev.
+ * A chave do Jev (`apikey_<hex>_<hex>`) não tem `sk-` nem vem sempre depois de
+ * `Bearer`, então nenhum padrão antigo a pegava solta.
+ *
+ * Os casos de `sk-`/`AIza`/`Bearer` estão aqui porque ESCREVER o caso do Jev
+ * revelou que os quatro padrões antigos nunca casaram: o arquivo tinha o byte
+ * de backspace (0x08) onde devia estar `\b`, e o regex exigia um backspace
+ * antes da chave. Nenhum teste os exercitava.
  */
 import { describe, expect, it } from "vitest";
 
-import { redigirMensagemDoProvedor } from "@/lib/agent-engine/edge/llm/run-model-call";
+import { normalizarErro, redigirMensagemDoProvedor } from "@/lib/agent-engine/edge/llm/run-model-call";
+import { scrubMessage } from "@/lib/sentry/scrub";
 
-describe("as chaves dos provedores são redigidas", () => {
+// Formato real (prefixo + 36 hex + 64 hex), valores inventados.
+const CHAVE_DO_JEV = `apikey_${"a1b2c3d4".repeat(4)}abcd_${"0f1e2d3c".repeat(8)}`;
+
+describe("a chave do Jev é redigida", () => {
+  it("num erro que ecoa a chave, a mensagem gravada não a contém", () => {
+    const erro = Object.assign(new Error(`invalid api key: ${CHAVE_DO_JEV} (request 42)`), { status: 401 });
+    const { error_message, error_code } = normalizarErro(erro);
+    expect(error_message).not.toContain(CHAVE_DO_JEV);
+    expect(error_message).not.toMatch(/0f1e2d3c/);
+    expect(error_message).toContain("[CHAVE]");
+    expect(error_code).toBe("credencial_recusada");
+  });
+
+  it("o redator de telemetria também a apaga inteira, sem deixar pedaço numérico", () => {
+    const saida = scrubMessage(`falhou com ${CHAVE_DO_JEV}`);
+    expect(saida).toBe("falhou com [CHAVE]");
+  });
+
+  it("texto comum com a palavra apikey não é tocado", () => {
+    expect(scrubMessage("faltou a apikey_ no cabeçalho")).toBe("faltou a apikey_ no cabeçalho");
+  });
+});
+
+describe("as chaves dos outros provedores também", () => {
   it.each([
     ["Anthropic", "sk-ant-api03-AbCdEfGhIjKlMnOp"],
     ["OpenRouter", "sk-or-v1-0123456789abcdef"],

@@ -35,7 +35,7 @@ import {
   type CredentialStatus,
 } from "@/hooks/ai/useCredentials";
 import { useT } from "@/hooks/i18n/useT";
-import { PROVEDORES } from "@/lib/ai/pontos/provedores";
+import { PROVEDORES_COM_CHAVE } from "@/lib/ai/pontos/provedores";
 import { descreverErroDeValidacao } from "@/lib/ai/credenciais/erro-de-validacao";
 import { RotateCredentialDialog } from "./RotateCredentialDialog";
 
@@ -73,7 +73,7 @@ export function CredentialCard({ credential, canWrite, usageCount }: Props) {
   const last4 = credential.api_key_last4 ?? "????";
   const inUse = usageCount > 0;
   const erro = descreverErroDeValidacao(credential.validation_error);
-  const provedor = PROVEDORES.find((p) => p.id === credential.provider);
+  const provedor = PROVEDORES_COM_CHAVE.find((p) => p.id === credential.provider);
 
   const onRevalidate = () => {
     startTransition(async () => {

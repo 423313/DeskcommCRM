@@ -51,6 +51,10 @@ export function isSensitiveHeader(name: string): boolean {
 
 export function scrubMessage(input: string): string {
   return input
+    // Chave do Jev (`apikey_<hex>_<hex>`) solta no texto. PRIMEIRO, porque os
+    // padrões de CPF e telefone abaixo comeriam pedaços numéricos dela e
+    // deixariam o resto passar.
+    .replace(/apikey_[A-Za-z0-9_]{16,}/g, "[CHAVE]")
     .replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, "[CPF]")
     .replace(/\+?\d{2}\s?\d{4,5}-?\d{4}/g, "[PHONE]")
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]");

@@ -8,29 +8,39 @@
  * obriga quem chama a tratar a ausência de resposta — o fallback deixa de depender
  * de disciplina.
  *
- * O `motivo` é tipado porque ele vira `llm_calls.error_code`, e porque UM deles é
- * diferente dos outros: `contrato_invalido` (422) é defeito NOSSO, não
- * indisponibilidade do fornecedor. Silenciá-lo junto com os demais transformaria
- * uma pergunta malformada em degradação permanente e invisível.
+ * O `motivo` é tipado porque ele vira `llm_calls.error_code`. E a falha carrega
+ * dois eixos: `exigeAcao` (não passa sozinho — chave recusada, sem crédito,
+ * pergunta ruim) e `defeitoNosso` (só a pergunta ruim). Silenciar os primeiros
+ * junto com a indisponibilidade passageira transformaria uma chave revogada em
+ * degradação permanente e invisível.
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { decidir, ENDPOINT_SYSTEM_ONE } from "@/lib/ai/decisao/cliente";
+// A base vem de `env`; este mock é quem decide se a variável existe em cada
+// caso, para o `.env` de quem roda o teste não mandar no resultado.
+const envMock = vi.hoisted(() => ({ JEV_API_BASE_URL: "" as string | undefined }));
+vi.mock("@/lib/env", () => ({
+  get env() {
+    return envMock;
+  },
+}));
+
+import { decidir, MODELO_DO_JEV, TETO_PADRAO_MS } from "@/lib/ai/decisao/cliente";
 
 const CHAVE = "tsk_teste";
 const PERGUNTAS = {
   clima: { tipo: "score", instrucao: "Qual o clima?", criterios: ["péssimo", "neutro", "ótimo"] },
 } as const;
 
-function respostaHttp(status: number, corpo: unknown): Response {
+function respostaHttp(status: number, corpo: unknown, cabecalhos: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(corpo), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...cabecalhos },
   });
 }
 
 const CORPO_OK = {
-  model: "jev-latest",
+  model: "jev-1.13.0",
   answers: {
     clima: {
       type: "score",
@@ -53,11 +63,14 @@ describe("cliente do System One", () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [url, init] = fetchImpl.mock.calls[0]!;
-    expect(String(url)).toBe(ENDPOINT_SYSTEM_ONE);
+    expect(String(url)).toBe("https://api.typesafe.ai/v1/systemone");
     expect(init.method).toBe("POST");
     expect(init.headers.Authorization).toBe(`Bearer ${CHAVE}`);
     const body = JSON.parse(init.body as string) as Record<string, unknown>;
-    expect(body.model).toBe("jev-latest");
+    // A versão FIXADA, nunca o apelido móvel: o limiar de passagem para humano
+    // foi calibrado sobre ela, e o apelido anda sozinho.
+    expect(body.model).toBe("jev-1.13.0");
+    expect(MODELO_DO_JEV).toBe("jev-1.13.0");
     expect(body.state).toBe("cliente disse: adorei!");
     expect(body.questions).toEqual({
       clima: { type: "score", instructions: "Qual o clima?", criteria: ["péssimo", "neutro", "ótimo"] },
@@ -76,20 +89,100 @@ describe("cliente do System One", () => {
     expect(clima.score).toBe(1.4);
     expect(clima.confianca).toBe(0.82);
     expect(r.uso).toEqual({ tokensDeEntrada: 412, tokensDeSaida: 0 });
+    expect(r.modelo, "a versão que DE FATO respondeu vai à telemetria").toBe("jev-1.13.0");
   });
 
   it.each([
-    [401, "credencial_invalida"],
-    [422, "contrato_invalido"],
-    [429, "limite_de_taxa"],
-    [529, "provedor_sobrecarregado"],
-    [500, "provedor_indisponivel"],
-  ])("HTTP %i não lança — devolve motivo %s", async (status, motivo) => {
-    const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(status, { error: "x" }));
+    // status, motivo, exigeAcao, defeitoNosso
+    [401, "credencial_invalida", true, false],
+    [403, "credencial_invalida", true, false],
+    [402, "sem_credito", true, false],
+    // 4xx que o fornecedor não documenta conta como crédito: o contrato só diz
+    // que ele "pode recusar gerar", sem dizer com que status.
+    [404, "sem_credito", true, false],
+    [400, "contrato_invalido", true, true],
+    [422, "contrato_invalido", true, true],
+    [429, "limite_de_taxa", false, false],
+    [529, "provedor_sobrecarregado", false, false],
+    [500, "provedor_indisponivel", false, false],
+    [503, "provedor_indisponivel", false, false],
+  ] as const)(
+    "HTTP %i não lança — motivo %s, exigeAcao %s, defeitoNosso %s",
+    async (status, motivo, exigeAcao, defeitoNosso) => {
+      const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(status, { error: "x" }));
+      const r = await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.motivo).toBe(motivo);
+      expect(r.exigeAcao).toBe(exigeAcao);
+      expect(r.defeitoNosso).toBe(defeitoNosso);
+      expect(r.status).toBe(status);
+    },
+  );
+
+  it("o 401 NÃO é defeito nosso: chave revogada é ação do operador", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(401, {}));
+    const r = await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
+    expect(r.ok === false && r.defeitoNosso).toBe(false);
+    expect(r.ok === false && r.exigeAcao).toBe(true);
+  });
+
+  it("repassa o retry-after (segundos) para o disjuntor", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(429, {}, { "retry-after": "30" }));
+    const r = await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
+    expect(r.ok === false && r.retryAfterMs).toBe(30_000);
+  });
+
+  it("sem retry-after, não inventa espera", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(429, {}));
     const r = await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.motivo).toBe(motivo);
+    expect(r.retryAfterMs).toBeUndefined();
+  });
+
+  it("fornecedor lento é cortado no teto padrão de 1,5 s", async () => {
+    expect(TETO_PADRAO_MS).toBe(1_500);
+    vi.useFakeTimers();
+    try {
+      // O dublê só responde quando o sinal aborta — um fetch que nunca volta.
+      const fetchImpl = vi.fn(
+        (_url: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          }),
+      );
+      const promessa = decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
+      await vi.advanceTimersByTimeAsync(1_499);
+      let terminou = false;
+      void promessa.then(() => {
+        terminou = true;
+      });
+      await Promise.resolve();
+      expect(terminou, "não pode desistir antes do teto").toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const r = await promessa;
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.motivo).toBe("provedor_indisponivel");
+      expect(r.exigeAcao, "lentidão passa sozinha").toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a base da API vem da instalação (o dublê do e2e), e vazio vale o padrão", async () => {
+    envMock.JEV_API_BASE_URL = "http://127.0.0.1:4010/";
+    try {
+      const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(200, CORPO_OK));
+      await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
+      expect(String(fetchImpl.mock.calls[0]![0])).toBe("http://127.0.0.1:4010/v1/systemone");
+    } finally {
+      envMock.JEV_API_BASE_URL = "";
+    }
+    const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(200, CORPO_OK));
+    await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
+    expect(String(fetchImpl.mock.calls[0]![0])).toBe("https://api.typesafe.ai/v1/systemone");
   });
 
   it("falha de rede não lança", async () => {
@@ -121,7 +214,7 @@ describe("cliente do System One", () => {
     expect(fetchImpl, "sem credencial não se gasta requisição").not.toHaveBeenCalled();
   });
 
-  it("o 422 é o único motivo que pede alerta — é defeito nosso, não do fornecedor", async () => {
+  it("o 422 é defeito nosso; a sobrecarga do fornecedor não é", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(422, { error: "malformed" }));
     const r = await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
     expect(r.ok).toBe(false);

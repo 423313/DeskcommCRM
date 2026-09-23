@@ -215,6 +215,11 @@ const schema = z.object({
   TRANSCRIPTION_API_KEY: z.string().optional().default(""),
   TRANSCRIPTION_BASE_URL: z.string().optional().default(""),
   TRANSCRIPTION_MODEL: z.string().optional().default(""),
+  // Endereço da API do Jev (TypeSafe AI). Vazio é ausente: vale
+  // https://api.typesafe.ai. Existe para o dublê do e2e — a CHAVE nunca vem
+  // daqui, é por organização (BYOK). Quem lê é `baseDaApiDoJev()`, em
+  // lib/ai/decisao/cliente.ts.
+  JEV_API_BASE_URL: z.string().optional().default(""),
   // Destinos internos que o DONO DA INSTALAÇÃO autoriza (decisão 22-d, #1004):
   // IPv4 e faixas CIDR IPv4 que a saída pode alcançar mesmo sendo rede interna,
   // e só para destinos que a própria INSTALAÇÃO configura (nunca o endereço que

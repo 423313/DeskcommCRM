@@ -157,6 +157,17 @@ export interface PontoDeIa {
    */
   fixo?: { razao: string; usa?: { provider: string; modelId: string } };
   registraEm: DestinoDeTelemetria;
+  /**
+   * O ponto sabe ser decidido pelo Jev (`lib/ai/decisao/`), que devolve decisão
+   * tipada em vez de texto. Só marque o ponto que TEM chamador do Jev:
+   * `tests/unit/pontos-de-ia-decisao-rapida.test.ts` cobra os dois lados, porque
+   * ponto marcado sem chamador é botão que não controla nada.
+   */
+  decisaoRapida?: {
+    primitiva: "score" | "choice" | "noul";
+    /** O que o Jev faz neste ponto, para quem não é engenheiro. Vai à tela. */
+    oQueOJevFaz: string;
+  };
 }
 
 export const PONTOS_DE_IA: readonly PontoDeIa[] = [
@@ -298,6 +309,11 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     sintomaDeFalha:
       "Cliente irritado não é mais escalado para um humano, e a insatisfação só aparece quando ele já sumiu.",
     registraEm: "llm_calls",
+    decisaoRapida: {
+      primitiva: "score",
+      oQueOJevFaz:
+        "Percebe, em menos de meio segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
+    },
   },
   {
     id: "followup_classify",

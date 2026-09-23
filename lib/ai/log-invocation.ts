@@ -6,6 +6,8 @@
  */
 
 import { normalizarErro } from "@/lib/agent-engine/edge/llm/run-model-call";
+import type { ProvedorComChave } from "@/lib/ai/pontos/provedores";
+import type { OrigemDaEscolha } from "@/lib/ai/pontos/resolver";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -47,7 +49,12 @@ export interface LogInvocationInput {
   prompt_tokens: number;
   completion_tokens: number;
   latency_ms: number;
+  /** Gravado como veio — sem arredondar. Quem cota em fração (o Jev) chega aqui em fração. */
   cost_cents: number;
+  /** Quando quem chama SABE o provedor. Sem ele, vale `providerDoModelo(model)`. */
+  provider?: ProvedorComChave;
+  /** Quem decidiu usar este modelo — a coluna "por que este modelo" da tela de Execuções. */
+  origem_da_escolha?: OrigemDaEscolha;
   finish_reason?: string | null;
   citations?: Array<Record<string, unknown>>;
   error_payload?: Record<string, unknown> | null;
@@ -80,8 +87,9 @@ export function logInvocation(row: LogInvocationInput): void {
           // `provider` não existia no shape antigo; deriva-se do id do modelo, e
           // vira 'desconhecido' quando não dá para saber — chute viraria
           // estatística, e estatística errada é pior que lacuna declarada.
-          provider: providerDoModelo(row.model),
+          provider: row.provider ?? providerDoModelo(row.model),
           model: row.model,
+          origem_da_escolha: row.origem_da_escolha ?? null,
           input_tokens: row.prompt_tokens,
           output_tokens: row.completion_tokens,
           cost_cents: row.cost_cents,
@@ -159,6 +167,9 @@ export function providerDoModelo(model: string): string {
   if (m.startsWith("anthropic/") || m.startsWith("claude")) return "anthropic";
   if (m.startsWith("openai/") || m.startsWith("gpt") || m.startsWith("text-embedding")) return "openai";
   if (m.startsWith("google/") || m.startsWith("gemini")) return "google";
+  // ANTES do ramo da barra: `typesafe/jev-1.13.0` tem barra e seria atribuído à
+  // OpenRouter, jogando o custo do Jev na conta de outro provedor.
+  if (m.startsWith("typesafe/") || m.startsWith("jev")) return "typesafe";
   if (m.includes("/")) return "openrouter";
   return "desconhecido";
 }

@@ -32,9 +32,14 @@
  * que o resultado é discriminado em vez de um valor com default.
  */
 import { allowlistedFetch, buildAllowlist } from "@/lib/agent-engine/edge/egress";
+import type { IDS_DE_PROVEDOR_DE_DECISAO } from "@/lib/ai/pontos/provedores";
+import { byteaToBuffer, decryptKey } from "@/lib/crypto/aes_gcm";
 import { logger } from "@/lib/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-import { decidir, ENDPOINT_SYSTEM_ONE, type Pergunta, type ResultadoDaDecisao } from "./cliente";
+import { baseDaApiDoJev, decidir, type Pergunta, type ResultadoDaDecisao } from "./cliente";
+
+const PROVEDOR_DO_JEV = "typesafe" satisfies (typeof IDS_DE_PROVEDOR_DE_DECISAO)[number];
 
 export interface EntradaDoPonto {
   /** O ponto de IA, como no registro (`lib/ai/pontos/registro.ts`). Vai à telemetria. */
@@ -49,21 +54,54 @@ export interface DependenciasDoPonto {
   /** Resolve a chave do fornecedor PARA AQUELA organização. `null` = não configurado. */
   buscarChave?: (organizationId: string) => Promise<string | null>;
   fetchImpl?: typeof fetch;
-  /** Allowlist de egress. O default é o endpoint intrínseco do fornecedor. */
+  /** Base da API. Default: `baseDaApiDoJev()`. A allowlist deriva dela. */
+  baseUrl?: string;
+  /** Allowlist de egress. O default é o host da base. */
   hostsPermitidos?: readonly string[];
 }
 
 /**
- * Busca a chave do provider `typesafe` da organização.
+ * A chave do Jev DAQUELA organização: a credencial `typesafe` ativa e validada
+ * mais recente. Nunca uma chave de ambiente global — seria o contrário do BYOK,
+ * e uma instalação pagaria a conta de outra.
  *
- * Fica como ponteiro até a onda que cadastra o provedor no painel: enquanto o
- * provedor não existe em `ai_provider_credentials`, devolver `null` é a resposta
- * CORRETA — e é o que mantém o produto exatamente como está hoje para quem não
- * configurou nada. Substituir isto por uma chave de ambiente global seria o
- * contrário da doutrina BYOK: uma instalação pagaria a conta de outra.
+ * "Validada" é a convenção de todo leitor de chave do repo
+ * (`lib/ai/gateway-binding.ts`): chave colada e ainda não conferida não sai
+ * para a rede.
+ *
+ * Nunca lança. Leitura que falha devolve `null` e o chamador segue pelo caminho
+ * de sempre — mas deixa rastro, porque sem ele uma decifragem quebrada é
+ * indistinguível de "não cadastrou a chave". O log leva só a CLASSE do erro: a
+ * mensagem pode carregar material da credencial.
  */
-async function chaveDaOrganizacao(_organizationId: string): Promise<string | null> {
-  return null;
+export async function chaveDaOrganizacao(organizationId: string): Promise<string | null> {
+  try {
+    // Admin client passa por cima da RLS: o filtro por organização é
+    // PROGRAMÁTICO e obrigatório (CLAUDE.md, anti-pattern 10).
+    const { data, error } = await createAdminClient()
+      .from("ai_provider_credentials")
+      .select("api_key_encrypted, api_key_iv, api_key_tag")
+      .eq("organization_id", organizationId)
+      .eq("provider", PROVEDOR_DO_JEV)
+      .eq("is_active", true)
+      .not("validated_at", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return decryptKey({
+      ciphertext: byteaToBuffer(data.api_key_encrypted),
+      iv: byteaToBuffer(data.api_key_iv),
+      tag: byteaToBuffer(data.api_key_tag),
+    });
+  } catch (erro) {
+    logger.warn("chave do Jev não pôde ser lida; seguindo pelo caminho de sempre", {
+      organizationId,
+      erro: erro instanceof Error ? erro.name : typeof erro,
+    });
+    return null;
+  }
 }
 
 export async function decidirNoPonto(
@@ -72,10 +110,11 @@ export async function decidirNoPonto(
 ): Promise<ResultadoDaDecisao> {
   const chave = await (deps.buscarChave ?? chaveDaOrganizacao)(entrada.organizationId);
   if (chave === null || chave.trim() === "") {
-    return { ok: false, motivo: "sem_credencial", defeitoNosso: false, status: null };
+    return { ok: false, motivo: "sem_credencial", exigeAcao: false, defeitoNosso: false, status: null };
   }
 
-  const allowlist = buildAllowlist([...(deps.hostsPermitidos ?? [ENDPOINT_SYSTEM_ONE])]);
+  const base = deps.baseUrl ?? baseDaApiDoJev();
+  const allowlist = buildAllowlist([...(deps.hostsPermitidos ?? [base])]);
   const fetchContido: typeof fetch = (input, init) =>
     allowlistedFetch(
       typeof input === "string" || input instanceof URL ? input : input.url,
@@ -90,6 +129,6 @@ export async function decidirNoPonto(
       perguntas: entrada.perguntas,
       ...(entrada.tetoMs !== undefined ? { tetoMs: entrada.tetoMs } : {}),
     },
-    { fetchImpl: fetchContido },
+    { fetchImpl: fetchContido, baseUrl: base },
   );
 }
