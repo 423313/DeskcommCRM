@@ -231,7 +231,10 @@ export async function resolveTurnAgent(
         intentName,
         confidence,
         outcome,
-        flowPointerId: member.flowPointerId ?? null,
+        // Só a intenção casada AGORA começa roteiro. Sticky é o mesmo assunto da
+        // conversa em curso: devolvê-lo recomeçaria o roteiro a cada turno — e,
+        // depois de concluído, de novo, para sempre.
+        flowPointerId: outcome === 'sticky' ? null : (member.flowPointerId ?? null),
       };
     };
 
