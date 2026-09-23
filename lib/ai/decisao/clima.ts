@@ -119,7 +119,10 @@ export async function medirClima(
     },
     deps,
   );
-  const latenciaMs = Date.now() - inicio;
+  // A régua é a da chamada (`r.latenciaMs`), não a do relógio acima, que conta
+  // também a busca da chave no banco — a IA de sempre, ao lado em Execuções,
+  // cronometra só a chamada. O relógio acima só serve quando nada saiu.
+  const latenciaMs = r.latenciaMs ?? Date.now() - inicio;
 
   if (!r.ok) {
     registrarFalha(entrada.organizationId, r.motivo, Date.now(), r.retryAfterMs);

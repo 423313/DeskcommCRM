@@ -57,6 +57,23 @@ describe("medirClima", () => {
     expect(r).toMatchObject({ ok: true, modelo: "jev-1.13.0", tokensDeEntrada: 80, tokensDeSaida: 18 });
   });
 
+  it("o tempo medido é o da chamada ao fornecedor, não o da busca da chave", async () => {
+    // Em Execuções, a IA de sempre cronometra só a chamada. Contar aqui a busca
+    // da chave no banco poria tempo de banco na conta do fornecedor.
+    const r = await medirClima(
+      { organizationId: novaOrg(), mensagem: "oi" },
+      {
+        buscarChave: async () => {
+          await new Promise((ok) => setTimeout(ok, 80));
+          return "tsk_x";
+        },
+        fetchImpl: vi.fn().mockResolvedValue(respostaComScore(2)),
+      },
+    );
+    expect(r.ok).toBe(true);
+    expect(r.latenciaMs).toBeLessThan(80);
+  });
+
   it("sem credencial não há nota, nem rede — o chamador segue pelo caminho atual", async () => {
     const fetchImpl = vi.fn();
     const r = await medirClima({ organizationId: novaOrg(), mensagem: "oi" }, { buscarChave: async () => null, fetchImpl });

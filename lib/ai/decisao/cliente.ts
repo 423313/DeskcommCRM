@@ -117,6 +117,8 @@ export interface FalhaDaDecisao {
   status: number | null;
   /** Do cabeçalho `retry-after`, quando o fornecedor o manda. Alimenta o disjuntor. */
   retryAfterMs?: number;
+  /** Só a ida e a volta ao fornecedor. Ausente quando nada saiu para a rede. */
+  latenciaMs?: number;
 }
 
 export type ResultadoDaDecisao =
@@ -126,6 +128,11 @@ export type ResultadoDaDecisao =
       uso: UsoDeTokens;
       /** A versão que DE FATO respondeu, como a API a devolveu. */
       modelo: string;
+      /**
+       * Só a ida e a volta ao fornecedor — sem a busca da chave no banco. É a
+       * mesma régua da IA de sempre em Execuções, que cronometra só a chamada.
+       */
+      latenciaMs: number;
     }
   | FalhaDaDecisao;
 
@@ -249,6 +256,7 @@ export async function decidir(
 
   const abortador = new AbortController();
   const relogio = setTimeout(() => abortador.abort(), entrada.tetoMs ?? TETO_PADRAO_MS);
+  const inicio = Date.now();
   try {
     const res = await (deps.fetchImpl ?? fetch)(`${deps.baseUrl ?? baseDaApiDoJev()}/v1/systemone`, {
       method: "POST",
@@ -266,15 +274,33 @@ export async function decidir(
         ok: false,
         ...doStatus(res.status),
         status: res.status,
+        latenciaMs: Date.now() - inicio,
         ...(espera !== undefined ? { retryAfterMs: espera } : {}),
       };
     }
 
-    const cru: unknown = await res.json();
-    const lido = corpoDaResposta.safeParse(cru);
-    if (!lido.success) {
-      return { ok: false, motivo: "resposta_ilegivel", exigeAcao: false, defeitoNosso: false, status: res.status };
+    // Ler o corpo e interpretá-lo são falhas diferentes. A leitura que cai (abort
+    // pelo teto no meio do corpo) é indisponibilidade; um 200 com página HTML de
+    // proxy é resposta que o sistema não entende — e a frase de "costuma se
+    // resolver sozinho" seria falsa para ela.
+    const texto = await res.text();
+    const latenciaMs = Date.now() - inicio;
+    const ilegivel = {
+      ok: false,
+      motivo: "resposta_ilegivel",
+      exigeAcao: false,
+      defeitoNosso: false,
+      status: res.status,
+      latenciaMs,
+    } as const;
+    let cru: unknown;
+    try {
+      cru = JSON.parse(texto);
+    } catch {
+      return ilegivel;
     }
+    const lido = corpoDaResposta.safeParse(cru);
+    if (!lido.success) return ilegivel;
 
     const respostas: Record<string, Resposta> = {};
     for (const [id, a] of Object.entries(lido.data.answers)) respostas[id] = daResposta(a);
@@ -283,16 +309,24 @@ export async function decidir(
       ok: true,
       respostas,
       modelo: lido.data.model ?? MODELO_DO_JEV,
+      latenciaMs,
       uso: {
         tokensDeEntrada: lido.data.usage?.input_tokens ?? 0,
         tokensDeSaida: lido.data.usage?.output_tokens ?? 0,
       },
     };
   } catch {
-    // Rede, abort por teto, JSON impossível de ler: tudo é indisponibilidade do
-    // ponto de vista de quem chama, e o caminho atual assume. O erro cru não sobe
-    // porque ele carrega URL e cabeçalho — e o cabeçalho tem a chave (regra 8).
-    return { ok: false, motivo: "provedor_indisponivel", exigeAcao: false, defeitoNosso: false, status: null };
+    // Rede e abort por teto: indisponibilidade do ponto de vista de quem chama,
+    // e o caminho atual assume. O erro cru não sobe porque ele carrega URL e
+    // cabeçalho — e o cabeçalho tem a chave (regra 8).
+    return {
+      ok: false,
+      motivo: "provedor_indisponivel",
+      exigeAcao: false,
+      defeitoNosso: false,
+      status: null,
+      latenciaMs: Date.now() - inicio,
+    };
   } finally {
     clearTimeout(relogio);
   }

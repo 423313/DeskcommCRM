@@ -133,6 +133,17 @@ describe("cliente do System One", () => {
     expect(r.ok === false && r.retryAfterMs).toBe(30_000);
   });
 
+  it("repassa o retry-after em data HTTP", async () => {
+    const daqui = new Date(Date.now() + 60_000).toUTCString();
+    const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(429, {}, { "retry-after": daqui }));
+    const r = await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    // A data HTTP tem resolução de segundo: entre 58 e 60 s a partir de agora.
+    expect(r.retryAfterMs).toBeGreaterThan(58_000);
+    expect(r.retryAfterMs).toBeLessThanOrEqual(60_000);
+  });
+
   it("sem retry-after, não inventa espera", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(respostaHttp(429, {}));
     const r = await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
@@ -203,6 +214,19 @@ describe("cliente do System One", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.motivo).toBe("resposta_ilegivel");
+  });
+
+  it("200 com página HTML (proxy) é resposta ilegível, não 'fora do ar'", async () => {
+    // "Fora do ar" diz "costuma se resolver sozinho"; um proxy que responde HTML
+    // não passa sozinho.
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response("<html>bad gateway</html>", { status: 200, headers: { "content-type": "text/html" } }),
+    );
+    const r = await decidir({ chave: CHAVE, estado: "x", perguntas: PERGUNTAS }, { fetchImpl });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivo).toBe("resposta_ilegivel");
+    expect(r.status).toBe(200);
   });
 
   it("sem chave, nem sai da máquina", async () => {
