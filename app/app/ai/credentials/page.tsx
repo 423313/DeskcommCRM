@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { contarUsoQueBloqueia, type VersaoVinculada } from "@/lib/ai/credenciais/uso";
+import { lerConfigDoJev } from "@/lib/ai/decisao/config";
+import { credencialEmUsoPeloJev } from "@/lib/ai/decisao/credencial";
+import { PONTOS_DO_JEV } from "@/lib/ai/pontos/registro";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { CredentialsList } from "./_components/CredentialsList";
 
@@ -46,6 +49,20 @@ export default async function CredentialsPage() {
     usageMap = contarUsoQueBloqueia((linked ?? []) as unknown as VersaoVinculada[]);
   }
 
+  // "Usada em": a chave do Jev não aparece no número acima (nenhuma versão de
+  // agente aponta para ela), e sem esta linha pareceria uma chave parada que dá
+  // para excluir sem efeito. Só a que ele USA, e só com ele ligado — a mesma
+  // regra que escolhe a chave que sai para a rede (`credencialEmUsoPeloJev`).
+  const { data: orgRow } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", activeOrg.orgId)
+    .maybeSingle();
+  const doJev = lerConfigDoJev(orgRow?.settings).ligado ? credencialEmUsoPeloJev(credentials) : null;
+  const usadaEmMap: Record<string, string[]> = doJev
+    ? { [doJev.id]: PONTOS_DO_JEV.map((p) => p.rotulo) }
+    : {};
+
   // A chave do `.env` também é "IA principal" — sem ela na conta, a lista
   // acusaria falta de IA a quem atende com a chave que veio na instalação.
   const ambiente = lerAmbiente();
@@ -67,6 +84,7 @@ export default async function CredentialsPage() {
         initialData={credentials}
         canWrite={canWrite}
         usageMap={usageMap}
+        usadaEmMap={usadaEmMap}
         instalacaoTemIa={instalacaoTemIa}
       />
     </div>

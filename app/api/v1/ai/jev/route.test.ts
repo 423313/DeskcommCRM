@@ -271,6 +271,15 @@ describe("GET /api/v1/ai/jev", () => {
         latency_ms: 90,
         created_at: "2026-09-22T13:00:00.000Z",
       }),
+      // Mais ANTIGA e por último na lista: o dublê não ordena, então a última
+      // falha tem de sair pela data, não pela posição.
+      chamada({
+        status: "erro",
+        error_code: "jev_sem_credito",
+        cost_cents: 0,
+        latency_ms: 80,
+        created_at: "2026-09-21T09:00:00.000Z",
+      }),
     ];
     const { corpo } = await ler();
     const n = corpo.data.numeros;
@@ -339,6 +348,23 @@ describe("PATCH /api/v1/ai/jev", () => {
     expect(corpo.error.message).toMatch(/Estados Unidos/);
     expect(escritas()).toEqual([]);
     expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("admin em espanhol recebe as duas recusas em espanhol", async () => {
+    const emEspanhol = {
+      ok: true,
+      user: { id: USUARIO, idioma: "es" },
+      org: { orgId: ORG, role: "admin" },
+    } as unknown as Awaited<ReturnType<typeof requireRole>>;
+
+    vi.mocked(requireRole).mockResolvedValueOnce(emEspanhol);
+    const semChave = await mudar({ ligado: true, aceite_lgpd: true });
+    expect(semChave.corpo.error.message).toMatch(/^Para activar Jev/);
+
+    estado.credenciais = [credencial()];
+    vi.mocked(requireRole).mockResolvedValueOnce(emEspanhol);
+    const semAceite = await mudar({ ligado: true });
+    expect(semAceite.corpo.error.message).toMatch(/^Activar Jev envía/);
   });
 
   it("liga com chave e aceite: grava quem aceitou, pelo cliente admin, sem apagar o resto, e audita", async () => {

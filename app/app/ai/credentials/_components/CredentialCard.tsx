@@ -43,6 +43,11 @@ interface Props {
   credential: CredentialRow;
   canWrite: boolean;
   usageCount: number;
+  /**
+   * As tarefas em que a chave trabalha fora dos agentes (hoje, as do Jev). Não
+   * trava a exclusão como `usageCount`: excluir desliga o Jev, e o diálogo avisa.
+   */
+  usadaEm?: readonly string[];
 }
 
 const STATUS_LABEL: Record<CredentialStatus, string> = {
@@ -61,7 +66,7 @@ const STATUS_VARIANT: Record<CredentialStatus, "default" | "secondary" | "destru
   inactive: "outline",
 };
 
-export function CredentialCard({ credential, canWrite, usageCount }: Props) {
+export function CredentialCard({ credential, canWrite, usageCount, usadaEm = [] }: Props) {
   const t = useT();
   const router = useRouter();
   const qc = useQueryClient();
@@ -90,8 +95,14 @@ export function CredentialCard({ credential, canWrite, usageCount }: Props) {
   const onDelete = () => {
     startTransition(async () => {
       try {
-        await apiClient.delete(`/api/v1/ai/credentials/${credential.id}`);
-        toast.success(t("Credencial removida."));
+        const res = await apiClient.delete<{ data?: { jev_desligado?: boolean } }>(
+          `/api/v1/ai/credentials/${credential.id}`,
+        );
+        toast.success(
+          res?.data?.jev_desligado
+            ? t("Credencial removida. O Jev foi desligado.")
+            : t("Credencial removida."),
+        );
         setDeleteOpen(false);
         await qc.invalidateQueries({ queryKey: credentialsListQueryKey });
         await refreshCredentialsView();
@@ -170,6 +181,13 @@ export function CredentialCard({ credential, canWrite, usageCount }: Props) {
         </div>
       </dl>
 
+      {usadaEm.length > 0 && (
+        <p className="text-xs" data-testid="credencial-usada-em">
+          <span className="text-muted-foreground">{t("Usada em")}:</span>{" "}
+          {usadaEm.map((tarefa) => t(tarefa)).join(", ")}
+        </p>
+      )}
+
       {canWrite && (
         <div className="flex items-center justify-end gap-1 pt-1">
           {/* Rotacionar é o caminho que NÃO passa pela exclusão — e por isso
@@ -229,7 +247,15 @@ export function CredentialCard({ credential, canWrite, usageCount }: Props) {
               {/* O diálogo só abre com `usageCount === 0` (a chave em uso tem o
                   botão desabilitado), então não há agente a avisar — a frase
                   antiga ("agents vão falhar") descrevia um caso que não chega
-                  aqui. O que sobra é o irreversível. */}
+                  aqui. O que sobra é o irreversível — e, na chave do Jev, que
+                  não trava, o efeito de excluí-la (a rota o desliga). */}
+              {usadaEm.length > 0 && (
+                <>
+                  {t(
+                    "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa volta a ser medido só pela sua IA principal.",
+                  )}{" "}
+                </>
+              )}
               {t("Esta ação não pode ser desfeita.")}
             </AlertDialogDescription>
           </AlertDialogHeader>

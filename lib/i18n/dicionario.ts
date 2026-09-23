@@ -2264,6 +2264,11 @@ export const DICIONARIO: Traducoes = {
   Inativa: { es: "Inactiva" },
   "Revalidando…": { es: "Revalidando…" },
   "Credencial removida.": { es: "Credencial eliminada." },
+  "Credencial removida. O Jev foi desligado.": { es: "Credencial eliminada. Jev se desactivó." },
+  "Usada em": { es: "Usada en" },
+  "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa volta a ser medido só pela sua IA principal.": {
+    es: "Jev usa esta clave. Sin ella, Jev se desactiva y el clima de la conversación vuelve a medirlo solo tu IA principal.",
+  },
   "Excluir credencial": { es: "Eliminar credencial" },
   Modelos: { es: "Modelos" },
   "Em uso por": { es: "En uso por" },
@@ -8119,6 +8124,14 @@ export const DICIONARIO: Traducoes = {
   },
   "nada foi gravado — verifique as permissões da organização": {
     es: "no se guardó nada; revisa los permisos de la organización",
+  },
+  // PATCH /api/v1/ai/jev. Fora da varredura de tela (pastas `api` não entram), e
+  // chegam ao admin como a mensagem do erro.
+  "Ligar o Jev manda a última mensagem de cada cliente para a TypeSafe AI, nos Estados Unidos. Para ligar, confirme que você está de acordo.": {
+    es: "Activar Jev envía el último mensaje de cada cliente a TypeSafe AI, en Estados Unidos. Para activarlo, confirma que estás de acuerdo.",
+  },
+  "Para ligar o Jev, cole a chave dele em Credenciais e espere o teste da chave passar.": {
+    es: "Para activar Jev, pega su clave en Credenciales y espera a que pase la prueba de la clave.",
   },
   "Não consegui checar o pedido de atualização.": { es: "No pude verificar la solicitud de actualización." },
   "Não consegui finalizar a atualização.": { es: "No pude finalizar la actualización." },

@@ -24,7 +24,7 @@ import { gravarConfigDoJev, lerConfigDoJev, type ConfigDoJev } from "@/lib/ai/de
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { PROVEDORES_DE_DECISAO } from "@/lib/ai/pontos/provedores";
-import { PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
+import { PONTOS_DO_JEV } from "@/lib/ai/pontos/registro";
 import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
@@ -48,8 +48,7 @@ const PAGINA = 1000;
 // migration) é o passo seguinte, quando alguma instalação chegar lá.
 const PAGINAS_MAX = 50;
 
-/** Onde o Jev trabalha: os pontos do registro que sabem ser decididos por ele. */
-const TAREFAS = PONTOS_DE_IA.flatMap((p) =>
+const TAREFAS = PONTOS_DO_JEV.flatMap((p) =>
   p.decisaoRapida ? [{ id: p.id, rotulo: p.rotulo, oQueOJevFaz: p.decisaoRapida.oQueOJevFaz }] : [],
 );
 
@@ -71,7 +70,14 @@ function numerosDaSemana(linhas: readonly LinhaDaSemana[]) {
   // Soma como o SUM do SQL: linha sem preço (`null`, versão fora da tabela)
   // não vira zero inventado — fica fora da conta.
   const custo = doJev.reduce((soma, l) => soma + (l.cost_cents === null ? 0 : Number(l.cost_cents)), 0);
-  const falha = doJev.filter((l) => l.status === "erro").at(-1);
+  // A mais recente pela DATA, não pela posição: a ordem da leitura existe para
+  // a paginação, e mudar a ordem não pode trocar a falha que o cartão mostra.
+  const falha = doJev
+    .filter((l) => l.status === "erro")
+    .reduce<LinhaDaSemana | null>(
+      (maisNova, l) => (maisNova === null || Date.parse(l.created_at) > Date.parse(maisNova.created_at) ? l : maisNova),
+      null,
+    );
   return {
     numeros: {
       dias: DIAS_DOS_NUMEROS,

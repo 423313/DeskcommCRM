@@ -4,7 +4,7 @@
  * onde deveria haver uma contagem.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CredentialCard } from "./CredentialCard";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
@@ -30,14 +30,45 @@ export function credencial(extra: Partial<CredentialRow> = {}): CredentialRow {
   };
 }
 
-export function montar(row: CredentialRow, props: { canWrite?: boolean; usageCount?: number } = {}) {
+export function montar(
+  row: CredentialRow,
+  props: { canWrite?: boolean; usageCount?: number; usadaEm?: string[] } = {},
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <CredentialCard credential={row} canWrite={props.canWrite ?? true} usageCount={props.usageCount ?? 0} />
+      <CredentialCard
+        credential={row}
+        canWrite={props.canWrite ?? true}
+        usageCount={props.usageCount ?? 0}
+        usadaEm={props.usadaEm}
+      />
     </QueryClientProvider>,
   );
 }
+
+describe("CredentialCard — chave do Jev", () => {
+  const AVISO = /Sem ela, o Jev é desligado/;
+
+  it("diz onde a chave trabalha e avisa, antes de excluir, que o Jev será desligado", () => {
+    montar(credencial({ provider: "typesafe", label: "Jev" }), {
+      usadaEm: ["Medir o clima da conversa"],
+    });
+    expect(screen.getByTestId("credencial-usada-em")).toHaveTextContent(
+      "Usada em: Medir o clima da conversa",
+    );
+    // Não trava como versão de agente: o botão de excluir segue disponível.
+    fireEvent.click(screen.getByRole("button", { name: "Excluir credencial" }));
+    expect(screen.getByText(AVISO)).toBeInTheDocument();
+  });
+
+  it("controle: chave que o Jev não usa não tem a linha nem o aviso", () => {
+    montar(credencial({ provider: "typesafe", label: "Jev reserva" }));
+    expect(screen.queryByTestId("credencial-usada-em")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Excluir credencial" }));
+    expect(screen.queryByText(AVISO)).toBeNull();
+  });
+});
 
 describe("CredentialCard — modelos", () => {
   it("mostra a CONTAGEM de modelos, nunca a lista colada", () => {

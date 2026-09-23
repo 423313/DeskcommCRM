@@ -19,6 +19,8 @@ interface Props {
   initialData: CredentialRow[];
   canWrite: boolean;
   usageMap: Record<string, number>;
+  /** Onde a chave trabalha fora dos agentes — hoje, as tarefas do Jev na chave que ele usa. */
+  usadaEmMap?: Record<string, string[]>;
   /**
    * A instalação trouxe chave de IA no `.env` (a do provedor ou a do gateway)?
    * É o caso mais comum do kit, e essa chave não é linha desta lista.
@@ -35,7 +37,13 @@ const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
 
 const PROVIDER_ORDER: ProvedorComChave[] = PROVEDORES_COM_CHAVE.map((p) => p.id);
 
-export function CredentialsList({ initialData, canWrite, usageMap, instalacaoTemIa = false }: Props) {
+export function CredentialsList({
+  initialData,
+  canWrite,
+  usageMap,
+  usadaEmMap = {},
+  instalacaoTemIa = false,
+}: Props) {
   const t = useT();
   const { data } = useCredentialsList({ initialData });
   const [addOpen, setAddOpen] = useState(false);
@@ -116,6 +124,7 @@ export function CredentialsList({ initialData, canWrite, usageMap, instalacaoTem
                     credential={row}
                     canWrite={canWrite}
                     usageCount={usageMap[row.id] ?? 0}
+                    usadaEm={usadaEmMap[row.id] ?? []}
                   />
                 </li>
               ))}

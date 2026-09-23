@@ -560,6 +560,9 @@ export const PONTO_POR_ID: ReadonlyMap<string, PontoDeIa> = new Map(
   PONTOS_DE_IA.map((p) => [p.id, p]),
 );
 
+/** Onde o Jev trabalha: o cartão dele lista, e a chave dele diz "Usada em". */
+export const PONTOS_DO_JEV: readonly PontoDeIa[] = PONTOS_DE_IA.filter((p) => p.decisaoRapida);
+
 /**
  * Os pontos agrupados como a tela mostra. A ordem dentro de cada papel é a de
  * declaração, que já está escrita na ordem em que o operador pensa (o que o
