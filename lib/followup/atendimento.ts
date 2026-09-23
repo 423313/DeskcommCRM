@@ -537,11 +537,6 @@ export async function registrarEventoDoRoteiro(
   return (r.rowCount ?? 0) > 0;
 }
 
-/** O nó `collect` de uma chave, com o id — a trilha ancora o evento no nó. */
-function noDaChave(estado: EstadoDeAtendimento, campo: string): string | null {
-  return campoPorChave(estado.checklist, campo)?.id ?? null;
-}
-
 /**
  * Marca o turno: soma uma tentativa na PRÓXIMA pergunta pendente e, se com isso
  * ela esgotou, recalcula a situação e conclui quando não sobra pendente.
