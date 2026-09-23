@@ -153,7 +153,7 @@ function makeDb(pointers: Row[], versions: Row[], stages: Row[] = []) {
     }
 
     const b = {
-      select() {
+      select(_cols?: string) {
         return b;
       },
       insert(obj: Row) {
