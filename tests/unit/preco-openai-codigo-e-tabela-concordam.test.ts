@@ -77,11 +77,13 @@ const gptDoCodigo = [...precosDoCodigo().keys()].sort();
 
 describe("o preço que o código cobra é o preço que a tabela soma", () => {
   it("as duas fontes têm os mesmos ids gpt (guarda de vacuidade, juntas)", () => {
-    // Medido em 23/09/2026: 12 ids gpt em cada fonte. Se você ADICIONOU um
-    // modelo, ele entra nas DUAS fontes — um teste que só reclama de valores
-    // passaria em id novo declarado de um lado só, que é o buraco da #1478.
-    expect(gptDoCodigo.length, "ids gpt lidos do pricing.ts").toBe(12);
-    expect(gptDaTabela.length, "ids gpt lidos do baseline").toBe(12);
+    // `> 0` como guarda de vacuidade — sugerida pelo @melgarafael na revisão do
+    // #1498: um `toBe(12)` reprovaria quem adicionasse um modelo novo nas DUAS
+    // fontes corretamente. Quem adiciona de um UM lado só cai na igualdade de
+    // conjuntos logo abaixo, que é a asserção que fecha o buraco da #1478.
+    // Medido em 23/09/2026: 12 ids gpt em cada fonte.
+    expect(gptDoCodigo.length, "ids gpt lidos do pricing.ts").toBeGreaterThan(0);
+    expect(gptDaTabela.length, "ids gpt lidos do baseline").toBeGreaterThan(0);
     expect(gptDaTabela, "id em uma fonte e não na outra").toEqual(gptDoCodigo);
   });
 
