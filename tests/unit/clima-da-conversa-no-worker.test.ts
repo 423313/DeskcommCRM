@@ -19,7 +19,9 @@
  * Em todos os casos o `.env` está VAZIO de chave de IA: um verde aqui só pode
  * ter vindo da credencial da organização.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const envMock: Record<string, string> = {
   ANTHROPIC_API_KEY: "",
@@ -44,6 +46,8 @@ vi.mock("@/lib/crypto/aes_gcm", () => ({
 
 import { generateObject } from "ai";
 
+import { registrarFalha } from "@/lib/ai/decisao/disjuntor";
+import { AVISO_DO_JEV, O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { processSentiment } from "@/workers/ai-sentiment-worker";
@@ -57,7 +61,11 @@ interface Banco {
   agent_inbox_items: Linha[];
 }
 
-const ORG = "11111111-1111-4111-8111-111111111111";
+/**
+ * Uma organização por caso: o disjuntor do Jev é por organização e vive no
+ * processo, e três falhas de casos anteriores o deixariam aberto para os seguintes.
+ */
+let ORG = "";
 const MSG = "22222222-2222-4222-8222-222222222222";
 const CONV = "33333333-3333-4333-8333-333333333333";
 const CRED_ANTHROPIC = "44444444-4444-4444-8444-444444444444";
@@ -84,6 +92,9 @@ interface Consulta {
   single(): Promise<{ data: Linha | null; error: null }>;
   then<T>(ok: (v: unknown) => T, falha?: (e: unknown) => T): Promise<T>;
 }
+
+/** Os `default` do schema que os casos leem de volta (`agent_inbox_items.status`). */
+const PADROES_DO_SCHEMA: Record<string, Linha> = { agent_inbox_items: { status: "open" } };
 
 function fazerAdmin(banco: Banco, rpcs: Linha[]) {
   const from = (tabela: string): Consulta => {
@@ -124,7 +135,7 @@ function fazerAdmin(banco: Banco, rpcs: Linha[]) {
       },
       insert: (linha) => {
         modo = "insert";
-        novas = Array.isArray(linha) ? linha : [linha];
+        novas = (Array.isArray(linha) ? linha : [linha]).map((l) => ({ ...PADROES_DO_SCHEMA[tabela], ...l }));
         return c;
       },
       update: (m) => {
@@ -199,30 +210,32 @@ function credencial(id: string, provider: string, chave: string): Linha {
   };
 }
 
-const evento = {
-  id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-  organization_id: ORG,
-  entity_id: MSG,
-  payload: { message_id: MSG, conversation_id: CONV },
-} as unknown as EventRow;
+const evento = (): EventRow =>
+  ({
+    id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    organization_id: ORG,
+    entity_id: MSG,
+    payload: { message_id: MSG, conversation_id: CONV },
+  }) as unknown as EventRow;
 
 /** O log é fire-and-forget (`queueMicrotask`): espera a linha cair no banco. */
 async function drenar(): Promise<void> {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-async function rodar(c: Cenario) {
-  const banco = montarBanco(c);
+/** `banco` entra por fora quando o caso roda o worker duas vezes no mesmo mundo. */
+async function rodar(c: Cenario, banco: Banco = montarBanco(c)) {
   const rpcs: Linha[] = [];
   vi.mocked(createAdminClient).mockReturnValue(
     fazerAdmin(banco, rpcs) as unknown as ReturnType<typeof createAdminClient>,
   );
-  const resultado = await processSentiment(evento);
+  const resultado = await processSentiment(evento());
   await drenar();
   return { resultado, banco, rpcs };
 }
 
 beforeEach(() => {
+  ORG = randomUUID();
   vi.clearAllMocks();
   vi.mocked(generateObject).mockResolvedValue({
     object: { sentiment_score: 0.2, reasoning_short: "cliente repetindo o pedido" },
@@ -281,5 +294,255 @@ describe("D12 — o clima roda com a chave colada pela tela", () => {
     expect(resultado).toEqual({ skipped: true, reason: "ai_gateway_key_missing" });
     expect(generateObject).not.toHaveBeenCalled();
     expect(banco.llm_calls).toHaveLength(0);
+  });
+});
+
+// ── O Jev no worker ──────────────────────────────────────────────────────────
+//
+// O fornecedor é um dublê de `fetch` GLOBAL, e não uma dependência injetada:
+// o worker chama `medirClima` sem deps, então é o caminho de produção inteiro
+// (interruptor em `settings`, chave decifrada do banco, allowlist de egress,
+// disjuntor) que decide se a pergunta sai.
+
+const CRED_JEV = "66666666-6666-4666-8666-666666666666";
+const CHAVE_DO_JEV = "apikey_dubledeteste0000_0000";
+const ACEITE = { em: "2026-09-23T12:00:00.000Z", por: "77777777-7777-4777-8777-777777777777" };
+
+/** Uma chamada que o dublê do fornecedor recebeu. */
+interface ChamadaAoJev {
+  url: string;
+  autorizacao: string | null;
+  corpo: { model: string; state: unknown };
+}
+
+let chamadasAoJev: ChamadaAoJev[] = [];
+
+/** Resposta no formato real da API (medido em 23/09/2026). */
+function respostaDoJev(nivel: number): Response {
+  return new Response(
+    JSON.stringify({
+      model: "jev-1.13.0",
+      answers: {
+        clima: {
+          type: "score",
+          score: nivel,
+          confidence: 0.91,
+          legend: { "0": "cliente irritado, revoltado ou ameaçando sair" },
+          probabilities: { "0": 0.91 },
+        },
+      },
+      usage: { input_tokens: 388, output_tokens: 18 },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
+function fornecedor(responder: (init: RequestInit) => Promise<Response>): void {
+  vi.stubGlobal("fetch", async (entrada: string | URL, init: RequestInit = {}) => {
+    const url = String(entrada);
+    // Qualquer outro destino é egress que este teste não previu.
+    if (!url.startsWith("https://api.typesafe.ai/")) throw new Error(`egress inesperado: ${url}`);
+    chamadasAoJev.push({
+      url,
+      autorizacao: new Headers(init.headers).get("authorization"),
+      corpo: JSON.parse(String(init.body)) as ChamadaAoJev["corpo"],
+    });
+    return responder(init);
+  });
+}
+
+function jevLigado(modo: "observacao" | "decide", comIaDeSempre = true): Cenario {
+  return {
+    settings: { llm: { provider: "anthropic" }, jev: { ligado: true, modo, aceite: ACEITE } },
+    credenciais: [
+      credencial(CRED_JEV, "typesafe", CHAVE_DO_JEV),
+      ...(comIaDeSempre ? [credencial(CRED_ANTHROPIC, "anthropic", "sk-ant-da-tela")] : []),
+    ],
+  };
+}
+
+const linhasDoJev = (b: Banco) => b.llm_calls.filter((l) => l.provider === "typesafe");
+const linhasDaIaDeSempre = (b: Banco) => b.llm_calls.filter((l) => l.provider !== "typesafe");
+const alertas = (rpcs: Linha[]) => rpcs.filter((r) => r["p_event_type"] === "ai.sentiment_alert");
+
+describe("o Jev no worker de clima", () => {
+  beforeEach(() => {
+    chamadasAoJev = [];
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("modo decide: a nota do Jev vale, a IA de sempre NÃO roda, e a linha dele diz a verdade", async () => {
+    fornecedor(async () => respostaDoJev(0));
+    const { resultado, banco, rpcs } = await rodar(jevLigado("decide"));
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0 });
+    expect(generateObject, "a IA de sempre rodou com o Jev decidindo").not.toHaveBeenCalled();
+
+    // O que saiu para o fornecedor: a chave da organização e a versão fixada.
+    expect(chamadasAoJev).toHaveLength(1);
+    expect(chamadasAoJev[0]!.autorizacao).toBe(`Bearer ${CHAVE_DO_JEV}`);
+    expect(chamadasAoJev[0]!.corpo.model).toBe("jev-1.13.0");
+    expect(chamadasAoJev[0]!.corpo.state).toBe("já é a terceira vez que eu peço isso");
+
+    expect(banco.llm_calls).toHaveLength(1);
+    const linha = banco.llm_calls[0]!;
+    expect(linha).toMatchObject({
+      purpose: "sentiment_classify",
+      provider: "typesafe",
+      model: "typesafe/jev-1.13.0",
+      status: "ok",
+      origem_da_escolha: "jev",
+      input_tokens: 388,
+      output_tokens: 18,
+    });
+    // 388 tokens x US$ 0,042/Mtok = 0,0016296 centavo — fração, nunca o 1 do ceil.
+    expect(linha.cost_cents as number).toBeCloseTo(0.0016296, 9);
+    expect(typeof linha.latency_ms).toBe("number");
+
+    expect(banco.messages[0]!.metadata).toMatchObject({
+      sentiment_score: 0,
+      sentiment_engine: "jev",
+      sentiment_jev_score: 0,
+      sentiment_jev_model: "jev-1.13.0",
+    });
+    // A passagem para humano sabe que foi o Jev (D11).
+    expect(alertas(rpcs)).toHaveLength(1);
+    expect(alertas(rpcs)[0]!["p_payload"]).toMatchObject({ sentiment_score: 0, sentiment_engine: "jev" });
+  });
+
+  it("modo observação: os dois medem, a IA de sempre decide, as duas notas ficam guardadas", async () => {
+    // O Jev acha o cliente ótimo (1,0); a IA de sempre acha irritado (0,2). Quem
+    // decide é a de sempre — e é por isso que o alerta sai.
+    fornecedor(async () => respostaDoJev(4));
+    const { resultado, banco, rpcs } = await rodar(jevLigado("observacao"));
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0.2 });
+    expect(generateObject).toHaveBeenCalledTimes(1);
+    expect(banco.messages[0]!.metadata).toMatchObject({
+      sentiment_score: 0.2,
+      sentiment_engine: "llm",
+      sentiment_jev_score: 1,
+      sentiment_jev_model: "jev-1.13.0",
+    });
+    expect(linhasDoJev(banco)).toHaveLength(1);
+    expect(linhasDoJev(banco)[0]).toMatchObject({ status: "ok", origem_da_escolha: "jev" });
+    expect(linhasDaIaDeSempre(banco)).toHaveLength(1);
+    expect(linhasDaIaDeSempre(banco)[0]).toMatchObject({ status: "ok", origem_da_escolha: null });
+    expect(alertas(rpcs)[0]!["p_payload"]).toMatchObject({ sentiment_engine: "llm" });
+  });
+
+  it("o Jev cai na rede: a IA de sempre mede no lugar dele, sem linha de erro e sem aviso", async () => {
+    fornecedor(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const { resultado, banco } = await rodar(jevLigado("decide"));
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0.2 });
+    expect(chamadasAoJev).toHaveLength(1);
+    expect(linhasDoJev(banco), "falha que a reserva cobriu não é erro para quem opera").toHaveLength(0);
+    expect(linhasDaIaDeSempre(banco)[0]).toMatchObject({ status: "ok", origem_da_escolha: "reserva_do_jev" });
+    expect(banco.messages[0]!.metadata).toMatchObject({ sentiment_engine: "llm" });
+    expect(banco.messages[0]!.metadata).not.toHaveProperty("sentiment_jev_score");
+    expect(banco.agent_inbox_items, "queda de rede passa sozinha — não pede ação").toHaveLength(0);
+  });
+
+  it("chave recusada: a reserva mede e UM aviso abre na Central, por mais mensagens que cheguem", async () => {
+    fornecedor(async () => new Response(JSON.stringify({ detail: { error_type: "authentication_error" } }), { status: 401 }));
+    const cenario = jevLigado("decide");
+    const primeira = await rodar(cenario);
+    const segunda = await rodar(cenario, primeira.banco);
+
+    expect(segunda.resultado).toEqual({ skipped: false, sentiment_score: 0.2 });
+    expect(chamadasAoJev).toHaveLength(2);
+    const avisos = segunda.banco.agent_inbox_items;
+    expect(avisos, "dedupe pelo título aberto").toHaveLength(1);
+    expect(avisos[0]).toMatchObject({
+      organization_id: ORG,
+      kind: "other",
+      severity: "warn",
+      title: AVISO_DO_JEV.titulo,
+    });
+    expect(avisos[0]!.body).toContain(O_QUE_FAZER_DO_JEV.jev_credencial_invalida);
+    expect(avisos[0]!.body).toContain(AVISO_DO_JEV.comReserva);
+    expect(linhasDoJev(segunda.banco)).toHaveLength(0);
+    expect(linhasDaIaDeSempre(segunda.banco).map((l) => l.origem_da_escolha)).toEqual([
+      "reserva_do_jev",
+      "reserva_do_jev",
+    ]);
+  });
+
+  it("sem IA de linguagem, o Jev decide mesmo no modo observação", async () => {
+    fornecedor(async () => respostaDoJev(2));
+    const { resultado, banco } = await rodar(jevLigado("observacao", false));
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0.5 });
+    expect(generateObject).not.toHaveBeenCalled();
+    expect(banco.llm_calls).toHaveLength(1);
+    expect(banco.llm_calls[0]).toMatchObject({ provider: "typesafe", status: "ok" });
+    expect(banco.messages[0]!.metadata).toMatchObject({ sentiment_engine: "jev", sentiment_score: 0.5 });
+  });
+
+  it("sem IA de linguagem e o Jev recusando: linha de erro com código próprio e aviso crítico", async () => {
+    // O único caso em que ninguém mediu — e é o único que vira erro em Execuções.
+    fornecedor(async () => new Response("{}", { status: 402 }));
+    const { resultado, banco } = await rodar(jevLigado("decide", false));
+
+    expect(resultado).toEqual({ skipped: true, reason: "jev_falhou_sem_reserva" });
+    expect(banco.llm_calls).toHaveLength(1);
+    expect(banco.llm_calls[0]).toMatchObject({
+      provider: "typesafe",
+      model: "typesafe/jev-1.13.0",
+      status: "erro",
+      error_code: "jev_sem_credito",
+      origem_da_escolha: "jev",
+      cost_cents: 0,
+    });
+    expect(banco.agent_inbox_items).toHaveLength(1);
+    expect(banco.agent_inbox_items[0]).toMatchObject({ severity: "critical" });
+    expect(banco.agent_inbox_items[0]!.body).toContain(AVISO_DO_JEV.semReserva);
+  });
+
+  it("Jev desligado: nenhuma chamada ao fornecedor e nenhuma linha dele, mesmo com a chave cadastrada", async () => {
+    fornecedor(async () => respostaDoJev(0));
+    const cenario = jevLigado("decide");
+    cenario.settings = { llm: { provider: "anthropic" }, jev: { ligado: false, modo: "decide", aceite: ACEITE } };
+    const { resultado, banco } = await rodar(cenario);
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0.2 });
+    expect(chamadasAoJev).toHaveLength(0);
+    expect(linhasDoJev(banco)).toHaveLength(0);
+    // O caminho de antes do Jev, byte a byte: sem origem, sem motor novo na linha.
+    expect(linhasDaIaDeSempre(banco)[0]).toMatchObject({ status: "ok", origem_da_escolha: null });
+  });
+
+  it("disjuntor aberto: a pergunta não sai e a IA de sempre mede como reserva", async () => {
+    fornecedor(async () => respostaDoJev(0));
+    registrarFalha(ORG, "limite_de_taxa", Date.now());
+    const { resultado, banco } = await rodar(jevLigado("decide"));
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0.2 });
+    expect(chamadasAoJev).toHaveLength(0);
+    expect(linhasDoJev(banco)).toHaveLength(0);
+    expect(linhasDaIaDeSempre(banco)[0]).toMatchObject({ origem_da_escolha: "reserva_do_jev" });
+  });
+
+  it("fornecedor lento: o teto corta em ~1,5 s e a reserva assume", async () => {
+    // O dreno roda os handlers em série: cada segundo aqui atrasa a fila inteira.
+    fornecedor(
+      (init) =>
+        new Promise<Response>((_ok, falha) => {
+          init.signal?.addEventListener("abort", () => falha(new DOMException("abortado", "AbortError")));
+        }),
+    );
+    const inicio = performance.now();
+    const { resultado, banco } = await rodar(jevLigado("decide"));
+    const duracao = performance.now() - inicio;
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0.2 });
+    expect(duracao, "o worker esperou o fornecedor além do teto").toBeLessThan(2_000);
+    expect(duracao, "cortou antes do teto — então não foi o teto que cortou").toBeGreaterThanOrEqual(1_400);
+    expect(linhasDaIaDeSempre(banco)[0]).toMatchObject({ origem_da_escolha: "reserva_do_jev" });
   });
 });

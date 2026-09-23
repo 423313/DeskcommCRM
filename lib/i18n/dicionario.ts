@@ -3258,6 +3258,49 @@ export const DICIONARIO: Traducoes = {
   "Usando o padrão da organização.": {
     es: "Usando el valor predeterminado de la organización.",
   },
+  "O produto resolve este ponto sozinho — não há modelo a escolher.": {
+    es: "El producto resuelve este punto por sí solo; no hay modelo que elegir.",
+  },
+  // O Jev em IA › Execuções e na Central (`lib/ai/decisao/textos.ts`).
+  "Medido pelo Jev. Se ele está em observação, quem decide é a IA de sempre.": {
+    es: "Medido por Jev. Si está en observación, quien decide es la IA de siempre.",
+  },
+  "O Jev não respondeu; a IA de sempre mediu no lugar dele.": {
+    es: "Jev no respondió; la IA de siempre midió en su lugar.",
+  },
+  "A TypeSafe não aceitou a chave do Jev. Confira em Credenciais se ela ainda vale, ou cole uma nova.": {
+    es: "TypeSafe no aceptó la clave de Jev. Revisa en Credenciales si todavía es válida o pega una nueva.",
+  },
+  "A TypeSafe recusou o pedido do Jev, em geral por crédito esgotado. Confira o saldo na sua conta da TypeSafe.": {
+    es: "TypeSafe rechazó el pedido de Jev, normalmente por falta de crédito. Revisa el saldo en tu cuenta de TypeSafe.",
+  },
+  "O sistema fez ao Jev uma pergunta que ele não aceitou. É defeito nosso, não da sua configuração: avise o suporte.": {
+    es: "El sistema le hizo a Jev una pregunta que no aceptó. Es un defecto nuestro, no de tu configuración: avisa al soporte.",
+  },
+  "O Jev recebeu pedidos demais de uma vez e pediu uma pausa. Ele volta sozinho em alguns minutos.": {
+    es: "Jev recibió demasiados pedidos a la vez y pidió una pausa. Vuelve solo en unos minutos.",
+  },
+  "O Jev está sobrecarregado neste momento. Costuma se resolver sozinho em alguns minutos.": {
+    es: "Jev está sobrecargado en este momento. Suele resolverse solo en unos minutos.",
+  },
+  "O Jev não respondeu a tempo ou está fora do ar. Costuma se resolver sozinho.": {
+    es: "Jev no respondió a tiempo o está caído. Suele resolverse solo.",
+  },
+  "O Jev respondeu de um jeito que o sistema não entendeu. Se continuar acontecendo, avise o suporte.": {
+    es: "Jev respondió de una forma que el sistema no entendió. Si sigue pasando, avisa al soporte.",
+  },
+  "O Jev parou de medir o clima das conversas": {
+    es: "Jev dejó de medir el clima de las conversaciones",
+  },
+  "Enquanto isso, a IA de sempre mede o clima no lugar dele.": {
+    es: "Mientras tanto, la IA de siempre mide el clima en su lugar.",
+  },
+  "Enquanto isso, o clima não está sendo medido: ninguém da equipe é chamado quando um cliente se irrita.": {
+    es: "Mientras tanto, el clima no se está midiendo: nadie del equipo recibe aviso cuando un cliente se molesta.",
+  },
+  "Depois de resolver, marque este aviso como resolvido para voltar a ser avisado.": {
+    es: "Cuando lo resuelvas, marca este aviso como resuelto para volver a recibir avisos.",
+  },
   "Default:": { es: "Predeterminado:" },
   "API key": { es: "Clave de API" },
 
@@ -10564,6 +10607,8 @@ export const DICIONARIO: Traducoes = {
     { es: "Se alcanzó el límite de gasto en IA — el cliente no pidió hablar con una persona" },
   "O cliente demonstrou irritação na conversa":
     { es: "El cliente mostró molestia en la conversación" },
+  // D11: só na passagem e no aviso da equipe (`MARCA_DO_JEV`), nunca ao cliente.
+  "(percebido pelo Jev)": { es: "(detectado por Jev)" },
   "O assistente não teve confiança suficiente para responder":
     { es: "El asistente no estaba lo bastante seguro para responder" },
   "O negócio chegou a uma etapa que pede uma pessoa":

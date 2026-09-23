@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 
 import { PROVEDORES_COM_CHAVE } from "@/lib/ai/pontos/provedores";
 import { PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
+import { EXPLICACAO_DA_ORIGEM } from "@/lib/ai/pontos/resolver";
 import { DICIONARIO } from "@/lib/i18n/dicionario";
 
 function semEspanhol(textos: readonly string[]): string[] {
@@ -35,5 +36,9 @@ describe("espanhol dos textos que vêm de lista, não de literal", () => {
     ]);
     expect(textos.length, "a varredura não enxergou o registro").toBeGreaterThan(30);
     expect(semEspanhol(textos)).toEqual([]);
+  });
+
+  it("toda explicação de origem — o \"por que este modelo\" de IA › Execuções", () => {
+    expect(semEspanhol(Object.values(EXPLICACAO_DA_ORIGEM))).toEqual([]);
   });
 });

@@ -98,6 +98,9 @@ export type MotivoDaAusencia =
   /** O disjuntor (`./disjuntor`) segurou a chamada: nada saiu para a rede. */
   | "disjuntor_aberto";
 
+/** Os motivos em que a pergunta chegou a sair para a rede — os que viram linha em Execuções. */
+export type MotivoComRede = Exclude<MotivoDaAusencia, "sem_credencial" | "disjuntor_aberto">;
+
 export interface UsoDeTokens {
   tokensDeEntrada: number;
   /** O fornecedor não cobra saída; guardamos o campo para a telemetria não mentir por omissão. */

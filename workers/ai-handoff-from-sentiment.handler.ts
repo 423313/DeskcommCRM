@@ -26,6 +26,9 @@ export const aiHandoffFromSentimentHandler: EventHandler = {
       (row.payload?.["conversation_id"] as string | undefined) ?? null;
     const sentimentScore =
       (row.payload?.["sentiment_score"] as number | undefined) ?? null;
+    /** Qual motor mediu — a passagem marca "(percebido pelo Jev)" quando foi ele. */
+    const sentimentEngine =
+      (row.payload?.["sentiment_engine"] as string | undefined) ?? null;
 
     if (!messageId && !conversationIdHint) {
       return {
@@ -69,6 +72,7 @@ export const aiHandoffFromSentimentHandler: EventHandler = {
       leadId,
       metadata: {
         sentiment_score: sentimentScore,
+        sentiment_engine: sentimentEngine,
         message_id: messageId,
         source: "ai.sentiment_alert",
       },

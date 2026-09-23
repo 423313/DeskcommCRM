@@ -19,14 +19,28 @@
  * mudar (mais níveis, outra base), o número normalizaria para algo plausível e
  * errado, e ninguém veria.
  *
- * ═══ NUNCA É O DONO DA DECISÃO ═══
+ * ═══ A AUSÊNCIA NÃO É ZERO ═══
  *
- * Devolve `null` para toda ausência — sem credencial, fornecedor fora do ar,
- * resposta ilegível, score fora da escala. `null` não é zero: zero é "medi e o
- * clima está péssimo", e é justamente a confusão que o gate de handoff deste
- * produto já pagou uma vez (ver `lib/kanban/card-state.ts` e o conserto em
- * `workers/ai-response-worker.ts`). Quem chama segue pelo caminho atual.
+ * Toda ausência — sem credencial, disjuntor aberto, fornecedor fora do ar,
+ * resposta ilegível, score fora da escala — volta como `{ ok: false }`, sem nota
+ * nenhuma. Zero é "medi e o clima está péssimo", e é justamente a confusão que o
+ * gate de handoff deste produto já pagou uma vez (ver `lib/kanban/card-state.ts`
+ * e o conserto em `workers/ai-response-worker.ts`).
+ *
+ * A falha é discriminada, e não um `null`, porque quem chama precisa de três
+ * respostas que o `null` apagava: se vale uma linha em Execuções (`tentouRede`),
+ * se alguém precisa agir (`exigeAcao`) e por quê (`motivo`).
+ *
+ * ═══ SÓ A ÚLTIMA MENSAGEM, E LIMPA ═══
+ *
+ * O texto sai para um fornecedor estrangeiro (LGPD, D6): vai só a mensagem que
+ * está sendo medida, passada pelo mesmo redator do Sentry — CPF, telefone,
+ * e-mail e chave do Jev não saem. O clima não depende deles.
  */
+import { scrubMessage } from "@/lib/sentry/scrub";
+
+import type { MotivoComRede } from "./cliente";
+import { podeTentar, registrarFalha, registrarSucesso } from "./disjuntor";
 import { decidirNoPonto, type DependenciasDoPonto } from "./ponto";
 
 /**
@@ -53,45 +67,98 @@ export interface EntradaDoClima {
   mensagem: string;
 }
 
-export interface ClimaMedido {
-  /** 0 = péssimo, 1 = ótimo — a mesma régua que `messages.metadata.sentiment_score` usa. */
-  score: number;
-  /** Probabilidade calibrada do fornecedor. Guardada para a telemetria, não para decidir. */
-  confianca: number;
-  tokensDeEntrada: number;
-}
+export type ClimaMedido =
+  | {
+      ok: true;
+      /** 0 = péssimo, 1 = ótimo — a mesma régua que `messages.metadata.sentiment_score` usa. */
+      score01: number;
+      /** Probabilidade calibrada do fornecedor. Guardada para a telemetria, não para decidir. */
+      confianca: number;
+      /** A versão que DE FATO respondeu — vai para `llm_calls.model` e para o preço. */
+      modelo: string;
+      tokensDeEntrada: number;
+      tokensDeSaida: number;
+      latenciaMs: number;
+    }
+  | {
+      ok: false;
+      /** A pergunta saiu para a rede — e é só nesse caso que a falha vira linha em Execuções. */
+      tentouRede: true;
+      motivo: MotivoComRede;
+      exigeAcao: boolean;
+      defeitoNosso: boolean;
+      latenciaMs: number;
+    }
+  | {
+      ok: false;
+      /** Nada saiu: é configuração (sem chave) ou o disjuntor segurando, não incidente. */
+      tentouRede: false;
+      motivo: "sem_credencial" | "disjuntor_aberto";
+      exigeAcao: false;
+      defeitoNosso: false;
+      latenciaMs: number;
+    };
 
 export async function medirClima(
   entrada: EntradaDoClima,
   deps: DependenciasDoPonto = {},
-): Promise<ClimaMedido | null> {
+): Promise<ClimaMedido> {
+  const inicio = Date.now();
+  if (!podeTentar(entrada.organizationId, inicio)) {
+    return { ok: false, motivo: "disjuntor_aberto", exigeAcao: false, defeitoNosso: false, tentouRede: false, latenciaMs: 0 };
+  }
+
   const r = await decidirNoPonto(
     {
       ponto: "sentiment_classify",
       organizationId: entrada.organizationId,
-      estado: entrada.mensagem,
+      estado: scrubMessage(entrada.mensagem),
       perguntas: {
         clima: { tipo: "score", instrucao: INSTRUCAO, criterios: NIVEIS_DE_CLIMA },
       },
     },
     deps,
   );
+  const latenciaMs = Date.now() - inicio;
 
-  if (!r.ok) return null;
-
-  const resposta = r.respostas["clima"];
-  if (resposta === undefined || resposta.tipo !== "score") return null;
-
-  const teto = NIVEIS_DE_CLIMA.length - 1;
-  if (!Number.isFinite(resposta.score) || resposta.score < 0 || resposta.score > teto) {
-    // Fora da escala = contrato mudou. Normalizar assim mesmo produziria um número
-    // plausível e errado, e o limiar de handoff passaria a disparar por régua trocada.
-    return null;
+  if (!r.ok) {
+    registrarFalha(entrada.organizationId, r.motivo, Date.now(), r.retryAfterMs);
+    if (r.motivo === "sem_credencial" || r.motivo === "disjuntor_aberto") {
+      return { ok: false, motivo: r.motivo, exigeAcao: false, defeitoNosso: false, tentouRede: false, latenciaMs };
+    }
+    return {
+      ok: false,
+      motivo: r.motivo,
+      exigeAcao: r.exigeAcao,
+      defeitoNosso: r.defeitoNosso,
+      tentouRede: true,
+      latenciaMs,
+    };
   }
 
+  const resposta = r.respostas["clima"];
+  const teto = NIVEIS_DE_CLIMA.length - 1;
+  if (
+    resposta === undefined ||
+    resposta.tipo !== "score" ||
+    !Number.isFinite(resposta.score) ||
+    resposta.score < 0 ||
+    resposta.score > teto
+  ) {
+    // Fora da escala = contrato mudou. Normalizar assim mesmo produziria um número
+    // plausível e errado, e o limiar de handoff passaria a disparar por régua trocada.
+    registrarFalha(entrada.organizationId, "resposta_ilegivel", Date.now());
+    return { ok: false, motivo: "resposta_ilegivel", exigeAcao: false, defeitoNosso: false, tentouRede: true, latenciaMs };
+  }
+
+  registrarSucesso(entrada.organizationId);
   return {
-    score: resposta.score / teto,
+    ok: true,
+    score01: resposta.score / teto,
     confianca: resposta.confianca,
+    modelo: r.modelo,
     tokensDeEntrada: r.uso.tokensDeEntrada,
+    tokensDeSaida: r.uso.tokensDeSaida,
+    latenciaMs,
   };
 }

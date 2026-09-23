@@ -5,6 +5,9 @@
  * Uses `anthropic/claude-haiku-4-5` via Vercel AI Gateway with generateObject
  * and a strict Zod schema so the result is always typed.
  *
+ * Com o Jev (System One) ligado em `organizations.settings.jev`, ele mede
+ * primeiro — ver o bloco "O Jev primeiro" no meio do arquivo.
+ *
  * Design principles (CLAUDE.md):
  * - Service-role admin client bypasses RLS → EVERY query filters `organization_id`
  *   programmatically from the trusted event_log row, never from user input.
@@ -13,19 +16,25 @@
  * - `console.log` is forbidden — only `console.warn`/`console.error` with prefix.
  */
 
-import { generateObject } from "ai";
+import { generateObject, type LanguageModel } from "ai";
 import { z } from "zod";
 
+import { costCents } from "@/lib/agent-engine/edge/llm/pricing";
 import { resolverAgenteDaConversa } from "@/lib/ai/agents/agente-da-conversa";
 import { computeCost } from "@/lib/ai/cost";
+import { MODELO_DO_JEV, type MotivoComRede } from "@/lib/ai/decisao/cliente";
+import { medirClima, type ClimaMedido } from "@/lib/ai/decisao/clima";
+import { lerConfigDoJev } from "@/lib/ai/decisao/config";
+import { avisoDoJevNaCentral, codigoDoErroDoJev } from "@/lib/ai/decisao/textos";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
-import { medirClima } from "@/lib/ai/decisao/clima";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
-import { logInvocation } from "@/lib/ai/log-invocation";
+import { logInvocation, type LogInvocationInput } from "@/lib/ai/log-invocation";
 import { SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
 import type { EventRow } from "@/lib/event-log/dispatcher";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SENTIMENT_MODEL = DEFAULT_CLASSIFIER_MODEL; // "anthropic/claude-haiku-4-5"
@@ -84,10 +93,6 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       event.organization_id,
       SENTIMENT_MODEL,
     );
-    if (!resolvido) {
-      return { skipped: true, reason: "ai_gateway_key_missing" };
-    }
-    const sentimentModel = resolvido.model;
 
     const messageId =
       (event.payload?.["message_id"] as string | undefined) ?? event.entity_id ?? null;
@@ -97,6 +102,22 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     }
 
     const admin = createAdminClient();
+
+    // ── O interruptor do Jev ──────────────────────────────────────────────
+    // Lido aqui, além de dentro de `medirClima`, porque o MODO muda quem decide.
+    // Leitura que falha vale como desligado (`lerConfigDoJev` nunca lança).
+    const { data: org } = await admin
+      .from("organizations")
+      .select("settings, locale")
+      .eq("id", event.organization_id)
+      .maybeSingle();
+    const daOrg = org as { settings?: unknown; locale?: string | null } | null;
+    const jev = lerConfigDoJev(daOrg?.settings);
+
+    // Sem IA de linguagem e sem o Jev, não há quem meça.
+    if (!resolvido && !jev.ligado) {
+      return { skipped: true, reason: "ai_gateway_key_missing" };
+    }
 
     // ── Load message (programmatic org filter) ────────────────────────────
     const { data: message, error: msgErr } = await admin
@@ -204,83 +225,97 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         ? agentConfig["sentiment_threshold"]
         : DEFAULT_SENTIMENT_THRESHOLD;
 
-    const start = Date.now();
-    let result: z.infer<typeof sentimentSchema>;
-    let promptTokens = 0;
-    let completionTokens = 0;
-    /**
-     * Qual caminho produziu a nota. Vai para `llm_calls.model` — sem isto, uma
-     * classificação feita pelo System One apareceria na tela de Execuções
-     * atribuída ao modelo de linguagem que não foi chamado, que é exatamente o
-     * defeito de atribuição que este worker já corrigiu uma vez.
-     */
-    let modeloQueMediu = resolvido.modelId;
+    const comum = {
+      organization_id: event.organization_id,
+      // `null`, não `""` (issue #160): o worker roda mesmo sem agente ativo — lê
+      // o agente só para o threshold e cai no default —, e string vazia numa
+      // coluna uuid fazia o insert de auditoria falhar em silêncio. O custo
+      // existe; a linha precisa entrar.
+      agent_id: agent?.id ?? null,
+      conversation_id: conversationId ?? message.conversation_id ?? null,
+      message_id: messageId,
+      invocation_kind: "sentiment_classify",
+    } satisfies Partial<LogInvocationInput>;
 
-    // ── System One primeiro, quando a organização o tiver configurado ──────
+    // ── O Jev primeiro, quando ligado ──────────────────────────────────────
     //
-    // Este é o ponto que estreia o caminho novo, e foi escolhido por rodar FORA
-    // do caminho crítico (worker paralelo — o cliente não espera por ele) e por
-    // já falhar em silêncio por desenho: um fornecedor em early access não tem
-    // como travar atendimento nenhum daqui.
-    //
-    // `null` cobre TODA ausência — sem credencial (que é o estado de toda
-    // instalação hoje), fora do ar, resposta ilegível, score fora da escala — e
-    // o caminho de sempre assume logo abaixo. Enquanto ninguém configurar, isto
-    // é uma chamada que volta `null` em memória, sem tocar a rede.
-    //
-    // Limite conhecido e deliberado: `resolverModeloDoPonto` roda ANTES e já
-    // devolveu cedo quando a org não tem LLM configurado. Ou seja, o System One
-    // só é tentado onde existe um caminho para cair. Menor raio na estreia.
-    const clima = await medirClima({
-      organizationId: event.organization_id,
-      mensagem: body,
-    });
+    // Três desfechos, e o modo (`settings.jev.modo`) só pesa no primeiro:
+    //  - mediu: em "decide" (ou sem IA de linguagem para comparar) a nota dele
+    //    vale e o LLM nem roda; em "observacao" o LLM roda e decide, e as duas
+    //    notas ficam em `messages.metadata` para o cartão medir a concordância;
+    //  - falhou na rede: a IA de sempre mede como reserva, e a linha dela diz
+    //    isso (`reserva_do_jev`). Linha de erro do Jev só quando NINGUÉM mediu —
+    //    uma falha que a reserva cobriu não é erro para quem opera;
+    //  - não tentou (sem chave, disjuntor aberto): nada sai para a rede, e sem
+    //    chave o caminho é exatamente o de antes do Jev.
+    // Falha que não passa sozinha (chave recusada, sem crédito, pergunta nossa
+    // recusada) abre aviso na Central, com ou sem reserva.
+    const clima: ClimaMedido | null = jev.ligado
+      ? await medirClima({ organizationId: event.organization_id, mensagem: body })
+      : null;
 
-    if (clima !== null) {
-      // `reasoning_short` vazio porque o System One não escreve — e o worker já
-      // DESCARTAVA esse campo (ele existia para o LLM raciocinar antes de
-      // pontuar). Aqui não há o que descartar: a nota já vem calibrada, e os
-      // tokens de saída que se pagava para jogar fora deixam de existir.
-      result = { sentiment_score: clima.score, reasoning_short: "" };
-      promptTokens = clima.tokensDeEntrada;
-      completionTokens = 0;
-      modeloQueMediu = "typesafe/jev-latest";
+    if (clima?.ok) {
+      logInvocation({
+        ...comum,
+        provider: "typesafe",
+        model: `typesafe/${clima.modelo}`,
+        origem_da_escolha: "jev",
+        prompt_tokens: clima.tokensDeEntrada,
+        completion_tokens: clima.tokensDeSaida,
+        latency_ms: clima.latenciaMs,
+        // Fracionário, sem o `Math.ceil` de `computeCost`: a centavo por
+        // chamada, o Jev custaria ~600x o preço real (D4). Versão sem preço na
+        // tabela sai `null`, nunca o preço de outra.
+        cost_cents: costCents(clima.modelo, {
+          inputTokens: clima.tokensDeEntrada,
+          outputTokens: clima.tokensDeSaida,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        }),
+        finish_reason: null,
+      });
+    }
+
+    const jevFalhouNaRede = clima !== null && !clima.ok && clima.tentouRede ? clima : null;
+    if (jevFalhouNaRede?.exigeAcao) {
+      await avisarNaCentral(admin, {
+        organizationId: event.organization_id,
+        idioma: normalizarIdioma(daOrg?.locale ?? null),
+        motivo: jevFalhouNaRede.motivo,
+        temReserva: resolvido !== null,
+      });
+    }
+    const registrarFalhaDoJev = (): void => {
+      if (jevFalhouNaRede === null) return;
+      logInvocation({
+        ...comum,
+        provider: "typesafe",
+        model: `typesafe/${MODELO_DO_JEV}`,
+        origem_da_escolha: "jev",
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        latency_ms: jevFalhouNaRede.latenciaMs,
+        cost_cents: 0,
+        finish_reason: "error",
+        error_code: codigoDoErroDoJev(jevFalhouNaRede.motivo),
+        error_payload: { motivo: jevFalhouNaRede.motivo },
+      });
+    };
+
+    let decisao: { score: number; engine: "jev" | "llm"; latenciaMs: number };
+    if (clima?.ok && (jev.modo === "decide" || resolvido === null)) {
+      decisao = { score: clima.score01, engine: "jev", latenciaMs: clima.latenciaMs };
+    } else if (resolvido === null) {
+      registrarFalhaDoJev();
+      return { skipped: true, reason: jevFalhouNaRede ? "jev_falhou_sem_reserva" : "ai_gateway_key_missing" };
     } else {
-      // ── Call LLM ──────────────────────────────────────────────────────────
-      const abortController = new AbortController();
-      const timeout = setTimeout(() => abortController.abort(), CLASSIFY_TIMEOUT_MS);
-
+      // O Jev ligado, com chave, e sem resposta: quem mede é a reserva.
+      const reserva = clima !== null && !clima.ok && clima.motivo !== "sem_credencial";
+      const origem = reserva ? ({ origem_da_escolha: "reserva_do_jev" } as const) : {};
+      const inicio = Date.now();
+      let medido: Awaited<ReturnType<typeof classificarComLlm>>;
       try {
-        const generated = await generateObject({
-          model: sentimentModel,
-          schema: sentimentSchema,
-          system: SENTIMENT_SYSTEM_PROMPT,
-          prompt: body,
-          temperature: 0,
-          // 80 era pequeno demais e nunca tinha sido exercitado (o worker morria
-          // antes, na autenticação). `generateObject` com Anthropic usa modo
-          // FERRAMENTA: o JSON vai dentro de um tool_use, que custa bem mais que
-          // texto puro. Medido com mensagens reais desta instalação: 2 de 3
-          // paravam em `stop_reason: max_tokens` com o JSON cortado no meio —
-          // daí o "No object generated: response did not match schema", que
-          // parecia erro de esquema e era truncamento. Pico observado: 146 sem
-          // as descrições, 84 com elas. 256 dá folga sem virar cheque em branco.
-          maxOutputTokens: 256,
-          abortSignal: abortController.signal,
-        });
-
-        result = generated.object;
-
-        const usage = generated.usage as
-          | {
-              inputTokens?: number;
-              outputTokens?: number;
-              promptTokens?: number;
-              completionTokens?: number;
-            }
-          | undefined;
-        promptTokens = usage?.inputTokens ?? usage?.promptTokens ?? 0;
-        completionTokens = usage?.outputTokens ?? usage?.completionTokens ?? 0;
+        medido = await classificarComLlm(resolvido.model, body);
       } catch (err) {
         // A FALHA também vira linha em `llm_calls`. A 0128 fez isso para o seam do
         // agent-engine, e este worker não passa por lá — então, até aqui, escolher
@@ -292,33 +327,45 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         // O `throw` mantém o desfecho de antes — quem decide o retorno continua
         // sendo o catch global, que nunca deixa este worker derrubar o bot.
         logInvocation({
-          organization_id: event.organization_id,
-          agent_id: agent?.id ?? null,
-          conversation_id: conversationId ?? message.conversation_id ?? null,
-          message_id: messageId,
-          invocation_kind: "sentiment_classify",
+          ...comum,
+          ...origem,
           model: resolvido.modelId,
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          latency_ms: Date.now() - start,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          latency_ms: Date.now() - inicio,
           cost_cents: 0,
           finish_reason: "error",
           error_payload: { message: err instanceof Error ? err.message : String(err) },
         });
+        registrarFalhaDoJev();
         throw err;
-      } finally {
-        clearTimeout(timeout);
       }
+      const latenciaMs = Date.now() - inicio;
+      logInvocation({
+        ...comum,
+        ...origem,
+        model: resolvido.modelId,
+        prompt_tokens: medido.promptTokens,
+        completion_tokens: medido.completionTokens,
+        latency_ms: latenciaMs,
+        cost_cents: await computeCost({
+          model: resolvido.modelId,
+          promptTokens: medido.promptTokens,
+          completionTokens: medido.completionTokens,
+        }),
+        finish_reason: null,
+      });
+      decisao = { score: medido.score, engine: "llm", latenciaMs };
     }
-
-    const latencyMs = Date.now() - start;
 
     // ── Merge sentiment into messages.metadata ────────────────────────────
     const existingMetadata = (message.metadata as Record<string, unknown> | null) ?? {};
     const updatedMetadata = {
       ...existingMetadata,
-      sentiment_score: result.sentiment_score,
-      sentiment_latency_ms: latencyMs,
+      sentiment_score: decisao.score,
+      sentiment_latency_ms: decisao.latenciaMs,
+      sentiment_engine: decisao.engine,
+      ...(clima?.ok ? { sentiment_jev_score: clima.score01, sentiment_jev_model: clima.modelo } : {}),
     };
 
     const { error: updateErr } = await admin
@@ -334,31 +381,8 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       });
     }
 
-    // ── Log invocation (fire-and-forget) ──────────────────────────────────
-    logInvocation({
-      organization_id: event.organization_id,
-      // `null`, não `""` (issue #160): o worker roda mesmo sem agente ativo — lê
-      // o agente só para o threshold e cai no default —, e string vazia numa
-      // coluna uuid fazia o insert de auditoria falhar em silêncio. O custo
-      // existe; a linha precisa entrar.
-      agent_id: agent?.id ?? null,
-      conversation_id: conversationId ?? message.conversation_id ?? null,
-      message_id: messageId,
-      invocation_kind: "sentiment_classify",
-      model: modeloQueMediu,
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      latency_ms: latencyMs,
-      cost_cents: await computeCost({
-        model: modeloQueMediu,
-        promptTokens,
-        completionTokens,
-      }),
-      finish_reason: null,
-    });
-
     // ── Emit alert if below threshold ────────────────────────────────────
-    if (result.sentiment_score < threshold) {
+    if (decisao.score < threshold) {
       const { error: emitErr } = await admin.rpc(
         "emit_event" as never,
         {
@@ -368,7 +392,10 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
           p_payload: {
             message_id: messageId,
             conversation_id: conversationId ?? message.conversation_id ?? null,
-            sentiment_score: result.sentiment_score,
+            sentiment_score: decisao.score,
+            // Qual motor mediu: a passagem para humano marca "(percebido pelo
+            // Jev)" na linha do tempo da equipe (D11).
+            sentiment_engine: decisao.engine,
           },
           // `agent_id` e `motivo` viajam com o alerta porque o limiar é o número
           // que decidiu emiti-lo: sem eles, "por que este alerta saiu?" recomeça
@@ -392,7 +419,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       }
     }
 
-    return { skipped: false, sentiment_score: result.sentiment_score };
+    return { skipped: false, sentiment_score: decisao.score };
   } catch (err) {
     // Global catch: NEVER throw — must not break the bot path.
     console.warn("[ai-sentiment-worker] sentiment_classify_failed", {
@@ -400,5 +427,90 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       error: err instanceof Error ? err.message : String(err),
     });
     return { skipped: true, reason: "classify_failed" };
+  }
+}
+
+async function classificarComLlm(
+  model: LanguageModel,
+  body: string,
+): Promise<{ score: number; promptTokens: number; completionTokens: number }> {
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), CLASSIFY_TIMEOUT_MS);
+  try {
+    const generated = await generateObject({
+      model,
+      schema: sentimentSchema,
+      system: SENTIMENT_SYSTEM_PROMPT,
+      prompt: body,
+      temperature: 0,
+      // 80 era pequeno demais e nunca tinha sido exercitado (o worker morria
+      // antes, na autenticação). `generateObject` com Anthropic usa modo
+      // FERRAMENTA: o JSON vai dentro de um tool_use, que custa bem mais que
+      // texto puro. Medido com mensagens reais desta instalação: 2 de 3
+      // paravam em `stop_reason: max_tokens` com o JSON cortado no meio —
+      // daí o "No object generated: response did not match schema", que
+      // parecia erro de esquema e era truncamento. Pico observado: 146 sem
+      // as descrições, 84 com elas. 256 dá folga sem virar cheque em branco.
+      maxOutputTokens: 256,
+      abortSignal: abortController.signal,
+    });
+    const usage = generated.usage as
+      | { inputTokens?: number; outputTokens?: number; promptTokens?: number; completionTokens?: number }
+      | undefined;
+    return {
+      score: generated.object.sentiment_score,
+      promptTokens: usage?.inputTokens ?? usage?.promptTokens ?? 0,
+      completionTokens: usage?.outputTokens ?? usage?.completionTokens ?? 0,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Aviso na Central para a falha do Jev que não passa sozinha.
+ *
+ * `kind='other'` sem referência, e dedupe pelo TÍTULO aberto — o mesmo desenho de
+ * `lib/agent-engine/edge/llm/run-model-call.ts`: kind novo exigiria reconstruir
+ * o CHECK de `agent_inbox_items.kind`, e o título fixo faz uma chave recusada
+ * virar UM aviso, não um por mensagem do dia. O texto sai no idioma da
+ * organização porque a Central mostra o corpo como veio.
+ *
+ * Nunca lança: o aviso é o alerta, não a medição.
+ */
+async function avisarNaCentral(
+  admin: ReturnType<typeof createAdminClient>,
+  a: { organizationId: string; idioma: Idioma; motivo: MotivoComRede; temReserva: boolean },
+): Promise<void> {
+  const { title, body } = avisoDoJevNaCentral(a.motivo, a.temReserva, (t) => traduzir(t, a.idioma));
+  const { count, error: erroDaBusca } = await admin
+    .from("agent_inbox_items")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", a.organizationId)
+    .eq("kind", "other")
+    .eq("title", title)
+    .eq("status", "open");
+  if (erroDaBusca) {
+    console.warn("[ai-sentiment-worker] dedupe do aviso do Jev falhou — aviso não aberto", {
+      organization_id: a.organizationId,
+      error: erroDaBusca.message,
+    });
+    return;
+  }
+  if ((count ?? 0) > 0) return;
+
+  const { error } = await admin.from("agent_inbox_items").insert({
+    organization_id: a.organizationId,
+    kind: "other",
+    // Sem reserva, o clima parou de vez: ninguém é chamado quando o cliente se irrita.
+    severity: a.temReserva ? "warn" : "critical",
+    title,
+    body,
+  });
+  if (error) {
+    console.warn("[ai-sentiment-worker] aviso do Jev na Central não foi aberto", {
+      organization_id: a.organizationId,
+      error: error.message,
+    });
   }
 }

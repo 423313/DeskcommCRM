@@ -410,6 +410,9 @@ export async function triggerHandoff(
     // a ficha do contato, não o lugar onde se responde.
     if (contactId !== null) {
       const idiomaDaOrg = await idiomaDaOrganizacao(admin, input.organizationId);
+      // D11: o worker de clima diz qual motor mediu (`sentiment_engine`).
+      const percebidoPeloJev =
+        input.reason === "low_sentiment" && input.metadata?.["sentiment_engine"] === "jev";
       // Step 5.5 — A LINHA DE FATO. Este motor abria o aviso da Central SEM
       // resumo nenhum: quem assumia uma conversa escalada por sentimento
       // recebia "Motivo: low_sentiment" e mais nada. Agora o contexto é uma
@@ -430,6 +433,7 @@ export async function triggerHandoff(
         motivo: {
           codigo: motivoDaPassagem(input.reason),
           texto: input.motivoTexto ?? null,
+          percebidoPeloJev,
         },
       });
       const gravou = await registrarPassagem(admin, {
@@ -466,6 +470,7 @@ export async function triggerHandoff(
           {
             motivoCodigo: motivoDaPassagem(input.reason),
             aviso: desfechoDaPassagem(aviso),
+            percebidoPeloJev,
           },
           (texto) => traduzir(texto, idiomaDaOrg),
         );

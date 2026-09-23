@@ -13,7 +13,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { medirClima } from "@/lib/ai/decisao/clima";
 
-const ENTRADA = { organizationId: "org-1", mensagem: "adorei o atendimento!" };
+// O disjuntor é por organização e vive no processo: sem uma organização por
+// caso, a terceira falha abriria o disjuntor e os casos seguintes nem chegariam
+// à rede — passariam pelo motivo errado.
+let seq = 0;
+const entrada = () => ({ organizationId: `org-fallback-${++seq}`, mensagem: "adorei o atendimento!" });
 
 /** O estado de TODA instalação hoje: provedor não cadastrado. */
 const SEM_CREDENCIAL = { buscarChave: async () => null };
@@ -21,9 +25,9 @@ const SEM_CREDENCIAL = { buscarChave: async () => null };
 describe("o clima cai no caminho de sempre", () => {
   it("sem credencial, não há medição e nada sai da máquina", async () => {
     const fetchImpl = vi.fn();
-    const r = await medirClima(ENTRADA, { ...SEM_CREDENCIAL, fetchImpl });
+    const r = await medirClima(entrada(), { ...SEM_CREDENCIAL, fetchImpl });
 
-    expect(r, "null = o worker segue para o LLM, como antes desta frente").toBeNull();
+    expect(r, "sem nota = o worker segue para o LLM, como antes desta frente").toMatchObject({ ok: false });
     expect(fetchImpl, "nenhuma requisição — a ausência é configuração, não incidente").not.toHaveBeenCalled();
   });
 
@@ -34,23 +38,23 @@ describe("o clima cai no caminho de sempre", () => {
     ["fornecedor sobrecarregado", 529],
     ["erro do fornecedor", 500],
   ])("%s (HTTP %i) devolve ausência, nunca uma nota", async (_rotulo, status) => {
-    const r = await medirClima(ENTRADA, {
+    const r = await medirClima(entrada(), {
       buscarChave: async () => "tsk_x",
       fetchImpl: vi.fn().mockResolvedValue(new Response("{}", { status })),
     });
-    expect(r).toBeNull();
+    expect(r).toMatchObject({ ok: false, tentouRede: true });
   });
 
   it("queda de rede devolve ausência, nunca uma nota", async () => {
-    const r = await medirClima(ENTRADA, {
+    const r = await medirClima(entrada(), {
       buscarChave: async () => "tsk_x",
       fetchImpl: vi.fn().mockRejectedValue(new Error("fetch failed")),
     });
-    expect(r).toBeNull();
+    expect(r).toMatchObject({ ok: false, motivo: "provedor_indisponivel", tentouRede: true });
   });
 
-  it("NENHUMA falha vira zero — e é por isso que o retorno é null", async () => {
-    // O ponto inteiro desta frente. Um fallback que devolvesse 0 em vez de null
+  it("NENHUMA falha vira zero — a falha não carrega nota nenhuma", async () => {
+    // O ponto inteiro desta frente. Um fallback que devolvesse nota 0 na falha
     // faria o pior estrago possível AQUI: `sentiment_score` 0 é menor que
     // qualquer limiar (default 0.3), então toda falha do fornecedor abriria um
     // alerta de cliente irritado. O mesmo defeito que travava conversa no gate
@@ -65,9 +69,9 @@ describe("o clima cai no caminho de sempre", () => {
       },
     ];
     for (const deps of falhas) {
-      const r = await medirClima(ENTRADA, deps);
-      expect(r, "nenhuma falha pode produzir nota — nem a pior delas").toBeNull();
-      expect(r?.score, "e muito menos o zero").not.toBe(0);
+      const r = await medirClima(entrada(), deps);
+      expect(r.ok, "nenhuma falha pode produzir nota — nem a pior delas").toBe(false);
+      expect("score01" in r, "e muito menos o zero").toBe(false);
     }
   });
 });

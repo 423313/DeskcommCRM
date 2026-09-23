@@ -49,13 +49,21 @@ export interface LogInvocationInput {
   prompt_tokens: number;
   completion_tokens: number;
   latency_ms: number;
-  /** Gravado como veio — sem arredondar. Quem cota em fração (o Jev) chega aqui em fração. */
-  cost_cents: number;
+  /**
+   * Gravado como veio — sem arredondar. Quem cota em fração (o Jev) chega aqui em
+   * fração. `null` = preço desconhecido, que a coluna aceita e é mais honesto que 0.
+   */
+  cost_cents: number | null;
   /** Quando quem chama SABE o provedor. Sem ele, vale `providerDoModelo(model)`. */
   provider?: ProvedorComChave;
   /** Quem decidiu usar este modelo — a coluna "por que este modelo" da tela de Execuções. */
   origem_da_escolha?: OrigemDaEscolha;
   finish_reason?: string | null;
+  /**
+   * Quando quem chama já tem o código canônico da falha (o Jev devolve o seu).
+   * Sem ele, o código sai de `error_payload` pela régua do motor.
+   */
+  error_code?: string;
   citations?: Array<Record<string, unknown>>;
   error_payload?: Record<string, unknown> | null;
 }
@@ -105,7 +113,7 @@ export function logInvocation(row: LogInvocationInput): void {
           // sem uma linha de conserto, e o dono passou horas procurando bug de
           // código num problema de fatura. `normalizarErro` já reconhece esse
           // texto como `limite_ou_saldo`, que é a linha que resolve.
-          error_code: row.error_payload ? codigoDoErro(row.error_payload) : null,
+          error_code: row.error_payload ? (row.error_code ?? codigoDoErro(row.error_payload)) : null,
           error_message: row.error_payload
             ? String(JSON.stringify(row.error_payload)).slice(0, 500)
             : null,

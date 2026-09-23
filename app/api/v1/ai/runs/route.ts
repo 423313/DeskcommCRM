@@ -13,6 +13,7 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM, type OrigemDaEscolha } from "@/lib/ai/pontos/resolver";
 import { createClient } from "@/lib/supabase/server";
@@ -51,6 +52,8 @@ const O_QUE_FAZER: Record<string, string> = {
     "A chamada foi recusada porque este ponto usa um endereço próprio e a empresa não tem chave cadastrada para ele — a chave da instalação não vai para endereço escolhido pela empresa. Cadastre a chave da empresa em Agente de IA › Provedores, ou tire o endereço próprio do ponto.",
   erro_desconhecido:
     "Não conseguimos classificar esta falha. A mensagem original do provedor está abaixo.",
+  // As falhas do Jev (`jev_*`), escritas junto do cliente dele.
+  ...O_QUE_FAZER_DO_JEV,
 };
 
 interface LinhaDeExecucao {

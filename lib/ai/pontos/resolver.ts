@@ -44,7 +44,11 @@ export type OrigemDaEscolha =
   | "binding"
   | "variavel_de_ambiente"
   | "herdado_de_quem_chamou"
-  | "padrao_da_organizacao";
+  | "padrao_da_organizacao"
+  /** O Jev mediu (decidindo, ou observando ao lado da IA de sempre). */
+  | "jev"
+  /** O Jev estava ligado e não respondeu: a IA de sempre mediu no lugar dele. */
+  | "reserva_do_jev";
 
 export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaEscolha, string> = {
   agente_publicado: "Definido na versão publicada do agente.",
@@ -54,6 +58,10 @@ export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaEscolha, string> = {
     "Herdado de quem disparou a chamada — o agente publicado, ou o roteador de intenção.",
   padrao_da_organizacao: "Usando o padrão da organização.",
   fixo_do_produto: "O produto resolve este ponto sozinho — não há modelo a escolher.",
+  // Uma frase para os dois modos: em observação o Jev mede e NÃO decide, e
+  // "o Jev decidiu" seria falso justamente no modo de comparar os dois.
+  jev: "Medido pelo Jev. Se ele está em observação, quem decide é a IA de sempre.",
+  reserva_do_jev: "O Jev não respondeu; a IA de sempre mediu no lugar dele.",
 };
 
 /** Uma linha de `ai_purpose_bindings`, já filtrada por organização. */
