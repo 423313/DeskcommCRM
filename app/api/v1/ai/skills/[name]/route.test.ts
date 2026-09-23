@@ -117,7 +117,7 @@ describe("DELETE /api/v1/ai/skills/[name]", () => {
 
 function makeAdminGetStub(input: {
   pointer: { version_id: string; updated_at: string } | null;
-  version?: { id: string; name: string; description: string; body: string; matcher: unknown } | null;
+  version?: { id: string; name: string; description: string; body: string; matcher: unknown; manifest?: unknown[] } | null;
 }) {
   return {
     from(table: string) {
@@ -182,9 +182,20 @@ describe("GET /api/v1/ai/skills/[name]", () => {
   });
 });
 
+/** Skill instalada na org, versão atual sem arquivos de pacote (o caso editável). */
+function mockSkillInstalada(manifest: unknown[] = []) {
+  vi.mocked(createAdminClient).mockReturnValue(
+    makeAdminGetStub({
+      pointer: { version_id: "v1", updated_at: "2026-09-19T00:00:00Z" },
+      version: { id: "v1", name: "catalogo", description: "d", body: "b", matcher: { any_keywords: ["x"] }, manifest },
+    }) as never,
+  );
+}
+
 describe("PUT /api/v1/ai/skills/[name]", () => {
   it("salva nova versão e move o ponteiro; audita ai.skill_saved", async () => {
     mockAuthzOk();
+    mockSkillInstalada();
     vi.mocked(insertSkillVersion).mockResolvedValue({ id: "v2" } as never);
     vi.mocked(setSkillPointer).mockResolvedValue(undefined as never);
 
@@ -218,13 +229,60 @@ describe("PUT /api/v1/ai/skills/[name]", () => {
     expect(insertSkillVersion).not.toHaveBeenCalled();
   });
 
-  it("teto de linhas estourado (insert lança) → 422 com a mensagem", async () => {
+  it("teto de linhas estourado → 422 com a mensagem, sem tocar o banco", async () => {
     mockAuthzOk();
-    vi.mocked(insertSkillVersion).mockRejectedValue(new Error("corpo de skill com 999 linhas excede o teto de 200"));
+    mockSkillInstalada();
+    const { PUT } = await import("./route");
+    const corpoGrande = Array.from({ length: 201 }, (_, i) => `linha ${i}`).join("\n");
+    const res = await PUT(reqPut("catalogo", { ...BODY_VALIDO, body: corpoGrande }), {
+      params: Promise.resolve({ name: "catalogo" }),
+    });
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(body.error.message).toContain("201 linhas");
+    expect(insertSkillVersion).not.toHaveBeenCalled();
+  });
+
+  it("falha do banco ao gravar → 500 sem a mensagem do driver", async () => {
+    mockAuthzOk();
+    mockSkillInstalada();
+    vi.mocked(insertSkillVersion).mockRejectedValue(new Error('duplicate key value violates "segredo_interno"'));
     const { PUT } = await import("./route");
     const res = await PUT(reqPut("catalogo", BODY_VALIDO), { params: Promise.resolve({ name: "catalogo" }) });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(500);
+    expect(JSON.stringify(await res.json())).not.toContain("segredo_interno");
     expect(setSkillPointer).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("skill não instalada na org → 404, sem gravar (criar skill nova é pelo .zip)", async () => {
+    mockAuthzOk();
+    vi.mocked(createAdminClient).mockReturnValue(makeAdminGetStub({ pointer: null }) as never);
+    const { PUT } = await import("./route");
+    const res = await PUT(reqPut("nova", BODY_VALIDO), { params: Promise.resolve({ name: "nova" }) });
+    expect(res.status).toBe(404);
+    expect(insertSkillVersion).not.toHaveBeenCalled();
+  });
+
+  it("skill de pacote com arquivos → 409, sem gravar (a versão nova perderia as references)", async () => {
+    mockAuthzOk();
+    mockSkillInstalada([{ path: "refs/tabela.md", kind: "reference" }]);
+    const { PUT } = await import("./route");
+    const res = await PUT(reqPut("catalogo", BODY_VALIDO), { params: Promise.resolve({ name: "catalogo" }) });
+    expect(res.status).toBe(409);
+    expect(insertSkillVersion).not.toHaveBeenCalled();
+    expect(setSkillPointer).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET avisa quando a skill é de pacote", () => {
+  it("manifest com arquivo → tem_arquivos_do_pacote: true", async () => {
+    mockAuthzOk();
+    mockSkillInstalada([{ path: "refs/tabela.md", kind: "reference" }]);
+    const { GET } = await import("./route");
+    const res = await GET(reqGet("catalogo"), { params: Promise.resolve({ name: "catalogo" }) });
+    const body = (await res.json()) as { data: { tem_arquivos_do_pacote: boolean } };
+    expect(body.data.tem_arquivos_do_pacote).toBe(true);
   });
 });
 

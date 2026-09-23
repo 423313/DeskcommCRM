@@ -10,8 +10,9 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * reinstalar/reimportar cria versão nova.
  *
  * PUT é o editor da tela (Fase 2 do PLANO-CONFIG-UI-AGENTE): cria uma versão NOVA
- * (nunca edita a antiga — imutabilidade) e move o ponteiro da org. Se a skill ainda
- * não existia para a org, cria; se existia, publica por cima. Semântica de
+ * (nunca edita a antiga — imutabilidade) e move o ponteiro da org. Só edita skill
+ * já instalada na org (criar é pelo .zip) e recusa skill de pacote com arquivos
+ * (409), porque os arquivos moram sob o id da versão antiga. Semântica de
  * versionamento igual à do import/install.
  *
  * organization_id vem SEMPRE de requireRole — NUNCA de query/body.
@@ -27,8 +28,10 @@ import {
   insertSkillVersion,
   setSkillPointer,
   skillMatcherSchema,
+  validateSkillBody,
 } from "@/lib/agent-engine/agent/skills";
 import { getSkillsPool } from "@/lib/ai/skills/db";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -77,7 +80,7 @@ export async function GET(
 
   const { data: version, error: verErr } = await admin
     .from("skill_versions")
-    .select("id, name, description, body, matcher")
+    .select("id, name, description, body, matcher, manifest")
     .eq("id", pointer.version_id)
     .maybeSingle();
   if (verErr) {
@@ -95,6 +98,8 @@ export async function GET(
       matcher: version.matcher,
       version_id: version.id,
       updated_at: pointer.updated_at,
+      // Skill de pacote não é editável aqui (o PUT devolve 409): a tela avisa antes.
+      tem_arquivos_do_pacote: Array.isArray(version.manifest) && version.manifest.length > 0,
     },
     { requestId },
   );
@@ -134,6 +139,52 @@ export async function PUT(
     });
   }
 
+  // O editor só edita skill JÁ instalada nesta organização. Criar skill nova é o
+  // caminho do .zip, que valida o nome contra o alfabeto do Storage.
+  const admin = createAdminClient();
+  const { data: pointer, error: ptrErr } = await admin
+    .from("skill_pointers")
+    .select("version_id")
+    .eq("organization_id", org.orgId)
+    .eq("name", name)
+    .maybeSingle();
+  if (ptrErr) {
+    logger.error("ai.skills.put: falha ao ler o ponteiro", { requestId, error: ptrErr.message });
+    return fail("internal_error", "Erro ao carregar a skill.", 500, { requestId });
+  }
+  if (!pointer) {
+    return fail("not_found", t("Skill não está instalada nesta organização."), 404, { requestId });
+  }
+  const { data: atual, error: verErr } = await admin
+    .from("skill_versions")
+    .select("manifest")
+    .eq("id", pointer.version_id)
+    .maybeSingle();
+  if (verErr) {
+    logger.error("ai.skills.put: falha ao ler a versão atual", { requestId, error: verErr.message });
+    return fail("internal_error", "Erro ao carregar a skill.", 500, { requestId });
+  }
+  // Os arquivos do pacote moram no Storage sob o id da VERSÃO
+  // (`skill-references.ts`). Uma versão nova nasce sem eles, e o agente perderia
+  // as references em silêncio. Skill de pacote muda pelo pacote.
+  if (Array.isArray(atual?.manifest) && atual.manifest.length > 0) {
+    return fail(
+      "state_conflict",
+      t("Esta skill veio de um pacote com arquivos. Para mudar o texto, edite o pacote e envie o .zip de novo."),
+      409,
+      { requestId },
+    );
+  }
+
+  // Validação ANTES do banco: erro de conteúdo é 422 com a mensagem que ensina;
+  // erro de banco é 500, sem vazar a mensagem do driver.
+  try {
+    validateSkillBody(parsed.data.body);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return fail("validation_failed", msg.slice(0, 300), 422, { requestId });
+  }
+
   const pool = getSkillsPool();
   let versionId: string;
   try {
@@ -147,10 +198,11 @@ export async function PUT(
     await setSkillPointer(pool, { tenantId: org.orgId, name, versionId: version.id });
     versionId = version.id;
   } catch (err) {
-    // `insertSkillVersion` valida o teto de 200 linhas e o matcher; a mensagem é
-    // instrutiva (diz o que corrigir) e vira 422 em vez de 500.
-    const msg = err instanceof Error ? err.message : String(err);
-    return fail("validation_failed", msg.slice(0, 300), 422, { requestId });
+    logger.error("ai.skills.put: falha ao gravar a versão", {
+      requestId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return fail("internal_error", "Erro ao salvar a skill.", 500, { requestId });
   }
 
   await audit({

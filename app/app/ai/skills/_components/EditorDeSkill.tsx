@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { useSkill, useSalvarSkill, useSkillVersions, useRestaurarSkill } from "@/hooks/ai/useSkills";
 
@@ -44,6 +45,7 @@ function parseKeywords(texto: string): string[] {
 
 export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
   const t = useT();
+  const tagDoIdioma = useTagDeIdioma();
   const skill = useSkill(aberto ? nome : null);
   const salvar = useSalvarSkill();
   const versoes = useSkillVersions(aberto ? nome : null);
@@ -65,23 +67,24 @@ export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
 
   const linhas = contarLinhas(corpo);
   const excedeTeto = linhas > MAX_LINHAS;
+  const veioDePacote = skill.data?.tem_arquivos_do_pacote === true;
 
   function salvarSkill() {
     const anyKeywords = parseKeywords(keywords);
     if (anyKeywords.length === 0) {
-      toast.error("Informe pelo menos uma palavra-chave de ativação.");
+      toast.error(t("Informe pelo menos uma palavra-chave de ativação."));
       return;
     }
     if (descricao.trim() === "") {
-      toast.error("A descrição é obrigatória.");
+      toast.error(t("A descrição é obrigatória."));
       return;
     }
     if (corpo.trim() === "") {
-      toast.error("O corpo da skill não pode ficar vazio.");
+      toast.error(t("O corpo da skill não pode ficar vazio."));
       return;
     }
     if (excedeTeto) {
-      toast.error(`O corpo tem ${linhas} linhas; o teto é ${MAX_LINHAS}.`);
+      toast.error(`${t("Linhas no corpo")}: ${linhas}/${MAX_LINHAS}.`);
       return;
     }
     salvar.mutate(
@@ -95,7 +98,7 @@ export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
       },
       {
         onSuccess: () => {
-          toast.success(`Skill "${nome}" atualizada — já vale para os agentes.`);
+          toast.success(`Skill "${nome}" ${t("atualizada — já vale para os agentes.")}`);
           aoMudarAberto(false);
         },
         onError: (err) => showApiError(err),
@@ -107,22 +110,30 @@ export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
     <Dialog open={aberto} onOpenChange={aoMudarAberto}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar skill “{nome}”</DialogTitle>
+          <DialogTitle>{t("Editar skill")} “{nome}”</DialogTitle>
           <DialogDescription>
-            Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na
-            conversa quando uma das palavras-chave aparece na mensagem do cliente.
+            {t(
+              "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente.",
+            )}
           </DialogDescription>
         </DialogHeader>
 
-        {skill.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+        {skill.isLoading && <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>}
         {skill.isError && (
-          <p className="text-sm text-destructive">Não foi possível carregar a skill.</p>
+          <p className="text-sm text-destructive">{t("Não foi possível carregar a skill.")}</p>
         )}
 
         {skill.isSuccess && (
           <div className="flex flex-col gap-4 py-2">
+            {veioDePacote && (
+              <p className="rounded-md border border-border/60 p-3 text-sm text-muted-foreground">
+                {t(
+                  "Esta skill veio de um pacote com arquivos. Para mudar o texto, edite o pacote e envie o .zip de novo.",
+                )}
+              </p>
+            )}
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="skill-desc">Descrição (aparece no índice do agente)</Label>
+              <Label htmlFor="skill-desc">{t("Descrição (aparece no índice do agente)")}</Label>
               <Input
                 id="skill-desc"
                 value={descricao}
@@ -132,23 +143,23 @@ export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="skill-kw">Palavras-chave de ativação (separe por vírgula)</Label>
+              <Label htmlFor="skill-kw">{t("Palavras-chave de ativação (separe por vírgula)")}</Label>
               <Input
                 id="skill-kw"
                 value={keywords}
                 onChange={(e) => setKeywords(e.target.value)}
-                placeholder="moto, motos, cb, estoque, preço"
+                placeholder={t("consulta, horário, preço")}
               />
               <p className="text-xs text-muted-foreground">
-                A skill é carregada quando o cliente escreve uma destas palavras.
+                {t("A skill é carregada quando o cliente escreve uma destas palavras.")}
               </p>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="skill-body">Corpo (o procedimento que o agente segue)</Label>
+                <Label htmlFor="skill-body">{t("Corpo (o procedimento que o agente segue)")}</Label>
                 <span className={excedeTeto ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
-                  {linhas}/{MAX_LINHAS} linhas
+                  {linhas}/{MAX_LINHAS} {t("linhas")}
                 </span>
               </div>
               <Textarea
@@ -163,21 +174,21 @@ export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
             <div className="flex flex-col gap-2 rounded-md border border-border/60 p-3">
               <Label>{t("Histórico de versões")}</Label>
               {versoes.isLoading && (
-                <p className="text-xs text-muted-foreground">Carregando…</p>
+                <p className="text-xs text-muted-foreground">{t("Carregando…")}</p>
               )}
               {versoes.data && versoes.data.length > 0 && (
                 <ul className="flex flex-col gap-1">
                   {versoes.data.map((v) => (
                     <li key={v.id} className="flex items-center justify-between gap-2 text-xs">
                       <span>
-                        {new Date(v.created_at).toLocaleString("pt-BR", {
+                        {new Date(v.created_at).toLocaleString(tagDoIdioma, {
                           day: "2-digit",
                           month: "2-digit",
                           year: "numeric",
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
-                        {v.atual ? " — em uso" : ""}
+                        {v.atual ? ` — ${t("em uso")}` : ""}
                       </span>
                       {!v.atual && (
                         <Button
@@ -188,13 +199,13 @@ export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
                             restaurar.mutate(
                               { name: nome, versionId: v.id },
                               {
-                                onSuccess: () => toast.success("Versão restaurada."),
+                                onSuccess: () => toast.success(t("Versão restaurada.")),
                                 onError: (err) => showApiError(err),
                               },
                             )
                           }
                         >
-                          Restaurar
+                          {t("Restaurar")}
                         </Button>
                       )}
                     </li>
@@ -207,13 +218,13 @@ export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => aoMudarAberto(false)}>
-            Cancelar
+            {t("Cancelar")}
           </Button>
           <Button
             onClick={salvarSkill}
-            disabled={salvar.isPending || skill.isLoading || excedeTeto}
+            disabled={salvar.isPending || skill.isLoading || excedeTeto || veioDePacote}
           >
-            {salvar.isPending ? "Salvando…" : "Salvar"}
+            {salvar.isPending ? t("Salvando…") : t("Salvar")}
           </Button>
         </DialogFooter>
       </DialogContent>

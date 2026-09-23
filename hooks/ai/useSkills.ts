@@ -33,6 +33,8 @@ export interface SkillComCorpo {
   matcher: SkillMatcher;
   version_id: string;
   updated_at?: string;
+  /** Skill de pacote (.zip com arquivos): o editor avisa e não salva — o PUT devolve 409. */
+  tem_arquivos_do_pacote?: boolean;
 }
 
 export interface SalvarSkillBody {
