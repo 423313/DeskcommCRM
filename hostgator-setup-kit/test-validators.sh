@@ -2128,8 +2128,7 @@ TMP_PRIV="$(mktemp -d)"
     cd "$TMP_PRIV" || exit 1
     git clone --quiet "$origem" w 2>/dev/null
     cd w || exit 1
-    git config user.email t@t; git config user.name t
-    echo x > a; git add -A; git commit --quiet -m init
+    echo x > a; git add -A; git -c user.email=t@t -c user.name=t commit --quiet -m init
     git tag v1.0.0
     git push --quiet origin HEAD --tags 2>/dev/null
   )
