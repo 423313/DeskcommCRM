@@ -12,20 +12,6 @@ import { baseDaApiDoJev } from "@/lib/ai/decisao/cliente";
 import type { ProvedorComChave } from "@/lib/ai/pontos/provedores";
 import { env } from "@/lib/env";
 
-/**
- * Os provedores cuja CHAVE este arquivo sabe validar — os que conversam E os
- * que só decidem (o Jev). Chave é chave: as duas naturezas se cadastram na
- * mesma tela.
- *
- * Derivado de `lib/ai/pontos/provedores.ts`, que é a lista única desde a
- * migration 0127 — quando ela era repetida à mão aqui, na rota de credenciais,
- * no diálogo da tela e em `lib/ai/agents/validation.ts`, a 0127 abriu o banco
- * para a OpenRouter e as quatro cópias continuaram recusando. O resultado era
- * uma tela que oferecia OpenRouter num ponto e não tinha onde cadastrar a
- * chave dela.
- */
-export type Provider = ProvedorComChave;
-
 export interface ValidationOk {
   ok: true;
   models: string[];
@@ -289,8 +275,20 @@ export async function validateTypeSafeKey(apiKey: string): Promise<ValidationRes
   }
 }
 
+/**
+ * Valida a CHAVE de qualquer natureza — de quem conversa E de quem só decide (o
+ * Jev). Chave é chave: as duas se cadastram na mesma tela.
+ *
+ * O tipo é `ProvedorComChave` pelo nome, sem apelido: um `Provider` exportado
+ * daqui com o sentido da UNIÃO convivia com o `Provider` de
+ * `hooks/ai/useCredentials.ts`, que quer dizer o contrário (só quem conversa),
+ * e ficava invisível à catraca de `provedores-de-decisao-catraca.test.ts`.
+ * Derivado de `lib/ai/pontos/provedores.ts`, a lista única desde a migration
+ * 0127 — quando era repetida à mão aqui, a 0127 abriu o banco para a OpenRouter
+ * e as cópias continuaram recusando.
+ */
 export function validateProviderKey(
-  provider: Provider,
+  provider: ProvedorComChave,
   apiKey: string,
 ): Promise<ValidationResult> {
   switch (provider) {
@@ -307,7 +305,7 @@ export function validateProviderKey(
     case "typesafe":
       return validateTypeSafeKey(apiKey);
     default: {
-      // Sem `never` aqui: `Provider` agora é derivado das listas, e elas
+      // Sem `never` aqui: o tipo é derivado das listas, e elas
       // crescem sem que este arquivo saiba. Provedor novo cadastrado antes de
       // ganhar validador devolve um erro que DIZ isso, em vez de quebrar o
       // build de quem só acrescentou uma linha na lista.

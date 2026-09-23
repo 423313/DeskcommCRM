@@ -19,6 +19,11 @@ interface Props {
   initialData: CredentialRow[];
   canWrite: boolean;
   usageMap: Record<string, number>;
+  /**
+   * A instalação trouxe chave de IA no `.env` (a do provedor ou a do gateway)?
+   * É o caso mais comum do kit, e essa chave não é linha desta lista.
+   */
+  instalacaoTemIa?: boolean;
 }
 
 // Rótulo e ordem saem das listas — provedor novo aparece na tela sem que
@@ -30,7 +35,7 @@ const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
 
 const PROVIDER_ORDER: ProvedorComChave[] = PROVEDORES_COM_CHAVE.map((p) => p.id);
 
-export function CredentialsList({ initialData, canWrite, usageMap }: Props) {
+export function CredentialsList({ initialData, canWrite, usageMap, instalacaoTemIa = false }: Props) {
   const t = useT();
   const { data } = useCredentialsList({ initialData });
   const [addOpen, setAddOpen] = useState(false);
@@ -48,8 +53,11 @@ export function CredentialsList({ initialData, canWrite, usageMap }: Props) {
   }
 
   // Só a chave do Jev não faz o atendimento funcionar: ele decide, não conversa.
-  // Sem este aviso a tela sairia do estado vazio e pareceria pronta.
+  // Sem este aviso a tela sairia do estado vazio e pareceria pronta. Mas quem
+  // atende com a chave que veio na instalação JÁ tem a IA principal: avisar ali
+  // seria alarme falso sobre o que está funcionando.
   const soDecisao =
+    !instalacaoTemIa &&
     credentials.some((c) => ehProvedorDeDecisao(c.provider)) &&
     !credentials.some((c) => c.is_active && ehProvedorSuportado(c.provider));
 

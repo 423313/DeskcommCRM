@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { contarUsoQueBloqueia, type VersaoVinculada } from "@/lib/ai/credenciais/uso";
+import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { CredentialsList } from "./_components/CredentialsList";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,12 @@ export default async function CredentialsPage() {
     usageMap = contarUsoQueBloqueia((linked ?? []) as unknown as VersaoVinculada[]);
   }
 
+  // A chave do `.env` também é "IA principal" — sem ela na conta, a lista
+  // acusaria falta de IA a quem atende com a chave que veio na instalação.
+  const ambiente = lerAmbiente();
+  const instalacaoTemIa =
+    ambiente.gateway || Object.values(ambiente.chavesDeProvedor).some(Boolean);
+
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
@@ -60,6 +67,7 @@ export default async function CredentialsPage() {
         initialData={credentials}
         canWrite={canWrite}
         usageMap={usageMap}
+        instalacaoTemIa={instalacaoTemIa}
       />
     </div>
   );

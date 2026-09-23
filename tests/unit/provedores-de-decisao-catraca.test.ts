@@ -17,7 +17,8 @@
  */
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
+import { describe, expect, it, vi } from "vitest";
 
 import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
 import { PROVIDERS, versionCreateSchema } from "@/lib/ai/agents/validation";
@@ -31,10 +32,43 @@ import {
   PROVEDORES_DE_DECISAO,
 } from "@/lib/ai/pontos/provedores";
 import { buildModel } from "@/lib/ai/runtime/agent";
+import { POST as reconciliarAgente } from "@/app/api/v1/ai/agents/[id]/reconcile/route";
 
 import { arquivosDeCodigo, caminhoRelativo } from "./helpers/varrer-codigo";
 
+vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: async () => null }));
+vi.mock("@/lib/auth/require-role", () => ({
+  requireRole: async () => ({
+    ok: true,
+    user: { id: "actor", idioma: "pt-BR" },
+    org: { orgId: "11111111-1111-4111-8111-111111111111", role: "admin" },
+  }),
+}));
+// Agente não encontrado: o corpo que PASSA pela validação chega aqui e volta 404.
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => {
+    const chain: Record<string, unknown> = { maybeSingle: async () => ({ data: null, error: null }) };
+    for (const m of ["from", "select", "eq"]) chain[m] = () => chain;
+    return chain;
+  },
+}));
+
 const DECISAO = PROVEDORES_DE_DECISAO.map((p) => p.id);
+
+function reconciliar(provider: string) {
+  return reconciliarAgente(
+    new NextRequest("http://localhost/api/v1/ai/agents/x/reconcile", {
+      method: "POST",
+      body: JSON.stringify({
+        channel_id: "22222222-2222-4222-8222-222222222222",
+        provider,
+        model: "jev-1.13.0",
+        credential_id: null,
+      }),
+    }),
+    { params: Promise.resolve({ id: "33333333-3333-4333-8333-333333333333" }) },
+  );
+}
 
 describe("o Jev está declarado como provedor de decisão (controle positivo)", () => {
   it("a lista irmã tem o Jev, e a união o inclui", () => {
@@ -81,6 +115,12 @@ describe.each(DECISAO)("%s nunca é modelo de conversa", (id) => {
     });
     expect(r.success).toBe(false);
   });
+
+  it("a reconciliação de agente legado o recusa na validação", async () => {
+    expect((await reconciliar(id)).status).toBe(422);
+    // Controle positivo: quem conversa passa da validação (e cai no 404 do dublê).
+    expect((await reconciliar("anthropic")).status).toBe(404);
+  });
 });
 
 describe("só as superfícies de CHAVE pedem a união", () => {
@@ -99,6 +139,10 @@ describe("só as superfícies de CHAVE pedem a união", () => {
     "lib/ai/decisao/ponto.ts", // lê a chave do Jev
     "app/api/v1/ai/credentials/route.ts", // cadastra a chave
     "hooks/ai/useCredentials.ts", // tipo da LINHA de credencial
+    "app/api/v1/ai/credentials/[id]/route.ts", // gira a chave (o provedor não muda)
+    "lib/ai/credenciais/guardar.ts", // cifra, grava e valida a chave de qualquer natureza
+    // decifra a credencial pelo id; o runtime que a usa recusa o Jev em buildModel
+    "lib/ai/credentials.ts",
     "app/app/ai/credentials/_components/AddCredentialDialog.tsx",
     "app/app/ai/credentials/_components/CredentialCard.tsx",
     "app/app/ai/credentials/_components/CredentialsList.tsx",
@@ -120,6 +164,19 @@ describe("só as superfícies de CHAVE pedem a união", () => {
       "arquivo novo pediu a lista que inclui o Jev. Se ele escolhe modelo de CONVERSA, use PROVEDORES; " +
         "se lida só com chave, declare-o aqui com a razão",
     ).toEqual([]);
+  });
+
+  it("ninguém dá outro nome à união (o apelido escaparia da varredura)", () => {
+    // Já aconteceu: `export type Provider = ProvedorComChave` em
+    // provider-validators.ts. Quem importava `Provider` de lá levava a união sem
+    // citar nenhum símbolo acima — e `Provider` em hooks/ai/useCredentials.ts
+    // quer dizer o CONTRÁRIO (só quem conversa).
+    const APELIDO =
+      /\btype\s+\w+(?:<[^>]*>)?\s*=[^;]*\b(?:ProvedorComChave|PROVEDORES_COM_CHAVE|IDS_COM_CHAVE|PROVEDORES_DE_DECISAO|IDS_DE_PROVEDOR_DE_DECISAO)\b|\b(?:ProvedorComChave|PROVEDORES_COM_CHAVE|IDS_COM_CHAVE)\s+as\s+\w+/;
+    const apelidam = usam.filter(
+      (c) => c !== "lib/ai/pontos/provedores.ts" && APELIDO.test(readFileSync(c, "utf8")),
+    );
+    expect(apelidam, "use o nome da lista (ProvedorComChave), não um apelido").toEqual([]);
   });
 
   it("toda declaração ainda é verdade (a lista não apodrece)", () => {

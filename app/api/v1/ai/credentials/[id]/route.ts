@@ -36,7 +36,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
-import { type Provider } from "@/lib/ai/provider-validators";
+import type { ProvedorComChave } from "@/lib/ai/pontos/provedores";
 import { rotacionarCredencial } from "@/lib/ai/credenciais/guardar";
 import {
   versoesCongeladas,
@@ -176,7 +176,7 @@ export async function PATCH(
     orgId: activeOrg.orgId,
     userId: authUser.id,
     credentialId: id,
-    provider: cred.provider as Provider,
+    provider: cred.provider as ProvedorComChave,
     ...(input.api_key !== undefined ? { apiKey: input.api_key } : {}),
     ...(input.label !== undefined ? { label: input.label } : {}),
     requestId,
