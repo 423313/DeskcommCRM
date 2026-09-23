@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@f7de37fa2f06 -->
+<!-- traduzido-de: docs/white-label.md@953a3423b852 -->
 
 [🇧🇷 Português](white-label.md) · [🇺🇸 English](white-label.en.md) · 🇪🇸 Español
 
@@ -167,7 +167,7 @@ La **Resolución CD/ANPD nº 19/2024** volvió obligatorias las cláusulas contr
 
 Todo cliente tuyo que use un CRM extranjero realiza esa transferencia y necesita el artefacto contractual. Alojando en una VPS en Brasil, **el CRM en sí no transfiere datos fuera del país** — y, para él, la obligación no se aplica.
 
-⚠️ **La salvedad es la IA, y vale para casi toda instalación.** La frase de arriba solo es completa mientras ningún proveedor de IA extranjero esté activado. La atención automática envía la conversación al proveedor que el cliente conectó (Anthropic, OpenAI, Google, DeepSeek u OpenRouter, todos fuera de Brasil). Jev, cuando el administrador lo activa en IA › Proveedores, envía el último mensaje de cada cliente a TypeSafe AI, en Estados Unidos, después de borrar CPF, teléfono y correo electrónico. En esos flujos hay transferencia internacional, y las cláusulas estándar valen para ellos. Jev viene desactivado y pide el consentimiento de quien administra antes de enviar nada; la IA de atención, no.
+⚠️ **La salvedad es la IA, y vale para casi toda instalación.** La frase de arriba solo es completa mientras ningún proveedor de IA extranjero esté activado. La atención automática envía la conversación al proveedor que el cliente conectó (Anthropic, OpenAI, Google, DeepSeek u OpenRouter, todos fuera de Brasil). Jev, cuando el administrador lo activa en IA › Proveedores, envía cada mensaje de los clientes a TypeSafe AI, en Estados Unidos, uno por vez y sin el resto de la conversación, después de borrar CPF, teléfono y correo electrónico. En esos flujos hay transferencia internacional, y las cláusulas estándar valen para ellos. Jev viene desactivado y pide el consentimiento de quien administra antes de enviar nada; la IA de atención, no.
 
 ⚠️ **No lo vendas como "servidor en Brasil = conformidad con la LGPD".** Eso es falso y un abogado lo desmonta en la primera pregunta: la conformidad depende de base legal, finalidad, seguridad y derechos del titular. El argumento correcto y defendible es el de arriba: sin transferencia internacional, no hay exigencia de cláusulas estándar.
 

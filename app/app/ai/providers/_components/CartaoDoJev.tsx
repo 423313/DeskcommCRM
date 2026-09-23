@@ -341,7 +341,7 @@ function ProntoParaLigar({ dados, recarregar }: { dados: DadosDoJev; recarregar:
       <div className="rounded-md border border-border p-3 text-sm">
         <p>
           {t(
-            "Ao ligar, a última mensagem de cada cliente vai para a TypeSafe AI, nos Estados Unidos, para o Jev avaliar. Antes de sair, o sistema apaga CPF, telefone e e-mail do texto. Com o Jev desligado, nada é enviado.",
+            "Ao ligar, cada mensagem que o cliente manda vai para a TypeSafe AI, nos Estados Unidos, uma de cada vez e sem o resto da conversa, para o Jev avaliar. Antes de sair, o sistema apaga CPF, telefone e e-mail do texto. Com o Jev desligado, nada é enviado.",
           )}
         </p>
         {aceite === null ? (
@@ -356,7 +356,7 @@ function ProntoParaLigar({ dados, recarregar }: { dados: DadosDoJev; recarregar:
             />
             <label htmlFor="jev-aceite" className="text-sm">
               {t(
-                "Concordo com o envio da última mensagem de cada cliente para a TypeSafe AI, nos Estados Unidos.",
+                "Concordo com o envio de cada mensagem dos clientes, uma de cada vez e sem o resto da conversa, para a TypeSafe AI, nos Estados Unidos.",
               )}
             </label>
           </div>

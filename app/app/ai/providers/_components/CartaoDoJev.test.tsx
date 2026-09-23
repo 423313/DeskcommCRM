@@ -28,7 +28,7 @@ function dados(extra: Parcial = {}): DadosDoJev {
     provedor: {
       rotulo: "Jev (TypeSafe AI)",
       quandoUsar:
-        "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em menos de meio segundo. Trabalha junto com a sua IA principal.",
+        "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em geral em menos de um segundo. Trabalha junto com a sua IA principal.",
       ondePegarAChave: "https://console.typesafe.ai/keys",
       prefixoDaChave: "apikey_…",
     },
@@ -45,7 +45,7 @@ function dados(extra: Parcial = {}): DadosDoJev {
         id: "sentiment_classify",
         rotulo: "Medir o clima da conversa",
         oQueOJevFaz:
-          "Percebe, em menos de meio segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
+          "Percebe, em geral em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
       },
     ],
     tem_ia_de_sempre: true,
@@ -164,7 +164,9 @@ describe("CartaoDoJev — (3) pronto para ligar", () => {
     montar(dados());
     expect(cartao()).toHaveAttribute("data-estado", "pronto");
     expect(screen.getByText("Medir o clima da conversa")).toBeInTheDocument();
-    expect(screen.getByText(/nos Estados Unidos, para o Jev avaliar/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/cada mensagem que o cliente manda .* uma de cada vez e sem o resto da conversa/),
+    ).toBeInTheDocument();
 
     const ligar = screen.getByRole("button", { name: "Ligar o Jev" });
     expect(ligar).toBeDisabled();

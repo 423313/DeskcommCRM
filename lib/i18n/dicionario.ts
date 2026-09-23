@@ -2255,8 +2255,8 @@ export const DICIONARIO: Traducoes = {
   "Muito barata e desconta sozinha o trecho repetido da conversa, sem você configurar nada — o custo cai para quem atende com um roteiro que não muda.": {
     es: "Muy barata y descuenta sola la parte repetida de la conversación, sin que configures nada: el costo baja para quien atiende con un guion que no cambia.",
   },
-  "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em menos de meio segundo. Trabalha junto com a sua IA principal.": {
-    es: "No conversa con el cliente: toma decisiones rápidas y baratas, como notar si el cliente está molesto, en menos de medio segundo. Trabaja junto con tu IA principal.",
+  "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em geral em menos de um segundo. Trabalha junto com a sua IA principal.": {
+    es: "No conversa con el cliente: toma decisiones rápidas y baratas, como notar si el cliente está molesto, en general en menos de un segundo. Trabaja junto con tu IA principal.",
   },
   "O Jev não conversa com o cliente — falta a chave da sua IA principal.": {
     es: "Jev no conversa con el cliente: falta la clave de tu IA principal.",
@@ -3049,8 +3049,8 @@ export const DICIONARIO: Traducoes = {
   "Cliente irritado não é mais escalado para um humano, e a insatisfação só aparece quando ele já sumiu.": {
     es: "El cliente molesto deja de escalarse a una persona, y la insatisfacción solo se nota cuando el cliente ya desapareció.",
   },
-  "Percebe, em menos de meio segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.": {
-    es: "Nota, en menos de medio segundo, si el cliente está molesto, y avisa para pasar la conversación a una persona.",
+  "Percebe, em geral em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.": {
+    es: "Nota, en general en menos de un segundo, si el cliente está molesto, y avisa para pasar la conversación a una persona.",
   },
   "Prepara uma resposta com a versão e o conhecimento do agente, sem aplicar alterações ao cliente.": {
     es: "Prepara una respuesta con la versión y el conocimiento del agente, sin aplicar cambios al cliente.",
@@ -3337,11 +3337,11 @@ export const DICIONARIO: Traducoes = {
   "Ele volta decidindo, como estava antes de ser desligado.": {
     es: "Vuelve decidiendo, como estaba antes de desactivarlo.",
   },
-  "Ao ligar, a última mensagem de cada cliente vai para a TypeSafe AI, nos Estados Unidos, para o Jev avaliar. Antes de sair, o sistema apaga CPF, telefone e e-mail do texto. Com o Jev desligado, nada é enviado.": {
-    es: "Al activarlo, el último mensaje de cada cliente va a TypeSafe AI, en Estados Unidos, para que Jev lo evalúe. Antes de salir, el sistema borra del texto el CPF, el teléfono y el correo. Con Jev desactivado, no se envía nada.",
+  "Ao ligar, cada mensagem que o cliente manda vai para a TypeSafe AI, nos Estados Unidos, uma de cada vez e sem o resto da conversa, para o Jev avaliar. Antes de sair, o sistema apaga CPF, telefone e e-mail do texto. Com o Jev desligado, nada é enviado.": {
+    es: "Al activarlo, cada mensaje que envía el cliente va a TypeSafe AI, en Estados Unidos, uno por vez y sin el resto de la conversación, para que Jev lo evalúe. Antes de salir, el sistema borra del texto el CPF, el teléfono y el correo. Con Jev desactivado, no se envía nada.",
   },
-  "Concordo com o envio da última mensagem de cada cliente para a TypeSafe AI, nos Estados Unidos.": {
-    es: "Estoy de acuerdo con el envío del último mensaje de cada cliente a TypeSafe AI, en Estados Unidos.",
+  "Concordo com o envio de cada mensagem dos clientes, uma de cada vez e sem o resto da conversa, para a TypeSafe AI, nos Estados Unidos.": {
+    es: "Estoy de acuerdo con el envío de cada mensaje de los clientes, uno por vez y sin el resto de la conversación, a TypeSafe AI, en Estados Unidos.",
   },
   "Envio aceito pela empresa em": { es: "Envío aceptado por la empresa el" },
   "Ligar o Jev": { es: "Activar Jev" },
@@ -6667,8 +6667,8 @@ export const DICIONARIO: Traducoes = {
   "o provedor de inteligência artificial contratado pelo operador, que recebe o trecho da conversa necessário para gerar a resposta ou avaliar a conversa;": {
     es: "el proveedor de inteligencia artificial contratado por el operador, que recibe el fragmento de la conversación necesario para generar la respuesta o evaluar la conversación;",
   },
-  "quando o operador liga as decisões rápidas do Jev (desligadas por padrão), a TypeSafe AI, nos Estados Unidos, que recebe a última mensagem do cliente, já sem CPF, telefone e e-mail, para avaliar se ele está irritado;": {
-    es: "cuando el operador activa las decisiones rápidas de Jev (desactivadas por defecto), TypeSafe AI, en Estados Unidos, que recibe el último mensaje del cliente, ya sin CPF, teléfono ni correo, para evaluar si está molesto;",
+  "quando o operador liga a análise automática do humor das mensagens pelo Jev (desligada por padrão), a TypeSafe AI, nos Estados Unidos, que recebe cada mensagem do cliente, sozinha e já sem CPF, telefone e e-mail, para avaliar se ele está irritado;": {
+    es: "cuando el operador activa el análisis automático del ánimo de los mensajes con Jev (desactivado por defecto), TypeSafe AI, en Estados Unidos, que recibe cada mensaje del cliente, por separado y ya sin CPF, teléfono ni correo, para evaluar si está molesto;",
   },
   "o provedor de infraestrutura onde o servidor está hospedado.": {
     es: "el proveedor de infraestructura donde el servidor está alojado.",
@@ -6719,8 +6719,8 @@ export const DICIONARIO: Traducoes = {
     es: "organiza atención y ventas: recibe y envía mensajes por los canales que el operador conecte, registra contactos y negocios, y permite que agentes de inteligencia artificial atiendan junto con personas, bajo las reglas que el operador configure.",
   },
   "3. Sua conta": { es: "3. Tu cuenta" },
-  "O acesso é pessoal. Você é responsável por manter sua senha em segredo e pelo que for feito com a sua conta. Contas de administrador exigem verificação em duas etapas. Avise o operador imediatamente se suspeitar de acesso indevido.": {
-    es: "El acceso es personal. Eres responsable de mantener tu contraseña en secreto y de lo que se haga con tu cuenta. Las cuentas de administrador exigen verificación en dos pasos. Avisa al operador de inmediato si sospechas de un acceso indebido.",
+  "O acesso é pessoal. Você é responsável por manter sua senha em segredo e pelo que for feito com a sua conta. A verificação em duas etapas é opcional e pode ser exigida por quem administra a empresa. Avise o operador imediatamente se suspeitar de acesso indevido.": {
+    es: "El acceso es personal. Eres responsable de mantener tu contraseña en secreto y de lo que se haga con tu cuenta. La verificación en dos pasos es opcional y puede exigirla quien administra la empresa. Avisa al operador de inmediato si sospechas de un acceso indebido.",
   },
   "4. Uso aceitável": { es: "4. Uso aceptable" },
   "Ao usar este sistema, você concorda em não:": { es: "Al usar este sistema, te comprometes a no:" },
@@ -8212,8 +8212,8 @@ export const DICIONARIO: Traducoes = {
   },
   // PATCH /api/v1/ai/jev. Fora da varredura de tela (pastas `api` não entram), e
   // chegam ao admin como a mensagem do erro.
-  "Ligar o Jev manda a última mensagem de cada cliente para a TypeSafe AI, nos Estados Unidos. Para ligar, confirme que você está de acordo.": {
-    es: "Activar Jev envía el último mensaje de cada cliente a TypeSafe AI, en Estados Unidos. Para activarlo, confirma que estás de acuerdo.",
+  "Ligar o Jev manda cada mensagem dos clientes, uma de cada vez e sem o resto da conversa, para a TypeSafe AI, nos Estados Unidos. Para ligar, confirme que você está de acordo.": {
+    es: "Activar Jev envía cada mensaje de los clientes, uno por vez y sin el resto de la conversación, a TypeSafe AI, en Estados Unidos. Para activarlo, confirma que estás de acuerdo.",
   },
   "Para ligar o Jev, cole a chave dele em Credenciais e espere o teste da chave passar.": {
     es: "Para activar Jev, pega su clave en Credenciales y espera a que pase la prueba de la clave.",

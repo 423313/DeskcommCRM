@@ -397,7 +397,7 @@ Removidos: **OpenClaw** e **Hermes** — não têm relação com o Deskcomm e di
 > **CTA:** Assinar a VPS com desconto da parceria →
 > **Microcopy:** link de parceria — assinar por ele apoia o projeto
 
-⚠️ O corpo dizia "sem transferência internacional de dados", e isso só é inteiro enquanto nenhum provedor de IA estrangeiro estiver ligado: a IA de atendimento manda a conversa ao provedor conectado, e o Jev, quando ligado, manda a última mensagem de cada cliente à TypeSafe AI, nos EUA. A ressalva completa está em [`docs/white-label.md`](../white-label.md), "O argumento jurídico que fecha venda no Brasil".
+⚠️ O corpo dizia "sem transferência internacional de dados", e isso só é inteiro enquanto nenhum provedor de IA estrangeiro estiver ligado: a IA de atendimento manda a conversa ao provedor conectado, e o Jev, quando ligado, manda cada mensagem dos clientes à TypeSafe AI, nos EUA, uma de cada vez e sem o resto da conversa. A ressalva completa está em [`docs/white-label.md`](../white-label.md), "O argumento jurídico que fecha venda no Brasil".
 
 ---
 

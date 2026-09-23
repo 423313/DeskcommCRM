@@ -143,7 +143,7 @@ export const PROVEDORES_DE_DECISAO = [
     id: "typesafe",
     rotulo: "Jev (TypeSafe AI)",
     quandoUsar:
-      "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em menos de meio segundo. Trabalha junto com a sua IA principal.",
+      "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em geral em menos de um segundo. Trabalha junto com a sua IA principal.",
     aceitaEndpointProprio: false,
     catalogoSincronizavel: false,
     ondePegarAChave: "https://console.typesafe.ai/keys",

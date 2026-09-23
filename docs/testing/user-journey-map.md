@@ -116,10 +116,10 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 
 ## J32 — Ligar o Jev para perceber o cliente irritado `[P1]` (2026-09-23)
 
-O Jev (System One, da TypeSafe AI) mede o clima da última mensagem do cliente em
-menos de meio segundo, no lugar ou ao lado da IA de sempre. Nasce desligado; ligar
-manda a última mensagem de cada cliente aos EUA, então pede o aceite de quem
-administra. É `[P1]` e não `[P0]`: nada dele está no caminho de quem acabou de
+O Jev (System One, da TypeSafe AI) mede o clima de cada mensagem do cliente, em
+geral em menos de um segundo, no lugar ou ao lado da IA de sempre. Nasce desligado;
+ligar manda cada mensagem dos clientes aos EUA, uma de cada vez e sem o resto da
+conversa, então pede o aceite de quem administra. É `[P1]` e não `[P0]`: nada dele está no caminho de quem acabou de
 instalar.
 
 Specs: `tests/e2e/jev-decisoes-rapidas.spec.ts` (parte 5 do `e2e`, contra o dublê

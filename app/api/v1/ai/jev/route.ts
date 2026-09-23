@@ -8,8 +8,8 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * de reserva? e, ligado, o que ele fez na semana e quanto concordou com a IA de
  * sempre.
  *
- * PATCH liga, desliga e troca o modo. Ligar manda a última mensagem de cada
- * cliente para um fornecedor nos EUA, então exige chave validada e, na primeira
+ * PATCH liga, desliga e troca o modo. Ligar manda cada mensagem que o cliente
+ * escreve, uma de cada vez e sem o resto da conversa, a um fornecedor nos EUA, então exige chave validada e, na primeira
  * vez, o aceite explícito do administrador (LGPD, D6), que fica gravado com
  * quem e quando. O interruptor mora em `organizations.settings.jev`
  * (`lib/ai/decisao/config.ts`); a organização vem da sessão, nunca do corpo.
@@ -295,7 +295,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
         return fail(
           "jev_exige_aceite",
           t(
-            "Ligar o Jev manda a última mensagem de cada cliente para a TypeSafe AI, nos Estados Unidos. Para ligar, confirme que você está de acordo.",
+            "Ligar o Jev manda cada mensagem dos clientes, uma de cada vez e sem o resto da conversa, para a TypeSafe AI, nos Estados Unidos. Para ligar, confirme que você está de acordo.",
           ),
           422,
           { requestId },
