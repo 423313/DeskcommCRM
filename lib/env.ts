@@ -528,9 +528,9 @@ if (env.NODE_ENV === "production") {
 // Este processo só conhece as chaves do AMBIENTE. As credenciais cadastradas em
 // IA › Credenciais moram no banco e são resolvidas mais tarde, no contexto da
 // organização; por isso ausência aqui nunca pode virar diagnóstico de "IA muda".
-// `OPENROUTER_API_KEY` entra na condição porque `isAiGatewayConfigured()`
-// (lib/ai/gateway.ts) e `resolveLanguageModel` a tratam como configuração
-// válida no ambiente, assim como gateway e Anthropic.
+// `OPENROUTER_API_KEY` entra na condição porque `resolveLanguageModel`
+// (lib/ai/gateway.ts) a trata como configuração válida no ambiente, assim como
+// gateway e Anthropic.
 // `OPENAI_API_KEY` entra pelo mesmo motivo, com a diferença que o aviso não
 // precisa esconder: ela atende os pontos do provedor que a ORGANIZAÇÃO escolheu
 // (é o último degrau de `resolverModeloDoPonto`, lib/ai/gateway-binding.ts).

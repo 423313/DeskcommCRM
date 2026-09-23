@@ -20,7 +20,7 @@ import { resolverAgenteDaConversa } from "@/lib/ai/agents/agente-da-conversa";
 import { computeCost } from "@/lib/ai/cost";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
-import { DEFAULT_CLASSIFIER_MODEL, isAiGatewayConfigured } from "@/lib/ai/gateway";
+import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { medirClima } from "@/lib/ai/decisao/clima";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation } from "@/lib/ai/log-invocation";
@@ -65,11 +65,11 @@ export interface SentimentResult {
 
 export async function processSentiment(event: EventRow): Promise<SentimentResult> {
   try {
-    // ── Guard: AI Gateway configured ────────────────────────────────────────
-    if (!isAiGatewayConfigured()) {
-      return { skipped: true, reason: "ai_gateway_key_missing" };
-    }
-
+    // Sem portão de `.env` na frente: `isAiGatewayConfigured()` só olhava três
+    // variáveis de ambiente e barrava a chave colada pela tela (IA ›
+    // Credenciais) e a OpenAI. Quem sabe se existe modelo é o resolver abaixo,
+    // que devolve `null` quando nada existe.
+    //
     // Passar SENTIMENT_MODEL como string cai no gateway da Vercel mesmo sem
     // chave (plano anônimo) e devolve "Unauthenticated ... Configure
     // AI_GATEWAY_API_KEY" — o que quebrava este worker em toda instalação que
