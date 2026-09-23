@@ -42,7 +42,7 @@ export function NumeroForaDoAr({
       data-testid="numero-fora-do-ar"
       className="flex flex-wrap items-center justify-between gap-2 border-t bg-destructive/5 px-4 py-2 text-sm"
     >
-      <span className="text-destructive">{t("O número desta conversa está desconectado.")}</span>
+      <span className="text-destructive">{t("O número desta conversa não está conectado.")}</span>
       <Button size="sm" variant="outline" onClick={() => setAberto(true)}>
         {t("Responder por outro número")}
       </Button>

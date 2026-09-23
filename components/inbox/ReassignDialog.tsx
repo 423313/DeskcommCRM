@@ -36,9 +36,10 @@ interface Props {
   /** Aba em que o diálogo abre. A faixa de número fora do ar abre em "numero". */
   abaInicial?: AbaDeTransferencia;
   /**
-   * O que a aba Número precisa. Sem `numero`, a aba não aparece: é o caso de
-   * quem chama o diálogo fora do Inbox, ou de conversa de rede social, que não
-   * tem telefone para continuar em outro canal.
+   * O que a aba Número precisa. Sem `numero`, a aba não aparece — é o caso de
+   * quem chama o diálogo fora do Inbox. Com `numero`, ela aparece sempre que há
+   * outro número com telefone, inclusive numa conversa de rede social cujo
+   * contato tem telefone salvo: continuar pelo WhatsApp é justamente a saída.
    */
   numero?: {
     contactId: string;
@@ -156,7 +157,7 @@ export function ReassignDialog({
             {numero.contactPhone ? (
               <p className="text-xs text-muted-foreground">
                 {t(
-                  "O cliente passa a receber as mensagens pelo número escolhido, e você fica como responsável. O histórico deste número continua nesta conversa.",
+                  "O cliente passa a receber as mensagens pelo número escolhido. Se a conversa lá estiver livre, você fica como responsável. O histórico deste número continua nesta conversa.",
                 )}
               </p>
             ) : (
