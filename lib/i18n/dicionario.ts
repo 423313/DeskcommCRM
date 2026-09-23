@@ -4881,13 +4881,19 @@ export const DICIONARIO: Traducoes = {
   "In-app": { es: "En la app" },
   Push: { es: "Push" },
   // ─── Configurações: Segurança ───
-  "Gerar novos códigos invalida TODOS os atuais. Tem certeza?": {
-    es: "Generar nuevos códigos invalida TODOS los actuales. ¿Estás seguro?",
+  "Gerar novos códigos de recuperação?": {
+    es: "¿Generar nuevos códigos de recuperación?",
+  },
+  "Os códigos atuais são invalidados imediatamente.": {
+    es: "Los códigos actuales se invalidan de inmediato.",
   },
   "Novos códigos gerados.": { es: "Nuevos códigos generados." },
   "Erro:": { es: "Error:" },
-  "Sair de TODOS os dispositivos? Você precisará fazer login de novo.": {
-    es: "¿Cerrar sesión en TODOS los dispositivos? Tendrás que iniciar sesión de nuevo.",
+  "Sair de todos os dispositivos?": {
+    es: "¿Cerrar sesión en todos los dispositivos?",
+  },
+  "Você precisará fazer login de novo em cada um deles.": {
+    es: "Tendrás que iniciar sesión de nuevo en cada uno de ellos.",
   },
   "Verificação em duas etapas": { es: "Verificación en dos pasos" },
   "Além da senha, o sistema pede um código de 6 dígitos que só existe no seu celular. É a proteção que segura uma senha vazada.": {
@@ -4898,8 +4904,11 @@ export const DICIONARIO: Traducoes = {
   "Ela é obrigatória para administradores desta empresa, então não dá para desligar aqui. Um administrador pode mudar essa regra abaixo.": {
     es: "Es obligatoria para los administradores de esta empresa, así que no se puede desactivar aquí. Un administrador puede cambiar esta regla abajo.",
   },
-  "Desligar a verificação em duas etapas desta conta?": {
-    es: "¿Desactivar la verificación en dos pasos de esta cuenta?",
+  "Desligar a verificação em duas etapas?": {
+    es: "¿Desactivar la verificación en dos pasos?",
+  },
+  "Sua conta fica sem essa camada de proteção até você ativar de novo.": {
+    es: "Tu cuenta queda sin esa capa de protección hasta que la actives de nuevo.",
   },
   "Verificação desligada.": { es: "Verificación desactivada." },
 
@@ -5309,6 +5318,12 @@ export const DICIONARIO: Traducoes = {
   "Pausando...": { es: "Pausando..." },
   "Fechar esta conversa?": { es: "¿Cerrar esta conversación?" },
   "Arquivar esta conversa?": { es: "¿Archivar esta conversación?" },
+  "O atendimento é encerrado. Se o cliente escrever de novo, você pode reabrir.": {
+    es: "La atención se cierra. Si el cliente vuelve a escribir, puedes reabrirla.",
+  },
+  "Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta.": {
+    es: "Archivar cierra esta atención y guarda la conversación en el historial. Si el cliente vuelve a escribir, ella vuelve.",
+  },
   "Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta. Arquivar?": {
     es: "Archivar cierra esta atención y guarda la conversación en el historial. Si el cliente vuelve a escribir, la conversación regresa. ¿Archivar?",
   },

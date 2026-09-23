@@ -1,5 +1,16 @@
 "use client";
+import { useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useT } from "@/hooks/i18n/useT";
 
 interface Props {
@@ -25,6 +36,7 @@ export function InboxKeyboardShortcuts({
   enabled = true,
 }: Props) {
   const t = useT();
+  const [confirmFecharOpen, setConfirmFecharOpen] = useState(false);
   function step(delta: number) {
     if (visibleIds.length === 0) return;
     const idx = selectedId ? visibleIds.indexOf(selectedId) : -1;
@@ -48,12 +60,25 @@ export function InboxKeyboardShortcuts({
   useHotkeys("a", () => onClaim(), { enabled, preventDefault: true });
   useHotkeys(
     "e",
-    () => {
-      if (confirm(t("Fechar conversa?"))) onClose();
-    },
+    () => setConfirmFecharOpen(true),
     { enabled, preventDefault: true },
   );
   useHotkeys("shift+/", () => onToggleHelp(), { enabled, preventDefault: true });
 
-  return null;
+  return (
+    <AlertDialog open={confirmFecharOpen} onOpenChange={setConfirmFecharOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("Fechar conversa?")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("O atendimento é encerrado. Se o cliente escrever de novo, você pode reabrir.")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+          <AlertDialogAction onClick={onClose}>{t("Fechar")}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
