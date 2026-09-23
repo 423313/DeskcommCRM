@@ -59,6 +59,21 @@ const USD_PER_MTOK: Record<string, Preco> = {
   // um prefixo `claude-opus-4` que engoliria toda a família.
   'claude-opus-4-1': { input: 15, output: 75, cacheRead: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
   'claude-opus-4': { input: 15, output: 75, cacheRead: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+
+  // OpenAI — gpt-4o, gpt-4o-mini e linha 5.x do catálogo (issue #1478).
+  // Cache de leitura: 50% de desconto na entrada (OpenAI prompt caching).
+  // Cache de gravação: não há cobrança adicional de gravação na OpenAI (1× a entrada).
+  'gpt-4o-mini': { input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite5m: 0.15, cacheWrite1h: 0.15 },
+  'gpt-4o': { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite5m: 2.5, cacheWrite1h: 2.5 },
+  'gpt-5.6-terra': { input: 2, output: 12, cacheRead: 1, cacheWrite5m: 2, cacheWrite1h: 2 },
+  'gpt-5.6-sol': { input: 5, output: 30, cacheRead: 2.5, cacheWrite5m: 5, cacheWrite1h: 5 },
+  'gpt-5.6-luna': { input: 0.2, output: 1.2, cacheRead: 0.1, cacheWrite5m: 0.2, cacheWrite1h: 0.2 },
+  'gpt-5.5': { input: 5, output: 30, cacheRead: 2.5, cacheWrite5m: 5, cacheWrite1h: 5 },
+  'gpt-5.5-pro': { input: 30, output: 180, cacheRead: 15, cacheWrite5m: 30, cacheWrite1h: 30 },
+  'gpt-5.4': { input: 2.5, output: 15, cacheRead: 1.25, cacheWrite5m: 2.5, cacheWrite1h: 2.5 },
+  'gpt-5.4-mini': { input: 0.75, output: 4.5, cacheRead: 0.375, cacheWrite5m: 0.75, cacheWrite1h: 0.75 },
+  'gpt-5.4-nano': { input: 0.2, output: 1.25, cacheRead: 0.1, cacheWrite5m: 0.2, cacheWrite1h: 0.2 },
+  'gpt-5.4-pro': { input: 30, output: 180, cacheRead: 15, cacheWrite5m: 30, cacheWrite1h: 30 },
 };
 
 export interface TokenUsage {
@@ -69,13 +84,17 @@ export interface TokenUsage {
 }
 
 /**
- * O preço de um id, tolerando o sufixo de data do vendor (`-20250805`).
+ * O preço de um id, tolerando o sufixo de data do vendor (`-20250805` ou `-2024-08-06`).
  *
  * Exportada para o teste poder provar o que a tabela recusa — é o caso que o
  * `startsWith` antigo deixava passar silenciosamente.
  */
 export function precoDoModelo(model: string): Preco | undefined {
-  return USD_PER_MTOK[model] ?? USD_PER_MTOK[model.replace(/-\d{8}$/, '')];
+  return (
+    USD_PER_MTOK[model] ??
+    USD_PER_MTOK[model.replace(/-\d{8}$/, '')] ??
+    USD_PER_MTOK[model.replace(/-\d{4}-\d{2}-\d{2}$/, '')]
+  );
 }
 
 /**
