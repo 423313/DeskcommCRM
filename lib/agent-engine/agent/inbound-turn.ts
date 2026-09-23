@@ -2843,6 +2843,22 @@ async function executarTurnoDoAgente(
     send_message: tool({
       ...AGENT_TOOL_DEFS.send_message,
       execute: async ({ body }) => {
+        // CORPO VAZIO NÃO SAI. Medido ao vivo (2026-09-19): o `gpt-4o-mini`
+        // chamou `send_message` várias vezes com corpo que virou vazio e o
+        // WhatsApp do cliente recebeu bolhas em branco. O schema garante
+        // min(1) no argumento, mas um `\n`/espaço passa e vira vazio depois do
+        // trim/gates. Recusar aqui devolve ao modelo para reescrever — nunca
+        // manda bolha em branco.
+        if (body.trim() === '') {
+          return {
+            ok: false,
+            error: {
+              code: 'corpo_vazio',
+              message:
+                'O texto da mensagem ficou vazio. Escreva a resposta de verdade e chame send_message de novo.',
+            },
+          };
+        }
         if (claimsCurrentInboundIsEmpty(body, mensagemDoJob)) {
           falseEmptyInboundVetoCount += 1;
           if (falseEmptyInboundVetoCount < MAX_VETOS_DE_FALSO_VAZIO) {
