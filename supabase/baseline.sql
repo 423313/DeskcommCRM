@@ -36578,6 +36578,62 @@ comment on column public.platform_settings.promessa_semantica is
 
 notify pgrst, 'reload schema';
 
+-- ---- cadastro com aprovação: pedidos de empresa nova (migration 0383) ----
+-- Recorte do PR #714, de @betoarts. Depois dos blocos 0253 e 0331 de propósito:
+-- a CHECK nova altera `platform_settings`, que precisa existir numa instalação
+-- NOVA. Em quem ATUALIZA, o `create table if not exists` da 0253 passa sem
+-- efeito e é o `drop constraint` + `add constraint` abaixo que leva o terceiro
+-- modo. Não cria função (o bloco da varredura anon fica acima sem prejuízo) e
+-- a tabela nova vem antes das travas do suporte, que são o último bloco.
+alter table public.platform_settings
+  drop constraint if exists platform_settings_signup_mode;
+alter table public.platform_settings
+  add constraint platform_settings_signup_mode
+  check (signup_mode in ('aberto', 'com_aprovacao', 'so_convite'));
+
+comment on column public.platform_settings.signup_mode is
+  'aberto = qualquer pessoa cria conta em /signup e abre a própria empresa (comportamento histórico). com_aprovacao = a conta é criada, mas a empresa só nasce quando o administrador da instalação aprova o pedido em /admin/cadastro (tabela registration_requests). so_convite = só quem chega com convite válido; sem convite, /signup recusa com tela e /auth/confirm NÃO provisiona organização.';
+
+create table if not exists public.registration_requests (
+  id                          uuid        primary key default gen_random_uuid(),
+  user_id                     uuid        not null references auth.users(id) on delete cascade,
+  requested_organization_name text        not null,
+  status                      text        not null default 'pending',
+  decided_by                  uuid        references auth.users(id) on delete set null,
+  decided_at                  timestamptz,
+  created_at                  timestamptz not null default now(),
+  updated_at                  timestamptz not null default now(),
+  constraint registration_requests_status check (status in ('pending', 'approved', 'rejected')),
+  constraint registration_requests_decision check (
+    (status = 'pending' and decided_at is null)
+    or (status in ('approved', 'rejected') and decided_at is not null)
+  )
+);
+
+comment on table public.registration_requests is
+  'Pedido de empresa nova numa instalação em signup_mode = com_aprovacao. Da INSTALAÇÃO, não do tenant (a organização ainda não existe): RLS ligada sem policy, lida e escrita só pelo servidor. Ver lib/auth/registration-requests.ts.';
+
+-- Um pedido pendente por conta: clique repetido no formulário não enfileira
+-- duplicata para o administrador.
+create unique index if not exists registration_requests_one_pending_per_user
+  on public.registration_requests (user_id)
+  where status = 'pending';
+
+create index if not exists registration_requests_pending_idx
+  on public.registration_requests (created_at)
+  where status = 'pending';
+
+alter table public.registration_requests enable row level security;
+revoke all on public.registration_requests from anon, authenticated;
+grant select, insert, update on public.registration_requests to service_role;
+
+drop trigger if exists trg_registration_requests_touch on public.registration_requests;
+create trigger trg_registration_requests_touch
+  before update on public.registration_requests
+  for each row execute function public.fn_touch_updated_at();
+
+notify pgrst, 'reload schema';
+
 -- ---- O App da Meta sai do `.env` e vira linha da INSTALAÇÃO (migration 0257) ----
 --
 -- O App Secret e o verify token do webhook são do APP, e um App da Meta atende N

@@ -1,4 +1,5 @@
 import { followupGatilhoPresencaHandler } from "@/lib/followup/gatilho-presenca.handler";
+import { followupGatilhoRetornoHandler } from "@/lib/followup/gatilho-retorno.handler";
 /**
  * Centralised handler registration for the event_log dispatcher.
  *
@@ -35,6 +36,9 @@ export function ensureHandlersRegistered(): void {
   // LLM, pelo mesmo motivo dela — é escrita curta no banco, sem rede de
   // terceiro, e não pode ficar atrás de um consumidor que pode estourar.
   registerHandler(campanhaRespostaHandler);
+  // Mesmo critério: o gatilho do cliente que volta é escrita curta no banco e
+  // precisa rodar antes do LLM.
+  registerHandler(followupGatilhoRetornoHandler);
   registerHandler(aiResponseHandler);
   registerHandler(aiSentimentHandler);
   registerHandler(aiHandoffFromSentimentHandler);
