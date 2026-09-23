@@ -33,6 +33,14 @@ export const O_QUE_FAZER_DO_JEV: Readonly<Record<`jev_${MotivoComRede}`, string>
 };
 
 /**
+ * O "por que este modelo" da linha de FALHA do Jev em Execuções — a única que
+ * ele grava, quando ninguém mediu. A frase da origem `jev` ("Medido pelo Jev")
+ * seria falsa justamente nela.
+ */
+export const JEV_FALHOU_SEM_RESERVA =
+  "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.";
+
+/**
  * O aviso da Central, só para falha que não passa sozinha (`exigeAcao`). O
  * título é FIXO porque é a chave do dedupe: uma chave recusada vira UM aviso,
  * não um por mensagem do dia.
@@ -42,7 +50,7 @@ export const AVISO_DO_JEV = {
   comReserva: "Enquanto isso, a IA de sempre mede o clima no lugar dele.",
   semReserva:
     "Enquanto isso, o clima não está sendo medido: ninguém da equipe é chamado quando um cliente se irrita.",
-  rearme: "Depois de resolver, marque este aviso como resolvido para voltar a ser avisado.",
+  rearme: "Este aviso se fecha sozinho quando o Jev voltar a medir.",
 } as const;
 
 export function avisoDoJevNaCentral(

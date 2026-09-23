@@ -3273,6 +3273,12 @@ export const DICIONARIO: Traducoes = {
   "O Jev não respondeu; a IA de sempre mediu no lugar dele.": {
     es: "Jev no respondió; la IA de siempre midió en su lugar.",
   },
+  "A IA de sempre falhou, mas o Jev já tinha medido esta mensagem: nada se perdeu.": {
+    es: "La IA de siempre falló, pero Jev ya había medido este mensaje: no se perdió nada.",
+  },
+  "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.": {
+    es: "Jev estaba activado y no respondió, y no había otra IA para medir en su lugar.",
+  },
   "A TypeSafe não aceitou a chave do Jev. Confira em Credenciais se ela ainda vale, ou cole uma nova.": {
     es: "TypeSafe no aceptó la clave de Jev. Revisa en Credenciales si todavía es válida o pega una nueva.",
   },
@@ -3303,8 +3309,8 @@ export const DICIONARIO: Traducoes = {
   "Enquanto isso, o clima não está sendo medido: ninguém da equipe é chamado quando um cliente se irrita.": {
     es: "Mientras tanto, el clima no se está midiendo: nadie del equipo recibe aviso cuando un cliente se molesta.",
   },
-  "Depois de resolver, marque este aviso como resolvido para voltar a ser avisado.": {
-    es: "Cuando lo resuelvas, marca este aviso como resuelto para volver a recibir avisos.",
+  "Este aviso se fecha sozinho quando o Jev voltar a medir.": {
+    es: "Este aviso se cierra solo cuando Jev vuelva a medir.",
   },
   // O cartão do Jev em IA › Provedores (`app/app/ai/providers/_components/CartaoDoJev.tsx`).
   "Jev — decisões rápidas": { es: "Jev: decisiones rápidas" },

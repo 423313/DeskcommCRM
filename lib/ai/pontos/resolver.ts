@@ -48,7 +48,9 @@ export type OrigemDaEscolha =
   /** O Jev mediu (decidindo, ou observando ao lado da IA de sempre). */
   | "jev"
   /** O Jev estava ligado e não respondeu: a IA de sempre mediu no lugar dele. */
-  | "reserva_do_jev";
+  | "reserva_do_jev"
+  /** Observação: a IA de sempre falhou, e a nota do Jev, já medida, decidiu. */
+  | "jev_cobriu";
 
 export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaEscolha, string> = {
   agente_publicado: "Definido na versão publicada do agente.",
@@ -62,6 +64,7 @@ export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaEscolha, string> = {
   // "o Jev decidiu" seria falso justamente no modo de comparar os dois.
   jev: "Medido pelo Jev. Se ele está em observação, quem decide é a IA de sempre.",
   reserva_do_jev: "O Jev não respondeu; a IA de sempre mediu no lugar dele.",
+  jev_cobriu: "A IA de sempre falhou, mas o Jev já tinha medido esta mensagem: nada se perdeu.",
 };
 
 /** Uma linha de `ai_purpose_bindings`, já filtrada por organização. */

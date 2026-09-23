@@ -1274,7 +1274,7 @@
       "id": "e108",
       "from": "sentimento",
       "to": "central",
-      "label": "falha que pede ação (chave recusada, sem crédito, pergunta recusada) abre aviso kind='other'"
+      "label": "falha que pede ação (chave recusada, sem crédito, pergunta recusada) abre aviso kind='other' — atualizado ao desfecho, fechado sozinho quando o Jev volta a medir"
     },
     {
       "id": "e109",

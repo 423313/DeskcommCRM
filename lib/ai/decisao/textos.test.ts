@@ -8,7 +8,12 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { AVISO_DO_JEV, avisoDoJevNaCentral, O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
+import {
+  AVISO_DO_JEV,
+  avisoDoJevNaCentral,
+  JEV_FALHOU_SEM_RESERVA,
+  O_QUE_FAZER_DO_JEV,
+} from "@/lib/ai/decisao/textos";
 import { EXPLICACAO_DA_ORIGEM } from "@/lib/ai/pontos/resolver";
 import { DICIONARIO, traduzir } from "@/lib/i18n/dicionario";
 
@@ -17,6 +22,8 @@ const TEXTOS = [
   ...Object.values(AVISO_DO_JEV),
   EXPLICACAO_DA_ORIGEM.jev,
   EXPLICACAO_DA_ORIGEM.reserva_do_jev,
+  EXPLICACAO_DA_ORIGEM.jev_cobriu,
+  JEV_FALHOU_SEM_RESERVA,
 ];
 
 describe("textos do Jev para quem opera", () => {
@@ -33,7 +40,7 @@ describe("textos do Jev para quem opera", () => {
     expect(TEXTOS.filter((t) => jargao.test(t))).toEqual([]);
   });
 
-  it("o aviso da Central diz o que fazer, se a IA de sempre cobre, e como rearmar", () => {
+  it("o aviso da Central diz o que fazer, se a IA de sempre cobre, e que se fecha sozinho", () => {
     const comReserva = avisoDoJevNaCentral("credencial_invalida", true, (t) => t);
     expect(comReserva.title).toBe(AVISO_DO_JEV.titulo);
     expect(comReserva.body).toContain(O_QUE_FAZER_DO_JEV.jev_credencial_invalida);

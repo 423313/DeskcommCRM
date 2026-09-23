@@ -25,7 +25,7 @@ import { computeCost } from "@/lib/ai/cost";
 import { MODELO_DO_JEV, type MotivoComRede } from "@/lib/ai/decisao/cliente";
 import { medirClima, type ClimaMedido } from "@/lib/ai/decisao/clima";
 import { lerConfigDoJev } from "@/lib/ai/decisao/config";
-import { avisoDoJevNaCentral, codigoDoErroDoJev } from "@/lib/ai/decisao/textos";
+import { AVISO_DO_JEV, avisoDoJevNaCentral, codigoDoErroDoJev } from "@/lib/ai/decisao/textos";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
@@ -34,7 +34,7 @@ import { logInvocation, type LogInvocationInput } from "@/lib/ai/log-invocation"
 import { DEFAULT_SENTIMENT_THRESHOLD, SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
+import { IDIOMAS, normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SENTIMENT_MODEL = DEFAULT_CLASSIFIER_MODEL; // "anthropic/claude-haiku-4-5"
@@ -255,7 +255,9 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     //  - não tentou (sem chave, disjuntor aberto): nada sai para a rede, e sem
     //    chave o caminho é exatamente o de antes do Jev.
     // Falha que não passa sozinha (chave recusada, sem crédito, pergunta nossa
-    // recusada) abre aviso na Central, com ou sem reserva.
+    // recusada) abre aviso na Central, com ou sem reserva — DEPOIS de se saber
+    // se a reserva mediu, porque é isso que o aviso afirma. O aviso se fecha
+    // sozinho quando o Jev volta a medir.
     const clima: ClimaMedido | null = jev.ligado
       ? await medirClima({ organizationId: event.organization_id, mensagem: body })
       : null;
@@ -280,17 +282,20 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         }),
         finish_reason: null,
       });
+      await fecharAvisoDoJev(admin, event.organization_id);
     }
 
     const jevFalhouNaRede = clima !== null && !clima.ok && clima.tentouRede ? clima : null;
-    if (jevFalhouNaRede?.exigeAcao) {
+    /** `reservaMediu` é o que o corpo do aviso afirma — por isso só se sabe no fim. */
+    const avisarSeExigeAcao = async (reservaMediu: boolean): Promise<void> => {
+      if (!jevFalhouNaRede?.exigeAcao) return;
       await avisarNaCentral(admin, {
         organizationId: event.organization_id,
         idioma: normalizarIdioma(daOrg?.locale ?? null),
         motivo: jevFalhouNaRede.motivo,
-        temReserva: resolvido !== null,
+        temReserva: reservaMediu,
       });
-    }
+    };
     const registrarFalhaDoJev = (): void => {
       if (jevFalhouNaRede === null) return;
       logInvocation({
@@ -313,7 +318,10 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       decisao = { score: clima.score01, engine: "jev", latenciaMs: clima.latenciaMs };
     } else if (resolvido === null) {
       registrarFalhaDoJev();
-      if (jevFalhouNaRede) return { skipped: true, reason: "jev_falhou_sem_reserva" };
+      if (jevFalhouNaRede) {
+        await avisarSeExigeAcao(false);
+        return { skipped: true, reason: "jev_falhou_sem_reserva" };
+      }
       // O Jev está ligado aqui (desligado e sem IA de linguagem, o worker já saiu
       // lá em cima), então o motivo é o dele: `ai_gateway_key_missing` mandava
       // quem lê o log caçar uma chave que não falta quando o disjuntor só segura.
@@ -338,9 +346,14 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         // deixar rastro nenhum: a tela de Execuções, cuja razão de existir é
         // responder "por que falhou", não mostrava nada para este ponto, com o
         // painel dizendo que estava configurado.
+        //
+        // A linha de ERRO não leva `reserva_do_jev`: essa origem diz "a IA de
+        // sempre mediu no lugar dele", e aqui ela não mediu. Quando o Jev já
+        // tinha medido (observação), leva `jev_cobriu` — a tela não mostra a
+        // consequência de um clima que foi medido.
         logInvocation({
           ...comum,
-          ...origem,
+          ...(clima?.ok ? ({ origem_da_escolha: "jev_cobriu" } as const) : {}),
           model: resolvido.modelId,
           prompt_tokens: 0,
           completion_tokens: 0,
@@ -367,6 +380,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
           finish_reason: null,
         });
         decisao = { score: medido.score, engine: "llm", latenciaMs };
+        await avisarSeExigeAcao(true);
       } else if (clima?.ok) {
         // Observação com a IA de sempre caída: o Jev já mediu, e a nota dele é a
         // única que existe. Descartá-la deixaria o cliente irritado passar sem
@@ -376,6 +390,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         // Ninguém mediu. O `throw` mantém o desfecho de antes — quem decide o
         // retorno continua sendo o catch global, que nunca derruba o bot.
         registrarFalhaDoJev();
+        await avisarSeExigeAcao(false);
         throw erroDaIa;
       }
     }
@@ -490,21 +505,41 @@ async function classificarComLlm(
 }
 
 /**
+ * Os títulos do aviso em todo idioma visível: o título é a chave do aviso, e ele
+ * sai traduzido. Casar só o do idioma de agora abriria um segundo aviso igual
+ * quando a organização trocasse de idioma, e deixaria o antigo sem fechar.
+ */
+const TITULOS_DO_AVISO_DO_JEV = [...new Set(IDIOMAS.map((i) => traduzir(AVISO_DO_JEV.titulo, i)))];
+
+/**
+ * Organizações em que ESTE processo já sabe que não há aviso do Jev aberto.
+ * Sem esta memória, cada medição bem-sucedida faria uma escrita na Central.
+ *
+ * ponytail: memória por processo. O dreno do agent-worker e o do cron são dois
+ * processos; quem abriu o aviso é quem o esqueceu daqui, então é ele que o
+ * fecha no próximo sucesso. Se um processo reiniciar, a primeira medição
+ * confere uma vez.
+ */
+const semAvisoDoJevAberto = new Set<string>();
+
+/**
  * Aviso na Central para a falha do Jev que não passa sozinha.
  *
- * `kind='other'` sem referência, e dedupe pelo TÍTULO aberto — o mesmo desenho de
+ * `kind='other'` sem referência, e o título fixo como chave — o mesmo desenho de
  * `lib/agent-engine/edge/llm/run-model-call.ts`: kind novo exigiria reconstruir
  * o CHECK de `agent_inbox_items.kind`, e o título fixo faz uma chave recusada
- * virar UM aviso, não um por mensagem do dia. O texto sai no idioma da
- * organização porque a Central mostra o corpo como veio.
+ * virar UM aviso, não um por mensagem do dia. Com um aviso já aberto, ele é
+ * ATUALIZADO para o desfecho de agora (motivo, se a reserva mediu, gravidade):
+ * sem isso, uma chave recusada coberta pela reserva seguia dizendo "a IA de
+ * sempre mede no lugar dele" depois que a reserva também caiu. O texto sai no
+ * idioma da organização porque a Central mostra o corpo como veio.
  *
- * ponytail: dedupe em duas idas (contar, depois inserir), sem trava. Dois drains
- * medindo a mesma organização no mesmo instante podem abrir dois avisos iguais —
- * a mesma corrida que `abrirItemDeOrcamento` (ai-response-worker) declara, e que
- * o `insert … where not exists` do engine também tem sob READ COMMITTED. Aviso
- * repetido é ruído; ausente seria o clima parado sem nada na tela. Fecha de vez
- * só com índice único parcial (org, título) em `kind='other' and status='open'`,
- * que é migration e exige antes deduplicar os avisos abertos de todo clone.
+ * ponytail: busca e escrita em duas idas, sem trava. Dois drains medindo a mesma
+ * organização no mesmo instante podem abrir dois avisos iguais — a mesma corrida
+ * que `abrirItemDeOrcamento` (ai-response-worker) declara. Aviso repetido é
+ * ruído; ausente seria o clima parado sem nada na tela. Fecha de vez só com
+ * índice único parcial (org, título) em `kind='other' and status='open'`, que é
+ * migration e exige antes deduplicar os avisos abertos de todo clone.
  *
  * Nunca lança: o aviso é o alerta, não a medição.
  */
@@ -512,35 +547,75 @@ async function avisarNaCentral(
   admin: ReturnType<typeof createAdminClient>,
   a: { organizationId: string; idioma: Idioma; motivo: MotivoComRede; temReserva: boolean },
 ): Promise<void> {
+  semAvisoDoJevAberto.delete(a.organizationId);
   const { title, body } = avisoDoJevNaCentral(a.motivo, a.temReserva, (t) => traduzir(t, a.idioma));
-  const { count, error: erroDaBusca } = await admin
+  // Sem reserva, o clima parou de vez: ninguém é chamado quando o cliente se irrita.
+  const severity = a.temReserva ? "warn" : "critical";
+  const { data: abertos, error: erroDaBusca } = await admin
     .from("agent_inbox_items")
-    .select("id", { count: "exact", head: true })
+    .select("id, title, body, severity")
     .eq("organization_id", a.organizationId)
     .eq("kind", "other")
-    .eq("title", title)
-    .eq("status", "open");
+    .in("title", TITULOS_DO_AVISO_DO_JEV)
+    .eq("status", "open")
+    .limit(1);
   if (erroDaBusca) {
-    console.warn("[ai-sentiment-worker] dedupe do aviso do Jev falhou — aviso não aberto", {
+    console.warn("[ai-sentiment-worker] busca do aviso do Jev falhou — aviso não aberto", {
       organization_id: a.organizationId,
       error: erroDaBusca.message,
     });
     return;
   }
-  if ((count ?? 0) > 0) return;
 
-  const { error } = await admin.from("agent_inbox_items").insert({
-    organization_id: a.organizationId,
-    kind: "other",
-    // Sem reserva, o clima parou de vez: ninguém é chamado quando o cliente se irrita.
-    severity: a.temReserva ? "warn" : "critical",
-    title,
-    body,
-  });
+  const aberto = (abertos ?? [])[0] as { id: string; title: string; body: string; severity: string } | undefined;
+  if (aberto && aberto.title === title && aberto.body === body && aberto.severity === severity) return;
+  const { error } = aberto
+    ? await admin
+        .from("agent_inbox_items")
+        .update({ title, body, severity })
+        .eq("id", aberto.id)
+        .eq("organization_id", a.organizationId)
+    : await admin.from("agent_inbox_items").insert({
+        organization_id: a.organizationId,
+        kind: "other",
+        severity,
+        title,
+        body,
+      });
   if (error) {
-    console.warn("[ai-sentiment-worker] aviso do Jev na Central não foi aberto", {
+    console.warn("[ai-sentiment-worker] aviso do Jev na Central não foi gravado", {
       organization_id: a.organizationId,
       error: error.message,
     });
   }
+}
+
+/**
+ * O Jev voltou a medir: o aviso aberto deixa de ser verdade e se fecha. Sem
+ * isto, depois de trocar a chave ou pôr crédito, a Central seguia dizendo "O Jev
+ * parou de medir" até alguém fechá-la à mão.
+ *
+ * Nunca lança, e só escreve na primeira medição depois de um aviso (ver
+ * `semAvisoDoJevAberto`).
+ */
+async function fecharAvisoDoJev(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+): Promise<void> {
+  if (semAvisoDoJevAberto.has(organizationId)) return;
+  const { error } = await admin
+    .from("agent_inbox_items")
+    .update({ status: "resolved" })
+    .eq("organization_id", organizationId)
+    .eq("kind", "other")
+    .in("title", TITULOS_DO_AVISO_DO_JEV)
+    .eq("status", "open");
+  if (error) {
+    console.warn("[ai-sentiment-worker] aviso do Jev não foi fechado", {
+      organization_id: organizationId,
+      error: error.message,
+    });
+    return;
+  }
+  semAvisoDoJevAberto.add(organizationId);
 }

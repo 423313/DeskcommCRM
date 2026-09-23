@@ -13,7 +13,8 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
+import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
+import { JEV_FALHOU_SEM_RESERVA, O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
 import { rotuloDoProvedor } from "@/lib/ai/pontos/provedores";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM, type OrigemDaEscolha } from "@/lib/ai/pontos/resolver";
@@ -111,7 +112,14 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   if (purpose) q = q.eq("purpose", purpose);
   if (status) q = q.eq("status", status);
-  if (provider) q = q.eq("provider", provider);
+  // "Só o Jev" inclui as linhas da reserva que o cobriu: são as que o cartão
+  // conta em "Vezes que a IA de sempre cobriu o Jev", e o link do cartão traz
+  // para cá. Filtrar só pelo provedor escondia justamente elas.
+  if (provider === PROVEDOR_DO_JEV) {
+    q = q.or(`provider.eq.${PROVEDOR_DO_JEV},origem_da_escolha.eq.reserva_do_jev`);
+  } else if (provider) {
+    q = q.eq("provider", provider);
+  }
 
   const { data, error } = await q;
   if (error) return fail("query_failed", error.message, 500);
@@ -129,11 +137,21 @@ export async function GET(req: NextRequest): Promise<Response> {
       // a algo que a pessoa já viu acontecer no negócio dela. Só em `erro`: a
       // linha da reserva que cobriu o Jev sai `ok` (nada se perdeu), e a do Jev
       // só sai `erro` quando ninguém mediu — aí a consequência é real.
-      consequencia: l.status === "erro" ? (ponto?.sintomaDeFalha ?? null) : null,
+      // `jev_cobriu` é a exceção do `erro`: a IA de sempre caiu em observação,
+      // mas a nota do Jev já estava na mão e decidiu — nada se perdeu.
+      consequencia:
+        l.status === "erro" && l.origem_da_escolha !== "jev_cobriu"
+          ? (ponto?.sintomaDeFalha ?? null)
+          : null,
       oQueFazer: l.status === "erro" ? (O_QUE_FAZER[l.error_code ?? ""] ?? null) : null,
-      porQueEsteModelo: l.origem_da_escolha
-        ? (EXPLICACAO_DA_ORIGEM[l.origem_da_escolha as OrigemDaEscolha] ?? null)
-        : null,
+      // A linha de falha do Jev só existe quando ninguém mediu: "Medido pelo Jev"
+      // seria falso justamente nela.
+      porQueEsteModelo:
+        l.origem_da_escolha === "jev" && l.status === "erro"
+          ? JEV_FALHOU_SEM_RESERVA
+          : l.origem_da_escolha
+            ? (EXPLICACAO_DA_ORIGEM[l.origem_da_escolha as OrigemDaEscolha] ?? null)
+            : null,
     };
   });
 

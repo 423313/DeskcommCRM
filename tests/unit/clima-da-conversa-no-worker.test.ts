@@ -49,6 +49,7 @@ import { generateObject } from "ai";
 import { registrarFalha } from "@/lib/ai/decisao/disjuntor";
 import { AVISO_DO_JEV, O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { traduzir } from "@/lib/i18n/dicionario";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { processSentiment } from "@/workers/ai-sentiment-worker";
 
@@ -541,6 +542,8 @@ describe("o Jev no worker de clima", () => {
     expect(linhasDoJev(banco)[0]).toMatchObject({ status: "ok" });
     expect(linhasDaIaDeSempre(banco)[0], "a falha da IA de sempre segue visível em Execuções").toMatchObject({
       status: "erro",
+      // Sem consequência na tela: o Jev já tinha medido.
+      origem_da_escolha: "jev_cobriu",
     });
     expect(banco.messages[0]!.metadata).toMatchObject({ sentiment_score: 0, sentiment_engine: "jev" });
     expect(alertas(rpcs)[0]!["p_payload"]).toMatchObject({ sentiment_score: 0, sentiment_engine: "jev" });
@@ -616,5 +619,78 @@ describe("o Jev no worker de clima", () => {
     expect(duracao, "o worker esperou o fornecedor além do teto").toBeLessThan(2_000);
     expect(duracao, "cortou antes do teto — então não foi o teto que cortou").toBeGreaterThanOrEqual(1_400);
     expect(linhasDaIaDeSempre(banco)[0]).toMatchObject({ origem_da_escolha: "reserva_do_jev" });
+  });
+});
+
+// ── O aviso da Central diz o desfecho de verdade, e se fecha sozinho ─────────
+
+describe("o aviso do Jev na Central", () => {
+  beforeEach(() => {
+    chamadasAoJev = [];
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const recusa402 = async () => new Response("{}", { status: 402 });
+
+  it("a reserva existe mas TAMBÉM cai: o aviso é crítico e não afirma que ela mede", async () => {
+    vi.mocked(generateObject).mockRejectedValue(new Error("Overloaded"));
+    fornecedor(recusa402);
+    const { resultado, banco } = await rodar(jevLigado("decide"));
+
+    expect(resultado).toEqual({ skipped: true, reason: "classify_failed" });
+    expect(banco.agent_inbox_items).toHaveLength(1);
+    expect(banco.agent_inbox_items[0]).toMatchObject({ severity: "critical" });
+    expect(banco.agent_inbox_items[0]!.body).toContain(AVISO_DO_JEV.semReserva);
+    expect(banco.agent_inbox_items[0]!.body).not.toContain(AVISO_DO_JEV.comReserva);
+    // A linha de erro da IA de sempre não diz "mediu no lugar dele".
+    expect(linhasDaIaDeSempre(banco)[0]).toMatchObject({ status: "erro", origem_da_escolha: null });
+  });
+
+  it("o aviso aberto acompanha o desfecho: coberto vira crítico quando a reserva some", async () => {
+    fornecedor(async () => new Response(JSON.stringify({ detail: { error_type: "authentication_error" } }), { status: 401 }));
+    const cenario = jevLigado("decide");
+    const primeira = await rodar(cenario);
+    expect(primeira.banco.agent_inbox_items[0]).toMatchObject({ severity: "warn" });
+
+    // A reserva cai também; o aviso aberto é o MESMO, atualizado — não um segundo.
+    vi.mocked(generateObject).mockRejectedValue(new Error("Overloaded"));
+    fornecedor(recusa402);
+    const segunda = await rodar(cenario, primeira.banco);
+    expect(segunda.banco.agent_inbox_items).toHaveLength(1);
+    expect(segunda.banco.agent_inbox_items[0]).toMatchObject({ severity: "critical", status: "open" });
+    expect(segunda.banco.agent_inbox_items[0]!.body).toContain(O_QUE_FAZER_DO_JEV.jev_sem_credito);
+    expect(segunda.banco.agent_inbox_items[0]!.body).toContain(AVISO_DO_JEV.semReserva);
+  });
+
+  it("o Jev volta a medir: o aviso aberto se fecha sozinho", async () => {
+    fornecedor(recusa402);
+    const cenario = jevLigado("decide");
+    const primeira = await rodar(cenario);
+    expect(primeira.banco.agent_inbox_items[0]).toMatchObject({ status: "open" });
+
+    fornecedor(async () => respostaDoJev(4));
+    const segunda = await rodar(cenario, primeira.banco);
+    expect(segunda.resultado).toEqual({ skipped: false, sentiment_score: 1 });
+    expect(segunda.banco.agent_inbox_items).toHaveLength(1);
+    expect(segunda.banco.agent_inbox_items[0]).toMatchObject({ status: "resolved" });
+  });
+
+  it("o aviso aberto em outro idioma é o mesmo aviso — trocar o idioma não abre um segundo", async () => {
+    fornecedor(recusa402);
+    const cenario = jevLigado("decide");
+    const banco = montarBanco(cenario);
+    banco.agent_inbox_items.push({
+      organization_id: ORG,
+      kind: "other",
+      severity: "warn",
+      status: "open",
+      title: traduzir(AVISO_DO_JEV.titulo, "es"),
+      body: "texto antigo",
+    });
+    const { banco: depois } = await rodar(cenario, banco);
+    expect(depois.agent_inbox_items).toHaveLength(1);
+    expect(depois.agent_inbox_items[0]!.title).toBe(AVISO_DO_JEV.titulo);
   });
 });

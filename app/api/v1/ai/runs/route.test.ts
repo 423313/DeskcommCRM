@@ -9,7 +9,7 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
+import { JEV_FALHOU_SEM_RESERVA, O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM } from "@/lib/ai/pontos/resolver";
 import { requireRole } from "@/lib/auth/require-role";
@@ -61,6 +61,10 @@ beforeEach(() => {
       filtros.push([coluna, valor]);
       return chain;
     },
+    or: (expressao: string) => {
+      filtros.push(["or", expressao]);
+      return chain;
+    },
     then: (resolve: (r: unknown) => unknown) => resolve({ data: linhas, error: null }),
   };
   vi.mocked(createClient).mockResolvedValue({
@@ -78,9 +82,17 @@ async function pedir(query = "") {
 
 describe("GET /api/v1/ai/runs", () => {
   it("?provider= vira filtro na consulta, e a organização é a da sessão", async () => {
-    const { status } = await pedir("?provider=typesafe");
+    const { status } = await pedir("?provider=anthropic");
     expect(status).toBe(200);
-    expect(filtros).toContainEqual(["provider", "typesafe"]);
+    expect(filtros).toContainEqual(["provider", "anthropic"]);
+    expect(filtros).toContainEqual(["organization_id", ORG]);
+  });
+
+  it("'Só o Jev' traz também as linhas da reserva que o cobriu", async () => {
+    // O cartão conta "Vezes que a IA de sempre cobriu o Jev" e o link dele
+    // vem para cá: filtrar só pelo provedor escondia justamente essas linhas.
+    await pedir("?provider=typesafe");
+    expect(filtros).toContainEqual(["or", "provider.eq.typesafe,origem_da_escolha.eq.reserva_do_jev"]);
     expect(filtros).toContainEqual(["organization_id", ORG]);
   });
 
@@ -122,5 +134,16 @@ describe("GET /api/v1/ai/runs", () => {
 
     expect(falha.consequencia).toBe(PONTO_POR_ID.get("sentiment_classify")?.sintomaDeFalha);
     expect(falha.oQueFazer).toBe(O_QUE_FAZER_DO_JEV.jev_credencial_invalida);
+    // "Medido pelo Jev" seria falso na única linha em que ninguém mediu.
+    expect(falha.porQueEsteModelo).toBe(JEV_FALHOU_SEM_RESERVA);
+  });
+
+  it("observação com a IA de sempre caída: a falha dela não afirma consequência que não houve", async () => {
+    linhas = [linha({ status: "erro", error_code: "provedor_indisponivel", origem_da_escolha: "jev_cobriu" })];
+    const { corpo } = await pedir();
+    const [linhaDaIa] = corpo.data.execucoes;
+    expect(linhaDaIa.consequencia).toBeNull();
+    expect(linhaDaIa.oQueFazer).not.toBeNull();
+    expect(linhaDaIa.porQueEsteModelo).toBe(EXPLICACAO_DA_ORIGEM.jev_cobriu);
   });
 });
