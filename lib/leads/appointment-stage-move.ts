@@ -82,7 +82,7 @@ export async function moverLeadParaEtapaDeAgendamento(
     return { moveu: false, motivo: "lead_fechado" };
   }
 
-  const { data: etapa, error: erroEtapa } = await admin
+  const { data: etapaData, error: erroEtapa } = await admin
     .from("crm_stages")
     .select("id, name")
     .eq("pipeline_id", leadRow.pipeline_id)
@@ -96,6 +96,19 @@ export async function moverLeadParaEtapaDeAgendamento(
       error: erroEtapa.message,
     });
     return { moveu: false, motivo: "indisponivel" };
+  }
+  let etapa = etapaData;
+  if (!etapa && slugAlvo.includes("-")) {
+    const { data: etapaLegada } = await admin
+      .from("crm_stages")
+      .select("id, name")
+      .eq("pipeline_id", leadRow.pipeline_id)
+      .eq("slug", slugAlvo.replace(/-/g, "_"))
+      .eq("is_archived", false)
+      .maybeSingle();
+    if (etapaLegada) {
+      etapa = etapaLegada;
+    }
   }
   if (!etapa) {
     return { moveu: false, motivo: "sem_etapa_mapeada" };

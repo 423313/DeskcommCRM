@@ -81,7 +81,7 @@ export async function moverLeadParaEtapaDeHandoff(
     return { moveu: false, motivo: "lead_fechado" };
   }
 
-  const { data: etapa, error: erroEtapa } = await admin
+  const { data: etapaData, error: erroEtapa } = await admin
     .from("crm_stages")
     .select("id, name")
     .eq("pipeline_id", leadRow.pipeline_id)
@@ -95,6 +95,19 @@ export async function moverLeadParaEtapaDeHandoff(
       error: erroEtapa.message,
     });
     return { moveu: false, motivo: "indisponivel" };
+  }
+  let etapa = etapaData;
+  if (!etapa && SLUG_ETAPA_HANDOFF.includes("-")) {
+    const { data: etapaLegada } = await admin
+      .from("crm_stages")
+      .select("id, name")
+      .eq("pipeline_id", leadRow.pipeline_id)
+      .eq("slug", SLUG_ETAPA_HANDOFF.replace(/-/g, "_"))
+      .eq("is_archived", false)
+      .maybeSingle();
+    if (etapaLegada) {
+      etapa = etapaLegada;
+    }
   }
   if (!etapa) {
     return { moveu: false, motivo: "sem_etapa_de_handoff" };
