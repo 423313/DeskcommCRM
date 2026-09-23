@@ -6185,6 +6185,8 @@ export const DICIONARIO: Traducoes = {
   "Adiado por uma pessoa da equipe": { es: "Pospuesto por una persona del equipo" },
   "Passo pulado por uma pessoa da equipe": { es: "Paso saltado por una persona del equipo" },
   "Começou porque o negócio entrou numa etapa": { es: "Empezó porque el negocio entró en una etapa" },
+  "Começou porque o negócio nasceu": { es: "Empezó porque el negocio nació" },
+  "o card acabou de ser criado": { es: "la tarjeta acaba de crearse" },
   "Começou porque o agente pediu ajuda de um humano": {
     es: "Empezó porque el agente pidió ayuda a un humano",
   },
@@ -6887,6 +6889,14 @@ export const DICIONARIO: Traducoes = {
   "Ex: Cliente desistiu por X motivo": { es: "Ej: El cliente desistió por X motivo" },
   "Confirmar": { es: "Confirmar" },
   "Lead criado": { es: "Lead creado" },
+  "O fluxo começa quando um negócio nasce: a primeira mensagem que abre o card, um formulário ou o cadastro manual. A entrada na fila leva poucos minutos, não é instantânea.":
+    {
+      es: "El flujo empieza cuando nace un negocio: el primer mensaje que abre la tarjeta, un formulario o el alta manual. La entrada en la fila tarda unos minutos, no es instantánea.",
+    },
+  "Quem escreveu pode receber a resposta do agente no mesmo instante — sem espera, saem duas mensagens juntas.":
+    {
+      es: "Quien escribió puede recibir la respuesta del agente en el mismo instante — sin espera, salen dos mensajes juntos.",
+    },
   "Crie um lead manualmente neste pipeline.": { es: "Crea un lead manualmente en este pipeline." },
   "Ex: Pedido Maria — combo presente": { es: "Ej: Pedido María — combo regalo" },
   "Contexto, observações, links…": { es: "Contexto, observaciones, enlaces…" },

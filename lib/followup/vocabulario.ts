@@ -563,6 +563,7 @@ export const GATILHOS: Record<TipoDeGatilho, string> = {
   appointment_no_show:"Falta confirmada pela equipe",
   manual: "Manual",
   webhook: "Disparado por uma automação em Webhooks",
+  lead_created: "Lead criado",
   silence: "Silêncio",
   stage_change: "Mudança de etapa no funil",
   // "Caso" é a palavra que a tela de escalação já usa. O rótulo diz o FATO que
