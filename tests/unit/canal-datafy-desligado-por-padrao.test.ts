@@ -130,3 +130,53 @@ describe("a entrada do canal", () => {
     expect(ingestMetaInbound).not.toHaveBeenCalled();
   });
 });
+
+describe("a revisão do modelo volta pelo webhook", () => {
+  it("atualiza o espelho DESTA conexão, sem precisar de sincronizar", async () => {
+    process.env.DATAFY_ENABLED = "true";
+    const filtros: [string, unknown][] = [];
+    const patches: Record<string, unknown>[] = [];
+    const admin = {
+      from: (tabela: string) => {
+        expect(tabela).toBe("meta_templates");
+        const q = {
+          update: (p: Record<string, unknown>) => {
+            patches.push(p);
+            return q;
+          },
+          eq: (coluna: string, valor: unknown) => {
+            filtros.push([coluna, valor]);
+            return q;
+          },
+          then: (ok: (r: unknown) => unknown) => ok({ error: null }),
+        };
+        return q;
+      },
+    };
+    const corpo = JSON.stringify({
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          id: "WABA",
+          changes: [
+            {
+              field: "message_template_status_update",
+              value: { event: "APPROVED", message_template_name: "boas_vindas", message_template_language: "pt_BR" },
+            },
+          ],
+        },
+      ],
+    });
+    const r = await handleInboundWebhook(admin as never, { session: sessao, rawBody: corpo, headers: assinado(corpo), secret: SEGREDO });
+    expect(r).toMatchObject({ ok: true, body: { outcomes: ["modelo"] } });
+    expect(patches[0]).toMatchObject({ status: "APPROVED" });
+    expect(filtros).toEqual(
+      expect.arrayContaining([
+        ["organization_id", "org-1"],
+        ["channel_session_id", "sess-1"],
+        ["name", "boas_vindas"],
+        ["language", "pt_BR"],
+      ]),
+    );
+  });
+});

@@ -2843,6 +2843,7 @@ export const DICIONARIO: Traducoes = {
   "a cada 100": { es: "por cada 100" },
   "a maioria responde em": { es: "la mayoría responde en" },
   "agora usa": { es: "ahora usa" },
+  "anotado pelo agente": { es: "anotado por el agente" },
   "aprendido automaticamente": { es: "aprendido automáticamente" },
   ativa: { es: "activa" },
   "atualizada em": { es: "actualizada el" },
@@ -11529,6 +11530,36 @@ export const DICIONARIO: Traducoes = {
   "Conecte um banco de dados de outro sistema para o agente consultar em tempo real.": {
     es: "Conecta una base de datos de otro sistema para que el agente la consulte en tiempo real.",
   },
+  // ─── Editor de skill, histórico e restauração (recorte do #1130, @vgamkt) ───
+  "Informe pelo menos uma palavra-chave de ativação.": { es: "Indica al menos una palabra clave de activación." },
+  "A descrição é obrigatória.": { es: "La descripción es obligatoria." },
+  "O corpo da skill não pode ficar vazio.": { es: "El cuerpo de la skill no puede quedar vacío." },
+  "Linhas no corpo": { es: "Líneas en el cuerpo" },
+  "atualizada — já vale para os agentes.": { es: "actualizada: ya vale para los agentes." },
+  "Editar skill": { es: "Editar skill" },
+  "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente.": {
+    es: "Guardar crea una versión nueva (la anterior queda en el historial). El cuerpo solo entra en la conversación cuando una de las palabras clave aparece en el mensaje del cliente.",
+  },
+  "Não foi possível carregar a skill.": { es: "No se pudo cargar la skill." },
+  "Esta skill veio de um pacote com arquivos. Para mudar o texto, edite o pacote e envie o .zip de novo.": {
+    es: "Esta skill vino de un paquete con archivos. Para cambiar el texto, edita el paquete y vuelve a enviar el .zip.",
+  },
+  "Descrição (aparece no índice do agente)": { es: "Descripción (aparece en el índice del agente)" },
+  "Palavras-chave de ativação (separe por vírgula)": { es: "Palabras clave de activación (separadas por coma)" },
+  "consulta, horário, preço": { es: "consulta, horario, precio" },
+  "A skill é carregada quando o cliente escreve uma destas palavras.": {
+    es: "La skill se carga cuando el cliente escribe una de estas palabras.",
+  },
+  "Corpo (o procedimento que o agente segue)": { es: "Cuerpo (el procedimiento que sigue el agente)" },
+  linhas: { es: "líneas" },
+  "em uso": { es: "en uso" },
+  "Versão restaurada.": { es: "Versión restaurada." },
+  Restaurar: { es: "Restaurar" },
+  "Use Editar para ajustar o texto de uma skill instalada — cada salvamento cria uma versão nova e a anterior fica no histórico. Também dá para reenviar um .zip com o mesmo nome; a sua versão passa a valer no lugar da do catálogo.": {
+    es: "Usa Editar para ajustar el texto de una skill instalada: cada guardado crea una versión nueva y la anterior queda en el historial. También puedes volver a enviar un .zip con el mismo nombre; tu versión pasa a valer en lugar de la del catálogo.",
+  },
+  "Versão não encontrada para esta skill.": { es: "No se encontró esa versión para esta skill." },
+  "Versão da skill não encontrada.": { es: "No se encontró la versión de la skill." },
 };
 
 /**

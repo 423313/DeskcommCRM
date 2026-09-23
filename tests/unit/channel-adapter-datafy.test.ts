@@ -8,16 +8,25 @@ vi.mock("@/lib/channels/graph-parceiro/credentials", async (original) => ({
   resolveGraphPartnerCreds: vi.fn(),
   graphPartnerGraphBase: () => "https://cloud.example.test/v1",
 }));
+vi.mock("@/lib/channels/meta/send-template-for-session", () => ({
+  sendTemplateForSession: vi.fn(),
+}));
 
 import { datafyAdapter } from "@/lib/channels/adapters/datafy";
 import { resolveGraphPartnerCreds } from "@/lib/channels/graph-parceiro/credentials";
+import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import type { OutboundEnvelope } from "@/lib/channels/types";
 
 /**
  * Adapter do canal Datafy (recorte do #1130, @vgamkt): o adapter oficial com
  * outro host e outro token — e que NÃO envia com o canal desligado.
  */
-const CREDS = { phoneNumberId: "106540352242922", token: "sk_live_abc" };
+const CREDS = {
+  channelSessionId: "sess-1",
+  phoneNumberId: "106540352242922",
+  wabaId: "366634483210360",
+  token: "sk_live_abc",
+};
 
 function envelope(over: Partial<OutboundEnvelope> = {}): OutboundEnvelope {
   return {
@@ -35,6 +44,7 @@ beforeEach(() => {
   process.env.DATAFY_ENABLED = "true";
   vi.mocked(resolveGraphPartnerCreds).mockReset();
   vi.mocked(resolveGraphPartnerCreds).mockResolvedValue(CREDS);
+  vi.mocked(sendTemplateForSession).mockReset();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -98,6 +108,48 @@ describe("adapter datafy", () => {
       new Response(JSON.stringify({ error: { code: 131047, message: "window closed" } }), { status: 400 }),
     );
     await expect(datafyAdapter.send(envelope())).rejects.toThrow(/datafy_131047/);
+  });
+
+  it("sendTemplate usa o transporte do parceiro (host + token), não o da Meta", async () => {
+    vi.mocked(sendTemplateForSession).mockResolvedValue("wamid.T");
+
+    const r = await datafyAdapter.sendTemplate!({
+      organizationId: "org-1",
+      sessionRef: "106540352242922",
+      to: "5531999998888",
+      name: "pedido_confirmado",
+      language: "pt_BR",
+      values: { "1": "João" },
+    });
+
+    expect(r.externalId).toBe("wamid.T");
+    const chamada = vi.mocked(sendTemplateForSession).mock.calls[0];
+    expect(chamada?.[1].transport).toEqual({
+      phoneNumberId: "106540352242922",
+      token: "sk_live_abc",
+      graphBase: "https://cloud.example.test/v1",
+      errorPrefix: "datafy",
+    });
+    expect(chamada?.[1].organizationId).toBe("org-1");
+    // O espelho é por conexão: sem o escopo, o mesmo modelo espelhado pelo
+    // canal oficial dá duas linhas e a consulta do envio falha.
+    expect(chamada?.[1].channelSessionId).toBe("sess-1");
+  });
+
+  it("sendTemplate com o canal DESLIGADO não envia nem consulta credencial", async () => {
+    process.env.DATAFY_ENABLED = "";
+    await expect(
+      datafyAdapter.sendTemplate!({
+        organizationId: "org-1",
+        sessionRef: "106540352242922",
+        to: "5531999998888",
+        name: "pedido_confirmado",
+        language: "pt_BR",
+        values: {},
+      }),
+    ).rejects.toThrow(/^datafy_not_configured/);
+    expect(resolveGraphPartnerCreds).not.toHaveBeenCalled();
+    expect(sendTemplateForSession).not.toHaveBeenCalled();
   });
 
   it("checkHealth mapeia 401 para FAILED e rede para reachable=false", async () => {
