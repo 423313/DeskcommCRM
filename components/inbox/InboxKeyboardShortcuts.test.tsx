@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useCallback, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { InboxKeyboardShortcuts } from "./InboxKeyboardShortcuts";
@@ -57,5 +58,39 @@ describe("atalho de teclado 'e' — fechar conversa", () => {
     await user.keyboard("e");
 
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("com a confirmação aberta, 'j' não troca a conversa e 'Fechar' encerra a que foi confirmada", async () => {
+    // Reproduz o InboxLayout: `onClose` lê a seleção na hora do clique. Com o
+    // `window.confirm()` a página travava; o AlertDialog não trava, então sem
+    // desligar os atalhos "e", "j", "Fechar" encerrava c2 em nome de c1.
+    const fechou = vi.fn();
+    function Inbox() {
+      const [sel, setSel] = useState<string | null>("c1");
+      const onClose = useCallback(() => {
+        if (sel) fechou(sel);
+      }, [sel]);
+      return (
+        <InboxKeyboardShortcuts
+          visibleIds={["c1", "c2"]}
+          selectedId={sel}
+          onSelect={setSel}
+          onFocusReply={vi.fn()}
+          onClaim={vi.fn()}
+          onClose={onClose}
+          onToggleHelp={vi.fn()}
+        />
+      );
+    }
+    const user = userEvent.setup();
+    render(<Inbox />);
+
+    await user.keyboard("e");
+    const dialogo = await screen.findByRole("alertdialog");
+    await user.keyboard("j");
+    await user.click(within(dialogo).getByRole("button", { name: "Fechar" }));
+
+    await waitFor(() => expect(fechou).toHaveBeenCalledTimes(1));
+    expect(fechou).toHaveBeenCalledWith("c1");
   });
 });
