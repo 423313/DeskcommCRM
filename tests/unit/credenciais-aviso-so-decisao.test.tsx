@@ -21,7 +21,7 @@ import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 
-const banco = vi.hoisted(() => ({ linhas: [] as unknown[] }));
+const banco = vi.hoisted(() => ({ linhas: [] as unknown[], settings: {} as Record<string, unknown> }));
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn(), delete: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
@@ -43,6 +43,11 @@ vi.mock("@/lib/supabase/server", () => ({
       const chain: Record<string, unknown> = {
         then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) =>
           Promise.resolve({ data: dados, error: null }).then(ok, erro),
+        // O interruptor do Jev, para o "Usada em" da chave dele.
+        maybeSingle: async () => ({
+          data: tabela === "organizations" ? { settings: banco.settings } : null,
+          error: null,
+        }),
       };
       for (const m of ["select", "eq", "order", "in"]) chain[m] = () => chain;
       return chain;
@@ -93,7 +98,10 @@ async function abrir(linhas: CredentialRow[]) {
   );
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  banco.settings = {};
+});
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
@@ -122,5 +130,25 @@ describe("tela de Credenciais — o aviso de que falta a IA principal", () => {
     ambiente([]);
     await abrir([JEV, ANTHROPIC]);
     expect(screen.queryByTestId("aviso-so-decisao")).toBeNull();
+  });
+});
+
+describe("tela de Credenciais — onde a chave do Jev trabalha", () => {
+  const ACEITE = { em: "2026-09-01T12:00:00.000Z", por: "44444444-4444-4444-8444-444444444444" };
+
+  it("Jev ligado: a chave que ele usa diz \"Usada em\" com a tarefa dele", async () => {
+    ambiente([]);
+    banco.settings = { jev: { ligado: true, modo: "observacao", aceite: ACEITE } };
+    await abrir([JEV, ANTHROPIC]);
+    expect(screen.getByTestId("credencial-usada-em")).toHaveTextContent("Usada em: Medir o clima da conversa");
+    // Só na chave do Jev: a de conversa não ganha a linha.
+    expect(screen.getAllByTestId("credencial-usada-em")).toHaveLength(1);
+  });
+
+  it("Jev desligado: a chave dele não trabalha em nada", async () => {
+    ambiente([]);
+    banco.settings = { jev: { ligado: false, modo: "observacao", aceite: ACEITE } };
+    await abrir([JEV, ANTHROPIC]);
+    expect(screen.queryByTestId("credencial-usada-em")).toBeNull();
   });
 });
