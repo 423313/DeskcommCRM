@@ -37142,6 +37142,18 @@ select 'MODULO_BANCO_EXTERNO',
        false, false
 on conflict (chave) do nothing;
 
+-- ---- a memória da organização aceita a origem 'agent' (migration 0385) ----
+-- `crm_save_org_memory` grava `source = 'agent'`, e o CHECK inline da 0067 (que o
+-- Postgres batiza `org_memory_entries_source_check`) só aceitava `manual` e
+-- `flywheel`: toda chamada da ferramenta falhava com 23514 (diagnóstico de
+-- @vgamkt, #1130). Bloco ÚNICO desta constraint, com o conjunto final; as linhas
+-- existentes cabem nele, então reaplicar no `update.sh` não viola nada.
+alter table public.org_memory_entries
+  drop constraint if exists org_memory_entries_source_check;
+alter table public.org_memory_entries
+  add constraint org_memory_entries_source_check
+  check (source in ('manual', 'flywheel', 'agent'));
+
 -- ---- módulos instalados são reaplicados, depois de toda tabela do núcleo (migration 0340) ----
 --
 -- A provisionadora de cada módulo instalado roda de novo, sobre o núcleo já

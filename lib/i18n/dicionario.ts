@@ -2843,6 +2843,7 @@ export const DICIONARIO: Traducoes = {
   "a cada 100": { es: "por cada 100" },
   "a maioria responde em": { es: "la mayoría responde en" },
   "agora usa": { es: "ahora usa" },
+  "anotado pelo agente": { es: "anotado por el agente" },
   "aprendido automaticamente": { es: "aprendido automáticamente" },
   ativa: { es: "activa" },
   "atualizada em": { es: "actualizada el" },
