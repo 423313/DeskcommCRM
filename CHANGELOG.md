@@ -5318,6 +5318,9 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [1.13.0] — 2026-09-04
 
+> **Esta versão não tem imagens publicadas** — o build da tag foi cancelado, e as três imagens não
+> existem no registro. Nada para fazer: quem atualiza chega à 1.14.0 ou superior.
+
 ### Alterado
 
 - **O CRM instala em Postgres 15, não só em 17** Até agora a instalação exigia Postgres 17. Quem tentasse usar um banco 15 ou 16
