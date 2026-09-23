@@ -8,8 +8,12 @@ import { z } from "zod";
 import { flowGraphSchema } from "./graph-schema";
 import { MAX_THRESHOLD_MINUTES, MIN_THRESHOLD_MINUTES } from "./gap-de-retorno";
 
-/** Vocabulário da coluna `surface` (0167). A UI não recorta mais por ela. */
-export const FOLLOWUP_FLOW_SURFACES = ["followup", "crm_automation"] as const;
+/**
+ * Vocabulário da coluna `surface` (0167; `atendimento` na 0394 — roteiro de
+ * perguntas conduzido no turno, módulo opcional `fluxos_atendimento`). A UI não
+ * recorta mais por ela; o CHECK do banco espelha esta tupla.
+ */
+export const FOLLOWUP_FLOW_SURFACES = ["followup", "crm_automation", "atendimento"] as const;
 export type FollowupFlowSurface = (typeof FOLLOWUP_FLOW_SURFACES)[number];
 
 export const createFollowupFlowSchema = z.strictObject({
