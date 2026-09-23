@@ -15,12 +15,16 @@
  * que é o único jeito de falar com o lead depois de 24 h.
  *
  * Por isso a busca tem duas etapas: a linha da própria conexão e, só se não
- * houver, a linha sem conexão (a do canal oficial). A linha de OUTRA conexão
- * nunca entra — é o que impede o número A de ser conferido com a definição do
- * número B, o defeito que a v1.45.0 fechou. Duas linhas na mesma etapa seguem
- * sendo erro (`maybeSingle`), como antes.
+ * houver, a linha sem conexão DA CONTA OFICIAL DESTA SESSÃO — e só quando a
+ * sessão É do canal oficial. Sem essas duas travas, o segundo passo serviria a
+ * um número de parceiro a definição do canal oficial (ou a linha órfã de um
+ * parceiro apagado, que o `on delete set null` deixa sem conexão), que é o
+ * defeito que a v1.45.0 fechou. A `waba_id` é a MESMA que o sync grava
+ * (`channel_sessions.meta_waba_id`, via `metaSessionForOrg`).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { CHANNEL_PROVIDER_META } from "./capabilities";
 
 export interface ChaveDaDefinicao {
   organizationId: string;
@@ -53,6 +57,22 @@ export async function linhaDoEspelho<T>(
     return { data: (daConexao.data as T | null) ?? null, error: daConexao.error };
   }
 
-  const semConexao = await base().is("channel_session_id", null).maybeSingle();
+  // Só o canal oficial tem linha sem conexão, e só a da conta dele serve.
+  const { data: sessao, error: erroDaSessao } = await db
+    .from("channel_sessions")
+    .select("provider, meta_waba_id")
+    .eq("organization_id", chave.organizationId)
+    .eq("id", chave.channelSessionId)
+    .maybeSingle();
+  if (erroDaSessao) return { data: null, error: erroDaSessao };
+  const oficial = sessao as { provider?: string; meta_waba_id?: string | null } | null;
+  if (oficial?.provider !== CHANNEL_PROVIDER_META || !oficial.meta_waba_id) {
+    return { data: null, error: null };
+  }
+
+  const semConexao = await base()
+    .is("channel_session_id", null)
+    .eq("waba_id", oficial.meta_waba_id)
+    .maybeSingle();
   return { data: (semConexao.data as T | null) ?? null, error: semConexao.error };
 }

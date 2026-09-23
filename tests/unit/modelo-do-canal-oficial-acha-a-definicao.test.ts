@@ -10,20 +10,21 @@ import { linhaDoEspelho } from "@/lib/channels/linha-do-espelho";
 const ORG = "org-1";
 const OFICIAL = "sessao-oficial";
 const PARCEIRO = "sessao-parceiro";
+const WABA = "waba-oficial";
 
-type Linha = { organization_id: string; name: string; language: string; channel_session_id: string | null; status: string };
+type Linha = Record<string, unknown>;
 
-/** Supabase mínimo que APLICA os filtros `eq`/`is` sobre as linhas. */
-function banco(linhas: Linha[]) {
+/** Supabase mínimo que APLICA os filtros `eq`/`is`, com uma tabela por nome. */
+function banco(tabelas: Record<string, Linha[]>) {
   return {
-    from: () => {
+    from: (tabela: string) => {
       const filtros: Array<(l: Linha) => boolean> = [];
       const q = {
         select: () => q,
-        eq: (col: keyof Linha, val: unknown) => (filtros.push((l) => l[col] === val), q),
-        is: (col: keyof Linha, val: null) => (filtros.push((l) => l[col] === val), q),
+        eq: (col: string, val: unknown) => (filtros.push((l) => l[col] === val), q),
+        is: (col: string, val: null) => (filtros.push((l) => l[col] === val), q),
         maybeSingle: async () => {
-          const achadas = linhas.filter((l) => filtros.every((f) => f(l)));
+          const achadas = (tabelas[tabela] ?? []).filter((l) => filtros.every((f) => f(l)));
           if (achadas.length > 1) return { data: null, error: { message: "multiple rows" } };
           return { data: achadas[0] ?? null, error: null };
         },
@@ -33,47 +34,73 @@ function banco(linhas: Linha[]) {
   } as never;
 }
 
-const linha = (channel_session_id: string | null, status: string): Linha => ({
+const sessoes: Linha[] = [
+  { organization_id: ORG, id: OFICIAL, provider: "meta_cloud", meta_waba_id: WABA },
+  { organization_id: ORG, id: PARCEIRO, provider: "datafy", meta_waba_id: null },
+];
+
+const modelo = (over: Linha): Linha => ({
   organization_id: ORG,
   name: "retomada",
   language: "pt_BR",
-  channel_session_id,
-  status,
+  channel_session_id: null,
+  waba_id: WABA,
+  status: "APPROVED",
+  ...over,
 });
 
 const buscar = (db: never, channelSessionId: string | null) =>
   linhaDoEspelho<Linha>(db, "*", { organizationId: ORG, name: "retomada", language: "pt_BR", channelSessionId });
 
 describe("a definição do modelo para uma conexão", () => {
-  it("canal oficial: acha a linha do sync, gravada sem conexão", async () => {
-    const r = await buscar(banco([linha(null, "APPROVED")]), OFICIAL);
+  it("canal oficial: acha a linha do sync, gravada sem conexão, na WABA da sessão", async () => {
+    const r = await buscar(banco({ channel_sessions: sessoes, meta_templates: [modelo({})] }), OFICIAL);
     expect(r.error).toBeNull();
     expect(r.data?.status).toBe("APPROVED");
   });
 
   it("oficial + parceiro com o mesmo nome: cada conexão acha a SUA linha, sem ambiguidade", async () => {
-    const db = banco([linha(null, "APPROVED"), linha(PARCEIRO, "PENDING")]);
+    const db = banco({
+      channel_sessions: sessoes,
+      meta_templates: [modelo({}), modelo({ channel_session_id: PARCEIRO, waba_id: "waba-parceiro", status: "PENDING" })],
+    });
     expect((await buscar(db, OFICIAL)).data?.channel_session_id).toBeNull();
     expect((await buscar(db, PARCEIRO)).data?.status).toBe("PENDING");
   });
 
-  it("a linha de OUTRA conexão nunca serve (o número A não é conferido com a definição do B)", async () => {
-    const r = await buscar(banco([linha(PARCEIRO, "APPROVED")]), OFICIAL);
+  it("parceiro SEM linha própria nunca herda a definição do canal oficial", async () => {
+    const r = await buscar(banco({ channel_sessions: sessoes, meta_templates: [modelo({})] }), PARCEIRO);
     expect(r.data).toBeNull();
   });
 
-  it("linha de OUTRA organização nunca serve — nem a da conexão, nem a sem conexão", async () => {
-    const deOutra = (channel_session_id: string | null): Linha => ({
-      ...linha(channel_session_id, "APPROVED"),
-      organization_id: "org-2",
+  it("linha órfã sem conexão de outra conta (parceiro apagado) não serve ao canal oficial", async () => {
+    const r = await buscar(
+      banco({ channel_sessions: sessoes, meta_templates: [modelo({ waba_id: "waba-parceiro-apagado" })] }),
+      OFICIAL,
+    );
+    expect(r.data).toBeNull();
+  });
+
+  it("duas contas oficiais com o mesmo modelo: cada sessão acha a da SUA conta, sem ambiguidade", async () => {
+    const db = banco({
+      channel_sessions: [...sessoes, { organization_id: ORG, id: "sessao-2", provider: "meta_cloud", meta_waba_id: "waba-2" }],
+      meta_templates: [modelo({}), modelo({ waba_id: "waba-2", status: "PAUSED" })],
     });
-    const db = banco([deOutra(OFICIAL), deOutra(null)]);
+    expect((await buscar(db, OFICIAL)).data?.status).toBe("APPROVED");
+    expect((await buscar(db, "sessao-2")).data?.status).toBe("PAUSED");
+  });
+
+  it("linha de OUTRA organização nunca serve — nem a da conexão, nem a sem conexão", async () => {
+    const db = banco({
+      channel_sessions: sessoes,
+      meta_templates: [modelo({ organization_id: "org-2", channel_session_id: OFICIAL }), modelo({ organization_id: "org-2" })],
+    });
     expect((await buscar(db, OFICIAL)).data).toBeNull();
     expect((await buscar(db, null)).data).toBeNull();
   });
 
   it("sem conexão (base anterior à 0144): busca como sempre buscou", async () => {
-    const r = await buscar(banco([linha(null, "APPROVED")]), null);
+    const r = await buscar(banco({ meta_templates: [modelo({})] }), null);
     expect(r.data?.status).toBe("APPROVED");
   });
 });
