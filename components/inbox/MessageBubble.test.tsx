@@ -135,3 +135,23 @@ describe("MessageBubble — rótulo de origem", () => {
     expect(screen.queryByText("IA")).not.toBeInTheDocument();
   });
 });
+
+describe("MessageBubble — contenção de layout e quebra de palavras (#1451)", () => {
+  it("texto longo sem espaços (ex: chave Pix) tem classe de quebra forçada [overflow-wrap:anywhere] e bolha tem min-w-0", () => {
+    const pixLongo =
+      "00020126580014br.gov.bcb.pix0136a1b2c3d4-e5f6-7890-abcd-ef1234567890520400005303986540510.005802BR5913TESTE TESTE6008BRASILIA62070503***6304ABCD";
+    const { container } = render(<MessageBubble message={msg({ body: pixLongo })} />);
+
+    const p = screen.getByText(pixLongo);
+    expect(p).toBeInTheDocument();
+    expect(p.className).toContain("[overflow-wrap:anywhere]");
+
+    const bolha = p.closest(".max-w-\\[75\\%\\]");
+    expect(bolha).not.toBeNull();
+    expect(bolha?.className).toContain("min-w-0");
+
+    const linha = container.firstElementChild as HTMLElement;
+    expect(linha.className).toContain("min-w-0");
+  });
+});
+
