@@ -128,7 +128,10 @@ describe("fiação — o \"digitando…\" cobre o tempo do modelo", () => {
     // o modelo inteiro sem indicador nenhum.
     const modelo = FONTE_INBOUND.indexOf("    const turn = await runModelCall(");
     expect(modelo).toBeGreaterThan(-1);
-    const janela = FONTE_INBOUND.slice(modelo - 700, modelo);
+    // Entre a montagem das mensagens de abertura e a chamada — nada roda no meio.
+    const abertura = FONTE_INBOUND.lastIndexOf("    const openingMessages: ModelMessage[] =", modelo);
+    expect(abertura).toBeGreaterThan(-1);
+    const janela = FONTE_INBOUND.slice(abertura, modelo);
     expect(janela).toMatch(
       /if \(channel\?\.signalTyping && turnoVaiFalarComOLead\(liveJob\(\)\)\) \{\s*acenderDigitando\(/,
     );
