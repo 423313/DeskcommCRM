@@ -15,6 +15,13 @@ import { env } from "@/lib/env";
 
 /** Aceita `NextRequest` e qualquer objeto com estas duas peças (testes). */
 export function basePublicaDaInstalacao(req: { headers: Headers; nextUrl: URL }): string {
+  // Quando META_WEBHOOK_BASE_URL estiver configurada, ela define a URL pública
+  // dos webhooks da Meta separada da URL do painel (ex.: painel em VPN/rede interna e webhook público).
+  const metaConfigurada = env.META_WEBHOOK_BASE_URL?.trim();
+  if (metaConfigurada && !metaConfigurada.includes("placeholder.invalid")) {
+    return metaConfigurada.replace(/\/+$/, "");
+  }
+
   const configurada = env.NEXT_PUBLIC_APP_URL;
   const usavel = configurada && !configurada.includes("placeholder.invalid") ? configurada : null;
   const base = usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
@@ -24,3 +31,5 @@ export function basePublicaDaInstalacao(req: { headers: Headers; nextUrl: URL })
   // override do número (`(#100) Invalid callback URL`).
   return base.replace(/\/+$/, "");
 }
+
+export const basePublicaDoWebhookMeta = basePublicaDaInstalacao;
