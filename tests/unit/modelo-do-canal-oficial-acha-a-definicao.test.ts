@@ -62,6 +62,16 @@ describe("a definição do modelo para uma conexão", () => {
     expect(r.data).toBeNull();
   });
 
+  it("linha de OUTRA organização nunca serve — nem a da conexão, nem a sem conexão", async () => {
+    const deOutra = (channel_session_id: string | null): Linha => ({
+      ...linha(channel_session_id, "APPROVED"),
+      organization_id: "org-2",
+    });
+    const db = banco([deOutra(OFICIAL), deOutra(null)]);
+    expect((await buscar(db, OFICIAL)).data).toBeNull();
+    expect((await buscar(db, null)).data).toBeNull();
+  });
+
   it("sem conexão (base anterior à 0144): busca como sempre buscou", async () => {
     const r = await buscar(banco([linha(null, "APPROVED")]), null);
     expect(r.data?.status).toBe("APPROVED");
