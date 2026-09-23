@@ -21,6 +21,7 @@ import { computeCost } from "@/lib/ai/cost";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { DEFAULT_CLASSIFIER_MODEL, isAiGatewayConfigured } from "@/lib/ai/gateway";
+import { medirClima } from "@/lib/ai/decisao/clima";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation } from "@/lib/ai/log-invocation";
 import { SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
@@ -203,73 +204,111 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         ? agentConfig["sentiment_threshold"]
         : DEFAULT_SENTIMENT_THRESHOLD;
 
-    // ── Call LLM ──────────────────────────────────────────────────────────
-    const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), CLASSIFY_TIMEOUT_MS);
-
     const start = Date.now();
     let result: z.infer<typeof sentimentSchema>;
     let promptTokens = 0;
     let completionTokens = 0;
+    /**
+     * Qual caminho produziu a nota. Vai para `llm_calls.model` — sem isto, uma
+     * classificação feita pelo System One apareceria na tela de Execuções
+     * atribuída ao modelo de linguagem que não foi chamado, que é exatamente o
+     * defeito de atribuição que este worker já corrigiu uma vez.
+     */
+    let modeloQueMediu = resolvido.modelId;
 
-    try {
-      const generated = await generateObject({
-        model: sentimentModel,
-        schema: sentimentSchema,
-        system: SENTIMENT_SYSTEM_PROMPT,
-        prompt: body,
-        temperature: 0,
-        // 80 era pequeno demais e nunca tinha sido exercitado (o worker morria
-        // antes, na autenticação). `generateObject` com Anthropic usa modo
-        // FERRAMENTA: o JSON vai dentro de um tool_use, que custa bem mais que
-        // texto puro. Medido com mensagens reais desta instalação: 2 de 3
-        // paravam em `stop_reason: max_tokens` com o JSON cortado no meio —
-        // daí o "No object generated: response did not match schema", que
-        // parecia erro de esquema e era truncamento. Pico observado: 146 sem
-        // as descrições, 84 com elas. 256 dá folga sem virar cheque em branco.
-        maxOutputTokens: 256,
-        abortSignal: abortController.signal,
-      });
+    // ── System One primeiro, quando a organização o tiver configurado ──────
+    //
+    // Este é o ponto que estreia o caminho novo, e foi escolhido por rodar FORA
+    // do caminho crítico (worker paralelo — o cliente não espera por ele) e por
+    // já falhar em silêncio por desenho: um fornecedor em early access não tem
+    // como travar atendimento nenhum daqui.
+    //
+    // `null` cobre TODA ausência — sem credencial (que é o estado de toda
+    // instalação hoje), fora do ar, resposta ilegível, score fora da escala — e
+    // o caminho de sempre assume logo abaixo. Enquanto ninguém configurar, isto
+    // é uma chamada que volta `null` em memória, sem tocar a rede.
+    //
+    // Limite conhecido e deliberado: `resolverModeloDoPonto` roda ANTES e já
+    // devolveu cedo quando a org não tem LLM configurado. Ou seja, o System One
+    // só é tentado onde existe um caminho para cair. Menor raio na estreia.
+    const clima = await medirClima({
+      organizationId: event.organization_id,
+      mensagem: body,
+    });
 
-      result = generated.object;
+    if (clima !== null) {
+      // `reasoning_short` vazio porque o System One não escreve — e o worker já
+      // DESCARTAVA esse campo (ele existia para o LLM raciocinar antes de
+      // pontuar). Aqui não há o que descartar: a nota já vem calibrada, e os
+      // tokens de saída que se pagava para jogar fora deixam de existir.
+      result = { sentiment_score: clima.score, reasoning_short: "" };
+      promptTokens = clima.tokensDeEntrada;
+      completionTokens = 0;
+      modeloQueMediu = "typesafe/jev-latest";
+    } else {
+      // ── Call LLM ──────────────────────────────────────────────────────────
+      const abortController = new AbortController();
+      const timeout = setTimeout(() => abortController.abort(), CLASSIFY_TIMEOUT_MS);
 
-      const usage = generated.usage as
-        | {
-            inputTokens?: number;
-            outputTokens?: number;
-            promptTokens?: number;
-            completionTokens?: number;
-          }
-        | undefined;
-      promptTokens = usage?.inputTokens ?? usage?.promptTokens ?? 0;
-      completionTokens = usage?.outputTokens ?? usage?.completionTokens ?? 0;
-    } catch (err) {
-      // A FALHA também vira linha em `llm_calls`. A 0128 fez isso para o seam do
-      // agent-engine, e este worker não passa por lá — então, até aqui, escolher
-      // no painel um modelo que não existe fazia toda classificação falhar sem
-      // deixar rastro nenhum: a tela de Execuções, cuja razão de existir é
-      // responder "por que falhou", não mostrava nada para este ponto, com o
-      // painel dizendo que estava configurado.
-      //
-      // O `throw` mantém o desfecho de antes — quem decide o retorno continua
-      // sendo o catch global, que nunca deixa este worker derrubar o bot.
-      logInvocation({
-        organization_id: event.organization_id,
-        agent_id: agent?.id ?? null,
-        conversation_id: conversationId ?? message.conversation_id ?? null,
-        message_id: messageId,
-        invocation_kind: "sentiment_classify",
-        model: resolvido.modelId,
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        latency_ms: Date.now() - start,
-        cost_cents: 0,
-        finish_reason: "error",
-        error_payload: { message: err instanceof Error ? err.message : String(err) },
-      });
-      throw err;
-    } finally {
-      clearTimeout(timeout);
+      try {
+        const generated = await generateObject({
+          model: sentimentModel,
+          schema: sentimentSchema,
+          system: SENTIMENT_SYSTEM_PROMPT,
+          prompt: body,
+          temperature: 0,
+          // 80 era pequeno demais e nunca tinha sido exercitado (o worker morria
+          // antes, na autenticação). `generateObject` com Anthropic usa modo
+          // FERRAMENTA: o JSON vai dentro de um tool_use, que custa bem mais que
+          // texto puro. Medido com mensagens reais desta instalação: 2 de 3
+          // paravam em `stop_reason: max_tokens` com o JSON cortado no meio —
+          // daí o "No object generated: response did not match schema", que
+          // parecia erro de esquema e era truncamento. Pico observado: 146 sem
+          // as descrições, 84 com elas. 256 dá folga sem virar cheque em branco.
+          maxOutputTokens: 256,
+          abortSignal: abortController.signal,
+        });
+
+        result = generated.object;
+
+        const usage = generated.usage as
+          | {
+              inputTokens?: number;
+              outputTokens?: number;
+              promptTokens?: number;
+              completionTokens?: number;
+            }
+          | undefined;
+        promptTokens = usage?.inputTokens ?? usage?.promptTokens ?? 0;
+        completionTokens = usage?.outputTokens ?? usage?.completionTokens ?? 0;
+      } catch (err) {
+        // A FALHA também vira linha em `llm_calls`. A 0128 fez isso para o seam do
+        // agent-engine, e este worker não passa por lá — então, até aqui, escolher
+        // no painel um modelo que não existe fazia toda classificação falhar sem
+        // deixar rastro nenhum: a tela de Execuções, cuja razão de existir é
+        // responder "por que falhou", não mostrava nada para este ponto, com o
+        // painel dizendo que estava configurado.
+        //
+        // O `throw` mantém o desfecho de antes — quem decide o retorno continua
+        // sendo o catch global, que nunca deixa este worker derrubar o bot.
+        logInvocation({
+          organization_id: event.organization_id,
+          agent_id: agent?.id ?? null,
+          conversation_id: conversationId ?? message.conversation_id ?? null,
+          message_id: messageId,
+          invocation_kind: "sentiment_classify",
+          model: resolvido.modelId,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          latency_ms: Date.now() - start,
+          cost_cents: 0,
+          finish_reason: "error",
+          error_payload: { message: err instanceof Error ? err.message : String(err) },
+        });
+        throw err;
+      } finally {
+        clearTimeout(timeout);
+      }
     }
 
     const latencyMs = Date.now() - start;
@@ -306,12 +345,12 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       conversation_id: conversationId ?? message.conversation_id ?? null,
       message_id: messageId,
       invocation_kind: "sentiment_classify",
-      model: resolvido.modelId,
+      model: modeloQueMediu,
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
       latency_ms: latencyMs,
       cost_cents: await computeCost({
-        model: resolvido.modelId,
+        model: modeloQueMediu,
         promptTokens,
         completionTokens,
       }),

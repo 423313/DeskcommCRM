@@ -822,6 +822,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da API da OpenAI (embeddings da busca e transcrição de áudio). É o destino do request: trocar pelo domínio do revendedor faria a chamada não chegar a lugar nenhum.",
   },
+  "api.typesafe.ai": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint do System One (`lib/ai/decisao/cliente.ts`) — o modelo que devolve decisão tipada em vez de texto, usado hoje no medidor de clima da conversa. É o destino do request, com a chave da PRÓPRIA organização: trocar pelo domínio do revendedor faria a chamada não chegar a lugar nenhum. Mesma razão das outras entradas de FORNECEDOR, e vale registrar que a allowlist de egress deriva DESTA constante, então esconder o nome aqui quebraria também a contenção de saída.",
+  },
   "api.anthropic.com": {
     categoria: "FORNECEDOR",
     motivo:
