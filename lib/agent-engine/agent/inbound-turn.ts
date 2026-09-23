@@ -2577,8 +2577,14 @@ async function executarTurnoDoAgente(
   // Sinal do matcher com o CONTEXTO recente (não só a última mensagem): a
   // conversa sobre motos continua e a skill não pode "cair" quando o cliente
   // responde a escolha ("A 2025"), senão as fotos da moto escolhida não saem.
-  const skillSignal = recentInboundSignal(effectiveContext.messages);
-  const skillMatch = matchSkills(skills, skillSignal);
+  //
+  // SÓ o matcher lê a janela. `skillSignal` segue sendo a ÚLTIMA inbound: ele
+  // também alimenta o classificador de jailbreak e os candidatos de divergência
+  // de estágio, e uma tentativa de jailbreak de cinco mensagens atrás não pode
+  // seguir marcando todo turno seguinte.
+  const skillSignal = latestInboundSignal(effectiveContext.messages);
+  const sinalDoMatcher = recentInboundSignal(effectiveContext.messages);
+  const skillMatch = matchSkills(skills, sinalDoMatcher);
   const matchedSkillsBlock = renderMatchedSkillBodies(skillMatch.matched);
   if (!preview && deps.knobs.goldenCandidatesDir !== undefined) {
     await recordSkillMissCandidates(
@@ -2587,7 +2593,7 @@ async function executarTurnoDoAgente(
         tenantId,
         leadId,
         jobId: liveJob().id,
-        signal: skillSignal,
+        signal: sinalDoMatcher,
         candidates: skillMatch.missCandidates,
       },
       runLog,
