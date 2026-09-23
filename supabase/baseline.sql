@@ -9269,15 +9269,21 @@ alter table public.channel_sessions
   add column if not exists wacalls_jid text,
   add column if not exists wacalls_paired_at timestamptz;
 
+-- datafy (migration 0387, canal Datafy — recorte do #1130) — colunas do provider
+-- que espelha a Cloud API, nullable e antes das constraints que as referenciam.
+alter table public.channel_sessions
+  add column if not exists datafy_phone_number_id text,
+  add column if not exists datafy_waba_id text,
+  add column if not exists datafy_token_encrypted bytea;
+
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_check;
 
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
-  -- 'wacalls' (migration 0233, chamada de voz) e 'zernio_social' (migration
-  -- 0368, redes sociais nativas) somados AQUI — UM bloco só por constraint,
-  -- doutrina de baseline (não duplicar drop+add por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text]));
+  -- 'wacalls' (0233), 'zernio_social' (0368) e 'datafy' (0387) somados AQUI —
+  -- UM bloco só por constraint (não duplicar drop+add por migration).
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
@@ -9289,7 +9295,8 @@ alter table public.channel_sessions
     -- 'zernio_social' (migration 0368) endereça pelo MESMO `zernio_account_id`:
     -- é o mesmo intermediário, com outra superfície de canal.
     (provider in ('zernio', 'zernio_social') and zernio_account_id is not null) or
-    (provider = 'wacalls'    and wacalls_session_id    is not null)
+    (provider = 'wacalls'    and wacalls_session_id    is not null) or
+    (provider = 'datafy'     and datafy_phone_number_id is not null)
   );
 
 comment on column public.channel_sessions.zernio_account_id is
@@ -14243,7 +14250,7 @@ alter table public.webhook_events_log
   drop constraint if exists webhook_events_log_provider_check;
 alter table public.webhook_events_log
   add constraint webhook_events_log_provider_check check (provider in (
-    'waha', 'nuvemshop', 'generic', 'meta_cloud', 'zernio'
+    'waha', 'nuvemshop', 'generic', 'meta_cloud', 'zernio', 'datafy'
   ));
 
 -- ---- a marca da instalação sai do .env e vai para o banco (migration 0155) ----
@@ -36361,6 +36368,41 @@ alter table public.meta_templates
   check (jsonb_typeof(saved_values) = 'object');
 comment on column public.meta_templates.saved_values is
   'Valores que o operador salvou para reaproveitar em todo disparo deste modelo, chaveados como template_values (slotKey: header:1, button0:1). Só link de mídia: a rota de escrita recusa valor de texto, que costuma ser dado de pessoa. Sobrevive à sincronização, que não lista esta coluna no upsert.';
+
+-- ---- canal de WhatsApp Datafy (migration 0387) ----
+-- Recorte do PR #1130, de @vgamkt. As COLUNAS e o VOCABULÁRIO dos CHECKs de
+-- `channel_sessions` (provider e ref) e de `webhook_events_log` vivem nos blocos
+-- ÚNICOS deles, lá em cima — doutrina "uma constraint, um bloco"
+-- (`tests/unit/baseline-constraint-reconstruida.test.ts`). Aqui só o que é desta
+-- migration e de mais ninguém: a dedup e o índice único entre ativos (desenho da
+-- 0165). A dedup roda ANTES do índice, para o `update.sh` de um banco que já
+-- tenha dois ativos com o mesmo número consertar em vez de quebrar.
+with ativos as (
+  select id,
+         row_number() over (
+           partition by datafy_phone_number_id
+           order by created_at desc nulls last, id desc
+         ) as posicao
+    from public.channel_sessions
+   where archived_at is null
+     and datafy_phone_number_id is not null
+)
+update public.channel_sessions s
+   set datafy_phone_number_id = s.datafy_phone_number_id || '-conflito-' || s.id::text
+  from ativos a
+ where a.id = s.id
+   and a.posicao > 1;
+
+create unique index if not exists channel_sessions_datafy_phone_number_id_ativo_unique
+  on public.channel_sessions (datafy_phone_number_id)
+  where archived_at is null and datafy_phone_number_id is not null;
+
+comment on column public.channel_sessions.datafy_phone_number_id is
+  'phone_number_id da WABA no canal Datafy (parceiro que espelha a Cloud API). É o sessionRef deste canal. Espelhado em lib/channels/session-ref.ts.';
+comment on column public.channel_sessions.datafy_token_encrypted is
+  'Token do Datafy (sk_live_…), cifrado por fn_encrypt_oauth. Nunca volta à tela depois de gravado.';
+
+-- ---- fim canal de WhatsApp Datafy (migration 0387) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
