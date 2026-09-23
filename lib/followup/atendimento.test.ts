@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type pg from "pg";
 
 import type { FlowEdge, FlowGraph, FlowNode } from "./graph-schema";
-import { finalizarFluxoDeAtendimento, mapearChecklist, melhorFluxoPorGatilho, montarNotaDeConclusao, renderBlocoDeAtendimento, situacaoDoChecklist, type ChecklistDeAtendimento, type EstadoDeAtendimento } from "./atendimento";
+import {
+  finalizarFluxoDeAtendimento,
+  mapearChecklist,
+  melhorFluxoPorGatilho,
+  montarResumoDoRoteiro,
+  processarInboundDoFluxo,
+  renderBlocoDeAtendimento,
+  situacaoDoChecklist,
+  valoresDoChecklist,
+  type ChecklistDeAtendimento,
+  type EstadoDeAtendimento,
+} from "./atendimento";
 
 function no(node: Partial<FlowNode> & Pick<FlowNode, "id" | "type" | "config">): FlowNode {
   return { label: node.id, position: { x: 0, y: 0 }, ...node } as FlowNode;
@@ -164,194 +173,273 @@ describe("situacaoDoChecklist", () => {
   });
 });
 
-describe("montarNotaDeConclusao (síntese do fluxo concluído)", () => {
-  const built = mapearChecklist(
-    grafo(
-      [trigger("t"), collect("c1", "cidade"), collect("c2", "cnh"), end("e")],
-      [aresta("t", "c1"), aresta("c1", "c2"), aresta("c2", "e")],
-    ),
-  );
-  if (!built.ok) throw new Error("grafo de teste inválido");
-  const lista = built.checklist;
+// ─────────────────────────────────────────────────────────────────────────────
+// Armazenamento do port (plano 2026-09-23, D1–D4): resposta em
+// contacts.custom_fields, trilha em followup_enrollment_events SEM o valor,
+// tentativas contadas da trilha, execução em 'coletando'.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const estado = (valores: Record<string, string>): EstadoDeAtendimento => ({
+const ORG = "org-A";
+
+function lista(nodes: FlowNode[], edges: FlowEdge[]): ChecklistDeAtendimento {
+  const r = mapearChecklist(grafo(nodes, edges));
+  if (!r.ok) throw new Error(r.erro);
+  return r.checklist;
+}
+
+function estadoCom(
+  checklist: ChecklistDeAtendimento,
+  valores: Record<string, string> = {},
+  tentativas: Record<string, number> = {},
+): EstadoDeAtendimento {
+  return {
     enrollment: {
-      id: "enr",
-      pointer_id: "ptr",
-      version_id: "ver",
+      id: "enr-A",
+      pointer_id: "ptr-A",
+      version_id: "ver-A",
       contact_id: "ct",
-      current_node_id: "n",
-      status: "active",
+      current_node_id: "t",
+      status: "coletando",
     },
-    nomeDoFluxo: "Qualificação",
-    checklist: lista,
+    nomeDoFluxo: "Cadastro",
+    checklist,
     valores,
-    tentativas: {},
+    tentativas,
     maxTentativas: 3,
-    situacao: situacaoDoChecklist(lista, new Set(Object.keys(valores))),
+    situacao: situacaoDoChecklist(checklist, new Set(Object.keys(valores)), { tentativas, maxTentativas: 3 }),
+  };
+}
+
+/**
+ * Dublê de `pg.Pool`: registra SQL/parâmetros; eventos com `idempotency_key`
+ * repetida não entram (como o índice `idx_followup_events_idem`).
+ */
+function poolFake(opts: { proximoGrafo?: FlowGraph; contatoAnonimizado?: boolean } = {}) {
+  const sqls: string[] = [];
+  const params: unknown[][] = [];
+  const chaves = new Set<string>();
+  const query = async (sql: string, values: unknown[] = []) => {
+    sqls.push(sql);
+    params.push(values);
+    if (/insert into followup_enrollment_events/.test(sql)) {
+      const chave = values[5] as string | null;
+      if (chave !== null) {
+        if (chaves.has(chave)) return { rows: [], rowCount: 0 };
+        chaves.add(chave);
+      }
+      return { rows: [], rowCount: 1 };
+    }
+    if (/update contacts/.test(sql)) return { rows: [], rowCount: opts.contatoAnonimizado ? 0 : 1 };
+    if (/update followup_enrollments/.test(sql)) return { rows: [], rowCount: 1 };
+    if (/select p\.active_version_id, v\.graph/.test(sql) && opts.proximoGrafo) {
+      return { rows: [{ active_version_id: "ver-B", graph: opts.proximoGrafo }], rowCount: 1 };
+    }
+    if (/insert into followup_enrollments/.test(sql)) return { rows: [{ id: "enr-B" }], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  };
+  const eventos = () =>
+    sqls
+      .map((s, i) => ({ s, p: params[i]! }))
+      .filter(({ s }) => /insert into followup_enrollment_events/.test(s))
+      .map(({ p }) => ({ tipo: p[3] as string, payload: JSON.parse(p[4] as string) as Record<string, unknown> }));
+  return { pool: { query } as unknown as pg.Pool, sqls, params, eventos };
+}
+
+const cidadeECnh = () =>
+  lista(
+    [trigger("t"), collect("c1", "cidade"), collect("c2", "cnh"), end("e")],
+    [aresta("t", "c1"), aresta("c1", "c2"), aresta("c2", "e")],
+  );
+
+describe("valoresDoChecklist (a resposta mora em custom_fields)", () => {
+  it("lê só as chaves do roteiro, como texto", () => {
+    expect(
+      valoresDoChecklist(cidadeECnh(), { cidade: "Campinas", cnh: true, link_site: "x", vazio: "" }),
+    ).toEqual({ cidade: "Campinas", cnh: "true" });
   });
 
-  it("traz o nome do fluxo e os valores normalizados, na ordem das perguntas", () => {
-    const nota = montarNotaDeConclusao(estado({ cidade: "Campinas", cnh: "true" }));
-    expect(nota).toContain('Fluxo "Qualificação"');
-    expect(nota).toContain("cidade: Campinas");
-    expect(nota).toContain("cnh: true");
-    expect(nota.indexOf("cidade:")).toBeLessThan(nota.indexOf("cnh:"));
+  it("campo que o contato JÁ tem não fica pendente — o roteiro não repergunta", () => {
+    const c = cidadeECnh();
+    const valores = valoresDoChecklist(c, { cidade: "Campinas" });
+    const s = situacaoDoChecklist(c, new Set(Object.keys(valores)));
+    expect(s.pendentes.map((n) => n.config.key)).toEqual(["cnh"]);
   });
 
-  it("marca o que NÃO foi respondido em vez de omitir (o próximo passo sabe o que ficou aberto)", () => {
-    const nota = montarNotaDeConclusao(estado({ cidade: "Campinas" }));
-    expect(nota).toContain("cnh: (não respondido)");
-  });
-
-  it("injeta a síntese do fluxo anterior no bloco do turno (passa-bastão)", () => {
-    const comNota = { ...estado({ cidade: "Campinas" }), notaAnterior: 'Fluxo "Qualificação" — cidade: Campinas' };
-    expect(renderBlocoDeAtendimento(comNota)).toContain(
-      'Contexto do atendimento anterior: Fluxo "Qualificação" — cidade: Campinas',
-    );
-    // Sem nota anterior, o cabeçalho falso não aparece.
-    expect(renderBlocoDeAtendimento(estado({ cidade: "Campinas" }))).not.toContain(
-      "Contexto do atendimento anterior",
-    );
+  it("lixo em custom_fields não quebra (null, array)", () => {
+    expect(valoresDoChecklist(cidadeECnh(), null)).toEqual({});
+    expect(valoresDoChecklist(cidadeECnh(), [1, 2])).toEqual({});
   });
 });
 
-describe("finalizarFluxoDeAtendimento (conclusão + encadeamento da venda)", () => {
-  const endCom = (ao: unknown) =>
+describe("processarInboundDoFluxo — gravação e trilha", () => {
+  it("resposta do validador vai para custom_fields do contato, filtrada pela organização", async () => {
+    const { pool, sqls, params } = poolFake();
+    await processarInboundDoFluxo(pool, {
+      organizationId: ORG,
+      estado: estadoCom(cidadeECnh()),
+      texto: "moro em Campinas",
+      messageId: "m1",
+      validacoes: [{ campo: "cidade", valor: "Campinas" }],
+    });
+    const i = sqls.findIndex((s) => /update contacts/.test(s));
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(sqls[i]).toMatch(/custom_fields = coalesce\(custom_fields, '\{\}'::jsonb\) \|\|/);
+    expect(sqls[i]).toMatch(/where organization_id = \$1 and id = \$2/);
+    expect(params[i]).toEqual([ORG, "ct", "cidade", "Campinas"]);
+  });
+
+  it("a TRILHA nunca carrega o valor respondido", async () => {
+    const { pool, eventos } = poolFake();
+    await processarInboundDoFluxo(pool, {
+      organizationId: ORG,
+      estado: estadoCom(cidadeECnh()),
+      texto: "Campinas, e tenho CNH sim",
+      messageId: "m1",
+      validacoes: [
+        { campo: "cidade", valor: "Campinas" },
+        { campo: "cnh", valor: "true" },
+      ],
+    });
+    const trilha = JSON.stringify(eventos());
+    expect(eventos().map((e) => e.tipo)).toEqual([
+      "roteiro_mensagem",
+      "roteiro_resposta",
+      "roteiro_resposta",
+      "roteiro_concluido",
+    ]);
+    expect(trilha).not.toContain("Campinas");
+    expect(trilha).not.toContain("valor");
+  });
+
+  it("mesma mensagem reprocessada (retry da fila) não grava nem conta de novo", async () => {
+    const { pool, sqls } = poolFake();
+    const args = {
+      organizationId: ORG,
+      estado: estadoCom(cidadeECnh()),
+      texto: "ok",
+      messageId: "m-repetida",
+    };
+    await processarInboundDoFluxo(pool, args);
+    const depoisDoPrimeiro = sqls.length;
+    const r = await processarInboundDoFluxo(pool, args);
+    expect(r.concluiu).toBe(false);
+    // Só a tentativa de reivindicar a mensagem — nada de tentativa nem gravação.
+    expect(sqls.length - depoisDoPrimeiro).toBe(1);
+  });
+
+  it("aceno conta tentativa na PRIMEIRA pendente; desvio não conta", async () => {
+    const aceno = poolFake();
+    await processarInboundDoFluxo(aceno.pool, {
+      organizationId: ORG,
+      estado: estadoCom(cidadeECnh()),
+      texto: "ok",
+      messageId: "m1",
+    });
+    expect(aceno.eventos().map((e) => e.tipo)).toEqual(["roteiro_mensagem", "roteiro_tentativa"]);
+    expect(aceno.eventos()[1]!.payload).toEqual({ campo: "cidade" });
+
+    const desvio = poolFake();
+    await processarInboundDoFluxo(desvio.pool, {
+      organizationId: ORG,
+      estado: estadoCom(cidadeECnh()),
+      texto: "vocês abrem no sábado?",
+      messageId: "m2",
+    });
+    expect(desvio.eventos().map((e) => e.tipo)).toEqual(["roteiro_mensagem", "roteiro_fora_do_fluxo"]);
+  });
+
+  it("contato anonimizado: nada é gravado nem dado como respondido", async () => {
+    const { pool, eventos } = poolFake({ contatoAnonimizado: true });
+    const r = await processarInboundDoFluxo(pool, {
+      organizationId: ORG,
+      estado: estadoCom(cidadeECnh()),
+      texto: "Campinas",
+      messageId: "m1",
+      validacoes: [{ campo: "cidade", valor: "Campinas" }],
+    });
+    expect(r.concluiu).toBe(false);
+    expect(eventos().map((e) => e.tipo)).toEqual(["roteiro_mensagem"]);
+  });
+
+  it("a última tentativa esgota a pergunta e fecha como exhausted", async () => {
+    const c = lista([trigger("t"), collect("c1", "cidade"), end("e")], [aresta("t", "c1"), aresta("c1", "e")]);
+    const { pool, sqls, params } = poolFake();
+    const r = await processarInboundDoFluxo(pool, {
+      organizationId: ORG,
+      estado: estadoCom(c, {}, { cidade: 2 }),
+      texto: "ok",
+      messageId: "m1",
+    });
+    expect(r.concluiu).toBe(true);
+    const i = sqls.findIndex((s) => /update followup_enrollments/.test(s));
+    expect(sqls[i]).toMatch(/status = 'completed'/);
+    expect(sqls[i]).toMatch(/and status = 'coletando'/);
+    expect(params[i]![2]).toBe("exhausted");
+  });
+
+  it("tudo respondido fecha como converted, não 'Esgotado'", async () => {
+    const c = lista([trigger("t"), collect("c1", "cidade"), end("e")], [aresta("t", "c1"), aresta("c1", "e")]);
+    const { pool, sqls, params } = poolFake();
+    await processarInboundDoFluxo(pool, {
+      organizationId: ORG,
+      estado: estadoCom(c),
+      texto: "Campinas",
+      messageId: "m1",
+      validacoes: [{ campo: "cidade", valor: "Campinas" }],
+    });
+    const i = sqls.findIndex((s) => /update followup_enrollments/.test(s));
+    expect(params[i]![2]).toBe("converted");
+  });
+});
+
+describe("finalizarFluxoDeAtendimento — encadeamento", () => {
+  const fimCom = (ao: unknown) =>
     no({
       id: "e",
       type: "end",
-      config: { outcome: "converted", ao_finalizar: ao } as Extract<
-        FlowNode,
-        { type: "end" }
-      >["config"],
-    }) as Extract<FlowNode, { type: "end" }>;
-
-  function estadoComFim(ao: unknown, pointerId: string): EstadoDeAtendimento {
-    const built = mapearChecklist(
-      grafo(
-        [trigger("t"), collect("c1", "cidade"), endCom(ao)],
-        [aresta("t", "c1"), aresta("c1", "e")],
-      ),
-    );
-    if (!built.ok) throw new Error("grafo de teste inválido");
-    return {
-      enrollment: {
-        id: "enr-A",
-        pointer_id: pointerId,
-        version_id: "ver-A",
-        contact_id: "ct",
-        current_node_id: "c1",
-        status: "active",
-      },
-      nomeDoFluxo: "Qualificação",
-      checklist: built.checklist,
-      valores: { cidade: "Campinas" },
-      tentativas: {},
-      maxTentativas: 3,
-      situacao: situacaoDoChecklist(built.checklist, new Set(["cidade"])),
-    };
-  }
-
-  /** Dublê de `pg.Pool`: registra SQL/parâmetros e responde por assinatura. */
-  function poolFake() {
-    const sqls: string[] = [];
-    const params: unknown[][] = [];
-    const query = async (sql: string, values: unknown[] = []) => {
-      sqls.push(sql);
-      params.push(values);
-      if (/select p\.active_version_id, v\.graph/.test(sql)) {
-        return {
-          rows: [
-            {
-              active_version_id: "ver-B",
-              graph: grafo(
-                [trigger("tB"), collect("cB", "outro"), end("eB")],
-                [aresta("tB", "cB"), aresta("cB", "eB")],
-              ),
-            },
-          ],
-        };
-      }
-      if (/insert into followup_enrollments/.test(sql)) return { rows: [{ id: "enr-B" }] };
-      return { rows: [] };
-    };
-    return { pool: { query } as unknown as pg.Pool, sqls, params };
-  }
-
-  it("grava a síntese em completion_note e emite concluido", async () => {
-    const { pool, sqls, params } = poolFake();
-    await finalizarFluxoDeAtendimento(pool, {
-      organizationId: "org",
-      estado: estadoComFim({ tipo: "nada" }, "A"),
+      config: { outcome: "converted", ao_finalizar: ao } as Extract<FlowNode, { type: "end" }>["config"],
     });
-    const update = sqls.findIndex((s) => /update followup_enrollments/.test(s));
-    expect(update).toBeGreaterThanOrEqual(0);
-    expect(sqls[update]).toContain("completion_note");
-    expect(params[update]).toContain('Fluxo "Qualificação" — cidade: Campinas');
-    expect(sqls.some((s) => /insert into contact_flow_events/.test(s))).toBe(true);
-  });
+  const estadoFim = (ao: unknown) =>
+    estadoCom(
+      lista([trigger("t"), collect("c1", "cidade"), fimCom(ao)], [aresta("t", "c1"), aresta("c1", "e")]),
+      { cidade: "Campinas" },
+    );
+  const grafoB = grafo([trigger("tB"), collect("cB", "outro"), end("eB")], [aresta("tB", "cB"), aresta("cB", "eB")]);
 
-  it("encadeia o próximo fluxo e emite encadeou", async () => {
-    const { pool, sqls } = poolFake();
+  it("encadeia o próximo roteiro em 'coletando', sem relógio, e registra encadeou", async () => {
+    const { pool, sqls, eventos } = poolFake({ proximoGrafo: grafoB });
     const r = await finalizarFluxoDeAtendimento(pool, {
-      organizationId: "org",
-      estado: estadoComFim({ tipo: "proximo_fluxo", fluxo: "B" }, "A"),
+      organizationId: ORG,
+      estado: estadoFim({ tipo: "proximo_fluxo", fluxo: "ptr-B" }),
     });
     expect(r.proximoEnrollmentId).toBe("enr-B");
-    expect(sqls.some((s) => /insert into followup_enrollments/.test(s))).toBe(true);
-    expect(sqls.filter((s) => /insert into contact_flow_events/.test(s)).length).toBeGreaterThanOrEqual(2);
+    const ins = sqls.find((s) => /insert into followup_enrollments/.test(s))!;
+    expect(ins).toMatch(/'coletando', null/);
+    expect(eventos().map((e) => e.tipo)).toEqual(["roteiro_concluido", "roteiro_iniciado", "roteiro_encadeou"]);
   });
 
-  it("NÃO encadeia para si mesmo (evita laço sem fim)", async () => {
-    const { pool, sqls } = poolFake();
+  it("NÃO encadeia para si mesmo (laço sem fim)", async () => {
+    const { pool, sqls } = poolFake({ proximoGrafo: grafoB });
     const r = await finalizarFluxoDeAtendimento(pool, {
-      organizationId: "org",
-      estado: estadoComFim({ tipo: "proximo_fluxo", fluxo: "A" }, "A"),
+      organizationId: ORG,
+      estado: estadoFim({ tipo: "proximo_fluxo", fluxo: "ptr-A" }),
     });
     expect(r.proximoEnrollmentId).toBeNull();
     expect(sqls.some((s) => /insert into followup_enrollments/.test(s))).toBe(false);
   });
 });
 
-describe("processarInboundDoFluxo — estado já completo conclui e encadeia", () => {
-  it("sem pendentes e completo: NÃO devolve cedo — fecha o fluxo (era o bug do teste ao vivo)", () => {
-    const src = readFileSync(join(process.cwd(), "lib/followup/atendimento.ts"), "utf8");
-    // O caminho `primeiro === undefined` precisa considerar `completo` e chamar
-    // o finalizador; antes ele retornava direto e o enrollment ficava `active`.
-    expect(src).toMatch(/if \(primeiro === undefined\) \{[\s\S]*estado\.situacao\.completo[\s\S]*finalizarFluxoDeAtendimento/);
+describe("montarResumoDoRoteiro (passa-bastão e tela, D4 — sem síntese por modelo)", () => {
+  it("rótulo: valor na ordem das perguntas, e o que falta aparece marcado", () => {
+    const resumo = montarResumoDoRoteiro({ nomeDoFluxo: "Cadastro", checklist: cidadeECnh(), valores: { cidade: "Campinas" } });
+    expect(resumo).toBe('Roteiro "Cadastro" — cidade: Campinas; cnh: (não respondido)');
   });
-});
 
-describe("idempotência do inbound do fluxo (retry de job não reprocessa)", () => {
-  it("processarInboundDoFluxo corta por message_id já visto na trilha", () => {
-    const src = readFileSync(join(process.cwd(), "lib/followup/atendimento.ts"), "utf8");
-    // A checagem precisa existir ANTES de qualquer gravação e filtrar por
-    // enrollment + message_id, contando eventos resposta/fora_do_fluxo.
-    expect(src).toMatch(/from contact_flow_events[\s\S]*message_id = \$3[\s\S]*kind in \('resposta','fora_do_fluxo'\)/);
-    expect(src).toMatch(/if \(\(ja\.rows\[0\]\?\.n \?\? 0\) > 0\) return \{ estado, concluiu: false \}/);
-  });
-});
-
-describe("captura MULTI-campo (2026-09-21)", () => {
-  it("aceita QUALQUER pendente, não só o primeiro (senão só o 1º campo é gravado)", () => {
-    const src = readFileSync(join(process.cwd(), "lib/followup/atendimento.ts"), "utf8");
-    // Medido ao vivo: o validador devolveu os 5 campos, mas a gravação só aceitou
-    // `moto_troca` porque `ehPendente` comparava só com `pendentes[0]`.
-    expect(src).toMatch(/const ehPendente = estado\.situacao\.pendentes\.some\(/);
-  });
-});
-
-describe("auditoria 2026-09-19 — o nao_respondeu do validador cai no classificador puro", () => {
-  it("distinguir aceno (conta tentativa) de desvio (não conta) preserva o teto", () => {
-    const src = readFileSync(join(process.cwd(), "lib/followup/atendimento.ts"), "utf8");
-    // O validador trata respostas/correções no bloco `validacoes`; o caminho SEM
-    // validação decide pelo classificador puro (aceno conta tentativa; desvio não).
-    // Antes era `: { resultado: "desviou" }`, e TODO nao_respondeu virava desvio —
-    // "ok"/emoji nunca esgotavam a pergunta (max_tentativas_pergunta inerte).
-    expect(src).toMatch(
-      /if \(args\.validacoes !== undefined[\s\S]*classificarInbound\(comoCampoParaCaptura\(primeiro\), args\.texto\)/,
-    );
-    expect(src).not.toMatch(/:\s*\{ resultado: "desviou" as const \};/);
+  it("o bloco do turno leva o resumo anterior e não fala em ferramenta que não existe", () => {
+    const e = { ...estadoCom(cidadeECnh()), notaAnterior: 'Roteiro "Cadastro" — cidade: Campinas' };
+    const bloco = renderBlocoDeAtendimento(e);
+    expect(bloco).toContain('Contexto do atendimento anterior: Roteiro "Cadastro" — cidade: Campinas');
+    expect(bloco).not.toContain("flow_collect");
+    expect(renderBlocoDeAtendimento(estadoCom(cidadeECnh()))).not.toContain("Contexto do atendimento anterior");
   });
 });

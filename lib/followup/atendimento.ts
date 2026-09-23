@@ -24,15 +24,12 @@
  */
 import type pg from "pg";
 
-import { logger } from "@/lib/logger";
-
 import {
   flowGraphSchema,
   type EndFinish,
   type FlowGraph,
   type FlowNode,
 } from "./graph-schema";
-import type { ContactFlowEventKind } from "./contact-flow-data";
 import { classificarInbound, type CampoPendenteParaCaptura } from "./captura-do-fluxo";
 
 export type PassoDeAtendimento =
@@ -213,16 +210,60 @@ export function melhorFluxoPorGatilho(
   return melhor;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Onde cada coisa mora (port do #1130 — plano 2026-09-23, D1–D4)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// O PR do autor guardava as respostas em `contact_flow_data` e a trilha em
+// `contact_flow_events`. Aqui não há tabela própria:
+//
+//   * a RESPOSTA vai para `contacts.custom_fields[chave]` — um só lugar para o
+//     dado do contato, já exportado ao titular e já zerado pela anonimização nos
+//     dois caminhos. Um campo que o contato JÁ tem não é perguntado;
+//   * a EXECUÇÃO é uma linha de `followup_enrollments` com status 'coletando'
+//     (0394) — fora, por construção, de tudo que o relógio do follow-up lê;
+//   * a TRILHA vai para `followup_enrollment_events` (`roteiro_*`), e o payload
+//     NUNCA leva o valor respondido — só a chave do campo. A trilha não é dado
+//     pessoal, e a LGPD não precisa redigi-la;
+//   * as TENTATIVAS por pergunta são contadas da trilha (`roteiro_tentativa`).
+
+/** Os tipos de evento do roteiro em `followup_enrollment_events.event_type`. */
+export const EVENTOS_DO_ROTEIRO = [
+  "roteiro_iniciado",
+  "roteiro_mensagem",
+  "roteiro_resposta",
+  "roteiro_fora_do_fluxo",
+  "roteiro_tentativa",
+  "roteiro_pergunta_feita",
+  "roteiro_concluido",
+  "roteiro_encadeou",
+] as const;
+export type EventoDoRoteiro = (typeof EVENTOS_DO_ROTEIRO)[number];
+
 /**
- * Bloco injetado no contexto do turno. Só existe quando o fluxo foi ACIONADO
- * (enrollment ativo) — sem fluxo, nada disto é enviado à IA.
+ * O que um evento do roteiro pode carregar. Não há campo para o VALOR de
+ * propósito: o tipo é a cerca — quem quiser gravar a resposta na trilha tem de
+ * mudar este tipo, e a mudança aparece na revisão.
+ */
+export interface PayloadDoEvento {
+  campo?: string;
+  origem?: "validador" | "captura" | "modelo" | "motor" | "gatilho" | "roteador" | "encadeamento";
+  correcao?: boolean;
+  esgotadas?: string[];
+  proximo_fluxo?: string;
+  proximo_enrollment_id?: string;
+}
+
+/**
+ * Bloco injetado no contexto do turno. Só existe quando o roteiro está em
+ * andamento (enrollment 'coletando') — sem roteiro, nada disto vai à IA.
  */
 export function renderBlocoDeAtendimento(
   estado: EstadoDeAtendimento,
   finalizacao?: EndFinish,
 ): string {
-  // O "passa-bastão" do fluxo ANTERIOR (quando este foi encadeado): o que já foi
-  // respondido não se repergunta, e o próximo passo da venda começa daqui.
+  // O "passa-bastão" do roteiro ANTERIOR (quando este foi encadeado): o que já
+  // foi respondido não se repergunta, e o próximo passo da venda começa daqui.
   const contexto =
     estado.notaAnterior !== undefined && estado.notaAnterior.length > 0
       ? `Contexto do atendimento anterior: ${estado.notaAnterior}\n\n`
@@ -231,11 +272,9 @@ export function renderBlocoDeAtendimento(
   if (estado.situacao.pendentes.length === 0) {
     const nota =
       finalizacao?.tipo === "skill"
-        ? `O fluxo foi concluído. Puxe agora a skill ${finalizacao.skill_name}.`
-        : finalizacao?.tipo === "ia"
-          ? "O fluxo foi concluído — siga o atendimento normalmente."
-          : "O fluxo foi concluído — siga o atendimento normalmente.";
-    return `${contexto}## Fluxo de atendimento — ${estado.nomeDoFluxo}\n${nota}`;
+        ? `O roteiro foi concluído. Puxe agora a skill ${finalizacao.skill_name}.`
+        : "O roteiro foi concluído — siga o atendimento normalmente.";
+    return `${contexto}## Roteiro de atendimento — ${estado.nomeDoFluxo}\n${nota}`;
   }
 
   const linhas = estado.situacao.pendentes.map((n) => {
@@ -246,18 +285,15 @@ export function renderBlocoDeAtendimento(
         ? ` Opções: ${cfg.options!.join(", ")}.`
         : "";
     const sugerida = cfg.question ? ` Pergunta sugerida: "${cfg.question}".` : "";
-    const corrige = cfg.permite_correcao ? "" : " Não aceite correção depois de preenchida.";
-    return `- ${cfg.label} (campo: ${cfg.key}, tipo ${cfg.type}, ${obrig}).${opcoes}${sugerida}${corrige}`;
+    return `- ${cfg.label} (${obrig}).${opcoes}${sugerida}`;
   });
 
   return [
-    `${contexto}## Fluxo de atendimento ativo — ${estado.nomeDoFluxo}`,
-    "Este fluxo foi acionado e precisa ser concluído. Atenda o cliente PRIMEIRO; encaixe no máximo UMA pergunta por resposta, quando houver abertura.",
-    "Se o cliente já informar um dado pendente — mesmo sem você ter perguntado —, registre com flow_collect: não pergunte o que ele já disse.",
-    "Guarde o valor NORMALIZADO (o sentido do que ele disse), em `valor`: sim/não vira true/false; número só com dígitos; data em AAAA-MM-DD; escolha vira uma das opções; texto livre é o sentido resumido. Mande o texto cru do cliente em `bruto`.",
-    "Se o cliente corrigir um dado já preenchido, o sistema registra a correção — não chame flow_collect para isso; apenas reconheça a mudança na conversa.",
+    `${contexto}## Roteiro de atendimento ativo — ${estado.nomeDoFluxo}`,
+    "Este roteiro foi acionado e precisa ser concluído. Atenda o cliente PRIMEIRO; encaixe no máximo UMA pergunta por resposta, quando houver abertura.",
+    "O sistema registra sozinho o que o cliente responde. Não repergunte o que ele já disse e não peça para ele confirmar.",
     `Pergunta sem resposta pode ser repetida no máximo ${estado.maxTentativas} vez(es); depois disso, pare de perguntá-la.`,
-    "Perguntas pendentes:",
+    "Perguntas pendentes, na ordem:",
     ...linhas,
   ].join("\n");
 }
@@ -265,6 +301,9 @@ export function renderBlocoDeAtendimento(
 // ─────────────────────────────────────────────────────────────────────────────
 // Banco
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** O mínimo do `pg.Pool` que o roteiro usa — o teste injeta um dublê. */
+export type BancoDoRoteiro = Pick<pg.Pool, "query">;
 
 export interface EnrollmentDeAtendimento {
   id: string;
@@ -279,26 +318,62 @@ export interface EstadoDeAtendimento {
   enrollment: EnrollmentDeAtendimento;
   nomeDoFluxo: string;
   checklist: ChecklistDeAtendimento;
+  /** Valor atual de cada chave do checklist em `contacts.custom_fields`. */
   valores: Record<string, string>;
   tentativas: Record<string, number>;
   maxTentativas: number;
   situacao: SituacaoDoChecklist;
   /**
-   * Síntese do fluxo ANTERIOR do mesmo contato (`completion_note` do último
-   * enrollment de atendimento concluído). É o "passa-bastão" do encadeamento:
-   * entra no bloco do turno para o próximo passo não reperguntar nem recomeçar.
+   * Resumo do roteiro ANTERIOR do mesmo contato, montado dos campos (D4). É o
+   * passa-bastão do encadeamento: o próximo passo não repergunta nem recomeça.
    */
   notaAnterior?: string;
 }
 
+/** O valor de um campo personalizado como texto — ou `null` se não há o que ler. */
+function comoTexto(v: unknown): string | null {
+  if (typeof v === "string") return v.trim() === "" ? null : v.trim();
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  if (typeof v === "boolean") return v ? "true" : "false";
+  return null;
+}
+
+/** Os valores das chaves do checklist, lidos de `custom_fields`. Puro. */
+export function valoresDoChecklist(
+  checklist: ChecklistDeAtendimento,
+  customFields: unknown,
+): Record<string, string> {
+  const cf =
+    customFields !== null && typeof customFields === "object" && !Array.isArray(customFields)
+      ? (customFields as Record<string, unknown>)
+      : {};
+  const valores: Record<string, string> = {};
+  for (const passo of checklist.passos) {
+    if (passo.kind !== "collect") continue;
+    const texto = comoTexto(cf[passo.node.config.key]);
+    if (texto !== null) valores[passo.node.config.key] = texto;
+  }
+  return valores;
+}
+
+async function lerCamposDoContato(
+  db: BancoDoRoteiro,
+  organizationId: string,
+  contactId: string,
+): Promise<unknown> {
+  const { rows } = await db.query<{ custom_fields: unknown }>(
+    `select custom_fields from contacts where organization_id = $1 and id = $2`,
+    [organizationId, contactId],
+  );
+  return rows[0]?.custom_fields ?? {};
+}
+
 /**
- * Fluxo de atendimento ATIVO de um contato: o enrollment mais recente ligado a um
- * pointer `surface='atendimento'`. Os valores são lidos por CONTATO+FLUXO (não por
- * enrollment): o que o cliente já respondeu uma vez não é perguntado de novo numa
- * nova execução. `null` quando não há fluxo ou o grafo é irrecuperável.
+ * Roteiro EM ANDAMENTO de um contato (enrollment 'coletando' de um pointer
+ * `atendimento` ativo). `null` quando não há roteiro ou o grafo é irrecuperável.
  */
 export async function carregarEstadoDeAtendimento(
-  db: pg.Pool,
+  db: BancoDoRoteiro,
   args: { organizationId: string; contactId: string },
 ): Promise<EstadoDeAtendimento | null> {
   const { rows } = await db.query<{
@@ -314,18 +389,15 @@ export async function carregarEstadoDeAtendimento(
     `select e.id, e.pointer_id, e.version_id, e.contact_id, e.current_node_id, e.status,
             p.name as nome, v.graph
        from followup_enrollments e
-       join followup_flow_pointers p on p.id = e.pointer_id
-       join followup_flow_versions v on v.id = e.version_id
+       join followup_flow_pointers p on p.id = e.pointer_id and p.organization_id = e.organization_id
+       join followup_flow_versions v on v.id = e.version_id and v.organization_id = e.organization_id
       where e.organization_id = $1
         and e.contact_id = $2
+        and e.status = 'coletando'
         and p.surface = 'atendimento'
-        -- Fluxo DESATIVADO para de guiar na hora: sem este filtro, desativar um
-        -- fluxo na tela não interrompia a execução em voo, e o bot seguia
-        -- perguntando (achado da auditoria). O enrollment órfão não roda e, se o
-        -- fluxo voltar a 'active', retoma.
+        -- Roteiro DESATIVADO para de guiar na hora (achado da auditoria do
+        -- autor): o enrollment fica parado e volta se o roteiro voltar a 'active'.
         and p.status = 'active'
-        and e.status in ('active', 'waiting_reply')
-      order by e.updated_at desc
       limit 1`,
     [args.organizationId, args.contactId],
   );
@@ -337,36 +409,27 @@ export async function carregarEstadoDeAtendimento(
   const checklist = mapearChecklist(parsed.data);
   if (!checklist.ok) return null;
 
-  const dados = await db.query<{ field_key: string; value: string | null; attempts: number }>(
-    `select field_key, value, attempts from contact_flow_data
-      where organization_id = $1 and contact_id = $2 and flow_pointer_id = $3`,
-    [args.organizationId, args.contactId, row.pointer_id],
+  const valores = valoresDoChecklist(
+    checklist.checklist,
+    await lerCamposDoContato(db, args.organizationId, args.contactId),
   );
-  const valores: Record<string, string> = {};
-  const tentativas: Record<string, number> = {};
-  for (const v of dados.rows) {
-    if (v.value !== null) valores[v.field_key] = v.value;
-    tentativas[v.field_key] = v.attempts;
-  }
-  const maxTentativas =
-    parsed.data.settings?.max_tentativas_pergunta ?? MAX_TENTATIVAS_PADRAO;
 
-  // "Passa-bastão": a síntese do último fluxo CONCLUÍDO deste contato. Ausente
-  // quando é o primeiro fluxo (ou quando a síntese não chegou a ser gravada).
-  const anterior = await db.query<{ completion_note: string | null }>(
-    `select e.completion_note
-       from followup_enrollments e
-       join followup_flow_pointers p on p.id = e.pointer_id
-      where e.organization_id = $1
-        and e.contact_id = $2
-        and p.surface = 'atendimento'
-        and e.status = 'completed'
-        and e.completion_note is not null
-      order by e.completed_at desc nulls last
-      limit 1`,
-    [args.organizationId, args.contactId],
+  const { rows: contagem } = await db.query<{ campo: string | null; n: number }>(
+    `select payload->>'campo' as campo, count(*)::int as n
+       from followup_enrollment_events
+      where organization_id = $1 and enrollment_id = $2 and event_type = 'roteiro_tentativa'
+      group by 1`,
+    [args.organizationId, row.id],
   );
-  const notaAnterior = anterior.rows[0]?.completion_note ?? undefined;
+  const tentativas: Record<string, number> = {};
+  for (const c of contagem) if (c.campo) tentativas[c.campo] = c.n;
+
+  const maxTentativas = parsed.data.settings?.max_tentativas_pergunta ?? MAX_TENTATIVAS_PADRAO;
+  const notaAnterior = await resumoDoRoteiroAnterior(db, {
+    organizationId: args.organizationId,
+    contactId: args.contactId,
+    enrollmentAtual: row.id,
+  });
 
   return {
     enrollment: {
@@ -386,153 +449,131 @@ export async function carregarEstadoDeAtendimento(
       tentativas,
       maxTentativas,
     }),
-    ...(notaAnterior !== undefined ? { notaAnterior } : {}),
+    ...(notaAnterior !== null ? { notaAnterior } : {}),
   };
 }
 
+/** Resumo, montado dos campos, do último roteiro CONCLUÍDO do contato. */
+async function resumoDoRoteiroAnterior(
+  db: BancoDoRoteiro,
+  args: { organizationId: string; contactId: string; enrollmentAtual: string },
+): Promise<string | null> {
+  const { rows } = await db.query<{ nome: string; graph: unknown }>(
+    `select p.name as nome, v.graph
+       from followup_enrollments e
+       join followup_flow_pointers p on p.id = e.pointer_id and p.organization_id = e.organization_id
+       join followup_flow_versions v on v.id = e.version_id and v.organization_id = e.organization_id
+      where e.organization_id = $1
+        and e.contact_id = $2
+        and e.id <> $3
+        and e.status = 'completed'
+        and p.surface = 'atendimento'
+      order by e.completed_at desc nulls last
+      limit 1`,
+    [args.organizationId, args.contactId, args.enrollmentAtual],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const parsed = flowGraphSchema.safeParse(row.graph);
+  if (!parsed.success) return null;
+  const checklist = mapearChecklist(parsed.data);
+  if (!checklist.ok) return null;
+  const valores = valoresDoChecklist(
+    checklist.checklist,
+    await lerCamposDoContato(db, args.organizationId, args.contactId),
+  );
+  return montarResumoDoRoteiro({ nomeDoFluxo: row.nome, checklist: checklist.checklist, valores });
+}
+
 /**
- * Grava uma resposta (upsert por org+contato+fluxo+campo). `value` guarda o texto
- * CRU e `valueJson` o NORMALIZADO — é o normalizado que o sistema usa.
+ * Grava a resposta NORMALIZADA no campo personalizado do contato. Devolve
+ * `false` quando nada foi gravado (contato de outra organização, sumiu ou foi
+ * anonimizado — depois do esquecimento, o roteiro não regrava dado pessoal).
  */
-export async function registrarDadoDoFluxo(
-  db: pg.Pool,
-  args: {
-    organizationId: string;
-    contactId: string;
-    flowPointerId: string;
-    enrollmentId: string;
-    fieldKey: string;
-    value: string;
-    valueJson?: unknown;
-    source: "client" | "agent" | "deterministic";
-  },
-): Promise<void> {
-  await db.query(
-    `insert into contact_flow_data
-        (organization_id, contact_id, flow_pointer_id, enrollment_id, field_key, value, value_json, source)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
-     on conflict (organization_id, contact_id, flow_pointer_id, field_key)
-     do update set value = excluded.value,
-                   value_json = excluded.value_json,
-                   source = excluded.source,
-                   enrollment_id = excluded.enrollment_id,
-                   updated_at = now()`,
-    [
-      args.organizationId,
-      args.contactId,
-      args.flowPointerId,
-      args.enrollmentId,
-      args.fieldKey,
-      args.value,
-      args.valueJson ?? null,
-      args.source,
-    ],
+export async function gravarRespostaNoContato(
+  db: BancoDoRoteiro,
+  args: { organizationId: string; contactId: string; campo: string; valor: string },
+): Promise<boolean> {
+  const r = await db.query(
+    `update contacts
+        set custom_fields = coalesce(custom_fields, '{}'::jsonb) || jsonb_build_object($3::text, $4::text),
+            updated_at = now()
+      where organization_id = $1 and id = $2 and not coalesce(is_anonymized, false)`,
+    [args.organizationId, args.contactId, args.campo, args.valor],
   );
+  return (r.rowCount ?? 0) > 0;
 }
 
 /**
- * Registra um evento na trilha da execução (`contact_flow_events`). Best-effort:
- * falha de telemetria NUNCA derruba o turno — quem chama envolve em try/catch.
+ * Registra um evento na trilha. Devolve se a linha entrou — com
+ * `idempotencyKey`, uma chave repetida não entra (índice único
+ * `idx_followup_events_idem`), e é isso que torna o roteiro idempotente.
  */
-export async function registrarEventoDoFluxo(
-  db: pg.Pool,
+export async function registrarEventoDoRoteiro(
+  db: BancoDoRoteiro,
   args: {
     organizationId: string;
     enrollmentId: string;
-    flowPointerId: string;
-    contactId: string;
-    kind: ContactFlowEventKind;
-    messageId?: string | null;
-    fieldKey?: string | null;
-    payload?: unknown;
+    tipo: EventoDoRoteiro;
+    nodeId?: string | null;
+    payload?: PayloadDoEvento;
+    idempotencyKey?: string;
   },
-): Promise<void> {
-  await db.query(
-    `insert into contact_flow_events
-        (organization_id, enrollment_id, flow_pointer_id, contact_id, kind, message_id, field_key, payload)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+): Promise<boolean> {
+  const r = await db.query(
+    `insert into followup_enrollment_events
+        (organization_id, enrollment_id, node_id, event_type, payload, idempotency_key)
+     values ($1, $2, $3, $4, $5::jsonb, $6)
+     on conflict do nothing`,
     [
       args.organizationId,
       args.enrollmentId,
-      args.flowPointerId,
-      args.contactId,
-      args.kind,
-      args.messageId ?? null,
-      args.fieldKey ?? null,
-      args.payload ?? {},
+      args.nodeId ?? null,
+      args.tipo,
+      JSON.stringify(args.payload ?? {}),
+      args.idempotencyKey ?? null,
     ],
   );
+  return (r.rowCount ?? 0) > 0;
 }
 
-/** Soma 1 tentativa na pergunta (ela vai ser feita neste turno). */export async function incrementarTentativa(
-  db: pg.Pool,
-  args: {
-    organizationId: string;
-    contactId: string;
-    flowPointerId: string;
-    enrollmentId: string;
-    fieldKey: string;
-  },
-): Promise<void> {
-  await db.query(
-    `insert into contact_flow_data
-        (organization_id, contact_id, flow_pointer_id, enrollment_id, field_key, attempts)
-     values ($1, $2, $3, $4, $5, 1)
-     on conflict (organization_id, contact_id, flow_pointer_id, field_key)
-     do update set attempts = contact_flow_data.attempts + 1,
-                   enrollment_id = excluded.enrollment_id,
-                   updated_at = now()`,
-    [
-      args.organizationId,
-      args.contactId,
-      args.flowPointerId,
-      args.enrollmentId,
-      args.fieldKey,
-    ],
-  );
+/** O nó `collect` de uma chave, com o id — a trilha ancora o evento no nó. */
+function noDaChave(estado: EstadoDeAtendimento, campo: string): string | null {
+  return campoPorChave(estado.checklist, campo)?.id ?? null;
 }
 
 /**
- * Marca o turno: incrementa a tentativa da PRÓXIMA pergunta pendente e, se com
- * isso ela esgotou (ou se não havia pendente), recalcula a situação. Devolve o
- * estado atualizado e se o fluxo CONCLUIU por esgotamento (sem novo valor).
+ * Marca o turno: soma uma tentativa na PRÓXIMA pergunta pendente e, se com isso
+ * ela esgotou, recalcula a situação e conclui quando não sobra pendente.
  */
 export async function registrarTentativaDoTurno(
-  db: pg.Pool,
-  args: { organizationId: string; estado: EstadoDeAtendimento },
+  db: BancoDoRoteiro,
+  args: { organizationId: string; estado: EstadoDeAtendimento; messageId?: string | null },
 ): Promise<{ estado: EstadoDeAtendimento; concluiu: boolean }> {
   const { estado } = args;
   const primeira = estado.situacao.pendentes[0];
   if (!primeira) return { estado, concluiu: estado.situacao.completo };
 
-  await incrementarTentativa(db, {
+  await registrarEventoDoRoteiro(db, {
     organizationId: args.organizationId,
-    contactId: estado.enrollment.contact_id,
-    flowPointerId: estado.enrollment.pointer_id,
     enrollmentId: estado.enrollment.id,
-    fieldKey: primeira.config.key,
+    tipo: "roteiro_tentativa",
+    nodeId: primeira.id,
+    payload: { campo: primeira.config.key },
   });
 
   const tentativas = {
     ...estado.tentativas,
     [primeira.config.key]: (estado.tentativas[primeira.config.key] ?? 0) + 1,
   };
-  const situacao = situacaoDoChecklist(estado.checklist, new Set(Object.keys(estado.valores)), {
-    tentativas,
-    maxTentativas: estado.maxTentativas,
+  const atualizado = recomputarSituacao(estado, new Set(Object.keys(estado.valores)), tentativas);
+  if (!atualizado.situacao.completo) return { estado: atualizado, concluiu: false };
+  await finalizarFluxoDeAtendimento(db, {
+    organizationId: args.organizationId,
+    estado: atualizado,
+    messageId: args.messageId ?? null,
   });
-  const atualizado = { ...estado, tentativas, situacao };
-
-  if (situacao.completo) {
-    await finalizarFluxoDeAtendimento(db, {
-      organizationId: args.organizationId,
-      estado: atualizado,
-      kind: "esgotado",
-      payload: { esgotadas: situacao.esgotadas.map((n) => n.config.key) },
-    });
-    return { estado: atualizado, concluiu: true };
-  }
-  return { estado: atualizado, concluiu: false };
+  return { estado: atualizado, concluiu: true };
 }
 
 /** Recalcula a situação do checklist preservando o resto do estado. */
@@ -543,6 +584,7 @@ function recomputarSituacao(
 ): EstadoDeAtendimento {
   return {
     ...estado,
+    tentativas,
     situacao: situacaoDoChecklist(estado.checklist, valores, {
       tentativas,
       maxTentativas: estado.maxTentativas,
@@ -565,415 +607,245 @@ function comoCampoParaCaptura(
 
 export interface ResultadoDoInbound {
   estado: EstadoDeAtendimento;
-  /** true = o fluxo concluiu neste processamento (resposta capturada ou esgotamento). */
+  /** true = o roteiro concluiu neste processamento. */
   concluiu: boolean;
   /** Ação de finalização, quando concluiu. */
   finalizacao?: EndFinish;
 }
 
 /**
- * Processa o INBOUND contra a PRIMEIRA pergunta pendente antes de o modelo rodar:
+ * Processa o INBOUND contra o roteiro antes de o modelo rodar:
  *
- *   - `respondeu`  → grava o valor normalizado (fonte `deterministic`) e conclui
- *                    se era o último obrigatório. NÃO conta tentativa.
- *   - `desviou`    → registra `fora_do_fluxo`; a pergunta continua pendente e a
- *                    tentativa NÃO conta (decisão 7 do plano robusto).
- *   - `ignorou`/`nao_identificado` → conta tentativa (a pergunta foi feita e não
- *                    veio resposta capturável); ao teto, esgota e conclui.
+ *   - com leitura do VALIDADOR (`validacoes`) → grava cada campo que ele leu
+ *     (pendente, ou já preenchido que aceita correção) e conclui se completou;
+ *   - sem ela, a captura determinística lê a PRIMEIRA pendente:
+ *     `respondeu` grava; `desviou` não conta tentativa; aceno/silêncio conta.
  *
- * Best-effort na gravação (falha não derruba o turno); a telemetria nunca conta
- * como bloqueio.
+ * Idempotente por mensagem: a primeira coisa é reivindicar a mensagem na
+ * trilha (`roteiro_mensagem`, chave `roteiro_msg:<id>`). Um job reexecutado
+ * (retry da fila) encontra a chave e não reprocessa — no teste ao vivo do autor,
+ * o reprocessamento gravou a frase de abertura no campo seguinte (60bbe49b5).
  */
 export async function processarInboundDoFluxo(
-  db: pg.Pool,
+  db: BancoDoRoteiro,
   args: {
     organizationId: string;
     estado: EstadoDeAtendimento;
     texto: string | null;
     messageId?: string | null;
-    /**
-     * Leitura do VALIDADOR (agente dedicado, ponto `flow_validate`), quando o
-     * chamador conseguiu rodá-lo. Tem PRECEDÊNCIA sobre a captura determinística
-     * porque ele vê o CONTEXTO da conversa — é o que evita gravar "ok"/2019 no
-     * campo errado. Ausente = comportamento de antes (só o classificador puro).
-     * Pode trazer VÁRIOS campos (respostas e/ou correções), em qualquer ordem —
-     * o cliente costuma responder a mais de uma pergunta na mesma mensagem.
-     */
     validacoes?: ReadonlyArray<{ campo: string; valor: string }> | undefined;
   },
 ): Promise<ResultadoDoInbound> {
   const { estado } = args;
+  const contactId = estado.enrollment.contact_id;
 
-  // IDEMPOTÊNCIA: um job de inbound RE-EXECUTADO (retry de fila) reprocessava a
-  // MESMA mensagem contra o estado JÁ AVANÇADO do fluxo — e a abertura virava
-  // resposta do campo seguinte (medido ao vivo, 2026-09-19: "quero dar minha
-  // moto na troca" foi gravada em `troca_ano` no 2º processamento). Se a
-  // mensagem já gerou `resposta`/`fora_do_fluxo` neste enrollment, não processa
-  // de novo. Os eventos são a trilha que torna a operação idempotente.
   if (args.messageId !== undefined && args.messageId !== null) {
-    try {
-      const ja = await db.query<{ n: number }>(
-        `select count(*)::int as n from contact_flow_events
-          where organization_id = $1 and enrollment_id = $2
-            and message_id = $3 and kind in ('resposta','fora_do_fluxo')`,
-        [args.organizationId, estado.enrollment.id, args.messageId],
-      );
-      if ((ja.rows[0]?.n ?? 0) > 0) return { estado, concluiu: false };
-    } catch {
-      // best-effort: sem a checagem, o pior caso é o comportamento anterior.
-    }
+    const primeiraVez = await registrarEventoDoRoteiro(db, {
+      organizationId: args.organizationId,
+      enrollmentId: estado.enrollment.id,
+      tipo: "roteiro_mensagem",
+      idempotencyKey: `roteiro_msg:${args.messageId}`,
+    });
+    if (!primeiraVez) return { estado, concluiu: false };
   }
 
-  // MÚLTIPLAS validações do validador (respostas e correções), em QUALQUER ordem.
-  // O cliente costuma responder a VÁRIAS perguntas na mesma mensagem ("é uma CG
-  // 125 2015, 120 mil km, tá boa, doc em dia"); aplicamos TODAS de uma vez, para
-  // nada ser reperguntado. Cada campo precisa ser uma pendente (resposta) ou um
-  // já preenchido que permite correção.
+  // MÚLTIPLAS respostas do validador (e correções), em QUALQUER ordem: o
+  // cliente costuma responder a várias perguntas na mesma mensagem.
   if (args.validacoes !== undefined && args.validacoes.length > 0) {
     const valoresNovos: Record<string, string> = { ...estado.valores };
     let aplicou = false;
     for (const v of args.validacoes) {
       const node = campoPorChave(estado.checklist, v.campo);
       if (node === null) continue;
-      // Pendente = QUALQUER campo ainda não preenchido (não só o primeiro): o
-      // cliente pode responder a todos de uma vez, em qualquer ordem.
       const ehPendente = estado.situacao.pendentes.some((n) => n.config.key === v.campo);
       const ehCorrecao =
         !ehPendente && node.config.permite_correcao && estado.valores[v.campo] !== undefined;
       if (!ehPendente && !ehCorrecao) continue;
-      // NO-OP: o valor não mudou (turno atrasado/reprocessado) — não é ruído novo.
+      // NO-OP: o valor não mudou — não é resposta nova.
       if (v.valor === "" || v.valor === (valoresNovos[v.campo] ?? "")) continue;
-      try {
-        await registrarDadoDoFluxo(db, {
-          organizationId: args.organizationId,
-          contactId: estado.enrollment.contact_id,
-          flowPointerId: estado.enrollment.pointer_id,
-          enrollmentId: estado.enrollment.id,
-          fieldKey: v.campo,
-          value: v.valor,
-          valueJson: {
-            normalizado: v.valor,
-            tipo: node.config.type,
-            deterministico: true,
-            ...(ehCorrecao ? { correcao: true } : {}),
-          },
-          source: "deterministic",
-        });
-      } catch {
-        continue;
-      }
-      void registrarEventoDoFluxo(db, {
+      const gravou = await gravarRespostaNoContato(db, {
+        organizationId: args.organizationId,
+        contactId,
+        campo: v.campo,
+        valor: v.valor,
+      });
+      if (!gravou) continue;
+      await registrarEventoDoRoteiro(db, {
         organizationId: args.organizationId,
         enrollmentId: estado.enrollment.id,
-        flowPointerId: estado.enrollment.pointer_id,
-        contactId: estado.enrollment.contact_id,
-        kind: "resposta",
-        messageId: args.messageId ?? null,
-        fieldKey: v.campo,
-        payload: {
-          normalizado: v.valor,
-          deterministico: true,
-          ...(ehCorrecao ? { correcao: true } : {}),
-        },
-      }).catch(() => {});
+        tipo: "roteiro_resposta",
+        nodeId: node.id,
+        payload: { campo: v.campo, origem: "validador", ...(ehCorrecao ? { correcao: true } : {}) },
+      });
       valoresNovos[v.campo] = v.valor;
       aplicou = true;
     }
     if (!aplicou) return { estado, concluiu: false };
-
-    const comValor = { ...estado, valores: valoresNovos };
-    const atualizado = recomputarSituacao(comValor, new Set(Object.keys(valoresNovos)));
-    if (!atualizado.situacao.completo) return { estado: atualizado, concluiu: false };
-    const { finalizacao } = await finalizarFluxoDeAtendimento(db, {
-      organizationId: args.organizationId,
-      estado: atualizado,
-      messageId: args.messageId ?? null,
-      kind: "concluido",
-    });
-    return {
-      estado: atualizado,
-      concluiu: true,
-      ...(finalizacao !== undefined ? { finalizacao } : {}),
-    };
+    return concluirSeCompleto(db, args, recomputarSituacao({ ...estado, valores: valoresNovos }, new Set(Object.keys(valoresNovos))));
   }
 
   const primeiro = estado.situacao.pendentes[0];
-  // Nada pendente COM todos os obrigatórios preenchidos = o fluxo JÁ concluiu
-  // (os valores chegaram por outra via — `flow_collect` do modelo, captura
-  // anterior). Fechar e encadear aqui é o que faz a venda continuar; antes,
-  // este caminho devolvia sem concluir e o enrollment ficava `active` para
-  // sempre (medido no teste ao vivo de 2026-09-18).
+  // Nada pendente = o roteiro já está completo (os valores chegaram por outra
+  // via, ex.: o contato já tinha o campo). Fechar aqui é o que faz a venda
+  // continuar — no teste ao vivo do autor, devolver cedo deixava o roteiro
+  // aberto para sempre.
   if (primeiro === undefined) {
-    if (estado.situacao.completo) {
-      const { finalizacao } = await finalizarFluxoDeAtendimento(db, {
-        organizationId: args.organizationId,
-        estado,
-        messageId: args.messageId ?? null,
-        kind: "concluido",
-      });
-      return {
-        estado,
-        concluiu: true,
-        ...(finalizacao !== undefined ? { finalizacao } : {}),
-      };
-    }
-    return { estado, concluiu: false };
+    return estado.situacao.completo ? concluirSeCompleto(db, args, estado) : { estado, concluiu: false };
   }
 
-  // O VALIDADOR decide, quando disponível: `respondeu` com valor → grava (abaixo);
-  // `nao_respondeu` → aplica o classificador puro para decidir ENTRE desvio
-  // (não conta tentativa) e aceno/silêncio (CONTA tentativa). Sem esta distinção,
-  // "ok"/emoji repetidos viravam `fora_do_fluxo` e o teto de tentativas nunca
-  // disparava — `max_tentativas_pergunta` ficava inerte (achado da auditoria,
-  // 2026-09-19). Sem validação → classificador puro direto.
-  // Chegou aqui = SEM validação do validador (ou nenhum campo aplicável): decide
-  // pelo classificador puro (desvio x aceno/silêncio). As respostas e correções
-  // do validador foram aplicadas no bloco acima.
   const leitura = classificarInbound(comoCampoParaCaptura(primeiro), args.texto);
 
   if (leitura.resultado === "desviou") {
-    await registrarEventoDoFluxo(db, {
+    await registrarEventoDoRoteiro(db, {
       organizationId: args.organizationId,
       enrollmentId: estado.enrollment.id,
-      flowPointerId: estado.enrollment.pointer_id,
-      contactId: estado.enrollment.contact_id,
-      kind: "fora_do_fluxo",
-      messageId: args.messageId ?? null,
-      fieldKey: primeiro.config.key,
-    }).catch(() => {});
+      tipo: "roteiro_fora_do_fluxo",
+      nodeId: primeiro.id,
+      payload: { campo: primeiro.config.key },
+    });
     return { estado, concluiu: false };
   }
 
   if (leitura.resultado === "respondeu") {
-    let gravou = false;
-    try {
-      await registrarDadoDoFluxo(db, {
-        organizationId: args.organizationId,
-        contactId: estado.enrollment.contact_id,
-        flowPointerId: estado.enrollment.pointer_id,
-        enrollmentId: estado.enrollment.id,
-        fieldKey: primeiro.config.key,
-        value: leitura.captura.bruto,
-        valueJson: {
-          normalizado: leitura.captura.valor,
-          tipo: primeiro.config.type,
-          deterministico: true,
-        },
-        source: "deterministic",
-      });
-      gravou = true;
-    } catch {
-      // best-effort: sem gravar, o campo segue pendente e o modelo pode registrar.
-    }
+    const gravou = await gravarRespostaNoContato(db, {
+      organizationId: args.organizationId,
+      contactId,
+      campo: primeiro.config.key,
+      valor: leitura.captura.valor,
+    });
     if (!gravou) return { estado, concluiu: false };
-
-    void registrarEventoDoFluxo(db, {
+    await registrarEventoDoRoteiro(db, {
       organizationId: args.organizationId,
       enrollmentId: estado.enrollment.id,
-      flowPointerId: estado.enrollment.pointer_id,
-      contactId: estado.enrollment.contact_id,
-      kind: "resposta",
-      messageId: args.messageId ?? null,
-      fieldKey: primeiro.config.key,
-      payload: { normalizado: leitura.captura.valor, tipo: primeiro.config.type, deterministico: true },
-    }).catch(() => {});
-
-    const valores = new Set(Object.keys(estado.valores));
-    valores.add(primeiro.config.key);
-    // O valor recém-capturado entra no estado ANTES de finalizar: é ele que a
-    // síntese (`montarNotaDeConclusao`) precisa enxergar.
-    const comValor = {
-      ...estado,
-      valores: { ...estado.valores, [primeiro.config.key]: leitura.captura.valor },
-    };
-    const atualizado = recomputarSituacao(comValor, valores);
-    if (!atualizado.situacao.completo) return { estado: atualizado, concluiu: false };
-
-    const { finalizacao } = await finalizarFluxoDeAtendimento(db, {
-      organizationId: args.organizationId,
-      estado: atualizado,
-      messageId: args.messageId ?? null,
-      kind: "concluido",
+      tipo: "roteiro_resposta",
+      nodeId: primeiro.id,
+      payload: { campo: primeiro.config.key, origem: "captura" },
     });
-    return {
-      estado: atualizado,
-      concluiu: true,
-      ...(finalizacao !== undefined ? { finalizacao } : {}),
-    };
+    const valores = { ...estado.valores, [primeiro.config.key]: leitura.captura.valor };
+    return concluirSeCompleto(db, args, recomputarSituacao({ ...estado, valores }, new Set(Object.keys(valores))));
   }
 
   // `ignorou` ou `nao_identificado`: a pergunta segue pendente e o turno conta
   // como tentativa (o teto é o freio contra a pergunta infinita).
-  const r = await registrarTentativaDoTurno(db, { organizationId: args.organizationId, estado });
+  const r = await registrarTentativaDoTurno(db, {
+    organizationId: args.organizationId,
+    estado,
+    messageId: args.messageId ?? null,
+  });
   return r.concluiu
-    ? { estado: r.estado, concluiu: true, finalizacao: r.estado.checklist.fim.config.ao_finalizar }
+    ? { estado: r.estado, concluiu: true, ...finalizacaoDe(r.estado) }
     : { estado: r.estado, concluiu: false };
 }
 
+function finalizacaoDe(estado: EstadoDeAtendimento): { finalizacao?: EndFinish } {
+  const fim = estado.checklist.fim.config.ao_finalizar;
+  return fim !== undefined ? { finalizacao: fim } : {};
+}
+
+async function concluirSeCompleto(
+  db: BancoDoRoteiro,
+  args: { organizationId: string; messageId?: string | null },
+  estado: EstadoDeAtendimento,
+): Promise<ResultadoDoInbound> {
+  if (!estado.situacao.completo) return { estado, concluiu: false };
+  const { finalizacao } = await finalizarFluxoDeAtendimento(db, {
+    organizationId: args.organizationId,
+    estado,
+    messageId: args.messageId ?? null,
+  });
+  return { estado, concluiu: true, ...(finalizacao !== undefined ? { finalizacao } : {}) };
+}
+
 /**
- * Marca o enrollment de atendimento como concluído (as perguntas param).
- * `completionNote` é a SÍNTESE do fluxo (passa-bastão para a continuação);
- * quando ausente, a coluna fica como está (não apaga uma nota anterior).
+ * RESUMO do roteiro, montado dos campos — o que a tela mostra e o que o
+ * próximo roteiro lê (D4: sem síntese por modelo, decisão do titular de
+ * 23/09). Percorre as perguntas na ordem; as não respondidas aparecem
+ * marcadas, para ninguém tomar ausência por "não".
  */
-export async function concluirEnrollmentDeAtendimento(
-  db: pg.Pool,
-  args: { organizationId: string; enrollmentId: string; outcome: string; completionNote?: string },
-): Promise<void> {
-  await db.query(
+export function montarResumoDoRoteiro(estado: {
+  nomeDoFluxo: string;
+  checklist: ChecklistDeAtendimento;
+  valores: Record<string, string>;
+}): string {
+  const linhas = estado.checklist.passos
+    .filter((p): p is Extract<PassoDeAtendimento, { kind: "collect" }> => p.kind === "collect")
+    .map((p) => `${p.node.config.label}: ${estado.valores[p.node.config.key] ?? "(não respondido)"}`);
+  return `Roteiro "${estado.nomeDoFluxo}" — ${linhas.join("; ")}`.slice(0, 2000);
+}
+
+/**
+ * Fecha o roteiro: grava o desfecho, emite o evento final e — se o Fim pedir
+ * `ao_finalizar: proximo_fluxo` — começa o PRÓXIMO roteiro (terminou um,
+ * continua a venda). O desfecho diz a verdade: `exhausted` só quando alguma
+ * pergunta esgotou sem resposta; senão `converted` (na prova, todo roteiro
+ * concluído ficava "Esgotado" pelo padrão do nó Fim).
+ */
+export async function finalizarFluxoDeAtendimento(
+  db: BancoDoRoteiro,
+  args: { organizationId: string; estado: EstadoDeAtendimento; messageId?: string | null },
+): Promise<{ finalizacao?: EndFinish; proximoEnrollmentId: string | null }> {
+  const { estado } = args;
+  const fim = estado.checklist.fim.config.ao_finalizar;
+  const esgotadas = estado.situacao.esgotadas.map((n) => n.config.key);
+
+  const r = await db.query(
     `update followup_enrollments
         set status = 'completed',
             outcome = $3,
             completed_at = now(),
-            updated_at = now(),
-            completion_note = coalesce($4, completion_note)
-      where organization_id = $1 and id = $2 and status in ('active', 'waiting_reply')`,
-    [args.organizationId, args.enrollmentId, args.outcome, args.completionNote ?? null],
+            updated_at = now()
+      where organization_id = $1 and id = $2 and status = 'coletando'`,
+    [args.organizationId, estado.enrollment.id, esgotadas.length > 0 ? "exhausted" : "converted"],
   );
-}
-
-/**
- * SÍNTESE DETERMINÍSTICA do fluxo concluído — o "passa-bastão" para a
- * continuação. Robusta por construção (não depende de modelo): percorre os
- * passos na ordem e usa o valor NORMALIZADO guardado. Campos não respondidos
- * (esgotados) aparecem marcados, para o próximo fluxo/IA saber o que ficou em
- * aberto em vez de reperguntar.
- */
-export function montarNotaDeConclusao(estado: EstadoDeAtendimento): string {
-  const linhas = estado.checklist.passos
-    .filter((p): p is Extract<PassoDeAtendimento, { kind: "collect" }> => p.kind === "collect")
-    .map((p) => {
-      const { key, label } = p.node.config;
-      return `${label}: ${estado.valores[key] ?? "(não respondido)"}`;
-    });
-  const nota = `Fluxo "${estado.nomeDoFluxo}" — ${linhas.join("; ")}`;
-  return nota.slice(0, 2000);
-}
-
-/**
- * Fecha um fluxo de atendimento: grava a síntese (`completion_note`), emite o
- * evento final e — se o nó Fim pedir `ao_finalizar: proximo_fluxo` — inicia o
- * PRÓXIMO fluxo da corrente (decisão 5: terminou o fluxo, continua a venda).
- *
- * Best-effort: toda falha é engolida para não derrubar o turno que já respondeu
- * ao cliente; a conclusão se repete no próximo turno se algo falhar aqui.
- */
-export async function finalizarFluxoDeAtendimento(
-  db: pg.Pool,
-  args: {
-    organizationId: string;
-    estado: EstadoDeAtendimento;
-    messageId?: string | null;
-    /** `concluido` (completou) ou `esgotado` (teto de tentativas). */
-    kind?: "concluido" | "esgotado";
-    payload?: unknown;
-  },
-): Promise<{ finalizacao?: EndFinish; proximoEnrollmentId: string | null }> {
-  const { estado } = args;
-  const fim = estado.checklist.fim.config.ao_finalizar;
-  const nota = montarNotaDeConclusao(estado);
-
-  try {
-    await concluirEnrollmentDeAtendimento(db, {
-      organizationId: args.organizationId,
-      enrollmentId: estado.enrollment.id,
-      outcome: estado.checklist.fim.config.outcome,
-      completionNote: nota,
-    });
-  } catch {
-    // best-effort: a conclusão se repete no próximo turno.
+  // Outro processamento já fechou (turno concorrente): não emite nem encadeia de novo.
+  if ((r.rowCount ?? 0) === 0) {
+    return { ...(fim !== undefined ? { finalizacao: fim } : {}), proximoEnrollmentId: null };
   }
-  void registrarEventoDoFluxo(db, {
+  await registrarEventoDoRoteiro(db, {
     organizationId: args.organizationId,
     enrollmentId: estado.enrollment.id,
-    flowPointerId: estado.enrollment.pointer_id,
-    contactId: estado.enrollment.contact_id,
-    kind: args.kind ?? "concluido",
-    messageId: args.messageId ?? null,
-    payload: args.payload ?? { nota },
-  }).catch(() => {});
-
-  // Síntese NATURAL (modelo) do que foi coletado. O motor garante a nota
-  // determinística acima; o job `flow_summary` a enriquece quando o modelo
-  // responde (e só então sobrescreve). Best-effort e DEDUPLICADO: não enfileira
-  // um segundo job enquanto houver um vivo para esta execução.
-  try {
-    await db.query(
-      `insert into job_queue (organization_id, contact_id, kind, payload)
-       select $1, $2, 'flow_summary', $3::jsonb
-        where not exists (
-          select 1 from job_queue
-           where organization_id = $1
-             and kind = 'flow_summary'
-             and status in ('pending', 'running')
-             and payload->>'enrollment_id' = $4
-        )`,
-      [
-        args.organizationId,
-        estado.enrollment.contact_id,
-        JSON.stringify({ enrollment_id: estado.enrollment.id }),
-        estado.enrollment.id,
-      ],
-    );
-  } catch (err) {
-    // best-effort: sem o job, a nota determinística já cobre a continuação.
-    logger.warn("[fluxo] enfileirar flow_summary falhou — o turno segue", {
-      enrollment_id: estado.enrollment.id,
-      error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
-    });
-  }
+    tipo: "roteiro_concluido",
+    nodeId: estado.checklist.fim.id,
+    payload: esgotadas.length > 0 ? { esgotadas } : {},
+  });
 
   let proximoEnrollmentId: string | null = null;
-  // Autoencadeamento (fluxo → ele mesmo) é ignorado: seria um laço sem fim. Um
+  // Autoencadeamento (roteiro → ele mesmo) é ignorado: seria laço sem fim. Um
   // vínculo A→B→A é configuração do dono e só avança um passo por turno.
   if (fim?.tipo === "proximo_fluxo" && fim.fluxo !== estado.enrollment.pointer_id) {
-    try {
-      proximoEnrollmentId = await iniciarFluxoDeAtendimento(db, {
+    proximoEnrollmentId = await iniciarFluxoDeAtendimento(db, {
+      organizationId: args.organizationId,
+      contactId: estado.enrollment.contact_id,
+      flowPointerId: fim.fluxo,
+      origem: "encadeamento",
+    });
+    if (proximoEnrollmentId !== null) {
+      await registrarEventoDoRoteiro(db, {
         organizationId: args.organizationId,
-        contactId: estado.enrollment.contact_id,
-        flowPointerId: fim.fluxo,
-      });
-      if (proximoEnrollmentId !== null) {
-        void registrarEventoDoFluxo(db, {
-          organizationId: args.organizationId,
-          enrollmentId: estado.enrollment.id,
-          flowPointerId: estado.enrollment.pointer_id,
-          contactId: estado.enrollment.contact_id,
-          kind: "encadeou",
-          messageId: args.messageId ?? null,
-          payload: { proximo_fluxo: fim.fluxo, proximo_enrollment_id: proximoEnrollmentId },
-        }).catch(() => {});
-      }
-    } catch (err) {
-      // best-effort: sem encadear, o fluxo apenas termina (não trava o turno).
-      // Loga porque o desfecho silencioso é o defeito: o fluxo termina, o
-      // próximo não começa, e nada na tela explica (auditoria 2026-09-19).
-      logger.warn("[fluxo] encadear o próximo fluxo falhou — o fluxo só terminou", {
-        enrollment_id: estado.enrollment.id,
-        proximo_fluxo: fim.fluxo,
-        error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+        enrollmentId: estado.enrollment.id,
+        tipo: "roteiro_encadeou",
+        nodeId: estado.checklist.fim.id,
+        payload: { proximo_fluxo: fim.fluxo, proximo_enrollment_id: proximoEnrollmentId },
       });
     }
   }
 
-  return {
-    ...(fim !== undefined ? { finalizacao: fim } : {}),
-    proximoEnrollmentId,
-  };
+  return { ...(fim !== undefined ? { finalizacao: fim } : {}), proximoEnrollmentId };
 }
 
 /**
- * ENTRADA POR GATILHO (motor): entre os fluxos ativos, qual LIGA pela mensagem
- * do cliente (palavra-gatilho). Independe do modelo e do roteador.
+ * ENTRADA POR GATILHO (motor): entre os roteiros ativos, qual LIGA pela
+ * mensagem do cliente (palavra-gatilho). Independe do modelo e do roteador.
  */
 export async function escolherFluxoPeloGatilho(
-  db: pg.Pool,
+  db: BancoDoRoteiro,
   args: { organizationId: string; texto: string | null },
 ): Promise<{ id: string; nome: string } | null> {
   if (!args.texto) return null;
   const { rows } = await db.query<{ id: string; nome: string; graph: unknown }>(
     `select p.id, p.name as nome, v.graph
        from followup_flow_pointers p
-       join followup_flow_versions v on v.id = p.active_version_id
+       join followup_flow_versions v on v.id = p.active_version_id and v.organization_id = p.organization_id
       where p.organization_id = $1
         and p.surface = 'atendimento'
         and p.status = 'active'`,
@@ -991,48 +863,25 @@ export async function escolherFluxoPeloGatilho(
 }
 
 /**
- * Fluxos de atendimento ATIVOS da organização (com versão publicada). É o que a
- * ferramenta `flow_start` oferece ao agente — o prompt/skill decide QUAL iniciar.
- */
-export async function listarFluxosDeAtendimentoAtivos(
-  db: pg.Pool,
-  organizationId: string,
-): Promise<Array<{ id: string; nome: string }>> {
-  const { rows } = await db.query<{ id: string; nome: string }>(
-    `select id, name as nome
-       from followup_flow_pointers
-      where organization_id = $1
-        and surface = 'atendimento'
-        and status = 'active'
-        and active_version_id is not null
-      order by name`,
-    [organizationId],
-  );
-  return rows;
-}
-
-/**
- * Começa um fluxo de atendimento para o contato. Devolve o id do enrollment
- * criado, ou `null` quando não é para começar (pointer inativo, sem versão, grafo
- * inválido, ou já existir um enrollment vivo — o índice "1 vivo por contato").
- *
- * `next_eval_at` fica num FUTURO distante de propósito: o CHECK
- * `followup_enrollments_relogio_coerente` exige `next_eval_at` quando o status é
- * `active`, e o motor de RELÓGIO do follow-up só reivindica `next_eval_at <= now()`
- * — então um fluxo de atendimento nunca é consumido pelo tick. (NULL violaria o
- * CHECK; um futuro distante satisfaz os dois.)
+ * Começa um roteiro para o contato. Devolve o id do enrollment, ou `null`
+ * quando não é para começar: roteiro de outra organização, inativo, sem versão,
+ * grafo que o motor não percorre, ou o contato já tem um roteiro 'coletando'
+ * (índice `idx_followup_enrollments_um_roteiro_coletando` — 23505 não é erro).
  */
 export async function iniciarFluxoDeAtendimento(
-  db: pg.Pool,
-  args: { organizationId: string; contactId: string; flowPointerId: string },
+  db: BancoDoRoteiro,
+  args: {
+    organizationId: string;
+    contactId: string;
+    flowPointerId: string;
+    conversationId?: string | null;
+    origem: "gatilho" | "roteador" | "encadeamento";
+  },
 ): Promise<string | null> {
-  const { rows } = await db.query<{
-    active_version_id: string | null;
-    graph: unknown;
-  }>(
+  const { rows } = await db.query<{ active_version_id: string | null; graph: unknown }>(
     `select p.active_version_id, v.graph
        from followup_flow_pointers p
-       join followup_flow_versions v on v.id = p.active_version_id
+       join followup_flow_versions v on v.id = p.active_version_id and v.organization_id = p.organization_id
       where p.organization_id = $1
         and p.id = $2
         and p.status = 'active'
@@ -1046,34 +895,40 @@ export async function iniciarFluxoDeAtendimento(
   if (!parsed.success) return null;
   const checklist = mapearChecklist(parsed.data);
   if (!checklist.ok) return null;
-
-  const gatilho = parsed.data.nodes.find((n) => n.type === "trigger");
-  const inicio = gatilho?.id ?? checklist.checklist.passos[0]?.node.id;
+  const inicio = parsed.data.nodes.find((n) => n.type === "trigger")?.id;
   if (inicio === undefined) return null;
 
+  let enrollmentId: string | null;
   try {
-    const { rows: created } = await db.query<{ id: string }>(
+    // `next_eval_at` NULO de propósito: 'coletando' é conduzido pelo turno e
+    // não tem relógio (0394). Omitir a coluna daria o default `now()`.
+    const { rows: criado } = await db.query<{ id: string }>(
       `insert into followup_enrollments
-          (organization_id, pointer_id, version_id, contact_id, current_node_id, status, next_eval_at)
-       values ($1, $2, $3, $4, $5, 'active', '2999-12-31T00:00:00Z')
+          (organization_id, pointer_id, version_id, contact_id, conversation_id, current_node_id, status, next_eval_at)
+       values ($1, $2, $3, $4, $5, $6, 'coletando', null)
        returning id`,
-      [args.organizationId, args.flowPointerId, row.active_version_id, args.contactId, inicio],
+      [
+        args.organizationId,
+        args.flowPointerId,
+        row.active_version_id,
+        args.contactId,
+        args.conversationId ?? null,
+        inicio,
+      ],
     );
-    const enrollmentId = created[0]?.id ?? null;
-    if (enrollmentId !== null) {
-      await registrarEventoDoFluxo(db, {
-        organizationId: args.organizationId,
-        enrollmentId,
-        flowPointerId: args.flowPointerId,
-        contactId: args.contactId,
-        kind: 'iniciado',
-      }).catch(() => {});
-    }
-    return enrollmentId;
+    enrollmentId = criado[0]?.id ?? null;
   } catch (err) {
-    // 23505 = índice "um enrollment vivo por contato" — o contato já está em
-    // outro fluxo (ou neste). Não é erro do turno.
     if ((err as { code?: string }).code === "23505") return null;
     throw err;
   }
+  if (enrollmentId !== null) {
+    await registrarEventoDoRoteiro(db, {
+      organizationId: args.organizationId,
+      enrollmentId,
+      tipo: "roteiro_iniciado",
+      nodeId: inicio,
+      payload: { origem: args.origem },
+    });
+  }
+  return enrollmentId;
 }
