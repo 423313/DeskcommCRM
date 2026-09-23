@@ -171,3 +171,12 @@ export const IDS_COM_CHAVE = PROVEDORES_COM_CHAVE.map((p) => p.id) as unknown as
 export function ehProvedorDeDecisao(id: string): boolean {
   return (IDS_DE_PROVEDOR_DE_DECISAO as readonly string[]).includes(id);
 }
+
+/**
+ * O nome de gente de qualquer provedor que aparece numa execução, inclusive o
+ * Jev. Devolve só o rótulo, e não a lista: quem precisa NOMEAR (a tela de
+ * Execuções) não pede a união, e a catraca continua valendo só para CHAVE.
+ */
+export function rotuloDoProvedor(id: string): string | undefined {
+  return PROVEDORES_COM_CHAVE.find((p) => p.id === id)?.rotulo;
+}

@@ -138,7 +138,6 @@ describe("só as superfícies de CHAVE pedem a união", () => {
     "lib/ai/log-invocation.ts", // grava o provedor da chamada, inclusive o Jev
     "lib/ai/decisao/credencial.ts", // qual chave do Jev está em uso
     "app/api/v1/ai/jev/route.ts", // o cartão do próprio Jev
-    "app/api/v1/ai/runs/route.ts", // só dá nome ao provedor de cada execução
     "app/api/v1/ai/credentials/route.ts", // cadastra a chave
     "hooks/ai/useCredentials.ts", // tipo da LINHA de credencial
     "app/api/v1/ai/credentials/[id]/route.ts", // gira a chave (o provedor não muda)

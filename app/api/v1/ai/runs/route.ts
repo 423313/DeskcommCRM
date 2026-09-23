@@ -14,7 +14,7 @@ import type { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
-import { PROVEDORES_COM_CHAVE } from "@/lib/ai/pontos/provedores";
+import { rotuloDoProvedor } from "@/lib/ai/pontos/provedores";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM, type OrigemDaEscolha } from "@/lib/ai/pontos/resolver";
 import { createClient } from "@/lib/supabase/server";
@@ -74,11 +74,6 @@ interface LinhaDeExecucao {
   created_at: string;
 }
 
-/** O nome de gente do provedor — "typesafe" na coluna, "Jev (TypeSafe AI)" na tela. */
-const ROTULO_DO_PROVEDOR: ReadonlyMap<string, string> = new Map(
-  PROVEDORES_COM_CHAVE.map((p) => [p.id, p.rotulo]),
-);
-
 const filtrosDaQuery = z.object({
   purpose: z.string().min(1).max(64).optional(),
   status: z.enum(["ok", "erro"]).optional(),
@@ -128,7 +123,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       // O nome de gente do ponto. Sem isto a tela mostraria `flywheel_judge`, e
       // o operador não tem por que saber o que é isso.
       pontoRotulo: ponto?.rotulo ?? l.purpose,
-      provedorRotulo: ROTULO_DO_PROVEDOR.get(l.provider) ?? l.provider,
+      // "typesafe" na coluna, "Jev (TypeSafe AI)" na tela.
+      provedorRotulo: rotuloDoProvedor(l.provider) ?? l.provider,
       // A consequência daquele ponto falhar, que é o que liga uma linha de log
       // a algo que a pessoa já viu acontecer no negócio dela. Só em `erro`: a
       // linha da reserva que cobriu o Jev sai `ok` (nada se perdeu), e a do Jev
