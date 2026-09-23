@@ -99,13 +99,21 @@ export async function moverLeadParaEtapaDeAgendamento(
   }
   let etapa = etapaData;
   if (!etapa && slugAlvo.includes("-")) {
-    const { data: etapaLegada } = await admin
+    const { data: etapaLegada, error: erroLegada } = await admin
       .from("crm_stages")
       .select("id, name")
       .eq("pipeline_id", leadRow.pipeline_id)
       .eq("slug", slugAlvo.replace(/-/g, "_"))
       .eq("is_archived", false)
       .maybeSingle();
+    if (erroLegada) {
+      logger.warn("[appointment-stage-move] leitura da etapa alvo (slug legado) falhou", {
+        lead_id: leadRow.id,
+        organization_id: input.organizationId,
+        error: erroLegada.message,
+      });
+      return { moveu: false, motivo: "indisponivel" };
+    }
     if (etapaLegada) {
       etapa = etapaLegada;
     }
