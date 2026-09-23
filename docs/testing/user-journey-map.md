@@ -131,12 +131,12 @@ HTTP `scripts/duble-jev-e2e.mjs`, que grava cada chamada num arquivo que a spec 
 | J32.1 | Procurar "jev" no ⌘K | a busca leva a Provedores, onde está o cartão | **ESCRITA, NÃO EXECUTADA** |
 | J32.2 | Cartão sem chave | diz o que o Jev é, leva à TypeSafe para pegar a chave e abre o diálogo de colar já no Jev (formato `apikey_…`) | **ESCRITA, NÃO EXECUTADA** |
 | J32.3 | Colar a chave | o teste da chave passa (o dublê recebeu o `GET /v1/models` com a chave certa) e o cartão fica pronto para ligar | **ESCRITA, NÃO EXECUTADA** |
-| J32.4 | Chave validada, Jev desligado | nenhuma pergunta sai para o fornecedor (D6) | **ESCRITA, NÃO EXECUTADA** |
+| J32.4 | Chave validada, Jev desligado, e uma mensagem do cliente chega e é drenada | nenhuma pergunta sai para o fornecedor (D6). O controle positivo é a J32.7: mesmo cliente, mesma conversa, só o interruptor muda | **ESCRITA, NÃO EXECUTADA** |
 | J32.5 | Ligar sem marcar o aceite | o botão fica travado; a rota recusa com `jev_exige_aceite` (provado em `app/api/v1/ai/jev/route.test.ts`) | **ESCRITA, NÃO EXECUTADA** em tela; rota **PASS** (unit) |
 | J32.6 | Ligar com o aceite, e deixar o Jev decidir | observando (com IA de sempre) → decidindo; sozinho quando a empresa não tem a IA de sempre | **ESCRITA, NÃO EXECUTADA** |
-| J32.7 | Mensagem de cliente pelo webhook do WhatsApp | o dublê recebe a pergunta do clima com a chave colada, a versão `jev-1.13.0` e SÓ a última mensagem, com telefone e e-mail trocados por `[PHONE]`/`[EMAIL]` | **ESCRITA, NÃO EXECUTADA** |
+| J32.7 | Segunda mensagem do mesmo cliente pelo webhook do WhatsApp | o dublê recebe a pergunta do clima com a chave colada, a versão `jev-1.13.0` e SÓ a última mensagem (sem a da J32.4, que está na mesma conversa), com telefone e e-mail trocados por `[PHONE]`/`[EMAIL]` | **ESCRITA, NÃO EXECUTADA** |
 | J32.8 | IA › Execuções, "Ver as decisões do Jev" | a medição aparece com "Jev (TypeSafe AI)", o modelo devolvido e sem "falhou"; o filtro "Só o Jev" vem marcado | **ESCRITA, NÃO EXECUTADA** |
-| J32.9 | O cartão depois da medição | "Mensagens medidas" sobe em 1 | **ESCRITA, NÃO EXECUTADA** |
+| J32.9 | O cartão depois da medição | "Mensagens medidas" sobe ao menos 1 (a nossa; outra que tenha voltado à fila depois do escoamento também conta — a prova de que foi a NOSSA é a do dublê, na J32.7) | **ESCRITA, NÃO EXECUTADA** |
 | J32.10 | O Jev como IA que conversa | ausente do "Modelo padrão", do seletor do ponto "Medir o clima da conversa" e do seletor de IA do agente novo | **ESCRITA, NÃO EXECUTADA** em tela; derivação **PASS** (`tests/unit/provedores-de-decisao-catraca.test.ts`) |
 | J32.11 | O Jev no "Qual você contratou" do onboarding | ausente | **NÃO COBERTO em tela** — o campo só aparece em organização sem chave nenhuma; a derivação de `PROVEDORES` é vigiada pela mesma catraca de unidade |
 | J32.12 | Desligar | volta a pronto para ligar, e religar não pede o aceite de novo | **ESCRITA, NÃO EXECUTADA** |

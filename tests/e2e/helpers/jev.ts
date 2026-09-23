@@ -112,15 +112,24 @@ export async function mensagensMedidas(page: Page): Promise<number> {
  * Uma mensagem de cliente pelo CAMINHO DE PRODUÇÃO — a rota que o WAHA chama.
  * O insert em `messages` dispara o `message.received` que acorda o worker de
  * clima; um insert à mão provaria a tela e mentiria sobre a origem.
+ *
+ * O `sufixo` escolhe o cliente (a mesma conversa); a `ordem` distingue as
+ * mensagens dele — o id é a chave de idempotência do webhook, e repeti-lo
+ * faria a segunda mensagem ser descartada como duplicata.
  */
-export async function mandarMensagemDoCliente(page: Page, texto: string, sufixo: string): Promise<void> {
+export async function mandarMensagemDoCliente(
+  page: Page,
+  texto: string,
+  sufixo: string,
+  ordem = 1,
+): Promise<void> {
   const { webhookToken, sessao } = credsDoJev();
   const r = await page.request.post(`/api/v1/webhooks/waha/${webhookToken}`, {
     data: {
       event: "message",
       session: sessao,
       payload: {
-        id: `e2e-jev-${sufixo}`,
+        id: `e2e-jev-${sufixo}-${ordem}`,
         from: `55318${sufixo}@c.us`,
         fromMe: false,
         body: texto,

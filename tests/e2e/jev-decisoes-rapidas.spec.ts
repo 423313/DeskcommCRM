@@ -51,6 +51,8 @@ const ARQUIVO_DE_CHAMADAS = path.join(os.tmpdir(), `duble-jev-e2e-${process.pid}
 const sufixo = String(Date.now()).slice(-6);
 /** A frase que identifica a NOSSA mensagem no que o dublê recebeu. */
 const FRASE_DO_CLIENTE = `Adorei o atendimento ${sufixo}`;
+/** A da mensagem que chega com o Jev desligado — do MESMO cliente, na mesma conversa. */
+const FRASE_DE_ANTES = `Vocês abrem no sábado ${sufixo}`;
 
 interface Chamada {
   metodo: string;
@@ -173,11 +175,18 @@ test.describe("Jev — decisões rápidas, pela tela", () => {
       expect(doTeste.some((c) => c.caminho === "/v1/models" && c.autorizado)).toBe(true);
     });
 
-    // Com a chave validada e o Jev ainda desligado, nada sai (D6).
-    expect(chamadasAoJev(), "o Jev foi chamado antes de alguém ligá-lo").toEqual([]);
+    await test.step("com a chave validada e o Jev desligado, uma mensagem chega e nada sai (D6)", async () => {
+      await mandarMensagemDoCliente(page, `Bom dia! ${FRASE_DE_ANTES}?`, sufixo, 1);
+      // Quem chama o Jev é o worker de clima, e ele só roda no dreno: sem esta
+      // linha a lista vazia abaixo não diria nada. O escoamento também tira da
+      // fila o que as specs anteriores da parte deixaram, antes de ligar.
+      await escoarAFila(page);
+      // Controle positivo: a mensagem da etapa seguinte é do mesmo cliente, na
+      // mesma conversa, e o Jev a mede — o que muda entre as duas é o interruptor.
+      expect(chamadasAoJev(), "o Jev foi chamado antes de alguém ligá-lo").toEqual([]);
+    });
 
     const antes = await test.step("liga, com o aceite de envio aos EUA", async () => {
-      await escoarAFila(page);
       await ligarOJev(page);
       return mensagensMedidas(page);
     });
@@ -187,6 +196,7 @@ test.describe("Jev — decisões rápidas, pela tela", () => {
         page,
         `Oi! Meu telefone é (11) 98765-4321 e o e-mail cliente.jev@exemplo.com.br. ${FRASE_DO_CLIENTE}!`,
         sufixo,
+        2,
       );
       await expect(async () => {
         await drenar(page);
@@ -197,9 +207,13 @@ test.describe("Jev — decisões rápidas, pela tela", () => {
       expect(chamada.autorizado, "o servidor não mandou a chave que o admin colou").toBe(true);
       expect(chamada.corpo?.model).toBe("jev-1.13.0");
       expect(chamada.corpo?.questions?.["clima"]?.type).toBe("score");
-      // LGPD: só a última mensagem, e sem telefone nem e-mail.
+      // LGPD: só a última mensagem, e sem telefone nem e-mail. A conversa já
+      // tem a mensagem de antes de ligar — mandar o histórico a levaria junto.
       const estado = String(chamada.corpo?.state ?? "");
       expect(estado.startsWith("Oi! Meu telefone é"), "o estado não é a mensagem, ou é mais que ela").toBe(true);
+      expect(estado, "o Jev recebeu o histórico da conversa, não só a última mensagem").not.toContain(
+        FRASE_DE_ANTES,
+      );
       expect(estado).toContain("[PHONE]");
       expect(estado).toContain("[EMAIL]");
       expect(estado).not.toContain("98765-4321");

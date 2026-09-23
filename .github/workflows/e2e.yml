@@ -1095,9 +1095,12 @@ jobs:
       # logo abaixo. (Este parágrafo dizia "as duas" com três na lista: número
       # em prosa envelhece, e por isso ele saiu.)
       #
-      # `jev-chave-real` entrou aqui em 2026-09-23, e o motivo é o mesmo do
-      # acervo: EXIGE UMA CHAVE PAGA da TypeSafe AI (`JEV_API_KEY`), e segredo de
-      # repositório público não é lugar para ela. O que o CI prova é a
+      # `jev-chave-real` entrou aqui em 2026-09-23: EXIGE UMA CHAVE PAGA da
+      # TypeSafe AI (`JEV_API_KEY`), e segredo de repositório público não é
+      # lugar para ela. Não é o caso de ficar no CI e pular os casos pagos, como
+      # a `acervo-de-conhecimento` faz: aqui a chave é a spec inteira, e mesmo
+      # com ela este job a reprovaria — o `pnpm e2e:env` aponta o Jev do
+      # servidor para o dublê, e ela recusa medir o dublê. O que o CI prova é a
       # `jev-decisoes-rapidas` (PARTE_5), contra um dublê que responde o contrato
       # MEDIDO na API real. O que só esta prova é que o contrato ainda é esse — a
       # versão fixada responde e a chave passa no teste. Sem a chave, ela pula; o
