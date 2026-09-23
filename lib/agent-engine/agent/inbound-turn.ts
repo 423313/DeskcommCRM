@@ -142,6 +142,7 @@ import { buildMcpTurnTools } from '../edge/crm/mcp-tools';
 import { cancelPendingCronsForLead } from '../cron/scheduler';
 import {
   latestInboundSignal,
+  recentInboundSignal,
   loadSkills,
   matchSkills,
   recordSkillMissCandidates,
@@ -2573,8 +2574,17 @@ async function executarTurnoDoAgente(
   // montar rawTools (Fase 2): o gate de read_skill_reference precisa do resultado do match
   // para decidir se a tool entra no turno (mesmo padrão de gate de search_knowledge/
   // request_human_handoff, feito antes do wrapToolsWithBreaker).
+  // Sinal do matcher com o CONTEXTO recente (não só a última mensagem): a
+  // conversa sobre motos continua e a skill não pode "cair" quando o cliente
+  // responde a escolha ("A 2025"), senão as fotos da moto escolhida não saem.
+  //
+  // SÓ o matcher lê a janela. `skillSignal` segue sendo a ÚLTIMA inbound: ele
+  // também alimenta o classificador de jailbreak e os candidatos de divergência
+  // de estágio, e uma tentativa de jailbreak de cinco mensagens atrás não pode
+  // seguir marcando todo turno seguinte.
   const skillSignal = latestInboundSignal(effectiveContext.messages);
-  const skillMatch = matchSkills(skills, skillSignal);
+  const sinalDoMatcher = recentInboundSignal(effectiveContext.messages);
+  const skillMatch = matchSkills(skills, sinalDoMatcher);
   const matchedSkillsBlock = renderMatchedSkillBodies(skillMatch.matched);
   if (!preview && deps.knobs.goldenCandidatesDir !== undefined) {
     await recordSkillMissCandidates(
@@ -2583,7 +2593,7 @@ async function executarTurnoDoAgente(
         tenantId,
         leadId,
         jobId: liveJob().id,
-        signal: skillSignal,
+        signal: sinalDoMatcher,
         candidates: skillMatch.missCandidates,
       },
       runLog,
