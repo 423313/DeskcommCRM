@@ -80,10 +80,17 @@ export async function POST(
     return fail("validation_failed", t("Cada produto tem no máximo 5 fotos."), 422, { requestId });
   }
 
+  // Recusa pelo Content-Length declarado ANTES de bufferizar o corpo (como a rota de
+  // mídia da conversa); o file.size abaixo continua sendo o check autoritativo.
+  const declarado = Number(req.headers.get("content-length") ?? 0);
+  if (declarado > TAMANHO_MAXIMO_DA_FOTO + 1_048_576) {
+    return fail("payload_too_large", t("A foto precisa ter até 5 MB."), 413, { requestId });
+  }
+
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) {
-    return fail("validation_failed", "Campo 'file' (multipart) obrigatório.", 422, { requestId });
+    return fail("validation_failed", t("Campo 'file' (multipart) obrigatório."), 422, { requestId });
   }
   if (file.size > TAMANHO_MAXIMO_DA_FOTO) {
     return fail("payload_too_large", t("A foto precisa ter até 5 MB."), 413, { requestId });

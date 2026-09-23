@@ -3080,7 +3080,10 @@ async function executarTurnoDoAgente(
                   ...(media ? { media } : {}),
                 });
               };
-              return enviarComFotos(finalBody, fotosDoProduto, {
+              // Cada foto é uma mensagem física: só vão as que cabem no que resta do teto
+              // do turno (a checagem de `max_sends_per_turn` acima roda uma vez, antes).
+              const fotosNoTeto = fotosDoProduto.slice(0, Math.max(0, maxSendsPerTurn - seq));
+              return enviarComFotos(finalBody, fotosNoTeto, {
                 sleep,
                 jitter,
                 enviarFoto: (foto, legenda) => enviar(legenda, foto),
