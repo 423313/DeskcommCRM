@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { Play, Clock, GitBranch, Brain, ChatCircle, ArrowsClockwise, PaperPlaneTilt, Flag, Question, PuzzlePiece } from "@/lib/ui/icons";
 import type { FlowNode, NodeType } from "@/lib/followup/graph-schema";
 import { RESULTADOS_DO_FIM } from "@/lib/followup/vocabulario";
+import { NOS_DA_SUPERFICIE } from "@/lib/followup/validate-publish";
 
 /**
  * Visual identity per node type — shared by the palette (Task 6.2 increment 2)
@@ -161,7 +162,13 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
   },
 };
 
-export const NODE_VISUAL_LIST = Object.values(NODE_VISUALS);
+/**
+ * A paleta do editor de follow-up: só o que o motor do RELÓGIO executa. Pergunta
+ * e Skill são do roteiro de atendimento (#1130) e ficam fora — a mesma lista
+ * que o publish cobra (`NOS_DA_SUPERFICIE`), para a tela não oferecer caixa que
+ * o publish recusa.
+ */
+export const NODE_VISUAL_LIST = NOS_DA_SUPERFICIE.followup.map((tipo) => NODE_VISUALS[tipo]);
 
 type ConfigOf<T extends NodeType> = Extract<FlowNode, { type: T }>["config"];
 

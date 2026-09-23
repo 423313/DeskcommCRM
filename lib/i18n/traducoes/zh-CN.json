@@ -4343,6 +4343,7 @@
   "Falha ao salvar o teto diário.": "保存每日上限失败。",
   "Faltam nome, idioma ou conteúdo.": "缺少名称、语言或内容。",
   "Fluxo não encontrado.": "未找到流程。",
+  "Roteiro de atendimento começa por palavra-gatilho ou pelo roteador, não por gatilho de follow-up.": "接待问卷只能由触发词或路由器启动，不能使用跟进触发器。",
   "Fluxo não tem rascunho pronto para publicar.": "流程没有可发布的草稿。",
   "Fluxo reprovado na validação de publish.": "流程未通过发布验证。",
   "Follow-up não encontrado.": "未找到跟进。",
