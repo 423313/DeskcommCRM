@@ -111,7 +111,9 @@ export function caminhoDaCadeia(no: ts.Expression): string | null {
  */
 export function nomesDoClienteAdmin(fonte: ts.SourceFile): Set<string> {
   const nomes = new Set<string>();
-  const visitar = (no: ts.Node): void => {
+  const pilha: ts.Node[] = [fonte];
+  while (pilha.length > 0) {
+    const no = pilha.pop()!;
     if (ts.isVariableDeclaration(no) && no.initializer && ts.isIdentifier(no.name)) {
       let init: ts.Node = no.initializer;
       if (ts.isAwaitExpression(init)) init = init.expression;
@@ -123,9 +125,10 @@ export function nomesDoClienteAdmin(fonte: ts.SourceFile): Set<string> {
         nomes.add(no.name.text);
       }
     }
-    ts.forEachChild(no, visitar);
-  };
-  visitar(fonte);
+    ts.forEachChild(no, (filho) => {
+      pilha.push(filho);
+    });
+  }
   return nomes;
 }
 
@@ -212,13 +215,68 @@ function ehExportado(no: ts.Node): boolean {
   return modificadores?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) === true;
 }
 
-function escopoDeTipos(fonte: ts.SourceFile): EscopoDeTipos {
+/**
+ * A função atravessa a fronteira do arquivo ou escapa como valor? (F2 da issue #1246)
+ *
+ * Uma função deixa de ter todas as suas chamadas visíveis quando:
+ * - Tem modificador `export` ou `export default`;
+ * - É citada numa cláusula `export { f }` ou `export default f`;
+ * - Escapa como valor (`lista.map(f)`, `passar(f)`, etc.).
+ */
+export function ehFuncaoExportadaOuEscapada(
+  nome: string,
+  no: ts.Node,
+  fonte: ts.SourceFile,
+): boolean {
+  if (ehExportado(no)) return true;
+
+  for (const decl of fonte.statements) {
+    if (ts.isExportDeclaration(decl)) {
+      const ligacoes = decl.exportClause;
+      if (ligacoes !== undefined && ts.isNamedExports(ligacoes)) {
+        for (const elem of ligacoes.elements) {
+          const exportado = elem.propertyName?.text ?? elem.name.text;
+          if (exportado === nome) return true;
+        }
+      }
+    }
+    if (ts.isExportAssignment(decl)) {
+      if (ts.isIdentifier(decl.expression) && decl.expression.text === nome) {
+        return true;
+      }
+    }
+  }
+
+  const pilha: ts.Node[] = [fonte];
+  while (pilha.length > 0) {
+    const n = pilha.pop()!;
+    if (ts.isIdentifier(n) && n.text === nome) {
+      if (ts.isFunctionDeclaration(n.parent) && n.parent.name === n) continue;
+      if (ts.isVariableDeclaration(n.parent) && n.parent.name === n) continue;
+      if (ts.isFunctionExpression(n.parent) && n.parent.name === n) continue;
+
+      let p: ts.Node = n.parent;
+      while (ts.isParenthesizedExpression(p)) p = p.parent;
+      if (ts.isCallExpression(p) && p.expression === n) continue;
+
+      return true;
+    }
+    ts.forEachChild(n, (filho) => {
+      pilha.push(filho);
+    });
+  }
+  return false;
+}
+
+export function escopoDeTipos(fonte: ts.SourceFile): EscopoDeTipos {
   const aliases = new Map<string, ts.TypeNode>();
   const interfaces = new Map<string, DeclaracaoDeInterface>();
   const importados = new Map<string, { modulo: string; exportado: string }>();
   const funcoes = new Map<string, FuncaoLocal>();
 
-  const visitar = (no: ts.Node): void => {
+  const pilha: ts.Node[] = [fonte];
+  while (pilha.length > 0) {
+    const no = pilha.pop()!;
     if (ts.isTypeAliasDeclaration(no)) aliases.set(no.name.text, no.type);
     if (ts.isInterfaceDeclaration(no)) {
       const estende: string[] = [];
@@ -233,11 +291,12 @@ function escopoDeTipos(fonte: ts.SourceFile): EscopoDeTipos {
     }
     const nome = nomeDeclarado(no);
     if (nome !== null && ts.isFunctionLike(no)) {
-      funcoes.set(nome, { parametros: no.parameters, exportada: ehExportado(no) });
+      funcoes.set(nome, { parametros: no.parameters, exportada: ehFuncaoExportadaOuEscapada(nome, no, fonte) });
     }
-    ts.forEachChild(no, visitar);
-  };
-  visitar(fonte);
+    ts.forEachChild(no, (filho) => {
+      pilha.push(filho);
+    });
+  }
 
   for (const decl of fonte.statements) {
     if (!ts.isImportDeclaration(decl) || !ts.isStringLiteral(decl.moduleSpecifier)) continue;
@@ -481,7 +540,9 @@ export function caminhosDoClienteAdmin(fonte: ts.SourceFile): Set<string> {
   const escopo = escopoDeTipos(fonte);
   const caminhos = new Set<string>();
 
-  const visitar = (no: ts.Node): void => {
+  const pilha: ts.Node[] = [fonte];
+  while (pilha.length > 0) {
+    const no = pilha.pop()!;
     if (ts.isParameter(no) && no.type !== undefined) {
       if (ts.isIdentifier(no.name)) {
         if (ehTipoDoClienteAdmin(no.type, escopo)) {
@@ -505,9 +566,10 @@ export function caminhosDoClienteAdmin(fonte: ts.SourceFile): Set<string> {
         }
       }
     }
-    ts.forEachChild(no, visitar);
-  };
-  visitar(fonte);
+    ts.forEachChild(no, (filho) => {
+      pilha.push(filho);
+    });
+  }
 
   // 3. a prova por CHAMADA, para o parâmetro sem anotação nenhuma.
   for (const nome of nomesProvadosPelaChamada(fonte, escopo, caminhos)) caminhos.add(nome);
@@ -604,9 +666,16 @@ function parametroRecebeAdmin(
     // que `chamada com o cliente admin`.
     if (chamadas.length === 0) return false;
     const proximos = new Set([...vistos, chave]);
-    return chamadas.every((chamada) =>
-      argumentoEntregaAdmin(chamada.arguments[indice], fonte, escopo, admins, caminhos, proximos),
-    );
+    return chamadas.every((chamada) => {
+      const arg = chamada.arguments[indice];
+      if (arg === undefined) {
+        return (
+          parametro.initializer !== undefined &&
+          argumentoEntregaAdmin(parametro.initializer, fonte, escopo, admins, caminhos, proximos)
+        );
+      }
+      return argumentoEntregaAdmin(arg, fonte, escopo, admins, caminhos, proximos);
+    });
   }
   return false;
 }
@@ -682,16 +751,19 @@ function nomesDasFuncoesQueContem(no: ts.Node): string[] {
 /** As chamadas a esta função no arquivo, FORA do corpo dela. */
 function chamadasA(fonte: ts.SourceFile, nome: string): ts.CallExpression[] {
   const chamadas: ts.CallExpression[] = [];
-  const visitar = (no: ts.Node, dentro: boolean): void => {
+  const pilha: { no: ts.Node; dentro: boolean }[] = [{ no: fonte, dentro: false }];
+  while (pilha.length > 0) {
+    const { no, dentro } = pilha.pop()!;
     if (!dentro && ts.isCallExpression(no) && ts.isIdentifier(no.expression) && no.expression.text === nome) {
       chamadas.push(no);
     }
     // Recursão não prova nada sobre o parâmetro: contá-la faria a função provar
     // a si mesma.
     const dentroAgora = dentro || nomeDeclarado(no) === nome;
-    ts.forEachChild(no, (filho) => visitar(filho, dentroAgora));
-  };
-  visitar(fonte, false);
+    ts.forEachChild(no, (filho) => {
+      pilha.push({ no: filho, dentro: dentroAgora });
+    });
+  }
   return chamadas;
 }
 
@@ -742,4 +814,244 @@ export function passosDaCadeia(chamada: ts.CallExpression): PassoDaCadeia[] {
     atual = proxima;
   }
   return passos;
+}
+
+/**
+ * Retorna a função que contém o nó, subindo pela árvore de ancestrais.
+ */
+function funcaoQueContem(no: ts.Node): ts.Node | null {
+  let atual: ts.Node | undefined = no.parent;
+  while (atual !== undefined) {
+    if (
+      ts.isFunctionDeclaration(atual) ||
+      ts.isFunctionExpression(atual) ||
+      ts.isArrowFunction(atual) ||
+      ts.isMethodDeclaration(atual) ||
+      ts.isConstructorDeclaration(atual)
+    ) {
+      return atual;
+    }
+    atual = atual.parent;
+  }
+  return null;
+}
+
+/**
+ * Localiza a declaração de um identificador no escopo léxico (F1 da issue #1246).
+ *
+ * Percorre os ancestrais léxicos a partir do nó até a raiz do arquivo,
+ * respeitando o escopo de bloco e função.
+ */
+export function declaracaoDoIdentificador(
+  id: ts.Identifier,
+  fonte: ts.SourceFile,
+): ts.Declaration | null {
+  const nome = id.text;
+  let atual: ts.Node | undefined = id.parent;
+
+  while (atual !== undefined) {
+    if (ts.isBlock(atual) || ts.isSourceFile(atual)) {
+      for (const stmt of atual.statements) {
+        if (ts.isVariableStatement(stmt)) {
+          for (const decl of stmt.declarationList.declarations) {
+            if (decl.name === id) continue;
+            if (ts.isIdentifier(decl.name) && decl.name.text === nome) {
+              if (ts.isSourceFile(atual) || decl.pos <= id.pos) {
+                return decl;
+              }
+            }
+            if (ts.isObjectBindingPattern(decl.name)) {
+              for (const elem of decl.name.elements) {
+                if (elem.name === id) continue;
+                if (ts.isIdentifier(elem.name) && elem.name.text === nome) {
+                  if (ts.isSourceFile(atual) || elem.pos <= id.pos) {
+                    return elem;
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (ts.isFunctionDeclaration(stmt) && stmt.name && stmt.name.text === nome) {
+          if (stmt.name !== id) return stmt;
+        }
+      }
+    }
+
+    if (
+      ts.isFunctionDeclaration(atual) ||
+      ts.isFunctionExpression(atual) ||
+      ts.isArrowFunction(atual) ||
+      ts.isMethodDeclaration(atual) ||
+      ts.isConstructorDeclaration(atual)
+    ) {
+      for (const param of atual.parameters) {
+        if (param.name === id) continue;
+        if (ts.isIdentifier(param.name) && param.name.text === nome) {
+          return param;
+        }
+        if (ts.isObjectBindingPattern(param.name)) {
+          for (const elem of param.name.elements) {
+            if (elem.name === id) continue;
+            if (ts.isIdentifier(elem.name) && elem.name.text === nome) {
+              return elem;
+            }
+          }
+        }
+      }
+    }
+
+    if (ts.isCatchClause(atual) && atual.variableDeclaration) {
+      if (
+        atual.variableDeclaration.name !== id &&
+        ts.isIdentifier(atual.variableDeclaration.name) &&
+        atual.variableDeclaration.name.text === nome
+      ) {
+        return atual.variableDeclaration;
+      }
+    }
+
+    if (ts.isForStatement(atual) || ts.isForOfStatement(atual) || ts.isForInStatement(atual)) {
+      if (atual.initializer && ts.isVariableDeclarationList(atual.initializer)) {
+        for (const decl of atual.initializer.declarations) {
+          if (decl.name === id) continue;
+          if (ts.isIdentifier(decl.name) && decl.name.text === nome) {
+            return decl;
+          }
+        }
+      }
+    }
+
+    atual = atual.parent;
+  }
+
+  return null;
+}
+
+/**
+ * Avalia se uma declaração léxica entrega o cliente admin.
+ */
+function ehDeclaracaoAdmin(
+  decl: ts.Declaration,
+  id: ts.Identifier,
+  fonte: ts.SourceFile,
+  escopo: EscopoDeTipos,
+  caminhos: ReadonlySet<string>,
+): boolean {
+  if (ts.isVariableDeclaration(decl)) {
+    if (!decl.initializer) return false;
+    let init: ts.Expression = decl.initializer;
+    while (ts.isParenthesizedExpression(init) || ts.isAwaitExpression(init)) {
+      init = init.expression;
+    }
+    if (ts.isCallExpression(init)) {
+      const raiz = raizDaCadeia(init.expression);
+      if (raiz === "createAdminClient" || (escopo.fabrica !== null && raiz === escopo.fabrica)) {
+        return true;
+      }
+    }
+    if (ts.isIdentifier(init)) {
+      const outra = declaracaoDoIdentificador(init, fonte);
+      if (outra !== null && outra !== decl) {
+        return ehDeclaracaoAdmin(outra, init, fonte, escopo, caminhos);
+      }
+    }
+    return false;
+  }
+
+  if (ts.isParameter(decl)) {
+    if (decl.type !== undefined) {
+      return ehTipoDoClienteAdmin(decl.type, escopo);
+    }
+    const fn = funcaoQueContem(decl);
+    if (fn === null) return false;
+    const nomeFn = nomeDeclarado(fn);
+    if (nomeFn === null) return false;
+    if (ehFuncaoExportadaOuEscapada(nomeFn, fn, fonte)) return false;
+
+    return caminhos.has(id.text);
+  }
+
+  if (ts.isBindingElement(decl)) {
+    const parent = decl.parent.parent;
+    if (ts.isParameter(parent) && parent.type !== undefined) {
+      const props = propriedadesDoClienteAdmin(parent.type, escopo);
+      const origem = decl.propertyName ?? decl.name;
+      if (ts.isIdentifier(origem)) {
+        return props.has(origem.text);
+      }
+    }
+    if (ts.isVariableDeclaration(parent) && parent.initializer !== undefined) {
+      if (ts.isIdentifier(decl.name) && decl.name.text === "admin") {
+        return ehReceptorAdmin(parent.initializer, fonte, escopo, caminhos);
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Determina se a expressão de receptor da mutação (`x.from("organizations")`)
+ * resolve no cliente admin pelo escopo léxico ou tipagem.
+ */
+export function ehReceptorAdmin(
+  receptor: ts.Expression,
+  fonte: ts.SourceFile,
+  escopo: EscopoDeTipos = escopoDeTipos(fonte),
+  caminhos: ReadonlySet<string> = caminhosDoClienteAdmin(fonte),
+): boolean {
+  let atual: ts.Expression = receptor;
+  while (ts.isParenthesizedExpression(atual) || ts.isAwaitExpression(atual)) {
+    atual = atual.expression;
+  }
+
+  // 1. Fábrica inline: createAdminClient()
+  if (ts.isCallExpression(atual)) {
+    const raiz = raizDaCadeia(atual.expression);
+    if (raiz === "createAdminClient" || (escopo.fabrica !== null && raiz === escopo.fabrica)) {
+      return true;
+    }
+    return false;
+  }
+
+  // 2. Acesso à propriedade: p.admin
+  if (ts.isPropertyAccessExpression(atual)) {
+    const base = atual.expression;
+    const propNome = atual.name.text;
+    if (ts.isIdentifier(base)) {
+      const decl = declaracaoDoIdentificador(base, fonte);
+      if (decl && ts.isParameter(decl) && decl.type !== undefined) {
+        const props = propriedadesDoClienteAdmin(decl.type, escopo);
+        return props.has(propNome);
+      }
+      if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
+        let init: ts.Expression = decl.initializer;
+        while (ts.isParenthesizedExpression(init) || ts.isAwaitExpression(init)) {
+          init = init.expression;
+        }
+        if (ts.isObjectLiteralExpression(init)) {
+          for (const prop of init.properties) {
+            if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name) && prop.name.text === propNome) {
+              return ehReceptorAdmin(prop.initializer, fonte, escopo, caminhos);
+            }
+            if (ts.isShorthandPropertyAssignment(prop) && prop.name.text === propNome) {
+              const propDecl = declaracaoDoIdentificador(prop.name, fonte);
+              return propDecl ? ehDeclaracaoAdmin(propDecl, prop.name, fonte, escopo, caminhos) : false;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  // 3. Identificador direto: admin, cliente
+  if (ts.isIdentifier(atual)) {
+    const decl = declaracaoDoIdentificador(atual, fonte);
+    if (decl === null) return false;
+    return ehDeclaracaoAdmin(decl, atual, fonte, escopo, caminhos);
+  }
+
+  return false;
 }

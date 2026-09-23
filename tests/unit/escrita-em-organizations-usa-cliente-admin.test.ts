@@ -72,6 +72,8 @@ import { arquivosDeCodigo, caminhoRelativo } from "./helpers/varrer-codigo";
 import {
   caminhoDaCadeia,
   caminhosDoClienteAdmin,
+  ehReceptorAdmin,
+  escopoDeTipos,
   nomesDoClienteAdmin,
   raizDaCadeia,
 } from "./helpers/cliente-admin";
@@ -122,8 +124,8 @@ function escritasEmOrganizations(caminho: string): Achado[] {
  * de cliente passado entre funções — num teste que roda em todo CI.
  */
 function achadosNaFonte(fonte: ts.SourceFile, arquivo: string): Achado[] {
-  const admins = nomesDoClienteAdmin(fonte);
-  const caminhosAdmin = caminhosDoClienteAdmin(fonte);
+  const escopo = escopoDeTipos(fonte);
+  const caminhos = caminhosDoClienteAdmin(fonte);
   const achados: Achado[] = [];
 
   const visitar = (no: ts.Node): void => {
@@ -154,9 +156,7 @@ function achadosNaFonte(fonte: ts.SourceFile, arquivo: string): Achado[] {
         // por um tipo que mora em OUTRO arquivo, ou herdado por `extends` — ou
         // passado por outra função deste mesmo arquivo (a chamada prova).
         const caminho = caminhoDaCadeia(receptor);
-        const deServico =
-          (raiz !== null && admins.has(raiz)) ||
-          (caminho !== null && caminhosAdmin.has(caminho));
+        const deServico = ehReceptorAdmin(receptor, fonte, escopo, caminhos);
         if (raiz !== null && !deServico) {
           achados.push({
             arquivo,
@@ -419,6 +419,44 @@ describe("toda escrita em `organizations` passa pelo cliente admin", () => {
           "export async function outro(orgId: string, settings: unknown) " +
           "{ const sessao = await createClient(); await vazar(sessao, orgId, settings); }",
         esperado: ["cliente.update", "cliente.update"],
+      },
+      {
+        forma: "F1d: valor padrão com local homônimo de sessão noutra função (escopo léxico)",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const admin = createAdminClient();\n" +
+          "async function aplicar(cliente = admin, orgId: string, settings: unknown) " +
+          `{ ${MUTA_PELO_CLIENTE_PASSADO} }\n` +
+          "export async function gravar(orgId: string, settings: unknown) " +
+          "{ await aplicar(admin, orgId, settings); }\n" +
+          "export async function vazar(orgId: string, settings: unknown) " +
+          `{ const cliente = await createClient(); ${MUTA_PELO_CLIENTE_PASSADO} }`,
+        esperado: ["cliente.update"],
+      },
+      {
+        forma: "F2d: valor padrão com export { aplicar } (função exportada por declaração nomeada)",
+        codigo:
+          IMPORTA_A_FABRICA +
+          "const admin = createAdminClient();\n" +
+          "async function aplicar(cliente = admin, orgId: string, settings: unknown) " +
+          `{ ${MUTA_PELO_CLIENTE_PASSADO} }\n` +
+          "export { aplicar };\n" +
+          "export async function gravar(orgId: string, settings: unknown) " +
+          "{ await aplicar(admin, orgId, settings); }",
+        esperado: ["cliente.update"],
+      },
+      {
+        forma: "F2d2: valor padrão com export default aplicar (função exportada como default)",
+        codigo:
+          IMPORTA_A_FABRICA +
+          "const admin = createAdminClient();\n" +
+          "async function aplicar(cliente = admin, orgId = \"\", settings: unknown = null) " +
+          `{ ${MUTA_PELO_CLIENTE_PASSADO} }\n` +
+          "export default aplicar;\n" +
+          "export async function gravar(orgId: string, settings: unknown) " +
+          "{ await aplicar(admin, orgId, settings); }",
+        esperado: ["cliente.update"],
       },
     ];
     for (const { forma, codigo, esperado = ["p.admin.update"] } of reprovados) {
