@@ -38,7 +38,7 @@ export function NoteCard({ note, onDelete }: Props) {
             </button>
           )}
         </div>
-        <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-snug">{note.body}</p>
+        <p className="mt-1 whitespace-pre-wrap wrap-anywhere leading-snug">{note.body}</p>
         <div className="mt-1 text-right text-[10px] opacity-70">{time}</div>
       </div>
     </div>
