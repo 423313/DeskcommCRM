@@ -95,10 +95,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   responde por cima. O dossiê do acompanhamento mostra que começou porque o
   cliente voltou.
 
+  Contribuição de @IanCouto (#1424, entrou pelo #1453).
+
 - **Duplicar e renomear um fluxo de follow-up** Em **IA → Follow-ups**, cada fluxo agora tem **Duplicar** e **Renomear**. A
   cópia nasce como rascunho com o mesmo desenho e o mesmo gatilho — não publica
   sozinha e não passa a mandar mensagem. O nome interno também muda pelo lápis
   ao lado do título no construtor.
+
+  Contribuição de @IanCouto (#1424, entrou pelo #1453).
 
 - **Follow-up quando um negócio nasce** Em **IA → Follow-ups**, o gatilho **Lead criado** inscreve o contato quando um
   negócio nasce — pela primeira mensagem que abre o card, por formulário ou pelo
@@ -108,6 +112,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   Um fluxo publicado com esse gatilho também passa a valer para o lead que nasce
   de uma conversa. Se você já tem uma automação em Webhooks no evento «quando
   entrar um contato novo», ela passa a rodar nesse caso também.
+
+  Contribuição de @IanCouto (recorte do #1471, entrou pelo #1479).
 
 - **Um segundo jeito de instalar, com o banco (Supabase) dentro da própria VPS** O kit ganhou um modo de instalação **opcional** em que ele mesmo instala e opera o
   Supabase **na VPS do cliente**, ao lado do CRM. Não é preciso abrir conta no
@@ -139,6 +145,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   Quem já instalou com o Supabase na nuvem (ou num Supabase próprio) **não é afetado**:
   nada muda no comportamento do instalador comum, do backup ou da atualização.
 
+  Contribuição de @betoarts (recorte do #714, entrou pelo #1464).
+
 - **Um comando sobe o DeskcommCRM inteiro na sua própria máquina** Até aqui, rodar o DeskcommCRM fora de um servidor exigia montar tudo à mão: banco, autenticação, WhatsApp e fila, cada um com a sua configuração. O instalador da VPS não serve para isso, porque ele assume domínio próprio e proxy na frente.
 
   Agora existe um caminho local: `./ubuntu-local-installer.sh` prepara a máquina, sobe o banco com a estrutura oficial do produto, gera as chaves, levanta a aplicação, o worker, o WhatsApp e a fila, e cria o usuário administrador — imprimindo no fim o endereço e a senha. Depois disso, `pnpm local:up`, `local:status`, `local:logs` e `local:down` cuidam do dia a dia. O passo a passo está em `docs/SETUP.md`.
@@ -166,6 +174,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   etapa, caso) exigia um agente publicado mesmo quando o fluxo não usava o
   modelo. Fluxo com classificação, espera inteligente ou mensagem gerada por IA
   continua precisando do agente.
+
+  Contribuição de @IanCouto (#1424, entrou pelo #1453).
 
 ### Corrigido
 
@@ -214,9 +224,13 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   aviso de “não respondeu”. Agora só avança o passo daquela resposta; a
   próxima pergunta espera o cliente de novo.
 
+  Contribuição de @IanCouto (#1424, entrou pelo #1453).
+
 - **A resposta do follow-up sai depois que o lead responde** Num fluxo de follow-up que espera a resposta do cliente (menu 1/2/3), a
   primeira mensagem saía e a seguinte ficava parada depois do "1". O
   acompanhamento volta a avançar e enviar a mensagem do ramo escolhido.
+
+  Contribuição de @IanCouto (#1424, entrou pelo #1453).
 
 - **O MCP passa a ter teto de chamadas por token, por organização e para escrita** O endereço que as ferramentas de IA usam para conversar com o sistema (`/api/mcp`) não limitava quantas vezes um token válido chamava as ferramentas. Um agente externo em laço podia disparar mensagens de WhatsApp sem parar, e o WhatsApp restringe e bane o número por volume.
 
