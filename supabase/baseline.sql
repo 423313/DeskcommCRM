@@ -10428,27 +10428,51 @@ select d.organization_id, d.id, c.conversation_id
 --   * INTOCADA — sem próximo passo, sem lead, sem dono humano, sem caso;
 --   * ligada a UMA conversa só — então apagá-la não deixa conversa nenhuma sem
 --     demanda (a cascata leva só esse vínculo);
---   * e nascida DEPOIS de outra demanda de origem real na mesma conversa. É
+--   * nascida DEPOIS de outra demanda de origem real na mesma conversa. É
 --     isso que separa a duplicata da derivada legítima: a do backfill original
 --     é anterior ao trigger, e a 'inbound' que chegou depois dela, numa conversa
---     reaberta, é mais NOVA — essa derivada é histórico e fica.
-delete from public.demandas d
- where d.origem = 'derivada'
-   and d.agent_case_id is null
-   and d.lead_id is null
-   and d.dono_user_id is null
-   and d.proximo_passo is null
-   and (select count(*) from public.demanda_conversas v where v.demanda_id = d.id) = 1
-   and exists (
-     select 1
-       from public.demanda_conversas dc
-       join public.demanda_conversas outra
-         on outra.conversation_id = dc.conversation_id and outra.demanda_id <> d.id
-       join public.demandas d2 on d2.id = outra.demanda_id
-      where dc.demanda_id = d.id
-        and d2.origem <> 'derivada'
-        and d2.created_at < d.created_at
-   );
+--     reaberta, é mais NOVA — essa derivada é histórico e fica;
+--   * e que NINGUÉM referencia. O backfill da 0222 (mais abaixo) escolhe a
+--     vigente pelo maior `aberta_em`, e a 'inbound' tem o `sent_at` do WAHA
+--     (segundos, anterior ao insert da conversa) — a duplicata costuma vencer,
+--     virar `current_demanda_id` e ser carimbada em `messages.demanda_id`.
+--     Apagá-la zeraria essas referências (`on delete set null`): a próxima
+--     entrada abriria outra demanda e o acompanhamento com fronteira nela seria
+--     cancelado como vencido. Duplicata vigente segue contando dobrado; é o
+--     preço menor.
+--
+-- Dentro de `do` porque essas colunas nascem no bloco da 0222, mais abaixo: no
+-- install ainda não existem (e não há demanda nenhuma para curar). O PL/pgSQL
+-- só analisa o `delete` quando o executa, então o `if` basta.
+do $$
+begin
+  if (select count(*) from information_schema.columns
+       where table_schema = 'public'
+         and (table_name, column_name) in (('conversations', 'current_demanda_id'),
+                                           ('messages', 'demanda_id'),
+                                           ('lead_checkpoints', 'demanda_id'))) = 3 then
+    delete from public.demandas d
+     where d.origem = 'derivada'
+       and d.agent_case_id is null
+       and d.lead_id is null
+       and d.dono_user_id is null
+       and d.proximo_passo is null
+       and (select count(*) from public.demanda_conversas v where v.demanda_id = d.id) = 1
+       and not exists (select 1 from public.conversations c where c.current_demanda_id = d.id)
+       and not exists (select 1 from public.messages m where m.demanda_id = d.id)
+       and not exists (select 1 from public.lead_checkpoints k where k.demanda_id = d.id)
+       and exists (
+         select 1
+           from public.demanda_conversas dc
+           join public.demanda_conversas outra
+             on outra.conversation_id = dc.conversation_id and outra.demanda_id <> d.id
+           join public.demandas d2 on d2.id = outra.demanda_id
+          where dc.demanda_id = d.id
+            and d2.origem <> 'derivada'
+            and d2.created_at < d.created_at
+       );
+  end if;
+end $$;
 
 -- R2 — conversas que nunca escalaram também são demandas.
 insert into public.demandas
