@@ -3976,12 +3976,6 @@ async function executarTurnoDoAgente(
         ? openingTextOnly
         : [{ role: 'user', content: [{ type: 'text', text: openingText }, ...nativeParts] }];
 
-    // O modelo decide tools livremente dentro do teto de steps (knob AGENT_MAX_STEPS).
-    //
-    // Sem escolta LOCAL: quem cobre o teto de gasto é `runAgentTurn`, que envolve
-    // este corpo inteiro. Escoltar aqui deixaria de fora as chamadas de modelo dos
-    // auxiliares (`classifyStage`, `maybeCompact`), que rodam ANTES desta e por
-    // isso são as que estouram primeiro.
     // "digitando…" ENQUANTO o modelo pensa. A pausa humana antes da 1ª bolha
     // (`esperaForaDoLock`) desconta este tempo e quase sempre zera — e com espera
     // zero ela não acende presença. Sem esta linha o cliente esperava a chamada
@@ -3993,6 +3987,13 @@ async function executarTurnoDoAgente(
         runLog,
       );
     }
+
+    // O modelo decide tools livremente dentro do teto de steps (knob AGENT_MAX_STEPS).
+    //
+    // Sem escolta LOCAL: quem cobre o teto de gasto é `runAgentTurn`, que envolve
+    // este corpo inteiro. Escoltar aqui deixaria de fora as chamadas de modelo dos
+    // auxiliares (`classifyStage`, `maybeCompact`), que rodam ANTES desta e por
+    // isso são as que estouram primeiro.
     const turn = await runModelCall(
       pool,
       deps.llmCfg,
