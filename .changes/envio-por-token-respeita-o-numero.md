@@ -9,3 +9,5 @@ Quem enviava mensagens com token de API (`POST /api/v1/messages` com `Authorizat
 Agora esses envios esperam o intervalo mínimo do número, como o agente do CRM já esperava, e entram na contagem diária. Quando o número atinge o limite do dia, a API responde `429 rate_limited`, informa o motivo e o horário de liberação (`libera_em`) e envia o cabeçalho `Retry-After`. A rota REST por token também passa a ter o mesmo teto de chamadas por minuto que o MCP já tinha.
 
 O envio feito pela tela, por um atendente, não muda. O canal oficial da Meta também não, porque não corre risco de banimento. O operador não precisa fazer nada, mas uma integração que dispara em massa pela API passa a receber `429` e precisa esperar o `Retry-After`.
+
+Contribuição de @bossprt (#1487).

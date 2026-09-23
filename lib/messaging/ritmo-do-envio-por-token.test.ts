@@ -67,6 +67,8 @@ describe("segurarEnvioPorToken", () => {
     expect(erro).toBeInstanceOf(ApiError);
     expect((erro as ApiError).status).toBe(429);
     expect(d.sleep).not.toHaveBeenCalled();
+    // O MCP só repassa a mensagem: os segundos têm de estar no texto.
+    expect((erro as ApiError).message).toContain(`${Math.ceil((ESPERA_MAXIMA_MS + 1) / 1000)}s`);
   });
 
   it("recusa com 429 e diz quando volta quando o teto diário do número estourou", async () => {
@@ -84,6 +86,9 @@ describe("segurarEnvioPorToken", () => {
       libera_em: liberaEm.toISOString(),
       retry_after_seconds: 43_200,
     });
+    // O MCP só repassa a mensagem: o horário e os segundos têm de estar no texto.
+    expect(erro.message).toContain(liberaEm.toISOString());
+    expect(erro.message).toContain("43200s");
   });
 
   it("não freia canal sem risco de banimento", async () => {

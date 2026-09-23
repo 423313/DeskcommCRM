@@ -97,18 +97,17 @@ export async function segurarEnvioPorToken(
   }
 
   const retryAfterSeconds = Math.max(1, Math.ceil(esperaMs / 1000));
+  const liberaEm = decisao.liberaEm.toISOString();
+  // O valor vai no texto, não só em `details`: o servidor MCP devolve ao cliente apenas a
+  // mensagem do erro (lib/mcp/server.ts), e um modelo sem o horário não sabe quando voltar.
   throw new ApiError(
     429,
     "rate_limited",
-    {
-      motivo: decisao.motivo,
-      libera_em: decisao.liberaEm.toISOString(),
-      retry_after_seconds: retryAfterSeconds,
-    },
+    { motivo: decisao.motivo, libera_em: liberaEm, retry_after_seconds: retryAfterSeconds },
     entrada.requestId,
     decisao.motivo === "teto_diario"
-      ? "Este número atingiu o limite de envios de hoje. Tente de novo depois de libera_em."
-      : "Envios rápidos demais para este número. Tente de novo em alguns segundos.",
+      ? `Este número atingiu o limite de envios de hoje. Tente de novo depois de ${liberaEm} (em ${retryAfterSeconds}s).`
+      : `Envios rápidos demais para este número. Tente de novo em ${retryAfterSeconds}s.`,
   );
 }
 
