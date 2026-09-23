@@ -267,6 +267,7 @@ function makeSupabase(linhaCompleta: Row, espelhoDoModelo: Row | null = null) {
         // não fala do comportamento sob teste.
         const cadeia: Record<string, unknown> = {
           eq: () => cadeia,
+          is: () => cadeia,
           maybeSingle: async () => ({ data: espelhoDoModelo, error: null }),
         };
         return { select: () => cadeia };
