@@ -49,7 +49,11 @@ export function canalGraphParceiroLigado(
 export const GRAPH_PARTNER_LABEL = "Datafy";
 
 export interface GraphPartnerCredentials {
+  /** A conexão (`channel_sessions.id`) — escopo do espelho de modelos. */
+  channelSessionId: string;
   phoneNumberId: string;
+  /** A WABA (conta) do número — é o que endereça o catálogo de modelos. */
+  wabaId: string;
   token: string;
 }
 
@@ -86,7 +90,7 @@ export async function resolveGraphPartnerCreds(
   const base = () =>
     admin
       .from("channel_sessions")
-      .select("datafy_phone_number_id, datafy_token_encrypted")
+      .select("id, datafy_phone_number_id, datafy_waba_id, datafy_token_encrypted")
       .eq("organization_id", organizationId)
       .eq("datafy_phone_number_id", phoneNumberId);
   const { data, error } = await queryTolerantToMissingArchived(
@@ -105,5 +109,11 @@ export async function resolveGraphPartnerCreds(
   const token = await decryptWebhookSecret(admin, cifrado as string);
   if (!token) return null;
 
-  return { phoneNumberId: (data as { datafy_phone_number_id: string }).datafy_phone_number_id, token };
+  const linha = data as { id: string; datafy_phone_number_id: string; datafy_waba_id?: string | null };
+  return {
+    channelSessionId: linha.id,
+    phoneNumberId: linha.datafy_phone_number_id,
+    wabaId: linha.datafy_waba_id ?? "",
+    token,
+  };
 }

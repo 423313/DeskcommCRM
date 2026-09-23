@@ -13,6 +13,7 @@ import { TemplatesClient } from "./TemplatesClient";
 import { TemplatesParceiroClient } from "./TemplatesParceiroClient";
 import { TelefoniaClient } from "./TelefoniaClient";
 import { useT } from "@/hooks/i18n/useT";
+import { rotaDeTemplates } from "@/lib/channels/templates-fonte";
 
 /**
  * Conexões — TODOS os canais em um lugar só.
@@ -123,7 +124,21 @@ export function ConexoesShell({
 
       {graphParceiro && (
         <TabsContent value="graph" className="mt-0">
-          <CanalGraphParceiroClient />
+          {/* Sub-abas como nas demais: conectar e gerenciar modelos são tarefas
+              diferentes. O componente de modelos é o MESMO do outro parceiro,
+              apontado para a rota desta fonte. */}
+          <Tabs value={sub} onValueChange={(v) => irPara("graph", v)} className="flex flex-col gap-4">
+            <TabsList>
+              <TabsTrigger value="conexao">{t("Conexão")}</TabsTrigger>
+              <TabsTrigger value="templates">{t("Modelos")}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="conexao" className="mt-0">
+              <CanalGraphParceiroClient />
+            </TabsContent>
+            <TabsContent value="templates" className="mt-0">
+              <TemplatesParceiroClient rota={rotaDeTemplates("graph")} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       )}
 

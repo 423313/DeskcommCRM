@@ -300,8 +300,21 @@ async function datafyInbound(
       desfechos.push("status");
       continue;
     }
-    // `template_status`: a gestão de modelos deste canal é a fatia seguinte do
-    // #1130 (`canManageTemplates: false`) — ainda não há espelho a atualizar.
+    if (e.kind === "template_status") {
+      // A revisão da plataforma decide depois da criação: sem isto a definição
+      // ficava PENDING no espelho até alguém clicar em Sincronizar, e o seletor
+      // do inbox não a oferecia. Escopo pela CONEXÃO desta entrega — a coluna
+      // `waba_id` do espelho deste canal guarda o número, não a conta.
+      const { error } = await admin
+        .from("meta_templates")
+        .update({ status: e.event, rejected_reason: e.reason, updated_at: agora })
+        .eq("organization_id", orgId)
+        .eq("channel_session_id", input.session.id)
+        .eq("name", e.templateName)
+        .eq("language", e.templateLanguage);
+      desfechos.push(error ? "modelo_nao_atualizado" : "modelo");
+      continue;
+    }
     desfechos.push("ignorado");
   }
 

@@ -91,15 +91,14 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
   // (host, token), não o que o WhatsApp permite — então o perfil é o do canal
   // oficial.
   //
-  // `canManageTemplates: false` é o recorte desta primeira entrega: enviar,
-  // receber e saúde funcionam, a gestão de modelos deste canal vem na fatia
-  // seguinte. Declarar `true` antes mostraria uma tela que não salva.
-  // `requiresTemplates: true` continua porque a regra da Meta é real: fora da
-  // janela, só modelo aprovado passa.
+  // `canManageTemplates: true`: os modelos são os da Cloud API e o parceiro
+  // expõe os mesmos endpoints de catálogo; a tela cria e sincroniza por lá.
+  // `requiresTemplates: true` porque a regra da Meta é real: fora da janela de
+  // 24h, só modelo aprovado passa.
   datafy: {
     freeformOutsideWindow: false,
     requiresTemplates: true,
-    canManageTemplates: false,
+    canManageTemplates: true,
     banRisk: false,
     minIntervalMs: 6000,
     voiceNote: "opus-only",
