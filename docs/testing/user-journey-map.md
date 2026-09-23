@@ -114,6 +114,59 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 
 - `[P0]` Colar chave inválida e entender o motivo — `tests/e2e/credenciais-de-ia.spec.ts`. Achados corrigidos em 2026-09-02: lista de modelos colada por vírgula no card; "Validando…" eterno após restart; erro em código (`auth_failed_401`, no card e no toast); diálogo sem dizer quando usar cada provedor nem onde pegar a chave; contagem "em uso" divergente do DELETE. **PASS** — executada de verdade contra browser real (Supabase local pg17 + baseline + Chromium) em 2026-09-02, depois que o Docker da máquina (antes indisponível) voltou. A própria execução achou um SEXTO defeito que a leitura de código não tinha achado: `descreverErroDeValidacao` não classificava `TypeError` (o nome que o `fetch()` do Node usa para falha de rede/DNS) como erro de rede, e o card mostrava "Falha na validação (TypeError)." cru em vez da frase amigável — corrigido em `lib/ai/credenciais/erro-de-validacao.ts`, com caso de teste. Evidência em `.superpowers/evidence/credenciais-de-ia.png`.
 
+## J32 — Ligar o Jev para perceber o cliente irritado `[P1]` (2026-09-23)
+
+O Jev (System One, da TypeSafe AI) mede o clima da última mensagem do cliente em
+menos de meio segundo, no lugar ou ao lado da IA de sempre. Nasce desligado; ligar
+manda a última mensagem de cada cliente aos EUA, então pede o aceite de quem
+administra. É `[P1]` e não `[P0]`: nada dele está no caminho de quem acabou de
+instalar.
+
+Specs: `tests/e2e/jev-decisoes-rapidas.spec.ts` (parte 5 do `e2e`, contra o dublê
+HTTP `scripts/duble-jev-e2e.mjs`, que grava cada chamada num arquivo que a spec lê) e
+`tests/e2e/jev-chave-real.spec.ts` (fora do CI: exige a chave paga; pula sem ela).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J32.1 | Procurar "jev" no ⌘K | a busca leva a Provedores, onde está o cartão | **ESCRITA, NÃO EXECUTADA** |
+| J32.2 | Cartão sem chave | diz o que o Jev é, leva à TypeSafe para pegar a chave e abre o diálogo de colar já no Jev (formato `apikey_…`) | **ESCRITA, NÃO EXECUTADA** |
+| J32.3 | Colar a chave | o teste da chave passa (o dublê recebeu o `GET /v1/models` com a chave certa) e o cartão fica pronto para ligar | **ESCRITA, NÃO EXECUTADA** |
+| J32.4 | Chave validada, Jev desligado | nenhuma pergunta sai para o fornecedor (D6) | **ESCRITA, NÃO EXECUTADA** |
+| J32.5 | Ligar sem marcar o aceite | o botão fica travado; a rota recusa com `jev_exige_aceite` (provado em `app/api/v1/ai/jev/route.test.ts`) | **ESCRITA, NÃO EXECUTADA** em tela; rota **PASS** (unit) |
+| J32.6 | Ligar com o aceite, e deixar o Jev decidir | observando (com IA de sempre) → decidindo; sozinho quando a empresa não tem a IA de sempre | **ESCRITA, NÃO EXECUTADA** |
+| J32.7 | Mensagem de cliente pelo webhook do WhatsApp | o dublê recebe a pergunta do clima com a chave colada, a versão `jev-1.13.0` e SÓ a última mensagem, com telefone e e-mail trocados por `[PHONE]`/`[EMAIL]` | **ESCRITA, NÃO EXECUTADA** |
+| J32.8 | IA › Execuções, "Ver as decisões do Jev" | a medição aparece com "Jev (TypeSafe AI)", o modelo devolvido e sem "falhou"; o filtro "Só o Jev" vem marcado | **ESCRITA, NÃO EXECUTADA** |
+| J32.9 | O cartão depois da medição | "Mensagens medidas" sobe em 1 | **ESCRITA, NÃO EXECUTADA** |
+| J32.10 | O Jev como IA que conversa | ausente do "Modelo padrão", do seletor do ponto "Medir o clima da conversa" e do seletor de IA do agente novo | **ESCRITA, NÃO EXECUTADA** em tela; derivação **PASS** (`tests/unit/provedores-de-decisao-catraca.test.ts`) |
+| J32.11 | O Jev no "Qual você contratou" do onboarding | ausente | **NÃO COBERTO em tela** — o campo só aparece em organização sem chave nenhuma; a derivação de `PROVEDORES` é vigiada pela mesma catraca de unidade |
+| J32.12 | Desligar | volta a pronto para ligar, e religar não pede o aceite de novo | **ESCRITA, NÃO EXECUTADA** |
+| J32.13 | A mesma jornada contra a API de verdade | a chave paga passa no teste, a versão fixada responde e a medição aparece em Execuções | **FORA DO CI** — exige `JEV_API_KEY`; receita no cabeçalho da spec |
+| J32.14 | Falha que pede ação (chave recusada, sem crédito) | aviso na Central dizendo o que fazer | **NÃO COBERTO em tela** — `tests/unit/clima-da-conversa-no-worker.test.ts` |
+| J32.15 | Irritação percebida pelo Jev | a passagem para humano diz "(percebido pelo Jev)" só no que a equipe lê | **NÃO COBERTO em tela** — `tests/unit/handoff-do-clima-diz-quem-mediu.test.ts` |
+
+"ESCRITA, NÃO EXECUTADA" quer dizer isso mesmo: a spec existe e passa pelas cercas
+estáticas (`e2e-cobertura-completa` e as irmãs), mas ninguém a rodou contra um app
+buildado ainda. Esta linha muda quando a primeira rodada da parte 5 medir.
+
+### Achados da integração (cada um com commit próprio)
+
+1. **O redator de segredo nunca apagou chave nenhuma** (`de7236805`). O padrão de
+   `redigirMensagemDoProvedor` tinha um byte de backspace onde devia estar `\b`, desde
+   2026-08-08: `sk-…`, `AIza…` e `Bearer …` chegavam inteiros à tela de Execuções.
+   Apareceu ao escrever o caso da chave do Jev.
+2. **O clima da conversa não media com a chave colada pela tela** (`3c3d4ccf5`). Um
+   portão olhava só as variáveis do `.env`; quem pulou a chave no `install.sh` e a
+   cadastrou depois ficava sem passagem por irritação, sem aviso nenhum.
+3. **Cadastrar a chave do Jev já mandava as mensagens para fora** (`87332b348`), antes
+   de alguém ligar ou aceitar. A guarda passou para onde toda chamada passa.
+4. **O `scrubMessage` não apagava telefone como se escreve no Brasil** (`625f895a6`):
+   `(11) 98765-4321` passava inteiro — para o Sentry e para a frase de aceite do Jev,
+   que prometia o contrário.
+5. **O aviso "falta a chave da sua IA principal" era falso** quando a chave estava no
+   `.env` (`65b8078c6`).
+6. **O filtro `?provider=` de Execuções** era afirmado no cabeçalho da rota e não
+   existia (`4a38195fc`).
+
 ## J4 — CRM e Pipelines `[P1]`
 
 | # | Caso | Expectativa |

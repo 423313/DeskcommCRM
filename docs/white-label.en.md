@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@e1d374bb48e0 -->
+<!-- traduzido-de: docs/white-label.md@f7de37fa2f06 -->
 
 [🇧🇷 Português](white-label.md) · 🇺🇸 English · [🇪🇸 Español](white-label.es.md)
 
@@ -165,7 +165,9 @@ If your client asks "where does my data live?", the dedicated installation has t
 
 **Resolution CD/ANPD nº 19/2024** made standard contractual clauses mandatory for **international transfers of personal data**, with the compliance deadline closing on **23 August 2025**.
 
-Every client of yours who uses a foreign CRM performs such a transfer and needs the contractual artifact. Hosting on a VPS in Brazil, **there is no international transfer** — and the obligation does not apply.
+Every client of yours who uses a foreign CRM performs such a transfer and needs the contractual artifact. Hosting on a VPS in Brazil, **the CRM itself transfers no data out of the country** — and, for the CRM, the obligation does not apply.
+
+⚠️ **The caveat is AI, and it applies to almost every installation.** The sentence above only holds while no foreign AI provider is switched on. Automated customer service sends the conversation to the provider the client connected (Anthropic, OpenAI, Google, DeepSeek or OpenRouter, all outside Brazil). Jev, once the administrator switches it on under AI › Providers, sends each customer's latest message to TypeSafe AI, in the United States, after stripping CPF, phone number and email. Those flows are international transfers, and the standard clauses apply to them. Jev ships switched off and asks for the administrator's consent before sending anything; the customer-service AI does not.
 
 ⚠️ **Do not sell this as "server in Brazil = LGPD compliance".** That is false, and a lawyer takes it apart on the first question: compliance depends on legal basis, purpose, security and data-subject rights. The correct and defensible argument is the one above: with no international transfer, there is no requirement for standard clauses.
 
