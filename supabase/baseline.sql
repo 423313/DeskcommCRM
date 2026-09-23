@@ -36527,14 +36527,16 @@ create trigger trg_redigir_conversas_ao_anonimizar
 
 -- Cura: contatos que JÁ foram anonimizados pelo botão antes deste gatilho. O
 -- gatilho só dispara na virada, e para eles a virada já passou. Cada comando só
--- alcança linha que ainda tem resíduo, então reaplicar (update.sh) não reescreve
--- nada e não enfileira nada de novo.
+-- alcança o que existia ATÉ `anonymized_at`: um contato anonimizado que volta a
+-- escrever (religado pelo LID) tem conversa NOVA, e reaplicar o baseline no
+-- update.sh não pode redigi-la nem mandar a mídia dela para o apagamento.
 insert into public.storage_redaction_queue (organization_id, bucket, object_path)
 select distinct m.organization_id, 'whatsapp-media', m.media_storage_path
   from public.messages m
   join public.conversations c on c.id = m.conversation_id and c.organization_id = m.organization_id
   join public.contacts k on k.id = c.contact_id and k.organization_id = c.organization_id
  where k.is_anonymized
+   and m.created_at <= k.anonymized_at
    and m.media_storage_path is not null
    and length(m.media_storage_path) > 0
 on conflict (bucket, object_path) do nothing;
@@ -36552,6 +36554,7 @@ update public.messages m set
  where c.id = m.conversation_id
    and c.organization_id = m.organization_id
    and k.is_anonymized
+   and m.created_at <= k.anonymized_at
    and (m.body is distinct from '[mensagem anonimizada]'
         or m.media_url is not null
         or m.media_storage_path is not null
@@ -36566,6 +36569,7 @@ update public.conversations c set
  where k.id = c.contact_id
    and k.organization_id = c.organization_id
    and k.is_anonymized
+   and coalesce(c.last_message_at, c.created_at) <= k.anonymized_at
    and (c.metadata <> '{}'::jsonb
         or c.last_message_preview is not null
         or c.last_handoff_reason is not null);
@@ -36580,6 +36584,7 @@ update public.lead_checkpoints l set
  where k.id = l.contact_id
    and k.organization_id = l.organization_id
    and k.is_anonymized
+   and l.created_at <= k.anonymized_at
    and (l.rolling_summary is distinct from '[resumo anonimizado]'
         or l.commitments <> '[]'::jsonb
         or l.objections <> '[]'::jsonb
