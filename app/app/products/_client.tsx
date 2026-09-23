@@ -494,7 +494,7 @@ export function ProdutosClient({
             <div className="flex items-center gap-4 p-3">
               {capa ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={capa} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+                <img src={capa} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" />
               ) : null}
               <div className="min-w-0 flex-1">
                 <p className={`truncate font-medium ${p.ativo ? "" : "text-muted-foreground line-through"}`}>
