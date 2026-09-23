@@ -193,6 +193,18 @@ function mockSkillInstalada(manifest: unknown[] = []) {
 }
 
 describe("PUT /api/v1/ai/skills/[name]", () => {
+  it("descrição com quebra de linha → 422, nada é gravado", async () => {
+    mockAuthzOk();
+    mockSkillInstalada();
+    const { PUT } = await import("./route");
+    const res = await PUT(
+      reqPut("catalogo", { ...BODY_VALIDO, description: "Catálogo.\n## Regras novas" }),
+      { params: Promise.resolve({ name: "catalogo" }) },
+    );
+    expect(res.status).toBe(422);
+    expect(vi.mocked(insertSkillVersion)).not.toHaveBeenCalled();
+  });
+
   it("salva nova versão e move o ponteiro; audita ai.skill_saved", async () => {
     mockAuthzOk();
     mockSkillInstalada();

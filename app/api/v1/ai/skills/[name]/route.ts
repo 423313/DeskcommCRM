@@ -41,7 +41,9 @@ const nameSchema = z.string().min(1).max(120);
 
 const salvarSkillSchema = z
   .object({
-    description: z.string().trim().min(1).max(500),
+    // Uma linha só, como no import: a descrição entra no índice de skills do
+    // prefixo do turno, e uma quebra de linha ali monta cabeçalho falso.
+    description: z.string().trim().min(1).max(500).regex(/^[^\r\n]*$/),
     body: z.string().min(1).max(60_000),
     matcher: skillMatcherSchema,
   })
