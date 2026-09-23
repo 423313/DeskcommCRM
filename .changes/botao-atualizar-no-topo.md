@@ -8,6 +8,8 @@ Na tela Configurações › Atualização, quando há várias versões acumulada
 botão "Atualizar agora" ficava depois da lista "O que muda" — quem só queria
 clicar precisava rolar por todo o histórico primeiro. O botão subiu para
 antes dessa lista; os avisos que pesam na decisão de atualizar (instalação em
-versão de desenvolvimento, "Requer atenção") continuam aparecendo antes dele.
+versão de desenvolvimento, "Requer atenção" e o de histórico incompleto, que
+avisa quando a lista pode não alcançar a versão instalada) continuam
+aparecendo antes dele.
 
-Contribuição de @allisonwilliancandido.
+Contribuição de @allisonwilliancandido (#1500).

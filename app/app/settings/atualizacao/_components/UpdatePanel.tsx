@@ -414,16 +414,6 @@ export function UpdatePanel() {
         </div>
       ) : null}
 
-      {/* O botão fica ANTES do changelog, não depois: com várias versões
-          acumuladas ele descia para o fim de uma lista longa, e quem só
-          queria clicar "Atualizar agora" precisava rolar por tudo. Os avisos
-          que pesam na decisão (`off_release`, `requires_attention`) continuam
-          antes DELE — só o "O que muda", que é consulta, não decisão, desceu
-          para depois. */}
-      <div className="mb-6">
-        <BotaoAtualizar mutate={() => atualizar.mutate()} isPending={atualizar.isPending} erro={erro} />
-      </div>
-
       {data.notes?.complete === false && data.notes.sections.length > 0 && (
         <p className="mb-4 text-sm text-muted-foreground">
           {t("Este histórico começa na versão")} {data.notes.sections.at(-1)?.version}{" "}
@@ -431,6 +421,19 @@ export function UpdatePanel() {
           {t("a última parte pode estar cortada. O texto completo está no arquivo CHANGELOG.md do projeto.")}
         </p>
       )}
+
+      {/* O botão fica ANTES do changelog, não depois: com várias versões
+          acumuladas ele descia para o fim de uma lista longa, e quem só
+          queria clicar "Atualizar agora" precisava rolar por tudo. Os avisos
+          que pesam na decisão (`off_release`, `requires_attention` e o de
+          histórico incompleto) continuam antes DELE — só o "O que muda", que é
+          consulta, não decisão, desceu para depois. O de histórico incompleto
+          entra na lista porque, com `complete === false`, o "Requer atenção"
+          só junta as versões presentes no texto: pode estar faltando aviso, e
+          esse parágrafo é a única pista disso. */}
+      <div className="mb-6">
+        <BotaoAtualizar mutate={() => atualizar.mutate()} isPending={atualizar.isPending} erro={erro} />
+      </div>
 
       {data.notes?.sections.length ? (
         <div className="mb-6">

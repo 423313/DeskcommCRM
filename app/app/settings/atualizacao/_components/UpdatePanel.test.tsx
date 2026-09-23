@@ -10,7 +10,8 @@ import type { SystemVersion } from "@/hooks/system/useSystemVersion";
  * acumuladas (o changelog "cumprida", medido pelo dono numa instalação
  * atrasada), quem só queria clicar precisava rolar a tela inteira antes de
  * achar o botão. Ele subiu para antes do changelog; os avisos que pesam na
- * decisão (`off_release`, `requires_attention`) continuam antes DELE.
+ * decisão (`off_release`, `requires_attention` e o de histórico incompleto)
+ * continuam antes DELE.
  */
 
 const dadosVersao = vi.hoisted(() => ({ atual: null as SystemVersion | null }));
@@ -71,6 +72,20 @@ describe("tela de atualização — o botão não fica atrás do changelog", () 
     });
 
     const aviso = screen.getByText("Requer atenção", { exact: false });
+    const botao = screen.getByRole("button", { name: "Atualizar agora" });
+
+    expect(
+      Boolean(aviso.compareDocumentPosition(botao) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+  });
+
+  it("o aviso de histórico incompleto continua ANTES do botão — com ele, o 'Requer atenção' pode estar faltando itens", () => {
+    renderTela({
+      ...CHANGELOG_LONGO,
+      notes: { ...CHANGELOG_LONGO.notes!, complete: false },
+    });
+
+    const aviso = screen.getByText("Este histórico começa na versão", { exact: false });
     const botao = screen.getByRole("button", { name: "Atualizar agora" });
 
     expect(
