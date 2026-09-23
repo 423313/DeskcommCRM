@@ -80,6 +80,9 @@ function LinkDaMidia({ tpl, slot }: { tpl: TemplateView; slot: TemplateSlotView 
   const salvo = tpl.savedValues[slot.valueKey] ?? "";
   const [valor, setValor] = useState(salvo);
   const limpo = valor.trim();
+  // A plataforma só baixa `https://` com host; a rota recusa o resto com um
+  // código (`link_invalido`) que chegaria cru ao aviso. Dizer antes, no campo.
+  const linkInvalido = limpo !== "" && !/^https:\/\/[^\s/]+/i.test(limpo);
   const id = `link:${tpl.name}:${tpl.language}:${slot.valueKey}`;
 
   async function gravar() {
@@ -110,7 +113,7 @@ function LinkDaMidia({ tpl, slot }: { tpl: TemplateView; slot: TemplateSlotView 
         <Button
           variant="outline"
           onClick={gravar}
-          disabled={limpo === salvo || salvar.isPending}
+          disabled={limpo === salvo || linkInvalido || salvar.isPending}
           data-testid="btn-salvar-link"
         >
           {salvar.isPending
@@ -120,11 +123,17 @@ function LinkDaMidia({ tpl, slot }: { tpl: TemplateView; slot: TemplateSlotView 
               : t("Salvar link")}
         </Button>
       </div>
-      <span className="text-xs text-muted-foreground">
-        {salvo
-          ? t("Link salvo: o envio deste modelo na conversa já sai com ele.")
-          : t("Link público (https) do arquivo. Salvo aqui, o envio na conversa já sai com ele.")}
-      </span>
+      {linkInvalido ? (
+        <span className="text-xs text-destructive" role="status">
+          {t("Use um link público que comece com https://")}
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          {salvo
+            ? t("Link salvo: o painel do modelo na conversa já vem preenchido com ele.")
+            : t("Link público (https) do arquivo. Salvo aqui, o painel do modelo na conversa já vem preenchido.")}
+        </span>
+      )}
     </div>
   );
 }
@@ -223,7 +232,15 @@ export function TemplatesClient() {
                     .filter((s) => s.expects !== "text")
                     .map((s, i) =>
                       ehMidia(s) ? (
-                        <LinkDaMidia key={`m:${s.valueKey}`} tpl={tpl} slot={s} />
+                        // `salvo` na chave: o campo nasce do link salvo e não o
+                        // acompanha depois. Se o link mudar por outra porta (o
+                        // painel da conversa), o refetch remonta o campo em vez
+                        // de deixar o valor velho pronto para ser gravado de volta.
+                        <LinkDaMidia
+                          key={`m:${s.valueKey}:${tpl.savedValues[s.valueKey] ?? ""}`}
+                          tpl={tpl}
+                          slot={s}
+                        />
                       ) : (
                         <div key={`m:${s.onde}:${i}`} className="flex flex-col gap-0.5">
                           <span className="text-xs uppercase tracking-wide text-muted-foreground">

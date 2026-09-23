@@ -87,4 +87,20 @@ describe("TemplatesClient — link da mídia salvo no modelo", () => {
       values: { "header:1": "" },
     });
   });
+
+  it("link que não é https: avisa no campo e não deixa salvar", async () => {
+    render(<TemplatesClient />);
+    await userEvent.type(screen.getByTestId("template-link-midia"), "http://exemplo.com/a.jpg");
+    expect(screen.getByTestId("btn-salvar-link")).toBeDisabled();
+    expect(screen.getByText(/comece com https/)).toBeInTheDocument();
+  });
+
+  it("link trocado por outra porta: o campo acompanha em vez de guardar o velho", () => {
+    salvos.valores = { "header:1": "https://exemplo.com/x1.jpg" };
+    const { rerender } = render(<TemplatesClient />);
+    salvos.valores = { "header:1": "https://exemplo.com/x2.jpg" };
+    rerender(<TemplatesClient />);
+    expect(screen.getByTestId("template-link-midia")).toHaveValue("https://exemplo.com/x2.jpg");
+    expect(screen.getByTestId("btn-salvar-link")).toBeDisabled();
+  });
 });
