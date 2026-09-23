@@ -78,14 +78,14 @@ describe("extrairAtribuicaoWaha — externalAdReply do WAHA e forma legada", () 
   it("extrai externalAdReply na forma recebida pelo WAHA NOWEB", () => {
     const r = extrairAtribuicaoWaha({
       extendedTextMessage: {
-        text: "Quero saber do curso",
+        text: "Quero saber mais",
         contextInfo: {
           ctwaPayload: "dados-do-clique",
           externalAdReply: {
             sourceType: "ad",
-            sourceId: "ad-9274",
-            ctwaClid: "clid-9274",
-            title: "Curso de sobrancelhas",
+            sourceId: "ad-exemplo",
+            ctwaClid: "clid-exemplo",
+            title: "Serviço de exemplo",
             body: "Saiba mais",
             sourceUrl: "https://fb.me/anuncio",
           },
@@ -95,9 +95,9 @@ describe("extrairAtribuicaoWaha — externalAdReply do WAHA e forma legada", () 
     });
     expect(r).toEqual({
       plataforma: "meta_ads",
-      sourceId: "clid-9274",
-      adId: "ad-9274",
-      titulo: "Curso de sobrancelhas",
+      sourceId: "clid-exemplo",
+      adId: "ad-exemplo",
+      titulo: "Serviço de exemplo",
       corpo: "Saiba mais",
       sourceUrl: "https://fb.me/anuncio",
       bruto: expect.objectContaining({ sourceType: "ad" }),
