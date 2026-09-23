@@ -26,10 +26,10 @@ describe("canal datafy — vocabulário e seam", () => {
     expect(caps.banRisk).toBe(false);
     expect(caps.costPerMessage).toBe(true);
     expect(caps.voiceNote).toBe("opus-only");
-    // Gestão de modelos é a fatia seguinte: declarar `true` agora mostraria uma
-    // tela que não salva, e a fonte de modelos tem de concordar com isso.
-    expect(caps.canManageTemplates).toBe(false);
-    expect(fonteDeTemplates(DATAFY)).toBeNull();
+    // Modelos são os da Cloud API; o parceiro expõe o catálogo. A fonte de
+    // modelos tem de concordar com a capability.
+    expect(caps.canManageTemplates).toBe(true);
+    expect(fonteDeTemplates(DATAFY)).toBe("graph");
   });
 
   it("é canal de MENSAGEM e aparece como WhatsApp, nunca como a marca do fornecedor", () => {
