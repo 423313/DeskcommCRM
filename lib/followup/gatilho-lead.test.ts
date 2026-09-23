@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EventRow } from "@/lib/event-log/dispatcher";
+import { ORIGEM_DA_PLANILHA } from "@/lib/leads/planilha";
 import type { EnabledFollowupAgent, FollowupGateDb } from "./agent-followup-gate";
 import {
   EVENTO_DE_LEAD_CRIADO,
@@ -115,6 +116,22 @@ describe("aplicaGatilhoDeLead — o que não dispara", () => {
       evento({ entity_kind: "lead" }),
     );
     expect(s.matched).toBe(false);
+    expect(reg.contatoConsultado).toBe(0);
+  });
+
+  it("negócio que entrou por planilha não inscreve — importação não vira disparo em massa", async () => {
+    const reg = registro();
+    const s = await aplicaGatilhoDeLead(
+      {
+        db: fakeDb({ pointers: [pointerArmado], pedeAgente: false, registro: reg }),
+        gateDb: fakeGate([]),
+        clock: CLOCK,
+      },
+      evento({ metadata: { via: ORIGEM_DA_PLANILHA } }),
+    );
+    expect(s.vindos_de_planilha).toBe(1);
+    expect(s.enrolled).toBe(0);
+    expect(reg.enrollments).toHaveLength(0);
     expect(reg.contatoConsultado).toBe(0);
   });
 

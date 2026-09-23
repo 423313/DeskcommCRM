@@ -33,7 +33,7 @@ export const followupGatilhoLeadHandler: EventHandler = {
         detail:
           `armados=${summary.pointers_armados} enrolled=${summary.enrolled} ` +
           `origem_obsoleta=${summary.skipped_stale_origin ?? 0} ja_vivo=${summary.skipped_existing} gate=${summary.pointers_barrados_pelo_gate} ` +
-          `sem_contato=${summary.sem_contato}`,
+          `sem_contato=${summary.sem_contato} planilha=${summary.vindos_de_planilha}`,
       };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);

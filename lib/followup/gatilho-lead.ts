@@ -8,6 +8,12 @@ import { serviceForEvent } from "@/lib/atendimento/origem";
  *   - `app/api/v1/leads/_handler.ts` — cadastro manual, API, importação, webhook
  *   - `lib/leads/nascimento-do-lead.ts` — a conversa que abre o primeiro card
  *
+ * Importação de planilha NÃO inscreve: ela também passa por
+ * `createLeadHandler`, e 400 linhas com telefone viravam 400 mensagens
+ * proativas de uma vez — o disparo em massa que a doutrina anti-banimento
+ * existe para impedir, sem que a tela do gatilho mencionasse planilha. O
+ * evento chega marcado (`metadata.via`) e conta `vindos_de_planilha`, nunca cala.
+ *
  * `contact_id` não vem no payload do cadastro; resolve-se pelo negócio.
  * Sem contato não há a quem escrever — conta `sem_contato`, nunca cala.
  *
@@ -18,6 +24,7 @@ import { serviceForEvent } from "@/lib/atendimento/origem";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { EventRow } from "@/lib/event-log/dispatcher";
+import { ORIGEM_DA_PLANILHA } from "@/lib/leads/planilha";
 import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
 import {
@@ -68,6 +75,7 @@ export interface GatilhoLeadSummary {
   skipped_existing: number;
   skipped_stale_origin?: number;
   sem_contato: number;
+  vindos_de_planilha: number;
 }
 
 export interface GatilhoLeadDeps {
@@ -88,6 +96,7 @@ function vazio(): GatilhoLeadSummary {
     enrolled: 0,
     skipped_existing: 0,
     sem_contato: 0,
+    vindos_de_planilha: 0,
   };
 }
 
@@ -106,6 +115,11 @@ export async function aplicaGatilhoDeLead(
   const armados = await deps.db.carregaPointersDeLead(row.organization_id);
   summary.pointers_armados = armados.length;
   if (armados.length === 0) return summary;
+
+  if (row.metadata?.via === ORIGEM_DA_PLANILHA) {
+    summary.vindos_de_planilha = armados.length;
+    return summary;
+  }
 
   const contatoId = await deps.db.carregaContatoDoNegocio(row.organization_id, negocioId);
   if (!contatoId) {
