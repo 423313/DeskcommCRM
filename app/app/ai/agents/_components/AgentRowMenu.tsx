@@ -48,6 +48,7 @@ export function AgentRowMenu({ agent }: Props) {
   const status = deriveAgentStatus(agent);
   const isPaused = status === "paused" || status === "draft";
   const isArchived = status === "archived";
+  const isDefault = agent.is_default;
 
   const run = (label: string, action: () => Promise<{ ok: boolean; error?: string; message?: string }>) => {
     startTransition(async () => {
@@ -57,7 +58,11 @@ export function AgentRowMenu({ agent }: Props) {
           toast.success(label);
           router.refresh();
         } else {
-          toast.error(res.message ?? `${t("Falha")}: ${res.error ?? "unknown"}`);
+          const message =
+            res.error === "cannot_archive_default"
+              ? t("O agent padrão da organização não pode ser arquivado.")
+              : res.message ?? `${t("Falha")}: ${res.error ?? "unknown"}`;
+          toast.error(message);
         }
       } catch {
         toast.error(t("Erro ao executar ação."));
@@ -117,7 +122,12 @@ export function AgentRowMenu({ agent }: Props) {
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            disabled={isArchived}
+            disabled={isArchived || isDefault}
+            title={
+              isDefault
+                ? t("O agent padrão da organização não pode ser arquivado.")
+                : undefined
+            }
             onSelect={(e) => {
               e.preventDefault();
               setArchiveOpen(true);
