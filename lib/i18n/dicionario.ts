@@ -5400,6 +5400,19 @@ export const DICIONARIO: Traducoes = {
   "link da imagem": { es: "enlace de la imagen" },
   "Salvar este link no modelo": { es: "Guardar este enlace en la plantilla" },
   "já há um link salvo": { es: "ya hay un enlace guardado" },
+  "Link salvo no modelo.": { es: "Enlace guardado en la plantilla." },
+  "Link removido do modelo.": { es: "Enlace eliminado de la plantilla." },
+  "Remover link": { es: "Quitar enlace" },
+  "Salvar link": { es: "Guardar enlace" },
+  "Link salvo: o painel do modelo na conversa já vem preenchido com ele.": {
+    es: "Enlace guardado: el panel de la plantilla en la conversación ya viene completado con él.",
+  },
+  "Link público (https) do arquivo. Salvo aqui, o painel do modelo na conversa já vem preenchido.": {
+    es: "Enlace público (https) del archivo. Guardado aquí, el panel de la plantilla en la conversación ya viene completado.",
+  },
+  "Use um link público que comece com https://": {
+    es: "Usa un enlace público que empiece con https://",
+  },
   "O modelo saiu, mas não consegui salvar o link nele.": {
     es: "La plantilla se envió, pero no pude guardar el enlace en ella.",
   },
@@ -5762,7 +5775,7 @@ export const DICIONARIO: Traducoes = {
   "Seu atendente foi criado, mas ficou como": { es: "Tu agente se creó, pero quedó como" },
   "rascunho": { es: "borrador" },
   "— ele ainda não tem com o que pensar.": { es: "— todavía no tiene con qué pensar." },
-  "Não achei chave de": { es: "No encontré ninguna clave de" },
+  "Não achei chave": { es: "No encontré ninguna clave" },
   "nem cadastrada aqui, nem vinda da instalação. Cole a chave no campo acima («o cérebro dele») e crie o atendente de novo — ou cadastre em": {
     es: "ni registrada aquí ni incluida con la instalación. Pega la clave en el campo de arriba («su cerebro») y vuelve a crear el agente, o regístrala en",
   },
