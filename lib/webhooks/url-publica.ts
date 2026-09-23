@@ -15,13 +15,6 @@ import { env } from "@/lib/env";
 
 /** Aceita `NextRequest` e qualquer objeto com estas duas peças (testes). */
 export function basePublicaDaInstalacao(req: { headers: Headers; nextUrl: URL }): string {
-  // Quando META_WEBHOOK_BASE_URL estiver configurada, ela define a URL pública
-  // dos webhooks da Meta separada da URL do painel (ex.: painel em VPN/rede interna e webhook público).
-  const metaConfigurada = env.META_WEBHOOK_BASE_URL?.trim();
-  if (metaConfigurada && !metaConfigurada.includes("placeholder.invalid")) {
-    return metaConfigurada.replace(/\/+$/, "");
-  }
-
   const configurada = env.NEXT_PUBLIC_APP_URL;
   const usavel = configurada && !configurada.includes("placeholder.invalid") ? configurada : null;
   const base = usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
@@ -32,4 +25,19 @@ export function basePublicaDaInstalacao(req: { headers: Headers; nextUrl: URL })
   return base.replace(/\/+$/, "");
 }
 
-export const basePublicaDoWebhookMeta = basePublicaDaInstalacao;
+/**
+ * A base do callback da META — e só dela (#1426). `META_WEBHOOK_BASE_URL`, quando
+ * definida, deixa o painel numa rede privada e expõe à Meta só `/api/v1/webhooks/meta/*`.
+ *
+ * NÃO mora dentro de `basePublicaDaInstalacao`: aquela também monta a URL de webhook
+ * dos canais parceiros (`channels/partner` e `channels/graph-partner`, em
+ * `/api/v1/webhooks/channel/<token>`), e a variável trocaria a URL deles para um
+ * endereço que o proxy da receita da issue bloqueia.
+ */
+export function basePublicaDoWebhookMeta(req: { headers: Headers; nextUrl: URL }): string {
+  const configurada = env.META_WEBHOOK_BASE_URL.trim();
+  if (configurada && !configurada.includes("placeholder.invalid")) {
+    return configurada.replace(/\/+$/, "");
+  }
+  return basePublicaDaInstalacao(req);
+}
