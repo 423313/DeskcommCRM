@@ -14,6 +14,7 @@ import type { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
+import { PROVEDORES_COM_CHAVE } from "@/lib/ai/pontos/provedores";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM, type OrigemDaEscolha } from "@/lib/ai/pontos/resolver";
 import { createClient } from "@/lib/supabase/server";
@@ -73,9 +74,17 @@ interface LinhaDeExecucao {
   created_at: string;
 }
 
+/** O nome de gente do provedor — "typesafe" na coluna, "Jev (TypeSafe AI)" na tela. */
+const ROTULO_DO_PROVEDOR: ReadonlyMap<string, string> = new Map(
+  PROVEDORES_COM_CHAVE.map((p) => [p.id, p.rotulo]),
+);
+
 const filtrosDaQuery = z.object({
   purpose: z.string().min(1).max(64).optional(),
   status: z.enum(["ok", "erro"]).optional(),
+  // O cabeçalho desta rota prometia o filtro por provedor desde o primeiro dia,
+  // e ele não existia: `?provider=` era descartado e a lista vinha inteira.
+  provider: z.string().min(1).max(64).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
 });
 
@@ -93,7 +102,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!filtros.success) {
     return fail("invalid_query", t("filtros inválidos"), 422, { details: filtros.error.issues });
   }
-  const { purpose, status, limit: limite } = filtros.data;
+  const { purpose, status, provider, limit: limite } = filtros.data;
 
   const db = await createClient();
   let q = db
@@ -107,6 +116,7 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   if (purpose) q = q.eq("purpose", purpose);
   if (status) q = q.eq("status", status);
+  if (provider) q = q.eq("provider", provider);
 
   const { data, error } = await q;
   if (error) return fail("query_failed", error.message, 500);
@@ -118,8 +128,11 @@ export async function GET(req: NextRequest): Promise<Response> {
       // O nome de gente do ponto. Sem isto a tela mostraria `flywheel_judge`, e
       // o operador não tem por que saber o que é isso.
       pontoRotulo: ponto?.rotulo ?? l.purpose,
+      provedorRotulo: ROTULO_DO_PROVEDOR.get(l.provider) ?? l.provider,
       // A consequência daquele ponto falhar, que é o que liga uma linha de log
-      // a algo que a pessoa já viu acontecer no negócio dela.
+      // a algo que a pessoa já viu acontecer no negócio dela. Só em `erro`: a
+      // linha da reserva que cobriu o Jev sai `ok` (nada se perdeu), e a do Jev
+      // só sai `erro` quando ninguém mediu — aí a consequência é real.
       consequencia: l.status === "erro" ? (ponto?.sintomaDeFalha ?? null) : null,
       oQueFazer: l.status === "erro" ? (O_QUE_FAZER[l.error_code ?? ""] ?? null) : null,
       porQueEsteModelo: l.origem_da_escolha

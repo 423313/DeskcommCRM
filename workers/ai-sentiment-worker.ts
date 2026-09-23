@@ -31,14 +31,13 @@ import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation, type LogInvocationInput } from "@/lib/ai/log-invocation";
-import { SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
+import { DEFAULT_SENTIMENT_THRESHOLD, SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SENTIMENT_MODEL = DEFAULT_CLASSIFIER_MODEL; // "anthropic/claude-haiku-4-5"
-const DEFAULT_SENTIMENT_THRESHOLD = 0.3;
 const CLASSIFY_TIMEOUT_MS = 5_000;
 
 // As descrições NÃO são decoração: viram o JSON Schema da ferramenta que o

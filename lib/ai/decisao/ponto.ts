@@ -34,15 +34,13 @@
  * default.
  */
 import { allowlistedFetch, buildAllowlist } from "@/lib/agent-engine/edge/egress";
-import type { IDS_DE_PROVEDOR_DE_DECISAO } from "@/lib/ai/pontos/provedores";
 import { byteaToBuffer, decryptKey } from "@/lib/crypto/aes_gcm";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { baseDaApiDoJev, decidir, type Pergunta, type ResultadoDaDecisao } from "./cliente";
 import { lerConfigDoJev } from "./config";
-
-const PROVEDOR_DO_JEV = "typesafe" satisfies (typeof IDS_DE_PROVEDOR_DE_DECISAO)[number];
+import { PROVEDOR_DO_JEV } from "./credencial";
 
 export interface EntradaDoPonto {
   /** O ponto de IA, como no registro (`lib/ai/pontos/registro.ts`). Vai à telemetria. */
@@ -66,7 +64,8 @@ export interface DependenciasDoPonto {
 /**
  * A chave do Jev DAQUELA organização: a credencial `typesafe` ativa e validada
  * mais recente. Nunca uma chave de ambiente global — seria o contrário do BYOK,
- * e uma instalação pagaria a conta de outra.
+ * e uma instalação pagaria a conta de outra. A mesma regra, sobre linhas já
+ * lidas, é `credencialEmUsoPeloJev` (`./credencial.ts`): mudar uma é mudar a outra.
  *
  * "Validada" é a convenção de todo leitor de chave do repo
  * (`lib/ai/gateway-binding.ts`): chave colada e ainda não conferida não sai
