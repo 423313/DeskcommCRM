@@ -175,8 +175,15 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     // spec, e não numa nova, porque o painel já está montado neste ponto: spec
     // nova custaria mais um login e mais um seed ao relógio do CI.
     await expect(page.getByRole("button", { name: "Novo Lead", exact: true })).toBeVisible();
-    page.on("dialog", (dialog) => dialog.accept());
+    // Fechar não é mais `window.confirm()` (bloqueado em iframe, ignora o
+    // tema) — é o `AlertDialog` da casa. O botão que abre e o que confirma
+    // têm o MESMO rótulo "Fechar"; o segundo clique escopado ao
+    // `alertdialog` é o que desambigua.
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Fechar", exact: true })
+      .click();
     await expect
       .poll(
         async () =>
@@ -232,6 +239,10 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     expect(box?.width).toBeGreaterThan(150);
     await page.screenshot({ path: `${evidence}/task4-reaberto-respondido.png`, fullPage: true });
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Fechar", exact: true })
+      .click();
     await expect
       .poll(
         async () =>
