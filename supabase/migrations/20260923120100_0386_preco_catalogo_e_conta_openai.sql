@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- 0388 — as DUAS tabelas de preço do OpenAI passam a dizer o que a fonte mediu
+-- 0386 — as DUAS tabelas de preço do OpenAI passam a dizer o que a fonte mediu
 -- (issue #1490, acompanhamento do #1486)
 --
 -- A tabela de preços versionada (`lib/agent-engine/edge/llm/pricing.ts`, o que
@@ -39,10 +39,10 @@ update public.ai_models
 insert into public.ai_pricing
   (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
 values
-  ('gpt-5.6-sol',         400,   2000, 'catálogo 0388 — preço promocional medido na fonte em 2026-09-23 (developers.openai.com/api/docs/pricing); promoção vale ao menos até 21/11/2026'),
-  ('gpt-4o',              250,   1000, 'catálogo 0388 — linha que o pricing.ts já cobrava e a tabela não tinha; preço medido na fonte em 2026-09-23'),
-  ('gpt-4o-mini',          15,     60, 'catálogo 0388 — linha que o pricing.ts já cobrava e a tabela não tinha; preço medido na fonte em 2026-09-23'),
-  ('gpt-4o-2024-05-13',   500,   1500, 'catálogo 0388 — snapshot com preço próprio; linha que o pricing.ts já cobrava e a tabela não tinha; medido em 2026-09-23')
+  ('gpt-5.6-sol',         400,   2000, 'catálogo 0386 — preço promocional medido na fonte em 2026-09-23 (developers.openai.com/api/docs/pricing); promoção vale ao menos até 21/11/2026'),
+  ('gpt-4o',              250,   1000, 'catálogo 0386 — linha que o pricing.ts já cobrava e a tabela não tinha; preço medido na fonte em 2026-09-23'),
+  ('gpt-4o-mini',          15,     60, 'catálogo 0386 — linha que o pricing.ts já cobrava e a tabela não tinha; preço medido na fonte em 2026-09-23'),
+  ('gpt-4o-2024-05-13',   500,   1500, 'catálogo 0386 — snapshot com preço próprio; linha que o pricing.ts já cobrava e a tabela não tinha; medido em 2026-09-23')
 on conflict (model) do update set
   prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
   completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,

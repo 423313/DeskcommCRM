@@ -9919,7 +9919,7 @@ on conflict (model) do update set
   notes = excluded.notes,
   superseded_at = null;
 
--- ---- as DUAS tabelas de preço do OpenAI (migration 0388, issue #1490) ----
+-- ---- as DUAS tabelas de preço do OpenAI (migration 0386, issue #1490) ----
 --
 -- O bloco da 0104 acima semeia 500/3000 para o gpt-5.6-sol, a versão não
 -- promocional do catálogo 0101. O pricing.ts (custo gravado em llm_calls)
@@ -9939,10 +9939,10 @@ update public.ai_models
 insert into public.ai_pricing
   (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
 values
-  ('gpt-5.6-sol',         400,   2000, 'catálogo 0388 — preço promocional medido na fonte em 2026-09-23 (developers.openai.com/api/docs/pricing); promoção vale ao menos até 21/11/2026'),
-  ('gpt-4o',              250,   1000, 'catálogo 0388 — linha que o pricing.ts já cobrava e a tabela não tinha; preço medido na fonte em 2026-09-23'),
-  ('gpt-4o-mini',          15,     60, 'catálogo 0388 — linha que o pricing.ts já cobrava e a tabela não tinha; preço medido na fonte em 2026-09-23'),
-  ('gpt-4o-2024-05-13',   500,   1500, 'catálogo 0388 — snapshot com preço próprio; linha que o pricing.ts já cobrava e a tabela não tinha; medido em 2026-09-23')
+  ('gpt-5.6-sol',         400,   2000, 'catálogo 0386 — preço promocional medido na fonte em 2026-09-23 (developers.openai.com/api/docs/pricing); promoção vale ao menos até 21/11/2026'),
+  ('gpt-4o',              250,   1000, 'catálogo 0386 — linha que o pricing.ts já cobrava e a tabela não tinha; preço medido na fonte em 2026-09-23'),
+  ('gpt-4o-mini',          15,     60, 'catálogo 0386 — linha que o pricing.ts já cobrava e a tabela não tinha; preço medido na fonte em 2026-09-23'),
+  ('gpt-4o-2024-05-13',   500,   1500, 'catálogo 0386 — snapshot com preço próprio; linha que o pricing.ts já cobrava e a tabela não tinha; medido em 2026-09-23')
 on conflict (model) do update set
   prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
   completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,
