@@ -132,7 +132,10 @@ export function AgentRowMenu({ agent }: Props) {
               e.preventDefault();
               setArchiveOpen(true);
             }}
-            className="text-destructive focus:text-destructive"
+            // O item desabilitado herda `pointer-events-none`, e sem hover o
+            // `title` acima nunca aparece. O Radix já recusa selecionar item
+            // desabilitado, então devolver o ponteiro não reabre o clique.
+            className="text-destructive focus:text-destructive data-[disabled]:pointer-events-auto"
           >
             <Archive size={14} aria-hidden className="mr-2" /> {t("Arquivar")}
           </DropdownMenuItem>
