@@ -242,7 +242,8 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     // Três desfechos, e o modo (`settings.jev.modo`) só pesa no primeiro:
     //  - mediu: em "decide" (ou sem IA de linguagem para comparar) a nota dele
     //    vale e o LLM nem roda; em "observacao" o LLM roda e decide, e as duas
-    //    notas ficam em `messages.metadata` para o cartão medir a concordância;
+    //    notas ficam em `messages.metadata` para o cartão medir a concordância
+    //    (se o LLM falhar, a nota do Jev vale);
     //  - falhou na rede: a IA de sempre mede como reserva, e a linha dela diz
     //    isso (`reserva_do_jev`). Linha de erro do Jev só quando NINGUÉM mediu —
     //    uma falha que a reserva cobriu não é erro para quem opera;
@@ -307,25 +308,31 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       decisao = { score: clima.score01, engine: "jev", latenciaMs: clima.latenciaMs };
     } else if (resolvido === null) {
       registrarFalhaDoJev();
-      return { skipped: true, reason: jevFalhouNaRede ? "jev_falhou_sem_reserva" : "ai_gateway_key_missing" };
+      if (jevFalhouNaRede) return { skipped: true, reason: "jev_falhou_sem_reserva" };
+      // O Jev está ligado aqui (desligado e sem IA de linguagem, o worker já saiu
+      // lá em cima), então o motivo é o dele: `ai_gateway_key_missing` mandava
+      // quem lê o log caçar uma chave que não falta quando o disjuntor só segura.
+      return {
+        skipped: true,
+        reason: clima?.ok === false ? `jev_${clima.motivo}` : "ai_gateway_key_missing",
+      };
     } else {
       // O Jev ligado, com chave, e sem resposta: quem mede é a reserva.
       const reserva = clima !== null && !clima.ok && clima.motivo !== "sem_credencial";
       const origem = reserva ? ({ origem_da_escolha: "reserva_do_jev" } as const) : {};
       const inicio = Date.now();
-      let medido: Awaited<ReturnType<typeof classificarComLlm>>;
+      let medido: Awaited<ReturnType<typeof classificarComLlm>> | null = null;
+      let erroDaIa: unknown = null;
       try {
         medido = await classificarComLlm(resolvido.model, body);
       } catch (err) {
+        erroDaIa = err;
         // A FALHA também vira linha em `llm_calls`. A 0128 fez isso para o seam do
         // agent-engine, e este worker não passa por lá — então, até aqui, escolher
         // no painel um modelo que não existe fazia toda classificação falhar sem
         // deixar rastro nenhum: a tela de Execuções, cuja razão de existir é
         // responder "por que falhou", não mostrava nada para este ponto, com o
         // painel dizendo que estava configurado.
-        //
-        // O `throw` mantém o desfecho de antes — quem decide o retorno continua
-        // sendo o catch global, que nunca deixa este worker derrubar o bot.
         logInvocation({
           ...comum,
           ...origem,
@@ -337,25 +344,35 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
           finish_reason: "error",
           error_payload: { message: err instanceof Error ? err.message : String(err) },
         });
-        registrarFalhaDoJev();
-        throw err;
       }
-      const latenciaMs = Date.now() - inicio;
-      logInvocation({
-        ...comum,
-        ...origem,
-        model: resolvido.modelId,
-        prompt_tokens: medido.promptTokens,
-        completion_tokens: medido.completionTokens,
-        latency_ms: latenciaMs,
-        cost_cents: await computeCost({
+      if (medido !== null) {
+        const latenciaMs = Date.now() - inicio;
+        logInvocation({
+          ...comum,
+          ...origem,
           model: resolvido.modelId,
-          promptTokens: medido.promptTokens,
-          completionTokens: medido.completionTokens,
-        }),
-        finish_reason: null,
-      });
-      decisao = { score: medido.score, engine: "llm", latenciaMs };
+          prompt_tokens: medido.promptTokens,
+          completion_tokens: medido.completionTokens,
+          latency_ms: latenciaMs,
+          cost_cents: await computeCost({
+            model: resolvido.modelId,
+            promptTokens: medido.promptTokens,
+            completionTokens: medido.completionTokens,
+          }),
+          finish_reason: null,
+        });
+        decisao = { score: medido.score, engine: "llm", latenciaMs };
+      } else if (clima?.ok) {
+        // Observação com a IA de sempre caída: o Jev já mediu, e a nota dele é a
+        // única que existe. Descartá-la deixaria o cliente irritado passar sem
+        // ninguém ser chamado, com a medição na mão.
+        decisao = { score: clima.score01, engine: "jev", latenciaMs: clima.latenciaMs };
+      } else {
+        // Ninguém mediu. O `throw` mantém o desfecho de antes — quem decide o
+        // retorno continua sendo o catch global, que nunca derruba o bot.
+        registrarFalhaDoJev();
+        throw erroDaIa;
+      }
     }
 
     // ── Merge sentiment into messages.metadata ────────────────────────────
@@ -475,6 +492,14 @@ async function classificarComLlm(
  * o CHECK de `agent_inbox_items.kind`, e o título fixo faz uma chave recusada
  * virar UM aviso, não um por mensagem do dia. O texto sai no idioma da
  * organização porque a Central mostra o corpo como veio.
+ *
+ * ponytail: dedupe em duas idas (contar, depois inserir), sem trava. Dois drains
+ * medindo a mesma organização no mesmo instante podem abrir dois avisos iguais —
+ * a mesma corrida que `abrirItemDeOrcamento` (ai-response-worker) declara, e que
+ * o `insert … where not exists` do engine também tem sob READ COMMITTED. Aviso
+ * repetido é ruído; ausente seria o clima parado sem nada na tela. Fecha de vez
+ * só com índice único parcial (org, título) em `kind='other' and status='open'`,
+ * que é migration e exige antes deduplicar os avisos abertos de todo clone.
  *
  * Nunca lança: o aviso é o alerta, não a medição.
  */

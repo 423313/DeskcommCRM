@@ -11,6 +11,8 @@ virar nota. Ele é mais rápido e muito mais barato.
 Nada muda na sua instalação: o motor novo só entra em ação para quem cadastrar o
 acesso a ele E ligá-lo, com o aceite de quem administra — e o botão de ligar ainda não
 existe na tela. Só cadastrar a chave não manda nada para fora. Desligado, tudo continua
-exatamente como está. Ligado, se o serviço novo estiver fora do ar ou responder algo
-inesperado, o caminho de sempre assume. Se ele recusar a chave ou o crédito acabar, o
-caminho de sempre também assume, e um aviso aparece na Central dizendo o que fazer.
+exatamente como está. Ligado numa instalação que também tem a IA de sempre, ela assume
+quando o serviço novo falha — fora do ar, resposta inesperada, chave recusada ou crédito
+acabado. Numa instalação sem a IA de sempre, o serviço novo mede sozinho: se ele falhar,
+o clima fica sem medida até ele voltar. Nos dois casos, se a falha pedir providência
+(chave recusada, crédito acabado), um aviso aparece na Central dizendo o que fazer.

@@ -317,11 +317,14 @@ interface ChamadaAoJev {
 
 let chamadasAoJev: ChamadaAoJev[] = [];
 
-/** Resposta no formato real da API (medido em 23/09/2026). */
-function respostaDoJev(nivel: number): Response {
+/**
+ * Resposta no formato real da API (medido em 23/09/2026). `modelo` é a versão
+ * que o fornecedor DIZ ter respondido — pode não ser a que pedimos.
+ */
+function respostaDoJev(nivel: number, modelo = "jev-1.13.0"): Response {
   return new Response(
     JSON.stringify({
-      model: "jev-1.13.0",
+      model: modelo,
       answers: {
         clima: {
           type: "score",
@@ -482,6 +485,44 @@ describe("o Jev no worker de clima", () => {
     expect(banco.llm_calls).toHaveLength(1);
     expect(banco.llm_calls[0]).toMatchObject({ provider: "typesafe", status: "ok" });
     expect(banco.messages[0]!.metadata).toMatchObject({ sentiment_engine: "jev", sentiment_score: 0.5 });
+  });
+
+  it("a versão gravada é a que o fornecedor devolveu, não a que o sistema fixou", async () => {
+    // Com o dublê devolvendo a MESMA versão que pedimos, gravar a fixada e gravar
+    // a devolvida dariam a mesma linha — e o teste não distinguiria as duas.
+    fornecedor(async () => respostaDoJev(0, "jev-1.14.0"));
+    const { banco } = await rodar(jevLigado("decide"));
+
+    expect(chamadasAoJev[0]!.corpo.model, "o pedido continua com a versão fixada").toBe("jev-1.13.0");
+    expect(banco.llm_calls).toHaveLength(1);
+    // Versão sem preço na tabela: custo desconhecido (`null`), nunca o preço de outra.
+    expect(banco.llm_calls[0]).toMatchObject({ model: "typesafe/jev-1.14.0", cost_cents: null });
+    expect(banco.messages[0]!.metadata).toMatchObject({ sentiment_jev_model: "jev-1.14.0" });
+  });
+
+  it("observação com a IA de sempre caindo: a nota do Jev vale, em vez de ninguém ser chamado", async () => {
+    vi.mocked(generateObject).mockRejectedValue(new Error("Overloaded"));
+    fornecedor(async () => respostaDoJev(0));
+    const { resultado, banco, rpcs } = await rodar(jevLigado("observacao"));
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0 });
+    expect(generateObject).toHaveBeenCalledTimes(1);
+    expect(linhasDoJev(banco)[0]).toMatchObject({ status: "ok" });
+    expect(linhasDaIaDeSempre(banco)[0], "a falha da IA de sempre segue visível em Execuções").toMatchObject({
+      status: "erro",
+    });
+    expect(banco.messages[0]!.metadata).toMatchObject({ sentiment_score: 0, sentiment_engine: "jev" });
+    expect(alertas(rpcs)[0]!["p_payload"]).toMatchObject({ sentiment_score: 0, sentiment_engine: "jev" });
+  });
+
+  it("sem IA de linguagem e o disjuntor aberto: nada sai, e o motivo é o do Jev, não 'falta chave'", async () => {
+    fornecedor(async () => respostaDoJev(0));
+    registrarFalha(ORG, "limite_de_taxa", Date.now());
+    const { resultado, banco } = await rodar(jevLigado("decide", false));
+
+    expect(resultado).toEqual({ skipped: true, reason: "jev_disjuntor_aberto" });
+    expect(chamadasAoJev).toHaveLength(0);
+    expect(banco.llm_calls).toHaveLength(0);
   });
 
   it("sem IA de linguagem e o Jev recusando: linha de erro com código próprio e aviso crítico", async () => {
