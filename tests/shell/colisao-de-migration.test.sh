@@ -157,19 +157,22 @@ git -C "$principal" add -A && git -C "$principal" commit -q -m "base"
 # objetos SOLTOS e ZERO packs (`git count-objects -v`) contra `gc.auto=6700`, e nenhum
 # `run_command: ... gc` aparece sob `GIT_TRACE=1`. `git -c gc.auto=0 push` seria inerte.
 clonar_com_retry() { # $1 = origem, $2 = destino, $3 = flag extra opcional (ex.: --bare)
-  local tentativas=3 i
+  local tentativas=3 i rc
   for i in $(seq 1 "$tentativas"); do
     rm -rf "$2"
     # a tentativa FINAL deixa o stderr passar: se as 3 falharem, a causa tem de aparecer
     # no log de quem roda — erro engolido é o anti-pattern nº 14 do CLAUDE.md.
     if [ "$i" -lt "$tentativas" ]; then
-      git clone -q ${3:+"$3"} "$1" "$2" 2>/dev/null
+      git clone -q ${3:+"$3"} "$1" "$2" 2>/dev/null; rc=$?
     else
-      git clone -q ${3:+"$3"} "$1" "$2"
+      git clone -q ${3:+"$3"} "$1" "$2"; rc=$?
     fi
+    # O exit do clone é o critério; o rev-parse sozinho NÃO basta: um clone que sai 128 na
+    # fase de checkout ("Clone succeeded, but checkout failed") deixa o `.git` no disco, e o
+    # rev-parse responderia 0 com a árvore pela metade (caso 33).
     # `--git-dir` responde para clone comum E para `--bare` (lá não há work tree, e
     # `--is-inside-work-tree` imprimiria `false` saindo 0 — passaria por acidente).
-    git -C "$2" rev-parse --git-dir >/dev/null 2>&1 && return 0
+    [ "$rc" -eq 0 ] && git -C "$2" rev-parse --git-dir >/dev/null 2>&1 && return 0
     [ "$i" -lt "$tentativas" ] && sleep 0.2
   done
   return 1
@@ -603,6 +606,26 @@ crus="$(awk '/^clonar_com_retry\(\) \{/ {dentro=1}
   /(^|[;&|{(]|then|do)[[:space:]]*git clone/ { print NR": "$0 }' "${BASH_SOURCE[0]}")"
 if [ -z "$crus" ]; then ok "nenhum git clone fora do retry"
 else falha "nenhum git clone fora do retry" "clone cru em: $crus"; fi
+
+echo "33. clone que sai não-zero DEIXANDO o .git no disco não passa: o retry repete"
+# "Clone succeeded, but checkout failed": o git sai 128 com o repositório criado e a árvore
+# pela metade. Aqui a 1ª tentativa clona de verdade, apaga um arquivo rastreado e sai 128;
+# as seguintes passam. Só o exit do clone separa isso de um clone inteiro.
+d="$TMP/c33"; n33="$TMP/c33.tentativas"; : > "$n33"
+( git() {
+    if [ "$1" = clone ]; then
+      echo x >> "$n33"; command git "$@" || return
+      if [ "$(wc -l < "$n33")" -eq 1 ]; then rm -f "$d/supabase/migrations/"*; return 128; fi
+      return 0
+    fi
+    command git "$@"
+  }
+  clonar_com_retry "$principal" "$d" )
+code=$?
+assert_exit "$code" 0 "a falha transiente de checkout é absorvida"
+assert_exit "$(wc -l < "$n33" | tr -d ' ')" 2 "e absorvida REPETINDO o clone, não aceitando o da 1ª tentativa"
+if [ -n "$(ls "$d/supabase/migrations/" 2>/dev/null)" ]; then ok "a árvore chega inteira"
+else falha "a árvore chega inteira" "supabase/migrations vazio: seguiu com o clone pela metade"; fi
 
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0
