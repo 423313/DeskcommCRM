@@ -224,3 +224,14 @@ it("encontra etapa legada com sublinhado ('chamar_humano') se não houver etapa 
   const r = await mover(c);
   expect(r).toEqual({ moveu: true, motivo: "movido" });
 });
+
+it("erro de banco na busca pelo slug legado é indisponibilidade, não 'sem_etapa_de_handoff'", async () => {
+  const c = cenario({
+    etapaPorSlug: (slug: string) =>
+      slug === "chamar_humano"
+        ? { data: null, error: { message: "fetch failed" } }
+        : { data: null, error: null },
+  });
+  const r = await mover(c);
+  expect(r).toEqual({ moveu: false, motivo: "indisponivel" });
+});

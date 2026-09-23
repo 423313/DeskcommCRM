@@ -196,4 +196,16 @@ describe("moverLeadParaEtapaDeAgendamento", () => {
     const r = await mover(c, "pending");
     expect(r).toEqual({ moveu: true, motivo: "movido" });
   });
+
+  it("erro de banco na busca pelo slug legado é indisponibilidade, não 'sem_etapa_mapeada'", async () => {
+    const c = cenario({
+      etapaPorSlug: (slug: string) =>
+        slug === "agendamento_solicitado"
+          ? { data: null, error: { message: "fetch failed" } }
+          : { data: null, error: null },
+    });
+    const r = await mover(c, "pending");
+    expect(r).toEqual({ moveu: false, motivo: "indisponivel" });
+    expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
+  });
 });
