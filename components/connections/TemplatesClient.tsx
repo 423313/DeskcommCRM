@@ -1,13 +1,18 @@
 "use client";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
+  useSaveTemplateValues,
   useSyncTemplates,
   useTemplates,
   type TemplatePreview,
+  type TemplateSlotView,
+  type TemplateView,
 } from "@/hooks/channels/useTemplates";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -52,6 +57,74 @@ function Preview({ preview }: { preview: TemplatePreview }) {
           ),
         )}
       </p>
+    </div>
+  );
+}
+
+function ehMidia(s: TemplateSlotView): boolean {
+  return s.expects === "image" || s.expects === "video" || s.expects === "document";
+}
+
+/**
+ * O link da mídia do cabeçalho, salvo NO MODELO e não no disparo.
+ *
+ * A plataforma exige o link em todo envio de modelo com cabeçalho de mídia — o
+ * arquivo enviado na aprovação é só amostra. Até aqui a única porta para salvar
+ * era o painel da janela fechada, que só grava DEPOIS de um envio: para deixar o
+ * modelo pronto, o operador tinha de disparar para um cliente. Aqui ele salva
+ * sem enviar nada, na mesma tela em que sincroniza. Campo vazio esquece o link.
+ */
+function LinkDaMidia({ tpl, slot }: { tpl: TemplateView; slot: TemplateSlotView }) {
+  const t = useT();
+  const salvar = useSaveTemplateValues();
+  const salvo = tpl.savedValues[slot.valueKey] ?? "";
+  const [valor, setValor] = useState(salvo);
+  const limpo = valor.trim();
+  const id = `link:${tpl.name}:${tpl.language}:${slot.valueKey}`;
+
+  async function gravar() {
+    await salvar.mutateAsync({
+      name: tpl.name,
+      language: tpl.language,
+      values: { [slot.valueKey]: limpo },
+    });
+    toast.success(limpo ? t("Link salvo no modelo.") : t("Link removido do modelo."));
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-xs uppercase tracking-wide text-muted-foreground">
+        {t(slot.onde)} · {slot.expects}
+      </label>
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          type="url"
+          inputMode="url"
+          placeholder="https://"
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          disabled={salvar.isPending}
+          data-testid="template-link-midia"
+        />
+        <Button
+          variant="outline"
+          onClick={gravar}
+          disabled={limpo === salvo || salvar.isPending}
+          data-testid="btn-salvar-link"
+        >
+          {salvar.isPending
+            ? t("Salvando…")
+            : !limpo && salvo
+              ? t("Remover link")
+              : t("Salvar link")}
+        </Button>
+      </div>
+      <span className="text-xs text-muted-foreground">
+        {salvo
+          ? t("Link salvo: o envio deste modelo na conversa já sai com ele.")
+          : t("Link público (https) do arquivo. Salvo aqui, o envio na conversa já sai com ele.")}
+      </span>
     </div>
   );
 }
@@ -148,16 +221,20 @@ export function TemplatesClient() {
                       parâmetro que contar `{{n}}` não enxerga. */}
                   {tpl.slots
                     .filter((s) => s.expects !== "text")
-                    .map((s, i) => (
-                      <div key={`m:${s.onde}:${i}`} className="flex flex-col gap-0.5">
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                          {t(s.onde)} · {s.expects}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {t("arquivo de")} {s.expects} {t("enviado no disparo")}
-                        </span>
-                      </div>
-                    ))}
+                    .map((s, i) =>
+                      ehMidia(s) ? (
+                        <LinkDaMidia key={`m:${s.valueKey}`} tpl={tpl} slot={s} />
+                      ) : (
+                        <div key={`m:${s.onde}:${i}`} className="flex flex-col gap-0.5">
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                            {t(s.onde)} · {s.expects}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {t("arquivo de")} {s.expects} {t("enviado no disparo")}
+                          </span>
+                        </div>
+                      ),
+                    )}
                 </div>
               ) : null}
             </Card>

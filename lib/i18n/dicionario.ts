@@ -5400,6 +5400,16 @@ export const DICIONARIO: Traducoes = {
   "link da imagem": { es: "enlace de la imagen" },
   "Salvar este link no modelo": { es: "Guardar este enlace en la plantilla" },
   "já há um link salvo": { es: "ya hay un enlace guardado" },
+  "Link salvo no modelo.": { es: "Enlace guardado en la plantilla." },
+  "Link removido do modelo.": { es: "Enlace eliminado de la plantilla." },
+  "Remover link": { es: "Quitar enlace" },
+  "Salvar link": { es: "Guardar enlace" },
+  "Link salvo: o envio deste modelo na conversa já sai com ele.": {
+    es: "Enlace guardado: el envío de esta plantilla en la conversación ya sale con él.",
+  },
+  "Link público (https) do arquivo. Salvo aqui, o envio na conversa já sai com ele.": {
+    es: "Enlace público (https) del archivo. Guardado aquí, el envío en la conversación ya sale con él.",
+  },
   "O modelo saiu, mas não consegui salvar o link nele.": {
     es: "La plantilla se envió, pero no pude guardar el enlace en ella.",
   },
