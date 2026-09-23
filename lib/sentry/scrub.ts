@@ -55,9 +55,16 @@ export function scrubMessage(input: string): string {
     // padrões de CPF e telefone abaixo comeriam pedaços numéricos dela e
     // deixariam o resto passar.
     .replace(/apikey_[A-Za-z0-9_]{16,}/g, "[CHAVE]")
+    // E-mail antes dos números, para o telefone não comer dígito de dentro do
+    // endereço e deixar o resto dele passar.
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]")
+    // Telefone como se escreve no Brasil: +55 opcional, DDD opcional (com ou
+    // sem parênteses), 8 ou 9 dígitos com hífen, espaço ou nada no meio. A
+    // borda (`[^\w-]` antes, `(?![\w-])` depois) é o que impede comer pedaço de
+    // UUID; o padrão de baixo continua pegando o número colado em outro texto.
+    .replace(/(^|[^\w-])(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}[-\s]?\d{4}(?![\w-])/g, "$1[PHONE]")
     .replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, "[CPF]")
-    .replace(/\+?\d{2}\s?\d{4,5}-?\d{4}/g, "[PHONE]")
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]");
+    .replace(/\+?\d{2}\s?\d{4,5}-?\d{4}/g, "[PHONE]");
 }
 
 /**

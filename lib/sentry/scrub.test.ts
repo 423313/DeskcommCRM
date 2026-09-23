@@ -66,6 +66,42 @@ describe("scrubMessage", () => {
     expect(out).not.toContain("123.456.789-01");
     expect(out).not.toContain("joao@exemplo.com");
   });
+
+  // O mesmo texto vai ao Sentry e ao Jev, e a tela do Jev promete ao admin que
+  // o telefone sai apagado. O padrão antigo exigia o DDD colado ao número, sem
+  // parênteses: `(11) 98765-4321` e `98765-4321` — os jeitos mais comuns de
+  // escrever — saíam inteiros. O critério é o número sumir, não o rótulo: 11
+  // dígitos seguidos o padrão de CPF pega antes, e isso também serve.
+  it("apaga telefone nos jeitos em que se escreve no Brasil", () => {
+    for (const tel of [
+      "(11) 98765-4321",
+      "(11)98765-4321",
+      "(11) 3456-7890",
+      "11 98765-4321",
+      "11 98765 4321",
+      "11987654321",
+      "5511987654321",
+      "+55 11 98765-4321",
+      "+55 (11) 98765-4321",
+      "98765-4321",
+      "98765 4321",
+      "3456-7890",
+    ]) {
+      const out = scrubMessage(`meu zap ${tel}, obrigado`);
+      expect(out, tel).not.toMatch(/\d{3}/);
+      expect(out, tel).toMatch(/^meu zap .*\[(PHONE|CPF)\], obrigado$/);
+    }
+  });
+
+  it("dois telefones na mesma frase saem os dois", () => {
+    expect(scrubMessage("98765-4321 ou (21) 3456-7890")).toBe("[PHONE] ou [PHONE]");
+  });
+
+  it("não come pedaço de UUID, de hora nem de data", () => {
+    const uuid = "3f2504e0-4f89-1234-5678-0305e82c3301";
+    expect(scrubMessage(`agente ${uuid}`)).toBe(`agente ${uuid}`);
+    expect(scrubMessage("em 2026-09-23T18:46:39Z")).toBe("em 2026-09-23T18:46:39Z");
+  });
 });
 
 describe("sentryScrubHooks", () => {
