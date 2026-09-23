@@ -16,6 +16,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Dublês do banco e da decifragem, para `chaveDaOrganizacao` real ──────────
 const banco = vi.hoisted(() => ({
+  /** `organizations.settings` — o interruptor do Jev mora aqui. */
+  settings: null as Record<string, unknown> | null,
   linha: null as Record<string, unknown> | null,
   erro: null as { name: string; message: string } | null,
   chamadas: [] as Array<[string, ...unknown[]]>,
@@ -34,7 +36,10 @@ vi.mock("@/lib/supabase/admin", () => ({
           return chain;
         };
       }
-      chain.maybeSingle = async () => ({ data: banco.linha, error: banco.erro });
+      chain.maybeSingle = async () =>
+        tabela === "organizations"
+          ? { data: banco.settings === null ? null : { settings: banco.settings }, error: null }
+          : { data: banco.linha, error: banco.erro };
       return chain;
     },
   }),
@@ -59,7 +64,17 @@ vi.mock("@/lib/logger", () => ({
 
 import { chaveDaOrganizacao, decidirNoPonto } from "@/lib/ai/decisao/ponto";
 
+/** Ligado COM aceite — o único estado em que a chave pode sair. */
+const LIGADO = {
+  jev: {
+    ligado: true,
+    modo: "observacao",
+    aceite: { em: "2026-09-23T12:00:00.000Z", por: "22222222-2222-4222-8222-222222222222" },
+  },
+};
+
 beforeEach(() => {
+  banco.settings = LIGADO;
   banco.linha = null;
   banco.erro = null;
   banco.chamadas.length = 0;
@@ -203,6 +218,51 @@ describe("chaveDaOrganizacao — a chave do Jev daquela empresa, e só dela", ()
     expect((init as RequestInit & { headers: Record<string, string> }).headers.Authorization).toBe(
       "Bearer decifrada:cifra",
     );
+  });
+
+  describe("só com o interruptor ligado (LGPD): cadastrar a chave não é consentir", () => {
+    const CREDENCIAL = { api_key_encrypted: "cifra", api_key_iv: "iv", api_key_tag: "tag" };
+
+    it.each([
+      ["nada gravado", {}],
+      ["desligado", { jev: { ligado: false, modo: "decide", aceite: LIGADO.jev.aceite } }],
+      ["ligado SEM o aceite do administrador", { jev: { ligado: true, modo: "decide", aceite: null } }],
+      ["config torta", { jev: "sim" }],
+    ])("%s: a chave validada não sai", async (_rotulo, settings) => {
+      banco.settings = settings;
+      banco.linha = CREDENCIAL;
+      expect(await chaveDaOrganizacao(ORG)).toBeNull();
+      // Desligado é configuração, não incidente: sem rastro, e sem ler a credencial.
+      expect(avisos).toEqual([]);
+      expect(banco.chamadas).not.toContainEqual(["from", "ai_provider_credentials"]);
+    });
+
+    it("o interruptor lido é o DESTA organização", async () => {
+      banco.linha = CREDENCIAL;
+      await chaveDaOrganizacao(ORG);
+      expect(banco.chamadas).toContainEqual(["from", "organizations"]);
+      expect(banco.chamadas).toContainEqual(["eq", "id", ORG]);
+    });
+
+    it("organização não encontrada vale como desligado", async () => {
+      banco.settings = null;
+      banco.linha = CREDENCIAL;
+      expect(await chaveDaOrganizacao(ORG)).toBeNull();
+    });
+
+    it("com a chave validada e o Jev desligado, o caminho padrão não sai da máquina", async () => {
+      // O caso do achado: a chave cadastrada pela tela, ninguém ligou o Jev, e o
+      // worker de clima chama `medirClima` a cada mensagem recebida.
+      banco.settings = {};
+      banco.linha = CREDENCIAL;
+      const fetchImpl = vi.fn();
+      const r = await decidirNoPonto(
+        { ponto: "sentiment_classify", organizationId: ORG, estado: "x", perguntas: PERGUNTAS },
+        { fetchImpl },
+      );
+      expect(r.ok === false && r.motivo).toBe("sem_credencial");
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
   });
 
   it("sem a credencial no banco, o caminho padrão não sai da máquina", async () => {
