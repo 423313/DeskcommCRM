@@ -8,6 +8,60 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.45.0] — 2026-09-23
+
+### Adicionado
+
+- **O produto do catálogo ganha foto, e o atendente de IA manda a foto junto** Na tela Produtos, cada produto passa a ter até 5 fotos (JPG ou PNG, até 5 MB
+  cada): quem gerencia sobe, troca a ordem e remove pelo botão "Fotos" da linha,
+  e a primeira foto vira a capa que aparece na lista. Quando o atendente de IA
+  apresenta um produto que tem foto, ele manda a foto junto, com o texto como
+  legenda — pelo mesmo caminho das outras mensagens, então opt-out, LGPD e o
+  ritmo anti-banimento continuam valendo. Se a foto não puder ser enviada, o
+  texto sai sozinho. As fotos ficam num espaço privado do armazenamento, e a
+  atualização cria esse espaço sozinha: não há nada para configurar.
+
+  Ideia de @vgamkt, a partir do #1130.
+
+### Alterado
+
+- **O botão "Atualizar agora" não fica mais atrás do histórico de versões** Na tela Configurações › Atualização, quando há várias versões acumuladas, o
+  botão "Atualizar agora" ficava depois da lista "O que muda" — quem só queria
+  clicar precisava rolar por todo o histórico primeiro. O botão subiu para
+  antes dessa lista; os avisos que pesam na decisão de atualizar (instalação em
+  versão de desenvolvimento, "Requer atenção" e o de histórico incompleto, que
+  avisa quando a lista pode não alcançar a versão instalada) continuam
+  aparecendo antes dele.
+
+  Contribuição de @allisonwilliancandido (#1500).
+
+### Corrigido
+
+- **Anonimizar um contato pela ficha passa a apagar também o que ele escreveu nas conversas** Anonimizar um contato pelo botão da ficha trocava o nome e os dados da ficha,
+  mas o que a pessoa tinha escrito nas conversas continuava guardado, assim como
+  o resumo que a inteligência artificial faz de cada atendimento e as fotos e
+  arquivos que ela enviou. Agora a anonimização, por qualquer caminho, apaga o
+  texto das mensagens, a prévia da última mensagem, o resumo da inteligência
+  artificial e manda apagar os arquivos enviados. Contatos que já tinham sido
+  anonimizados antes são corrigidos na própria atualização. Os resumos da
+  inteligência artificial também passam a constar do relatório de dados que o
+  titular pode pedir. Não há ação para quem opera a VPS.
+
+- **Origem de anúncios do WhatsApp conectado por QR** Contatos que chegam por anúncios Clique para WhatsApp agora recebem a origem do anúncio quando o WAHA NOWEB entrega `externalAdReply`. Antes, o CRM procurava apenas `externalAdReplyInfo` e deixava o contato como WhatsApp sem atribuição. A forma anterior continua aceita, e posts orgânicos continuam fora da atribuição paga. Crédito: @ozzure.
+
+- **O preço dos modelos OpenAI nas duas tabelas do schema passa a bater com a fonte** Quem atendia com gpt-5.6-sol via a tela um preço e a conta somava outro: o catalogo (ai_models) e a tabela de orcamento (ai_pricing) seguiam com 500/3000 centavos por milhao, a versao nao promocional, enquanto o codigo que grava o custo em llm_calls cobrava 400/2000 — preco promocional medido na fonte oficial em 23/09/2026, validade declarada pela propria pagina ate 21/11/2026. As duas tabelas agora mudam juntas, a notes da linha grava fonte e data da medicao, e entram na tabela os tres ids OpenAI que o codigo ja cobrava e a tabela nao conhecia (gpt-4o, gpt-4o-mini, gpt-4o-2024-05-13). Nao ha acao para quem opera a VPS: a correcao chega na proxima atualizacao.
+
+  Contribuição de @webtecnica (#1498).
+
+- **O roteador em "Automático" passa a usar a inteligência artificial que a empresa escolheu** Quem deixava o modelo do roteador em "Automático" numa empresa que usa só a
+  OpenAI via toda conversa cair no agente reserva: o roteador pedia um modelo da
+  Anthropic ao provedor errado, e a identificação da intenção falhava sempre.
+  Agora "Automático" usa o que está escolhido para a empresa (no painel de
+  provedores ou no padrão da organização). Em empresas que usam a Anthropic, o
+  "Automático" também passa a seguir esse padrão, em vez de um modelo fixo. Quem
+  escolheu um modelo específico na tela do roteador não é afetado. Não há ação
+  para quem opera a VPS.
+
 ## [1.44.0] — 2026-09-23
 
 ### Adicionado
@@ -7567,7 +7621,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.44.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.45.0...HEAD
+[1.45.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.44.0...v1.45.0
 [1.44.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.43.0...v1.44.0
 [1.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.42.0...v1.43.0
 [1.42.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.41.0...v1.42.0
