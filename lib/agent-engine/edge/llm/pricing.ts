@@ -2,7 +2,8 @@
  * Tabela de preços versionada (stack.md §2: usage × pricing.ts → llm_calls.cost_cents).
  * ÚNICO lugar com preço de modelo no repo.
  *
- * Fonte: https://platform.claude.com/docs/en/about-claude/pricing (conferida 2026-09).
+ * Fontes: https://platform.claude.com/docs/en/about-claude/pricing (Anthropic) e
+ * https://openai.com/api/pricing (OpenAI, conferidas em 2026-09).
  * Cache: leitura = 0.1× a entrada; gravação = 1.25× no TTL de 5 minutos e 2× no de
  * 1 hora — os dois TTLs que o knob `LLM_CACHE_TTL` aceita (`lib/agent-engine/env.ts`),
  * e é por isso que `costCents` recebe o TTL em vigor em vez de supor a doutrina.
