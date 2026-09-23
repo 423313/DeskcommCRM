@@ -205,4 +205,21 @@ describe("validarRespostaDoFluxo", () => {
     expect(r).toEqual({ resultado: "nao_respondeu" });
     expect(runModelCallMock).not.toHaveBeenCalled();
   });
+
+  it("usa o modelo auxiliar do turno — sem ele, instalação sem default_model nunca teria validador", async () => {
+    runModelCallMock.mockReset();
+    runModelCallMock.mockResolvedValue({ result: { text: '{"respostas":[]}' } } as never);
+    await validarRespostaDoFluxo(
+      db,
+      cfg,
+      { tenantId: "o", leadId: "l", jobId: "j" },
+      base,
+      { log: logger, aux: { model: "gpt-5.4-mini", llmOverride: { provider: "openai", credentialId: null } } },
+    );
+    expect(runModelCallMock.mock.calls[0]![2]).toMatchObject({
+      purpose: "flow_validate",
+      model: "gpt-5.4-mini",
+      llmOverride: { provider: "openai", credentialId: null },
+    });
+  });
 });

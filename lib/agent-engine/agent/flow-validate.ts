@@ -42,6 +42,7 @@ import type { Logger } from '../obs/logger';
 import type { ProviderRegistry } from '../edge/llm/providers';
 import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
 import { valorBateComTipo } from '@/lib/followup/captura-do-fluxo';
+import type { AuxModelArgs } from './aux-model-args';
 
 /** O que o validador enxerga de uma pergunta do fluxo. */
 export interface PerguntaDoFluxo {
@@ -165,7 +166,17 @@ export async function validarRespostaDoFluxo(
     preenchidos: readonly { key: string; label: string; valor: string }[];
     mensagens: readonly MensagemDoContexto[];
   },
-  deps: { registry?: ProviderRegistry; log: Logger },
+  deps: {
+    registry?: ProviderRegistry;
+    log: Logger;
+    /**
+     * Modelo e credencial das chamadas auxiliares do turno (`auxModelArgs`).
+     * Sem isto, a instalação configurada só pela tela (sem `default_model` na
+     * organização) nunca teria validador: a chamada falharia por "modelo não
+     * definido" e todo turno cairia em `indefinido` — calado.
+     */
+    aux?: AuxModelArgs;
+  },
 ): Promise<LeituraDaResposta> {
   // Sem pergunta pendente e sem corrigível, não há o que validar.
   if (args.perguntas.length === 0 && args.preenchidos.length === 0) {
@@ -181,6 +192,7 @@ export async function validarRespostaDoFluxo(
         leadId: ids.leadId,
         jobId: ids.jobId,
         purpose: 'flow_validate',
+        ...(deps.aux ?? {}),
         messages: [
           {
             role: 'user',
