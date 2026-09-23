@@ -66,6 +66,14 @@ function erroDaGraph(res: Response, json: RawTemplate | null, acao: string): Err
   );
 }
 
+function mesmaOrigem(url: string): boolean {
+  try {
+    return new URL(url).origin === new URL(graphPartnerGraphBase()).origin;
+  } catch {
+    return false;
+  }
+}
+
 export const graphPartnerTemplateOps: ChannelTemplateOps = {
   async list({ organizationId, sessionRef }): Promise<ChannelTemplate[]> {
     const c = await creds({ organizationId, sessionRef });
@@ -84,7 +92,9 @@ export const graphPartnerTemplateOps: ChannelTemplateOps = {
       if (!res.ok || json?.error) throw erroDaGraph(res, json, "failed");
       for (const t of json?.data ?? []) todos.push(toNeutral(t));
       const proxima = json?.paging?.next;
-      url = proxima && proxima !== url ? proxima : null;
+      // Só segue a página seguinte no MESMO host: o token vai no header, e um
+      // `next` apontando para fora o entregaria a quem a resposta mandasse.
+      url = proxima && proxima !== url && mesmaOrigem(proxima) ? proxima : null;
     }
     return todos;
   },

@@ -10,6 +10,7 @@ import { resolveGraphPartnerCreds } from "@/lib/channels/graph-parceiro/credenti
 import { graphPartnerTemplateOps } from "@/lib/channels/graph-parceiro/templates";
 
 const CREDS = {
+  channelSessionId: "sess-1",
   phoneNumberId: "106540352242922",
   wabaId: "366634483210360",
   token: "sk_live_abc",
@@ -99,6 +100,31 @@ describe("modelos do parceiro Graph-compatível", () => {
     const [url, init] = fetchSpy.mock.calls[0]!;
     expect(String(url)).toContain("/message_templates?name=antigo");
     expect(init?.method).toBe("DELETE");
+  });
+
+  it("pagina pelo `next` do mesmo host, e nunca leva o token para outro", async () => {
+    const pagina = (next: string | undefined, name: string) =>
+      new Response(
+        JSON.stringify({
+          data: [{ name, language: "pt_BR", status: "APPROVED", components: [] }],
+          ...(next ? { paging: { next } } : {}),
+        }),
+        { status: 200 },
+      );
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(pagina("https://cloud.example.test/v1/366634483210360/message_templates?after=X", "a"))
+      .mockResolvedValueOnce(pagina("https://coletor.invalid/rouba?after=Y", "b"))
+      .mockResolvedValueOnce(pagina(undefined, "c"));
+
+    const r = await graphPartnerTemplateOps.list(ESCOPO);
+
+    expect(r.map((t) => t.name)).toEqual(["a", "b"]);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls.map(([u]) => new URL(String(u)).host)).toEqual([
+      "cloud.example.test",
+      "cloud.example.test",
+    ]);
   });
 
   it("erro da API sobe com o código do status", async () => {

@@ -108,6 +108,10 @@ export const datafyAdapter: ChannelAdapter = {
    * (`meta_templates`) e postado na Graph do parceiro.
    */
   async sendTemplate(input): Promise<{ externalId: string | null }> {
+    // Mesma régua do `send`: canal desligado na instalação não envia nada.
+    if (!canalGraphParceiroLigado()) {
+      throw new Error(`${NAO_CONFIGURADO}: o canal está desligado nesta instalação (DATAFY_ENABLED).`);
+    }
     const admin = createAdminClient();
     const creds = await resolveGraphPartnerCreds(admin, {
       organizationId: input.organizationId,
@@ -123,6 +127,10 @@ export const datafyAdapter: ChannelAdapter = {
       name: input.name,
       language: input.language,
       values: input.values,
+      // O espelho guarda a definição POR CONEXÃO. Sem o escopo, o mesmo nome e
+      // idioma espelhados também pelo canal oficial dão duas linhas, e a
+      // consulta do envio falha em vez de achar a desta conexão.
+      channelSessionId: creds.channelSessionId,
       transport: {
         phoneNumberId: creds.phoneNumberId,
         token: creds.token,

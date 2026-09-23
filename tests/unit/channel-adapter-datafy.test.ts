@@ -21,7 +21,12 @@ import type { OutboundEnvelope } from "@/lib/channels/types";
  * Adapter do canal Datafy (recorte do #1130, @vgamkt): o adapter oficial com
  * outro host e outro token — e que NÃO envia com o canal desligado.
  */
-const CREDS = { phoneNumberId: "106540352242922", wabaId: "366634483210360", token: "sk_live_abc" };
+const CREDS = {
+  channelSessionId: "sess-1",
+  phoneNumberId: "106540352242922",
+  wabaId: "366634483210360",
+  token: "sk_live_abc",
+};
 
 function envelope(over: Partial<OutboundEnvelope> = {}): OutboundEnvelope {
   return {
@@ -39,6 +44,7 @@ beforeEach(() => {
   process.env.DATAFY_ENABLED = "true";
   vi.mocked(resolveGraphPartnerCreds).mockReset();
   vi.mocked(resolveGraphPartnerCreds).mockResolvedValue(CREDS);
+  vi.mocked(sendTemplateForSession).mockReset();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -125,6 +131,25 @@ describe("adapter datafy", () => {
       errorPrefix: "datafy",
     });
     expect(chamada?.[1].organizationId).toBe("org-1");
+    // O espelho é por conexão: sem o escopo, o mesmo modelo espelhado pelo
+    // canal oficial dá duas linhas e a consulta do envio falha.
+    expect(chamada?.[1].channelSessionId).toBe("sess-1");
+  });
+
+  it("sendTemplate com o canal DESLIGADO não envia nem consulta credencial", async () => {
+    process.env.DATAFY_ENABLED = "";
+    await expect(
+      datafyAdapter.sendTemplate!({
+        organizationId: "org-1",
+        sessionRef: "106540352242922",
+        to: "5531999998888",
+        name: "pedido_confirmado",
+        language: "pt_BR",
+        values: {},
+      }),
+    ).rejects.toThrow(/^datafy_not_configured/);
+    expect(resolveGraphPartnerCreds).not.toHaveBeenCalled();
+    expect(sendTemplateForSession).not.toHaveBeenCalled();
   });
 
   it("checkHealth mapeia 401 para FAILED e rede para reachable=false", async () => {
