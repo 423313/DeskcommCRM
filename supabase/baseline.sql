@@ -10417,6 +10417,39 @@ select d.organization_id, d.id, c.conversation_id
       where dc.demanda_id = d.id and dc.conversation_id = c.conversation_id
    );
 
+-- AUTO-CURA (migration 0392): apaga a duplicata que a versão anterior deste
+-- apêndice criou. O guard de R2 abaixo era idempotente só CONTRA SI MESMO —
+-- procurava outra 'derivada' com o mesmo `aberta_em` — e não enxergava a
+-- demanda 'inbound' que o trigger da 0138 cria na entrada. Em quem já rodava,
+-- cada `update.sh` derivava uma segunda demanda para cada conversa nova,
+-- dobrando `demandas_sem_proximo_passo` (o invariante 4) e `escopo.demandas`.
+--
+-- Só sai a 'derivada' que tem a assinatura da duplicata e mais nada:
+--   * INTOCADA — sem próximo passo, sem lead, sem dono humano, sem caso;
+--   * ligada a UMA conversa só — então apagá-la não deixa conversa nenhuma sem
+--     demanda (a cascata leva só esse vínculo);
+--   * e nascida DEPOIS de outra demanda de origem real na mesma conversa. É
+--     isso que separa a duplicata da derivada legítima: a do backfill original
+--     é anterior ao trigger, e a 'inbound' que chegou depois dela, numa conversa
+--     reaberta, é mais NOVA — essa derivada é histórico e fica.
+delete from public.demandas d
+ where d.origem = 'derivada'
+   and d.agent_case_id is null
+   and d.lead_id is null
+   and d.dono_user_id is null
+   and d.proximo_passo is null
+   and (select count(*) from public.demanda_conversas v where v.demanda_id = d.id) = 1
+   and exists (
+     select 1
+       from public.demanda_conversas dc
+       join public.demanda_conversas outra
+         on outra.conversation_id = dc.conversation_id and outra.demanda_id <> d.id
+       join public.demandas d2 on d2.id = outra.demanda_id
+      where dc.demanda_id = d.id
+        and d2.origem <> 'derivada'
+        and d2.created_at < d.created_at
+   );
+
 -- R2 — conversas que nunca escalaram também são demandas.
 insert into public.demandas
   (organization_id, contact_id, aberta_em, origem, estado, dono_kind, desfecho, fechada_em)
@@ -10433,6 +10466,12 @@ select
  where not exists (
    select 1 from public.agent_cases c where c.conversation_id = cv.id
  )
+   and not exists (
+   select 1 from public.demanda_conversas dc where dc.conversation_id = cv.id
+ )
+   -- O guard que faltava (migration 0392): derivar o PASSADO só vale para a
+   -- conversa que não tem demanda NENHUMA. Sem esta linha, toda conversa que o
+   -- trigger da 0138 já cobriu ganha uma segunda demanda no `update.sh` seguinte.
    and not exists (
    select 1 from public.demandas d
     where d.organization_id = cv.organization_id
