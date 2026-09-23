@@ -275,6 +275,10 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await page.getByRole("button", { name: "Reabrir", exact: true }).click();
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("open");
     await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Cerrar", exact: true })
+      .click();
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("closed");
     expect(hits.filter((url) => url.includes("sendText"))).toHaveLength(1);
 
