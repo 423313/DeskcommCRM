@@ -133,7 +133,7 @@ backup "$WORK/saida-bind.txt" abc123 "bind||$WORK/sessoes"
 check "bind: o snapshot sai com o arquivo de sessão que está no host" \
   snapshot_tem "$(snapshot)"
 check "bind: não é o tar de um diretório vazio" \
-  bash -c '[ -n "$1" ] && [ "$(stat -c%s "$1")" -gt 1000 ]' _ "$(snapshot)"
+  bash -c '[ -n "$1" ] && [ "$(wc -c < "$1")" -gt 1000 ]' _ "$(snapshot)"
 check "bind: o passo não anunciou vazio" nao_contem "$WORK/saida-bind.txt" "saiu VAZIO"
 check "bind: a pasta do host foi a montagem levada ao docker" contem "$DUBLE_LOG" "$WORK/sessoes:/data:ro"
 
