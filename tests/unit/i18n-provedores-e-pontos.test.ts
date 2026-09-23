@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PROVEDORES_COM_CHAVE } from "@/lib/ai/pontos/provedores";
-import { PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
+import { PAPEIS, PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM } from "@/lib/ai/pontos/resolver";
 import { DICIONARIO } from "@/lib/i18n/dicionario";
 
@@ -27,14 +27,22 @@ describe("espanhol dos textos que vêm de lista, não de literal", () => {
     expect(semEspanhol(PROVEDORES_COM_CHAVE.map((p) => p.quandoUsar))).toEqual([]);
   });
 
-  it("todo texto de ponto de IA — rótulo, descrição, sintoma e o que o Jev faz", () => {
+  it("todo texto de ponto de IA — rótulo, descrição, sintoma, razão de ser fixo e o que o Jev faz", () => {
     const textos = PONTOS_DE_IA.flatMap((p) => [
       p.rotulo,
       p.oQueFaz,
       p.sintomaDeFalha,
+      // `t(ponto.fixo.razao)` no cartão do ponto (PainelDeProvedores).
+      ...(p.fixo ? [p.fixo.razao] : []),
       ...(p.decisaoRapida ? [p.decisaoRapida.oQueOJevFaz] : []),
     ]);
     expect(textos.length, "a varredura não enxergou o registro").toBeGreaterThan(30);
+    expect(semEspanhol(textos)).toEqual([]);
+  });
+
+  it("todo papel — o título e a explicação de cada grupo do painel de provedores", () => {
+    const textos = Object.values(PAPEIS).flatMap((p) => [p.rotulo, p.explicacao]);
+    expect(textos.length, "a varredura não enxergou os papéis").toBeGreaterThan(5);
     expect(semEspanhol(textos)).toEqual([]);
   });
 

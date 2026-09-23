@@ -1,0 +1,332 @@
+/**
+ * O cartão do Jev tem seis estados, e cada um responde a pergunta que a pessoa
+ * tem naquele momento: "o que é isto?", "por que a chave não passou?", "o que
+ * acontece se eu ligar?", "ele concorda com a minha IA?", "quanto está custando?"
+ * e "por que ele decide sozinho?". Os dados vêm de `GET /api/v1/ai/jev`.
+ */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
+
+import { CartaoDoJev, jevNoPonto, type DadosDoJev } from "./CartaoDoJev";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/app/app/ai/credentials/_actions", () => ({ refreshCredentialsView: vi.fn() }));
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() },
+}));
+
+type Aninhado = "provedor" | "chave" | "config" | "numeros";
+type Parcial = Partial<Omit<DadosDoJev, Aninhado>> & {
+  [K in Aninhado]?: Partial<DadosDoJev[K]>;
+};
+
+function dados(extra: Parcial = {}): DadosDoJev {
+  const base: DadosDoJev = {
+    provedor: {
+      rotulo: "Jev (TypeSafe AI)",
+      quandoUsar:
+        "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em menos de meio segundo. Trabalha junto com a sua IA principal.",
+      ondePegarAChave: "https://console.typesafe.ai/keys",
+      prefixoDaChave: "apikey_…",
+    },
+    chave: {
+      existe: true,
+      validada: true,
+      credencial_id: "cred-1",
+      rotulo: "Jev",
+      erro_de_validacao: null,
+    },
+    config: { ligado: false, modo: "observacao", aceite: null },
+    tarefas: [
+      {
+        id: "sentiment_classify",
+        rotulo: "Medir o clima da conversa",
+        oQueOJevFaz:
+          "Percebe, em menos de meio segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
+      },
+    ],
+    tem_ia_de_sempre: true,
+    numeros: {
+      dias: 7,
+      decisoes: 0,
+      custo_cents: 0,
+      latencia_media_ms: null,
+      reservas: 0,
+      observacao: { dias: 30, comparadas: 0, concordaram: 0 },
+    },
+    ultima_falha: null,
+    pode_editar: true,
+  };
+  return {
+    ...base,
+    ...extra,
+    provedor: { ...base.provedor, ...extra.provedor },
+    chave: { ...base.chave, ...extra.chave },
+    config: { ...base.config, ...extra.config },
+    numeros: { ...base.numeros, ...extra.numeros },
+  };
+}
+
+const recarregar = vi.fn(async () => {});
+let chamadas: Array<{ url: string; metodo: string; corpo: unknown }> = [];
+
+beforeEach(() => {
+  chamadas = [];
+  recarregar.mockClear();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      chamadas.push({
+        url,
+        metodo: init?.method ?? "GET",
+        corpo: init?.body ? JSON.parse(String(init.body)) : null,
+      });
+      return new Response(JSON.stringify({ data: { validated_at: "2026-09-23T00:00:00Z" } }), {
+        status: 200,
+      });
+    }),
+  );
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+function montar(d: DadosDoJev | null, opcoes: { erro?: string; idioma?: string } = {}) {
+  return render(
+    <IdiomaProvider locale={opcoes.idioma ?? "pt-BR"}>
+      <QueryClientProvider client={new QueryClient()}>
+        <CartaoDoJev dados={d} erro={opcoes.erro ?? null} recarregar={recarregar} />
+      </QueryClientProvider>
+    </IdiomaProvider>,
+  );
+}
+
+const cartao = () => screen.getByTestId("cartao-do-jev");
+
+describe("CartaoDoJev — (1) sem chave", () => {
+  const semChave = () =>
+    dados({ chave: { existe: false, validada: false, credencial_id: null, rotulo: null } });
+
+  it("diz o que é e leva a quem pega e a quem cola a chave", () => {
+    montar(semChave());
+    expect(cartao()).toHaveAttribute("data-estado", "sem_chave");
+    expect(screen.getByText(/toma decisões rápidas e baratas/)).toBeInTheDocument();
+    const pegar = screen.getByRole("link", { name: /Pegar a chave na TypeSafe/ });
+    expect(pegar).toHaveAttribute("href", "https://console.typesafe.ai/keys");
+    expect(pegar).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("button", { name: "Colar a chave" })).toBeInTheDocument();
+  });
+
+  it("'Colar a chave' abre o cadastro já no Jev, e não na Anthropic", () => {
+    montar(semChave());
+    fireEvent.click(screen.getByRole("button", { name: "Colar a chave" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText(/API key/)).toHaveAttribute("placeholder", "apikey_…");
+    expect(screen.getByRole("link", { name: /Pegar chave em/ })).toHaveAttribute(
+      "href",
+      "https://console.typesafe.ai/keys",
+    );
+  });
+
+  it("quem não administra não vê o botão de colar, e sabe por quê", () => {
+    montar({ ...semChave(), pode_editar: false });
+    expect(screen.queryByRole("button", { name: "Colar a chave" })).toBeNull();
+    expect(screen.getByText(/Só quem administra a empresa/)).toBeInTheDocument();
+  });
+});
+
+describe("CartaoDoJev — (2) chave que não passou no teste", () => {
+  it("diz o motivo em português de gente e testa de novo pela rota de revalidar", async () => {
+    montar(dados({ chave: { validada: false, erro_de_validacao: "auth_failed_401" } }));
+    expect(cartao()).toHaveAttribute("data-estado", "chave_nao_validada");
+    expect(screen.getByText(/O provedor recusou a chave/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Testar de novo" }));
+    await waitFor(() => expect(recarregar).toHaveBeenCalled());
+    expect(chamadas).toEqual([
+      { url: "/api/v1/ai/credentials/cred-1/revalidate", metodo: "POST", corpo: {} },
+    ]);
+  });
+
+  it("chave recém-colada, sem resultado ainda, não é tratada como recusada", () => {
+    montar(dados({ chave: { validada: false, erro_de_validacao: null } }));
+    expect(screen.getByText(/A chave ainda está sendo testada/)).toBeInTheDocument();
+    expect(screen.queryByText(/recusou/)).toBeNull();
+  });
+});
+
+describe("CartaoDoJev — (3) pronto para ligar", () => {
+  it("lista o que o Jev vai fazer e só liga depois do aceite marcado", async () => {
+    montar(dados());
+    expect(cartao()).toHaveAttribute("data-estado", "pronto");
+    expect(screen.getByText("Medir o clima da conversa")).toBeInTheDocument();
+    expect(screen.getByText(/nos Estados Unidos, para o Jev avaliar/)).toBeInTheDocument();
+
+    const ligar = screen.getByRole("button", { name: "Ligar o Jev" });
+    expect(ligar).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Concordo com o envio/ }));
+    expect(ligar).toBeEnabled();
+    fireEvent.click(ligar);
+
+    await waitFor(() => expect(recarregar).toHaveBeenCalled());
+    expect(chamadas).toEqual([
+      { url: "/api/v1/ai/jev", metodo: "PATCH", corpo: { ligado: true, aceite_lgpd: true } },
+    ]);
+  });
+
+  it("religar depois do aceite gravado não pede a caixa de novo", async () => {
+    montar(
+      dados({
+        config: { modo: "decide", aceite: { em: "2026-09-20T12:00:00Z", por: "u1" } },
+      }),
+    );
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ligar o Jev" }));
+    await waitFor(() => expect(recarregar).toHaveBeenCalled());
+    expect(chamadas[0]?.corpo).toEqual({ ligado: true });
+  });
+
+  it("sem a IA de sempre, avisa que o atendimento precisa dela", () => {
+    montar(dados({ tem_ia_de_sempre: false }));
+    expect(
+      screen.getByText("O Jev não conversa com o cliente — falta a chave da sua IA principal."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("CartaoDoJev — (4) ligado, observando", () => {
+  it("mostra a concordância e oferece deixar o Jev decidir", async () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        numeros: { observacao: { dias: 30, comparadas: 4, concordaram: 3 } },
+      }),
+    );
+    expect(cartao()).toHaveAttribute("data-estado", "observando");
+    expect(screen.getByTestId("jev-concordancia")).toHaveTextContent(/3 de 4/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Deixar o Jev decidir" }));
+    await waitFor(() => expect(recarregar).toHaveBeenCalled());
+    expect(chamadas[0]).toEqual({ url: "/api/v1/ai/jev", metodo: "PATCH", corpo: { modo: "decide" } });
+  });
+
+  it("sem nada comparado ainda, não inventa porcentagem", () => {
+    montar(dados({ config: { ligado: true, modo: "observacao" } }));
+    expect(screen.getByTestId("jev-concordancia")).toHaveTextContent(
+      /Ainda não há mensagens medidas pelos dois/,
+    );
+  });
+});
+
+describe("CartaoDoJev — (5) ligado, decidindo", () => {
+  const decidindo = () =>
+    dados({
+      config: { ligado: true, modo: "decide" },
+      numeros: { decisoes: 1200, custo_cents: 0.21, latencia_media_ms: 361, reservas: 2 },
+    });
+
+  it("mostra os números da semana, com o custo em casas que não viram zero", () => {
+    montar(decidindo());
+    expect(cartao()).toHaveAttribute("data-estado", "decidindo");
+    const numeros = screen.getByTestId("jev-numeros");
+    expect(numeros).toHaveTextContent(/1\.200/);
+    // 0,21 centavo de dólar = US$ 0,0021 — com 2 casas seria "US$ 0,00".
+    expect(numeros).toHaveTextContent(/US\$\s?0,0021/);
+    expect(numeros).toHaveTextContent(/0,4\s?s/);
+    expect(numeros).toHaveTextContent(/2/);
+  });
+
+  it("leva às decisões do Jev em Execuções, já filtradas", () => {
+    montar(decidindo());
+    expect(screen.getByRole("link", { name: /Ver as decisões do Jev/ })).toHaveAttribute(
+      "href",
+      "/app/ai/runs?provider=typesafe",
+    );
+  });
+
+  it("desliga, e volta a só observar", async () => {
+    montar(decidindo());
+    fireEvent.click(screen.getByRole("button", { name: "Desligar" }));
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar a só observar" }));
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(2));
+    expect(chamadas.map((c) => c.corpo)).toEqual([{ ligado: false }, { modo: "observacao" }]);
+  });
+
+  it("a última falha sai com o que fazer, não com o código", () => {
+    montar({
+      ...decidindo(),
+      ultima_falha: { motivo: "jev_sem_credito", em: "2026-09-22T10:00:00Z" },
+    });
+    expect(screen.getByTestId("jev-ultima-falha")).toHaveTextContent(/crédito esgotado/);
+    expect(screen.getByTestId("jev-ultima-falha")).not.toHaveTextContent("jev_sem_credito");
+  });
+
+  it("chave que deixou de valer com o Jev ligado aparece, com o teste à mão", () => {
+    montar({ ...decidindo(), chave: { ...decidindo().chave, validada: false } });
+    expect(screen.getByRole("button", { name: "Testar de novo" })).toBeInTheDocument();
+  });
+
+  it("ligado sem chave ativa (desativada em Credenciais) não finge que mede", () => {
+    montar({
+      ...decidindo(),
+      chave: { existe: false, validada: false, credencial_id: null, rotulo: null, erro_de_validacao: null },
+    });
+    expect(screen.getByTestId("jev-chave")).toHaveTextContent(/sem chave ativa/);
+    expect(screen.queryByRole("button", { name: "Testar de novo" })).toBeNull();
+  });
+});
+
+describe("CartaoDoJev — (6) sem a IA de sempre", () => {
+  it("explica que o Jev decide sozinho e não oferece modo", () => {
+    montar(dados({ config: { ligado: true, modo: "observacao" }, tem_ia_de_sempre: false }));
+    expect(cartao()).toHaveAttribute("data-estado", "sozinho");
+    expect(screen.getByText(/sem reserva/)).toBeInTheDocument();
+    expect(
+      screen.getByText("O Jev não conversa com o cliente — falta a chave da sua IA principal."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Deixar o Jev decidir" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Voltar a só observar" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Desligar" })).toBeInTheDocument();
+  });
+});
+
+describe("CartaoDoJev — leitura e idioma", () => {
+  it("quem não administra vê o estado, sem os botões de mudar", () => {
+    montar({ ...dados({ config: { ligado: true, modo: "decide" } }), pode_editar: false });
+    expect(screen.queryByRole("button", { name: "Desligar" })).toBeNull();
+    expect(screen.getByTestId("jev-numeros")).toBeInTheDocument();
+  });
+
+  it("falha ao carregar vira aviso com 'Tentar de novo', e não some", () => {
+    montar(null, { erro: "sem permissão" });
+    expect(screen.getByText("sem permissão")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(recarregar).toHaveBeenCalled();
+  });
+
+  it("fala espanhol com quem escolheu espanhol", () => {
+    montar(dados({ config: { ligado: true, modo: "decide" } }), { idioma: "es" });
+    expect(screen.getByRole("heading", { name: "Jev: decisiones rápidas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Desactivar" })).toBeInTheDocument();
+  });
+});
+
+describe("jevNoPonto — a linha do cartão do ponto", () => {
+  it("só aparece no ponto que o Jev atende, e com ele ligado", () => {
+    expect(jevNoPonto(dados(), "sentiment_classify")).toBeNull();
+    expect(jevNoPonto(null, "sentiment_classify")).toBeNull();
+    const ligado = dados({ config: { ligado: true } });
+    expect(jevNoPonto(ligado, "stage_classify")).toBeNull();
+    expect(jevNoPonto(ligado, "sentiment_classify")).toBe("observacao");
+    expect(jevNoPonto(dados({ config: { ligado: true, modo: "decide" } }), "sentiment_classify")).toBe(
+      "decide",
+    );
+    expect(
+      jevNoPonto(dados({ config: { ligado: true }, tem_ia_de_sempre: false }), "sentiment_classify"),
+    ).toBe("sozinho");
+  });
+});

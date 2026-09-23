@@ -48,13 +48,17 @@ interface CreateResponse {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** O cartão do Jev abre o diálogo já nele; a tela de Credenciais, na Anthropic. */
+  providerInicial?: ProvedorComChave;
+  /** Chamado depois de gravar, para quem abriu o diálogo fora de Credenciais reler o que mostra. */
+  aoSalvar?: () => void;
 }
 
-export function AddCredentialDialog({ open, onOpenChange }: Props) {
+export function AddCredentialDialog({ open, onOpenChange, providerInicial = "anthropic", aoSalvar }: Props) {
   const t = useT();
   const router = useRouter();
   const qc = useQueryClient();
-  const [provider, setProvider] = useState<ProvedorComChave>("anthropic");
+  const [provider, setProvider] = useState<ProvedorComChave>(providerInicial);
   const [label, setLabel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -62,7 +66,7 @@ export function AddCredentialDialog({ open, onOpenChange }: Props) {
   const provedor = PROVEDORES_COM_CHAVE.find((p) => p.id === provider) ?? PROVEDORES_COM_CHAVE[0];
 
   const reset = () => {
-    setProvider("anthropic");
+    setProvider(providerInicial);
     setLabel("");
     setApiKey("");
     setErrors({});
@@ -94,6 +98,7 @@ export function AddCredentialDialog({ open, onOpenChange }: Props) {
       toast.success(t("Credencial salva. Validação em segundo plano."));
       reset();
       onOpenChange(false);
+      aoSalvar?.();
 
       // Poll uma vez após ~3s para refletir validated_at no card.
       setTimeout(async () => {

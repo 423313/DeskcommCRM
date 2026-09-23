@@ -59,6 +59,15 @@ describe("CommandPalette", () => {
     expect(screen.getByRole("option", { name: /Radar/ })).toBeTruthy();
   });
 
+  it("acha o Jev pelo nome, embora ele não tenha tela própria", async () => {
+    const user = userEvent.setup();
+    abrir();
+    // O cartão dele mora em Provedores; sem o nome na descrição, quem ouviu
+    // falar do Jev digitava "jev" e não achava nada.
+    await user.type(screen.getByRole("combobox"), "jev");
+    expect(screen.getByRole("option", { name: /Provedores/ })).toBeTruthy();
+  });
+
   it("respeita o papel", async () => {
     comoPapel("agent");
     const user = userEvent.setup();

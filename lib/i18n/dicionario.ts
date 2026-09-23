@@ -1024,8 +1024,8 @@ export const DICIONARIO: Traducoes = {
     es: "La clave del proveedor de IA que los agentes usan para pensar.",
   },
   Provedores: { es: "Proveedores" },
-  "Qual inteligência atende cada parte do sistema — e o que acontece se ela falhar.": {
-    es: "Qué inteligencia atiende cada parte del sistema y qué ocurre si falla.",
+  "Qual inteligência atende cada parte do sistema, o que acontece se ela falhar e o Jev, das decisões rápidas.": {
+    es: "Qué inteligencia atiende cada parte del sistema, qué ocurre si falla y Jev, el de las decisiones rápidas.",
   },
   Conhecimento: { es: "Conocimiento" },
   "Os materiais que o agente consulta antes de responder sobre o seu negócio.": {
@@ -3306,6 +3306,89 @@ export const DICIONARIO: Traducoes = {
   "Depois de resolver, marque este aviso como resolvido para voltar a ser avisado.": {
     es: "Cuando lo resuelvas, marca este aviso como resuelto para volver a recibir avisos.",
   },
+  // O cartão do Jev em IA › Provedores (`app/app/ai/providers/_components/CartaoDoJev.tsx`).
+  "Jev — decisões rápidas": { es: "Jev: decisiones rápidas" },
+  "Não consegui carregar o cartão do Jev": { es: "No pude cargar la tarjeta de Jev" },
+  Observando: { es: "Observando" },
+  Decidindo: { es: "Decidiendo" },
+  "Decidindo sozinho": { es: "Decidiendo solo" },
+  "Pegar a chave na TypeSafe": { es: "Obtener la clave en TypeSafe" },
+  "Colar a chave": { es: "Pegar la clave" },
+  "Só quem administra a empresa pode colar a chave e ligar o Jev.": {
+    es: "Solo quien administra la empresa puede pegar la clave y activar Jev.",
+  },
+  "Só quem administra a empresa pode mudar o Jev.": {
+    es: "Solo quien administra la empresa puede cambiar Jev.",
+  },
+  "A chave ainda está sendo testada. Leva alguns segundos.": {
+    es: "La clave todavía se está probando. Tarda unos segundos.",
+  },
+  "O Jev está ligado, mas sem chave ativa: enquanto isso, ele não mede nada.": {
+    es: "Jev está activado, pero sin clave activa: mientras tanto, no mide nada.",
+  },
+  "A chave passou no teste.": { es: "La clave pasó la prueba." },
+  "A chave não passou no teste.": { es: "La clave no pasó la prueba." },
+  "Testar de novo": { es: "Probar de nuevo" },
+  "Trocar a chave em Credenciais": { es: "Cambiar la clave en Credenciales" },
+  "O que o Jev vai fazer": { es: "Qué va a hacer Jev" },
+  "Ele começa só observando: a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.": {
+    es: "Empieza solo observando: tu IA de siempre sigue decidiendo, y comparas los dos antes de dejar que Jev decida.",
+  },
+  "Ele volta decidindo, como estava antes de ser desligado.": {
+    es: "Vuelve decidiendo, como estaba antes de desactivarlo.",
+  },
+  "Ao ligar, a última mensagem de cada cliente vai para a TypeSafe AI, nos Estados Unidos, para o Jev avaliar. Antes de sair, o sistema apaga CPF, telefone e e-mail do texto. Com o Jev desligado, nada é enviado.": {
+    es: "Al activarlo, el último mensaje de cada cliente va a TypeSafe AI, en Estados Unidos, para que Jev lo evalúe. Antes de salir, el sistema borra del texto el CPF, el teléfono y el correo. Con Jev desactivado, no se envía nada.",
+  },
+  "Concordo com o envio da última mensagem de cada cliente para a TypeSafe AI, nos Estados Unidos.": {
+    es: "Estoy de acuerdo con el envío del último mensaje de cada cliente a TypeSafe AI, en Estados Unidos.",
+  },
+  "Envio aceito pela empresa em": { es: "Envío aceptado por la empresa el" },
+  "Ligar o Jev": { es: "Activar Jev" },
+  "O Jev foi ligado.": { es: "Jev se activó." },
+  "O Jev foi desligado.": { es: "Jev se desactivó." },
+  "Agora o Jev decide.": { es: "Ahora Jev decide." },
+  "O Jev voltou a só observar.": { es: "Jev volvió a solo observar." },
+  "Observando — a sua IA de sempre ainda decide. Compare os dois antes de deixar o Jev decidir.": {
+    es: "Observando: tu IA de siempre todavía decide. Compara los dos antes de dejar que Jev decida.",
+  },
+  "Decidindo — o Jev mede primeiro, e a sua IA de sempre só entra se ele não responder.": {
+    es: "Decidiendo: Jev mide primero, y tu IA de siempre solo entra si él no responde.",
+  },
+  "Decidindo sozinho — a empresa não tem a IA de sempre, então o Jev mede o clima sem reserva.": {
+    es: "Decidiendo solo: la empresa no tiene la IA de siempre, así que Jev mide el clima sin respaldo.",
+  },
+  "Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.": {
+    es: "Todavía no hay mensajes medidos por los dos. La comparación aparece aquí en cuanto los haya.",
+  },
+  "Nos últimos": { es: "En los últimos" },
+  "dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em": {
+    es: "días, Jev y tu IA de siempre llegaron a la misma conclusión en",
+  },
+  "mensagens — os dois chamariam, ou não, uma pessoa para a conversa.": {
+    es: "mensajes: los dos llamarían, o no, a una persona para la conversación.",
+  },
+  "Mensagens medidas": { es: "Mensajes medidos" },
+  "Tempo médio": { es: "Tiempo promedio" },
+  "Vezes que a IA de sempre cobriu o Jev": { es: "Veces que la IA de siempre cubrió a Jev" },
+  "O Jev não conseguiu medir.": { es: "Jev no pudo medir." },
+  "Ver as decisões do Jev": { es: "Ver las decisiones de Jev" },
+  "Deixar o Jev decidir": { es: "Dejar que Jev decida" },
+  "Voltar a só observar": { es: "Volver a solo observar" },
+  // A linha do Jev no cartão do ponto (`PainelDeProvedores.tsx`).
+  "O Jev mede primeiro; o modelo abaixo é a reserva.": {
+    es: "Jev mide primero; el modelo de abajo es el respaldo.",
+  },
+  "O Jev observa; o modelo abaixo ainda decide.": {
+    es: "Jev observa; el modelo de abajo todavía decide.",
+  },
+  "O Jev mede sozinho: não há modelo de reserva.": {
+    es: "Jev mide solo: no hay modelo de respaldo.",
+  },
+  // IA › Execuções, o filtro do Jev.
+  "Só o Jev": { es: "Solo Jev" },
+  "Mostrando só o Jev": { es: "Mostrando solo Jev" },
+  "O Jev ainda não mediu nenhuma mensagem.": { es: "Jev todavía no midió ningún mensaje." },
   "Default:": { es: "Predeterminado:" },
   "API key": { es: "Clave de API" },
 
@@ -6582,8 +6665,11 @@ export const DICIONARIO: Traducoes = {
   "a plataforma de mensagens usada para conversar com o cliente;": {
     es: "la plataforma de mensajería usada para conversar con el cliente;",
   },
-  "o provedor de inteligência artificial contratado pelo operador, que recebe o trecho da conversa necessário para gerar a resposta;": {
-    es: "el proveedor de inteligencia artificial contratado por el operador, que recibe el fragmento de la conversación necesario para generar la respuesta;",
+  "o provedor de inteligência artificial contratado pelo operador, que recebe o trecho da conversa necessário para gerar a resposta ou avaliar a conversa;": {
+    es: "el proveedor de inteligencia artificial contratado por el operador, que recibe el fragmento de la conversación necesario para generar la respuesta o evaluar la conversación;",
+  },
+  "quando o operador liga as decisões rápidas do Jev (desligadas por padrão), a TypeSafe AI, nos Estados Unidos, que recebe a última mensagem do cliente, já sem CPF, telefone e e-mail, para avaliar se ele está irritado;": {
+    es: "cuando el operador activa las decisiones rápidas de Jev (desactivadas por defecto), TypeSafe AI, en Estados Unidos, que recibe el último mensaje del cliente, ya sin CPF, teléfono ni correo, para evaluar si está molesto;",
   },
   "o provedor de infraestrutura onde o servidor está hospedado.": {
     es: "el proveedor de infraestructura donde el servidor está alojado.",
@@ -6604,8 +6690,8 @@ export const DICIONARIO: Traducoes = {
   },
   "não pode ser desfeita": { es: "no se puede deshacer" },
   "7. Segurança": { es: "7. Seguridad" },
-  "O acesso é controlado por conta, senha e papel, com verificação em duas etapas obrigatória para administradores. Cada organização hospedada só enxerga os próprios dados, e as chaves de integração são guardadas cifradas.": {
-    es: "El acceso se controla con cuenta, contraseña y rol, y la verificación en dos pasos es obligatoria para los administradores. Cada organización alojada solo ve sus propios datos y las claves de integración se guardan cifradas.",
+  "O acesso é controlado por conta, senha e papel, com verificação em duas etapas opcional, que quem administra pode tornar obrigatória. Cada organização hospedada só enxerga os próprios dados, e as chaves de integração são guardadas cifradas.": {
+    es: "El acceso se controla con cuenta, contraseña y rol, con verificación en dos pasos opcional, que quien administra puede volver obligatoria. Cada organización alojada solo ve sus propios datos y las claves de integración se guardan cifradas.",
   },
   "8. Encarregado e contato": { es: "8. Encargado y contacto" },
   "Para exercer seus direitos ou tirar dúvidas sobre privacidade, fale com o encarregado de dados:": {

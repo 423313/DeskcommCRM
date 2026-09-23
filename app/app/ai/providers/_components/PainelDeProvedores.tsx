@@ -42,6 +42,8 @@ import {
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
 
+import { CartaoDoJev, jevNoPonto, useDadosDoJev, type DadosDoJev } from "./CartaoDoJev";
+
 interface Ponto {
   id: string;
   rotulo: string;
@@ -102,6 +104,7 @@ export function PainelDeProvedores() {
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [avancado, setAvancado] = useState<Record<string, boolean>>({});
+  const jev = useDadosDoJev();
 
   const carregar = useCallback(async () => {
     // O try/catch não é zelo genérico: sem ele, qualquer exceção (rede caindo,
@@ -200,6 +203,8 @@ export function PainelDeProvedores() {
 
       <CartaoDoPadrao dados={dados} aoSalvar={carregar} />
 
+      <CartaoDoJev dados={jev.dados} erro={jev.erro} recarregar={jev.recarregar} />
+
       <div className="space-y-8">
         {porPapel.map(({ papel, info, pontos }) => (
           <section key={papel} data-testid={`papel-${papel}`}>
@@ -229,6 +234,7 @@ export function PainelDeProvedores() {
                     key={ponto.id}
                     ponto={ponto}
                     dados={dados}
+                    jev={jev.dados}
                     aoSalvar={carregar}
                   />
                 ))}
@@ -422,13 +428,16 @@ function ResumoDoGrupo({ pontos }: { pontos: Ponto[] }) {
 function CartaoDoPonto({
   ponto,
   dados,
+  jev,
   aoSalvar,
 }: {
   ponto: Ponto;
   dados: Dados;
+  jev: DadosDoJev | null;
   aoSalvar: () => Promise<void>;
 }) {
   const t = useT();
+  const oJevAqui = jevNoPonto(jev, ponto.id);
   const [provider, setProvider] = useState(ponto.efetivo.provider);
   const [modelId, setModelId] = useState(ponto.efetivo.modelId ?? "");
   const [credentialId, setCredentialId] = useState(ponto.efetivo.credentialId ?? "");
@@ -499,6 +508,17 @@ function CartaoDoPonto({
             )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{t(ponto.oQueFaz)}</p>
+          {/* O modelo deste cartão continua valendo com o Jev ligado — como
+              reserva, ou como quem decide enquanto o Jev só observa. */}
+          {oJevAqui && (
+            <p className="mt-1 text-xs text-accent" data-testid={`jev-no-ponto-${ponto.id}`}>
+              {oJevAqui === "decide"
+                ? t("O Jev mede primeiro; o modelo abaixo é a reserva.")
+                : oJevAqui === "observacao"
+                  ? t("O Jev observa; o modelo abaixo ainda decide.")
+                  : t("O Jev mede sozinho: não há modelo de reserva.")}
+            </p>
+          )}
         </div>
         <div className="text-right text-xs text-muted-foreground">
           <div className="font-mono">{ponto.efetivo.modelId ?? "—"}</div>

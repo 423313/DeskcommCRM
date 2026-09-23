@@ -447,7 +447,7 @@ export const NAV_CATALOG = [
     // havia onde responder "quem usa IA aqui, e com qual chave?".
     href: "/app/ai/providers",
     label: "Provedores",
-    description: "Qual inteligência atende cada parte do sistema — e o que acontece se ela falhar.",
+    description: "Qual inteligência atende cada parte do sistema, o que acontece se ela falhar e o Jev, das decisões rápidas.",
     icon: "Plugs",
     group: "ia",
     section: "Montar o agente",
