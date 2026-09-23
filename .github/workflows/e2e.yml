@@ -1345,6 +1345,17 @@ jobs:
       # qualquer outra falha (porta ocupada, contêiner que não fica saudável)
       # vermelha na hora, sem gastar o relógio da parte.
       #
+      # Esperar só não basta, e isso foi MEDIDO: na primeira rodada do PR que
+      # criou este laço (run 35910532729), o ghcr.io seguiu recusando por 4,5
+      # min, nas 4 tentativas, nas 5 partes. O limite não era rajada de um
+      # minuto; era o registro inteiro sob carga. Por isso as tentativas pares
+      # trocam de REGISTRO: o `supabase/setup-cli` exporta
+      # `SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io`, e o CLI publica as mesmas
+      # imagens em `public.ecr.aws` (o default dele sem o setup-cli). As 7
+      # tags que este stack sobe responderam 200 lá em 23/09/2026. Camada é
+      # endereçada por digest, então o que já veio de um registro não é
+      # baixado de novo do outro.
+      #
       # `-x studio,postgres-meta`: menos imagens, menos requisições ao
       # registro. Nenhuma spec, script ou passo deste workflow fala com o
       # Studio (porta 54323) nem com o postgres-meta (que só o Studio usa):
@@ -1360,14 +1371,16 @@ jobs:
           mv supabase/migrations /tmp/migrations-off
           mkdir -p supabase/migrations
           esperas=(0 20 60 120)
+          registros=(ghcr.io public.ecr.aws ghcr.io public.ecr.aws)
           for tentativa in 1 2 3 4; do
             espera=${esperas[$((tentativa - 1))]}
+            registro=${registros[$((tentativa - 1))]}
             if [ "$espera" -gt 0 ]; then
-              echo "::warning title=supabase start: nova tentativa::tentativa ${tentativa} de 4 daqui a ${espera}s — a anterior falhou baixando imagem do registro"
+              echo "::warning title=supabase start: nova tentativa::tentativa ${tentativa} de 4 daqui a ${espera}s, puxando de ${registro} — a anterior falhou baixando imagem do registro"
               supabase stop --no-backup || true
               sleep "$espera"
             fi
-            if supabase start -x studio,postgres-meta 2>&1 | tee /tmp/supabase-start.log; then
+            if SUPABASE_INTERNAL_IMAGE_REGISTRY="$registro" supabase start -x studio,postgres-meta 2>&1 | tee /tmp/supabase-start.log; then
               exit 0
             fi
             if ! grep -qE 'toomanyrequests|failed to pull docker image|error pulling image|TLS handshake timeout|i/o timeout|connection reset by peer' /tmp/supabase-start.log; then
@@ -1375,7 +1388,7 @@ jobs:
               exit 1
             fi
           done
-          echo "::error title=supabase start falhou 4 vezes baixando imagens::o registro recusou o pull nas 4 tentativas (esperas de 20s, 60s e 120s). É limite de taxa ou rede do registro, não o PR — rerode a parte."
+          echo "::error title=supabase start falhou 4 vezes baixando imagens::ghcr.io e public.ecr.aws recusaram o pull nas 4 tentativas (esperas de 20s, 60s e 120s). É limite de taxa ou rede do registro, não o PR — rerode a parte."
           exit 1
 
       # O baseline é um dump `--schema-only`: ele USA os tipos das extensões

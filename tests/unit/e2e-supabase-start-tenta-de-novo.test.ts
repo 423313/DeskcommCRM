@@ -9,7 +9,9 @@
  *
  * Este teste RODA o script do passo (extraído do e2e.yml, sem cópia) com um
  * `supabase` e um `sleep` falsos no PATH, e mede o comportamento:
- *   - pull recusado duas vezes e depois aceito → verde, com `stop` entre elas;
+ *   - pull recusado duas vezes e depois aceito → verde, com `stop` entre elas
+ *     e alternando ghcr.io ↔ public.ecr.aws (a espera sozinha não bastou:
+ *     o ghcr.io recusou por 4,5 min seguidos no run 35910532729);
  *   - falha que não é de registro → vermelho NA HORA, sem esperar;
  *   - registro recusando sempre → vermelho depois da 4ª tentativa, com `::error::`.
  *
@@ -58,9 +60,10 @@ function rodar(saidas: Array<{ texto: string; falha: boolean }>) {
     `#!/usr/bin/env node
 const fs = require("fs");
 const raiz = ${JSON.stringify(raiz)};
-fs.appendFileSync(raiz + "/chamadas.log", process.argv.slice(2).join(" ") + "\\n");
+const registro = process.argv[2] === "start" ? "@" + process.env.SUPABASE_INTERNAL_IMAGE_REGISTRY + " " : "";
+fs.appendFileSync(raiz + "/chamadas.log", registro + process.argv.slice(2).join(" ") + "\\n");
 if (process.argv[2] !== "start") process.exit(0);
-const n = fs.readFileSync(raiz + "/chamadas.log", "utf-8").split("\\n").filter((l) => l.startsWith("start")).length;
+const n = fs.readFileSync(raiz + "/chamadas.log", "utf-8").split("\\n").filter((l) => l.startsWith("@")).length;
 const saidas = JSON.parse(fs.readFileSync(raiz + "/saidas.json", "utf-8"));
 const s = saidas[Math.min(n, saidas.length) - 1];
 process.stderr.write(s.texto + "\\n");
@@ -90,17 +93,17 @@ const LIMITE = {
 };
 
 describe("e2e.yml — supabase start resiste ao limite do registro", () => {
-  it("tenta de novo, com stop e espera crescente, e fica verde quando o pull passa", () => {
+  it("tenta de novo, alternando o registro, com stop e espera crescente, e fica verde quando o pull passa", () => {
     const r = rodar([LIMITE, LIMITE, { texto: "Started supabase local development setup.", falha: false }]);
     expect(r.status, r.saida).toBe(0);
     expect(r.chamadas).toEqual([
-      "start -x studio,postgres-meta",
+      "@ghcr.io start -x studio,postgres-meta",
       "stop --no-backup",
       "sleep 20",
-      "start -x studio,postgres-meta",
+      "@public.ecr.aws start -x studio,postgres-meta",
       "stop --no-backup",
       "sleep 60",
-      "start -x studio,postgres-meta",
+      "@ghcr.io start -x studio,postgres-meta",
     ]);
     expect(r.saida).toContain("::warning");
   });
@@ -110,14 +113,19 @@ describe("e2e.yml — supabase start resiste ao limite do registro", () => {
       { texto: "failed to bind host port for 0.0.0.0:54322: address already in use", falha: true },
     ]);
     expect(r.status, r.saida).toBe(1);
-    expect(r.chamadas).toEqual(["start -x studio,postgres-meta"]);
+    expect(r.chamadas).toEqual(["@ghcr.io start -x studio,postgres-meta"]);
     expect(r.saida).toContain("::error");
   });
 
   it("registro recusando sempre: vermelho depois da 4ª tentativa, com ::error::", () => {
     const r = rodar([LIMITE]);
     expect(r.status, r.saida).toBe(1);
-    expect(r.chamadas.filter((c) => c.startsWith("start"))).toHaveLength(4);
+    expect(r.chamadas.filter((c) => c.startsWith("@")).map((c) => c.split(" ")[0])).toEqual([
+      "@ghcr.io",
+      "@public.ecr.aws",
+      "@ghcr.io",
+      "@public.ecr.aws",
+    ]);
     expect(r.chamadas.filter((c) => c.startsWith("sleep"))).toEqual(["sleep 20", "sleep 60", "sleep 120"]);
     expect(r.saida).toContain("::error title=supabase start falhou 4 vezes");
   });
