@@ -49,12 +49,16 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const supabase = await createClient();
   const { data: contato, error: contatoErr } = await supabase
     .from("contacts")
-    .select("id, custom_fields")
+    .select("id, custom_fields, is_anonymized")
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
     .maybeSingle();
   if (contatoErr) return fail("internal_error", contatoErr.message, 500, { requestId });
   if (!contato) return fail("not_found", t("Contato não encontrado."), 404, { requestId });
+  // Anonimizado: as respostas foram apagadas e o que sobra (nome do roteiro,
+  // datas) é histórico de uma pessoa que pediu para sair. Nenhuma tela mostra —
+  // a ficha e o painel da conversa passam os dois por aqui.
+  if (contato.is_anonymized) return ok([], { requestId });
 
   const { data, error } = await supabase
     .from("followup_enrollments")

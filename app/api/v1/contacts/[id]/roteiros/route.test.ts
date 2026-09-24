@@ -86,4 +86,19 @@ describe("GET /api/v1/contacts/:id/roteiros", () => {
     expect(filtros).toContainEqual(["followup_flow_pointers.surface", "atendimento"]);
     expect(filtros).toContainEqual(["organization_id", "org"]);
   });
+
+  it("⭐ contato anonimizado: lista vazia, e os roteiros nem são consultados", async () => {
+    deps.modulo.mockResolvedValue(true);
+    const tabelas: string[] = [];
+    const cadeia = {
+      select: () => cadeia,
+      eq: () => cadeia,
+      maybeSingle: async () => ({ data: { id: ID, custom_fields: {}, is_anonymized: true }, error: null }),
+    };
+    deps.client.mockResolvedValue({ from: (t: string) => (tabelas.push(t), cadeia) });
+    const res = await GET(req(), ctx);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: unknown[] }).data).toEqual([]);
+    expect(tabelas).toEqual(["contacts"]);
+  });
 });
