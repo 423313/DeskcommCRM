@@ -12,7 +12,7 @@
  * componente o que o `.env` tem.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
 
@@ -21,7 +21,12 @@ import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 
-const banco = vi.hoisted(() => ({ linhas: [] as unknown[], settings: {} as Record<string, unknown> }));
+const banco = vi.hoisted(() => ({
+  linhas: [] as unknown[],
+  settings: {} as Record<string, unknown>,
+  /** A IA principal mede o clima? (a mesma pergunta do worker) */
+  iaPrincipal: true,
+}));
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn(), delete: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
@@ -53,6 +58,12 @@ vi.mock("@/lib/supabase/server", () => ({
       return chain;
     },
   }),
+}));
+
+vi.mock("@/lib/ai/gateway-binding", () => ({
+  resolverModeloDoPonto: vi.fn(async () =>
+    banco.iaPrincipal ? { model: {}, modelId: "anthropic/claude-haiku-4-5", origem: "padrao" } : null,
+  ),
 }));
 
 import CredentialsPage from "@/app/app/ai/credentials/page";
@@ -101,6 +112,7 @@ async function abrir(linhas: CredentialRow[]) {
 beforeEach(() => {
   vi.clearAllMocks();
   banco.settings = {};
+  banco.iaPrincipal = true;
 });
 afterEach(() => {
   cleanup();
@@ -126,6 +138,12 @@ describe("tela de Credenciais — o aviso de que falta a IA principal", () => {
     },
   );
 
+  it("a chave de conversa RECUSADA não conta como IA principal", async () => {
+    ambiente([]);
+    await abrir([JEV, { ...ANTHROPIC, validated_at: null, validation_error: "auth_failed_401" }]);
+    expect(screen.getByTestId("aviso-so-decisao")).toBeInTheDocument();
+  });
+
   it("chave do Jev e chave de IA de conversa cadastrada: não avisa", async () => {
     ambiente([]);
     await abrir([JEV, ANTHROPIC]);
@@ -150,5 +168,48 @@ describe("tela de Credenciais — onde a chave do Jev trabalha", () => {
     banco.settings = { jev: { ligado: false, modo: "observacao", aceite: ACEITE } };
     await abrir([JEV, ANTHROPIC]);
     expect(screen.queryByTestId("credencial-usada-em")).toBeNull();
+  });
+});
+
+describe("tela de Credenciais — o que excluir a chave do Jev faz", () => {
+  const ACEITE = { em: "2026-09-01T12:00:00.000Z", por: "44444444-4444-4444-8444-444444444444" };
+
+  /** Abre o diálogo de exclusão do cartão que diz "Usada em" — o da chave em uso. */
+  function excluirAChaveEmUso(): HTMLElement {
+    const cartao = screen.getByTestId("credencial-usada-em").parentElement as HTMLElement;
+    fireEvent.click(within(cartao).getByRole("button", { name: "Excluir credencial" }));
+    return screen.getByRole("alertdialog");
+  }
+
+  beforeEach(() => {
+    ambiente([]);
+    banco.settings = { jev: { ligado: true, modo: "decide", aceite: ACEITE } };
+  });
+
+  it("com a IA principal medindo: ela volta a medir sozinha", async () => {
+    await abrir([JEV, ANTHROPIC]);
+    expect(excluirAChaveEmUso()).toHaveTextContent(/volta a ser medido só pela sua IA principal/);
+  });
+
+  it("sem IA principal: o diálogo diz que o clima para de ser medido", async () => {
+    banco.iaPrincipal = false;
+    await abrir([JEV]);
+    const dialogo = excluirAChaveEmUso();
+    expect(dialogo).toHaveTextContent(/deixa de ser medido/);
+    expect(dialogo).not.toHaveTextContent(/volta a ser medido/);
+  });
+
+  it("sobrando outra chave do Jev que passou no teste: não diz que o Jev desliga", async () => {
+    const maisNova = { ...JEV, id: "55555555-5555-4555-8555-555555555555", created_at: "2099-01-01T00:00:00.000Z" };
+    await abrir([JEV, maisNova, ANTHROPIC]);
+    const dialogo = excluirAChaveEmUso();
+    expect(dialogo).toHaveTextContent(/passa a usar a outra chave/);
+    expect(dialogo).not.toHaveTextContent(/é desligado/);
+  });
+
+  it("a chave do Jev não mostra 'Em uso por 0' ao lado do 'Usada em'", async () => {
+    await abrir([JEV]);
+    const cartao = screen.getByTestId("credencial-usada-em").parentElement as HTMLElement;
+    expect(cartao).not.toHaveTextContent(/Em uso por/);
   });
 });

@@ -10,7 +10,7 @@ import {
   PROVEDORES_COM_CHAVE,
   type ProvedorComChave,
 } from "@/lib/ai/pontos/provedores";
-import { useCredentialsList, type CredentialRow } from "@/hooks/ai/useCredentials";
+import { credentialStatus, useCredentialsList, type CredentialRow } from "@/hooks/ai/useCredentials";
 import { useT } from "@/hooks/i18n/useT";
 import { CredentialCard } from "./CredentialCard";
 import { AddCredentialDialog } from "./AddCredentialDialog";
@@ -21,6 +21,8 @@ interface Props {
   usageMap: Record<string, number>;
   /** Onde a chave trabalha fora dos agentes — hoje, as tarefas do Jev na chave que ele usa. */
   usadaEmMap?: Record<string, string[]>;
+  /** O efeito de excluir a chave que o Jev usa, calculado no servidor (`page.tsx`). */
+  avisoAoExcluirMap?: Record<string, string>;
   /**
    * A instalação trouxe chave de IA no `.env` (a do provedor ou a do gateway)?
    * É o caso mais comum do kit, e essa chave não é linha desta lista.
@@ -42,6 +44,7 @@ export function CredentialsList({
   canWrite,
   usageMap,
   usadaEmMap = {},
+  avisoAoExcluirMap = {},
   instalacaoTemIa = false,
 }: Props) {
   const t = useT();
@@ -67,7 +70,11 @@ export function CredentialsList({
   const soDecisao =
     !instalacaoTemIa &&
     credentials.some((c) => ehProvedorDeDecisao(c.provider)) &&
-    !credentials.some((c) => c.is_active && ehProvedorSuportado(c.provider));
+    // A chave de conversa RECUSADA não atende ninguém. A que ainda está em
+    // teste conta: sem isso o aviso piscaria nos segundos depois de colar.
+    !credentials.some(
+      (c) => c.is_active && ehProvedorSuportado(c.provider) && credentialStatus(c) !== "invalid",
+    );
 
   if (credentials.length === 0) {
     return (
@@ -125,6 +132,7 @@ export function CredentialsList({
                     canWrite={canWrite}
                     usageCount={usageMap[row.id] ?? 0}
                     usadaEm={usadaEmMap[row.id] ?? []}
+                    avisoAoExcluir={avisoAoExcluirMap[row.id]}
                   />
                 </li>
               ))}

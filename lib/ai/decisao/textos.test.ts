@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AO_EXCLUIR_A_CHAVE_DO_JEV,
   AVISO_DO_JEV,
   avisoDoJevNaCentral,
   JEV_FALHOU_SEM_RESERVA,
@@ -24,6 +25,7 @@ const TEXTOS = [
   EXPLICACAO_DA_ORIGEM.reserva_do_jev,
   EXPLICACAO_DA_ORIGEM.jev_cobriu,
   JEV_FALHOU_SEM_RESERVA,
+  ...Object.values(AO_EXCLUIR_A_CHAVE_DO_JEV),
 ];
 
 describe("textos do Jev para quem opera", () => {

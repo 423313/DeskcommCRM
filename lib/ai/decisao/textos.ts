@@ -41,6 +41,19 @@ export const JEV_FALHOU_SEM_RESERVA =
   "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.";
 
 /**
+ * O que o diálogo de exclusão diz sobre a chave que o Jev usa. São três
+ * desfechos, e a frase única de antes era falsa em dois: sobrando outra chave
+ * apta, o Jev não desliga; sem IA principal, ninguém volta a medir o clima.
+ */
+export const AO_EXCLUIR_A_CHAVE_DO_JEV = {
+  outraChave: "O Jev usa esta chave. Sem ela, ele passa a usar a outra chave dele que já passou no teste.",
+  iaPrincipalAssume:
+    "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa volta a ser medido só pela sua IA principal.",
+  climaPara:
+    "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa deixa de ser medido: ninguém da equipe é chamado quando um cliente se irrita.",
+} as const;
+
+/**
  * O aviso da Central, só para falha que não passa sozinha (`exigeAcao`). O
  * título é FIXO porque é a chave do dedupe: uma chave recusada vira UM aviso,
  * não um por mensagem do dia.

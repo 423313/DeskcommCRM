@@ -8,6 +8,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CredentialCard } from "./CredentialCard";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
+import { AO_EXCLUIR_A_CHAVE_DO_JEV } from "@/lib/ai/decisao/textos";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("../_actions", () => ({ refreshCredentialsView: vi.fn() }));
@@ -32,7 +33,7 @@ export function credencial(extra: Partial<CredentialRow> = {}): CredentialRow {
 
 export function montar(
   row: CredentialRow,
-  props: { canWrite?: boolean; usageCount?: number; usadaEm?: string[] } = {},
+  props: { canWrite?: boolean; usageCount?: number; usadaEm?: string[]; avisoAoExcluir?: string } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -42,6 +43,7 @@ export function montar(
         canWrite={props.canWrite ?? true}
         usageCount={props.usageCount ?? 0}
         usadaEm={props.usadaEm}
+        avisoAoExcluir={props.avisoAoExcluir}
       />
     </QueryClientProvider>,
   );
@@ -53,6 +55,7 @@ describe("CredentialCard — chave do Jev", () => {
   it("diz onde a chave trabalha e avisa, antes de excluir, que o Jev será desligado", () => {
     montar(credencial({ provider: "typesafe", label: "Jev" }), {
       usadaEm: ["Medir o clima da conversa"],
+      avisoAoExcluir: AO_EXCLUIR_A_CHAVE_DO_JEV.iaPrincipalAssume,
     });
     expect(screen.getByTestId("credencial-usada-em")).toHaveTextContent(
       "Usada em: Medir o clima da conversa",

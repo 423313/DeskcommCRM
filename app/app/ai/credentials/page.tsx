@@ -8,6 +8,9 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { contarUsoQueBloqueia, type VersaoVinculada } from "@/lib/ai/credenciais/uso";
 import { lerConfigDoJev } from "@/lib/ai/decisao/config";
 import { credencialEmUsoPeloJev } from "@/lib/ai/decisao/credencial";
+import { AO_EXCLUIR_A_CHAVE_DO_JEV } from "@/lib/ai/decisao/textos";
+import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
+import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { PONTOS_DO_JEV } from "@/lib/ai/pontos/registro";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { CredentialsList } from "./_components/CredentialsList";
@@ -62,6 +65,23 @@ export default async function CredentialsPage() {
   const usadaEmMap: Record<string, string[]> = doJev
     ? { [doJev.id]: PONTOS_DO_JEV.map((p) => p.rotulo) }
     : {};
+  // O que excluir a chave em uso faz — a mesma conta do DELETE (sobra outra
+  // apta?) e a mesma pergunta que o worker faz (há IA principal para medir?).
+  const avisoAoExcluirMap: Record<string, string> = {};
+  if (doJev) {
+    const sobraOutra =
+      credencialEmUsoPeloJev(credentials.filter((c) => c.id !== doJev.id)) !== null;
+    const temIaPrincipal = sobraOutra
+      ? true
+      : (await resolverModeloDoPonto("sentiment_classify", activeOrg.orgId, DEFAULT_CLASSIFIER_MODEL, {
+          naFaltaUsarOPadraoDaOrganizacao: true,
+        })) !== null;
+    avisoAoExcluirMap[doJev.id] = sobraOutra
+      ? AO_EXCLUIR_A_CHAVE_DO_JEV.outraChave
+      : temIaPrincipal
+        ? AO_EXCLUIR_A_CHAVE_DO_JEV.iaPrincipalAssume
+        : AO_EXCLUIR_A_CHAVE_DO_JEV.climaPara;
+  }
 
   // A chave do `.env` também é "IA principal" — sem ela na conta, a lista
   // acusaria falta de IA a quem atende com a chave que veio na instalação.
@@ -85,6 +105,7 @@ export default async function CredentialsPage() {
         canWrite={canWrite}
         usageMap={usageMap}
         usadaEmMap={usadaEmMap}
+        avisoAoExcluirMap={avisoAoExcluirMap}
         instalacaoTemIa={instalacaoTemIa}
       />
     </div>

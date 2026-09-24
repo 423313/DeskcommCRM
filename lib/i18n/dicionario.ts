@@ -3303,6 +3303,12 @@ export const DICIONARIO: Traducoes = {
   "O Jev respondeu de um jeito que o sistema não entendeu. Se continuar acontecendo, avise o suporte.": {
     es: "Jev respondió de una forma que el sistema no entendió. Si sigue pasando, avisa al soporte.",
   },
+  "O Jev usa esta chave. Sem ela, ele passa a usar a outra chave dele que já passou no teste.": {
+    es: "Jev usa esta clave. Sin ella, pasa a usar su otra clave que ya pasó la prueba.",
+  },
+  "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa deixa de ser medido: ninguém da equipe é chamado quando um cliente se irrita.": {
+    es: "Jev usa esta clave. Sin ella, Jev se desactiva y el clima de la conversación deja de medirse: nadie del equipo recibe aviso cuando un cliente se molesta.",
+  },
   "O Jev parou de medir o clima das conversas": {
     es: "Jev dejó de medir el clima de las conversaciones",
   },
