@@ -684,29 +684,39 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         data.custom_fields && typeof data.custom_fields === "object" && !Array.isArray(data.custom_fields)
           ? (data.custom_fields as Record<string, unknown>)
           : {};
-      // Os rótulos vêm das perguntas dos roteiros que o contato percorreu.
-      const { data: grafos, error: grafosErr } = await admin
+      // Os rótulos vêm das perguntas dos roteiros que o contato percorreu. Duas
+      // leituras planas (sem embed): o coletor também roda sobre clientes que
+      // só entendem coluna simples (tests/invariants/agenda-meet-export).
+      const grafos: unknown[] = [];
+      const { data: inscricoes, error: inscricoesErr } = await admin
         .from("followup_enrollments")
-        .select("started_at, followup_flow_versions(graph)")
+        .select("version_id")
         .eq("organization_id", organizationId)
         .eq("contact_id", contactId)
         .order("started_at", { ascending: false })
         .limit(50);
-      if (grafosErr) {
+      const versaoIds = [
+        ...new Set((inscricoes ?? []).flatMap((r) => (r.version_id ? [r.version_id as string] : []))),
+      ];
+      if (versaoIds.length > 0 && !inscricoesErr) {
+        const { data: versoes, error: versoesErr } = await admin
+          .from("followup_flow_versions")
+          .select("id, graph")
+          .eq("organization_id", organizationId)
+          .in("id", versaoIds);
+        if (versoesErr) {
+          logger.warn("[lgpd-export-worker] roteiros load failed", { request_id: requestId, error: versoesErr.message });
+        }
+        const porId = new Map((versoes ?? []).map((v) => [v.id as string, v.graph]));
+        for (const id of versaoIds) grafos.push(porId.get(id)); // o mais recente primeiro
+      }
+      if (inscricoesErr) {
         logger.warn("[lgpd-export-worker] roteiros load failed", {
           request_id: requestId,
-          error: grafosErr.message,
+          error: inscricoesErr.message,
         });
       }
-      const legiveis = camposLegiveis(
-        customFields,
-        perguntasDosGrafos(
-          (grafos ?? []).flatMap((r) => {
-            const v = (r as { followup_flow_versions: unknown }).followup_flow_versions;
-            return (Array.isArray(v) ? v : [v]).map((x) => (x as { graph?: unknown } | null)?.graph);
-          }),
-        ),
-      );
+      const legiveis = camposLegiveis(customFields, perguntasDosGrafos(grafos));
       contact = {
         id: data.id,
         name: data.name ?? null,
