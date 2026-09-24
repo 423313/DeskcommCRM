@@ -158,7 +158,7 @@ export const AUDIT_ACTIONS = [
   "lgpd.manually_approved",
   "webhook.hmac_invalid",
   // Uma rodada do cron `webhook-replay` que reprocessou ou desistiu de algum
-  // arquivo de webhook WAHA (rodada vazia não vira linha).
+  // arquivo de webhook do canal por QR (rodada vazia não vira linha).
   "webhook.replay_run",
   "lgpd.sla_alarm_triggered",
   "lgpd.sla_watcher_run",

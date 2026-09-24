@@ -112,7 +112,7 @@ vi.mock("@/lib/waha/ingest", async (original) => {
 import { logger } from "@/lib/logger";
 import { POST as postGlobal } from "@/app/api/v1/webhooks/waha/route";
 import { POST as postPorToken } from "@/app/api/v1/webhooks/waha/[token]/route";
-import { MAX_TENTATIVAS, reprocessarWebhooksWaha } from "@/app/api/v1/cron/webhook-replay/route";
+import { MAX_TENTATIVAS, reprocessarArquivoDeWebhooks } from "@/lib/channels/reprocessar-arquivo-de-webhook";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MENSAGEM_QUE_NAO_ENTROU } from "@/lib/event-log/aviso-de-evento-morto";
 
@@ -188,7 +188,7 @@ const linha = (id: string, attempts: number, payload: unknown = EVENTO) => ({
   attempts,
   error_message: "transitoria: messages.insert inbound: 57014 timeout",
 });
-const replay = () => reprocessarWebhooksWaha(createAdminClient(), new Date(), "req-cron");
+const replay = () => reprocessarArquivoDeWebhooks(createAdminClient(), new Date(), "req-cron");
 const avisosAbertos = () =>
   ops.filter((o) => o.tabela === "agent_inbox_items" && o.op === "insert").map((o) => o.valores);
 
@@ -201,7 +201,7 @@ describe("cron webhook-replay", () => {
         ["eq:provider", "waha"],
         ["eq:status", "error"],
         ["like:error_message", "transitoria:%"],
-        ["lt:created_at", expect.any(String)],
+        ["lt:received_at", expect.any(String)],
       ]),
     );
   });
