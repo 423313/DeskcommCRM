@@ -165,6 +165,37 @@ export const RETENCAO_AVISO_DE_CASO_DIAS_PADRAO = 180;
  */
 export const RETENCAO_AVISO_DE_CASO_DIAS_PISO = 30;
 
+/**
+ * 30 dias para CANDIDATOS NUNCA CONTATADOS da prospecção nativa
+ * (`prospecting_candidates` com status='new', migration 0369).
+ *
+ * Guarda nome, telefone, endereço e identificador de lugar de pessoas que nunca
+ * falaram com a empresa. Candidato pesquisado e não abordado não deve ficar para
+ * sempre: uma campanha montada e abandonada expira esses registros.
+ *
+ * ⚠️ DIFERENÇA DECLARADA em relação aos pisos com função SQL: a tabela é server-only
+ * e a poda da prospecção é executada pelo admin client, não por função security definer.
+ * Além disso, os tokens de supressão (`suppression_salt`, `suppression_place`,
+ * `suppression_phone`) de quem exerceu opt-out/exclusão NÃO são expurgados junto,
+ * pois impedem reimportações futuras da mesma pessoa.
+ */
+export const RETENCAO_PROSPECCAO_NOVOS_DIAS_PADRAO = 30;
+export const RETENCAO_PROSPECCAO_NOVOS_DIAS_PISO = 7;
+
+/**
+ * 180 dias para CANDIDATOS PROCESSADOS da prospecção (`prospecting_candidates`
+ * com status em 'queued', 'sending', 'sent', 'skipped', 'failed').
+ *
+ * Seis meses é o horizonte em que a métrica de funil da campanha e o histórico
+ * de tentativa de contato ainda são consultados.
+ *
+ * ⚠️ DIFERENÇA DECLARADA: a tabela é server-only e a poda da prospecção é
+ * executada pelo admin client, sem função dedicada no banco.
+ */
+export const RETENCAO_PROSPECCAO_PROCESSADOS_DIAS_PADRAO = 180;
+export const RETENCAO_PROSPECCAO_PROCESSADOS_DIAS_PISO = 30;
+
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;

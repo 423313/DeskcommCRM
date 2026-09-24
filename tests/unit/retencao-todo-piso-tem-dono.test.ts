@@ -66,6 +66,8 @@ const DONO_NO_SQL: Record<string, string> = {
  */
 const SEM_FUNCAO_NO_SQL: Record<string, string> = {
   CAPTACAO: "admin client",
+  PROSPECCAO_NOVOS: "admin client",
+  PROSPECCAO_PROCESSADOS: "admin client",
 };
 
 function paresDeclarados(): string[] {
