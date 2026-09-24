@@ -42,6 +42,8 @@ async function ownerPatchOrThrow(
   supabase: SB,
   ctx: HandlerCtx,
   input: OwnerPatchInput,
+  /** Na edição, o responsável que o lead JÁ tem: reenviá-lo não é atribuir. */
+  responsavelAtual: string | null = null,
 ): Promise<OwnerPatch | null> {
   const result = resolveOwnerPatch(input);
   if (!result.ok) {
@@ -78,7 +80,79 @@ async function ownerPatchOrThrow(
     }
   }
 
+  // O responsável humano passa pela mesma pergunta que o agente acima: é desta
+  // organização? A FK de `owner_user_id` só garante que a pessoa EXISTE — sem
+  // isto, um id de outra empresa (ou de quem foi desligado) virava dono do
+  // negócio. Régua G3-04, a mesma do bulk-assign e da automação `assign_owner`:
+  // vínculo não revogado e papel acima de viewer.
+  //
+  // Cliente ADMIN, filtrado pela org do contexto: a RLS de `user_organizations`
+  // só mostra a um `agent` a própria linha, e o cliente de sessão recusaria
+  // todo colega legítimo.
+  //
+  // Reenviar o responsável que o lead já tem não é atribuir: sem esta exceção,
+  // um lead cujo dono foi desligado não poderia mais ser editado por quem manda
+  // o formulário inteiro.
+  const responsavel = result.patch.owner_user_id;
+  if (responsavel !== null && responsavel !== responsavelAtual) {
+    const { data: membro, error: membroErr } = await createAdminClient()
+      .from("user_organizations")
+      .select("role")
+      .eq("organization_id", ctx.organization_id)
+      .eq("user_id", responsavel)
+      .is("revoked_at", null)
+      .maybeSingle();
+
+    if (membroErr) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, membroErr.message);
+    }
+    if (!membro || membro.role === "viewer") {
+      throw new ApiError(
+        422,
+        "validation_failed",
+        undefined,
+        ctx.requestId,
+        traduzir("Responsável não é um atendente ativo desta organização.", ctx.idioma ?? "pt-BR"),
+      );
+    }
+  }
+
   return result.patch;
+}
+
+/**
+ * O contato do lead tem de ser DESTA organização.
+ *
+ * A FK `crm_leads_contact_id_fkey` referencia só `contacts(id)`: ela aceita o
+ * contato de qualquer empresa. Todo escritor de lead — tela, MCP, token de
+ * servidor, automação, importação, webhook de entrada, prospecção, clone —
+ * passa por `createLeadHandler`/`updateLeadHandler`, então a pergunta mora aqui.
+ *
+ * 404 igual para "não existe" e "é de outra organização" (molde de
+ * `app/api/v1/agenda/agendamentos/_handler.ts`): a resposta não pode confirmar
+ * que o id existe noutro lugar. E responde ANTES do INSERT, para que um uuid
+ * inexistente não vire 500 com a mensagem da FK.
+ */
+async function contatoDaOrgOrThrow(supabase: SB, ctx: HandlerCtx, contactId: string): Promise<void> {
+  const { data: contato, error: contatoErr } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("id", contactId)
+    .eq("organization_id", ctx.organization_id)
+    .maybeSingle();
+
+  if (contatoErr) {
+    throw new ApiError(500, "internal_error", undefined, ctx.requestId, contatoErr.message);
+  }
+  if (!contato) {
+    throw new ApiError(
+      404,
+      "not_found",
+      undefined,
+      ctx.requestId,
+      traduzir("Contato não encontrado.", ctx.idioma ?? "pt-BR"),
+    );
+  }
 }
 
 function actorAuditPayload(actor: Actor): {
@@ -296,6 +370,8 @@ export async function createLeadHandler(
     );
   }
 
+  if (input.contact_id) await contatoDaOrgOrThrow(supabase, ctx, input.contact_id);
+
   // next position_in_stage = MAX + 1000.
   const { data: maxRow, error: maxErr } = await supabase
     .from("crm_leads")
@@ -449,6 +525,11 @@ export async function updateLeadHandler(
     );
   }
 
+  // Reenviar o contato que o lead já tem não é ligar a um contato novo.
+  if (input.contact_id && input.contact_id !== existing.contact_id) {
+    await contatoDaOrgOrThrow(supabase, ctx, input.contact_id);
+  }
+
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
@@ -457,7 +538,12 @@ export async function updateLeadHandler(
   if (input.currency !== undefined) patch.currency = input.currency;
   // Dono do negócio (0070): regra em lib/leads/owner-patch.ts, compartilhada
   // com create, bulk e MCP. owner_kind é DERIVADO — nunca lido do body.
-  const ownerPatch = await ownerPatchOrThrow(supabase, ctx, input);
+  const ownerPatch = await ownerPatchOrThrow(
+    supabase,
+    ctx,
+    input,
+    (existing.owner_user_id as string | null) ?? null,
+  );
   if (ownerPatch) {
     Object.assign(patch, ownerPatch);
     if (ownerPatch.owner_user_id !== null || ownerPatch.owner_agent_id !== null) {
