@@ -28,7 +28,7 @@ function dados(extra: Parcial = {}): DadosDoJev {
     provedor: {
       rotulo: "Jev (TypeSafe AI)",
       quandoUsar:
-        "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — em geral em menos de um segundo. Trabalha junto com a sua IA principal.",
+        "Não conversa com o cliente: toma decisões rápidas e baratas — como perceber se o cliente está irritado — geralmente em menos de um segundo. Trabalha junto com a sua IA principal.",
       ondePegarAChave: "https://console.typesafe.ai/keys",
       prefixoDaChave: "apikey_…",
     },
@@ -45,7 +45,7 @@ function dados(extra: Parcial = {}): DadosDoJev {
         id: "sentiment_classify",
         rotulo: "Medir o clima da conversa",
         oQueOJevFaz:
-          "Percebe, em geral em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
+          "Percebe, geralmente em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
       },
     ],
     tem_ia_de_sempre: true,

@@ -312,7 +312,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     decisaoRapida: {
       primitiva: "score",
       oQueOJevFaz:
-        "Percebe, em geral em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
+        "Percebe, geralmente em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
     },
   },
   {
