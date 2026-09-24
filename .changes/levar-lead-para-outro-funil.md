@@ -10,4 +10,7 @@ enquanto o card de origem encerra como perdido, com o motivo "Levado para
 outro funil", e o histórico da troca fica registrado na linha do tempo dos
 dois lados. A rota que faz a troca já existia; faltava a tela.
 
-Crédito: @nsbastosconsultoria com Claude Code.
+Numa instalação com um funil só, a janela explica que é preciso criar outro
+funil antes, em vez de abrir uma lista vazia.
+
+Contribuição de @nsbastosconsultoria (#1578).

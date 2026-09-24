@@ -9270,6 +9270,9 @@ export const DICIONARIO: Traducoes = {
   // A TELA que faltava para a troca de funil — menu do card e o diálogo.
   "Levar para outro funil": { es: "Llevar a otro embudo" },
   "Escolha o funil de destino": { es: "Elige el embudo de destino" },
+  "Este é o único funil. Crie outro funil para poder levar o negócio até ele.": {
+    es: "Este es el único embudo. Crea otro embudo para poder llevar el negocio hasta él.",
+  },
   'O negócio é recriado no funil escolhido e este encerra como perdido, com o motivo "Levado para outro funil" — o histórico dos dois lados fica registrado na linha do tempo.': {
     es: 'El negocio se recrea en el embudo elegido y este se cierra como perdido, con el motivo "Movido a otro embudo" — el historial de los dos lados queda registrado en la línea de tiempo.',
   },
