@@ -4,8 +4,10 @@
  * ═══ A lei que este arquivo encodeia ═════════════════════════════════════════
  *
  * Num stream correto do React, TODO `<div hidden id="S:N">` vem acompanhado de
- * um `$RC("B:N","S:N")` no próprio documento — o revelador que move o conteúdo
- * para dentro do boundary e DRENA a caixa. No HTML gravado dos runs vermelhos,
+ * um revelador no próprio documento que move o conteúdo e DRENA a caixa:
+ * `$RC("B:N","S:N")` (boundary), `$RR("B:N","S:N",[…])` (boundary com folhas de
+ * estilo) ou `$RS("S:N","P:N")` (segmento) — as três instruções do `react-dom`
+ * servidor do Next 16.3.5 (regra em `helpers/caixa-ssr.ts`). No HTML gravado dos runs vermelhos,
  * o documento fechava com a caixa pendurada no `<body>`, com uma cópia inteira
  * da página dentro, e `$RC` ZERO: todo `getByTestId` passava a casar dois
  * (issue #1374, "O invariante quebrado").
@@ -17,9 +19,9 @@
  *    — o navegador não executa nenhum script, então o documento fica EXATAMENTE
  *    como o servidor o mandou:
  *      · 2 testids sem JS ⇒ o SERVIDOR mandou dois (a hidratação não tem parte);
- *      · caixa `S:N` sem o seu `$RC` ⇒ o stream terminou antes do revelador —
+ *      · caixa `S:N` sem revelador ⇒ o stream terminou antes dele —
  *        o defeito medido na issue, agora reprova aqui.
- *    Com JS desligado os `$RC` também não correm, então as caixas FICAM — e é
+ *    Com JS desligado os reveladores também não correm, então as caixas FICAM — e é
  *    por isso que dá para ler a relação caixa↔revelador em repouso, sem corrida.
  *
  * 2. "Instrumento que falta" (issue, seção homônima): nenhuma spec escuta o
@@ -51,6 +53,7 @@ import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
 
+import { caixasSemRevelador, REVELADOR_DE_CAIXA } from "./helpers/caixa-ssr";
 import { instalarInstrumento } from "./helpers/instrumento-da-pagina";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
@@ -83,32 +86,35 @@ async function entrar(page: Page, email: string, senha: string): Promise<void> {
 interface EstadoDoSsr {
   /** Caixas de revelação ainda no documento (`<div hidden id="S:N">`). */
   staged: string[];
-  /** Caixas cujo `$RC("…","S:N")` NÃO aparece em nenhum script do documento. */
+  /** Caixas cujo id NÃO aparece em nenhum `$RC`/`$RR`/`$RS` do documento. */
   stagedSemRevelador: string[];
   /** Quantas cópias do testid alvo existem — 2 é o sintoma da issue. */
   alvo: number;
-  /** Quantos scripts do documento carregam `$RC(`. */
-  scriptsComRC: number;
+  /** Quantos scripts do documento carregam `$RC(`, `$RR(` ou `$RS(`. */
+  scriptsReveladores: number;
 }
 
 /** O estado da caixa, lido do DOM como ele está — sem esperar, sem interferir. */
 async function medirEstado(pagina: Page): Promise<EstadoDoSsr> {
-  return pagina.evaluate(() => {
-    const staged = Array.from(document.querySelectorAll('div[hidden][id^="S:"]'), (el) => el.id);
-    const comRC = Array.from(document.scripts, (s) => s.textContent ?? "").filter((t) =>
-      t.includes("$RC("),
-    );
+  const { staged, reveladores, alvo } = await pagina.evaluate((fonte) => {
+    const revelador = new RegExp(fonte);
     return {
-      staged,
-      stagedSemRevelador: staged.filter((id) => !comRC.some((t) => t.includes(id))),
+      staged: Array.from(document.querySelectorAll('div[hidden][id^="S:"]'), (el) => el.id),
+      // Só os scripts reveladores saem do navegador: o payload RSC é grande.
+      reveladores: Array.from(document.scripts, (s) => s.textContent ?? "").filter((t) => revelador.test(t)),
       alvo: document.querySelectorAll('[data-testid="opcao-modo-manual"]').length,
-      scriptsComRC: comRC.length,
     };
-  });
+  }, REVELADOR_DE_CAIXA.source);
+  return {
+    staged,
+    stagedSemRevelador: caixasSemRevelador(staged, reveladores),
+    alvo,
+    scriptsReveladores: reveladores.length,
+  };
 }
 
 test.describe("a caixa do streaming SSR não fica órfã (issue #1374)", () => {
-  test("sem JavaScript: o servidor manda UM, e toda caixa S:N vem com o seu $RC", async ({ page, context, browser }, testInfo) => {
+  test("sem JavaScript: o servidor manda UM, e toda caixa S:N vem com o seu revelador", async ({ page, context, browser }, testInfo) => {
     const creds = lerCreds();
     // O login É JavaScript (formulário que autentica); o estado dele é que
     // viaja para o contexto sem JS — a navegação medida é a da issue.
@@ -144,9 +150,9 @@ test.describe("a caixa do streaming SSR não fica órfã (issue #1374)", () => {
         ).toBeLessThanOrEqual(1);
         expect(
           estadoSsr.stagedSemRevelador,
-          "caixa S:N SEM o seu $RC no documento — o invariante quebrado da issue #1374: " +
+          "caixa S:N SEM revelador ($RC/$RR/$RS) no documento — o invariante quebrado da issue #1374: " +
             "a caixa nunca seria revelada nem drenada. Caixas e reveladores medidos: " +
-            `${JSON.stringify({ staged: estadoSsr.staged, scriptsComRC: estadoSsr.scriptsComRC })}`,
+            `${JSON.stringify({ staged: estadoSsr.staged, scriptsReveladores: estadoSsr.scriptsReveladores })}`,
         ).toEqual([]);
         expect(
           instrumento.erros,
