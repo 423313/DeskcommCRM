@@ -144,6 +144,62 @@ function comRaciocinioDesligado(inner: typeof fetch): typeof fetch {
  * (createFakeRegistry, sem fetch real); este caminho só é exercitado pelo smoke
  * (rede real → endpoint canônico do provider allowlistado).
  */
+/**
+ * Esforço de raciocínio das chamadas DIRETAS à OpenAI — knob
+ * OPENAI_REASONING_EFFORT (opcional; ausente = nada é injetado e vale o padrão
+ * do modelo).
+ *
+ * Por que existe: nos modelos de raciocínio da OpenAI (famílias gpt-5.x e
+ * gpt-6) o padrão é PENSAR antes de responder, e o agente de WhatsApp paga isso
+ * em latência. Medido em 2026-09-24 com `gpt-6-luna`, prompt de produção e a
+ * tool `send_message`, 2 repetições por configuração:
+ *
+ *   padrão ........ 4,9–5,5 s, 248–282 tokens de saída, send_message 0 de 2
+ *   effort=low .... 5,9–6,3 s, 258–284 tokens de saída, send_message 1 de 2
+ *   effort=none ... 1,8–2,0 s,       49 tokens de saída, send_message 2 de 2
+ *
+ * No turno real (`agent_preview`) o padrão levou 9–27 s, com ~700 tokens de
+ * saída para um rascunho de ~40 — e, quando o modelo não chama a tool, o loop
+ * roda outra etapa. É o mesmo campo que a DeepSeek já recebe
+ * (`comRaciocinioDesligado`), só que com o valor escolhido pelo operador.
+ *
+ * ⚠️ Só vale para o provider `openai` (endpoint oficial, Responses API). Modelo
+ * SEM raciocínio (ex.: gpt-4.1-mini) recusa o campo com 400 — por isso é
+ * opt-in, e o valor é validado aqui: grafia errada falha na subida, não vira
+ * requisição recusada no meio de um atendimento.
+ */
+export type EsforcoDeRaciocinioOpenAI = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+const ESFORCOS_OPENAI: readonly EsforcoDeRaciocinioOpenAI[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+
+export function esforcoDeRaciocinioOpenAI(
+  valor: string | undefined = process.env.OPENAI_REASONING_EFFORT,
+): EsforcoDeRaciocinioOpenAI | null {
+  const v = valor?.trim().toLowerCase();
+  if (!v) return null;
+  if (!(ESFORCOS_OPENAI as readonly string[]).includes(v)) {
+    throw new Error(`OPENAI_REASONING_EFFORT inválido — use ${ESFORCOS_OPENAI.join(', ')} (ou deixe vazio)`);
+  }
+  return v as EsforcoDeRaciocinioOpenAI;
+}
+
+/** Injeta `reasoning.effort` no corpo, preservando o resto de `reasoning` e da chamada. */
+function comEsforcoDeRaciocinio(inner: typeof fetch, esforco: EsforcoDeRaciocinioOpenAI): typeof fetch {
+  return (input, init) => {
+    const corpo = init?.body;
+    if (typeof corpo === 'string') {
+      try {
+        const json = JSON.parse(corpo) as Record<string, unknown>;
+        const bruto = json['reasoning'];
+        const reasoning = bruto !== null && typeof bruto === 'object' ? (bruto as Record<string, unknown>) : {};
+        return inner(input, { ...init, body: JSON.stringify({ ...json, reasoning: { ...reasoning, effort: esforco } }) });
+      } catch {
+        // Corpo não-JSON: repassa intacto — um ajuste de tuning nunca derruba a chamada.
+      }
+    }
+    return inner(input, init);
+  };
+}
+
 export function createDefaultRegistry(opts?: {
   allowedHosts?: string[];
   /**
@@ -151,8 +207,12 @@ export function createDefaultRegistry(opts?: {
    * fábrica é dela). Ausente = 'provider' = nada é injetado.
    */
   deepseekThinking?: RaciocinioDeepseek;
+  /** Knob OPENAI_REASONING_EFFORT; ausente = lido do ambiente. `null` = não injeta. */
+  openaiReasoningEffort?: EsforcoDeRaciocinioOpenAI | null;
 }): ProviderRegistry {
   const extra = opts?.allowedHosts ?? [];
+  const esforcoOpenAI =
+    opts?.openaiReasoningEffort !== undefined ? opts.openaiReasoningEffort : esforcoDeRaciocinioOpenAI();
   const contain = (endpoint: string): typeof fetch => {
     const allow = buildAllowlist([endpoint, ...extra]);
     return (input, init) => {
@@ -163,8 +223,11 @@ export function createDefaultRegistry(opts?: {
   return {
     anthropic: (apiKey, modelId) =>
       createAnthropic({ apiKey, fetch: contain(ANTHROPIC_ENDPOINT) })(modelId),
-    openai: (apiKey, modelId) =>
-      createOpenAI({ apiKey, fetch: contain(OPENAI_ENDPOINT) })(modelId),
+    openai: (apiKey, modelId) => {
+      const contido = contain(OPENAI_ENDPOINT);
+      const fetchFinal = esforcoOpenAI ? comEsforcoDeRaciocinio(contido, esforcoOpenAI) : contido;
+      return createOpenAI({ apiKey, fetch: fetchFinal })(modelId);
+    },
     google: (apiKey, modelId) =>
       createGoogleGenerativeAI({ apiKey, fetch: contain(GOOGLE_ENDPOINT) })(modelId),
     /**
