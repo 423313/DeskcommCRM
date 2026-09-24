@@ -148,6 +148,7 @@ import {
   provideCaseUpdateInputSchema,
 } from './human-cases';
 import { buildMcpTurnTools } from '../edge/crm/mcp-tools';
+import { definicaoNaConexao } from '@/lib/channels/linha-do-espelho';
 import { cancelPendingCronsForLead } from '../cron/scheduler';
 import {
   latestInboundSignal,
@@ -2772,16 +2773,20 @@ async function executarTurnoDoAgente(
         // O texto RENDERIZADO vai como `body` da cadeia: os gates de promessa,
         // spinning e disclosure avaliam exatamente o que o contato vai ler. Sem
         // isso, "usar template" seria a forma de escapar dos guardrails de conteúdo.
-        const { rows } = await pool.query<{
-          components: unknown;
-          parameter_format: string;
-          status: string;
-        }>(
-          `select components, parameter_format, status from meta_templates
-            where organization_id = $1 and name = $2 and language = $3`,
-          [tenantId, template_name, language],
-        );
-        const linha = rows[0];
+        // A definição DESTA conexão (lib/channels/linha-do-espelho.ts): sem o
+        // escopo, com canal oficial e parceiro espelhando o mesmo nome, o agente
+        // renderizava e passava pelos gates o texto de OUTRO número.
+        const linha =
+          (await definicaoNaConexao<{
+            components: unknown;
+            parameter_format: string;
+            status: string;
+          }>(pool, ['components', 'parameter_format', 'status'], {
+            organizationId: tenantId,
+            name: template_name,
+            language,
+            channelSessionId: input.channelSessionId,
+          })) ?? undefined;
         if (linha === undefined) {
           return {
             ok: false,
