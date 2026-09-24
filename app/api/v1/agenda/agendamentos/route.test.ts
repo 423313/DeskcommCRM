@@ -15,7 +15,11 @@ import { isPublicPath } from "@/lib/auth/public-paths";
 import { McpAuthError } from "@/lib/mcp/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { marcarAgendamentoHandler } from "./_handler";
+import {
+  alterarAgendamentoHandler,
+  cancelarAgendamentoHandler,
+  marcarAgendamentoHandler,
+} from "./_handler";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({ checkRateLimit: vi.fn() }));
@@ -106,19 +110,21 @@ describe("POST /api/v1/agenda/agendamentos — sessão de navegador", () => {
 });
 
 describe("POST /api/v1/agenda/agendamentos — Bearer (monitoramento processual)", () => {
-  function tokenOk(over: Partial<{ organizationId: string; scopes: string[] }> = {}) {
+  // `ai_operator` por padrão: é o papel que as tools MCP de escrita na agenda
+  // exigem, e a rota exige o MESMO do token (ver o caso "token agent → 403").
+  function tokenOk(over: Partial<{ organizationId: string; scopes: string[]; role: string }> = {}) {
     vi.mocked(validateBearerToken).mockResolvedValue({
       organizationId: over.organizationId ?? ORG_ID,
-      role: "agent" as never,
+      role: (over.role ?? "ai_operator") as never,
       // Token de servidor SEM o scope `actor:ai_agent` vira `api_token`
       // (`lib/mcp/auth.ts`, `deriveActor`) — é o que n8n usaria de fato.
-      actor: { type: "api_token", id: "tok-1", role: "agent" as never },
+      actor: { type: "api_token", id: "tok-1", role: (over.role ?? "ai_operator") as never },
       apiTokenId: "tok-1",
       scopes: over.scopes ?? ["mcp:write"],
     });
   }
 
-  it("Bearer válido com scope mcp:write → 201, org do TOKEN, actor api_token (client admin)", async () => {
+  it("token ai_operator (o papel das tools MCP da agenda) com mcp:write → 201, org do TOKEN, actor api_token (client admin)", async () => {
     tokenOk({ organizationId: ORG_ID });
     const { POST } = await import("./route");
     const res = await POST(postReq(BODY, { authorization: "Bearer dsk_abc_def" }));
@@ -130,6 +136,35 @@ describe("POST /api/v1/agenda/agendamentos — Bearer (monitoramento processual)
       organization_id: ORG_ID,
       actor: { type: "api_token", id: "tok-1" },
     });
+  });
+
+  it("token `agent` (o papel com que todo token da tela nasce) → 403 nos TRÊS verbos, handler não roda", async () => {
+    tokenOk({ role: "agent" });
+    const { POST, PATCH, DELETE } = await import("./route");
+    const auth = { authorization: "Bearer dsk_abc_def" };
+    const ID = "55555555-5555-4555-8555-555555555555";
+    const respostas = [
+      await POST(postReq(BODY, auth)),
+      await PATCH(
+        new NextRequest("http://localhost/api/v1/agenda/agendamentos", {
+          method: "PATCH",
+          body: JSON.stringify({ id: ID, notes: "x" }),
+          headers: { "content-type": "application/json", ...auth },
+        }),
+      ),
+      await DELETE(
+        new NextRequest("http://localhost/api/v1/agenda/agendamentos", {
+          method: "DELETE",
+          body: JSON.stringify({ id: ID, reason: "desmarcado pelo tribunal" }),
+          headers: { "content-type": "application/json", ...auth },
+        }),
+      ),
+    ];
+
+    expect(respostas.map((r) => r.status)).toEqual([403, 403, 403]);
+    expect(marcarAgendamentoHandler).not.toHaveBeenCalled();
+    expect(alterarAgendamentoHandler).not.toHaveBeenCalled();
+    expect(cancelarAgendamentoHandler).not.toHaveBeenCalled();
   });
 
   it("Bearer inválido/revogado → 401, nenhuma chamada ao handler", async () => {
@@ -174,8 +209,8 @@ describe("POST /api/v1/agenda/agendamentos — teto de escrita do Bearer", () =>
   function tokenOk(): void {
     vi.mocked(validateBearerToken).mockResolvedValue({
       organizationId: ORG_ID,
-      role: "agent" as never,
-      actor: { type: "api_token", id: "tok-1", role: "agent" as never },
+      role: "ai_operator" as never,
+      actor: { type: "api_token", id: "tok-1", role: "ai_operator" as never },
       apiTokenId: "tok-1",
       scopes: ["mcp:write"],
     });
@@ -224,5 +259,37 @@ describe("POST /api/v1/agenda/agendamentos — teto de escrita do Bearer", () =>
 
     expect(res.status).toBeLessThan(300);
     expect(checkRateLimit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * `/api/v1/agenda/agendamentos` agora está em `PUBLIC_PATHS` — o proxy deixa de
+ * barrar o GET sem cookie. Quem barra é o `requireRole` da própria rota, que
+ * NÃO lê Bearer: listar a agenda segue só-sessão.
+ */
+describe("GET /api/v1/agenda/agendamentos — continua só-sessão", () => {
+  it("Bearer válido e sem sessão → 401, e o token nem é consultado", async () => {
+    vi.mocked(validateBearerToken).mockResolvedValue({
+      organizationId: ORG_ID,
+      role: "admin" as never,
+      actor: { type: "api_token", id: "tok-1", role: "admin" as never },
+      apiTokenId: "tok-1",
+      scopes: ["mcp:read", "mcp:write"],
+    });
+    vi.mocked(requireRole).mockResolvedValue({
+      ok: false,
+      response: fail("unauthenticated", "Auth required.", 401, {}),
+    } as never);
+    const { GET } = await import("./route");
+    const res = await GET(
+      new NextRequest(
+        "http://localhost/api/v1/agenda/agendamentos?de=2026-10-01T00:00:00Z&ate=2026-10-08T00:00:00Z",
+        { method: "GET", headers: { authorization: "Bearer dsk_abc_def" } },
+      ),
+    );
+
+    expect(res.status).toBe(401);
+    expect(validateBearerToken).not.toHaveBeenCalled();
+    expect(createAdminClient).not.toHaveBeenCalled();
   });
 });

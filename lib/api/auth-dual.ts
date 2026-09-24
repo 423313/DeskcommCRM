@@ -61,10 +61,16 @@ export interface AuthDualOptions {
   requestId: string;
   /** `resource_type` gravado no audit `authz.denied` (ex.: "messages"). */
   resource: string;
-  /** Rank mínimo exigido nos DOIS modos. */
+  /** Rank mínimo exigido nos DOIS modos (salvo `tokenRole`). */
   role: Role;
   /** Scope exigido do token. Rotas de escrita usam `mcp:write`. */
   scope: string;
+  /**
+   * Rank mínimo do TOKEN, quando a tool MCP da mesma escrita exige mais que a
+   * sessão. Sem isto a rota REST vira atalho: o token que leva 403 pela tool
+   * passa pela rota, porque as duas chamam o mesmo handler.
+   */
+  tokenRole?: Role;
 }
 
 /**
@@ -73,7 +79,7 @@ export interface AuthDualOptions {
  */
 export async function resolveAuthDual(
   req: NextRequest,
-  { requestId, resource, role, scope }: AuthDualOptions,
+  { requestId, resource, role, scope, tokenRole }: AuthDualOptions,
 ): Promise<AuthDual> {
   const authHeader = req.headers.get("authorization");
 
@@ -98,7 +104,7 @@ export async function resolveAuthDual(
 
     try {
       ensureScope(auth.scopes, scope);
-      ensureRole(auth.role, role);
+      ensureRole(auth.role, tokenRole ?? role);
     } catch (err) {
       if (err instanceof McpAuthError) {
         return {

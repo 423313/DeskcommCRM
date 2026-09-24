@@ -346,6 +346,13 @@ async function despachar<T>(
     resource: "agenda",
     role: "agent",
     scope: "mcp:write",
+    // O MESMO papel das tools MCP de escrita na agenda (`lib/mcp/tools/
+    // agendamento.ts`, `requiresRole: "ai_operator"`), que chamam estes mesmos
+    // handlers. Token criado pela tela nasce `agent`: sem esta linha, o `dsk_`
+    // que leva 403 ao cancelar pela tool cancelaria por aqui. E ator que não é
+    // pessoa escapa de "atendente só mexe na própria agenda"
+    // (`aOpcaoPodeRecortar`) — um token `agent` mexeria na agenda de todos.
+    tokenRole: "ai_operator",
   });
   if (!authz.ok) return authz.response;
   // `idioma` só vem no ramo de sessão (`resolveAuthDual`); o ramo de token não
