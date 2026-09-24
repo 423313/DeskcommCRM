@@ -55,6 +55,9 @@ vi.mock("@/hooks/inbox/useReleaseConversation", () => ({
 vi.mock("@/hooks/inbox/useResumeAiAttendance", () => ({
   useResumeAiAttendance: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+// O header monta o discador (`DialButton`), que exige o `VoiceCallProvider` do
+// shell autenticado. Aqui só a largura importa: o discador fica fora da conta.
+vi.mock("@/components/voice/DialButton", () => ({ DialButton: () => null }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   usePermission: () => true,
   useAuth: () => ({ user: { id: "u-1" }, activeOrg: { orgId: "org-1", role: "manager" } }),
