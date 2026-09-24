@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { abrirAcesso } from "@/lib/external-db/acesso";
 
-import { modulosLigados } from "./modulos";
+import { esquecerMemoDosModulos, MEMO_DO_MODULO_MS, moduloLigadoComMemo, modulosLigados } from "./modulos";
 
 function banco(resposta: { data?: unknown; error?: unknown } | Error) {
   const from = vi.fn(() => ({
@@ -65,3 +65,16 @@ describe("abrirAcesso com o módulo desligado", () => {
     expect(from).toHaveBeenCalledWith("platform_config");
   });
 });
+
+describe("moduloLigadoComMemo (turno do agente)", () => {
+  it("dentro do prazo do memo, uma leitura só; vencido, lê de novo", async () => {
+    esquecerMemoDosModulos();
+    const { db, from } = banco({ data: [{ chave: "MODULO_FLUXOS_DE_ATENDIMENTO", valor: "ligado" }] });
+    expect(await moduloLigadoComMemo(db, "fluxos_atendimento", 1_000)).toBe(true);
+    expect(await moduloLigadoComMemo(db, "fluxos_atendimento", 1_000 + MEMO_DO_MODULO_MS - 1)).toBe(true);
+    expect(from).toHaveBeenCalledTimes(1);
+    await moduloLigadoComMemo(db, "fluxos_atendimento", 1_000 + MEMO_DO_MODULO_MS + 1);
+    expect(from).toHaveBeenCalledTimes(2);
+  });
+});
+

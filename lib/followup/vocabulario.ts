@@ -522,6 +522,7 @@ export const TIPOS_DE_CAMPO: Record<TipoDeCampo, string> = {
   date: "Data",
   boolean: "Sim ou não",
   select: "Escolha numa lista",
+  cpf: "CPF (confere o dígito)",
 };
 
 // ─── nó final ────────────────────────────────────────────────────────────
@@ -552,6 +553,7 @@ export const SITUACOES_DO_ACOMPANHAMENTO: Record<EnrollmentStatus, string> = {
   // precisa saber que este acompanhamento está vivo e só não fala agora.
   dormente: "Aguardando a data do retorno",
   paused_handoff: "Pausado — um humano assumiu",
+  coletando: "Coletando respostas do roteiro",
   completed: "Concluído",
   cancelled: "Cancelado",
   dead: "Parou por falha",

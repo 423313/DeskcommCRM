@@ -20,18 +20,29 @@ export const dynamic = "force-dynamic";
 
 const LIST_COLUMNS = "id, name, status, active_version_id, handoff_policy, updated_at";
 
-export async function GET(_req?: NextRequest): Promise<Response> {
+/**
+ * `?surface=atendimento` lista os roteiros de atendimento (a tela deles chega no
+ * PR 3). Sem o parâmetro, só os fluxos do RELÓGIO — a tela de Follow-ups, o
+ * seletor de fluxos do agente e a ação de webhook "inscrever" leem daqui, e na
+ * prova prática do #1130 os roteiros apareciam nessas listas como se fossem
+ * follow-ups (e abriam no editor de follow-up).
+ */
+export async function GET(req?: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const authz = await requireRole("viewer", { requestId, resource: "followup_flows" });
   if (!authz.ok) return authz.response;
   const { org: activeOrg } = authz;
 
+  const querRoteiros = req?.nextUrl.searchParams.get("surface") === "atendimento";
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const base = supabase
     .from("followup_flow_pointers")
     .select(LIST_COLUMNS)
-    .eq("organization_id", activeOrg.orgId)
-    .order("updated_at", { ascending: false });
+    .eq("organization_id", activeOrg.orgId);
+  const { data, error } = await (querRoteiros
+    ? base.eq("surface", "atendimento")
+    : base.neq("surface", "atendimento")
+  ).order("updated_at", { ascending: false });
   if (error) return fail("internal_error", error.message, 500, { requestId });
   return ok(data ?? [], { requestId });
 }
