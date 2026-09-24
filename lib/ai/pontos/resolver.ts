@@ -45,8 +45,10 @@ export type OrigemDaEscolha =
   | "variavel_de_ambiente"
   | "herdado_de_quem_chamou"
   | "padrao_da_organizacao"
-  /** O Jev mediu (decidindo, ou observando ao lado da IA de sempre). */
+  /** O Jev mediu e a nota dele decidiu. Também a linha de falha do Jev (ver Execuções). */
   | "jev"
+  /** Observação: o Jev mediu ao lado da IA de sempre, e quem decidiu foi ela. */
+  | "jev_observacao"
   /** O Jev estava ligado e não respondeu: a IA de sempre mediu no lugar dele. */
   | "reserva_do_jev"
   /** Observação: a IA de sempre falhou, e a nota do Jev, já medida, decidiu. */
@@ -60,9 +62,10 @@ export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaEscolha, string> = {
     "Herdado de quem disparou a chamada — o agente publicado, ou o roteador de intenção.",
   padrao_da_organizacao: "Usando o padrão da organização.",
   fixo_do_produto: "O produto resolve este ponto sozinho — não há modelo a escolher.",
-  // Uma frase para os dois modos: em observação o Jev mede e NÃO decide, e
-  // "o Jev decidiu" seria falso justamente no modo de comparar os dois.
-  jev: "Medido pelo Jev. Se ele está em observação, quem decide é a IA de sempre.",
+  // Duas origens, uma por desfecho: a frase única ("se ele está em observação,
+  // quem decide é…") não dizia o que aconteceu NAQUELA mensagem.
+  jev: "O Jev decidiu.",
+  jev_observacao: "O Jev observou; quem decidiu foi a IA de sempre.",
   reserva_do_jev: "O Jev não respondeu; a IA de sempre mediu no lugar dele.",
   jev_cobriu: "A IA de sempre falhou, mas o Jev já tinha medido esta mensagem: nada se perdeu.",
 };

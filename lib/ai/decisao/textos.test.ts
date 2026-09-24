@@ -22,6 +22,7 @@ const TEXTOS = [
   ...Object.values(O_QUE_FAZER_DO_JEV),
   ...Object.values(AVISO_DO_JEV),
   EXPLICACAO_DA_ORIGEM.jev,
+  EXPLICACAO_DA_ORIGEM.jev_observacao,
   EXPLICACAO_DA_ORIGEM.reserva_do_jev,
   EXPLICACAO_DA_ORIGEM.jev_cobriu,
   JEV_FALHOU_SEM_RESERVA,

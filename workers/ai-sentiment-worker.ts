@@ -265,11 +265,21 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       : null;
 
     if (clima?.ok) {
+      await fecharAvisoDoJev(admin, event.organization_id);
+    }
+    /**
+     * A linha da medição do Jev sai DEPOIS da decisão, com a origem do que
+     * aconteceu: "jev" quando a nota dele decidiu, "jev_observacao" quando a IA
+     * de sempre decidiu. Antes da decisão a linha não sabia — em observação com a
+     * IA de sempre caída, é a nota do Jev que decide.
+     */
+    const registrarMedicaoDoJev = (decidiu: boolean): void => {
+      if (!clima?.ok) return;
       logInvocation({
         ...comum,
         provider: "typesafe",
         model: `typesafe/${clima.modelo}`,
-        origem_da_escolha: "jev",
+        origem_da_escolha: decidiu ? "jev" : "jev_observacao",
         prompt_tokens: clima.tokensDeEntrada,
         completion_tokens: clima.tokensDeSaida,
         latency_ms: clima.latenciaMs,
@@ -284,8 +294,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         }),
         finish_reason: null,
       });
-      await fecharAvisoDoJev(admin, event.organization_id);
-    }
+    };
 
     const jevFalhouNaRede = clima !== null && !clima.ok && clima.tentouRede ? clima : null;
     /** `reservaMediu` é o que o corpo do aviso afirma — por isso só se sabe no fim. */
@@ -412,6 +421,8 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         throw erroDaIa;
       }
     }
+
+    registrarMedicaoDoJev(decisao.engine === "jev");
 
     // ── Merge sentiment into messages.metadata ────────────────────────────
     const existingMetadata = (message.metadata as Record<string, unknown> | null) ?? {};

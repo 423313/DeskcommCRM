@@ -462,7 +462,8 @@ describe("o Jev no worker de clima", () => {
       sentiment_jev_model: "jev-1.13.0",
     });
     expect(linhasDoJev(banco)).toHaveLength(1);
-    expect(linhasDoJev(banco)[0]).toMatchObject({ status: "ok", origem_da_escolha: "jev" });
+    // Execuções diz o que aconteceu NESTA mensagem: o Jev observou, não decidiu.
+    expect(linhasDoJev(banco)[0]).toMatchObject({ status: "ok", origem_da_escolha: "jev_observacao" });
     expect(linhasDaIaDeSempre(banco)).toHaveLength(1);
     expect(linhasDaIaDeSempre(banco)[0]).toMatchObject({ status: "ok", origem_da_escolha: null });
     expect(alertas(rpcs)[0]!["p_payload"]).toMatchObject({ sentiment_engine: "llm" });
@@ -539,7 +540,8 @@ describe("o Jev no worker de clima", () => {
 
     expect(resultado).toEqual({ skipped: false, sentiment_score: 0 });
     expect(generateObject).toHaveBeenCalledTimes(1);
-    expect(linhasDoJev(banco)[0]).toMatchObject({ status: "ok" });
+    // Em observação, mas foi a nota dele que decidiu: a linha diz "jev", não "jev_observacao".
+    expect(linhasDoJev(banco)[0]).toMatchObject({ status: "ok", origem_da_escolha: "jev" });
     expect(linhasDaIaDeSempre(banco)[0], "a falha da IA de sempre segue visível em Execuções").toMatchObject({
       status: "erro",
       // Sem consequência na tela: o Jev já tinha medido.

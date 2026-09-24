@@ -144,7 +144,7 @@ export async function GET(req: NextRequest): Promise<Response> {
           ? (ponto?.sintomaDeFalha ?? null)
           : null,
       oQueFazer: l.status === "erro" ? (O_QUE_FAZER[l.error_code ?? ""] ?? null) : null,
-      // A linha de falha do Jev só existe quando ninguém mediu: "Medido pelo Jev"
+      // A linha de falha do Jev só existe quando ninguém mediu: "O Jev decidiu"
       // seria falso justamente nela.
       porQueEsteModelo:
         l.origem_da_escolha === "jev" && l.status === "erro"

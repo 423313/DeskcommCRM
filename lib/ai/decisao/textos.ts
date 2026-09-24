@@ -34,7 +34,7 @@ export const O_QUE_FAZER_DO_JEV: Readonly<Record<`jev_${MotivoComRede}`, string>
 
 /**
  * O "por que este modelo" da linha de FALHA do Jev em Execuções — a única que
- * ele grava, quando ninguém mediu. A frase da origem `jev` ("Medido pelo Jev")
+ * ele grava, quando ninguém mediu. A frase da origem `jev` ("O Jev decidiu.")
  * seria falsa justamente nela.
  */
 export const JEV_FALHOU_SEM_RESERVA =

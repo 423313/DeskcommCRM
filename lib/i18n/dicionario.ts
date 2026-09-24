@@ -3283,9 +3283,8 @@ export const DICIONARIO: Traducoes = {
     es: "El producto resuelve este punto por sí solo; no hay modelo que elegir.",
   },
   // O Jev em IA › Execuções e na Central (`lib/ai/decisao/textos.ts`).
-  "Medido pelo Jev. Se ele está em observação, quem decide é a IA de sempre.": {
-    es: "Medido por Jev. Si está en observación, quien decide es la IA de siempre.",
-  },
+  "O Jev decidiu.": { es: "Jev decidió." },
+  "O Jev observou; quem decidiu foi a IA de sempre.": { es: "Jev observó; quien decidió fue la IA de siempre." },
   "O Jev não respondeu; a IA de sempre mediu no lugar dele.": {
     es: "Jev no respondió; la IA de siempre midió en su lugar.",
   },

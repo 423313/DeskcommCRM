@@ -134,8 +134,20 @@ describe("GET /api/v1/ai/runs", () => {
 
     expect(falha.consequencia).toBe(PONTO_POR_ID.get("sentiment_classify")?.sintomaDeFalha);
     expect(falha.oQueFazer).toBe(O_QUE_FAZER_DO_JEV.jev_credencial_invalida);
-    // "Medido pelo Jev" seria falso na única linha em que ninguém mediu.
+    // "O Jev decidiu" seria falso na única linha em que ninguém mediu.
     expect(falha.porQueEsteModelo).toBe(JEV_FALHOU_SEM_RESERVA);
+  });
+
+  it("a linha do Jev diz o fato: decidiu, ou só observou", async () => {
+    linhas = [
+      linha({ provider: "typesafe", model: "typesafe/jev-1.13.0", origem_da_escolha: "jev" }),
+      linha({ provider: "typesafe", model: "typesafe/jev-1.13.0", origem_da_escolha: "jev_observacao" }),
+    ];
+    const { corpo } = await pedir("?provider=typesafe");
+    expect(corpo.data.execucoes.map((e: { porQueEsteModelo: string }) => e.porQueEsteModelo)).toEqual([
+      "O Jev decidiu.",
+      "O Jev observou; quem decidiu foi a IA de sempre.",
+    ]);
   });
 
   it("observação com a IA de sempre caída: a falha dela não afirma consequência que não houve", async () => {
