@@ -31,7 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { ArrowRight, CaretLeft, Info, Plus, Trash } from "@/lib/ui/icons";
 import { randomId } from "@/lib/random-id";
-import { usePermission } from "@/hooks/auth/AuthProvider";
+import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
 import {
   useRouter as useRouterData,
   useUpdateRouter,
@@ -118,7 +118,11 @@ export function RouterEditorClient({
   const saveMembers = useSaveMembers(routerId);
   const testRouter = useTestRouter(routerId);
   // Fluxos de atendimento disponíveis para amarrar a uma intenção (surface=atendimento).
-  const { data: atendimentoFlows } = useFollowupFlows({ surface: "atendimento" });
+  // Com o módulo desligado o seletor não existe: amarrar a um roteiro que não roda
+  // seria prometer um comportamento que a instalação não tem.
+  const { activeOrg } = useAuth();
+  const roteirosLigados = activeOrg?.modulos_ligados?.includes("fluxos_atendimento") === true;
+  const { data: atendimentoFlows } = useFollowupFlows({ surface: "atendimento", enabled: roteirosLigados });
 
   const baseline = React.useMemo(
     () => ({
@@ -412,7 +416,7 @@ export function RouterEditorClient({
                     <IntentRow
                       member={m}
                       agents={agents}
-                      flows={atendimentoFlows ?? []}
+                      flows={roteirosLigados ? (atendimentoFlows ?? []) : null}
                       disabled={!canManage}
                       error={memberErrors[i] ?? null}
                       duplicate={duplicateNames.has(m.intent_name.trim().toLowerCase())}
@@ -469,7 +473,8 @@ function IntentRow({
 }: {
   member: DraftMember;
   agents: AgentLite[];
-  flows: Array<{ id: string; name: string }>;
+  /** `null` = módulo de roteiros desligado: o seletor não aparece. */
+  flows: Array<{ id: string; name: string }> | null;
   disabled: boolean;
   error: string | null;
   duplicate: boolean;
@@ -531,7 +536,8 @@ function IntentRow({
           maxLength={2000}
         />
       </div>
-      <div className="space-y-1">
+      {flows !== null && (
+      <div className="space-y-1" data-testid="seletor-de-roteiro">
         <Label>{t("Fluxo de atendimento (opcional)")}</Label>
         <Select
           value={member.flow_pointer_id ?? NONE}
@@ -556,6 +562,7 @@ function IntentRow({
           )}
         </p>
       </div>
+      )}
       <ExamplesInput
         value={member.examples}
         onChange={(examples) => onChange({ examples })}
