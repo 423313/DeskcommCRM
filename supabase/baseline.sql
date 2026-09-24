@@ -38134,7 +38134,9 @@ begin
   return v_apagadas;
 end;
 $$;
-revoke all    on function public.fn_expurgar_prospeccao_vencida(int,int) from public, anon, authenticated;
+revoke all    on function public.fn_expurgar_prospeccao_vencida(int,int) from public;
+revoke execute on function public.fn_expurgar_prospeccao_vencida(int,int) from anon;
+revoke execute on function public.fn_expurgar_prospeccao_vencida(int,int) from authenticated;
 grant  execute on function public.fn_expurgar_prospeccao_vencida(int,int) to service_role;
 
 create index if not exists prospecting_candidates_expira_idx

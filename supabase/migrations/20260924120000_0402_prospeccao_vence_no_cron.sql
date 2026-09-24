@@ -76,7 +76,9 @@ $$;
 -- grant implícito a PUBLIC que o Postgres dá a toda função ao criá-la (que
 -- `revoke from anon` não remove). Fechar uma só deixa a função exposta com o
 -- gate verde — mesmas duas linhas das sete irmãs.
-revoke all    on function public.fn_expurgar_prospeccao_vencida(int,int) from public, anon, authenticated;
+revoke all    on function public.fn_expurgar_prospeccao_vencida(int,int) from public;
+revoke execute on function public.fn_expurgar_prospeccao_vencida(int,int) from anon;
+revoke execute on function public.fn_expurgar_prospeccao_vencida(int,int) from authenticated;
 grant  execute on function public.fn_expurgar_prospeccao_vencida(int,int) to service_role;
 
 -- Índice dedicado ao predicado do expurgo (desenho da 0174): PARCIAL porque
