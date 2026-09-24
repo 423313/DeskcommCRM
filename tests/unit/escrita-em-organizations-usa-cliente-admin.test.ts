@@ -540,6 +540,20 @@ describe("toda escrita em `organizations` passa pelo cliente admin", () => {
           '{ const admin = await createClient(); await aplicar(admin.schema("public"), orgId, settings); }',
         esperado: ["cliente.update"],
       },
+      {
+        forma:
+          "chamada com spread omite o argumento na posição, mas o spread entrega o cliente de SESSÃO " +
+          "(o valor padrão não pode provar)",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const admin = createAdminClient();\n" +
+          "async function aplicar(orgId: string, settings: unknown, cliente = admin) " +
+          `{ ${MUTA_PELO_CLIENTE_PASSADO} }\n` +
+          "export async function vazar(orgId: string, settings: unknown) " +
+          "{ const sessao = await createClient(); const args = [orgId, settings, sessao] as const; await aplicar(...args); }",
+        esperado: ["cliente.update"],
+      },
     ];
     for (const { forma, codigo, esperado = ["p.admin.update"] } of reprovados) {
       // `expect.soft` pelo mesmo motivo do CONTROLE verde: uma sabotagem por vez

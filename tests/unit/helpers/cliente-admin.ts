@@ -697,6 +697,8 @@ function parametroRecebeAdmin(
   const funcoesHomonimas = escopo.funcoes.filter((f) => f.nome === funcao.nome).length > 1;
 
   return chamadas.every((chamada) => {
+    // Spread desloca as posições: `arguments[indice]` deixa de ser o argumento entregue.
+    if (chamada.arguments.some(ts.isSpreadElement)) return false;
     const arg = chamada.arguments[indice];
     if (arg === undefined) {
       if (funcoesHomonimas) return false;
