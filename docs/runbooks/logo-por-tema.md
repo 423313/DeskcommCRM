@@ -14,10 +14,6 @@ Para desfazer a escolha visual, remova o logo escuro pela própria tela. O padr�
 
 Para reverter a versão do aplicativo, restaure a imagem anterior registrada na implantação. A migration é aditiva: deixe coluna, função e dados no banco; não é necessário apagar nenhum arquivo ou restaurar o banco para voltar ao código anterior. Essa versão ignora a arte escura, e o RPC legado continua funcionando. Preserve o backup e confira login, marca e funcionamento da aplicação após a reversão.
 
-## Incorporação de uma solução upstream
-
-Mantenha a alteração em um commit/PR independente. Em cada atualização, compare o comportamento oficial com: upload e remoção independentes, herança sem mistura de marcas, isolamento entre organizações e renderização clara/escura. Só retire a implementação local quando a oficial satisfizer esses casos. Se mudar o formato persistido, crie uma migration de transição preservando os arquivos; não remova a migration já aplicada nem volte o banco inteiro. A aceitação de uma contribuição depende dos mantenedores.
-
 ## Checklist de integração
 
 - Entrada: campos da tela de marca, autorizados por escopo; os dois temas passam pela mesma rota.
