@@ -576,7 +576,7 @@
       "col": 1,
       "type": "external",
       "label": "Jev (System One) — lib/ai/decisao",
-      "sublabel": "medirClima: só a última mensagem, passada por scrubMessage; teto de 1,5 s; disjuntor por organização; nunca lança"
+      "sublabel": "medirClima: cada mensagem recebida, sozinha e sem o histórico, passada por scrubMessage; teto de 1,5 s; disjuntor por organização; nunca lança"
     },
     {
       "id": "jevLlmCalls",
@@ -1244,7 +1244,7 @@
       "id": "e103",
       "from": "sentimento",
       "to": "jev",
-      "label": "medirClima(última mensagem) — desligado, nada sai para a rede"
+      "label": "medirClima(a mensagem, sem o histórico) — desligado, nada sai para a rede"
     },
     {
       "id": "e104",
