@@ -5,6 +5,9 @@ import { expect, test } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 
+// O segundo login pode aguardar uma janela TOTP inteira antes de testar a tela.
+test.describe.configure({ timeout: 60_000 });
+
 const { url, serviceRole } = credenciaisSupabaseDeTeste();
 const admin = createClient<Database>(url, serviceRole, { auth: { persistSession: false } });
 
