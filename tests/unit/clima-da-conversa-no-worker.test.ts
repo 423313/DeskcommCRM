@@ -675,6 +675,9 @@ describe("o aviso do Jev na Central", () => {
     expect(segunda.resultado).toEqual({ skipped: false, sentiment_score: 1 });
     expect(segunda.banco.agent_inbox_items).toHaveLength(1);
     expect(segunda.banco.agent_inbox_items[0]).toMatchObject({ status: "resolved" });
+    // A convenção do repo (`lib/event-log/aviso-do-laco.ts`, baseline): resolver
+    // carimba o quando. Sem ele a Central mostra um aviso fechado sem data.
+    expect(segunda.banco.agent_inbox_items[0]!.resolved_at).toEqual(expect.any(String));
   });
 
   // ── A queda que "passa sozinha" e não passa ─────────────────────────────────

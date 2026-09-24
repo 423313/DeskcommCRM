@@ -644,7 +644,7 @@ async function fecharAvisoDoJev(
   if (semAvisoDoJevAberto.has(organizationId)) return;
   const { error } = await admin
     .from("agent_inbox_items")
-    .update({ status: "resolved" })
+    .update({ status: "resolved", resolved_at: new Date().toISOString() })
     .eq("organization_id", organizationId)
     .eq("kind", "other")
     .in("title", TITULOS_DO_AVISO_DO_JEV)
