@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 
 import type { FlowEdge, FlowGraph, FlowNode } from "./graph-schema";
@@ -8,6 +8,7 @@ import {
   melhorFluxoPorGatilho,
   montarResumoDoRoteiro,
   processarInboundDoFluxo,
+  encerrarRoteirosVencidos,
   renderBlocoDeAtendimento,
   situacaoDoChecklist,
   valoresDoChecklist,
@@ -443,3 +444,17 @@ describe("montarResumoDoRoteiro (passa-bastão e tela, D4 — sem síntese por m
     expect(renderBlocoDeAtendimento(estadoCom(cidadeECnh()))).not.toContain("Contexto do atendimento anterior");
   });
 });
+
+describe("encerrarRoteirosVencidos (prazo, 0397)", () => {
+  it("chama a função do banco com o lote e devolve quantos encerrou", async () => {
+    const rpc = vi.fn(async () => ({ data: 3, error: null }));
+    expect(await encerrarRoteirosVencidos({ rpc }, 50)).toBe(3);
+    expect(rpc).toHaveBeenCalledWith("fn_encerrar_roteiros_vencidos", { p_limite: 50 });
+  });
+
+  it("erro do banco sobe — quem chama loga, não engole calado", async () => {
+    const rpc = vi.fn(async () => ({ data: null, error: { message: "permission denied" } }));
+    await expect(encerrarRoteirosVencidos({ rpc })).rejects.toThrow("permission denied");
+  });
+});
+

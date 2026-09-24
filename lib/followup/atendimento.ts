@@ -240,6 +240,8 @@ export const EVENTOS_DO_ROTEIRO = [
   // Emitido só pelo banco hoje: a fusão por nono dígito encerra o roteiro vivo
   // excedente (baseline, bloco da 0198). O PR 2 o usa no handoff e na expiração.
   "roteiro_cancelado",
+  // Emitido pelo banco (`fn_encerrar_roteiros_vencidos`, 0397): o prazo venceu.
+  "roteiro_expirado",
 ] as const;
 export type EventoDoRoteiro = (typeof EVENTOS_DO_ROTEIRO)[number];
 
@@ -974,4 +976,19 @@ export async function iniciarFluxoDeAtendimento(
     });
   }
   return enrollmentId;
+}
+
+/**
+ * Encerra, em lote, o roteiro 'coletando' cujo prazo venceu (0397,
+ * `fn_encerrar_roteiros_vencidos`: sem mensagem lida há mais de
+ * `settings.expira_em_horas`, padrão 72 h, com o evento `roteiro_expirado`).
+ * Chamado pelo relógio do follow-up. Devolve quantos encerrou.
+ */
+export async function encerrarRoteirosVencidos(
+  db: { rpc(fn: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { message: string } | null }> },
+  limite = 200,
+): Promise<number> {
+  const { data, error } = await db.rpc("fn_encerrar_roteiros_vencidos", { p_limite: limite });
+  if (error) throw new Error(error.message);
+  return typeof data === "number" ? data : 0;
 }
