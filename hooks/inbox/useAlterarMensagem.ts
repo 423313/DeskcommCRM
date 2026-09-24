@@ -6,7 +6,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 
-/** Recarrega o fio após o WAHA confirmar, sem fingir sucesso antes da resposta. */
+/** Recarrega o fio após o canal confirmar, sem fingir sucesso antes da resposta. */
 export function useAlterarMensagem(conversationId: string | null) {
   const qc = useQueryClient();
   const t = useT();

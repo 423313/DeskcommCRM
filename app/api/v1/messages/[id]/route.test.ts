@@ -14,7 +14,17 @@ vi.mock("@/lib/auth/require-role", () => ({
   requireRole: async () => ({ ok: true, user: { id: "usuario-1", idioma: "pt-BR" }, org: { orgId: "org-1" } }),
 }));
 vi.mock("@/lib/audit", () => ({ audit: state.audit }));
-vi.mock("@/lib/waha/client", () => ({ getWahaClient: () => ({ editMessage: state.edit, deleteMessage: state.remove }) }));
+vi.mock("@/lib/channels", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  transportaMensagem: () => true,
+  resolveSessionRef: () => "numero-1",
+  getAdapter: () => ({
+    isConfigured: () => true,
+    resolveRecipient: () => "chat-1",
+    editMessage: state.edit,
+    revokeMessage: state.remove,
+  }),
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from: (table: string) => {
@@ -28,7 +38,7 @@ vi.mock("@/lib/supabase/server", () => ({
           : table === "conversations"
             ? { id: "conversa-1", contact_id: "contato-1", is_group: false, channel_session_id: "sessao-1" }
             : table === "channel_sessions"
-              ? { provider: "waha", waha_session_name: "numero-1", archived_at: null }
+              ? { provider: "canal-teste", archived_at: null }
               : { phone_number: "5511999999999", wa_identity: null, wa_lid: null }, error: null }),
       };
       return q;
@@ -56,25 +66,27 @@ beforeEach(() => {
 });
 
 describe("alterar mensagem enviada", () => {
-  it("rejeita mensagem recebida antes de chamar o WAHA", async () => {
+  it("rejeita mensagem recebida antes de chamar o canal", async () => {
     state.message = { ...state.message, direction: "inbound" };
     const res = await DELETE(new NextRequest(url, { method: "DELETE" }), ctx);
     expect(res.status).toBe(403);
     expect(state.remove).not.toHaveBeenCalled();
   });
 
-  it("edita só mensagem própria, reconstruindo o id completo, e audita", async () => {
+  it("edita só mensagem própria pelo adaptador do canal, e audita", async () => {
     const res = await PATCH(new NextRequest(url, {
       method: "PATCH", body: JSON.stringify({ text: "depois" }),
     }), ctx);
     expect(res.status).toBe(200);
-    expect(state.edit).toHaveBeenCalledWith("numero-1", "5511999999999@c.us", "true_5511999999999@c.us_ABC", "depois");
+    expect(state.edit).toHaveBeenCalledWith({
+      organizationId: "org-1", sessionRef: "numero-1", recipient: "chat-1", externalId: "ABC", text: "depois",
+    });
     expect(state.calls).toContainEqual({ table: "messages", update: expect.objectContaining({ body: "depois" }) });
     expect(state.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "message.edited", resourceId: id }));
   });
 
-  it("não marca como apagada quando o WAHA recusa", async () => {
-    state.remove.mockRejectedValueOnce(new Error("waha_403"));
+  it("não marca como apagada quando o canal recusa", async () => {
+    state.remove.mockRejectedValueOnce(new Error("recusado_403"));
     const res = await DELETE(new NextRequest(url, { method: "DELETE" }), ctx);
     expect(res.status).toBe(502);
     expect(state.calls).toEqual([]);

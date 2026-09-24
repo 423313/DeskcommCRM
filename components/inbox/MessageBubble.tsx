@@ -406,7 +406,7 @@ export function MessageBubble({
               if (!onApagar) return;
               setOcupado(true);
               try { await onApagar(); setApagando(false); }
-              catch { /* Mantém a confirmação aberta se o WAHA recusar. */ }
+              catch { /* Mantém a confirmação aberta se o canal recusar. */ }
               finally { setOcupado(false); }
             }}>{t("Apagar para todos")}</Button>
           </AlertDialogFooter>

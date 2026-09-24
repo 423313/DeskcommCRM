@@ -1,4 +1,4 @@
-/** Edição e revogação de mensagens de texto enviadas pelo próprio atendente via WAHA. */
+/** Edição e revogação de mensagens de texto enviadas pelo próprio atendente. */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
@@ -7,11 +7,16 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import {
+  CHANNEL_SESSION_REF_COLUMNS,
+  getAdapter,
+  resolveSessionRef,
+  transportaMensagem,
+  type ChannelProvider,
+  type ChannelSessionRef,
+} from "@/lib/channels";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
-import { getWahaClient } from "@/lib/waha/client";
-import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
-import { resolveWahaChatId } from "@/lib/waha/send";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +25,6 @@ const textoSchema = z.object({ text: z.string().trim().min(1).max(4096) });
 const JANELA_EDICAO_MS = 15 * 60 * 1000;
 
 async function alterar(req: NextRequest, ctx: Ctx, acao: "edit" | "revoke"): Promise<Response> {
-  const supportDenied = await requireSupportWrite();
-  if (supportDenied) return supportDenied;
   const requestId = randomUUID();
   const authz = await requireRole("agent", { requestId, resource: "messages" });
   if (!authz.ok) return authz.response;
@@ -64,34 +67,42 @@ async function alterar(req: NextRequest, ctx: Ctx, acao: "edit" | "revoke"): Pro
     return fail("not_found", t("Conversa não encontrada."), 404, { requestId });
   }
   const [{ data: session }, { data: contact }] = await Promise.all([
-    supabase.from("channel_sessions").select("provider, waha_session_name, archived_at")
+    supabase.from("channel_sessions").select(`${CHANNEL_SESSION_REF_COLUMNS}, archived_at`)
       .eq("id", message.channel_session_id).eq("organization_id", authz.org.orgId).maybeSingle(),
     supabase.from("contacts").select("phone_number, wa_identity, wa_lid")
       .eq("id", conversation.contact_id).eq("organization_id", authz.org.orgId).maybeSingle(),
   ]);
-  if (session?.provider !== "waha" || !session.waha_session_name || session.archived_at) {
+  // O canal decide se sabe alterar: a rota testa a presença do método, nunca
+  // QUAL provider é (invariante 1 de docs/doctrine/restricao-de-canal.md).
+  const adapter = session && !session.archived_at && transportaMensagem(session.provider)
+    ? getAdapter(session.provider as ChannelProvider) : null;
+  const sessionRef = session ? resolveSessionRef(session as unknown as ChannelSessionRef) : null;
+  if (!adapter?.editMessage || !adapter.revokeMessage || !sessionRef) {
     return fail("unsupported_channel", t("Este canal não permite alterar mensagens."), 409, { requestId });
   }
-  const client = getWahaClient();
-  if (!client) return fail("channel_unavailable", t("WhatsApp indisponível no momento."), 503, { requestId });
+  if (!adapter.isConfigured()) {
+    return fail("channel_unavailable", t("WhatsApp indisponível no momento."), 503, { requestId });
+  }
 
-  // O envio NOWEB grava só a cauda do id; o webhook grava o id completo.
-  // Quando o completo existe, ele também preserva o @lid original do chat.
-  const chatId = chatIdFromWaMessageId(message.external_id) ?? resolveWahaChatId({
-    isGroup: false, groupChatId: null, phoneNumber: contact?.phone_number,
-    waIdentity: contact?.wa_identity, waLid: contact?.wa_lid,
-  });
-  if (!chatId) return fail("recipient_unavailable", t("Contato sem WhatsApp válido."), 409, { requestId });
-  const messageId = message.external_id.includes("_")
-    ? message.external_id : `true_${chatId}_${bareWaMessageId(message.external_id)}`;
-
+  const alvo = {
+    organizationId: authz.org.orgId,
+    sessionRef,
+    externalId: message.external_id,
+    recipient: adapter.resolveRecipient({
+      isGroup: false, groupChatId: null, phoneNumber: contact?.phone_number,
+      waIdentity: contact?.wa_identity, waLid: contact?.wa_lid,
+    }),
+  };
   try {
     if (acao === "edit" && parsed?.success) {
-      await client.editMessage(session.waha_session_name, chatId, messageId, parsed.data.text);
+      await adapter.editMessage({ ...alvo, text: parsed.data.text });
     } else {
-      await client.deleteMessage(session.waha_session_name, chatId, messageId);
+      await adapter.revokeMessage(alvo);
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message === "recipient_unavailable") {
+      return fail("recipient_unavailable", t("Contato sem WhatsApp válido."), 409, { requestId });
+    }
     return fail("channel_error", t("O WhatsApp recusou a alteração da mensagem."), 502, { requestId });
   }
 
@@ -127,9 +138,13 @@ async function alterar(req: NextRequest, ctx: Ctx, acao: "edit" | "revoke"): Pro
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   return alterar(req, ctx, "edit");
 }
 
 export async function DELETE(req: NextRequest, ctx: Ctx): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   return alterar(req, ctx, "revoke");
 }

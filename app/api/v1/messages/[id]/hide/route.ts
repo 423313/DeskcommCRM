@@ -13,8 +13,6 @@ import { createClient } from "@/lib/supabase/server";
 interface Ctx { params: Promise<{ id: string }> }
 
 async function alterar(req: NextRequest, ctx: Ctx, ocultar: boolean): Promise<Response> {
-  const supportDenied = await requireSupportWrite();
-  if (supportDenied) return supportDenied;
   const requestId = randomUUID();
   const authz = await requireRole("manager", { requestId, resource: "messages" });
   if (!authz.ok) return authz.response;
@@ -70,9 +68,13 @@ async function alterar(req: NextRequest, ctx: Ctx, ocultar: boolean): Promise<Re
 }
 
 export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   return alterar(req, ctx, true);
 }
 
 export async function DELETE(req: NextRequest, ctx: Ctx): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   return alterar(req, ctx, false);
 }
