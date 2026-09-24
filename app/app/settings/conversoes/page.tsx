@@ -29,6 +29,7 @@
  * O objeto é uma credencial que escreve na conta de anúncios da empresa, ao lado
  * de billing e API tokens na mesma prancheta. Mesmo gate de `settings/marca`.
  */
+import { ScriptDoSite } from "./_scriptDoSite";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -303,6 +304,9 @@ export default async function ConversoesPage({
         código, e quem monta o botão da landing page não teria onde descobrir o
         formato nem os limites.
       */}
+      {slug ? (
+        <ScriptDoSite slug={slug} google={capturaGoogle} meta={estadoDaCaptura} idioma={idioma} />
+      ) : null}
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">{t("Quem chegou pelo site")}</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">

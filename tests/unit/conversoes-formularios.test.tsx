@@ -1,3 +1,4 @@
+import { ScriptDoSite } from "@/app/app/settings/conversoes/_scriptDoSite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FormularioDeCapturaDeUtm } from "@/app/app/settings/conversoes/_formCapturaDeUtm";
@@ -81,4 +82,28 @@ describe("formulários de conversão", () => {
       ),
     );
   });
+});
+
+it("só gera o script com captura ativa salva, sem credenciais", () => {
+  const { rerender } = render(
+    <ScriptDoSite slug="loja" google={null} meta={null} idioma="pt-BR" />,
+  );
+  expect(screen.queryByRole("button", { name: "Copiar script do site" })).toBeNull();
+  rerender(
+    <ScriptDoSite
+      slug="loja"
+      google={{
+        whatsappE164: "+5511999999999",
+        messageTemplate: "Olá [ref:{token}]",
+        habilitada: true,
+      }}
+      meta={null}
+      idioma="pt-BR"
+    />,
+  );
+  const code = screen.getByTestId("script-do-site").querySelector("code")!.textContent!;
+  expect(code).toContain(window.location.origin + "/rastreio/v1.js");
+  expect(code).toContain('data-google-whatsapp="5511999999999"');
+  expect(code).not.toContain("data-meta-whatsapp");
+  expect(screen.getByRole("button", { name: "Copiar script do site" })).toBeTruthy();
 });

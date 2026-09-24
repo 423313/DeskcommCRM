@@ -113,6 +113,20 @@
       "col": 3,
       "type": "component",
       "label": "conversoes.qualificacao"
+    },
+    {
+      "id": "site",
+      "lane": "tela",
+      "col": 0,
+      "type": "component",
+      "label": "Site: URL e botão WhatsApp"
+    },
+    {
+      "id": "script",
+      "lane": "motor",
+      "col": 1,
+      "type": "component",
+      "label": "Script público v1: origem da visita"
     }
   ],
   "edges": [
@@ -217,6 +231,24 @@
       "from": "conexao",
       "to": "qualificacao",
       "label": "etapa e ação opcionais"
+    },
+    {
+      "id": "e17",
+      "from": "site",
+      "to": "script",
+      "label": "identificadores e navegação"
+    },
+    {
+      "id": "e18",
+      "from": "tela",
+      "to": "script",
+      "label": "snippet das capturas salvas"
+    },
+    {
+      "id": "e19",
+      "from": "script",
+      "to": "captura",
+      "label": "clique no número configurado"
     }
   ]
 }

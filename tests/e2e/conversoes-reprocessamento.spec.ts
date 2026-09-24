@@ -159,7 +159,23 @@ test("captura Google: configure pela tela, recarregue e leve wbraid ao link do W
         body: "<h1>Destino WhatsApp de teste</h1>",
       }),
     );
-    await page.goto(`${link}?wbraid=${click}`);
+    const snippet = await page.getByTestId("script-do-site").locator("code").innerText();
+    await page.route("http://localhost:41739/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: `<!doctype html><html><head>${snippet}</head><body><h1>Site de teste</h1><a href="/produto">Ver produto</a><a id="whatsapp" href="https://wa.me/5511999999999">WhatsApp</a></body></html>`,
+      }),
+    );
+    await page.goto(`http://localhost:41739/?wbraid=${click}&email=nao-capturar`);
+    await expect(page.locator("#whatsapp")).toHaveAttribute("href", `${link}?wbraid=${click}`);
+    await page.getByRole("link", { name: "Ver produto", exact: true }).click();
+    await expect(page.locator("#whatsapp")).toHaveAttribute("href", `${link}?wbraid=${click}`);
+    await page.screenshot({
+      path: testInfo.outputPath("script-site-origem-preservada.png"),
+      fullPage: true,
+    });
+    await page.getByRole("link", { name: "WhatsApp", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Destino WhatsApp de teste", exact: true }),
     ).toBeVisible();
