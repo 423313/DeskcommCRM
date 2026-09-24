@@ -48,6 +48,10 @@ function banco(
     grafo?: FlowGraph;
     /** A linha da mensagem do turno, como o roteiro a lê (legenda + derivado da mídia). */
     mensagem?: { body: string | null; media_derived_text?: string | null } | null;
+    /** Perguntas já feitas ao cliente (eventos `roteiro_pergunta_feita`). */
+    perguntasFeitas?: string[];
+    /** O LOTE inteiro (rajada): vence `mensagem` quando presente. */
+    lote?: Array<{ id: string; body: string | null; media_derived_text?: string | null }>;
   } = {},
 ) {
   const GRAFO_DO_BANCO = opts.grafo ?? GRAFO;
@@ -91,7 +95,14 @@ function banco(
       existe = true;
       return { rows: [{ id: 'enr-1' }], rowCount: 1 };
     }
-    if (/from messages/.test(sql)) return { rows: mensagem === null ? [] : [mensagem], rowCount: mensagem === null ? 0 : 1 };
+    if (/event_type in \('roteiro_tentativa', 'roteiro_pergunta_feita'\)/.test(sql)) {
+      const linhas = (opts.perguntasFeitas ?? []).map((campo) => ({ tipo: 'roteiro_pergunta_feita', campo, n: 1 }));
+      return { rows: linhas, rowCount: linhas.length };
+    }
+    if (/from messages/.test(sql)) {
+      const linhas = opts.lote ?? (mensagem === null ? [] : [{ id: 'msg-1', ...mensagem }]);
+      return { rows: linhas, rowCount: linhas.length };
+    }
     if (/select custom_fields from contacts/.test(sql)) return { rows: [{ custom_fields: {} }], rowCount: 1 };
     if (/insert into followup_enrollment_events|update /.test(sql)) return { rows: [], rowCount: 1 };
     return { rows: [], rowCount: 0 };
@@ -228,7 +239,11 @@ describe('mídia e retry (achado 8 da prova; revisão do PR 1)', () => {
     );
     expect(r).not.toBeNull();
     expect(validar).not.toHaveBeenCalled();
-    expect(b.sqls.some((s) => /insert into followup_enrollment_events/.test(s))).toBe(false);
+    // A mensagem é reivindicada (o retry não a relê), mas nada conta tentativa.
+    const tipos = b.query.mock.calls
+      .filter(([sql]) => /insert into followup_enrollment_events/.test(String(sql)))
+      .map(([, params]) => (params as unknown[])[3]);
+    expect(tipos).toEqual(['roteiro_mensagem']);
   });
 
   it('áudio TRANSCRITO: o roteiro lê a transcrição, sem o enquadramento do histórico', async () => {
@@ -247,6 +262,54 @@ describe('mídia e retry (achado 8 da prova; revisão do PR 1)', () => {
     const deps = { pool: b.pool, moduloLigado: async () => true, validar, log: log() as never };
     await prepararRoteiroDoTurno(deps, turno);
     await prepararRoteiroDoTurno(deps, turno);
+    expect(validar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('revisão adversarial do PR 2 — dado inventado', () => {
+  it('⭐ turno que COMEÇA o roteiro: "sim, quero financiar" não vira tem_cnh = true', async () => {
+    const b = banco({ grafo: GRAFO_SIM_NAO, mensagem: { body: 'sim, quero financiar' } });
+    const validar = vi.fn<ValidarResposta>(async () => ({ resultado: 'nao_respondeu' }));
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar, log: log() as never },
+      { ...turno, texto: 'sim, quero financiar' },
+    );
+    // Nenhuma pergunta foi feita: não há "pergunta atual" para o validador.
+    expect(validar).toHaveBeenCalledWith(expect.objectContaining({ perguntaAtual: null }));
+    expect(b.sqls.some((s) => /update contacts/.test(s))).toBe(false);
+    expect(r?.estado.situacao.pendentes.map((n) => n.config.key)).toEqual(['tem_cnh']);
+  });
+
+  it('pergunta já FEITA é a pergunta atual no turno seguinte', async () => {
+    const b = banco({
+      roteiroJaExiste: true,
+      grafo: GRAFO_SIM_NAO,
+      mensagem: { body: 'sim' },
+      perguntasFeitas: ['tem_cnh'],
+    });
+    const validar = vi.fn<ValidarResposta>(async () => ({ resultado: 'nao_respondeu' }));
+    await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar, log: log() as never },
+      { ...turno, texto: 'sim' },
+    );
+    expect(validar).toHaveBeenCalledWith(expect.objectContaining({ perguntaAtual: 'tem_cnh' }));
+  });
+
+  it('⭐ rajada "oi" + "meu cpf é 529.982.247-25": o validador lê o LOTE, e o retry não relê', async () => {
+    const b = banco({
+      roteiroJaExiste: true,
+      lote: [
+        { id: 'm1', body: 'oi' },
+        { id: 'm2', body: 'meu cpf é 529.982.247-25' },
+      ],
+    });
+    const validar = vi.fn<ValidarResposta>(async () => ({ resultado: 'nao_respondeu' }));
+    const deps = { pool: b.pool, moduloLigado: async () => true, validar, log: log() as never };
+    await prepararRoteiroDoTurno(deps, { ...turno, messageId: 'm1', texto: 'oi' });
+    expect(validar).toHaveBeenCalledWith(
+      expect.objectContaining({ textoAtual: 'oi\nmeu cpf é 529.982.247-25' }),
+    );
+    await prepararRoteiroDoTurno(deps, { ...turno, messageId: 'm1', texto: 'oi' });
     expect(validar).toHaveBeenCalledTimes(1);
   });
 });

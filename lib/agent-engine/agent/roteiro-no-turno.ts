@@ -34,13 +34,14 @@ import {
   carregarEstadoDeAtendimento,
   escolherFluxoPeloGatilho,
   iniciarFluxoDeAtendimento,
-  lerMensagemParaORoteiro,
+  lerLoteParaORoteiro,
   processarInboundDoFluxo,
   reivindicarMensagemDoRoteiro,
   registrarEventoDoRoteiro,
   renderBlocoDeAtendimento,
   type BancoDoRoteiro,
   type EstadoDeAtendimento,
+  type MensagemDoLote,
 } from '@/lib/followup/atendimento';
 import { perguntaSaiuNosTextos, textoDaPergunta } from '@/lib/followup/captura-do-fluxo';
 
@@ -66,6 +67,7 @@ export type ValidarResposta = (args: {
   }[];
   mensagens: readonly MensagemDoContexto[];
   textoAtual?: string | null;
+  perguntaAtual?: string | null;
 }) => Promise<LeituraDaResposta>;
 
 export interface DepsDoRoteiro {
@@ -117,17 +119,23 @@ export async function prepararRoteiroDoTurno(
 
   let estado: EstadoDeAtendimento | null;
   let iniciado = false;
-  // O texto que o ROTEIRO lê: legenda + conteúdo derivado da mídia, da própria
-  // linha da mensagem (não o corpo enquadrado do histórico do agente). `null`
-  // com mensagem = mídia sem leitura.
+  // O que o ROTEIRO lê: o LOTE do turno (a mensagem pinada e as que pegaram
+  // carona na rajada), cada uma com legenda + conteúdo derivado da mídia, das
+  // próprias linhas (não o corpo enquadrado do histórico do agente).
+  let lote: MensagemDoLote[] | null = null;
+  const textoDe = (mensagens: readonly MensagemDoLote[]): string | null => {
+    const legiveis = mensagens.flatMap((m) => (m.texto === null ? [] : [m.texto]));
+    return legiveis.length === 0 ? null : legiveis.join('\n');
+  };
   let texto = t.texto;
   try {
     if (t.messageId !== null && t.conversationId !== null) {
-      texto = await lerMensagemParaORoteiro(deps.pool, {
+      lote = await lerLoteParaORoteiro(deps.pool, {
         organizationId: t.organizationId,
         conversationId: t.conversationId,
         messageId: t.messageId,
       });
+      texto = textoDe(lote);
     }
     estado = await carregarEstadoDeAtendimento(deps.pool, {
       organizationId: t.organizationId,
@@ -164,24 +172,37 @@ export async function prepararRoteiroDoTurno(
   if (t.messageId === null) return montar(estado, iniciado);
 
   const atual = estado;
-  // Áudio sem transcrição, figurinha: não há o que ler. Não conta tentativa
-  // nem gasta o validador — a pergunta segue de pé para a próxima mensagem.
-  if (texto === null) {
-    deps.log.info('roteiro: mensagem sem texto legível (mídia) — não conta como resposta nem como tentativa', {
-      enrollment_id: atual.enrollment.id,
-    });
-    return montar(atual, iniciado);
-  }
-  const messageId = t.messageId;
+  const mensagensDoLote = lote ?? [{ id: t.messageId, texto }];
   try {
-    // Reivindica a mensagem ANTES do validador: um retry da fila não paga a
-    // chamada de modelo de novo, nem grava ou conta duas vezes.
-    const primeiraVez = await reivindicarMensagemDoRoteiro(deps.pool, {
-      organizationId: t.organizationId,
-      enrollmentId: atual.enrollment.id,
-      messageId,
-    });
-    if (!primeiraVez) return montar(atual, iniciado);
+    // Reivindica CADA mensagem do lote ANTES do validador: um retry da fila não
+    // paga a chamada de modelo de novo, nem grava ou conta duas vezes; e uma
+    // mensagem que outro turno já leu não é lida de novo.
+    const novas: MensagemDoLote[] = [];
+    for (const m of mensagensDoLote) {
+      const primeiraVez = await reivindicarMensagemDoRoteiro(deps.pool, {
+        organizationId: t.organizationId,
+        enrollmentId: atual.enrollment.id,
+        messageId: m.id,
+      });
+      if (primeiraVez) novas.push(m);
+    }
+    if (novas.length === 0) return montar(atual, iniciado);
+    texto = textoDe(novas);
+    // Áudio sem transcrição, figurinha: não há o que ler. Não conta tentativa
+    // nem gasta o validador — a pergunta segue de pé para a próxima mensagem.
+    if (texto === null) {
+      deps.log.info('roteiro: mensagem sem texto legível (mídia) — não conta como resposta nem como tentativa', {
+        enrollment_id: atual.enrollment.id,
+      });
+      return montar(atual, iniciado);
+    }
+    // Só é "a pergunta atual" a primeira pendente que JÁ FOI FEITA — e nunca no
+    // turno que começa o roteiro, quando nada foi perguntado ainda.
+    const primeiraPendente = atual.situacao.pendentes[0]?.config.key;
+    const perguntaAtual =
+      !iniciado && primeiraPendente !== undefined && atual.perguntasFeitas.has(primeiraPendente)
+        ? primeiraPendente
+        : null;
 
     const perguntas: PerguntaDoFluxo[] = atual.situacao.pendentes.map((n) => ({
       key: n.config.key,
@@ -207,7 +228,13 @@ export async function prepararRoteiroDoTurno(
 
     let validacoes: Array<{ campo: string; valor: string }> | undefined;
     if (perguntas.length > 0 || preenchidos.length > 0) {
-      const leitura = await deps.validar({ perguntas, preenchidos, mensagens: t.mensagens, textoAtual: texto });
+      const leitura = await deps.validar({
+        perguntas,
+        preenchidos,
+        mensagens: t.mensagens,
+        textoAtual: texto,
+        perguntaAtual,
+      });
       if (leitura.resultado === 'respondeu') validacoes = leitura.respostas;
       // Só chaves e o desfecho — nunca o texto do cliente nem o valor lido.
       deps.log.info('roteiro: leitura do validador', {

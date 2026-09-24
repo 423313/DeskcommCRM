@@ -8,7 +8,9 @@ import {
   perguntaSaiuNosTextos,
   valorBateComTipo,
   type CampoPendenteParaCaptura,
+  datasDoTexto,
   respostaTemLastro,
+  textoCitaAOpcao,
 } from "./captura-do-fluxo";
 
 const campo = (
@@ -212,3 +214,39 @@ describe("respostaTemLastro", () => {
     expect(respostaTemLastro(cnh, "true", "tenho cnh sim", { perguntaAtual: false })).toBe(true);
   });
 });
+
+describe("revisão adversarial do PR 2", () => {
+  it("datasDoTexto lê dd/mm/aaaa, dd-mm-aaaa, aaaa-mm-dd e por extenso", () => {
+    expect(datasDoTexto("nasci em 12/03/1990")).toEqual(["1990-03-12"]);
+    expect(datasDoTexto("12-03-1990")).toEqual(["1990-03-12"]);
+    expect(datasDoTexto("1990-03-12")).toEqual(["1990-03-12"]);
+    expect(datasDoTexto("nasci em 12 de março de 1990")).toEqual(["1990-03-12"]);
+  });
+
+  it("data com lastro é a MESMA data escrita", () => {
+    const nasc = { key: "nascimento", label: "Nascimento", type: "date" as const };
+    expect(respostaTemLastro(nasc, "1985-07-20", "nasci em 12/03/1990", { perguntaAtual: true })).toBe(false);
+    expect(respostaTemLastro(nasc, "1990-03-12", "nasci em 12/03/1990", { perguntaAtual: true })).toBe(true);
+    expect(respostaTemLastro(nasc, "12/03/1990", "nasci em 12 de março de 1990", { perguntaAtual: false })).toBe(true);
+  });
+
+  it("opção é PALAVRA inteira; opção de 1–2 letras só vale sozinha", () => {
+    expect(textoCitaAOpcao("quero ver outras cores", "Outra")).toBe(false);
+    expect(textoCitaAOpcao("vou de outra, então", "Outra")).toBe(true);
+    expect(textoCitaAOpcao("quero ver a moto grande", "G")).toBe(false);
+    expect(textoCitaAOpcao("G", "G")).toBe(true);
+    // Opção "A" (plano A/B) e o artigo "a": palavra inteira não basta.
+    expect(textoCitaAOpcao("quero a moto", "A")).toBe(false);
+    expect(textoCitaAOpcao("tem tamanho G e M?", "M")).toBe(false);
+    const cor = { key: "cor", label: "Cor", type: "select" as const, options: ["Outra", "Azul"] };
+    expect(classificarInbound(cor, "quero ver outras cores").resultado).not.toBe("respondeu");
+  });
+
+  it('"tenho uns 2 mil de entrada" não é ano 2000', () => {
+    const ano = { key: "ano", label: "Ano da moto", type: "number" as const };
+    expect(respostaTemLastro(ano, "2000", "tenho uns 2 mil de entrada", { perguntaAtual: true })).toBe(false);
+    expect(classificarInbound(ano, "uns 2 mil").resultado).not.toBe("respondeu");
+    expect(respostaTemLastro(ano, "2000", "é uma 2000", { perguntaAtual: true })).toBe(true);
+  });
+});
+

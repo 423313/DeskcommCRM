@@ -192,6 +192,10 @@ function estadoCom(
   checklist: ChecklistDeAtendimento,
   valores: Record<string, string> = {},
   tentativas: Record<string, number> = {},
+  // Padrão: toda pergunta já foi feita (o turno comum). `new Set()` = nenhuma.
+  perguntasFeitas: ReadonlySet<string> = new Set(
+    checklist.passos.flatMap((p) => (p.kind === "collect" ? [p.node.config.key] : [])),
+  ),
 ): EstadoDeAtendimento {
   return {
     enrollment: {
@@ -206,6 +210,7 @@ function estadoCom(
     checklist,
     valores,
     tentativas,
+    perguntasFeitas,
     maxTentativas: 3,
     situacao: situacaoDoChecklist(checklist, new Set(Object.keys(valores)), { tentativas, maxTentativas: 3 }),
   };
@@ -455,6 +460,33 @@ describe("encerrarRoteirosVencidos (prazo, 0397)", () => {
   it("erro do banco sobe — quem chama loga, não engole calado", async () => {
     const rpc = vi.fn(async () => ({ data: null, error: { message: "permission denied" } }));
     await expect(encerrarRoteirosVencidos({ rpc })).rejects.toThrow("permission denied");
+  });
+});
+
+describe("pergunta que não foi feita (revisão adversarial do PR 2)", () => {
+  const cnh = () =>
+    lista(
+      [trigger("t"), no({ id: "c1", type: "collect", config: { key: "tem_cnh", label: "Tem CNH", type: "boolean", required: true, permite_correcao: true } }), end("e")],
+      [aresta("t", "c1"), aresta("c1", "e")],
+    );
+
+  it('"sim" sem a pergunta feita: nem resposta, nem tentativa', async () => {
+    const { pool, sqls, eventos } = poolFake();
+    const r = await processarInboundDoFluxo(pool, {
+      organizationId: ORG,
+      estado: estadoCom(cnh(), {}, {}, new Set()),
+      texto: "sim",
+      messageId: "m1",
+    });
+    expect(r.concluiu).toBe(false);
+    expect(sqls.some((q) => /update contacts/.test(q))).toBe(false);
+    expect(eventos().map((e) => e.tipo)).toEqual(["roteiro_mensagem"]);
+  });
+
+  it('com a pergunta feita, o mesmo "sim" responde', async () => {
+    const { pool, sqls } = poolFake();
+    await processarInboundDoFluxo(pool, { organizationId: ORG, estado: estadoCom(cnh()), texto: "sim", messageId: "m1" });
+    expect(sqls.some((q) => /update contacts/.test(q))).toBe(true);
   });
 });
 

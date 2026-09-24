@@ -182,6 +182,13 @@ export async function validarRespostaDoFluxo(
      * `mensagens`.
      */
     textoAtual?: string | null;
+    /**
+     * A chave da pergunta que está SENDO FEITA (já perguntada ao cliente). Só
+     * ela aceita texto livre e sim/não sem lastro. Ausente/`null` = nenhuma —
+     * o caso do turno que começa o roteiro (revisão adversarial do PR 2:
+     * "sim, quero financiar" virava tem_cnh = true).
+     */
+    perguntaAtual?: string | null;
   },
   deps: {
     registry?: ProviderRegistry;
@@ -252,13 +259,14 @@ export async function validarRespostaDoFluxo(
     // texto livre e sim/não sem citar o assunto.
     if (
       !respostaTemLastro(campoParaValidar, r.valor, textoDoCliente, {
-        perguntaAtual: pendente !== undefined && pendente.key === args.perguntas[0]?.key,
+        perguntaAtual: pendente !== undefined && pendente.key === (args.perguntaAtual ?? null),
       })
     ) {
       continue;
     }
     vistas.add(r.campo);
-    validas.push({ campo: r.campo, valor: r.valor });
+    // CPF sai do validador só com os dígitos — o mesmo formato da captura.
+    validas.push({ campo: r.campo, valor: campoParaValidar.type === 'cpf' ? r.valor.replace(/\D/g, '') : r.valor });
   }
 
   if (validas.length === 0) return { resultado: 'nao_respondeu' };

@@ -327,6 +327,13 @@ export interface EstadoDeAtendimento {
   /** Valor atual de cada chave do checklist em `contacts.custom_fields`. */
   valores: Record<string, string>;
   tentativas: Record<string, number>;
+  /**
+   * Chaves das perguntas que JÁ FORAM FEITAS ao cliente nesta execução (evento
+   * `roteiro_pergunta_feita`). Só uma pergunta feita pode ser "a pergunta
+   * atual": sem isso, no turno que COMEÇA o roteiro, "sim, quero financiar"
+   * virava `tem_cnh = true` (revisão adversarial do PR 2).
+   */
+  perguntasFeitas: ReadonlySet<string>;
   maxTentativas: number;
   situacao: SituacaoDoChecklist;
   /**
@@ -420,15 +427,21 @@ export async function carregarEstadoDeAtendimento(
     await lerCamposDoContato(db, args.organizationId, args.contactId),
   );
 
-  const { rows: contagem } = await db.query<{ campo: string | null; n: number }>(
-    `select payload->>'campo' as campo, count(*)::int as n
+  const { rows: contagem } = await db.query<{ tipo: string; campo: string | null; n: number }>(
+    `select event_type as tipo, payload->>'campo' as campo, count(*)::int as n
        from followup_enrollment_events
-      where organization_id = $1 and enrollment_id = $2 and event_type = 'roteiro_tentativa'
-      group by 1`,
+      where organization_id = $1 and enrollment_id = $2
+        and event_type in ('roteiro_tentativa', 'roteiro_pergunta_feita')
+      group by 1, 2`,
     [args.organizationId, row.id],
   );
   const tentativas: Record<string, number> = {};
-  for (const c of contagem) if (c.campo) tentativas[c.campo] = c.n;
+  const perguntasFeitas = new Set<string>();
+  for (const c of contagem) {
+    if (!c.campo) continue;
+    if (c.tipo === "roteiro_pergunta_feita") perguntasFeitas.add(c.campo);
+    else tentativas[c.campo] = c.n;
+  }
 
   const maxTentativas = parsed.data.settings?.max_tentativas_pergunta ?? MAX_TENTATIVAS_PADRAO;
   const notaAnterior = await resumoDoRoteiroAnterior(db, {
@@ -450,6 +463,7 @@ export async function carregarEstadoDeAtendimento(
     checklist: checklist.checklist,
     valores,
     tentativas,
+    perguntasFeitas,
     maxTentativas,
     situacao: situacaoDoChecklist(checklist.checklist, new Set(Object.keys(valores)), {
       tentativas,
@@ -561,31 +575,49 @@ export async function reivindicarMensagemDoRoteiro(
   });
 }
 
+/** Uma mensagem do cliente como o roteiro a lê; `texto: null` = mídia sem leitura. */
+export interface MensagemDoLote {
+  id: string;
+  texto: string | null;
+}
+
 /**
- * O texto de uma mensagem do cliente PARA O ROTEIRO: a legenda e o conteúdo
- * derivado da mídia (transcrição do áudio, leitura da imagem), sem o
- * enquadramento que o histórico do agente usa. `null` = mídia sem leitura
- * (figurinha, áudio ainda não transcrito): não há o que ler, e isso NÃO é
- * "não respondeu" — achado 8 da prova do #1130, em que três áudios esgotavam
+ * O LOTE que este turno responde, como o ROTEIRO o lê: a mensagem pinada no
+ * job e as que chegaram depois dela na mesma conversa (o drain junta uma rajada
+ * num job só e as seguintes "pegam carona"). Cada uma com a legenda e o
+ * conteúdo derivado da mídia (transcrição do áudio, leitura da imagem), sem o
+ * enquadramento que o histórico do agente usa. `texto: null` = mídia sem
+ * leitura (figurinha, áudio ainda não transcrito): não há o que ler, e isso NÃO
+ * é "não respondeu" — achado 8 da prova do #1130, em que três áudios esgotavam
  * a pergunta.
+ *
+ * Lote, e não só a primeira: na rajada "oi" + "meu cpf é 529.982.247-25", o job
+ * fica preso ao "oi" e o CPF chega de carona — conferir o lastro só na primeira
+ * fazia o roteiro reperguntar o que o cliente acabou de dizer (revisão
+ * adversarial do PR 2).
  */
-export async function lerMensagemParaORoteiro(
+export async function lerLoteParaORoteiro(
   db: BancoDoRoteiro,
   args: { organizationId: string; conversationId: string; messageId: string },
-): Promise<string | null> {
-  const { rows } = await db.query<{ body: string | null; media_derived_text: string | null }>(
-    `select body, media_derived_text
-       from messages
-      where organization_id = $1 and conversation_id = $2 and id = $3 and direction = 'inbound'
-      limit 1`,
+): Promise<MensagemDoLote[]> {
+  const { rows } = await db.query<{ id: string; body: string | null; media_derived_text: string | null }>(
+    `select m.id, m.body, m.media_derived_text
+       from messages m
+       join messages p on p.id = $3 and p.organization_id = $1 and p.conversation_id = $2
+      where m.organization_id = $1
+        and m.conversation_id = $2
+        and m.direction = 'inbound'
+        and coalesce(m.sent_at, m.created_at) >= coalesce(p.sent_at, p.created_at)
+      order by coalesce(m.sent_at, m.created_at), m.id
+      limit 20`,
     [args.organizationId, args.conversationId, args.messageId],
   );
-  const row = rows[0];
-  if (!row) return null;
-  const partes = [row.body, row.media_derived_text]
-    .map((p) => (p ?? "").trim())
-    .filter((p) => p !== "");
-  return partes.length === 0 ? null : partes.join("\n");
+  return rows.map((row) => {
+    const partes = [row.body, row.media_derived_text]
+      .map((p) => (p ?? "").trim())
+      .filter((p) => p !== "");
+    return { id: row.id, texto: partes.length === 0 ? null : partes.join("\n") };
+  });
 }
 
 /**
@@ -739,6 +771,15 @@ export async function processarInboundDoFluxo(
   }
 
   const leitura = classificarInbound(comoCampoParaCaptura(primeiro), args.texto);
+  // Pergunta que NÃO foi feita não é a pergunta atual: a mensagem não é
+  // resposta a ela (nem desvio dela), e não conta tentativa. A captura só vale
+  // para o que tem lastro próprio no texto (data, número, CPF, opção escrita);
+  // um "sim" solto, sem a pergunta, não é resposta de nada.
+  if (!estado.perguntasFeitas.has(primeiro.config.key)) {
+    if (leitura.resultado !== "respondeu" || primeiro.config.type === "boolean") {
+      return { estado, concluiu: false };
+    }
+  }
 
   if (leitura.resultado === "desviou") {
     await registrarEventoDoRoteiro(db, {

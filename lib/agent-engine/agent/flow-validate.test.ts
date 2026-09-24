@@ -292,4 +292,60 @@ describe("validarRespostaDoFluxo", () => {
       ).toEqual({ resultado: "nao_respondeu" });
     });
   });
+
+  describe("revisão adversarial do PR 2", () => {
+    const ids = { tenantId: "o", leadId: "l", jobId: "j" };
+    const modelo = (json: unknown) =>
+      runModelCallMock.mockResolvedValue({ result: { text: JSON.stringify(json) } } as never);
+
+    it('turno sem pergunta feita: "sim, quero financiar" não vira tem_cnh e "quero financiar" não vira nome', async () => {
+      modelo({ respostas: [{ campo: "tem_cnh", valor: "true" }, { campo: "nome_completo", valor: "Lia Mendes" }] });
+      const perguntas = [
+        { key: "tem_cnh", label: "Tem CNH", type: "boolean" as const },
+        { key: "nome_completo", label: "Nome completo", type: "text" as const },
+      ];
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "sim, quero financiar", perguntaAtual: null }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "quero financiar", perguntaAtual: null }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+    });
+
+    it("com a pergunta FEITA, o sim solto responde a ela", async () => {
+      modelo({ respostas: [{ campo: "tem_cnh", valor: "true" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, {
+          perguntas: [{ key: "tem_cnh", label: "Tem CNH", type: "boolean" }],
+          preenchidos: [], mensagens: [], textoAtual: "sim", perguntaAtual: "tem_cnh",
+        }, { log: logger }),
+      ).toEqual({ resultado: "respondeu", respostas: [{ campo: "tem_cnh", valor: "true" }] });
+    });
+
+    it('data: "nasci em 12/03/1990" não sustenta 1985-07-20; a data escrita entra', async () => {
+      const perguntas = [{ key: "nascimento", label: "Data de nascimento", type: "date" as const }];
+      modelo({ respostas: [{ campo: "nascimento", valor: "1985-07-20" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "nasci em 12/03/1990", perguntaAtual: "nascimento" }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "a revisão foi 10/05/2023", perguntaAtual: null }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+      modelo({ respostas: [{ campo: "nascimento", valor: "1990-03-12" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "nasci em 12 de março de 1990", perguntaAtual: "nascimento" }, { log: logger }),
+      ).toEqual({ resultado: "respondeu", respostas: [{ campo: "nascimento", valor: "1990-03-12" }] });
+    });
+
+    it("rajada: o CPF da segunda mensagem do lote tem lastro", async () => {
+      modelo({ respostas: [{ campo: "cpf", valor: "529.982.247-25" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, {
+          perguntas: [{ key: "cpf", label: "CPF", type: "cpf" }],
+          preenchidos: [], mensagens: [], textoAtual: "oi\nmeu cpf é 529.982.247-25", perguntaAtual: "cpf",
+        }, { log: logger }),
+      ).toEqual({ resultado: "respondeu", respostas: [{ campo: "cpf", valor: "52998224725" }] });
+    });
+  });
 });
+

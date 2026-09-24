@@ -188,7 +188,9 @@ function capturarNumero(
   if (!Number.isFinite(valor)) return null;
   if (temMil) valor *= 1000;
   if (ehAno) {
-    // "ano" tem faixa plausível: evita capturar "24" (parcelas) como 2024.
+    // "ano" tem faixa plausível: evita capturar "24" (parcelas) como 2024. E
+    // "mil" não faz ano: "uns 2 mil de entrada" não é 2000.
+    if (temMil) return null;
     if (!Number.isInteger(valor) || valor < 1950 || valor > 2100) return null;
     return { key: campo.key, valor: String(valor), bruto };
   }
@@ -229,10 +231,24 @@ function capturarSelect(
   if (opcoes.length === 0) return null;
   // Opção mais longa primeiro: evita "novo" casar dentro de "novo/novinho".
   for (const opcao of [...opcoes].sort((a, b) => b.length - a.length)) {
-    const no = normalizar(opcao);
-    if (no !== "" && n.includes(no)) return { key: campo.key, valor: opcao, bruto };
+    if (textoCitaAOpcao(n, opcao)) return { key: campo.key, valor: opcao, bruto };
   }
   return null;
+}
+
+/**
+ * A opção aparece no texto como PALAVRA (ou sequência de palavras), não como
+ * pedaço de palavra — "quero ver outras cores" não cita "Outra". Opção de uma
+ * ou duas letras (P, M, G) casaria com quase tudo: só vale se a mensagem for
+ * só ela. Revisão adversarial do PR 2.
+ */
+export function textoCitaAOpcao(texto: string, opcao: string): boolean {
+  const alvo = soPalavras(normalizar(opcao));
+  if (alvo === "") return false;
+  const palavras = soPalavras(normalizar(texto));
+  if (alvo.replace(/\s/g, "").length <= 2) return palavras === alvo;
+  const escapado = alvo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|\\s)${escapado}(\\s|$)`).test(palavras);
 }
 
 /** O cliente mudou de assunto? (pergunta/pedido explícito em vez de resposta.) */
@@ -375,7 +391,7 @@ export function perguntaSaiuNosTextos(
 // aceitar um inventado custa um cadastro errado que ninguém revisa.
 
 /** Os números escritos no texto, já com "mil"/"k" aplicado e separador BR tratado. */
-function numerosDoTexto(texto: string): number[] {
+function numerosDoTexto(texto: string, opts: { comMil: boolean } = { comMil: true }): number[] {
   const n = normalizar(texto);
   const saida: number[] = [];
   for (const m of n.matchAll(/(\d[\d.,]*)\s*(mil|k)?\b/g)) {
@@ -384,8 +400,47 @@ function numerosDoTexto(texto: string): number[] {
     else digitos = digitos.replace(/\.(?=\d{3}\b)/g, "");
     let valor = Number(digitos);
     if (!Number.isFinite(valor)) continue;
-    if ((m[2] ?? "") !== "") valor *= 1000;
+    if ((m[2] ?? "") !== "") {
+      // "2 mil" é dinheiro ou quilometragem, nunca ano.
+      if (!opts.comMil) continue;
+      valor *= 1000;
+    }
     saida.push(valor);
+  }
+  return saida;
+}
+
+const MESES: Record<string, number> = {
+  janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
+  julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+};
+
+function isoDe(ano: number, mes: number, dia: number): string | null {
+  if (ano < 100) ano += Math.floor(new Date().getFullYear() / 100) * 100;
+  if (!validaData(ano, mes, dia)) return null;
+  return `${String(ano).padStart(4, "0")}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
+/**
+ * Todas as datas ESCRITAS no texto, em AAAA-MM-DD: dd/mm/aaaa, dd-mm-aaaa,
+ * dd.mm.aaaa (ano de 2 ou 4 dígitos), aaaa-mm-dd e "12 de março de 1990".
+ */
+export function datasDoTexto(texto: string): string[] {
+  const n = normalizar(texto);
+  const saida: string[] = [];
+  for (const m of n.matchAll(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g)) {
+    const iso = isoDe(Number(m[1]), Number(m[2]), Number(m[3]));
+    if (iso) saida.push(iso);
+  }
+  for (const m of n.matchAll(/\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2}|\d{4})\b/g)) {
+    const iso = isoDe(Number(m[3]), Number(m[2]), Number(m[1]));
+    if (iso) saida.push(iso);
+  }
+  for (const m of n.matchAll(/\b(\d{1,2})\s+de\s+([a-z]+)\s+(?:de\s+)?(\d{4})\b/g)) {
+    const mes = MESES[m[2]!];
+    if (mes === undefined) continue;
+    const iso = isoDe(Number(m[3]), mes, Number(m[1]));
+    if (iso) saida.push(iso);
   }
   return saida;
 }
@@ -406,19 +461,24 @@ export function respostaTemLastro(
   const nt = normalizar(t);
   switch (campo.type) {
     case "select":
-      return normalizar(v) !== "" && nt.includes(normalizar(v));
+      return textoCitaAOpcao(t, v);
     case "number": {
       const alvo = Number(v.replace(/\s/g, "").replace(/\.(?=\d{3}\b)/g, "").replace(",", "."));
       if (!Number.isFinite(alvo)) return false;
-      if (ehCampoDeAno(campo) && (!Number.isInteger(alvo) || alvo < 1950 || alvo > 2100)) return false;
-      return numerosDoTexto(t).includes(alvo);
+      const ano = ehCampoDeAno(campo);
+      if (ano && (!Number.isInteger(alvo) || alvo < 1950 || alvo > 2100)) return false;
+      return numerosDoTexto(t, { comMil: !ano }).includes(alvo);
     }
     case "cpf": {
       const digitos = v.replace(/\D/g, "");
       return isValidCpf(digitos) && t.replace(/\D/g, "").includes(digitos);
     }
-    case "date":
-      return RE_DATA_BR.test(nt) || RE_DATA_ISO.test(nt);
+    case "date": {
+      // A data devolvida tem de ser A MESMA escrita — não basta haver uma data
+      // no texto ("nasci em 12/03/1990" não sustenta 1985-07-20).
+      const alvo = datasDoTexto(v)[0];
+      return alvo !== undefined && datasDoTexto(t).includes(alvo);
+    }
     case "text":
       return opts.perguntaAtual || nt.includes(normalizar(v));
     case "boolean":
