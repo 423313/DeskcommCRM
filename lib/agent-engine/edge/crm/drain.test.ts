@@ -131,6 +131,25 @@ it('foto + pergunta em texto: a espera da mídia olha a CONVERSA, não o id do e
 });
 
 /**
+ * A idade da mídia é contada de quando ela CHEGOU A NÓS (`created_at`), não do
+ * relógio do aparelho (`sent_at` = timestamp do WhatsApp no inbound). Foto
+ * entregue com atraso — aparelho offline, WAHA reconectando — tem `sent_at`
+ * antigo e nasceria "além do teto": o turno seguiria sem esperar a leitura.
+ *
+ * E mídia sem `media_url` nunca entra na esteira (sem ela o
+ * `media.persist_requested` não é emitido): esperar por ela só atrasa o texto.
+ */
+it('espera da mídia: âncora é created_at (não sent_at) e só conta mídia com media_url', async () => {
+  const calls: string[] = [];
+  process.env.__ESPERA__ = '1000';
+  await drainTick(poolFalso({ type: 'image', media_derived_status: null }, calls), knobs, log);
+  const consultaDeMidia = calls.find((s) => s.includes('media_derived_status')) ?? '';
+  expect(consultaDeMidia).toMatch(/created_at\s+as\s+quando/);
+  expect(consultaDeMidia).not.toMatch(/sent_at/);
+  expect(consultaDeMidia).toMatch(/media_url\s+is\s+not\s+null/);
+});
+
+/**
  * Catraca do teto (issue #543): 90s é o valor que o #530 teve de abandonar.
  *
  * O PR #530 subiu o teto de 45s para 120s, mas os dois casos que exercitam o

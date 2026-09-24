@@ -429,22 +429,32 @@ async function processEvent(
   // COMPROVANTE e escreve "já paguei, e vocês estão me cobrando". A evidência e
   // a alegação chegam em mensagens separadas, e o turno precisa das duas.
   //
-  // A âncora do teto passou a ser a hora DA MÍDIA (`coalesce(sent_at,
-  // created_at)`), não a do evento: é a idade da derivação que diz se ainda vale
-  // esperar. Mídia antiga e travada não segura o turno para sempre — sai do teto
-  // e o turno segue com o marcador `[tipo]`.
+  // A âncora do teto passou a ser a hora DA MÍDIA, não a do evento: é a idade
+  // da derivação que diz se ainda vale esperar. Mídia antiga e travada não segura
+  // o turno para sempre — sai do teto e o turno segue com o marcador `[tipo]`.
+  //
+  // E a hora da mídia é `created_at` — quando ELA CHEGOU A NÓS —, nunca
+  // `sent_at`. No inbound, `sent_at` é o timestamp do WhatsApp, o relógio do
+  // aparelho (`lib/waha/ingest.ts`, `dataDoTimestamp(p.timestamp)`): uma foto
+  // entregue com atraso (aparelho offline, WAHA reconectando) nasceria "além do
+  // teto" e o turno seguiria sem esperar a leitura que acabou de começar.
+  //
+  // `media_url is not null` é a pré-condição de TODA a esteira: sem ela o
+  // `media.persist_requested` nem é emitido, a derivação nunca é pedida e o
+  // status fica null para sempre — esperar por ela só atrasaria a resposta.
   const { rows: midias } = await pool.query<{
     type: string;
     media_derived_status: string | null;
     quando: string;
   }>(
-    `select type, media_derived_status, coalesce(sent_at, created_at) as quando
+    `select type, media_derived_status, created_at as quando
        from messages
       where organization_id = $1
         and conversation_id = $2
         and direction = 'inbound'
         and type = any($3::text[])
-      order by coalesce(sent_at, created_at) desc
+        and media_url is not null
+      order by created_at desc
       limit 20`,
     [event.organization_id, p.conversation_id, [...TIPOS_DERIVAVEIS]],
   );
