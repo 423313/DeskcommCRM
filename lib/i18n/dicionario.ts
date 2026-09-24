@@ -9412,6 +9412,7 @@ export const DICIONARIO: Traducoes = {
   "Já existe uma atualização em andamento.": { es: "Ya hay una actualización en curso." },
   "Lead foi modificado por outro usuário. Recarregue e tente novamente.": { es: "Otro usuario modificó el lead. Recarga e inténtalo de nuevo." },
   "Liberou a conversa de volta para a fila": { es: "Devolvió la conversación a la cola" },
+  "Atendente revogado da organização": { es: "Asesor revocado de la organización" },
   "Material não encontrado.": { es: "Material no encontrado." },
   "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.": { es: "No se permite mover entre embudos. Usa POST /api/v1/leads/[id]/clone para llevar el negocio a otro embudo." },
   "Nada para alterar.": { es: "No hay nada que modificar." },
