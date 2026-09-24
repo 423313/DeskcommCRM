@@ -204,7 +204,11 @@ export function ConversationHeader({ conversation, onAbrirConversa }: Props) {
 
       {/* `shrink-0` saiu daqui: era ele que impunha o piso de largura. Agora a
           barra pode encolher e quebrar internamente, e os botões continuam
-          todos visíveis e clicáveis — só que em duas linhas quando preciso. */}
+          todos visíveis e clicáveis — só que em duas linhas quando preciso.
+          Esta coluna existe para o selo do automático morar ABAIXO da barra
+          (#1625): na linha do nome ele alargava a identidade e empurrava a
+          barra inteira para baixo. Ela também não é `shrink-0`, pelo mesmo
+          motivo da barra. */}
       <div className="flex min-w-0 flex-col items-end gap-1">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {/* A chamada usa o telefone da ficha, mesmo quando o contato chegou por
@@ -355,7 +359,10 @@ export function ConversationHeader({ conversation, onAbrirConversa }: Props) {
         )}
       </div>
         {/* O aviso pertence à operação automática. Abaixo da barra ele não
-            alarga a ficha do contato nem muda a posição dos botões. */}
+            alarga a ficha do contato nem muda a posição dos botões.
+            Sem esta marca, a conversa em que o robô está calado tem exatamente
+            a mesma cara de uma conversa normal. O testid é contrato:
+            `escalacao-ciclo.spec.ts` o clica. */}
         {motivo !== null && (
           <Badge variant="outline" className="h-4 w-fit max-w-full truncate px-1.5 text-[10px]"
             title={t(ROTULO_DO_MOTIVO[motivo])} data-testid="badge-atendimento-humano">
