@@ -134,17 +134,6 @@ function comRaciocinioDesligado(inner: typeof fetch): typeof fetch {
 }
 
 /**
- * Providers reais do lançamento. Sonnet (Anthropic) é o default RECOMENDADO —
- * recomendação vive em .env.example/docs; o id do modelo é sempre config da org.
- *
- * O `fetch` INTERNO do provider (generateText) também roteia pela allowlist
- * (`allowlistedFetch`) — sem isso o egress do SDK escapava da contenção. A
- * allowlist do provider = seu endpoint canônico + hosts extra de config
- * (`allowedHosts`, ex.: proxy corporativo). Testes usam o registry fake
- * (createFakeRegistry, sem fetch real); este caminho só é exercitado pelo smoke
- * (rede real → endpoint canônico do provider allowlistado).
- */
-/**
  * Esforço de raciocínio das chamadas DIRETAS à OpenAI — knob
  * OPENAI_REASONING_EFFORT (opcional; ausente = nada é injetado e vale o padrão
  * do modelo).
@@ -166,8 +155,9 @@ function comRaciocinioDesligado(inner: typeof fetch): typeof fetch {
  * ⚠️ Só vale para o provider `openai` (endpoint oficial, Responses API) e só
  * em modelo que raciocina (`modeloOpenAIRaciocina`): modelo SEM raciocínio
  * recusa o campo — medido: `gpt-4.1-nano` + `reasoning.effort` → 400
- * "Unsupported parameter". O valor é validado aqui: grafia errada falha na
- * leitura, não vira requisição recusada no meio de um atendimento.
+ * "Unsupported parameter". A grafia é validada no boot do worker
+ * (`lib/agent-engine/env.ts`, pela mesma função abaixo): errada, o worker não
+ * sobe e diz qual variável corrigir, em vez de falhar a cada turno.
  */
 export type EsforcoDeRaciocinioOpenAI = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 const ESFORCOS_OPENAI: readonly EsforcoDeRaciocinioOpenAI[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
@@ -210,6 +200,17 @@ function comEsforcoDeRaciocinio(inner: typeof fetch, esforco: EsforcoDeRaciocini
   };
 }
 
+/**
+ * Providers reais do lançamento. Sonnet (Anthropic) é o default RECOMENDADO —
+ * recomendação vive em .env.example/docs; o id do modelo é sempre config da org.
+ *
+ * O `fetch` INTERNO do provider (generateText) também roteia pela allowlist
+ * (`allowlistedFetch`) — sem isso o egress do SDK escapava da contenção. A
+ * allowlist do provider = seu endpoint canônico + hosts extra de config
+ * (`allowedHosts`, ex.: proxy corporativo). Testes usam o registry fake
+ * (createFakeRegistry, sem fetch real); este caminho só é exercitado pelo smoke
+ * (rede real → endpoint canônico do provider allowlistado).
+ */
 export function createDefaultRegistry(opts?: {
   allowedHosts?: string[];
   /**
