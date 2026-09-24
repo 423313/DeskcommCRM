@@ -19,8 +19,21 @@ import { z } from "zod";
 import { listaAgendamentos, type AgendamentoListado } from "@/lib/agenda/consulta";
 import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
+import type { Actor } from "@/lib/api/handlers/types";
+import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
+import { requireRole } from "@/lib/auth/require-role";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { logger } from "@/lib/logger";
+import { createClient } from "@/lib/supabase/server";
+
+import {
+  alterarAgendamentoHandler,
+  cancelarAgendamentoHandler,
+  marcarAgendamentoHandler,
+} from "./_handler";
 
 /**
  * O que ESTA ROTA devolve — o contrato da lista mais a ORIGEM.
@@ -31,19 +44,6 @@ import { logger } from "@/lib/logger";
  * e não se clica.
  */
 type AgendamentoDaResposta = AgendamentoListado & { origem?: "google_sync" };
-import { resolveAuthDual } from "@/lib/api/auth-dual";
-import type { Actor } from "@/lib/api/handlers/types";
-import { ApiError } from "@/lib/api/types";
-import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
-import { traduzir } from "@/lib/i18n/dicionario";
-import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
-
-import {
-  alterarAgendamentoHandler,
-  cancelarAgendamentoHandler,
-  marcarAgendamentoHandler,
-} from "./_handler";
 
 const listarSchema = z.object({
   contact_id: z.string().uuid().optional(),
@@ -352,6 +352,9 @@ async function despachar<T>(
   // tem preferência de idioma de pessoa nenhuma — degrada para o padrão.
   const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
   const { supabase, organizationId, actor } = authz;
+
+  const tetoEstourado = await tetoDeEscritaDoToken(authz, "agenda", requestId);
+  if (tetoEstourado) return tetoEstourado;
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
