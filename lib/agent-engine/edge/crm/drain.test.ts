@@ -133,7 +133,7 @@ it('foto + pergunta em texto: a espera da mídia olha a CONVERSA, não o id do e
 /**
  * A idade da mídia é contada de quando ela CHEGOU A NÓS (`created_at`), não do
  * relógio do aparelho (`sent_at` = timestamp do WhatsApp no inbound). Foto
- * entregue com atraso — aparelho offline, WAHA reconectando — tem `sent_at`
+ * entregue com atraso — aparelho offline, canal reconectando — tem `sent_at`
  * antigo e nasceria "além do teto": o turno seguiria sem esperar a leitura.
  *
  * E mídia sem `media_url` nunca entra na esteira (sem ela o

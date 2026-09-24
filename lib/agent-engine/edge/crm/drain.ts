@@ -435,8 +435,8 @@ async function processEvent(
   //
   // E a hora da mídia é `created_at` — quando ELA CHEGOU A NÓS —, nunca
   // `sent_at`. No inbound, `sent_at` é o timestamp do WhatsApp, o relógio do
-  // aparelho (`lib/waha/ingest.ts`, `dataDoTimestamp(p.timestamp)`): uma foto
-  // entregue com atraso (aparelho offline, WAHA reconectando) nasceria "além do
+  // aparelho (a ingestão do canal, `dataDoTimestamp(p.timestamp)`): uma foto
+  // entregue com atraso (aparelho offline, canal reconectando) nasceria "além do
   // teto" e o turno seguiria sem esperar a leitura que acabou de começar.
   //
   // `media_url is not null` é a pré-condição de TODA a esteira: sem ela o
