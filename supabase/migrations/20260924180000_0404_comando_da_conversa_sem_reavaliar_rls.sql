@@ -29,6 +29,13 @@
 -- usuário antes e depois foram conferidas na issue (contagem por comando com o
 -- papel `authenticated`): idênticas.
 --
+-- As duas subconsultas em `contacts` também exigem `ct.organization_id =
+-- $1.organization_id`. A policy de UPDATE de `conversations` confere empresa e
+-- papel, não o `contact_id`, e a checagem da FK para `contacts` não passa pela
+-- RLS: sem o predicado, uma conversa da própria empresa apontada para o contato
+-- de OUTRA leria, sob o definer, os dois bits dele. A busca segue pela chave
+-- primária, então o predicado não custa nada.
+--
 -- ─── O parâmetro SEM NOME não é estilo, é a metade da segurança ─────────────
 -- A PostgREST expõe coluna calculada com parâmetro NAMEDADO em `/rpc`
 -- (documentação v10 e v12: "use an unnamed parameter to prevent it from being
@@ -50,13 +57,14 @@
 --
 -- Grants: o DROP leva a ACL junto, então as DUAS origens de EXECUTE da regra 9
 -- voltam explícitas (revoke de public e anon; grant a authenticated e
--- service_role) — e a varredura anon do fim do baseline, que percorre
+-- service_role) — e a varredura anon do baseline, que percorre
 -- `p.prosecdef`, a alcança a partir de agora e preserva os dois grants.
 --
 -- Reaplicação: `drop if exists` + `create` idempotentes — o `update.sh` de um
--- clone re-executa sem erro. No `baseline.sql` o mesmo bloco está no APÊNDICE
--- do fim do arquivo (a definição do meio ainda nasce namedada+invoker, como a
--- 0203 a criou; o apêndice é quem aplica esta decisão depois dela).
+-- clone re-executa sem erro. No `baseline.sql` o mesmo bloco está no APÊNDICE,
+-- logo ANTES da varredura anon (a definição do meio ainda nasce
+-- namedada+invoker, como a 0203 a criou; o apêndice é quem aplica esta decisão
+-- depois dela, e a varredura, que vem depois, tira o `anon` dela).
 -- ═══════════════════════════════════════════════════════════════════════════
 
 drop function if exists public.comando_da_conversa(public.conversations);
@@ -77,8 +85,8 @@ as $comando$
     -- `coalesce` porque `contact_id` é anulável no schema: contato ausente não
     -- pode virar `null` e derrubar a linha inteira para fora de todo filtro —
     -- o efeito seria uma conversa invisível em TODAS as abas.
-    coalesce((select ct.force_human from public.contacts ct where ct.id = $1.contact_id), false),
-    coalesce((select ct.is_blocked  from public.contacts ct where ct.id = $1.contact_id), false),
+    coalesce((select ct.force_human from public.contacts ct where ct.id = $1.contact_id and ct.organization_id = $1.organization_id), false),
+    coalesce((select ct.is_blocked  from public.contacts ct where ct.id = $1.contact_id and ct.organization_id = $1.organization_id), false),
     now()
   );
 $comando$;

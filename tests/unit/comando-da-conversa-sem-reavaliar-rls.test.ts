@@ -9,11 +9,15 @@
  *  2. parâmetro SEM NOME (com nome, a PostgREST expõe a coluna calculada em
  *     `/rpc` — e sob `definer`, uma linha fabricada de `conversations` leria
  *     `force_human`/`is_blocked` de outro tenant);
- *  3. o apêndice no fim do `baseline.sql` (a definição do meio do arquivo ainda
- *     nasce namedada + invoker, como a 0203 a escreveu — sem o apêndice, todo
- *     `update.sh` DESFAZ a correção).
+ *  3. o apêndice no `baseline.sql`, antes da varredura anon (a definição do meio
+ *     do arquivo ainda nasce namedada + invoker, como a 0203 a escreveu — sem o
+ *     apêndice, todo `update.sh` DESFAZ a correção);
+ *  4. `ct.organization_id = $1.organization_id` nas duas subconsultas (a policy de
+ *     UPDATE de `conversations` não confere `contact_id` e a FK não passa pela
+ *     RLS — sem o predicado, sob o definer, uma conversa apontada para contato de
+ *     outra empresa leria os dois bits dele).
  *
- * Este arquivo é a régua estática das três, mais a linha do MANIFEST — o
+ * Este arquivo é a régua estática das quatro, mais a linha do MANIFEST — o
  * `pre-commit` confere a tripla no momento do commit, mas sem isto um rebase ou
  * um "arrumar o baseline" futuro derruba a decisão com o gate verde.
  *
@@ -106,5 +110,21 @@ describe("a 0404 — comando_da_conversa sem reavaliar a RLS (issue #1571)", () 
     expect(apendice.includes("security definer"), "o apêndice não aplica o security definer").toBe(true);
     expect(apendice.includes("create function public.comando_da_conversa(public.conversations)"), "o apêndice não recria com parâmetro sem nome").toBe(true);
     expect(apendice).toContain("notify pgrst, 'reload schema';");
+  });
+
+  it("as duas subconsultas em contacts exigem a empresa da conversa, na migration e no apêndice", () => {
+    const PREDICADO = "where ct.id = $1.contact_id and ct.organization_id = $1.organization_id)";
+    const conta = (texto: string): number => texto.split(PREDICADO).length - 1;
+
+    const sql = ler(path.join(DIR_MIGRACOES, arquivoDaMigration()!));
+    const baseline = ler(path.join(RAIZ, "supabase", "baseline.sql"));
+    const apendice = baseline.slice(
+      baseline.lastIndexOf("drop function if exists public.comando_da_conversa(public.conversations);"),
+    );
+
+    const motivo =
+      "subconsulta em contacts sem `ct.organization_id = $1.organization_id`: sob o definer, uma conversa apontada para contato de outra empresa leria force_human/is_blocked dele";
+    expect(conta(sql), `migration — ${motivo}`).toBe(2);
+    expect(conta(apendice), `apêndice do baseline — ${motivo}`).toBe(2);
   });
 });

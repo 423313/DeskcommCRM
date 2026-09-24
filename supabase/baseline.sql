@@ -37230,7 +37230,11 @@ update public.crm_leads l
 -- 75–94 ms em 528 conversas), e parâmetro SEM NOME para a PostgREST não publicar
 -- a função em `/rpc` — com nome, uma linha fabricada de `conversations` leria
 -- `force_human`/`is_blocked` de outro tenant sob o definer. A coluna calculada
--- (`?select=`, `?comando_da_conversa=in.(...)`) não muda de forma.
+-- (`?select=`, `?comando_da_conversa=in.(...)`) não muda de forma. As duas
+-- subconsultas exigem `ct.organization_id = $1.organization_id`: a policy de
+-- UPDATE de `conversations` não confere o `contact_id` e a FK não passa pela RLS,
+-- então sem o predicado uma conversa apontada para contato de outra empresa
+-- leria os dois bits dele. Entra ANTES da varredura anon porque cria função.
 --
 -- DROP sem `cascade`: medi que nada em `supabase/` depende desta função além
 -- dela mesma. O DROP leva a ACL, então as DUAS origens de EXECUTE voltam
@@ -37249,8 +37253,8 @@ as $comando$
     $1.status,
     $1.assigned_to_user_id,
     $1.bot_silenced_until,
-    coalesce((select ct.force_human from public.contacts ct where ct.id = $1.contact_id), false),
-    coalesce((select ct.is_blocked  from public.contacts ct where ct.id = $1.contact_id), false),
+    coalesce((select ct.force_human from public.contacts ct where ct.id = $1.contact_id and ct.organization_id = $1.organization_id), false),
+    coalesce((select ct.is_blocked  from public.contacts ct where ct.id = $1.contact_id and ct.organization_id = $1.organization_id), false),
     now()
   );
 $comando$;
