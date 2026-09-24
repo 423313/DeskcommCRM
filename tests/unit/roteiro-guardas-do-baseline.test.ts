@@ -47,3 +47,23 @@ describe("superfície imutável e roteiro só manual", () => {
     expect(noBaseline).toBeLessThan(varredura);
   });
 });
+
+describe("o roteiro encerra com humano, no opt-out e no prazo (0397)", () => {
+  const MIGRATION_0397 = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "20260923230000_0397_roteiro_encerra_com_humano_e_prazo.sql"),
+    "utf8",
+  );
+  const varredura = BASELINE.indexOf("-- ---- VARREDURA anon:");
+  it.each([
+    "create trigger trg_contato_encerra_roteiro_com_humano_ou_opt_out",
+    "create or replace function public.fn_encerrar_roteiros_vencidos(",
+    "revoke execute on function public.fn_encerrar_roteiros_vencidos(int) from anon;",
+    "revoke execute on function public.fn_encerrar_roteiros_vencidos(int) from authenticated;",
+  ])("%s — na migration e no apêndice, antes da varredura anon", (trecho) => {
+    expect(MIGRATION_0397).toContain(trecho);
+    const noBaseline = BASELINE.indexOf(trecho);
+    expect(noBaseline).toBeGreaterThan(0);
+    expect(noBaseline).toBeLessThan(varredura);
+  });
+});
+

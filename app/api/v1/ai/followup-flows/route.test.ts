@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: deps.client }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/instalacao/modulos", () => ({ moduloLigado: deps.modulo }));
 
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 
@@ -93,3 +93,33 @@ describe("POST /api/v1/ai/followup-flows — roteiro de atendimento", () => {
     expect(capturado.payload).not.toHaveProperty("surface");
   });
 });
+
+describe("GET /api/v1/ai/followup-flows — roteiros fora da lista de follow-ups", () => {
+  function clientDaLista() {
+    const filtros: Array<[string, string, unknown]> = [];
+    const cadeia = {
+      select: () => cadeia,
+      eq: (c: string, v: unknown) => (filtros.push(["eq", c, v]), cadeia),
+      neq: (c: string, v: unknown) => (filtros.push(["neq", c, v]), cadeia),
+      order: async () => ({ data: [], error: null }),
+    };
+    return { filtros, client: { from: () => cadeia } };
+  }
+
+  it("sem parâmetro: só fluxos do relógio (a prova achou roteiros na tela de Follow-ups)", async () => {
+    const { filtros, client } = clientDaLista();
+    deps.client.mockResolvedValue(client);
+    const res = await GET(new NextRequest("http://localhost/api/v1/ai/followup-flows"));
+    expect(res.status).toBe(200);
+    expect(filtros).toContainEqual(["neq", "surface", "atendimento"]);
+  });
+
+  it("?surface=atendimento: só os roteiros", async () => {
+    const { filtros, client } = clientDaLista();
+    deps.client.mockResolvedValue(client);
+    await GET(new NextRequest("http://localhost/api/v1/ai/followup-flows?surface=atendimento"));
+    expect(filtros).toContainEqual(["eq", "surface", "atendimento"]);
+    expect(filtros).not.toContainEqual(["neq", "surface", "atendimento"]);
+  });
+});
+

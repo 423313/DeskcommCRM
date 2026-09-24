@@ -454,6 +454,26 @@ Cada item: teste que reproduz o achado da prova (vermelho na base do PR 1), cons
 6. **Log sem PII como cerca.** Teste que varre `lib/followup/atendimento.ts`,
    `roteiro-no-turno.ts` e `flow-validate.ts` e reprova `log.*` com `texto`/`valor`.
 
+## PR 2 — como foi executado (branch `feat/fluxos-atendimento-consertos`)
+
+| Achado / pendência | Conserto | Prova |
+|---|---|---|
+| 4 — validador inventa dado | `respostaTemLastro`: a resposta precisa estar NA mensagem, por tipo (opção escrita; número escrito, ano 1950–2100; texto livre e sim/não soltos só na pergunta que está sendo feita) | `flow-validate.test.ts` com as frases da prova ("uns 15 mil" ≠ "Outra"; "CG 125" ≠ ano 125); `captura-do-fluxo.test.ts` |
+| 7 — CPF sem validação | tipo `cpf`: mod-11 na captura e no validador; correção carrega o tipo. O valor fica SÓ em `custom_fields` (um lugar, apagado pela anonimização) | idem |
+| 8 — áudio/figurinha = "não respondeu" | o roteiro lê legenda + derivado da mídia da linha da mensagem; mídia sem leitura não conta tentativa nem chama o validador | `roteiro-no-turno.test.ts` |
+| 9 — roteiro vivo com humano | migration 0397: gatilho na virada de `force_human`/`is_blocked` encerra (não pausa) com evento; a pausa curta pelo celular NÃO encerra | invariante novo `roteiro-de-atendimento-humano-opt-out-prazo` (CI) |
+| opt-out | o mesmo gatilho + `STATUS_ALCANCADOS_PELO_OPT_OUT` com `coletando` | `reactivity-dormente.test.ts` + invariante |
+| expiração | `fn_encerrar_roteiros_vencidos` (padrão 72 h, `settings.expira_em_horas`), no relógio e no cron, com evento `roteiro_expirado` | invariante + `atendimento.test.ts` |
+| memo da chave | `moduloLigadoComMemo`, 30 s | `modulos.test.ts` |
+| `coletando` nas listas | fila, enrollments, cancelamento (antes 409), outcome-stats, `EnrollmentStatus` | teste da rota de cancelar |
+| validador antes do claim | claim primeiro; retry não paga modelo | `roteiro-no-turno.test.ts` |
+| ligar o módulo antes da tela | **decisão: RECUSAR** ligar até o PR 3 (`MODULOS_AINDA_NAO_LIGAVEIS`); desligar segue livre | `updateModuloDaInstalacao.test.ts` |
+| Follow-ups listando roteiros | GET padrão sem roteiros (`?surface=atendimento` só roteiros); tela e editor de follow-up idem | `route.test.ts` |
+| editor oferecendo nós recusados | a paleta do FOLLOW-UP já está filtrada (PR 1); a paleta do ROTEIRO nasce filtrada no PR 3, junto do editor dele | — |
+
+Ficam para o PR 3: tela e guia, PDF de LGPD com os campos personalizados, ficha do contato,
+o roteador escolhendo roteiro, e tirar `fluxos_atendimento` de `MODULOS_AINDA_NAO_LIGAVEIS`.
+
 # PR 3 — TELAS (fragmento `capacidade_nova` com o crédito)
 
 1. Interruptor em `/admin/sistema` (`app/admin/(protected)/sistema/_form.tsx`), como o do

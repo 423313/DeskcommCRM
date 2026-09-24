@@ -36935,6 +36935,117 @@ create trigger trg_superficie_do_fluxo_imutavel
   for each row
   execute function public.fn_superficie_do_fluxo_imutavel();
 
+-- ---- o roteiro de atendimento encerra quando um humano assume, no opt-out e no prazo (migration 0397, #1130) ----
+-- Gatilho na virada false→true de `force_human`/`is_blocked` (um lugar para todos
+-- os escritores) e `fn_encerrar_roteiros_vencidos` (prazo em settings.expira_em_horas,
+-- padrão 72 h), chamada pelo relógio do follow-up. Racional na migration 0397.
+-- ⚠️ ANTES da VARREDURA anon, porque cria função. Idempotente.
+create or replace function public.fn_contato_encerra_roteiro_com_humano_ou_opt_out()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_motivo text;
+begin
+  if new.is_blocked = true and coalesce(old.is_blocked, false) = false then
+    v_motivo := 'opt_out';
+  elsif new.force_human = true and coalesce(old.force_human, false) = false then
+    v_motivo := 'humano_assumiu';
+  else
+    return new;
+  end if;
+
+  with encerrados as (
+    update public.followup_enrollments
+       set status = 'cancelled',
+           cancel_reason = case v_motivo when 'opt_out' then 'Contato pediu para parar (opt-out)'
+                                         else 'Humano assumiu o atendimento' end,
+           completed_at = now(),
+           updated_at = now()
+     where organization_id = new.organization_id
+       and contact_id = new.id
+       and status = 'coletando'
+    returning id, organization_id, current_node_id
+  )
+  insert into public.followup_enrollment_events
+    (organization_id, enrollment_id, node_id, event_type, payload, idempotency_key)
+  select organization_id, id, current_node_id, 'roteiro_cancelado',
+         jsonb_build_object('motivo', v_motivo), 'roteiro_cancelado:' || v_motivo
+    from encerrados
+  on conflict do nothing;
+  return new;
+end
+$$;
+
+revoke all on function public.fn_contato_encerra_roteiro_com_humano_ou_opt_out() from public;
+revoke execute on function public.fn_contato_encerra_roteiro_com_humano_ou_opt_out() from anon;
+revoke execute on function public.fn_contato_encerra_roteiro_com_humano_ou_opt_out() from authenticated;
+
+drop trigger if exists trg_contato_encerra_roteiro_com_humano_ou_opt_out on public.contacts;
+create trigger trg_contato_encerra_roteiro_com_humano_ou_opt_out
+  after update of force_human, is_blocked on public.contacts
+  for each row
+  when ((new.force_human = true and coalesce(old.force_human, false) = false)
+     or (new.is_blocked = true and coalesce(old.is_blocked, false) = false))
+  execute function public.fn_contato_encerra_roteiro_com_humano_ou_opt_out();
+
+create or replace function public.fn_encerrar_roteiros_vencidos(p_limite int default 200)
+returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_encerrados int;
+begin
+  with vencidos as (
+    select e.id
+      from public.followup_enrollments e
+      join public.followup_flow_versions v on v.id = e.version_id and v.organization_id = e.organization_id
+     where e.status = 'coletando'
+       and greatest(
+             e.started_at,
+             coalesce((select max(ev.created_at) from public.followup_enrollment_events ev
+                        where ev.enrollment_id = e.id and ev.organization_id = e.organization_id
+                          and ev.event_type = 'roteiro_mensagem'), e.started_at)
+           ) < now() - make_interval(hours => case
+             when (v.graph->'settings'->>'expira_em_horas') ~ '^[0-9]{1,4}$'
+               then greatest(1, (v.graph->'settings'->>'expira_em_horas')::int)
+             else 72 end)
+     order by e.started_at
+     limit greatest(1, least(coalesce(p_limite, 200), 1000))
+     for update of e skip locked
+  ),
+  encerrados as (
+    update public.followup_enrollments e
+       set status = 'cancelled',
+           cancel_reason = 'Roteiro expirou sem resposta',
+           completed_at = now(),
+           updated_at = now()
+      from vencidos
+     where e.id = vencidos.id and e.status = 'coletando'
+    returning e.id, e.organization_id, e.current_node_id
+  ),
+  eventos as (
+    insert into public.followup_enrollment_events
+      (organization_id, enrollment_id, node_id, event_type, payload, idempotency_key)
+    select organization_id, id, current_node_id, 'roteiro_expirado', '{}'::jsonb, 'roteiro_expirado'
+      from encerrados
+    on conflict do nothing
+    returning 1
+  )
+  select count(*)::int into v_encerrados from encerrados;
+  return v_encerrados;
+end
+$$;
+
+revoke all on function public.fn_encerrar_roteiros_vencidos(int) from public;
+revoke execute on function public.fn_encerrar_roteiros_vencidos(int) from anon;
+revoke execute on function public.fn_encerrar_roteiros_vencidos(int) from authenticated;
+grant execute on function public.fn_encerrar_roteiros_vencidos(int) to service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
