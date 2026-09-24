@@ -34,9 +34,10 @@ import {
   abrirOCartao,
   credsDoJev,
   drenar,
+  clicarEEsperarAMudanca,
   escoarAFila,
-  esperarEstado,
   esperarMedicaoEmExecucoes,
+  esperarNoCartao,
   ligarOJev,
   limparOJev,
   mandarMensagemDoCliente,
@@ -166,10 +167,18 @@ test.describe("Jev — decisões rápidas, pela tela", () => {
       await cartao.getByRole("button", { name: "Colar a chave" }).click();
       // O diálogo abre JÁ no Jev: o formato da chave é o dele.
       await expect(page.locator("#cred-key")).toHaveAttribute("placeholder", "apikey_…");
-      await page.locator("#cred-label").fill(`Jev E2E ${sufixo}`);
+      // Só a chave, como o leigo faz: o nome é opcional e vira o do provedor.
       await page.locator("#cred-key").fill(CHAVE_DO_DUBLE);
-      await page.getByRole("button", { name: /salvar e validar/i }).click();
-      await esperarEstado(page, ["pronto"]);
+      const [criou] = await Promise.all([
+        page.waitForResponse(
+          (r) => r.url().endsWith("/api/v1/ai/credentials") && r.request().method() === "POST",
+        ),
+        page.getByRole("button", { name: /salvar e validar/i }).click(),
+      ]);
+      expect(criou.status(), "a chave não foi cadastrada").toBe(201);
+      await expect(page.getByRole("dialog")).toBeHidden();
+      // Sem recarregar: o cartão se relê sozinho depois do teste da chave.
+      await esperarNoCartao(page, ["pronto"]);
       // O teste da chave foi ao dublê, com a chave certa.
       const doTeste = JSON.parse(fs.readFileSync(ARQUIVO_DE_CHAMADAS, "utf8")) as Chamada[];
       expect(doTeste.some((c) => c.caminho === "/v1/models" && c.autorizado)).toBe(true);
@@ -251,10 +260,11 @@ test.describe("Jev — decisões rápidas, pela tela", () => {
 
     await test.step("desligar volta ao estado de antes, e o aceite fica registrado", async () => {
       const cartao = await abrirOCartao(page);
-      await cartao.getByRole("button", { name: "Desligar" }).click();
-      const desligado = await esperarEstado(page, ["pronto"]);
-      expect(desligado).toBe("pronto");
+      await clicarEEsperarAMudanca(page, cartao.getByRole("button", { name: "Desligar" }));
+      await esperarNoCartao(page, ["pronto"]);
+      // Relida do servidor: o aceite ficou gravado, não só na memória da tela.
       const pronto = await abrirOCartao(page);
+      await expect(pronto).toHaveAttribute("data-estado", "pronto");
       // Religar não pergunta de novo: o aceite é da empresa (D6).
       await expect(pronto.locator("#jev-aceite")).toHaveCount(0);
       await expect(pronto).toContainText("Envio aceito pela empresa em");

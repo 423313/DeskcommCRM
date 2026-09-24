@@ -67,7 +67,13 @@ export async function abrirOCartao(page: Page): Promise<Locator> {
   return cartao;
 }
 
-/** Espera o cartão chegar a um dos estados, relendo a página — o teste da chave roda depois da resposta. */
+/**
+ * Espera o cartão chegar a um dos estados RELENDO a página. Só serve onde o
+ * cartão não tem como saber sozinho — a chave cadastrada pela API, fora da tela.
+ * Logo depois de um clique, NUNCA: o `goto` aborta o pedido que o clique
+ * disparou, e o cartão fica no estado de antes para sempre (medido: o POST da
+ * chave saiu com status -1 e o cartão ficou em "sem_chave").
+ */
 export async function esperarEstado(page: Page, estados: string[], timeout = 30_000): Promise<string> {
   let atual = "";
   await expect(async () => {
@@ -76,6 +82,25 @@ export async function esperarEstado(page: Page, estados: string[], timeout = 30_
     expect(estados, `o cartão está em "${atual}"`).toContain(atual);
   }).toPass({ timeout, intervals: [1_000, 2_000, 3_000] });
   return atual;
+}
+
+/**
+ * Espera o cartão mudar SEM recarregar, como a pessoa vê: depois de um clique
+ * ele se relê sozinho. Uma recarga aqui provaria a rota, não a tela.
+ */
+export async function esperarNoCartao(page: Page, estados: string[], timeout = 30_000): Promise<string> {
+  const cartao = page.getByTestId("cartao-do-jev");
+  await expect(cartao).toHaveAttribute("data-estado", new RegExp(`^(${estados.join("|")})$`), { timeout });
+  return (await cartao.getAttribute("data-estado")) ?? "";
+}
+
+/** Clica num botão do cartão e espera a mudança chegar ao servidor — o `PATCH` respondido, e com sucesso. */
+export async function clicarEEsperarAMudanca(page: Page, botao: Locator): Promise<void> {
+  const [resposta] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/v1/ai/jev") && r.request().method() === "PATCH"),
+    botao.click(),
+  ]);
+  expect(resposta.status(), "a mudança do Jev foi recusada pelo servidor").toBe(200);
 }
 
 /**
@@ -90,18 +115,17 @@ export async function ligarOJev(page: Page): Promise<string> {
   // Sem o aceite, o botão não liga: é a D6 vista pela tela.
   await expect(ligar).toBeDisabled();
   await cartao.locator("#jev-aceite").check();
-  await ligar.click();
+  await clicarEEsperarAMudanca(page, ligar);
 
-  const estado = await esperarEstado(page, ["observando", "decidindo", "sozinho"]);
+  const estado = await esperarNoCartao(page, ["observando", "decidindo", "sozinho"]);
   if (estado !== "observando") return estado;
-  const cartaoLigado = await abrirOCartao(page);
   // O laço de retorno da observação (o mapa vivo o nomeia): o cartão mostra a
   // concordância antes de a pessoa deixar o Jev decidir. Aqui a IA de sempre
   // tem chave falsa, então o bloco diz que ainda não há comparação — o que se
   // prova é que ele está na tela, no estado em que a decisão é tomada.
-  await expect(cartaoLigado.getByTestId("jev-concordancia")).toBeVisible();
-  await cartaoLigado.getByRole("button", { name: "Deixar o Jev decidir" }).click();
-  return esperarEstado(page, ["decidindo"]);
+  await expect(cartao.getByTestId("jev-concordancia")).toBeVisible();
+  await clicarEEsperarAMudanca(page, cartao.getByRole("button", { name: "Deixar o Jev decidir" }));
+  return esperarNoCartao(page, ["decidindo"]);
 }
 
 /** "Mensagens medidas" do cartão — o primeiro número da grade. */
