@@ -25,15 +25,14 @@ function normalizar(texto: string): string {
 }
 
 const ROTULO_GRUPO = new Map(NAV_GROUPS.map((g) => [g.id, g.label]));
+const ORDEM_GRUPO = new Map(NAV_GROUPS.map((g, i) => [g.id, i]));
 
 export function CommandPalette({
   open,
   onOpenChange,
-  onNavigate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onNavigate?: () => void;
 }) {
   const t = useT();
   return (
@@ -43,12 +42,7 @@ export function CommandPalette({
         {/* O miolo é um componente à parte porque o Radix o DESMONTA ao fechar:
             busca e destaque nascem zerados na próxima abertura por construção,
             sem um efeito de reset para manter em sincronia. */}
-        <Resultados
-          aoEscolher={() => {
-            onOpenChange(false);
-            onNavigate?.();
-          }}
-        />
+        <Resultados aoEscolher={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );
@@ -87,17 +81,23 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
 
   const resultados = useMemo(() => {
     const termo = normalizar(busca.trim());
-    return visiveis.filter((d) => {
+    const filtrados = visiveis.filter((d) => {
       const casaCategoria = categoriaAtiva === "todos" || d.group === categoriaAtiva;
       if (!casaCategoria) return false;
       if (!termo) return true;
       return normalizar(`${d.label} ${d.description} ${ROTULO_GRUPO.get(d.group) ?? ""}`).includes(termo);
     });
+    if (termo) return filtrados;
+    // O catálogo não é contíguo por grupo (a Prospecção, de CRM, vem antes do
+    // Inbox). Sem reordenar, a 1ª seção seria a do 1º item e as setas, que
+    // andam por este array, pulariam de uma seção para outra. Ordenado pelo
+    // NAV_GROUPS, a ordem do array é a ordem da tela. O sort é estável.
+    return [...filtrados].sort((a, b) => (ORDEM_GRUPO.get(a.group) ?? 0) - (ORDEM_GRUPO.get(b.group) ?? 0));
   }, [busca, visiveis, categoriaAtiva]);
 
   // Agrupamento para exibição visual estruturada quando não há busca específica digitada
   const resultadosAgrupados = useMemo(() => {
-    const map = new Map<string, NavDestination[]>();
+    const map = new Map<NavGroupId, NavDestination[]>();
     for (const item of resultados) {
       const g = item.group;
       const lista = map.get(g) ?? [];
@@ -112,6 +112,11 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
     router.push(destino.href);
   }
 
+  /**
+   * O destaque volta ao topo junto com a busca, no mesmo evento: mantê-lo
+   * apontaria para outro item depois que a lista muda, e o Enter navegaria
+   * para o lugar errado.
+   */
   function aoDigitar(valor: string) {
     setBusca(valor);
     setDestacado(0);
@@ -166,7 +171,7 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
       </div>
 
       {/* Categorias rápidas para navegação instantânea */}
-      <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/30 px-3 py-2 text-xs scrollbar-none">
+      <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/30 px-3 py-2 text-xs">
         <button
           type="button"
           onClick={() => mudarCategoria("todos")}
@@ -215,9 +220,9 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
           className="max-h-[60vh] space-y-5 overflow-y-auto p-4"
         >
           {Array.from(resultadosAgrupados.entries()).map(([grupoId, itens]) => {
-            const rotuloGrupo = ROTULO_GRUPO.get(grupoId as NavGroupId) ?? grupoId;
+            const rotuloGrupo = ROTULO_GRUPO.get(grupoId) ?? grupoId;
             return (
-              <div key={grupoId} className="space-y-2">
+              <div key={grupoId} role="group" aria-label={t(rotuloGrupo)} className="space-y-2">
                 <div className="flex items-center justify-between border-b pb-1">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {t(rotuloGrupo)}
@@ -231,6 +236,8 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
                     const Icon = d.icon;
                     const idxGlobal = resultados.findIndex((r) => r.href === d.href);
                     const ativo = idxGlobal === destacado;
+                    // Mesmo par do modo lista: cinza sobre o destaque dava 1,2:1.
+                    const secundario = ativo ? "text-accent-foreground" : "text-muted-foreground";
                     return (
                       <div
                         key={d.href}
@@ -257,7 +264,7 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-semibold leading-tight">{t(d.label)}</p>
-                          <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                          <p className={cn("mt-0.5 line-clamp-2 text-[11px] leading-snug", secundario)}>
                             {t(d.description)}
                           </p>
                         </div>
