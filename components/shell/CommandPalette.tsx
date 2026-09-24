@@ -145,8 +145,10 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
             const ativo = i === destacado;
             // No item destacado o fundo é a cor de destaque: o cinza de apoio
             // ficava 1,2:1 sobre o verde (medido), ilegível. A cor de frente do
-            // destaque a 90% dá 5,1:1 no claro e 5,5:1 no escuro (AA pede 4,5).
-            const secundario = ativo ? "text-accent-foreground/90" : "text-muted-foreground";
+            // destaque SEM opacidade herda o piso de 4,5:1 que
+            // lib/branding/contraste.ts garante para qualquer marca própria; a
+            // 90%, uma marca de luminância média cai para 4,1:1.
+            const secundario = ativo ? "text-accent-foreground" : "text-muted-foreground";
             return (
               <li
                 key={d.href}
