@@ -37220,6 +37220,49 @@ update public.crm_leads l
    and l.currency = 'BRL'
    and l.value_cents is null;
 
+-- ---- 0404 — `comando_da_conversa` deixa de reavaliar a RLS por conversa (issue #1571) ----
+--
+-- Apêndice idempotente: o `update.sh` do clone re-executa este bloco inteiro a
+-- cada atualização — e PRECISA, porque a definição do MEIO deste arquivo ainda
+-- nasce namedada + invoker (a 0203, como ela foi escrita). Aqui mora a decisão
+-- da 0404: SECURITY DEFINER para a contagem das abas da Inbox parar de pagar a
+-- policy de `contacts` duas vezes por conversa (medido na issue: 823–846 ms →
+-- 75–94 ms em 528 conversas), e parâmetro SEM NOME para a PostgREST não publicar
+-- a função em `/rpc` — com nome, uma linha fabricada de `conversations` leria
+-- `force_human`/`is_blocked` de outro tenant sob o definer. A coluna calculada
+-- (`?select=`, `?comando_da_conversa=in.(...)`) não muda de forma.
+--
+-- DROP sem `cascade`: medi que nada em `supabase/` depende desta função além
+-- dela mesma. O DROP leva a ACL, então as DUAS origens de EXECUTE voltam
+-- explícitas; o `notify` é obrigatório porque a forma do schema mudou (o /rpc
+-- some) e sem ele o PostgREST serve o schema velho até reinício manual.
+drop function if exists public.comando_da_conversa(public.conversations);
+
+create function public.comando_da_conversa(public.conversations)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $comando$
+  select public.fn_comando_da_conversa(
+    $1.status,
+    $1.assigned_to_user_id,
+    $1.bot_silenced_until,
+    coalesce((select ct.force_human from public.contacts ct where ct.id = $1.contact_id), false),
+    coalesce((select ct.is_blocked  from public.contacts ct where ct.id = $1.contact_id), false),
+    now()
+  );
+$comando$;
+
+comment on function public.comando_da_conversa(public.conversations)
+  is 'Campo calculado exposto pelo PostgREST: ?select=comando_da_conversa e ?comando_da_conversa=in.(...). Resolve o contato e carimba now(); a regra em si é fn_comando_da_conversa. SECURITY DEFINER desde a 0404 (issue #1571: a contagem das abas reavaliava a RLS de contacts 2x por conversa); parâmetro SEM NOME de propósito — com nome a PostgREST a exporia em /rpc, e ali uma linha fabricada leria force_human/is_blocked de outro tenant.';
+
+revoke execute on function public.comando_da_conversa(public.conversations) from public, anon;
+grant  execute on function public.comando_da_conversa(public.conversations) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -38099,46 +38142,3 @@ end $$;
 -- a lista de erros benignos do update.sh, então a atualização não diz
 -- "atualizado" com módulo fora do ar. Instalação nova não tem módulo: no-op.
 do $f$ begin perform public.fn_conferir_modulos_instalados(); end $f$;
-
--- ---- 0404 — `comando_da_conversa` deixa de reavaliar a RLS por conversa (issue #1571) ----
---
--- Apêndice idempotente: o `update.sh` do clone re-executa este bloco inteiro a
--- cada atualização — e PRECISA, porque a definição do MEIO deste arquivo ainda
--- nasce namedada + invoker (a 0203, como ela foi escrita). Aqui mora a decisão
--- da 0404: SECURITY DEFINER para a contagem das abas da Inbox parar de pagar a
--- policy de `contacts` duas vezes por conversa (medido na issue: 823–846 ms →
--- 75–94 ms em 528 conversas), e parâmetro SEM NOME para a PostgREST não publicar
--- a função em `/rpc` — com nome, uma linha fabricada de `conversations` leria
--- `force_human`/`is_blocked` de outro tenant sob o definer. A coluna calculada
--- (`?select=`, `?comando_da_conversa=in.(...)`) não muda de forma.
---
--- DROP sem `cascade`: medi que nada em `supabase/` depende desta função além
--- dela mesma. O DROP leva a ACL, então as DUAS origens de EXECUTE voltam
--- explícitas; o `notify` é obrigatório porque a forma do schema mudou (o /rpc
--- some) e sem ele o PostgREST serve o schema velho até reinício manual.
-drop function if exists public.comando_da_conversa(public.conversations);
-
-create function public.comando_da_conversa(public.conversations)
-returns text
-language sql
-stable
-security definer
-set search_path = public
-as $comando$
-  select public.fn_comando_da_conversa(
-    $1.status,
-    $1.assigned_to_user_id,
-    $1.bot_silenced_until,
-    coalesce((select ct.force_human from public.contacts ct where ct.id = $1.contact_id), false),
-    coalesce((select ct.is_blocked  from public.contacts ct where ct.id = $1.contact_id), false),
-    now()
-  );
-$comando$;
-
-comment on function public.comando_da_conversa(public.conversations)
-  is 'Campo calculado exposto pelo PostgREST: ?select=comando_da_conversa e ?comando_da_conversa=in.(...). Resolve o contato e carimba now(); a regra em si é fn_comando_da_conversa. SECURITY DEFINER desde a 0404 (issue #1571: a contagem das abas reavaliava a RLS de contacts 2x por conversa); parâmetro SEM NOME de propósito — com nome a PostgREST a exporia em /rpc, e ali uma linha fabricada leria force_human/is_blocked de outro tenant.';
-
-revoke execute on function public.comando_da_conversa(public.conversations) from public, anon;
-grant  execute on function public.comando_da_conversa(public.conversations) to authenticated, service_role;
-
-notify pgrst, 'reload schema';
