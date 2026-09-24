@@ -326,7 +326,7 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
       )}
       <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
         <span>{t("Use as setas ↑↓ e Enter para navegar")}</span>
-        <span>ESC para fechar</span>
+        <span>{t("ESC para fechar")}</span>
       </div>
     </>
   );
