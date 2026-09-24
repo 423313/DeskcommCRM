@@ -1,11 +1,13 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Declaração da política de retenção para candidatos da prospecção nativa
+titulo: Os candidatos da prospecção nativa agora têm prazo, e é o cron quem apaga
 ---
 
-Define prazos de retenção padrão e pisos em `lib/retencao/politica.ts` para registros de `prospecting_candidates`: 30 dias de padrão (piso de 7) para candidatos nunca contatados (`status='new'`), e 180 dias de padrão (piso de 30) para candidatos processados.
+A tabela `prospecting_candidates` nascia sem dono de expurgo: nome, telefone e endereço de pessoas pesquisadas e nunca contatados ficavam para sempre, e uma campanha montada e abandonada deixava esse dado parado sem nenhum evento que o expirasse.
 
-Preserva explicitamente a salvaguarda de que tokens de supressão (`suppression_*`) não são eliminados na expurgação, garantindo o direito de opt-out em futuras coletas. Atualiza a checagem de conformidade em `tests/unit/retencao-todo-piso-tem-dono.test.ts`.
+A política de retenção passa a valer de verdade: **365 dias de padrão (piso de 90)** — decisão do dono, alinhada ao horizonte da conversa do caso e da captação — aplicados pela nova função `fn_expurgar_prospeccao_vencida`, chamada em lotes pelo cron diário `data-retention`, com o piso dentro do corpo da função como os demais prazos da casa. O relógio conta da criação para quem nunca foi contatado e da última tentativa para quem já recebeu mensagem; `queued` e `sending` nunca entram, e os tokens de supressão (`suppression_*`) de quem pediu opt-out/exclusão são preservados para sempre, garantindo que uma reimportação futura não traga a pessoa de volta.
+
+Quem opera a VPS não faz nada: a correção chega na próxima atualização. O valor pode ser ajustado com `PROSPECCAO_RETENTION_DAYS` no `.env`, como os demais prazos de retenção.
 
 Contribuição de @webtecnica.

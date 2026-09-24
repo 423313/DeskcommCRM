@@ -166,34 +166,31 @@ export const RETENCAO_AVISO_DE_CASO_DIAS_PADRAO = 180;
 export const RETENCAO_AVISO_DE_CASO_DIAS_PISO = 30;
 
 /**
- * 30 dias para CANDIDATOS NUNCA CONTATADOS da prospecção nativa
- * (`prospecting_candidates` com status='new', migration 0369).
+ * 365 dias para os CANDIDATOS da prospecção nativa (`prospecting_candidates`,
+ * migration 0369; expurgo na 0402, issue #1313).
  *
- * Guarda nome, telefone, endereço e identificador de lugar de pessoas que nunca
- * falaram com a empresa. Candidato pesquisado e não abordado não deve ficar para
- * sempre: uma campanha montada e abandonada expira esses registros.
+ * Guarda nome, telefone, endereço e identificador de lugar — a pessoa que mais
+ * cedo ou mais tarde vai ser abordada, e que em muitos casos nunca falou com a
+ * empresa. Um ano é a decisão do dono do projeto (24/09/2026, PR #1577),
+ * alinhado ao horizonte da conversa do caso e da captação: depois disso o
+ * funil responde por EVENTOS, não por raspagem parada.
  *
- * ⚠️ DIFERENÇA DECLARADA em relação aos pisos com função SQL: a tabela é server-only
- * e a poda da prospecção é executada pelo admin client, não por função security definer.
- * Além disso, os tokens de supressão (`suppression_salt`, `suppression_place`,
- * `suppression_phone`) de quem exerceu opt-out/exclusão NÃO são expurgados junto,
- * pois impedem reimportações futuras da mesma pessoa.
+ * Quem APLICA é `fn_expurgar_prospeccao_vencida` (migration 0402), chamada em
+ * lotes pelo cron `data-retention` — e o piso mora DENTRO do corpo da função,
+ * `greatest(...)`, como as sete irmãs: só assim ele vale para qualquer
+ * chamador, inclusive um `psql` na mão.
+ *
+ * Duas guardas que a função impõe e esta declaração não pode expressar:
+ * - `status not in ('queued','sending')` — trabalho vivo nunca entra no
+ *   expurgo, em nenhuma idade;
+ * - `suppression_salt is null` — os tokens de supressão (`suppression_salt`,
+ *   `suppression_place`, `suppression_phone`) de quem exerceu opt-out/exclusão
+ *   NUNCA são expurgados: é o tombstone que faz o trigger
+ *   `prospecting_refuse_erased` barrar a reimportação futura da mesma pessoa.
+ *   Expurgá-lo reabriria a porta que a anonimização (0370) fechou.
  */
-export const RETENCAO_PROSPECCAO_NOVOS_DIAS_PADRAO = 30;
-export const RETENCAO_PROSPECCAO_NOVOS_DIAS_PISO = 7;
-
-/**
- * 180 dias para CANDIDATOS PROCESSADOS da prospecção (`prospecting_candidates`
- * com status em 'queued', 'sending', 'sent', 'skipped', 'failed').
- *
- * Seis meses é o horizonte em que a métrica de funil da campanha e o histórico
- * de tentativa de contato ainda são consultados.
- *
- * ⚠️ DIFERENÇA DECLARADA: a tabela é server-only e a poda da prospecção é
- * executada pelo admin client, sem função dedicada no banco.
- */
-export const RETENCAO_PROSPECCAO_PROCESSADOS_DIAS_PADRAO = 180;
-export const RETENCAO_PROSPECCAO_PROCESSADOS_DIAS_PISO = 30;
+export const RETENCAO_PROSPECCAO_DIAS_PADRAO = 365;
+export const RETENCAO_PROSPECCAO_DIAS_PISO = 90;
 
 
 export interface RetencaoInterpretada {
