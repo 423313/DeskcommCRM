@@ -299,6 +299,15 @@ describe("toda escrita em `organizations` passa pelo cliente admin", () => {
           "export async function gravar(orgId: string, settings: unknown) " +
           "{ await aplicar(admin, orgId, settings); }",
       },
+      {
+        forma: "chamada encadeada `.schema(\"public\")` a partir do cliente admin criado aqui",
+        codigo:
+          IMPORTA_A_FABRICA +
+          "const admin = createAdminClient();\n" +
+          "export async function gravar(orgId: string, settings: unknown) {\n" +
+          '  await admin.schema("public").from("organizations").update({ settings }).eq("id", orgId);\n' +
+          "}",
+      },
     ];
     for (const { forma, codigo } of aceitos) {
       // `expect.soft`: o vermelho lista TODAS as formas que passaram, e não só a
@@ -457,6 +466,40 @@ describe("toda escrita em `organizations` passa pelo cliente admin", () => {
           "export async function gravar(orgId: string, settings: unknown) " +
           "{ await aplicar(admin, orgId, settings); }",
         esperado: ["cliente.update"],
+      },
+      {
+        forma: "funções homônimas com valor padrão (ordem a depois b: escopo da função vs arquivo)",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const admin = createAdminClient();\n" +
+          "export async function a(orgId: string, settings: unknown) {\n" +
+          '  const run = async (cliente = admin) => { await cliente.from("organizations").update({ settings }).eq("id", orgId); };\n' +
+          "  await run();\n" +
+          "}\n" +
+          "export async function b(orgId: string, settings: unknown) {\n" +
+          "  const sessao = await createClient();\n" +
+          '  const run = async (cliente = sessao) => { await cliente.from("organizations").update({ settings }).eq("id", orgId); };\n' +
+          "  await run();\n" +
+          "}",
+        esperado: ["cliente.update", "cliente.update"],
+      },
+      {
+        forma: "funções homônimas com valor padrão (ordem b depois a: independência de ordem)",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const admin = createAdminClient();\n" +
+          "export async function b(orgId: string, settings: unknown) {\n" +
+          "  const sessao = await createClient();\n" +
+          '  const run = async (cliente = sessao) => { await cliente.from("organizations").update({ settings }).eq("id", orgId); };\n' +
+          "  await run();\n" +
+          "}\n" +
+          "export async function a(orgId: string, settings: unknown) {\n" +
+          '  const run = async (cliente = admin) => { await cliente.from("organizations").update({ settings }).eq("id", orgId); };\n' +
+          "  await run();\n" +
+          "}",
+        esperado: ["cliente.update", "cliente.update"],
       },
     ];
     for (const { forma, codigo, esperado = ["p.admin.update"] } of reprovados) {

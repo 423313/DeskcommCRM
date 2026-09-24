@@ -111,9 +111,7 @@ export function caminhoDaCadeia(no: ts.Expression): string | null {
  */
 export function nomesDoClienteAdmin(fonte: ts.SourceFile): Set<string> {
   const nomes = new Set<string>();
-  const pilha: ts.Node[] = [fonte];
-  while (pilha.length > 0) {
-    const no = pilha.pop()!;
+  const visitar = (no: ts.Node): void => {
     if (ts.isVariableDeclaration(no) && no.initializer && ts.isIdentifier(no.name)) {
       let init: ts.Node = no.initializer;
       if (ts.isAwaitExpression(init)) init = init.expression;
@@ -125,10 +123,9 @@ export function nomesDoClienteAdmin(fonte: ts.SourceFile): Set<string> {
         nomes.add(no.name.text);
       }
     }
-    ts.forEachChild(no, (filho) => {
-      pilha.push(filho);
-    });
-  }
+    ts.forEachChild(no, visitar);
+  };
+  visitar(fonte);
   return nomes;
 }
 
@@ -168,6 +165,8 @@ interface DeclaracaoDeInterface {
 
 /** Uma função declarada no arquivo — o que a prova por CHAMADA precisa dela. */
 interface FuncaoLocal {
+  readonly no: ts.Node;
+  readonly nome: string;
   readonly parametros: ts.NodeArray<ts.ParameterDeclaration>;
   readonly exportada: boolean;
 }
@@ -189,7 +188,7 @@ interface EscopoDeTipos {
   readonly aliases: ReadonlyMap<string, ts.TypeNode>;
   readonly interfaces: ReadonlyMap<string, DeclaracaoDeInterface>;
   readonly importados: ReadonlyMap<string, { readonly modulo: string; readonly exportado: string }>;
-  readonly funcoes: ReadonlyMap<string, FuncaoLocal>;
+  readonly funcoes: readonly FuncaoLocal[];
 }
 
 /** O nome com que uma função é declarada; `null` para o que não tem nome (nem método). */
@@ -247,36 +246,34 @@ export function ehFuncaoExportadaOuEscapada(
     }
   }
 
-  const pilha: ts.Node[] = [fonte];
-  while (pilha.length > 0) {
-    const n = pilha.pop()!;
+  let escapou = false;
+  const visitar = (n: ts.Node): void => {
+    if (escapou) return;
     if (ts.isIdentifier(n) && n.text === nome) {
-      if (ts.isFunctionDeclaration(n.parent) && n.parent.name === n) continue;
-      if (ts.isVariableDeclaration(n.parent) && n.parent.name === n) continue;
-      if (ts.isFunctionExpression(n.parent) && n.parent.name === n) continue;
+      if (ts.isFunctionDeclaration(n.parent) && n.parent.name === n) return;
+      if (ts.isVariableDeclaration(n.parent) && n.parent.name === n) return;
+      if (ts.isFunctionExpression(n.parent) && n.parent.name === n) return;
 
       let p: ts.Node = n.parent;
       while (ts.isParenthesizedExpression(p)) p = p.parent;
-      if (ts.isCallExpression(p) && p.expression === n) continue;
+      if (ts.isCallExpression(p) && p.expression === n) return;
 
-      return true;
+      escapou = true;
+      return;
     }
-    ts.forEachChild(n, (filho) => {
-      pilha.push(filho);
-    });
-  }
-  return false;
+    ts.forEachChild(n, visitar);
+  };
+  visitar(fonte);
+  return escapou;
 }
 
 export function escopoDeTipos(fonte: ts.SourceFile): EscopoDeTipos {
   const aliases = new Map<string, ts.TypeNode>();
   const interfaces = new Map<string, DeclaracaoDeInterface>();
   const importados = new Map<string, { modulo: string; exportado: string }>();
-  const funcoes = new Map<string, FuncaoLocal>();
+  const funcoes: FuncaoLocal[] = [];
 
-  const pilha: ts.Node[] = [fonte];
-  while (pilha.length > 0) {
-    const no = pilha.pop()!;
+  const visitar = (no: ts.Node): void => {
     if (ts.isTypeAliasDeclaration(no)) aliases.set(no.name.text, no.type);
     if (ts.isInterfaceDeclaration(no)) {
       const estende: string[] = [];
@@ -291,12 +288,16 @@ export function escopoDeTipos(fonte: ts.SourceFile): EscopoDeTipos {
     }
     const nome = nomeDeclarado(no);
     if (nome !== null && ts.isFunctionLike(no)) {
-      funcoes.set(nome, { parametros: no.parameters, exportada: ehFuncaoExportadaOuEscapada(nome, no, fonte) });
+      funcoes.push({
+        no,
+        nome,
+        parametros: no.parameters,
+        exportada: ehFuncaoExportadaOuEscapada(nome, no, fonte),
+      });
     }
-    ts.forEachChild(no, (filho) => {
-      pilha.push(filho);
-    });
-  }
+    ts.forEachChild(no, visitar);
+  };
+  visitar(fonte);
 
   for (const decl of fonte.statements) {
     if (!ts.isImportDeclaration(decl) || !ts.isStringLiteral(decl.moduleSpecifier)) continue;
@@ -540,9 +541,7 @@ export function caminhosDoClienteAdmin(fonte: ts.SourceFile): Set<string> {
   const escopo = escopoDeTipos(fonte);
   const caminhos = new Set<string>();
 
-  const pilha: ts.Node[] = [fonte];
-  while (pilha.length > 0) {
-    const no = pilha.pop()!;
+  const visitar = (no: ts.Node): void => {
     if (ts.isParameter(no) && no.type !== undefined) {
       if (ts.isIdentifier(no.name)) {
         if (ehTipoDoClienteAdmin(no.type, escopo)) {
@@ -566,10 +565,9 @@ export function caminhosDoClienteAdmin(fonte: ts.SourceFile): Set<string> {
         }
       }
     }
-    ts.forEachChild(no, (filho) => {
-      pilha.push(filho);
-    });
-  }
+    ts.forEachChild(no, visitar);
+  };
+  visitar(fonte);
 
   // 3. a prova por CHAMADA, para o parâmetro sem anotação nenhuma.
   for (const nome of nomesProvadosPelaChamada(fonte, escopo, caminhos)) caminhos.add(nome);
@@ -613,7 +611,7 @@ function nomesProvadosPelaChamada(
   const admins = nomesDoClienteAdmin(fonte);
   const candidatos = new Set<string>();
 
-  for (const funcao of escopo.funcoes.values()) {
+  for (const funcao of escopo.funcoes) {
     if (funcao.exportada) continue;
     for (const parametro of funcao.parametros) {
       if (parametro.type !== undefined || !ts.isIdentifier(parametro.name)) continue;
@@ -632,6 +630,36 @@ function nomesProvadosPelaChamada(
   return provados;
 }
 
+function chamadaChamaEstaFuncao(chamada: ts.CallExpression, fnNo: ts.Node, fonte: ts.SourceFile): boolean {
+  if (!ts.isIdentifier(chamada.expression)) return false;
+  const decl = declaracaoDoIdentificador(chamada.expression, fonte);
+  if (!decl) return false;
+  if (decl === fnNo) return true;
+  if (ts.isVariableDeclaration(decl)) {
+    let init: ts.Node | undefined = decl.initializer;
+    while (init && (ts.isParenthesizedExpression(init) || ts.isAwaitExpression(init))) {
+      init = init.expression;
+    }
+    if (init === fnNo) return true;
+  }
+  return false;
+}
+
+function chamadasAFuncao(fonte: ts.SourceFile, fn: FuncaoLocal): ts.CallExpression[] {
+  const chamadas: ts.CallExpression[] = [];
+  const visitar = (no: ts.Node, dentro: boolean): void => {
+    if (!dentro && ts.isCallExpression(no) && ts.isIdentifier(no.expression) && no.expression.text === fn.nome) {
+      if (chamadaChamaEstaFuncao(no, fn.no, fonte)) {
+        chamadas.push(no);
+      }
+    }
+    const dentroAgora = dentro || no === fn.no;
+    ts.forEachChild(no, (filho) => visitar(filho, dentroAgora));
+  };
+  visitar(fonte, false);
+  return chamadas;
+}
+
 /**
  * True quando o parâmetro `nome` da função que CONTÉM `no` recebe o cliente
  * admin — pela anotação dele ou por TODAS as chamadas visíveis a essa função
@@ -646,38 +674,39 @@ function parametroRecebeAdmin(
   caminhos: ReadonlySet<string>,
   vistos: ReadonlySet<string>,
 ): boolean {
-  for (const nomeFuncao of nomesDasFuncoesQueContem(no)) {
-    const funcao = escopo.funcoes.get(nomeFuncao);
-    // Função exportada fica de fora: as chamadas deste arquivo não são todas as
-    // que existem, e o outro arquivo não está sob esta varredura.
-    if (funcao === undefined || funcao.exportada) continue;
-    const indice = funcao.parametros.findIndex((p) => ts.isIdentifier(p.name) && p.name.text === nome);
-    if (indice < 0) continue;
-    const parametro = funcao.parametros[indice];
-    if (parametro === undefined) continue;
-    // A anotação, quando existe, é autoridade: ou ela já provou o cliente admin,
-    // ou ela diz que é outro cliente — e aí a chamada não desmente o `tsc`.
-    if (parametro.type !== undefined) return ehTipoDoClienteAdmin(parametro.type, escopo, vistos);
+  const fnNode = funcaoQueContem(no);
+  if (fnNode === null) return false;
+  const funcao = escopo.funcoes.find((f) => f.no === fnNode);
+  if (funcao === undefined || funcao.exportada) return false;
 
-    const chave = `${fonte.fileName}#${nomeFuncao}#${nome}`;
-    if (vistos.has(chave)) return false;
-    const chamadas = chamadasA(fonte, nomeFuncao);
-    // Sem chamada neste arquivo não há prova: `não chamada aqui` não é o mesmo
-    // que `chamada com o cliente admin`.
-    if (chamadas.length === 0) return false;
-    const proximos = new Set([...vistos, chave]);
-    return chamadas.every((chamada) => {
-      const arg = chamada.arguments[indice];
-      if (arg === undefined) {
-        return (
-          parametro.initializer !== undefined &&
-          argumentoEntregaAdmin(parametro.initializer, fonte, escopo, admins, caminhos, proximos)
-        );
-      }
-      return argumentoEntregaAdmin(arg, fonte, escopo, admins, caminhos, proximos);
-    });
-  }
-  return false;
+  const indice = funcao.parametros.findIndex((p) => ts.isIdentifier(p.name) && p.name.text === nome);
+  if (indice < 0) return false;
+  const parametro = funcao.parametros[indice];
+  if (parametro === undefined) return false;
+
+  if (parametro.type !== undefined) return ehTipoDoClienteAdmin(parametro.type, escopo, vistos);
+
+  const chave = `${fonte.fileName}#${fnNode.pos}#${nome}`;
+  if (vistos.has(chave)) return false;
+  const chamadas = chamadasAFuncao(fonte, funcao);
+  if (chamadas.length === 0) return false;
+  const proximos = new Set([...vistos, chave]);
+
+  // Se o arquivo possui múltiplas funções homônimas com este nome, o argumento omitido (default)
+  // não pode provar para evitar confusão de assinatura entre homônimos
+  const funcoesHomonimas = escopo.funcoes.filter((f) => f.nome === funcao.nome).length > 1;
+
+  return chamadas.every((chamada) => {
+    const arg = chamada.arguments[indice];
+    if (arg === undefined) {
+      if (funcoesHomonimas) return false;
+      return (
+        parametro.initializer !== undefined &&
+        argumentoEntregaAdmin(parametro.initializer, fonte, escopo, admins, caminhos, proximos)
+      );
+    }
+    return argumentoEntregaAdmin(arg, fonte, escopo, admins, caminhos, proximos);
+  });
 }
 
 /** O argumento entregue na chamada é o cliente admin — por origem, anotação ou passagem? */
@@ -711,7 +740,7 @@ function todasAsFuncoesProvam(
     funcao.parametros.find((p) => ts.isIdentifier(p.name) && p.name.text === nome);
 
   let declarantes = 0;
-  for (const funcao of escopo.funcoes.values()) {
+  for (const funcao of escopo.funcoes) {
     const parametro = parametroComNome(funcao);
     if (parametro === undefined) continue;
     declarantes++;
@@ -723,48 +752,6 @@ function todasAsFuncoesProvam(
     if (!parametroRecebeAdmin(parametro, nome, fonte, escopo, admins, caminhos, new Set())) return false;
   }
   return declarantes > 0;
-}
-
-/** As funções que CONTÊM este nó, da mais interna para a mais externa. */
-function nomesDasFuncoesQueContem(no: ts.Node): string[] {
-  const nomes: string[] = [];
-  let atual: ts.Node | undefined = no.parent;
-  while (atual !== undefined) {
-    // Método de classe: o parâmetro dele é `this`-bound e o nome não é o de uma
-    // função declarada no arquivo — a busca para aqui, em vez de atribuir o nó
-    // ao último nome visto.
-    if (
-      ts.isMethodDeclaration(atual) ||
-      ts.isConstructorDeclaration(atual) ||
-      ts.isGetAccessorDeclaration(atual) ||
-      ts.isSetAccessorDeclaration(atual)
-    ) {
-      break;
-    }
-    const nome = nomeDeclarado(atual);
-    if (nome !== null) nomes.push(nome);
-    atual = atual.parent;
-  }
-  return nomes;
-}
-
-/** As chamadas a esta função no arquivo, FORA do corpo dela. */
-function chamadasA(fonte: ts.SourceFile, nome: string): ts.CallExpression[] {
-  const chamadas: ts.CallExpression[] = [];
-  const pilha: { no: ts.Node; dentro: boolean }[] = [{ no: fonte, dentro: false }];
-  while (pilha.length > 0) {
-    const { no, dentro } = pilha.pop()!;
-    if (!dentro && ts.isCallExpression(no) && ts.isIdentifier(no.expression) && no.expression.text === nome) {
-      chamadas.push(no);
-    }
-    // Recursão não prova nada sobre o parâmetro: contá-la faria a função provar
-    // a si mesma.
-    const dentroAgora = dentro || nomeDeclarado(no) === nome;
-    ts.forEachChild(no, (filho) => {
-      pilha.push({ no: filho, dentro: dentroAgora });
-    });
-  }
-  return chamadas;
 }
 
 /**
@@ -1006,11 +993,14 @@ export function ehReceptorAdmin(
     atual = atual.expression;
   }
 
-  // 1. Fábrica inline: createAdminClient()
+  // 1. Fábrica inline: createAdminClient() ou admin.schema("public")
   if (ts.isCallExpression(atual)) {
     const raiz = raizDaCadeia(atual.expression);
     if (raiz === "createAdminClient" || (escopo.fabrica !== null && raiz === escopo.fabrica)) {
       return true;
+    }
+    if (ts.isPropertyAccessExpression(atual.expression) && atual.expression.name.text === "schema") {
+      return ehReceptorAdmin(atual.expression.expression, fonte, escopo, caminhos);
     }
     return false;
   }
