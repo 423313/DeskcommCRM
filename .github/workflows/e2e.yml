@@ -1087,6 +1087,7 @@ jobs:
         suporte-temporario.spec.ts
         olhar-telas-do-epico.spec.ts
         jev-decisoes-rapidas.spec.ts
+        buffer-ssr-caixa-orfa.spec.ts
 
       # ─── FORA_DO_CI — as que ficaram fora, e o motivo de cada uma ───
       #
