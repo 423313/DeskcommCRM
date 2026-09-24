@@ -1133,9 +1133,6 @@ export const DICIONARIO: Traducoes = {
   // aqui mudaria a tela de quem usa em portugues — que e o unico jeito de
   // esta feature piorar alguma coisa.
   "Buscar...": { es: "Buscar..." },
-  // Rotulo so-para-leitor-de-tela do X de fechar em Dialog e Sheet. Ele esta
-  // em INGLES no produto desde o shadcn, e continua: traduzi-lo mudaria o
-  // portugues. Consertar o rotulo pt-BR e mudanca de UX, com PR proprio.
   "Menu do usuário": { es: "Menú del usuario" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
