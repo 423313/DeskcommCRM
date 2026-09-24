@@ -44,6 +44,7 @@ import {
 } from "@/hooks/ai/useRouters";
 import type { ClassifierModelOption } from "@/lib/ai/classifier-models";
 import type { ChannelSessionLite } from "../../agents/[id]/_components/AgentForm";
+import { useFollowupFlows } from "@/hooks/followup/useFollowupFlows";
 import { useT } from "@/hooks/i18n/useT";
 
 interface AgentLite {
@@ -116,6 +117,8 @@ export function RouterEditorClient({
   const deleteRouter = useDeleteRouter();
   const saveMembers = useSaveMembers(routerId);
   const testRouter = useTestRouter(routerId);
+  // Fluxos de atendimento disponíveis para amarrar a uma intenção (surface=atendimento).
+  const { data: atendimentoFlows } = useFollowupFlows({ surface: "atendimento" });
 
   const baseline = React.useMemo(
     () => ({
@@ -123,22 +126,26 @@ export function RouterEditorClient({
       isActive: router.is_active,
       fallbackAgentId: router.fallback_agent_id ?? "",
       classifier: classifierKeyFrom(router.config),
-      members: members.map(({ agent_id, intent_name, intent_description, examples }) => ({
+      members: members.map(({ agent_id, intent_name, intent_description, examples, flow_pointer_id }) => ({
         agent_id,
         intent_name,
         intent_description,
         examples,
+        flow_pointer_id: flow_pointer_id ?? null,
       })),
     }),
     [router, members],
   );
 
-  const currentMembers = draftMembers.map(({ agent_id, intent_name, intent_description, examples }) => ({
-    agent_id,
-    intent_name,
-    intent_description,
-    examples,
-  }));
+  const currentMembers = draftMembers.map(
+    ({ agent_id, intent_name, intent_description, examples, flow_pointer_id }) => ({
+      agent_id,
+      intent_name,
+      intent_description,
+      examples,
+      flow_pointer_id: flow_pointer_id ?? null,
+    }),
+  );
 
   const dirty =
     name !== baseline.name ||
@@ -179,6 +186,7 @@ export function RouterEditorClient({
         intent_name: "",
         intent_description: "",
         examples: [],
+        flow_pointer_id: null,
       },
     ]);
   }
@@ -404,6 +412,7 @@ export function RouterEditorClient({
                     <IntentRow
                       member={m}
                       agents={agents}
+                      flows={atendimentoFlows ?? []}
                       disabled={!canManage}
                       error={memberErrors[i] ?? null}
                       duplicate={duplicateNames.has(m.intent_name.trim().toLowerCase())}
@@ -451,6 +460,7 @@ export function RouterEditorClient({
 function IntentRow({
   member,
   agents,
+  flows,
   disabled,
   error,
   duplicate,
@@ -459,6 +469,7 @@ function IntentRow({
 }: {
   member: DraftMember;
   agents: AgentLite[];
+  flows: Array<{ id: string; name: string }>;
   disabled: boolean;
   error: string | null;
   duplicate: boolean;
@@ -519,6 +530,31 @@ function IntentRow({
           rows={2}
           maxLength={2000}
         />
+      </div>
+      <div className="space-y-1">
+        <Label>{t("Fluxo de atendimento (opcional)")}</Label>
+        <Select
+          value={member.flow_pointer_id ?? NONE}
+          onValueChange={(v) => onChange({ flow_pointer_id: v === NONE ? null : v })}
+          disabled={disabled}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={t("Nenhum — só roteia o agente")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>{t("Nenhum — só roteia o agente")}</SelectItem>
+            {flows.map((f) => (
+              <SelectItem key={f.id} value={f.id}>
+                {f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {t(
+            "Quando a intenção casar, este fluxo começa e as perguntas dele guiam o atendimento até o cliente completar.",
+          )}
+        </p>
       </div>
       <ExamplesInput
         value={member.examples}
