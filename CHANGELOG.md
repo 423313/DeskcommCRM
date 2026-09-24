@@ -24,6 +24,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Extratores de atribuição deixam de gravar o id do anúncio como clique de origem** Quando uma mensagem com `referral` de anúncio chegava sem `ctwa_clid`, os extratores de atribuição (API oficial e WAHA) utilizavam o id do anúncio (`source_id`) como fallback para `sourceId` (`ad_source_id`), fazendo com que o envio de conversões reportasse o identificador do anúncio à plataforma como se fosse o identificador do clique. Agora os extratores gravam `sourceId` exclusivamente quando o clique (`ctwa_clid` / `ctwaClid`) estiver presente, mantendo o id do anúncio estritamente em `adId` (`ad_id`).
 
+  Contribuição de @webtecnica (#1552).
+
 - **Na Agenda, o botão Confirmar volta a ser alcançável em janelas baixas** Em telas largas com pouca altura (por exemplo 1280×500 ou 1024×560), o formulário de "Novo agendamento" cortava a lista de horários e o botão Confirmar sem barra de rolagem: os campos acima do calendário ocupavam quase toda a altura e o painel ficava sem espaço. Agora o formulário inteiro rola, o painel de marcar mantém a altura do próprio conteúdo e a lista de horários continua com a sua rolagem própria.
 
 - **O agente deixa de dizer que "vai ver os horários" sem consultar a agenda** O agente com ferramenta de agenda já era impedido de responder "vou verificar os horários" ou "estou confirmando a disponibilidade" sem ter consultado a agenda de verdade naquele turno. Uma forma parecida escapava: "Vou chamar a responsável pra ver os horários." A mensagem saía e o turno terminava sem consulta nenhuma: a promessa de olhar os horários ficava só na promessa. Agora essa forma também é barrada, e o agente é orientado a consultar a agenda e responder com os horários reais. A regra nova é estreita de propósito: frases em que quem vai ver é o cliente ("pra você ver a agenda do evento"), "nada a ver com o seu agendamento" e "vamos ver: o horário de funcionamento é…" continuam saindo normalmente. Não há nada a configurar.
@@ -31,6 +33,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   Contribuição de @gyanu2507 (#972); relato de @spoliagency (#970).
 
 - **Ação de automação assign_owner passa a ajustar owner_kind e limpar owner_agent_id** A ação de automação `assign_owner` atualizava `owner_user_id` diretamente no `crm_leads` sem ajustar `owner_kind` nem limpar `owner_agent_id`, violando a constraint `crm_leads_owner_kind_coherence` em leads previamente atribuídos a agentes de IA ou gerando incoerência em leads com dono sem tipo. Agora a ação roteia a atribuição por `resolveOwnerPatch`, garantindo a coerência do trio `owner_user_id`, `owner_kind` e `owner_agent_id`.
+
+  Contribuição de @webtecnica (#1549).
 
 - **A atualização para de refazer no banco o que já estava pronto** Toda atualização reaplica o esquema do banco inteiro com o sistema no ar. Alguns trechos dele desfaziam e refaziam, a cada atualização, coisas que já estavam no formato final: a tabela de compromissos da agenda era regravada inteira, uma coluna da tabela de membros da equipe era criada e apagada, e duas proteções da agenda e do follow-up eram reconstruídas. Enquanto isso acontecia, quem usava a agenda ou fazia login podia ficar esperando, e cada passada consumia de novo recursos do banco.
 
@@ -47,6 +51,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **crm_find_free_slots tolera dia e dias_a_frente juntos priorizando dia** A ferramenta MCP `crm_find_free_slots` não recusa mais chamadas com `periodo_ambiguo` quando o modelo de IA preenche `dia` e `dias_a_frente` simultaneamente, priorizando o campo mais específico (`dia`) e documentando a precedência no schema da ferramenta.
 
+  Contribuição de @webtecnica (#1555).
+
 - **Atualizar a instalação não duplica mais as demandas do Radar** Cada atualização da VPS criava uma segunda demanda para toda conversa nova que já tinha a sua, e o Radar passava a mostrar o dobro de demandas abertas sem próximo passo (o índice de atrito também contava em dobro). A atualização agora só cria demanda para conversa que não tem nenhuma, e a duplicata que as atualizações anteriores deixaram é apagada sozinha na próxima atualização. Só sai a cópia que ninguém tocou: demanda com próximo passo, responsável, lead ou caso fica como está, e a cópia que já virou o atendimento em curso da conversa também fica, para não interromper acompanhamento nenhum. Depois de atualizar, a contagem do Radar pode cair, e o número novo é o correto.
 
 - **O "digitando…" aparece no WhatsApp do cliente enquanto a IA prepara a resposta** O indicador de "digitando…" praticamente nunca aparecia quando o agente de IA respondia: ele só era acionado se sobrasse tempo de espera depois que a IA terminava de pensar, e quase nunca sobrava. Agora ele acende no começo do atendimento de cada mensagem, cobrindo os segundos em que o cliente espera a resposta. Crédito: @rafaelbatistazz.
@@ -56,6 +62,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 - **As fotos do produto não passam mais do limite de mensagens por resposta** Quando a descrição de um produto era longa demais para ir como legenda da foto, o texto saía numa mensagem à parte e as fotos vinham depois sem contar essa mensagem. Com o limite de 3 mensagens por resposta, um produto com 3 fotos chegava ao cliente em 4 mensagens, acima do ritmo que protege o número de bloqueio. Agora o limite é conferido antes de cada foto, já contando o texto. Crédito: @bonito-system.
 
 - **Freio de envio por token aplicado antes de abrir conversa e teto por organização** Ao iniciar conversa e envio por token (`crm_start_conversation_and_send`), o freio de ritmo e teto diário do número passa a ser checado antes de registrar a abertura da conversa no banco, impedindo conversas vazias residuais quando o envio for retido por limite de taxa (429). Além disso, a rota `/api/v1/messages` agora respeita um teto global por organização além do teto por token individual.
+
+  Contribuição de @webtecnica (#1556).
 
 - **Textos longos sem espaços no Inbox não estouram mais a largura da tela** No Inbox, mensagens com sequências longas e contínuas de caracteres sem espaço (como códigos Pix copia-e-cola de 150+ caracteres) estufavam a bolha de mensagem para além da coluna de conversa, desalinhando o layout e ocultando os botões de ação do topo. A coluna da conversa, o scroller e a bolha ganharam contenção de largura mínima, e o texto ganhou quebra forçada (`wrap-anywhere`): o layout fica íntegro no desktop (medido em 1024 e 1280 px).
 
@@ -91,9 +99,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Transcrição aceita base URL com ou sem /v1 e sem duplicar caminho** Ao configurar uma URL base customizada para transcrição de áudio (ex.: Groq ou Whisper próprio, como sugerido no `.env.example`), o provedor de transcrição concatenava `/v1/audio/transcriptions` sem normalizar o sufixo `/v1` ou barras finais, resultando em `/v1/v1/audio/transcriptions` e gerando erro 404. O provedor agora normaliza a base removendo barras finais e o sufixo `/v1`, suportando tanto URLs com quanto sem `/v1`.
 
+  Contribuição de @webtecnica (#1550).
+
 - **e2e do Trunk SIP garante dígito no sufixo e remove host na varredura de chave crua** A spec `tests/e2e/trunk-sip-config.spec.ts` passa a garantir um dígito no sufixo aleatório derivado de `Date.now().toString(36)` e a limpar ocorrências de `host` em `corpoSemOBloco`, evitando que nomes de host gerados casem com o padrão de chave de tradução crua (`a.b.c`).
 
+  Contribuição de @webtecnica (#1553).
+
 - **Atualização de modelo pelo Zernio passa a filtrar pela conexão correspondente** A sincronização de status de modelo vinda de webhook do Zernio (`lib/channels/zernio/avisos.ts`) atualizava o espelho local (`meta_templates`) filtrando apenas por organização e nome. Em organizações com mais de uma conexão espelhando modelos de mesmo nome (ou conexões com múltiplos idiomas), o estado recebido do Zernio podia sobrescrever a linha de outro canal. Agora a atualização filtra por `channel_session_id` e idioma, isolando as conexões.
+
+  Contribuição de @webtecnica (#1551).
 
 ## [1.45.0] — 2026-09-23
 
