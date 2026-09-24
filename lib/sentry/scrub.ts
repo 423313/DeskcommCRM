@@ -49,6 +49,17 @@ export function isSensitiveHeader(name: string): boolean {
   return SENSITIVE_HEADER.test(name);
 }
 
+/**
+ * UUID tem forma exata (8-4-4-4-12 em hexadecimal) e é identificador de
+ * depuração, não dado do titular. Ele é separado do texto ANTES dos padrões de
+ * CPF e telefone, que por isso não precisam de borda de letra: com borda, o CPF
+ * e o telefone grudados no rótulo (`cpf12345678909`, `tel-11987654321`) saíam
+ * inteiros rumo ao Jev, e sem ela os padrões comiam pedaço de UUID (141 de
+ * 5.000 alterados, `…-a9ff-811889831080` virava `…-a9ff-[CPF]0`). O grupo de
+ * captura faz o `split` devolver o UUID nas posições ímpares.
+ */
+const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
 export function scrubMessage(input: string): string {
   return input
     // Chave do Jev (`apikey_<hex>_<hex>`) solta no texto. PRIMEIRO, porque os
@@ -58,27 +69,28 @@ export function scrubMessage(input: string): string {
     // E-mail antes dos números, para o telefone não comer dígito de dentro do
     // endereço e deixar o resto dele passar.
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]")
+    .split(UUID)
+    .map((trecho, i) => (i % 2 === 1 ? trecho : apagarCpfETelefone(trecho)))
+    .join("");
+}
+
+function apagarCpfETelefone(trecho: string): string {
+  return trecho
     // Telefone como se escreve no Brasil: +55 opcional, DDD opcional (com ou
     // sem parênteses), 8 ou 9 dígitos (o 9 da frente pode vir solto), e hífen,
     // ponto, espaço ou nada entre os blocos — `11-98765-4321` e `11.98765.4321`
-    // saíam inteiros enquanto a tela prometia apagar o telefone. A borda
-    // (`[^\w-]` antes, `(?![\w-])` depois) é o que impede comer pedaço de UUID;
-    // o padrão de baixo continua pegando o número colado em outro texto.
+    // saíam inteiros enquanto a tela prometia apagar o telefone. Com 8 dígitos
+    // o padrão é curto, e a borda (`[^\w-]` antes, `(?![\w-])` depois) o tira de
+    // dentro de hash: sem ela, 1.390 de 5.000 SHA-1 saíam alterados. Os dois
+    // padrões de baixo seguem pegando o número colado em outro texto.
     .replace(
       /(^|[^\w-])(?:\+?55\s?)?(?:\(?\d{2}\)?[-.\s]?)?(?:9[-.\s]?\d{4}|\d{4,5})[-.\s]?\d{4}(?![\w-])/g,
       "$1[PHONE]",
     )
     // CPF com qualquer separador entre os blocos (ponto, espaço, hífen ou nada):
     // `123 456 789 09` e `123.456.789.09` também são CPF de quem digita rápido.
-    // Aceitar hífen ENTRE os blocos exige borda FORA deles: sem letra, dígito
-    // ou hífen vizinho. Sem ela, o padrão comia pedaço de UUID — medido, casava
-    // em 67 de 5.000 UUIDs (`…-a9ff-811889831080` virava `…-a9ff-[CPF]0`).
-    .replace(/(^|[^A-Za-z0-9-])\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}(?![A-Za-z0-9-])/g, "$1[CPF]")
-    // O número colado em outro texto (`zap11987654321`), que a borda do padrão
-    // de cima deixa passar. A borda aqui é só hexadecimal e hífen — exatamente
-    // os vizinhos possíveis dentro de um UUID —, porque sem ela este padrão
-    // também comia UUID: casava em 126 de 5.000 (`…-a8322618067f` virava `…-a[PHONE]f`).
-    .replace(/(^|[^0-9A-Fa-f-])\+?\d{2}\s?\d{4,5}-?\d{4}(?![0-9A-Fa-f-])/g, "$1[PHONE]");
+    .replace(/\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}/g, "[CPF]")
+    .replace(/\+?\d{2}\s?\d{4,5}-?\d{4}/g, "[PHONE]");
 }
 
 /**

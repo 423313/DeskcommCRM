@@ -122,11 +122,39 @@ describe("scrubMessage", () => {
   });
 
   it("o número colado em texto também sai", () => {
-    expect(scrubMessage("zap11987654321 ok")).toBe("zap[PHONE] ok");
+    // 11 dígitos seguidos o CPF pega antes; o critério é o número sumir.
+    expect(scrubMessage("zap11987654321 ok")).toMatch(/^zap\[(PHONE|CPF)\] ok$/);
   });
 
-  // Um UUID fixo passa por sorte: sem borda, 141 destes 5.000 saíam alterados,
-  // sempre num trecho só de dígitos. Por isso milhares,
+  // Regressão: uma borda de letra/hífen nos padrões (posta para poupar UUID)
+  // deixava sair inteiro o número grudado justamente nos rótulos que alguém
+  // digita colado — e hexadecimal (`cpf`, `fone`, `doc`) e hífen estão entre eles.
+  it("apaga CPF e telefone grudados no rótulo, inclusive por hífen", () => {
+    for (const [texto, rotulo] of [
+      ["cpf12345678909", "cpf"],
+      ["CPF123.456.789-09", "CPF"],
+      ["doc12345678909", "doc"],
+      ["fone11987654321", "fone"],
+      ["telefone11987654321", "telefone"],
+      ["tel-11987654321", "tel-"],
+      ["lead-123.456.789-09", "lead-"],
+    ] as const) {
+      const out = scrubMessage(texto);
+      expect(out, texto).not.toMatch(/\d{3}/);
+      expect(out, texto).toMatch(new RegExp(`^${rotulo}\\[(PHONE|CPF)\\]$`));
+    }
+    expect(scrubMessage("12345678909-joao")).toMatch(/^\[(PHONE|CPF)\]-joao$/);
+  });
+
+  it("apaga o CPF e poupa o UUID na mesma frase", () => {
+    const uuid = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    const out = scrubMessage(`cpf12345678909 no agente ${uuid}`);
+    expect(out).toMatch(/^cpf\[(PHONE|CPF)\] no agente /);
+    expect(out).toContain(uuid);
+  });
+
+  // Um UUID fixo passa por sorte: sem a proteção do UUID, 141 destes 5.000
+  // saíam alterados, sempre num trecho só de dígitos. Por isso milhares,
   // gerados de forma determinística (sha256 do índice) — a mesma amostra em
   // toda execução, e uma falha reproduzível pelo índice.
   it("não come pedaço de UUID — em milhares deles", () => {
