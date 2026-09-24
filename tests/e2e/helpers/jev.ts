@@ -95,6 +95,11 @@ export async function ligarOJev(page: Page): Promise<string> {
   const estado = await esperarEstado(page, ["observando", "decidindo", "sozinho"]);
   if (estado !== "observando") return estado;
   const cartaoLigado = await abrirOCartao(page);
+  // O laço de retorno da observação (o mapa vivo o nomeia): o cartão mostra a
+  // concordância antes de a pessoa deixar o Jev decidir. Aqui a IA de sempre
+  // tem chave falsa, então o bloco diz que ainda não há comparação — o que se
+  // prova é que ele está na tela, no estado em que a decisão é tomada.
+  await expect(cartaoLigado.getByTestId("jev-concordancia")).toBeVisible();
   await cartaoLigado.getByRole("button", { name: "Deixar o Jev decidir" }).click();
   return esperarEstado(page, ["decidindo"]);
 }
@@ -158,12 +163,15 @@ export async function drenar(page: Page): Promise<number> {
  * Escoa a fila ANTES de ligar o Jev. As specs anteriores da parte usam a mesma
  * organização, e uma mensagem delas ainda na fila seria medida pelo Jev junto
  * com a nossa. O teto de voltas é o que impede um evento que volta sempre de
- * prender a spec aqui; o que sobrar, a spec separa pelo conteúdo.
+ * prender a spec aqui — e estourá-lo REPROVA: a prova "o Jev desligado não
+ * manda nada" é uma lista vazia, e medida antes de a fila escoar ela afirmaria
+ * o vazio sem ter olhado.
  */
 export async function escoarAFila(page: Page): Promise<void> {
   for (let volta = 0; volta < 20; volta++) {
     if ((await drenar(page)) === 0) return;
   }
+  throw new Error("a fila não escoou em 20 drenos — a prova do Jev desligado mediria o vazio");
 }
 
 /** A linha da medição em IA › Execuções, pelo filtro que o cartão oferece. */

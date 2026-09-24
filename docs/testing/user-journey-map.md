@@ -133,7 +133,7 @@ HTTP `scripts/duble-jev-e2e.mjs`, que grava cada chamada num arquivo que a spec 
 | J32.3 | Colar a chave | o teste da chave passa (o dublê recebeu o `GET /v1/models` com a chave certa) e o cartão fica pronto para ligar | **ESCRITA, NÃO EXECUTADA** |
 | J32.4 | Chave validada, Jev desligado, e uma mensagem do cliente chega e é drenada | nenhuma pergunta sai para o fornecedor (D6). O controle positivo é a J32.7: mesmo cliente, mesma conversa, só o interruptor muda | **ESCRITA, NÃO EXECUTADA** |
 | J32.5 | Ligar sem marcar o aceite | o botão fica travado; a rota recusa com `jev_exige_aceite` (provado em `app/api/v1/ai/jev/route.test.ts`) | **ESCRITA, NÃO EXECUTADA** em tela; rota **PASS** (unit) |
-| J32.6 | Ligar com o aceite, e deixar o Jev decidir | observando (com IA de sempre) → decidindo; sozinho quando a empresa não tem a IA de sempre | **ESCRITA, NÃO EXECUTADA** |
+| J32.6 | Ligar com o aceite, e deixar o Jev decidir | observando (com IA de sempre), com o bloco de concordância na tela — o laço de retorno da observação — → decidindo; sozinho quando a empresa não tem a IA de sempre. O NÚMERO da concordância (acima de zero) não se alcança pela tela neste ambiente: a IA de sempre tem chave falsa; ele é provado em `CartaoDoJev.test.tsx` e `app/api/v1/ai/jev/route.test.ts` | **ESCRITA, NÃO EXECUTADA** |
 | J32.7 | Segunda mensagem do mesmo cliente pelo webhook do WhatsApp | o dublê recebe a pergunta do clima com a chave colada, a versão `jev-1.13.0` e SÓ a última mensagem (sem a da J32.4, que está na mesma conversa), com telefone e e-mail trocados por `[PHONE]`/`[EMAIL]` | **ESCRITA, NÃO EXECUTADA** |
 | J32.8 | IA › Execuções, "Ver as decisões do Jev" | a medição aparece com "Jev (TypeSafe AI)", o modelo devolvido e sem "falhou"; o filtro "Só o Jev" vem marcado | **ESCRITA, NÃO EXECUTADA** |
 | J32.9 | O cartão depois da medição | "Mensagens medidas" sobe ao menos 1 (a nossa; outra que tenha voltado à fila depois do escoamento também conta — a prova de que foi a NOSSA é a do dublê, na J32.7) | **ESCRITA, NÃO EXECUTADA** |
@@ -141,7 +141,7 @@ HTTP `scripts/duble-jev-e2e.mjs`, que grava cada chamada num arquivo que a spec 
 | J32.11 | O Jev no "Qual você contratou" do onboarding | ausente | **NÃO COBERTO em tela** — o campo só aparece em organização sem chave nenhuma; a derivação de `PROVEDORES` é vigiada pela mesma catraca de unidade |
 | J32.12 | Desligar | volta a pronto para ligar, e religar não pede o aceite de novo | **ESCRITA, NÃO EXECUTADA** |
 | J32.13 | A mesma jornada contra a API de verdade | a chave paga passa no teste, a versão fixada responde e a medição aparece em Execuções | **FORA DO CI** — exige `JEV_API_KEY`; receita no cabeçalho da spec |
-| J32.14 | Falha que pede ação (chave recusada, sem crédito) | aviso na Central dizendo o que fazer | **NÃO COBERTO em tela** — `tests/unit/clima-da-conversa-no-worker.test.ts` |
+| J32.14 | Falha que pede ação (chave recusada, sem crédito) | aviso na Central dizendo o que fazer e se a IA de sempre de fato mediu; atualizado quando o desfecho piora; fechado sozinho quando o Jev volta a medir | **NÃO COBERTO em tela** — `tests/unit/clima-da-conversa-no-worker.test.ts` |
 | J32.15 | Irritação percebida pelo Jev | a passagem para humano diz "(percebido pelo Jev)" só no que a equipe lê | **NÃO COBERTO em tela** — `tests/unit/handoff-do-clima-diz-quem-mediu.test.ts` |
 
 "ESCRITA, NÃO EXECUTADA" quer dizer isso mesmo: a spec existe e passa pelas cercas
