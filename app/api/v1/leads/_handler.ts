@@ -155,6 +155,37 @@ async function contatoDaOrgOrThrow(supabase: SB, ctx: HandlerCtx, contactId: str
   }
 }
 
+/**
+ * O gatilho `trg_lead_so_liga_a_propria_empresa` (migration 0403) recusa com
+ * SQLSTATE `PT404`/`PT422` o contato ou responsável de fora da organização. As
+ * guardas acima respondem antes; isto cobre a janela entre conferir e gravar
+ * (um vínculo revogado nesse meio) com a MESMA resposta, e não um 500.
+ */
+function recusaDaGuardaDoBanco(
+  ctx: HandlerCtx,
+  erro: { code?: string } | null,
+): ApiError | null {
+  if (erro?.code === "PT404") {
+    return new ApiError(
+      404,
+      "not_found",
+      undefined,
+      ctx.requestId,
+      traduzir("Contato não encontrado.", ctx.idioma ?? "pt-BR"),
+    );
+  }
+  if (erro?.code === "PT422") {
+    return new ApiError(
+      422,
+      "validation_failed",
+      undefined,
+      ctx.requestId,
+      traduzir("Responsável não é um atendente ativo desta organização.", ctx.idioma ?? "pt-BR"),
+    );
+  }
+  return null;
+}
+
 function actorAuditPayload(actor: Actor): {
   actorUserId: string | null;
   metadataActor: Record<string, unknown>;
@@ -339,6 +370,14 @@ export async function createLeadHandler(
      * lote quem entrou por planilha. Não vem do corpo da requisição.
      */
     via_planilha?: boolean;
+    /**
+     * Interno (clone para outro funil, pela tela ou pela automação). O dono veio
+     * do negócio de ORIGEM, não de quem pediu: se ele não pode mais ser dono
+     * (desligado, virou viewer, agente arquivado), o clone nasce sem dono e a
+     * linha do tempo diz por quê — mover o negócio de funil não pode falhar
+     * porque alguém saiu da empresa. Não vem do corpo da requisição.
+     */
+    dono_herdado?: boolean;
   },
 ): Promise<Record<string, unknown>> {
   // Validate stage belongs to pipeline within active org.
@@ -388,9 +427,16 @@ export async function createLeadHandler(
 
   // Nascer com dono e sem owner_kind é drift silencioso (o CHECK aceita kind
   // null): o lead teria dono e sumiria do filtro e das métricas por kind.
-  const ownerPatch =
-    (await ownerPatchOrThrow(supabase, ctx, input)) ??
-    ({ owner_user_id: null, owner_agent_id: null, owner_kind: null } satisfies OwnerPatch);
+  const semDono = { owner_user_id: null, owner_agent_id: null, owner_kind: null } satisfies OwnerPatch;
+  let donoHerdadoDescartado = false;
+  let ownerPatch: OwnerPatch;
+  try {
+    ownerPatch = (await ownerPatchOrThrow(supabase, ctx, input)) ?? semDono;
+  } catch (erro) {
+    if (!(input.dono_herdado && erro instanceof ApiError && erro.status === 422)) throw erro;
+    ownerPatch = semDono;
+    donoHerdadoDescartado = true;
+  }
 
   // A moeda de um lead novo é a que a ORGANIZAÇÃO declarou, não um literal.
   // `"BRL"` aqui (e o `.default("BRL")` que saiu de `createLeadSchema`) fazia
@@ -435,6 +481,8 @@ export async function createLeadHandler(
     .select(LEAD_COLS)
     .single();
 
+  const recusaNoInsert = recusaDaGuardaDoBanco(ctx, insErr);
+  if (recusaNoInsert) throw recusaNoInsert;
   if (insErr || !lead) {
     throw new ApiError(
       500,
@@ -443,6 +491,31 @@ export async function createLeadHandler(
       ctx.requestId,
       insErr?.message ?? traduzir("Falha ao criar lead.", ctx.idioma ?? "pt-BR"),
     );
+  }
+
+  if (donoHerdadoDescartado) {
+    const leadId = (lead as { id: string }).id;
+    const atividade = await emitLeadActivity(supabase, {
+      organizationId: ctx.organization_id,
+      leadId,
+      contactId: input.contact_id ?? null,
+      type: "lead_edited",
+      sourceModule: "crm",
+      sourceId: leadId,
+      actor: ctx.actor,
+      reason: "Nasceu sem responsável: quem cuidava do negócio de origem não atende mais nesta empresa",
+      payload: { fields: ["owner_user_id", "owner_agent_id"], motivo: "dono_da_origem_inativo" },
+    });
+    if (!atividade.ok) {
+      await registraFalhaDeAtividade(supabase, {
+        organizationId: ctx.organization_id,
+        leadId,
+        tipo: "lead_edited",
+        origem: "leads/_handler.createLeadHandler",
+        erro: atividade.error,
+        requestId: ctx.requestId,
+      });
+    }
   }
 
   const a = actorAuditPayload(ctx.actor);
@@ -576,6 +649,8 @@ export async function updateLeadHandler(
     .select(LEAD_COLS)
     .maybeSingle();
 
+  const recusaNoUpdate = recusaDaGuardaDoBanco(ctx, updErr);
+  if (recusaNoUpdate) throw recusaNoUpdate;
   if (updErr) {
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
   }

@@ -34,6 +34,8 @@ const VIEWER_A = "20000000-0000-4000-8000-0000000000ee";
 
 const tabelas: Record<string, Linha[]> = {};
 const escritas: { tabela: string; tipo: "insert" | "update"; valores: Linha }[] = [];
+/** Recusa que o "banco" devolve na próxima escrita — o gatilho da migration 0403. */
+let recusaDoGatilho: { code: string; message: string } | null = null;
 
 function reiniciaBanco() {
   tabelas.crm_stages = [{ id: ETAPA, pipeline_id: PIPELINE, organization_id: ORG_A }];
@@ -62,6 +64,7 @@ function reiniciaBanco() {
     },
   ];
   escritas.length = 0;
+  recusaDoGatilho = null;
 }
 
 /** Consulta encadeável que aplica de fato os filtros `.eq`/`.is`. */
@@ -71,6 +74,7 @@ function consulta(tabela: string) {
   const linhas = () =>
     (tabelas[tabela] ?? []).filter((l) => filtros.every(([c, v]) => (l[c] ?? null) === v));
   const resolve = async () => {
+    if (escrita && recusaDoGatilho) return { data: null, error: recusaDoGatilho };
     if (escrita?.tipo === "insert") {
       escritas.push({ tabela, ...escrita });
       return { data: { id: "lead-novo", ...escrita.valores }, error: null };
@@ -111,6 +115,8 @@ vi.mock("@/lib/leads/activity-emitter", () => ({
 }));
 
 import { createLeadHandler, updateLeadHandler } from "@/app/api/v1/leads/_handler";
+import { emitLeadActivity } from "@/lib/leads/activity-emitter";
+import { montaPayloadDoClone, type OrigemParaClonar } from "@/lib/leads/clonar-para-funil";
 import { crmCreateLead, crmUpdateLead } from "@/lib/mcp/tools/leads";
 
 const ctx = {
@@ -130,7 +136,10 @@ const novo = (extra: Linha = {}) =>
 
 const leadsGravados = () => escritas.filter((e) => e.tabela === "crm_leads");
 
-beforeEach(reiniciaBanco);
+beforeEach(() => {
+  reiniciaBanco();
+  vi.mocked(emitLeadActivity).mockClear();
+});
 
 describe("createLeadHandler — contato", () => {
   it("contato de OUTRA empresa: 404, e nada é gravado", async () => {
@@ -231,5 +240,63 @@ describe("pelo MCP (crm_create_lead / crm_update_lead passam pelo handler)", () 
       crmUpdateLead.handler({ lead_id: LEAD, owner_user_id: MEMBRO_B } as never, ctxMcp),
     ).rejects.toMatchObject({ status: 422 });
     expect(leadsGravados()).toHaveLength(0);
+  });
+});
+
+describe("a recusa do gatilho do banco (migration 0403) vira a mesma resposta, não 500", () => {
+  it("PT404 no INSERT → 404 Contato não encontrado", async () => {
+    recusaDoGatilho = { code: "PT404", message: "Contato não encontrado." };
+    await expect(createLeadHandler(banco as never, ctx, novo())).rejects.toMatchObject({
+      status: 404,
+      code: "not_found",
+    });
+  });
+
+  it("PT422 no UPDATE → 422 validation_failed", async () => {
+    recusaDoGatilho = { code: "PT422", message: "Responsável não é um atendente ativo desta organização." };
+    await expect(
+      updateLeadHandler(banco as never, ctx, LEAD, { title: "Outro título" } as never),
+    ).rejects.toMatchObject({ status: 422, code: "validation_failed" });
+  });
+});
+
+describe("clone para outro funil: o dono vem da ORIGEM", () => {
+  const origem = (dono: string): OrigemParaClonar =>
+    ({
+      id: LEAD,
+      pipeline_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      status: "open",
+      title: "Negócio",
+      contact_id: CONTATO_A,
+      owner_user_id: dono,
+      owner_agent_id: null,
+    }) as OrigemParaClonar;
+  const etapa = { id: ETAPA, pipeline_id: PIPELINE } as never;
+
+  it("dono desligado: o clone nasce SEM dono, e a linha do tempo diz por quê — nunca 422", async () => {
+    await createLeadHandler(banco as never, ctx, montaPayloadDoClone(origem(DESLIGADO_A), etapa));
+    expect(leadsGravados()).toHaveLength(1);
+    expect(leadsGravados()[0].valores).toMatchObject({
+      owner_user_id: null,
+      owner_agent_id: null,
+      owner_kind: null,
+      contact_id: CONTATO_A,
+    });
+    expect(vi.mocked(emitLeadActivity)).toHaveBeenCalledWith(
+      banco,
+      expect.objectContaining({ type: "lead_edited", reason: expect.stringContaining("sem responsável") }),
+    );
+  });
+
+  it("dono ainda ativo: o clone mantém o dono, sem atividade extra", async () => {
+    await createLeadHandler(banco as never, ctx, montaPayloadDoClone(origem(ATENDENTE_A), etapa));
+    expect(leadsGravados()[0].valores).toMatchObject({ owner_user_id: ATENDENTE_A, owner_kind: "user" });
+    expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
+  });
+
+  it("fora do clone, o mesmo dono desligado continua recusado (422)", async () => {
+    await expect(
+      createLeadHandler(banco as never, ctx, novo({ owner_user_id: DESLIGADO_A })),
+    ).rejects.toMatchObject({ status: 422 });
   });
 });
