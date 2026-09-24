@@ -1,4 +1,4 @@
--- 0401 — a junção de fichas leva o `social_identity` do contato que sai
+-- 0407 — a junção de fichas leva o `social_identity` do contato que sai
 -- (issue #1455; seguimento do #1444, que fez o canal social filtrar ficha
 -- mesclada).
 --
