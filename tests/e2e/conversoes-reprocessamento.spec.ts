@@ -53,6 +53,7 @@ test("conversões: instalação sem credenciais explica a ausência e permite re
       stage_id: stage,
       title: titulo,
       status: "won",
+      closed_at: new Date().toISOString(),
       value_cents: 15000,
       currency: "BRL",
     });

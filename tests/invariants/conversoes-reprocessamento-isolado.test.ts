@@ -3,7 +3,7 @@ import { GOV_ORG, GOV_LEAD, seedGov, sql } from "./gov-helpers";
 
 beforeAll(seedGov);
 const iniciar = `begin;
- update public.crm_leads set status='won' where id='${GOV_LEAD}';
+ update public.crm_leads set status='won', closed_at=now() where id='${GOV_LEAD}';
  insert into public.ad_conversion_dispatches (organization_id, lead_id, platform, event_name, status, reason)
  values ('${GOV_ORG}', '${GOV_LEAD}', 'google_ads', 'Purchase', 'error', 'recusado_pela_plataforma')
  on conflict (organization_id,lead_id,event_name) do update set status='error';`;
