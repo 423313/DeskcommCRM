@@ -231,6 +231,9 @@ export const DICIONARIO: Traducoes = {
   "Abordado": { es: "Contactado" },
   "Não abordado": { es: "No contactado" },
   "Respondeu": { es: "Respondió" },
+  "Logo para o tema escuro (opcional)": { es: "Logo para el tema oscuro (opcional)" },
+  "Remover logo escuro": { es: "Eliminar logo oscuro" },
+  "Use uma versão legível sobre fundo escuro. Ela aparece sem moldura branca. Sem ela, o logo padrão mantém a proteção de contraste. PNG ou JPG, até 512 KB.": { es: "Usa una versión legible sobre fondo oscuro. Se muestra sin marco blanco. Sin ella, el logo predeterminado conserva la protección de contraste. PNG o JPG, hasta 512 KB." },
   // /admin/email — o servidor SMTP da instalação (PR #714, @betoarts, recorte).
   "Servidor de e-mail conectado e autenticado.": { es: "Servidor de correo conectado y autenticado." },
   "Preencha e salve o servidor e o remetente antes de testar.": {
@@ -1128,6 +1131,16 @@ export const DICIONARIO: Traducoes = {
   "Buscar telas": { es: "Buscar pantallas" },
   "Buscar telas do sistema…": { es: "Buscar pantallas del sistema…" },
   Telas: { es: "Pantallas" },
+  "Buscar por nome, objetivo ou função (ex: leads, agenda, prompt, whatsapp)...": {
+    es: "Buscar por nombre, objetivo o función (ej.: leads, agenda, prompt, whatsapp)...",
+  },
+  "Tente buscar por outro termo ou selecione 'Todas' nas categorias.": {
+    es: "Prueba con otro término o selecciona 'Todas' en las categorías.",
+  },
+  ferramenta: { es: "herramienta" },
+  ferramentas: { es: "herramientas" },
+  "Use as setas ↑↓ e Enter para navegar": { es: "Usa las flechas ↑↓ y Enter para navegar" },
+  "ESC para fechar": { es: "ESC para cerrar" },
   // O gatilho da busca no topo mostra RETICENCIA ASCII desde antes do i18n
   // (`Buscar...`). A chave e o byte que a tela ja mostrava: trocar por "…"
   // aqui mudaria a tela de quem usa em portugues — que e o unico jeito de
@@ -9442,6 +9455,7 @@ export const DICIONARIO: Traducoes = {
   "Já existe uma atualização em andamento.": { es: "Ya hay una actualización en curso." },
   "Lead foi modificado por outro usuário. Recarregue e tente novamente.": { es: "Otro usuario modificó el lead. Recarga e inténtalo de nuevo." },
   "Liberou a conversa de volta para a fila": { es: "Devolvió la conversación a la cola" },
+  "Atendente revogado da organização": { es: "Asesor revocado de la organización" },
   "Material não encontrado.": { es: "Material no encontrado." },
   "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.": { es: "No se permite mover entre embudos. Usa POST /api/v1/leads/[id]/clone para llevar el negocio a otro embudo." },
   "Nada para alterar.": { es: "No hay nada que modificar." },
