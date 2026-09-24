@@ -15,6 +15,10 @@
 # Nada aqui toca a rede: a "API" é um JSON local servido por `file://`, pelo
 # mesmo `DESKCOMM_RELEASES_LATEST_URL` que um fork usaria.
 set -uo pipefail
+# Zera o ambiente git herdado (GIT_DIR de hook ou rebase --exec) e passa a
+# identidade por variável: nada aqui escreve no repositório de quem roda.
+unset $(git rev-parse --local-env-vars)
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t.t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t.t
 
 KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../hostgator-setup-kit" && pwd)"
 WORK="$(mktemp -d)"
@@ -30,7 +34,6 @@ REPO="$WORK/repo"
 git init --quiet "$REPO"
 (
   cd "$REPO"
-  git config user.email t@t; git config user.name t
   echo a > a; git add -A; git commit --quiet -m a; git tag v1.19.0
   echo b > b; git add -A; git commit --quiet -m b; git tag -a v1.20.0 -m "criada à mão, sem release"
 )
