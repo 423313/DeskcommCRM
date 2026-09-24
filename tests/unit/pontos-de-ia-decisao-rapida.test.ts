@@ -6,6 +6,12 @@
  * e nada muda. Chamador sem marca é o avesso: o Jev decide num ponto que a tela
  * não mostra. Mesmo molde de `pontos-de-ia-completude.test.ts`, lendo o
  * CÓDIGO-FONTE de `lib/ai/decisao/`, onde mora todo chamador do Jev.
+ *
+ * Escrever `ponto: "x"` numa função que ninguém chama também é botão que não
+ * controla nada. Por isso o módulo do chamador precisa ser IMPORTADO por alguém
+ * fora de `lib/ai/decisao/` (o worker, a rota), e `decidirNoPonto` chamado de
+ * qualquer outra raiz precisa de ponto marcado — senão a premissa "todo
+ * chamador mora em lib/ai/decisao" seria só uma frase.
  */
 import { readFileSync } from "node:fs";
 
@@ -57,6 +63,34 @@ describe("decisão rápida: registro × chamador do Jev", () => {
       .filter(([id]) => !idsMarcados.has(id))
       .map(([id, quem]) => `${id} (em ${quem.map((c) => c.arquivo).join(", ")})`);
     expect(orfaos, "o Jev decide num ponto que a tela não mostra").toEqual([]);
+  });
+
+  it("o módulo de cada chamador tem quem o use fora de lib/ai/decisao", () => {
+    const fora = arquivosDeCodigo(["app", "lib", "workers", "components", "hooks"])
+      .map(caminhoRelativo)
+      .filter((c) => !c.startsWith("lib/ai/decisao/"))
+      .map((c) => readFileSync(c, "utf8"));
+    const semConsumidor = marcados.flatMap((p) =>
+      (porPonto.get(p.id) ?? [])
+        .map((c) => c.arquivo.replace(/\.tsx?$/, ""))
+        .filter((modulo) => !fora.some((fonte) => fonte.includes(`"@/${modulo}"`)))
+        .map((modulo) => `${p.id} (${modulo})`),
+    );
+    expect(semConsumidor, "o Jev é chamado num módulo que nenhum worker ou rota importa").toEqual([]);
+  });
+
+  it("decidirNoPonto chamado de qualquer raiz cai num ponto marcado", () => {
+    const idsMarcados = new Set(marcados.map((p) => p.id));
+    const soltos = arquivosDeCodigo(["app", "lib", "workers", "components", "hooks"])
+      .map(caminhoRelativo)
+      .filter((c) => c !== "lib/ai/decisao/ponto.ts")
+      .flatMap((c) => {
+        const fonte = readFileSync(c, "utf8");
+        if (!/\bdecidirNoPonto\(/.test(fonte)) return [];
+        const ids = [...fonte.matchAll(CHAMADA)].map((m) => m[1]!);
+        return ids.length > 0 && ids.every((id) => idsMarcados.has(id)) ? [] : [c];
+      });
+    expect(soltos, "chamada ao Jev sem ponto marcado (ou com o ponto numa variável)").toEqual([]);
   });
 
   it("o que a tela diz sobre o Jev está escrito para quem não é engenheiro", () => {

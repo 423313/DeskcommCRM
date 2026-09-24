@@ -172,8 +172,19 @@ describe("só as superfícies de CHAVE pedem a união", () => {
     // provider-validators.ts. Quem importava `Provider` de lá levava a união sem
     // citar nenhum símbolo acima — e `Provider` em hooks/ai/useCredentials.ts
     // quer dizer o CONTRÁRIO (só quem conversa).
+    // Três formas: `type X = …`, `export const X = <lista>` (apelido de VALOR,
+    // que um arquivo declarado reexportaria) e `<símbolo> as X`.
     const APELIDO =
-      /\btype\s+\w+(?:<[^>]*>)?\s*=[^;]*\b(?:ProvedorComChave|PROVEDORES_COM_CHAVE|IDS_COM_CHAVE|PROVEDORES_DE_DECISAO|IDS_DE_PROVEDOR_DE_DECISAO)\b|\b(?:ProvedorComChave|PROVEDORES_COM_CHAVE|IDS_COM_CHAVE)\s+as\s+\w+/;
+      /\btype\s+\w+(?:<[^>]*>)?\s*=[^;]*\b(?:ProvedorComChave|PROVEDORES_COM_CHAVE|IDS_COM_CHAVE|PROVEDORES_DE_DECISAO|IDS_DE_PROVEDOR_DE_DECISAO)\b|\bexport\s+(?:const|let)\s+\w+\s*(?::[^=]+)?=\s*(?:PROVEDORES_COM_CHAVE|IDS_COM_CHAVE|PROVEDORES_DE_DECISAO|IDS_DE_PROVEDOR_DE_DECISAO)\b|\b(?:ProvedorComChave|PROVEDORES_COM_CHAVE|IDS_COM_CHAVE|PROVEDORES_DE_DECISAO|IDS_DE_PROVEDOR_DE_DECISAO)\s+as\s+\w+/;
+    // Controle: a régua pega as três formas, e não o `const` local de um card.
+    for (const apelido of [
+      "export type Provider = ProvedorComChave;",
+      "export const TODOS = PROVEDORES_COM_CHAVE;",
+      "export { PROVEDORES_DE_DECISAO as X };",
+    ]) {
+      expect(APELIDO.test(apelido), apelido).toBe(true);
+    }
+    expect(APELIDO.test("const provedor = PROVEDORES_COM_CHAVE.find((p) => p.id === x);")).toBe(false);
     const apelidam = usam.filter(
       (c) => c !== "lib/ai/pontos/provedores.ts" && APELIDO.test(readFileSync(c, "utf8")),
     );
