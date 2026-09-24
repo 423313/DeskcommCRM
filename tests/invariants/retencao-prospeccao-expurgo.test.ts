@@ -58,7 +58,7 @@ function semear(opts: Candidato): void {
       ? "null"
       : `now() - interval '${opts.tentativaDias} days'`;
   const supressao = opts.suprimido
-    ? `gen_random_bytes(32)`
+    ? `extensions.gen_random_bytes(32)`
     : "null";
   sql(`
     insert into prospecting_candidates (
@@ -153,7 +153,7 @@ describe("fn_expurgar_prospeccao_vencida — o prazo que a declaração prometia
         '{"name":"[anonimizado]"}'::jsonb, 'skipped',
         now() - interval '900 days',
         decode('${salt}', 'hex'),
-        hmac(convert_to('lugar-exato-da-pessoa', 'UTF8'), decode('${salt}', 'hex'), 'sha256')
+        extensions.hmac(convert_to('lugar-exato-da-pessoa', 'UTF8'), decode('${salt}', 'hex'), 'sha256')
       );
     `);
     semear({ id: id(11), idadeDias: 500, tentativaDias: null });
