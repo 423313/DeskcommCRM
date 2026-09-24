@@ -40,6 +40,8 @@ export interface RegistroDeEnvio {
   detalhe?: string | null;
   protocolo?: string | null;
   solicitadoEm?: string | null;
+  ocorridoEm?: string;
+  googleActionId?: string;
 }
 
 /** Leitura falha fechada: erro de banco nunca autoriza um segundo envio. */
@@ -51,7 +53,9 @@ export async function lerRegistro(
 ) {
   const { data, error } = await admin
     .from("ad_conversion_dispatches")
-    .select("status, platform, value_cents, currency, remote_request_id, remote_requested_at")
+    .select(
+      "status, platform, value_cents, currency, remote_request_id, remote_requested_at, event_occurred_at, google_action_id",
+    )
     .eq("organization_id", organizationId)
     .eq("lead_id", leadId)
     .eq("event_name", evento)
@@ -64,6 +68,8 @@ export async function lerRegistro(
     currency: string | null;
     remote_request_id?: string | null;
     remote_requested_at?: string | null;
+    event_occurred_at?: string | null;
+    google_action_id?: string | null;
   } | null;
 }
 
@@ -100,6 +106,8 @@ export async function registraEnvio(
       ...(registro.solicitadoEm !== undefined
         ? { remote_requested_at: registro.solicitadoEm }
         : {}),
+      ...(registro.ocorridoEm ? { event_occurred_at: registro.ocorridoEm } : {}),
+      ...(registro.googleActionId ? { google_action_id: registro.googleActionId } : {}),
       attempted_at: new Date().toISOString(),
     },
     { onConflict: "organization_id,lead_id,event_name" },

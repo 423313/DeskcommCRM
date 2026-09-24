@@ -37,6 +37,32 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "O botão do site precisa repassar gclid, gbraid ou wbraid recebidos na página. Um endereço fixo sem esses parâmetros não identifica o clique. Mantenha o código na mensagem enviada ao WhatsApp.":
+    {
+      es: "El botón del sitio debe transmitir el gclid, gbraid o wbraid recibido en la página. Una dirección fija sin estos parámetros no identifica el clic. Mantenga el código en el mensaje enviado a WhatsApp.",
+    },
+  "Lead qualificado (opcional)": { es: "Lead cualificado (opcional)" },
+  "Ao entrar na etapa escolhida, o negócio envia uma qualificação sem valor monetário. A compra continua sendo enviada ao ganhar o negócio com valor. Cada evento é contado uma vez por negócio.":
+    {
+      es: "Al entrar en la etapa elegida, el negocio envía una cualificación sin valor monetario. La compra se sigue enviando al ganar el negocio con un valor. Cada evento se cuenta una vez por negocio.",
+    },
+  "Etapa de qualificação": { es: "Etapa de cualificación" },
+  "Não enviar qualificação": { es: "No enviar cualificación" },
+  "Etapa indisponível — escolha outra": { es: "Etapa no disponible — elija otra" },
+  "Não foi possível carregar as etapas. Atualize a página antes de salvar.": {
+    es: "No se pudieron cargar las etapas. Actualice la página antes de guardar.",
+  },
+  "Ação de conversão de lead qualificado": { es: "Acción de conversión de lead cualificado" },
+  "Informe uma ação do Google diferente da compra. Configure a categoria de lead qualificado e o uso na otimização no Google Ads. Salvar não envia qualificações antigas.":
+    {
+      es: "Introduzca una acción de Google distinta de la compra. Configure la categoría de lead cualificado y su uso en la optimización en Google Ads. Guardar no envía cualificaciones anteriores.",
+    },
+  "Conversões que não foram reportadas": { es: "Conversiones que no se han enviado" },
+  "conversões aceitas pela plataforma": { es: "conversiones aceptadas por la plataforma" },
+  "Nenhuma pendência. Ainda pode não haver vendas ou qualificações com origem em anúncio.": {
+    es: "No hay envíos pendientes. Puede que aún no haya ventas o cualificaciones procedentes de anuncios.",
+  },
+  Evento: { es: "Evento" },
   "A plataforma recebeu o envio. A confirmação será consultada automaticamente.": { es: "La plataforma recibió el envío. La confirmación se consultará automáticamente." },
   "A plataforma não concluiu em 24 horas. Consulte o gerenciador e use o botão para verificar novamente.": { es: "La plataforma no terminó en 24 horas. Consulta el administrador y usa el botón para verificar de nuevo." },
   "Falha temporária. Uma nova tentativa foi agendada automaticamente.": { es: "Fallo temporal. Se programó automáticamente un nuevo intento." },

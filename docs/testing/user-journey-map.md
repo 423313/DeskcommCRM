@@ -2859,3 +2859,10 @@ sim. Consertado pela ordem: publicar primeiro, decidir a porta depois.
 ## Conversões de anúncios — reprocessamento
 
 [P1] `tests/e2e/conversoes-reprocessamento.spec.ts`: administrador abre Conversões sem credenciais opcionais, vê o que falta, identifica origem de uma venda pendente e agenda reprocessamento pela tela. A spec confere o evento exclusivo e captura screenshot; integra o CI. O teste não prova aceite/atribuição por contas reais de anúncios.
+
+### Conversões Google: captura e qualificação
+
+- [P1] `tests/e2e/conversoes-reprocessamento.spec.ts`: salvar captura Google pela tela, recarregar configuração, abrir endereço com wbraid e verificar a referência criada. Destino WhatsApp interceptado; não envia mensagem nem comprova atribuição externa.
+- Componentes: `tests/unit/conversoes-formularios.test.tsx` cobre escolha de etapa/ação, bloqueio da mesma ação de compra e formulário de captura.
+- Banco: `tests/invariants/conversoes-qualificacao-isolada.test.ts` cobre identificadores, isolamento da etapa, snapshot e reprocessamento por evento.
+- Piloto real ainda necessário: anúncio → mensagem → etapa → recibo e diagnóstico da plataforma.

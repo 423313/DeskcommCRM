@@ -79,6 +79,8 @@ async function enviar(
   credencial: CredencialDeConversao,
   conversao: ConversaoOffline,
 ): Promise<ResultadoDeEnvio> {
+  if (conversao.evento !== "Purchase" || conversao.valorCentavos === null)
+    return { tipo: "permanente", detalhe: "Este transporte aceita apenas compras com valor." };
   const idadeMs = Date.now() - conversao.ocorridoEm.getTime();
   if (idadeMs > IDADE_MAXIMA_MS) {
     const dias = Math.floor(idadeMs / (24 * 60 * 60 * 1000));

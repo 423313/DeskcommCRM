@@ -1,3 +1,5 @@
+import type { IdentificadoresGoogle } from "./google/identificadores";
+
 /**
  * O vocabulário AGNÓSTICO do eixo de plataformas de anúncio.
  *
@@ -46,8 +48,8 @@ export type ApiDeConversaoGoogle = "google_ads" | "data_manager";
 
 export type PlataformaDeAnuncio = "meta_ads" | "google_ads";
 
-/** Só `Purchase` hoje. `Lead` é a Fase 2 e entra quando `lead.created` for consumido. */
-export type NomeDoEvento = "Purchase";
+/** Venda e qualificação são resultados distintos e deduplicados separadamente. */
+export type NomeDoEvento = "Purchase" | "QualifiedLead";
 
 /**
  * Uma conversão pronta para sair — no formato da CASA, não no da plataforma.
@@ -76,9 +78,10 @@ export interface ConversaoOffline {
   ocorridoEm: Date;
   /** O clique que originou a conversa — `ad_source_id` do contato (0164). */
   cliqueDeOrigem: string;
+  identificadoresGoogle?: IdentificadoresGoogle;
   /** E.164 sem `+`, ainda EM CLARO: o hash é responsabilidade do transporte. */
   telefone: string | null;
-  valorCentavos: number;
+  valorCentavos: number | null;
   moeda: string;
 }
 

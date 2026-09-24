@@ -39,9 +39,13 @@ export function montarEvento(credencial: CredencialDeConversao, conversao: Conve
         transactionId: conversao.eventoId,
         eventTimestamp: conversao.ocorridoEm.toISOString(),
         eventSource: "MESSAGE",
-        adIdentifiers: { gclid: conversao.cliqueDeOrigem },
-        conversionValue: conversao.valorCentavos / 100,
-        currency: conversao.moeda.toUpperCase(),
+        adIdentifiers: conversao.identificadoresGoogle ?? { gclid: conversao.cliqueDeOrigem },
+        ...(conversao.valorCentavos !== null
+          ? {
+              conversionValue: conversao.valorCentavos / 100,
+              currency: conversao.moeda.toUpperCase(),
+            }
+          : {}),
       },
     ],
     // Não inventa consentimento nem envia dados pessoais para preencher ausência de clique.

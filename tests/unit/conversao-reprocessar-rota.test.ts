@@ -40,6 +40,28 @@ describe("reprocessamento autorizado", () => {
     });
     expect(audit).toHaveBeenCalledOnce();
   });
+  it("seleciona qualificação sem repetir o evento de compra", async () => {
+    const resposta = await POST(
+      new Request("https://example.test?event_name=QualifiedLead", { method: "POST" }),
+      { params: Promise.resolve({ id }) },
+    );
+    expect(resposta.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith("fn_solicitar_reenvio_conversao", {
+      p_org: "org-da-sessao",
+      p_lead: id,
+      p_event: "QualifiedLead",
+    });
+  });
+  it("recusa evento arbitrário antes de acessar o banco", async () => {
+    expect(
+      (
+        await POST(new Request("https://example.test?event_name=Inventado", { method: "POST" }), {
+          params: Promise.resolve({ id }),
+        })
+      ).status,
+    ).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
   it("repetição sem efeito não gera auditoria", async () => {
     rpc.mockResolvedValue({ data: false, error: null });
     expect((await chamar()).status).toBe(200);

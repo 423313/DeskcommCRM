@@ -21,15 +21,7 @@
       "label": "Dados"
     }
   ],
-  "mainPath": [
-    "funil",
-    "eventos",
-    "handler",
-    "transporte",
-    "registro",
-    "tela",
-    "retry"
-  ],
+  "mainPath": ["funil", "eventos", "handler", "transporte", "registro", "tela", "retry"],
   "nodes": [
     {
       "id": "origem",
@@ -107,6 +99,20 @@
       "col": 10,
       "type": "component",
       "label": "Histórico de auditoria"
+    },
+    {
+      "id": "captura",
+      "lane": "motor",
+      "col": 0,
+      "type": "component",
+      "label": "Captura Google → referência → contato"
+    },
+    {
+      "id": "qualificacao",
+      "lane": "motor",
+      "col": 3,
+      "type": "component",
+      "label": "conversoes.qualificacao"
     }
   ],
   "edges": [
@@ -181,6 +187,36 @@
       "from": "tela",
       "to": "conexao",
       "label": "OAuth e configuração"
+    },
+    {
+      "id": "e12",
+      "from": "tela",
+      "to": "captura",
+      "label": "WhatsApp e mensagem por organização"
+    },
+    {
+      "id": "e13",
+      "from": "captura",
+      "to": "origem",
+      "label": "gclid / gbraid / wbraid"
+    },
+    {
+      "id": "e14",
+      "from": "eventos",
+      "to": "qualificacao",
+      "label": "stage_changed / retry_requested"
+    },
+    {
+      "id": "e15",
+      "from": "qualificacao",
+      "to": "handler",
+      "label": "envio compartilhado sem valor"
+    },
+    {
+      "id": "e16",
+      "from": "conexao",
+      "to": "qualificacao",
+      "label": "etapa e ação opcionais"
     }
   ]
 }

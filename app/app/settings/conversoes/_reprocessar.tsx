@@ -6,7 +6,15 @@ import { Button } from "@/components/ui/button";
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
 
-export function ReprocessarConversao({ leadId, idioma }: { leadId: string; idioma: Idioma }) {
+export function ReprocessarConversao({
+  leadId,
+  idioma,
+  evento = "Purchase",
+}: {
+  leadId: string;
+  idioma: Idioma;
+  evento?: string;
+}) {
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
   const t = (texto: string) => traduzir(texto, idioma);
@@ -19,7 +27,7 @@ export function ReprocessarConversao({ leadId, idioma }: { leadId: string; idiom
         iniciar(async () => {
           try {
             const resposta = await fetch(
-              `/api/v1/leads/${encodeURIComponent(leadId)}/conversion/retry`,
+              `/api/v1/leads/${encodeURIComponent(leadId)}/conversion/retry${evento === "Purchase" ? "" : `?event_name=${encodeURIComponent(evento)}`}`,
               { method: "POST" },
             );
             if (!resposta.ok) throw new Error();

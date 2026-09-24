@@ -31,6 +31,7 @@
  * de um `sem_atribuicao` que não existe.
  */
 import { z } from "zod";
+import { identificadorParaUpload } from "./identificadores";
 import { enviarDataManager, consultarDataManager } from "./data-manager";
 import { logger } from "@/lib/logger";
 import { configuracaoDoGoogleAds } from "./config";
@@ -204,11 +205,17 @@ async function enviar(
   const corpo = {
     conversions: [
       {
-        gclid: conversao.cliqueDeOrigem,
+        ...identificadorParaUpload(
+          conversao.identificadoresGoogle ?? { gclid: conversao.cliqueDeOrigem },
+        ),
         conversionAction: `customers/${customerId}/conversionActions/${google.conversionActionId}`,
         conversionDateTime: formatarDataDeConversao(conversao.ocorridoEm),
-        conversionValue: conversao.valorCentavos / 100,
-        currencyCode: conversao.moeda.toUpperCase(),
+        ...(conversao.valorCentavos !== null
+          ? {
+              conversionValue: conversao.valorCentavos / 100,
+              currencyCode: conversao.moeda.toUpperCase(),
+            }
+          : {}),
         // Dedup do lado do Google — mesmo papel do `event_id` da Meta.
         orderId: conversao.eventoId,
       },

@@ -101,3 +101,79 @@ test("conversões: instalação sem credenciais explica a ausência e permite re
     await admin.from("crm_pipelines").delete().eq("organization_id", org).eq("id", pipeline);
   }
 });
+
+test("captura Google: configure pela tela, recarregue e leve wbraid ao link do WhatsApp", async ({
+  page,
+}, testInfo) => {
+  const creds = await loginComoAdmin(page, lerCreds());
+  const { data: users, error: usersError } = await admin.auth.admin.listUsers();
+  if (usersError) throw usersError;
+  const user = users.users.find((u) => u.email === creds.users.admin!.email);
+  if (!user) throw new Error("Admin de teste ausente");
+  const { data: membro, error: membroError } = await admin
+    .from("user_organizations")
+    .select("organization_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .single();
+  if (membroError) throw membroError;
+  const org = membro.organization_id;
+  // As tabelas de captura são server-only; o browser opera pela action real.
+  const db = admin;
+  const { data: anterior, error: erroAnterior } = await db
+    .from("google_ads_landing_pages")
+    .select("*")
+    .eq("organization_id", org)
+    .maybeSingle();
+  if (erroAnterior) throw erroAnterior;
+  const click = `teste-${randomUUID()}`;
+  try {
+    await page.goto("/app/settings/conversoes");
+    const form = page.getByTestId("captura-google");
+    await form.getByLabel("Para qual WhatsApp mandar", { exact: true }).fill("+5511999999999");
+    await form
+      .getByLabel("Texto que a pessoa vai enviar", { exact: true })
+      .fill("Olá! Teste de origem. [ref:{token}]");
+    const ligado = form.getByRole("switch", { name: "Endereço de captura ligado", exact: true });
+    if ((await ligado.getAttribute("aria-checked")) !== "true") await ligado.click();
+    await form.getByRole("button", { name: "Salvar endereço de captura", exact: true }).click();
+    await expect(page.getByText("Endereço de captura salvo.", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(form.getByLabel("Para qual WhatsApp mandar", { exact: true })).toHaveValue(
+      "+5511999999999",
+    );
+    const link = (await form.locator("code").innerText()).trim();
+    expect(new URL(link).origin).toBe(new URL(page.url()).origin);
+    await page.screenshot({
+      path: testInfo.outputPath("conversoes-captura-google.png"),
+      fullPage: true,
+    });
+    // O destino externo é interceptado: prova o redirect sem enviar mensagem real.
+    await page.route("https://wa.me/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<h1>Destino WhatsApp de teste</h1>",
+      }),
+    );
+    await page.goto(`${link}?wbraid=${click}`);
+    await expect(
+      page.getByRole("heading", { name: "Destino WhatsApp de teste", exact: true }),
+    ).toBeVisible();
+    const texto = new URL(page.url()).searchParams.get("text");
+    const token = texto?.match(/\[ref:([23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6})\]/)?.[1];
+    expect(token).toBeTruthy();
+    const { data: ref, error } = await db
+      .from("google_ads_click_refs")
+      .select("gclid,wbraid")
+      .eq("organization_id", org)
+      .eq("token", token!)
+      .single();
+    if (error) throw error;
+    expect(ref).toEqual({ gclid: null, wbraid: click });
+  } finally {
+    await db.from("google_ads_click_refs").delete().eq("organization_id", org).eq("wbraid", click);
+    if (anterior) await db.from("google_ads_landing_pages").upsert(anterior);
+    else await db.from("google_ads_landing_pages").delete().eq("organization_id", org);
+  }
+});

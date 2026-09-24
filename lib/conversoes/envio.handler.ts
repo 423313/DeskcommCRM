@@ -49,7 +49,6 @@ import { lerAtribuicao } from "./leitura-da-atribuicao";
 import { lerRegistro, registraEnvio } from "./registro-de-envio";
 
 const CONSUMER_KEY = "conversoes.venda";
-const EVENTO: NomeDoEvento = "Purchase";
 
 /** Backoff do transitório. O drain reagenda sem contar tentativa. */
 const ESPERA_PADRAO_MS = 5 * 60 * 1000;
@@ -60,7 +59,17 @@ const ok = (status: HandlerResult["status"], detail?: string): HandlerResult => 
   detail,
 });
 
-async function processar(row: EventRow): Promise<HandlerResult> {
+export async function processarConversao(
+  row: EventRow,
+  qualificacao?: { ocorridoEm: string; googleActionId: string },
+): Promise<HandlerResult> {
+  const EVENTO: NomeDoEvento = qualificacao ? "QualifiedLead" : "Purchase";
+  if (
+    !qualificacao &&
+    row.event_type === "ad_conversion.retry_requested" &&
+    row.payload.event_name === "QualifiedLead"
+  )
+    return ok("skipped", "outro_evento");
   if (!row.entity_id) return ok("skipped", "sem_entidade");
 
   const admin = createAdminClient();
@@ -98,7 +107,8 @@ async function processar(row: EventRow): Promise<HandlerResult> {
   // das mudanças de etapa não é fechamento, e sai por aqui sem tocar no banco de
   // novo nem sujar o livro-razão.
   const registro = await lerRegistro(admin, row.organization_id, lead.id, EVENTO);
-  if (lead.status !== "won" && !registro?.remote_request_id) return ok("skipped", "nao_e_ganho");
+  if (!qualificacao && lead.status !== "won" && !registro?.remote_request_id)
+    return ok("skipped", "nao_e_ganho");
   if (registro?.status === "sent") {
     return ok("skipped", "ja_enviada");
   }
@@ -113,6 +123,12 @@ async function processar(row: EventRow): Promise<HandlerResult> {
   if (!leitura.temAtribuicao) return ok("skipped", leitura.motivo);
 
   const { plataforma, cliqueDeOrigem, telefone } = leitura.atribuicao;
+  const identificadoresGoogle =
+    "identificadoresGoogle" in leitura.atribuicao
+      ? leitura.atribuicao.identificadoresGoogle
+      : undefined;
+  if (qualificacao && plataforma !== "google_ads")
+    return ok("skipped", "qualificacao_sem_origem_google");
 
   const registra = (
     status: "sent" | "skipped" | "error",
@@ -129,7 +145,17 @@ async function processar(row: EventRow): Promise<HandlerResult> {
       status,
       motivo,
       eventoId: `${lead.id}:${EVENTO}`,
-      valorCentavos: registro?.remote_request_id ? registro.value_cents : lead.value_cents,
+      valorCentavos: qualificacao
+        ? null
+        : registro?.remote_request_id
+          ? registro.value_cents
+          : lead.value_cents,
+      ...(qualificacao
+        ? {
+            ocorridoEm: registro?.event_occurred_at ?? qualificacao.ocorridoEm,
+            googleActionId: registro?.google_action_id ?? qualificacao.googleActionId,
+          }
+        : {}),
       moeda: registro?.remote_request_id ? registro.currency : lead.currency,
       detalhe: detalhe ?? null,
       protocolo,
@@ -149,7 +175,11 @@ async function processar(row: EventRow): Promise<HandlerResult> {
   // nullable e nada obriga a preenchê-lo no fechamento (baseline.sql:1452), então
   // esta é a pendência MAIS COMUM — e a razão de a tela existir. Mandar `0` para
   // "resolver" seria aceito e ensinaria ao otimizador que a venda não vale nada.
-  if (!registro?.remote_request_id && (lead.value_cents === null || lead.value_cents <= 0)) {
+  if (
+    !qualificacao &&
+    !registro?.remote_request_id &&
+    (lead.value_cents === null || lead.value_cents <= 0)
+  ) {
     await registra("skipped", "sem_valor");
     return ok("skipped", "sem_valor");
   }
@@ -162,6 +192,21 @@ async function processar(row: EventRow): Promise<HandlerResult> {
     return ok("skipped", credencial.motivo);
   }
 
+  if (qualificacao && credencial.credencial.google) {
+    credencial.credencial.google.conversionActionId =
+      registro?.google_action_id ?? qualificacao.googleActionId;
+  }
+  if (qualificacao && !registro?.event_occurred_at) {
+    await registra("skipped", "nova_tentativa_agendada");
+    // O primeiro snapshot vence também quando dois movimentos concorrem.
+    const salvo = await lerRegistro(admin, row.organization_id, lead.id, EVENTO);
+    if (!salvo?.event_occurred_at || !salvo.google_action_id)
+      throw new Error("Snapshot da qualificação ausente.");
+    qualificacao = { ocorridoEm: salvo.event_occurred_at, googleActionId: salvo.google_action_id };
+    if (credencial.credencial.google)
+      credencial.credencial.google.conversionActionId = salvo.google_action_id;
+  }
+
   const conversao: ConversaoOffline = {
     organizationId: row.organization_id,
     leadId: lead.id,
@@ -171,13 +216,18 @@ async function processar(row: EventRow): Promise<HandlerResult> {
     // existe. O fallback é para a linha antiga de um banco que fechou por outro
     // caminho — e cair em `created_at` do evento é melhor que em `now()`, que
     // fingiria que a venda é de hoje.
-    ocorridoEm: new Date(lead.closed_at ?? row.created_at ?? Date.now()),
+    ocorridoEm: new Date(
+      qualificacao
+        ? (registro?.event_occurred_at ?? qualificacao.ocorridoEm)
+        : (lead.closed_at ?? row.created_at ?? Date.now()),
+    ),
     cliqueDeOrigem,
+    identificadoresGoogle,
     telefone,
     // A coluna tem `DEFAULT 'BRL'` e um CHECK de ISO-4217; o fallback só cobre a
     // linha que teve a moeda apagada à mão.
     moeda: lead.currency ?? "BRL",
-    valorCentavos: lead.value_cents ?? 0,
+    valorCentavos: qualificacao ? null : (lead.value_cents ?? 0),
   };
 
   // Protocolo já recebido: consultar é a única operação permitida até concluir.
@@ -250,7 +300,7 @@ async function processar(row: EventRow): Promise<HandlerResult> {
 
 async function handle(row: EventRow): Promise<HandlerResult> {
   try {
-    return await processar(row);
+    return await processarConversao(row);
   } catch {
     return {
       consumer_key: CONSUMER_KEY,

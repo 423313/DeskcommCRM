@@ -30,6 +30,7 @@ export interface EstadoDaConexao {
 export interface PendenciaDeEnvio {
   plataforma: string;
   leadId: string;
+  evento: string;
   status: string;
   motivo: string | null;
   detalhe: string | null;
@@ -85,7 +86,7 @@ export async function lerPendencias(
   const { data } = await admin
     .from("ad_conversion_dispatches")
     .select(
-      "lead_id, platform, status, reason, detail, value_cents, attempted_at, crm_leads(title)",
+      "lead_id, event_name, platform, status, reason, detail, value_cents, attempted_at, crm_leads(title)",
     )
     .eq("organization_id", organizationId)
     .neq("status", "sent")
@@ -95,6 +96,7 @@ export async function lerPendencias(
   return ((data ?? []) as unknown[]).map((linha) => {
     const l = linha as {
       lead_id: string;
+      event_name: string;
       platform: string;
       status: string;
       reason: string | null;
@@ -106,6 +108,7 @@ export async function lerPendencias(
     const lead = Array.isArray(l.crm_leads) ? l.crm_leads[0] : l.crm_leads;
     return {
       leadId: l.lead_id,
+      evento: l.event_name ?? "Purchase",
       plataforma: l.platform,
       status: l.status,
       motivo: l.reason,

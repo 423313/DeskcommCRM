@@ -878,7 +878,6 @@ export type Database = {
         Update: { id?: string; organization_id?: string; actor_user_id?: string; auth_session_id?: string; access_mode?: string; previous_organization_id?: string | null; created_at?: string; expires_at?: string; ended_at?: string | null }
         Relationships: [{ foreignKeyName: "platform_support_sessions_organization_id_fkey"; columns: ["organization_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }]
       }
-
       ad_conversion_dispatches: {
         Row: {
           attempted_at: string
@@ -887,13 +886,15 @@ export type Database = {
           detail: string | null
           event_id: string | null
           event_name: string
+          event_occurred_at: string | null
+          google_action_id: string | null
           id: string
           lead_id: string
           organization_id: string
           platform: string
+          reason: string | null
           remote_request_id: string | null
           remote_requested_at: string | null
-          reason: string | null
           status: string
           updated_at: string
           value_cents: number | null
@@ -905,13 +906,15 @@ export type Database = {
           detail?: string | null
           event_id?: string | null
           event_name: string
+          event_occurred_at?: string | null
+          google_action_id?: string | null
           id?: string
           lead_id: string
           organization_id: string
           platform: string
+          reason?: string | null
           remote_request_id?: string | null
           remote_requested_at?: string | null
-          reason?: string | null
           status: string
           updated_at?: string
           value_cents?: number | null
@@ -923,13 +926,15 @@ export type Database = {
           detail?: string | null
           event_id?: string | null
           event_name?: string
+          event_occurred_at?: string | null
+          google_action_id?: string | null
           id?: string
           lead_id?: string
           organization_id?: string
           platform?: string
+          reason?: string | null
           remote_request_id?: string | null
           remote_requested_at?: string | null
-          reason?: string | null
           status?: string
           updated_at?: string
           value_cents?: number | null
@@ -957,10 +962,13 @@ export type Database = {
           created_at: string
           dataset_id: string | null
           enabled: boolean
-          google_conversion_action_id: string | null
           google_api: string
+          google_conversion_action_id: string | null
           google_customer_id: string | null
           google_login_customer_id: string | null
+          google_qualification_action_id: string | null
+          google_qualification_configured_at: string | null
+          google_qualification_stage_id: string | null
           google_refresh_token_encrypted: string | null
           id: string
           organization_id: string
@@ -974,10 +982,13 @@ export type Database = {
           created_at?: string
           dataset_id?: string | null
           enabled?: boolean
-          google_conversion_action_id?: string | null
           google_api?: string
+          google_conversion_action_id?: string | null
           google_customer_id?: string | null
           google_login_customer_id?: string | null
+          google_qualification_action_id?: string | null
+          google_qualification_configured_at?: string | null
+          google_qualification_stage_id?: string | null
           google_refresh_token_encrypted?: string | null
           id?: string
           organization_id: string
@@ -991,10 +1002,13 @@ export type Database = {
           created_at?: string
           dataset_id?: string | null
           enabled?: boolean
-          google_conversion_action_id?: string | null
           google_api?: string
+          google_conversion_action_id?: string | null
           google_customer_id?: string | null
           google_login_customer_id?: string | null
+          google_qualification_action_id?: string | null
+          google_qualification_configured_at?: string | null
+          google_qualification_stage_id?: string | null
           google_refresh_token_encrypted?: string | null
           id?: string
           organization_id?: string
@@ -1010,6 +1024,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_qualification_stage_org_fk"
+            columns: ["organization_id", "google_qualification_stage_id"]
+            isOneToOne: false
+            referencedRelation: "crm_stages"
+            referencedColumns: ["organization_id", "id"]
           },
         ]
       }
@@ -8820,6 +8841,98 @@ export type Database = {
           },
         ]
       }
+      google_ads_landing_pages: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          message_template: string
+          organization_id: string
+          updated_at: string
+          updated_by: string | null
+          whatsapp_e164: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          message_template?: string
+          organization_id: string
+          updated_at?: string
+          updated_by?: string | null
+          whatsapp_e164: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          message_template?: string
+          organization_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          whatsapp_e164?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_ads_landing_pages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_ads_click_refs: {
+        Row: {
+          contact_id: string | null
+          created_at: string
+          gbraid: string | null
+          gclid: string | null
+          id: string
+          matched_at: string | null
+          organization_id: string
+          query_raw: Json
+          token: string
+          wbraid: string | null
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string
+          gbraid?: string | null
+          gclid?: string | null
+          id?: string
+          matched_at?: string | null
+          organization_id: string
+          query_raw?: Json
+          token: string
+          wbraid?: string | null
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string
+          gbraid?: string | null
+          gclid?: string | null
+          id?: string
+          matched_at?: string | null
+          organization_id?: string
+          query_raw?: Json
+          token?: string
+          wbraid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_ads_click_refs_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "google_ads_click_refs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       calendar_google_reconcilable_appointments: {
@@ -9202,10 +9315,12 @@ export type Database = {
         Args: { p_agent_id: string; p_version_id: string }
         Returns: undefined
       }
-      fn_solicitar_reenvio_conversao: {
-        Args: { p_org: string; p_lead: string }
-        Returns: boolean
-      }
+      fn_solicitar_reenvio_conversao:
+        | { Args: { p_lead: string; p_org: string }; Returns: boolean }
+        | {
+            Args: { p_event: string; p_lead: string; p_org: string }
+            Returns: boolean
+          }
       emit_event: {
         Args: {
           p_entity_id: string

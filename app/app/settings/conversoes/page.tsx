@@ -93,19 +93,36 @@ export default async function ConversoesPage({
   const { erro: erroDoGoogle, ok: okDoGoogle } = await searchParams;
 
   const admin = createAdminClient();
-  const [estado, pendencias, enviadas, estadoGoogle, estadoDaCaptura, canais, organizacao] =
-    await Promise.all([
-      lerEstadoDaConexao(admin, activeOrg.orgId),
-      lerPendencias(admin, activeOrg.orgId),
-      contaEnviadas(admin, activeOrg.orgId),
-      lerEstadoDaConexaoGoogle(admin, activeOrg.orgId),
-      lerEstadoDaCaptura(admin, "meta_ads_landing_pages", activeOrg.orgId),
-      // Os números conectados viram SUGESTÃO no formulário de captura. Falhar
-      // aqui não pode derrubar a tela inteira: sem sugestão, a pessoa digita.
-      listSelectableChannels(admin, activeOrg.orgId).catch(() => []),
-      // O `slug` é o `[org]` da rota pública, e não está no `ActiveOrg`.
-      admin.from("organizations").select("slug").eq("id", activeOrg.orgId).maybeSingle(),
-    ]);
+  const [
+    estado,
+    pendencias,
+    enviadas,
+    estadoGoogle,
+    estadoDaCaptura,
+    canais,
+    organizacao,
+    capturaGoogle,
+    etapas,
+  ] = await Promise.all([
+    lerEstadoDaConexao(admin, activeOrg.orgId),
+    lerPendencias(admin, activeOrg.orgId),
+    contaEnviadas(admin, activeOrg.orgId),
+    lerEstadoDaConexaoGoogle(admin, activeOrg.orgId),
+    lerEstadoDaCaptura(admin, "meta_ads_landing_pages", activeOrg.orgId),
+    // Os números conectados viram SUGESTÃO no formulário de captura. Falhar
+    // aqui não pode derrubar a tela inteira: sem sugestão, a pessoa digita.
+    listSelectableChannels(admin, activeOrg.orgId).catch(() => []),
+    // O `slug` é o `[org]` da rota pública, e não está no `ActiveOrg`.
+    admin.from("organizations").select("slug").eq("id", activeOrg.orgId).maybeSingle(),
+    lerEstadoDaCaptura(admin, "google_ads_landing_pages", activeOrg.orgId),
+    admin
+      .from("crm_stages")
+      .select("id, name, crm_pipelines(name)")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_won", false)
+      .eq("is_lost", false)
+      .order("position"),
+  ]);
   const slug = (organizacao.data as { slug: string | null } | null)?.slug ?? null;
   const numerosConectados = canais
     .map((c) => c.phone_number)
@@ -170,11 +187,26 @@ export default async function ConversoesPage({
       <FormularioDeConversoes estado={estado} idioma={idioma} />
       <FormularioDeConversoesGoogle
         estado={estadoGoogle}
+        etapas={(etapas.data ?? []).map((e) => ({
+          id: e.id,
+          nome: `${(Array.isArray(e.crm_pipelines) ? e.crm_pipelines[0] : e.crm_pipelines)?.name ?? "Funil"} — ${e.name}`,
+        }))}
+        erroEtapas={Boolean(etapas.error)}
         idioma={idioma}
         configurado={googleAdsEstaConfigurado(estadoGoogle.api)}
         dataManagerConfigurado={googleAdsEstaConfigurado("data_manager")}
         falta={faltaParaConectarOGoogleAds(estadoGoogle.api)}
       />
+
+      {slug && (
+        <FormularioDeCapturaDeUtm
+          plataforma="google"
+          estado={capturaGoogle}
+          idioma={idioma}
+          slug={slug}
+          numerosConectados={numerosConectados}
+        />
+      )}
 
       <p className="text-sm text-muted-foreground">
         {t(
@@ -183,9 +215,9 @@ export default async function ConversoesPage({
       </p>
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold">{t("Vendas que não foram reportadas")}</h2>
+          <h2 className="text-lg font-semibold">{t("Conversões que não foram reportadas")}</h2>
           <span className="text-sm text-muted-foreground">
-            {enviadas} {t("aceitas pela plataforma")}
+            {enviadas} {t("conversões aceitas pela plataforma")}
           </span>
         </div>
 
@@ -198,7 +230,7 @@ export default async function ConversoesPage({
               saber que a lista vazia ainda não prova que funciona.
             */}
             {t(
-              "Nenhuma pendência. Ou tudo que veio de anúncio foi reportado, ou ainda não fechou nenhuma venda com origem em anúncio.",
+              "Nenhuma pendência. Ainda pode não haver vendas ou qualificações com origem em anúncio.",
             )}
           </p>
         ) : (
@@ -207,6 +239,7 @@ export default async function ConversoesPage({
               <thead className="bg-muted/50 text-left">
                 <tr>
                   <th className="p-3 font-medium">{t("Negócio")}</th>
+                  <th className="p-3 font-medium">{t("Evento")}</th>
                   <th className="p-3 font-medium">{t("Origem")}</th>
                   <th className="p-3 font-medium">{t("Valor")}</th>
                   <th className="p-3 font-medium">{t("O que houve")}</th>
@@ -216,7 +249,7 @@ export default async function ConversoesPage({
               </thead>
               <tbody>
                 {pendencias.map((p) => (
-                  <tr key={p.leadId} className="border-t align-top">
+                  <tr key={`${p.leadId}:${p.evento}`} className="border-t align-top">
                     <td className="p-3">
                       <a
                         className="underline underline-offset-2"
@@ -224,6 +257,9 @@ export default async function ConversoesPage({
                       >
                         {p.tituloDoLead ?? t("(sem título)")}
                       </a>
+                    </td>
+                    <td className="p-3">
+                      {t(p.evento === "QualifiedLead" ? "Lead qualificado" : "Compra")}
                     </td>
                     <td className="p-3">
                       {p.plataforma === "meta_ads"
@@ -247,7 +283,7 @@ export default async function ConversoesPage({
                       {new Date(p.tentadoEm).toLocaleString(idioma)}
                     </td>
                     <td className="p-3">
-                      <ReprocessarConversao leadId={p.leadId} idioma={idioma} />
+                      <ReprocessarConversao leadId={p.leadId} idioma={idioma} evento={p.evento} />
                     </td>
                   </tr>
                 ))}
