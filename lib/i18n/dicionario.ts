@@ -5569,6 +5569,7 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Inbox: aviso de retenção (before_send) ───
   "sem domingo": { es: "sin domingo" },
+  "horário de": { es: "horario de" },
   "Fora da janela de envio": { es: "Fuera de la ventana de envío" },
   "A resposta fica agendada para a próxima abertura da janela, às": {
     es: "La respuesta queda programada para cuando se abra de nuevo la ventana, a las",
