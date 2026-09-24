@@ -3061,6 +3061,13 @@ export const DICIONARIO: Traducoes = {
   "Percebe, geralmente em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.": {
     es: "Nota, normalmente en menos de un segundo, si el cliente está molesto, y avisa para pasar la conversación a una persona.",
   },
+  "Validar a resposta do fluxo": { es: "Validar la respuesta del flujo" },
+  "Quando o fluxo está esperando uma resposta, lê a mensagem do cliente com o contexto da conversa e devolve SÓ o dado que deve ser salvo — ou diz que ele não respondeu.": {
+    es: "Cuando el flujo espera una respuesta, lee el mensaje del cliente con el contexto de la conversación y devuelve SOLO el dato que debe guardarse, o indica que no respondió.",
+  },
+  "Dado errado entra no cadastro do cliente (ex.: o modelo grava a resposta na pergunta errada) ou o cliente fica sem a pergunta seguinte.": {
+    es: "Entra un dato erróneo en el registro del cliente (p. ej.: el modelo guarda la respuesta en la pregunta equivocada) o el cliente se queda sin la siguiente pregunta.",
+  },
   "Prepara uma resposta com a versão e o conhecimento do agente, sem aplicar alterações ao cliente.": {
     es: "Prepara una respuesta con la versión y el conocimiento del agente, sin aplicar cambios al cliente.",
   },
