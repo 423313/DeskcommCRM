@@ -30,7 +30,8 @@ export default async function AtendimentoFlowBuilderPage({
 
   const supabase = await createClient();
   const flow = await carregarFluxoParaEdicao(supabase, { orgId: activeOrg.orgId, id });
-  if (!flow) notFound();
+  // Um fluxo de follow-up não abre aqui (nem um roteiro no editor de follow-up).
+  if (!flow || flow.surface !== "atendimento") notFound();
 
   return (
     <div className="flex h-full flex-col">

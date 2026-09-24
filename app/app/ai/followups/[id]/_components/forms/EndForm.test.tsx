@@ -94,6 +94,8 @@ describe("EndForm — encadear o próximo fluxo de atendimento", () => {
       <EndForm
         config={{ outcome: "converted" }}
         onChange={(c) => gravados.push(c as Record<string, unknown>)}
+        surface="atendimento"
+        flowId="flow-a"
       />,
     );
 
@@ -104,7 +106,8 @@ describe("EndForm — encadear o próximo fluxo de atendimento", () => {
 
     await user.click(screen.getByRole("combobox", { name: "Próximo fluxo" }));
     const fluxos = await screen.findAllByRole("option");
-    // O rascunho não aparece: só fluxo ativo pode ser encadeado.
+    // O rascunho não aparece (só fluxo ativo encadeia), nem o próprio roteiro
+    // (o motor ignoraria calado — prova prática do #1130, J5).
     expect(fluxos.map((f) => f.textContent)).toEqual(["Escolha um fluxo", "Financiamento"]);
 
     await user.click(screen.getByRole("option", { name: "Financiamento" }));
@@ -114,3 +117,33 @@ describe("EndForm — encadear o próximo fluxo de atendimento", () => {
     });
   });
 });
+
+describe("EndForm por superfície (PR 3 do port do #1130)", () => {
+  it("no FOLLOW-UP não há 'Ao concluir' (não existe para o relógio)", () => {
+    render(<EndForm config={{ outcome: "converted" }} onChange={() => {}} />);
+    expect(screen.getByRole("combobox", { name: "Resultado" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Ao concluir, o que fazer" })).toBeNull();
+  });
+
+  it("no ROTEIRO não há 'Resultado' — o desfecho é do motor", () => {
+    render(<EndForm config={{ outcome: "converted" }} onChange={() => {}} surface="atendimento" />);
+    expect(screen.queryByRole("combobox", { name: "Resultado" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Ao concluir, o que fazer" })).toBeTruthy();
+  });
+
+  it("não oferece encadear no próprio roteiro", { timeout: TETO_MS }, async () => {
+    const user = usuario();
+    render(
+      <EndForm
+        config={{ outcome: "converted", ao_finalizar: { tipo: "proximo_fluxo", fluxo: "" } }}
+        onChange={() => {}}
+        surface="atendimento"
+        flowId="flow-b"
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Próximo fluxo" }));
+    const fluxos = await screen.findAllByRole("option");
+    expect(fluxos.map((f) => f.textContent)).toEqual(["Escolha um fluxo"]);
+  });
+});
+

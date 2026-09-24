@@ -31,10 +31,14 @@ export function useFollowupFlows(opts?: {
   initialData?: FollowupFlowPointerRow[];
   /** Recorta a listagem por superfície (`atendimento` = tela de fluxos de atendimento). */
   surface?: FollowupFlowSurface;
+  /** `false` = não busca (o Fim de um follow-up não precisa da lista de roteiros). */
+  enabled?: boolean;
 }) {
   const surface = opts?.surface;
   return useQuery({
-    queryKey: [...followupFlowsListQueryKey, surface ?? "all"],
+    // A lista de follow-ups mantém a chave de sempre (instalar modelo e
+    // duplicar escrevem nela); só o recorte por superfície ganha chave própria.
+    queryKey: surface ? [...followupFlowsListQueryKey, surface] : followupFlowsListQueryKey,
     queryFn: async () => {
       try {
         const url = surface
@@ -48,6 +52,7 @@ export function useFollowupFlows(opts?: {
       }
     },
     initialData: opts?.initialData,
+    enabled: opts?.enabled ?? true,
   });
 }
 
