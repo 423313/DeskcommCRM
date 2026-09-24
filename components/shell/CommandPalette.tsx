@@ -280,6 +280,12 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
           {resultados.map((d, i) => {
             const Icon = d.icon;
             const ativo = i === destacado;
+            // No item destacado o fundo é a cor de destaque: o cinza de apoio
+            // ficava 1,2:1 sobre o verde (medido), ilegível. A cor de frente do
+            // destaque SEM opacidade herda o piso de 4,5:1 que
+            // lib/branding/contraste.ts garante para qualquer marca própria; a
+            // 90%, uma marca de luminância média cai para 4,1:1.
+            const secundario = ativo ? "text-accent-foreground" : "text-muted-foreground";
             return (
               <li
                 key={d.href}
@@ -305,11 +311,13 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm font-medium">{t(d.label)}</span>
-                    <span className="truncate text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                    <span className={cn("truncate text-[10px] font-medium tracking-wider uppercase", secundario)}>
                       {t(ROTULO_GRUPO.get(d.group) ?? "")}
                     </span>
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">{t(d.description)}</p>
+                  {/* Duas linhas, não uma cortada: a palavra que a pessoa buscou
+                      pode estar no fim da descrição. */}
+                  <p className={cn("line-clamp-2 text-xs", secundario)}>{t(d.description)}</p>
                 </div>
               </li>
             );

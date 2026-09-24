@@ -59,6 +59,33 @@ describe("CommandPalette", () => {
     expect(screen.getByRole("option", { name: /Radar/ })).toBeTruthy();
   });
 
+  it("acha o Jev pelo nome, embora ele não tenha tela própria", async () => {
+    const user = userEvent.setup();
+    abrir();
+    // O cartão dele mora em Provedores; sem o nome na descrição, quem ouviu
+    // falar do Jev digitava "jev" e não achava nada.
+    await user.type(screen.getByRole("combobox"), "jev");
+    const opcao = screen.getByRole("option", { name: /Provedores/ });
+    // E VÊ o nome: a descrição longa cortava antes do "Jev" (medido em campo).
+    const descricao = opcao.querySelector("p")!.textContent!;
+    expect(descricao.indexOf("Jev"), descricao).toBeGreaterThanOrEqual(0);
+    expect(descricao.indexOf("Jev"), "o Jev tem de vir no começo").toBeLessThan(20);
+  });
+
+  it("o texto de apoio do item destacado usa a cor de frente do destaque, não o cinza", async () => {
+    const user = userEvent.setup();
+    abrir();
+    await user.type(screen.getByRole("combobox"), "jev");
+    const destacada = screen.getByRole("option", { selected: true });
+    // Cinza sobre o verde do destaque dava 1,2:1. Sem opacidade: o piso de
+    // 4,5:1 de lib/branding/contraste.ts só vale para a cor de frente INTEIRA.
+    for (const apoio of [destacada.querySelector("p")!, destacada.querySelector("span.uppercase")!]) {
+      expect(apoio.classList).toContain("text-accent-foreground");
+      expect(apoio.className).not.toMatch(/text-accent-foreground\//);
+      expect(apoio.className).not.toContain("text-muted-foreground");
+    }
+  });
+
   it("respeita o papel", async () => {
     comoPapel("agent");
     const user = userEvent.setup();
