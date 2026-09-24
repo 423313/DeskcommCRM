@@ -90,6 +90,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   que abre o ponto no mapa, e o assistente recebe o link — o pino passa a valer
   como endereço de entrega. Se a busca falhar, a mensagem entra como antes.
 
+  Contribuição de @jmpo (#1584).
+
 - **Escolha um logo para cada tema da marca** A tela de marca aceita uma imagem opcional para o tema escuro, exibida sem moldura branca. O logo atual continua no tema claro e conserva a proteção de contraste no escuro quando não há uma segunda imagem. Instalação e organizações mantêm suas próprias marcas; remover uma arte não apaga a outra. Crédito: @vitorlacerdadigital.
 
 - **Dá para regular o raciocínio dos modelos da OpenAI com OPENAI_REASONING_EFFORT** Os modelos de raciocínio da OpenAI (gpt-5.x, gpt-6) pensam antes de responder, e no atendimento pelo WhatsApp isso vira espera: medido com `gpt-6-luna`, o rascunho levava de 9 a 27 s, com uns 700 tokens de raciocínio para uma resposta de 40, e às vezes o modelo nem chamava a ferramenta de envio. Com `OPENAI_REASONING_EFFORT=none` no `.env`, a mesma chamada caiu de uns 5 s para uns 2 s e chamou a ferramenta todas as vezes. Valores aceitos: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`; vazio mantém o padrão do modelo. Vale só para o provedor OpenAI direto e só para modelos que raciocinam (`o*`, `gpt-5*`, `gpt-6*`, fora as variantes `-chat`); os demais seguem sem o campo. Grafia errada impede o worker de subir e o log diz qual variável corrigir. Contribuição de @rogercampel (#1598).
@@ -141,7 +143,9 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   O botão "X" que fecha diálogos e painéis laterais era anunciado como "Close", em inglês, para
   quem usa leitor de tela. Agora é anunciado como "Fechar" (em espanhol, "Cerrar").
 
-- **Cerca de escrita em organizations fecha pontos cegos de escopo léxico e exportações** A cerca de escrita em `organizations` (`tests/unit/escrita-em-organizations-usa-cliente-admin.test.ts`) passa a resolver a identidade do cliente admin por escopo léxico da declaração em vez de apenas pelo nome no escopo do arquivo. Além disso, funções com declaração `export { ... }`, `export default` ou que escapam como valor agora são devidamente tratadas como exportadas, impedindo que parâmetros sem anotação explícita de tipo passem desapercebidos com falso-verde.
+- **Cerca de escrita em organizations fecha pontos cegos de escopo léxico e exportações** A cerca de escrita em `organizations` (`tests/unit/escrita-em-organizations-usa-cliente-admin.test.ts`) passa a resolver a identidade do cliente admin por escopo léxico da declaração em vez de apenas pelo nome no escopo do arquivo. Além disso, funções com declaração `export { ... }`, `export default` ou que escapam como valor agora são devidamente tratadas como exportadas, impedindo que parâmetros sem anotação explícita de tipo passem despercebidos com falso-verde.
+
+  Contribuição de @webtecnica (#1557).
 
 - **A tela Execuções deixa de poder mostrar a chave do provedor de IA numa mensagem de erro** Quando um provedor de IA recusava uma chamada e repetia a chave de acesso no texto do
   erro, a tela IA › Execuções podia mostrar essa chave inteira. O filtro que deveria
@@ -189,7 +193,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Invariante garante que a configuração de SMTP da instalação é estritamente server-side** Adiciona o teste de invariante `tests/invariants/configuracao-de-smtp-e-server-side.test.ts` para a tabela `platform_smtp_settings`, espelhando a proteção de suas irmãs (`platform_meta_app`, `platform_google_oauth`).
 
-  O teste afere privilégios revocados para `anon` e `authenticated`, permissão estrita ao `service_role`, ativação de RLS sem policies públicas, isolamento da senha criptografada via `fn_encrypt_oauth`/`fn_decrypt_oauth` e garantia de integridade do singleton.
+  O teste afere privilégios revogados para `anon` e `authenticated`, permissão estrita ao `service_role`, ativação de RLS sem policies públicas, isolamento da senha criptografada via `fn_encrypt_oauth`/`fn_decrypt_oauth` e garantia de integridade do singleton.
 
   Contribuição de @webtecnica.
 
@@ -222,6 +226,8 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   Contribuição de @jmpo (#1583).
 
 - **O rascunho de resposta chega sem esperar um resumo da conversa que ninguém usa** No modo assistido, depois de escrever o rascunho o agente ainda pedia ao modelo um resumo da conversa (o checkpoint) e só entregava o rascunho quando esse resumo terminava. Nesse modo o resumo não é gravado nem lido por ninguém, e a espera era a maior parte do tempo: medido em produção, a resposta ficou pronta às 12:32:40 e o rascunho só apareceu às 12:32:56 — 16 dos 28 segundos depois de "Sugerir resposta". Agora o rascunho sai assim que a resposta fica pronta. O teste do agente (a tela de prévia) continua mostrando o resumo, e o aviso de "o agente não propôs uma resposta" continua valendo.
+
+  Contribuição de @rogercampel (#1605).
 
 - **Os candidatos da prospecção nativa agora têm prazo, e é o cron quem apaga** A tabela `prospecting_candidates` nascia sem dono de expurgo: nome, telefone e endereço de pessoas pesquisadas e nunca contatados ficavam para sempre, e uma campanha montada e abandonada deixava esse dado parado sem nenhum evento que o expirasse.
 
