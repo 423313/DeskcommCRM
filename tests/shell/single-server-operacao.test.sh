@@ -140,6 +140,26 @@ check "dump corrompido reprova o backup" test "$rc" -ne 0
 check "e diz que o dump saiu corrompido" contem "$WORK/bk-corrompido.out" "saiu corrompido"
 check "e não deixa o arquivo corrompido para ninguém confiar nele" \
   bash -c "! ls '$APROJ'/backups/db-*.sql.gz >/dev/null 2>&1"
+
+# E quando uma etapa do pipe FALHA (o `gzip` sai ≠0, como no disco cheio): o
+# `set -e` encerrava o script antes do `gzip -t`, e o arquivo cortado ficava na
+# pasta — com o nome definitivo, dentro da retenção e ao alcance do restore.
+mkdir -p "$WORK/gzip-falha"
+{
+  printf '#!/usr/bin/env bash
+GZIP_REAL=%q
+' "$GZIP_REAL"
+  cat <<'G'
+case " $* " in *" -t "*) exec "$GZIP_REAL" "$@" ;; esac
+cat >/dev/null; printf 'nao-e-gzip'; exit 1
+G
+} > "$WORK/gzip-falha/gzip"
+chmod +x "$WORK/gzip-falha/gzip"
+(cd "$APROJ" && PATH="$WORK/gzip-falha:$PATH" bash "$KIT_DIR/backup.sh") > "$WORK/bk-pipe-falhou.out" 2>&1; rc=$?
+check "pipe do dump que falha reprova o backup" test "$rc" -ne 0
+check "e diz que o dump falhou no meio" contem "$WORK/bk-pipe-falhou.out" "falhou no meio"
+check "e não deixa o arquivo cortado (nem o .parcial) na pasta" \
+  bash -c "! ls '$APROJ'/backups/db-*.sql.gz >/dev/null 2>&1 && ! ls '$APROJ'/backups/.db-*.parcial >/dev/null 2>&1"
 printf 'x' | gzip > "$APROJ/backups/db-20260922-030000.sql.gz"
 : > "$LOG"
 (cd "$APROJ" && printf 'RESTAURAR\n' | bash "$KIT_DIR/restore.sh" backups/db-20260922-030000.sql.gz) > "$WORK/rs-comum.out" 2>&1; rc=$?
