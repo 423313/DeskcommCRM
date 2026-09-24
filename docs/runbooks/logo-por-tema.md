@@ -1,6 +1,6 @@
 # Logo por tema: compatibilidade e reversão
 
-A mudança 0401 acrescenta `platform_branding.logo_dark_path` e o campo homônimo em `organizations.settings.branding`. O bucket e as regras de tamanho, formato, autorização e auditoria são os mesmos do logo padrão. O upload conserva os bytes da imagem.
+A mudança 0406 acrescenta `platform_branding.logo_dark_path` e o campo homônimo em `organizations.settings.branding`. O bucket e as regras de tamanho, formato, autorização e auditoria são os mesmos do logo padrão. O upload conserva os bytes da imagem.
 
 A rota `POST/DELETE /api/v1/marca/logo` aceita `tema=claro|escuro`; omitir o tema conserva o contrato antigo (`claro`). A resposta mantém `logo_path` e `logo_url`, relativos ao tema pedido. O RPC antigo delega ao mesmo escritor com o tema claro. Nome/cor não alteram os ponteiros dos arquivos.
 

@@ -1,4 +1,4 @@
-/** 0398: isolamento de tenant, autorização, escrita por tema e rollback do cliente antigo. */
+/** 0406: isolamento de tenant, autorização, escrita por tema e rollback do cliente antigo. */
 import { beforeAll, describe, expect, it } from "vitest";
 import { lastLine, sql } from "./gov-helpers";
 const org = "10c00398-0000-4000-8000-000000000001";

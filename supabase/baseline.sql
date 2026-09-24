@@ -37140,7 +37140,7 @@ end; $$;
 revoke execute on function public.fn_service_inbound(uuid) from public,anon,authenticated;
 grant execute on function public.fn_service_inbound(uuid) to service_role;
 
--- ---- logo por tema: funções (migration 0401) ----
+-- ---- logo por tema: funções (migration 0406) ----
 create or replace function public.fn_definir_logo_por_tema_da_organizacao(
   p_org   uuid,
   p_actor uuid,
@@ -38262,8 +38262,8 @@ end $$;
 do $f$ begin perform public.fn_conferir_modulos_instalados(); end $f$;
 
 
--- ---- logo por tema: coluna da instalação (migration 0401) ----
--- 0401 — Logo opcional para o tema escuro, preservando o logo padrão.
+-- ---- logo por tema: coluna da instalação (migration 0406) ----
+-- 0406 — Logo opcional para o tema escuro, preservando o logo padrão.
 -- Aditiva: código anterior continua usando logo_path; rollback de imagem não
 -- exige apagar coluna, arquivos ou dados. Somente a rota de logo escreve os caminhos.
 

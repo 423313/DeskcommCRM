@@ -1,4 +1,4 @@
--- 0401 — Logo opcional para o tema escuro, preservando o logo padrão.
+-- 0406 — Logo opcional para o tema escuro, preservando o logo padrão.
 -- Aditiva: código anterior continua usando logo_path; rollback de imagem não
 -- exige apagar coluna, arquivos ou dados. Somente a rota de logo escreve os caminhos.
 
