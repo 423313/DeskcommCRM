@@ -126,6 +126,16 @@ export const agentConfigSchema = z.object({
   // sessão rejeita a configuração.
   voice_speed: z.number().min(0.25).max(1.5).default(0.85),
   voice_model: agentVoiceModelSchema.default("gpt-realtime"),
+  /**
+   * Aceita os comandos de controle `#on`/`#off` enviados pelo CELULAR do
+   * operador (C-076)? `false` (default do produto) = o ingest NÃO reconhece os
+   * comandos; qualquer mensagem do celular continua pausando a IA normalmente.
+   *
+   * O default é `false` de propósito: um comando digitado no chat do CLIENTE é
+   * uma decisão de produto com efeito visível (o cliente pode ver a mensagem),
+   * então não se liga por migration — se liga na tela do agente.
+   */
+  aceita_comandos_celular: z.boolean().default(false),
 });
 export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
@@ -139,6 +149,7 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
   voice: "marin",
   voice_speed: 0.85,
   voice_model: "gpt-realtime",
+  aceita_comandos_celular: false,
 };
 
 // ---------------------------------------------------------------------------
