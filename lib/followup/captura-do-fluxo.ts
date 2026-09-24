@@ -19,6 +19,8 @@
  * pergunta ("ano" exige 4 dígitos plausíveis, "km" aceita "mil", etc.). Texto
  * livre NUNCA é capturado aqui — interpretar sentido não é trabalho de regex.
  */
+import { isValidCpf } from "@/lib/legal/perfil-do-pais";
+
 import type { ContactFlowFieldType } from "./graph-schema";
 
 /** O mínimo que a captura precisa saber de um campo pendente. */
@@ -107,6 +109,8 @@ export function normalizarValorDoCampo(
       return capturarBooleano(campo, t, n, temContexto);
     case "select":
       return capturarSelect(campo, t, n);
+    case "cpf":
+      return capturarCpf(campo, t);
     case "text":
       // Texto livre é interpretação — não é trabalho de regex.
       return null;
@@ -151,6 +155,15 @@ function validaData(ano: number, mes: number, dia: number): boolean {
   if (mes < 1 || mes > 12) return false;
   if (dia < 1 || dia > 31) return false;
   return true;
+}
+
+/** Um CPF de 11 dígitos, com ou sem pontuação, que CONFERE pelo dígito verificador. */
+function capturarCpf(campo: CampoPendenteParaCaptura, bruto: string): CapturaDeCampo | null {
+  for (const m of bruto.matchAll(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g)) {
+    const digitos = m[0].replace(/\D/g, "");
+    if (isValidCpf(digitos)) return { key: campo.key, valor: digitos, bruto };
+  }
+  return null;
 }
 
 function capturarNumero(
@@ -294,6 +307,8 @@ export function valorBateComTipo(campo: CampoPendenteParaCaptura, valor: unknown
       return RE_DATA_ISO.test(s) || RE_DATA_BR.test(s);
     case "select":
       return (campo.options ?? []).some((o) => normalizar(o) === normalizar(s));
+    case "cpf":
+      return isValidCpf(s);
     case "text":
       return true;
     default:
@@ -334,3 +349,82 @@ export function perguntaSaiuNosTextos(
   }
   return false;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LASTRO: a resposta que o validador leu está NA mensagem do cliente?
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Achado 4 da prova prática do #1130: o validador gravava dado que o cliente
+// NÃO deu. "Oi, voltei. Como fica a parcela de uma moto de uns 15 mil?" virou
+// `modelo_interesse = "Outra"` (uma opção da lista, nunca dita), e "tenho uma
+// Honda CG 125 pra troca" virou `ano_troca = 125` (a cilindrada lida como ano).
+// `valorBateComTipo` só conferia a FORMA do valor; nada conferia que ele veio da
+// mensagem. Aqui o valor precisa ter lastro no texto — por tipo:
+//
+//   select   a opção aparece no texto (sem acento/caixa);
+//   number   o número aparece no texto como número ("120 mil" = 120000), e um
+//            campo de ANO só aceita 1950–2100;
+//   cpf      o CPF confere pelo dígito E os 11 dígitos estão no texto;
+//   date     há uma data escrita no texto;
+//   text     na pergunta que está sendo feita, o texto livre É a resposta;
+//            em outra pergunta (ou correção), o valor precisa estar no texto;
+//   boolean  na pergunta que está sendo feita, sim/não basta; em outra, o
+//            texto precisa citar o assunto do campo ("tenho CNH").
+//
+// Conservador de propósito: recusar um dado certo custa uma pergunta a mais;
+// aceitar um inventado custa um cadastro errado que ninguém revisa.
+
+/** Os números escritos no texto, já com "mil"/"k" aplicado e separador BR tratado. */
+function numerosDoTexto(texto: string): number[] {
+  const n = normalizar(texto);
+  const saida: number[] = [];
+  for (const m of n.matchAll(/(\d[\d.,]*)\s*(mil|k)?\b/g)) {
+    let digitos = m[1]!.replace(/[.,]$/, "");
+    if (/,/.test(digitos)) digitos = digitos.replace(/\./g, "").replace(",", ".");
+    else digitos = digitos.replace(/\.(?=\d{3}\b)/g, "");
+    let valor = Number(digitos);
+    if (!Number.isFinite(valor)) continue;
+    if ((m[2] ?? "") !== "") valor *= 1000;
+    saida.push(valor);
+  }
+  return saida;
+}
+
+function ehCampoDeAno(campo: CampoPendenteParaCaptura): boolean {
+  return /\bano\b/.test(contextoDoCampo(campo));
+}
+
+export function respostaTemLastro(
+  campo: CampoPendenteParaCaptura,
+  valor: string,
+  texto: string,
+  opts: { perguntaAtual: boolean },
+): boolean {
+  const v = valor.trim();
+  const t = texto.trim();
+  if (v === "" || t === "") return false;
+  const nt = normalizar(t);
+  switch (campo.type) {
+    case "select":
+      return normalizar(v) !== "" && nt.includes(normalizar(v));
+    case "number": {
+      const alvo = Number(v.replace(/\s/g, "").replace(/\.(?=\d{3}\b)/g, "").replace(",", "."));
+      if (!Number.isFinite(alvo)) return false;
+      if (ehCampoDeAno(campo) && (!Number.isInteger(alvo) || alvo < 1950 || alvo > 2100)) return false;
+      return numerosDoTexto(t).includes(alvo);
+    }
+    case "cpf": {
+      const digitos = v.replace(/\D/g, "");
+      return isValidCpf(digitos) && t.replace(/\D/g, "").includes(digitos);
+    }
+    case "date":
+      return RE_DATA_BR.test(nt) || RE_DATA_ISO.test(nt);
+    case "text":
+      return opts.perguntaAtual || nt.includes(normalizar(v));
+    case "boolean":
+      return opts.perguntaAtual || contemContexto(campo, nt);
+    default:
+      return false;
+  }
+}
+

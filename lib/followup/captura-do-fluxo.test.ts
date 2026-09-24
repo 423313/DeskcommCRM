@@ -8,6 +8,7 @@ import {
   perguntaSaiuNosTextos,
   valorBateComTipo,
   type CampoPendenteParaCaptura,
+  respostaTemLastro,
 } from "./captura-do-fluxo";
 
 const campo = (
@@ -160,5 +161,54 @@ describe("valorBateComTipo — o flow_collect do modelo respeita o tipo", () => 
     const t = campo("text", { key: "obs", label: "Observação" });
     expect(valorBateComTipo(t, "qualquer coisa")).toBe(true);
     expect(valorBateComTipo(t, "")).toBe(false);
+  });
+});
+
+describe("tipo cpf (achado 7 da prova do #1130)", () => {
+  const cpf = { key: "cpf", label: "CPF", type: "cpf" as const };
+
+  it("CPF válido, com ou sem pontuação, vira só os dígitos", () => {
+    expect(classificarInbound(cpf, "529.982.247-25")).toEqual({
+      resultado: "respondeu",
+      captura: { key: "cpf", valor: "52998224725", bruto: "529.982.247-25" },
+    });
+    expect(classificarInbound(cpf, "meu cpf 52998224725").resultado).toBe("respondeu");
+  });
+
+  it("dígito verificador errado NÃO é resposta (a pergunta segue)", () => {
+    expect(classificarInbound(cpf, "123.456.789-00").resultado).not.toBe("respondeu");
+    expect(valorBateComTipo(cpf, "12345678900")).toBe(false);
+    expect(valorBateComTipo(cpf, "52998224725")).toBe(true);
+  });
+});
+
+describe("respostaTemLastro", () => {
+  const ano = { key: "ano_troca", label: "Ano da moto", type: "number" as const };
+  const km = { key: "km", label: "Quilometragem", type: "number" as const };
+  const modelo = { key: "modelo", label: "Modelo", type: "select" as const, options: ["CG 160", "Outra"] };
+  const nome = { key: "nome", label: "Nome completo", type: "text" as const };
+  const cnh = { key: "cnh", label: "Tem CNH", type: "boolean" as const };
+
+  it("select: a opção precisa estar no texto", () => {
+    expect(respostaTemLastro(modelo, "Outra", "moto de uns 15 mil", { perguntaAtual: true })).toBe(false);
+    expect(respostaTemLastro(modelo, "CG 160", "quero a cg 160", { perguntaAtual: false })).toBe(true);
+  });
+
+  it("número: precisa estar no texto; ano só entre 1950 e 2100", () => {
+    expect(respostaTemLastro(ano, "125", "tenho uma Honda CG 125", { perguntaAtual: true })).toBe(false);
+    expect(respostaTemLastro(ano, "2015", "é 2015", { perguntaAtual: true })).toBe(true);
+    expect(respostaTemLastro(km, "120000", "rodou uns 120 mil", { perguntaAtual: true })).toBe(true);
+    expect(respostaTemLastro(km, "90000", "rodou uns 120 mil", { perguntaAtual: true })).toBe(false);
+  });
+
+  it("texto livre: vale na pergunta feita; em outra, o valor precisa estar no texto", () => {
+    expect(respostaTemLastro(nome, "Lia Mendes", "sou a lia mendes", { perguntaAtual: false })).toBe(true);
+    expect(respostaTemLastro(nome, "Lia Mendes", "quero financiar", { perguntaAtual: false })).toBe(false);
+    expect(respostaTemLastro(nome, "Lia", "Lia", { perguntaAtual: true })).toBe(true);
+  });
+
+  it("sim/não fora da pergunta feita precisa citar o assunto", () => {
+    expect(respostaTemLastro(cnh, "true", "sim, quero financiar", { perguntaAtual: false })).toBe(false);
+    expect(respostaTemLastro(cnh, "true", "tenho cnh sim", { perguntaAtual: false })).toBe(true);
   });
 });

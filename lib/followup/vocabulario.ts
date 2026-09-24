@@ -522,6 +522,7 @@ export const TIPOS_DE_CAMPO: Record<TipoDeCampo, string> = {
   date: "Data",
   boolean: "Sim ou não",
   select: "Escolha numa lista",
+  cpf: "CPF (confere o dígito)",
 };
 
 // ─── nó final ────────────────────────────────────────────────────────────

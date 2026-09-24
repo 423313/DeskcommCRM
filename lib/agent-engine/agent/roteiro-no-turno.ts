@@ -55,8 +55,15 @@ export interface RoteiroDoTurno {
 
 export type ValidarResposta = (args: {
   perguntas: readonly PerguntaDoFluxo[];
-  preenchidos: readonly { key: string; label: string; valor: string }[];
+  preenchidos: readonly {
+    key: string;
+    label: string;
+    valor: string;
+    type?: PerguntaDoFluxo['type'];
+    options?: string[] | undefined;
+  }[];
   mensagens: readonly MensagemDoContexto[];
+  textoAtual?: string | null;
 }) => Promise<LeituraDaResposta>;
 
 export interface DepsDoRoteiro {
@@ -155,13 +162,21 @@ export async function prepararRoteiroDoTurno(
     // Campos já respondidos que ACEITAM correção ("na verdade o ano é 2020").
     const preenchidos = atual.checklist.passos.flatMap((p) =>
       p.kind === 'collect' && p.node.config.permite_correcao && atual.valores[p.node.config.key] !== undefined
-        ? [{ key: p.node.config.key, label: p.node.config.label, valor: atual.valores[p.node.config.key]! }]
+        ? [
+            {
+              key: p.node.config.key,
+              label: p.node.config.label,
+              valor: atual.valores[p.node.config.key]!,
+              type: p.node.config.type,
+              ...(p.node.config.options !== undefined ? { options: p.node.config.options } : {}),
+            },
+          ]
         : [],
     );
 
     let validacoes: Array<{ campo: string; valor: string }> | undefined;
     if ((perguntas.length > 0 || preenchidos.length > 0) && (t.texto ?? '').trim() !== '') {
-      const leitura = await deps.validar({ perguntas, preenchidos, mensagens: t.mensagens });
+      const leitura = await deps.validar({ perguntas, preenchidos, mensagens: t.mensagens, textoAtual: t.texto });
       if (leitura.resultado === 'respondeu') validacoes = leitura.respostas;
       // Só chaves e o desfecho — nunca o texto do cliente nem o valor lido.
       deps.log.info('roteiro: leitura do validador', {

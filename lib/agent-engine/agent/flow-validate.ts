@@ -41,7 +41,8 @@ import type pg from 'pg';
 import type { Logger } from '../obs/logger';
 import type { ProviderRegistry } from '../edge/llm/providers';
 import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
-import { valorBateComTipo } from '@/lib/followup/captura-do-fluxo';
+import { respostaTemLastro, valorBateComTipo } from '@/lib/followup/captura-do-fluxo';
+import type { ContactFlowFieldType } from '@/lib/followup/graph-schema';
 import type { AuxModelArgs } from './aux-model-args';
 
 /** O que o validador enxerga de uma pergunta do fluxo. */
@@ -49,7 +50,7 @@ export interface PerguntaDoFluxo {
   key: string;
   label: string;
   question?: string | undefined;
-  type: 'text' | 'number' | 'date' | 'boolean' | 'select';
+  type: ContactFlowFieldType;
   options?: string[] | undefined;
 }
 
@@ -162,9 +163,25 @@ export async function validarRespostaDoFluxo(
   ids: { tenantId: string; leadId: string; jobId: string },
   args: {
     perguntas: readonly PerguntaDoFluxo[];
-    /** Campos já preenchidos que ACEITAM correção (o cliente pode mudar). */
-    preenchidos: readonly { key: string; label: string; valor: string }[];
+    /**
+     * Campos já preenchidos que ACEITAM correção (o cliente pode mudar). O tipo
+     * vem junto para a correção passar pela mesma régua da resposta — um CPF
+     * corrigido confere o dígito como o primeiro.
+     */
+    preenchidos: readonly {
+      key: string;
+      label: string;
+      valor: string;
+      type?: ContactFlowFieldType;
+      options?: string[] | undefined;
+    }[];
     mensagens: readonly MensagemDoContexto[];
+    /**
+     * A mensagem do cliente que ESTE turno responde. É nela que a resposta
+     * precisa ter lastro (`respostaTemLastro`). Ausente = a última do cliente em
+     * `mensagens`.
+     */
+    textoAtual?: string | null;
   },
   deps: {
     registry?: ProviderRegistry;
@@ -210,6 +227,8 @@ export async function validarRespostaDoFluxo(
   const leitura = parseLeituraDoValidador(texto);
   if (leitura === null) return { resultado: 'indefinido' };
 
+  const textoDoCliente =
+    args.textoAtual ?? [...args.mensagens].reverse().find((m) => m.de === 'cliente')?.texto ?? '';
   const validas: RespostaDoFluxo[] = [];
   const vistas = new Set<string>();
   for (const r of leitura.respostas) {
@@ -219,15 +238,25 @@ export async function validarRespostaDoFluxo(
     const alvo = pendente ?? preenchido;
     if (alvo === undefined) continue;
     if (vistas.has(r.campo)) continue; // um campo, uma resposta
-    // O valor passa pela MESMA régua de tipo da captura determinística. Um campo
-    // já preenchido (correção) não carrega o tipo aqui — vale como texto livre.
+    // O valor passa pela MESMA régua de tipo da captura determinística.
     const campoParaValidar = {
       key: alvo.key,
       label: alvo.label,
-      type: 'type' in alvo ? alvo.type : ('text' as const),
-      ...('options' in alvo && alvo.options !== undefined ? { options: alvo.options } : {}),
+      type: alvo.type ?? ('text' as const),
+      ...(alvo.options !== undefined ? { options: alvo.options } : {}),
     };
     if (!valorBateComTipo(campoParaValidar, r.valor)) continue;
+    // E precisa ter LASTRO na mensagem (achado 4 da prova do #1130): uma opção
+    // da lista que o cliente nunca disse, ou a cilindrada lida como ano, não
+    // entram. Só a pergunta que está sendo feita (a primeira pendente) aceita
+    // texto livre e sim/não sem citar o assunto.
+    if (
+      !respostaTemLastro(campoParaValidar, r.valor, textoDoCliente, {
+        perguntaAtual: pendente !== undefined && pendente.key === args.perguntas[0]?.key,
+      })
+    ) {
+      continue;
+    }
     vistas.add(r.campo);
     validas.push({ campo: r.campo, valor: r.valor });
   }

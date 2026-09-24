@@ -305,7 +305,12 @@ export const conditionConfigSchema = z
  * `contact_flow_data.field_key` (migration 0236) — a regex espelha o CHECK do
  * banco (minúsculas, começa com letra).
  */
-export const contactFlowFieldTypeSchema = z.enum(['text', 'number', 'date', 'boolean', 'select']);
+/**
+ * `cpf` (PR 2 do port): o número confere pelo dígito verificador (mod-11 da
+ * Receita) antes de ser aceito — na prova prática, um CPF com dígito errado foi
+ * gravado como resposta porque o campo era "Número".
+ */
+export const contactFlowFieldTypeSchema = z.enum(['text', 'number', 'date', 'boolean', 'select', 'cpf']);
 export type ContactFlowFieldType = z.infer<typeof contactFlowFieldTypeSchema>;
 
 export const collectConfigSchema = z
