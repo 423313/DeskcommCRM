@@ -37213,6 +37213,57 @@ update public.crm_leads l
    and l.currency = 'BRL'
    and l.value_cents is null;
 
+
+-- ---- 0402 — os candidatos da prospecção nativa ganham prazo (issue #1313) ----
+--
+-- Apêndice idempotente: o `update.sh` do clone re-executa este bloco inteiro a
+-- cada atualização. Quem aplica o prazo é ESTA função, chamada em lotes pelo
+-- cron `app/api/v1/cron/data-retention` — a declaração em
+-- `lib/retencao/politica.ts` sem ela é decorativa, e o teste de guarda diz
+-- isso. Padrão 365 / piso 90, decisão do dono (24/09/2026, PR #1577).
+-- O relógio é `coalesce(attempted_at, created_at)`: nunca contatado conta da
+-- criação, contatado conta da última tentativa. `queued`/`sending` nunca
+-- entram (trabalho vivo) e o tombstone de LGPD (0370) nunca entra — é ele que
+-- faz o trigger `prospecting_refuse_erased` barrar a reimportação.
+create or replace function public.fn_expurgar_prospeccao_vencida(
+  p_retencao_dias int default null,
+  p_limite int default null
+) returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  -- 365 = um ano, o horizonte decidido pelo dono (0402, issue #1313). O piso
+  -- de 90 impede que o knob vire apagador de rastro recente — e mora AQUI,
+  -- no corpo, para valer contra qualquer chamador.
+  v_dias int := greatest(coalesce(p_retencao_dias, 365), 90);
+  v_limite int := least(greatest(coalesce(p_limite, 1000), 1), 10000);
+  v_apagadas int;
+begin
+  with vencidos as (
+    select c.id from public.prospecting_candidates c
+     where c.status not in ('queued','sending')
+       and c.suppression_salt is null
+       and coalesce(c.attempted_at, c.created_at)
+           < now() - make_interval(days => v_dias)
+     order by coalesce(c.attempted_at, c.created_at)
+     limit v_limite
+  )
+  delete from public.prospecting_candidates c using vencidos v where c.id = v.id;
+  get diagnostics v_apagadas = row_count;
+  return v_apagadas;
+end;
+$$;
+revoke all    on function public.fn_expurgar_prospeccao_vencida(int,int) from public;
+revoke execute on function public.fn_expurgar_prospeccao_vencida(int,int) from anon;
+revoke execute on function public.fn_expurgar_prospeccao_vencida(int,int) from authenticated;
+grant  execute on function public.fn_expurgar_prospeccao_vencida(int,int) to service_role;
+
+create index if not exists prospecting_candidates_expira_idx
+  on public.prospecting_candidates ((coalesce(attempted_at, created_at)))
+  where status not in ('queued','sending') and suppression_salt is null;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -38092,53 +38143,3 @@ end $$;
 -- a lista de erros benignos do update.sh, então a atualização não diz
 -- "atualizado" com módulo fora do ar. Instalação nova não tem módulo: no-op.
 do $f$ begin perform public.fn_conferir_modulos_instalados(); end $f$;
-
--- ---- 0402 — os candidatos da prospecção nativa ganham prazo (issue #1313) ----
---
--- Apêndice idempotente: o `update.sh` do clone re-executa este bloco inteiro a
--- cada atualização. Quem aplica o prazo é ESTA função, chamada em lotes pelo
--- cron `app/api/v1/cron/data-retention` — a declaração em
--- `lib/retencao/politica.ts` sem ela é decorativa, e o teste de guarda diz
--- isso. Padrão 365 / piso 90, decisão do dono (24/09/2026, PR #1577).
--- O relógio é `coalesce(attempted_at, created_at)`: nunca contatado conta da
--- criação, contatado conta da última tentativa. `queued`/`sending` nunca
--- entram (trabalho vivo) e o tombstone de LGPD (0370) nunca entra — é ele que
--- faz o trigger `prospecting_refuse_erased` barrar a reimportação.
-create or replace function public.fn_expurgar_prospeccao_vencida(
-  p_retencao_dias int default null,
-  p_limite int default null
-) returns int
-language plpgsql
-security definer
-set search_path = public, pg_temp
-as $$
-declare
-  -- 365 = um ano, o horizonte decidido pelo dono (0402, issue #1313). O piso
-  -- de 90 impede que o knob vire apagador de rastro recente — e mora AQUI,
-  -- no corpo, para valer contra qualquer chamador.
-  v_dias int := greatest(coalesce(p_retencao_dias, 365), 90);
-  v_limite int := least(greatest(coalesce(p_limite, 1000), 1), 10000);
-  v_apagadas int;
-begin
-  with vencidos as (
-    select c.id from public.prospecting_candidates c
-     where c.status not in ('queued','sending')
-       and c.suppression_salt is null
-       and coalesce(c.attempted_at, c.created_at)
-           < now() - make_interval(days => v_dias)
-     order by coalesce(c.attempted_at, c.created_at)
-     limit v_limite
-  )
-  delete from public.prospecting_candidates c using vencidos v where c.id = v.id;
-  get diagnostics v_apagadas = row_count;
-  return v_apagadas;
-end;
-$$;
-revoke all    on function public.fn_expurgar_prospeccao_vencida(int,int) from public;
-revoke execute on function public.fn_expurgar_prospeccao_vencida(int,int) from anon;
-revoke execute on function public.fn_expurgar_prospeccao_vencida(int,int) from authenticated;
-grant  execute on function public.fn_expurgar_prospeccao_vencida(int,int) to service_role;
-
-create index if not exists prospecting_candidates_expira_idx
-  on public.prospecting_candidates ((coalesce(attempted_at, created_at)))
-  where status not in ('queued','sending') and suppression_salt is null;
