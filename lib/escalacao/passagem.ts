@@ -143,6 +143,14 @@ export const FRASE_DO_MOTIVO = {
  */
 export const MARCA_DO_JEV = "(percebido pelo Jev)";
 
+/**
+ * A frase do motivo com a marca, exatamente como o briefing a grava no `body`
+ * da passagem (`briefing-da-passagem.ts`). É por ela que o cartão do Inbox sabe
+ * que foi o Jev — a passagem não tem coluna para o motor.
+ * ponytail: derivado do texto gravado; se o motor ganhar coluna, o cartão lê de lá.
+ */
+export const MOTIVO_PERCEBIDO_PELO_JEV = `${FRASE_DO_MOTIVO.low_sentiment} ${MARCA_DO_JEV}`;
+
 /** A frase em português de cada motivo de o cliente NÃO ter sido avisado. */
 export const FRASE_DO_MOTIVO_DO_AVISO = {
   na_fila_canal_fora: "A mensagem ficou na fila porque o canal está fora do ar",
