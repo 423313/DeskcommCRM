@@ -153,14 +153,25 @@ test("captura Google: configure pela tela, recarregue e leve wbraid ao link do W
       path: testInfo.outputPath("conversoes-captura-google.png"),
       fullPage: true,
     });
-    // O destino externo é interceptado: prova o redirect sem enviar mensagem real.
-    await page.route("https://wa.me/**", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "text/html",
-        body: "<h1>Destino WhatsApp de teste</h1>",
-      }),
+    // O Playwright só chama o handler para a PRIMEIRA URL de uma cadeia de
+    // redirect: um route em wa.me não pega o salto do 302 e o navegador ia ao
+    // WhatsApp real. Intercepta o endereço de captura, executa o endpoint de
+    // verdade sem seguir o redirect e lê o destino pelo Location.
+    let destino = "";
+    await page.route(
+      (url) => url.href.startsWith(`${link}?`),
+      async (route) => {
+        const resposta = await route.fetch({ maxRedirects: 0 });
+        destino = resposta.headers()["location"] ?? "";
+        await route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: "<h1>Destino WhatsApp de teste</h1>",
+        });
+      },
     );
+    // Cinto: nenhuma execução do CI abre o WhatsApp real.
+    await page.context().route("https://wa.me/**", (route) => route.abort());
     const snippet = await page.getByTestId("script-do-site").locator("code").innerText();
     // Um documento criado só com route.fulfill não tem endereço de rede real:
     // o Chromium pode impedir que ele carregue o script no loopback do app.
@@ -193,7 +204,8 @@ test("captura Google: configure pela tela, recarregue e leve wbraid ao link do W
     await expect(
       page.getByRole("heading", { name: "Destino WhatsApp de teste", exact: true }),
     ).toBeVisible();
-    const texto = new URL(page.url()).searchParams.get("text");
+    expect(destino.startsWith("https://wa.me/5511999999999?")).toBe(true);
+    const texto = new URL(destino).searchParams.get("text");
     const token = texto?.match(/\[ref:([23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6})\]/)?.[1];
     expect(token).toBeTruthy();
     const { data: ref, error } = await db
