@@ -133,7 +133,7 @@ import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memor
 import { matchesHandoffKeyword } from './agent-config';
 import { garantirPerguntaDoRoteiro, prepararRoteiroDoTurno } from './roteiro-no-turno';
 import { validarRespostaDoFluxo } from './flow-validate';
-import { moduloLigado } from '@/lib/instalacao/modulos';
+import { moduloLigadoComMemo } from '@/lib/instalacao/modulos';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
@@ -148,6 +148,7 @@ import {
   provideCaseUpdateInputSchema,
 } from './human-cases';
 import { buildMcpTurnTools } from '../edge/crm/mcp-tools';
+import { definicaoNaConexao } from '@/lib/channels/linha-do-espelho';
 import { cancelPendingCronsForLead } from '../cron/scheduler';
 import {
   latestInboundSignal,
@@ -2390,7 +2391,7 @@ async function executarTurnoDoAgente(
       ? await prepararRoteiroDoTurno(
           {
             pool,
-            moduloLigado: () => moduloLigado(deps.crmCfg.supabase, 'fluxos_atendimento'),
+            moduloLigado: () => moduloLigadoComMemo(deps.crmCfg.supabase, 'fluxos_atendimento'),
             validar: (args) =>
               validarRespostaDoFluxo(
                 pool,
@@ -2772,16 +2773,20 @@ async function executarTurnoDoAgente(
         // O texto RENDERIZADO vai como `body` da cadeia: os gates de promessa,
         // spinning e disclosure avaliam exatamente o que o contato vai ler. Sem
         // isso, "usar template" seria a forma de escapar dos guardrails de conteúdo.
-        const { rows } = await pool.query<{
-          components: unknown;
-          parameter_format: string;
-          status: string;
-        }>(
-          `select components, parameter_format, status from meta_templates
-            where organization_id = $1 and name = $2 and language = $3`,
-          [tenantId, template_name, language],
-        );
-        const linha = rows[0];
+        // A definição DESTA conexão (lib/channels/linha-do-espelho.ts): sem o
+        // escopo, com canal oficial e parceiro espelhando o mesmo nome, o agente
+        // renderizava e passava pelos gates o texto de OUTRO número.
+        const linha =
+          (await definicaoNaConexao<{
+            components: unknown;
+            parameter_format: string;
+            status: string;
+          }>(pool, ['components', 'parameter_format', 'status'], {
+            organizationId: tenantId,
+            name: template_name,
+            language,
+            channelSessionId: input.channelSessionId,
+          })) ?? undefined;
         if (linha === undefined) {
           return {
             ok: false,
@@ -4108,8 +4113,10 @@ async function executarTurnoDoAgente(
     }
 
     // ROTEIRO: a pergunta pendente é compromisso. Se o modelo não a fez, o motor
-    // a manda — pela MESMA cadeia de guardrails, dentro do teto de envios.
-    if (roteiro !== null && seq < maxSendsPerTurn) {
+    // a manda — pela MESMA cadeia de guardrails, dentro do teto de envios. Roda
+    // mesmo com o teto cheio: registrar que o MODELO fez a pergunta é o que a
+    // torna "a pergunta atual" no turno seguinte.
+    if (roteiro !== null) {
       await garantirPerguntaDoRoteiro(
         { pool, log: runLog },
         {
@@ -4117,6 +4124,7 @@ async function executarTurnoDoAgente(
           roteiro,
           corposEnviados,
           enviar: async (texto) => {
+            if (seq >= maxSendsPerTurn) return false;
             const chain = await runBeforeSend({
               pool,
               log: runLog,

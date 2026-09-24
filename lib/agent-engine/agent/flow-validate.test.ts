@@ -92,7 +92,7 @@ describe("validarRespostaDoFluxo", () => {
       db,
       cfg,
       { tenantId: "o", leadId: "l", jobId: "j" },
-      base,
+      { ...base, textoAtual: "é 2019" },
       { log: logger },
     );
     expect(r).toEqual({ resultado: "respondeu", respostas: [{ campo: "troca_ano", valor: "2019" }] });
@@ -114,7 +114,7 @@ describe("validarRespostaDoFluxo", () => {
           { key: "troca_km", label: "Km", type: "number" },
         ],
         preenchidos: [],
-        mensagens: [],
+        mensagens: [{ de: "cliente", texto: "é de 2015 e rodou 120 km" }],
       },
       { log: logger },
     );
@@ -149,7 +149,11 @@ describe("validarRespostaDoFluxo", () => {
       db,
       cfg,
       { tenantId: "o", leadId: "l", jobId: "j" },
-      { ...base, preenchidos: [{ key: "moto_troca", label: "Moto", valor: "CG 125" }] },
+      {
+        ...base,
+        preenchidos: [{ key: "moto_troca", label: "Moto", valor: "CG 125" }],
+        textoAtual: "na verdade é uma CG 150",
+      },
       { log: logger },
     );
     expect(r).toEqual({ resultado: "respondeu", respostas: [{ campo: "moto_troca", valor: "CG 150" }] });
@@ -222,4 +226,126 @@ describe("validarRespostaDoFluxo", () => {
       llmOverride: { provider: "openai", credentialId: null },
     });
   });
+
+  describe("lastro na mensagem (achado 4 da prova do #1130)", () => {
+    const respostaDoModelo = (json: unknown) =>
+      runModelCallMock.mockResolvedValue({ result: { text: JSON.stringify(json) } } as never);
+
+    it('"moto de uns 15 mil" não vira a opção "Outra"', async () => {
+      respostaDoModelo({ respostas: [{ campo: "modelo_interesse", valor: "Outra" }] });
+      const r = await validarRespostaDoFluxo(db, cfg, { tenantId: "o", leadId: "l", jobId: "j" }, {
+        perguntas: [
+          { key: "cpf", label: "CPF", type: "cpf" },
+          { key: "modelo_interesse", label: "Modelo de interesse", type: "select", options: ["CG 160", "Fazer 250", "XRE 300", "Outra"] },
+        ],
+        preenchidos: [],
+        mensagens: [],
+        textoAtual: "oi, voltei. então, como fica a parcela de uma moto de uns 15 mil?",
+      }, { log: logger });
+      expect(r).toEqual({ resultado: "nao_respondeu" });
+    });
+
+    it('"Honda CG 125" dá a moto, mas não vira ANO 125', async () => {
+      respostaDoModelo({ respostas: [{ campo: "moto_troca", valor: "Honda CG 125" }, { campo: "ano_troca", valor: "125" }] });
+      const r = await validarRespostaDoFluxo(db, cfg, { tenantId: "o", leadId: "l", jobId: "j" }, {
+        perguntas: [
+          { key: "moto_troca", label: "Moto na troca", type: "text" },
+          { key: "ano_troca", label: "Ano da moto", type: "number" },
+        ],
+        preenchidos: [],
+        mensagens: [],
+        textoAtual: "tenho uma Honda CG 125 pra troca",
+      }, { log: logger });
+      expect(r).toEqual({ resultado: "respondeu", respostas: [{ campo: "moto_troca", valor: "Honda CG 125" }] });
+    });
+
+    it("CPF com dígito errado é recusado; o certo entra, e a correção confere o dígito", async () => {
+      const perguntas = [{ key: "cpf", label: "CPF", type: "cpf" as const }];
+      respostaDoModelo({ respostas: [{ campo: "cpf", valor: "12345678900" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, { tenantId: "o", leadId: "l", jobId: "j" },
+          { perguntas, preenchidos: [], mensagens: [], textoAtual: "meu cpf é 123.456.789-00" }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+
+      respostaDoModelo({ respostas: [{ campo: "cpf", valor: "52998224725" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, { tenantId: "o", leadId: "l", jobId: "j" },
+          { perguntas, preenchidos: [], mensagens: [], textoAtual: "529.982.247-25" }, { log: logger }),
+      ).toEqual({ resultado: "respondeu", respostas: [{ campo: "cpf", valor: "52998224725" }] });
+
+      respostaDoModelo({ respostas: [{ campo: "cpf", valor: "11144477735" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, { tenantId: "o", leadId: "l", jobId: "j" },
+          {
+            perguntas: [],
+            preenchidos: [{ key: "cpf", label: "CPF", valor: "52998224725", type: "cpf" }],
+            mensagens: [],
+            textoAtual: "opa, digitei errado, o certo é 111.444.777-35",
+          }, { log: logger }),
+      ).toEqual({ resultado: "respondeu", respostas: [{ campo: "cpf", valor: "11144477735" }] });
+    });
+
+    it("sem a mensagem do cliente, nada tem lastro", async () => {
+      respostaDoModelo({ respostas: [{ campo: "troca_ano", valor: "2019" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, { tenantId: "o", leadId: "l", jobId: "j" }, base, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+    });
+  });
+
+  describe("revisão adversarial do PR 2", () => {
+    const ids = { tenantId: "o", leadId: "l", jobId: "j" };
+    const modelo = (json: unknown) =>
+      runModelCallMock.mockResolvedValue({ result: { text: JSON.stringify(json) } } as never);
+
+    it('turno sem pergunta feita: "sim, quero financiar" não vira tem_cnh e "quero financiar" não vira nome', async () => {
+      modelo({ respostas: [{ campo: "tem_cnh", valor: "true" }, { campo: "nome_completo", valor: "Lia Mendes" }] });
+      const perguntas = [
+        { key: "tem_cnh", label: "Tem CNH", type: "boolean" as const },
+        { key: "nome_completo", label: "Nome completo", type: "text" as const },
+      ];
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "sim, quero financiar", perguntaAtual: null }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "quero financiar", perguntaAtual: null }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+    });
+
+    it("com a pergunta FEITA, o sim solto responde a ela", async () => {
+      modelo({ respostas: [{ campo: "tem_cnh", valor: "true" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, {
+          perguntas: [{ key: "tem_cnh", label: "Tem CNH", type: "boolean" }],
+          preenchidos: [], mensagens: [], textoAtual: "sim", perguntaAtual: "tem_cnh",
+        }, { log: logger }),
+      ).toEqual({ resultado: "respondeu", respostas: [{ campo: "tem_cnh", valor: "true" }] });
+    });
+
+    it('data: "nasci em 12/03/1990" não sustenta 1985-07-20; a data escrita entra', async () => {
+      const perguntas = [{ key: "nascimento", label: "Data de nascimento", type: "date" as const }];
+      modelo({ respostas: [{ campo: "nascimento", valor: "1985-07-20" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "nasci em 12/03/1990", perguntaAtual: "nascimento" }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "a revisão foi 10/05/2023", perguntaAtual: null }, { log: logger }),
+      ).toEqual({ resultado: "nao_respondeu" });
+      modelo({ respostas: [{ campo: "nascimento", valor: "1990-03-12" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, { perguntas, preenchidos: [], mensagens: [], textoAtual: "nasci em 12 de março de 1990", perguntaAtual: "nascimento" }, { log: logger }),
+      ).toEqual({ resultado: "respondeu", respostas: [{ campo: "nascimento", valor: "1990-03-12" }] });
+    });
+
+    it("rajada: o CPF da segunda mensagem do lote tem lastro", async () => {
+      modelo({ respostas: [{ campo: "cpf", valor: "529.982.247-25" }] });
+      expect(
+        await validarRespostaDoFluxo(db, cfg, ids, {
+          perguntas: [{ key: "cpf", label: "CPF", type: "cpf" }],
+          preenchidos: [], mensagens: [], textoAtual: "oi\nmeu cpf é 529.982.247-25", perguntaAtual: "cpf",
+        }, { log: logger }),
+      ).toEqual({ resultado: "respondeu", respostas: [{ campo: "cpf", valor: "52998224725" }] });
+    });
+  });
 });
+

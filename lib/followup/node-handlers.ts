@@ -23,6 +23,13 @@ export type EnrollmentStatus =
    */
   | "dormente"
   | "paused_handoff"
+  /**
+   * Roteiro de atendimento em andamento (0394). Conduzido pelo TURNO, não pelo
+   * relógio: o motor de follow-up nunca o reclama (o claim filtra
+   * `active|waiting_reply`). Está aqui porque o opt-out o alcança
+   * (`reactivity.ts`) e o cancelamento pela fila o encerra.
+   */
+  | "coletando"
   | "completed"
   | "cancelled"
   | "dead";
