@@ -13,7 +13,7 @@ describe("social OAuth return", () => {
   });
 
   it("entrega um documento same-origin com destino fixo sem refletir tokens", async () => {
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/auth/social-return"));
     const html = await response.text();
     expect(response.status).toBe(200);
     expect(response.headers.get("location")).toBeNull();
@@ -26,6 +26,27 @@ describe("social OAuth return", () => {
     );
     expect(html).not.toContain("connect_token");
     expect(html).toContain("Voltando para suas conexões…");
+  });
+
+  // A tela de Redes sociais lê `error` e `connected` para dizer se a autorização
+  // deu certo ou falhou. A ponte passa adiante só o SINAL, escolhido entre destinos
+  // fixos — nenhum valor recebido (nem o `connect_token`) chega ao documento.
+  it.each([
+    ["?connected=facebook&connect_token=SEGREDO", "/app/connections?aba=sociais&connected=1"],
+    ["?error=access_denied", "/app/connections?aba=sociais&error=1"],
+    ["?error=x&connected=facebook", "/app/connections?aba=sociais&error=1"],
+    ["", "/app/connections?aba=sociais"],
+  ])("volta %j com o desfecho para %s sem refletir a query", async (query, esperado) => {
+    const response = await GET(new Request(`http://localhost/auth/social-return${query}`));
+    const html = await response.text();
+    const script = html.match(/<script>(.*?)<\/script>/)![1]!;
+    expect(script).toBe(`window.location.replace(${JSON.stringify(esperado)});`);
+    expect(response.headers.get("content-security-policy")).toContain(
+      createHash("sha256").update(script).digest("base64"),
+    );
+    for (const vazado of ["SEGREDO", "connect_token", "facebook", "access_denied"]) {
+      expect(html).not.toContain(vazado);
+    }
   });
 
   it("aponta novos fluxos de autorização emitidos para o landing", () => {
