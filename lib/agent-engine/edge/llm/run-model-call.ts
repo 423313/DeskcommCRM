@@ -16,7 +16,7 @@ import { guardServiceTools } from "@/lib/atendimento/fronteira-server";
  * cacheWriteTokens}. Validado no ai@7 via scripts/smoke-llm.sh (modelo real) —
  * upgrade de major re-valida esses paths pelo mesmo gate (regra dura 16).
  */
-import { generateText, hasToolCall, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
+import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
 import type pg from 'pg';
 import { z } from 'zod';
 
@@ -213,11 +213,13 @@ export interface RunModelCallInput {
    */
   maxSteps?: number;
   /**
-   * Encerra o loop assim que o modelo chamar esta tool (além do teto de
-   * `maxSteps`). O rascunho assistido usa `send_message`: depois dela o modelo
-   * só faz uma etapa a mais para "encerrar", que custava ~1,5 s medido.
+   * Encerra o loop quando o predicado for verdadeiro ao fim de uma etapa (além
+   * do teto de `maxSteps`). É predicado, e não nome de tool, de propósito: o
+   * rascunho assistido para quando há resposta ACEITA, não quando o modelo
+   * chamou `send_message` — um envio vetado devolve o erro ao modelo para ele
+   * reescrever na etapa seguinte, e parar ali entregava rascunho vazio.
    */
-  pararAoChamar?: string;
+  pararQuando?: () => boolean;
   /** Teto por chamada auxiliar; nunca aumenta o limite configurado pela organização. */
   maxOutputTokens?: number;
   /** Cancelamento propagado pelo chamador; a falha continua registrada em llm_calls. */
@@ -671,9 +673,9 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       stopWhen:
         input.maxSteps === undefined
           ? undefined
-          : input.pararAoChamar === undefined
+          : input.pararQuando === undefined
             ? stepCountIs(input.maxSteps)
-            : [stepCountIs(input.maxSteps), hasToolCall(input.pararAoChamar)],
+            : [stepCountIs(input.maxSteps), input.pararQuando],
       temperature,
       topP,
       topK,
