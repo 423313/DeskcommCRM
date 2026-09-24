@@ -3082,10 +3082,12 @@ async function executarTurnoDoAgente(
               };
               // Cada foto é uma mensagem física: só vão as que cabem no que resta do teto
               // do turno (a checagem de `max_sends_per_turn` acima roda uma vez, antes).
-              const fotosNoTeto = fotosDoProduto.slice(0, Math.max(0, maxSendsPerTurn - seq));
-              return enviarComFotos(finalBody, fotosNoTeto, {
+              // O resto é medido ANTES DE CADA FOTO, depois do texto: o texto acima do
+              // teto de legenda sai à parte e também gasta o teto.
+              return enviarComFotos(finalBody, fotosDoProduto, {
                 sleep,
                 jitter,
+                restantes: () => maxSendsPerTurn - seq,
                 enviarFoto: (foto, legenda) => enviar(legenda, foto),
                 enviarTexto: (texto) =>
                   sendInBubbles(texto, {
