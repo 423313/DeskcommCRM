@@ -79,6 +79,14 @@ describe("POST /messages após resposta humana, com o ajuste LIGADO", () => {
     expect(registrarTrocaDeComando).toHaveBeenCalledWith(
       expect.objectContaining({ tipo: "conversation_claimed", conversationId }),
     );
+    expect(rpc).toHaveBeenCalledWith(
+      "emit_event",
+      expect.objectContaining({
+        p_event_type: "conversation.claimed",
+        p_entity_id: conversationId,
+        p_organization_id: organizationId,
+      }),
+    );
   });
 
   it("respeita quem assumiu primeiro e não informa falha falsa do envio", async () => {

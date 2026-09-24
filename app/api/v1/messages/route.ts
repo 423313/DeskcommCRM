@@ -152,6 +152,16 @@ export async function POST(req: NextRequest): Promise<Response> {
               actor,
               motivo: "Assumiu o atendimento desta conversa",
             });
+            // O mesmo evento que o botão Assumir emite.
+            const { error: emitErr } = await supabase.rpc("emit_event", {
+              p_event_type: "conversation.claimed",
+              p_entity_kind: "conversation",
+              p_entity_id: message.conversation_id,
+              p_payload: { assigned_to_user_id: actor.id },
+              p_metadata: { request_id: requestId },
+              p_organization_id: organizationId,
+            });
+            if (emitErr) console.error("[messages.send] emit_event failed", emitErr.message);
           }
         }
       } catch (claimError) {

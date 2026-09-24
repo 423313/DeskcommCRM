@@ -36828,7 +36828,11 @@ begin
      status_changed_at=clock_timestamp(),
      service_revision=service_revision+1,service_started_at=m.sent_at,
      assigned_to_user_id=case when keep_owner then c.assigned_to_user_id else null end,
-     assigned_at=case when keep_owner then c.assigned_at else null end,
+     -- O relógio do episódio NOVO, não o do encerrado: o prazo de devolução
+     -- automática à IA (handoff_return_after_minutes) conta a partir do
+     -- último sinal humano, e assigned_at é um deles. Guardar o do episódio
+     -- antigo devolveria a conversa à IA no primeiro tick do cron.
+     assigned_at=case when keep_owner then clock_timestamp() else null end,
      assignee_kind=case when keep_owner then 'user' else null end,
      bot_silenced_until=case when keep_owner then 'infinity'::timestamptz else c.bot_silenced_until end,
      active_ai_agent_id=null,
