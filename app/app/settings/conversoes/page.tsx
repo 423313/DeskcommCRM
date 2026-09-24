@@ -55,6 +55,7 @@ import { lerEstadoDaConexaoGoogle } from "@/lib/plataformas-de-anuncio/google/es
 import { lerEstadoDaCaptura } from "@/lib/plataformas-de-anuncio/landing-config";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { ReprocessarConversao } from "./_reprocessar";
 import { FormularioDeCapturaDeUtm } from "./_formCapturaDeUtm";
 import { FormularioDeConversoes } from "./_form";
 import { FormularioDeConversoesGoogle } from "./_formGoogle";
@@ -65,7 +66,8 @@ export const dynamic = "force-dynamic";
 /** O que a volta do OAuth do Google Ads diz, traduzido — ver o callback. */
 const ERRO_DO_GOOGLE_EM_PORTUGUES: Record<string, string> = {
   cancelado: "Você cancelou a autorização no Google. Nada foi conectado.",
-  estado_invalido: "O link de conexão expirou ou é inválido. Clique em \"Conectar com Google\" de novo.",
+  estado_invalido:
+    'O link de conexão expirou ou é inválido. Clique em "Conectar com Google" de novo.',
   sem_codigo: "O Google não devolveu o código esperado. Tente de novo.",
   google_ads_nao_configurado:
     "Esta instalação ainda não tem as credenciais do Google Ads configuradas. Fale com quem administra o servidor.",
@@ -138,7 +140,9 @@ export default async function ConversoesPage({
 
       {erroDoGoogle && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm">
-          {t(ERRO_DO_GOOGLE_EM_PORTUGUES[erroDoGoogle] ?? "Não consegui conectar com o Google Ads.")}
+          {t(
+            ERRO_DO_GOOGLE_EM_PORTUGUES[erroDoGoogle] ?? "Não consegui conectar com o Google Ads.",
+          )}
         </div>
       )}
       {okDoGoogle && (
@@ -149,13 +153,17 @@ export default async function ConversoesPage({
 
       {estado.conectada && !estado.habilitada && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-          {t("O envio está pausado. As vendas continuam sendo registradas aqui, mas não vão para a plataforma enquanto isto estiver desligado.")}
+          {t(
+            "O envio está pausado. As vendas continuam sendo registradas aqui, mas não vão para a plataforma enquanto isto estiver desligado.",
+          )}
         </div>
       )}
 
       {estado.testEventCode && (
         <div className="rounded-md border border-sky-500/40 bg-sky-500/10 p-4 text-sm">
-          {t("Modo de teste ligado: as vendas vão marcadas como teste e não contam para a otimização. Apague o código de teste quando terminar de conferir.")}
+          {t(
+            "Modo de teste ligado: as vendas vão marcadas como teste e não contam para a otimização. Apague o código de teste quando terminar de conferir.",
+          )}
         </div>
       )}
 
@@ -163,15 +171,21 @@ export default async function ConversoesPage({
       <FormularioDeConversoesGoogle
         estado={estadoGoogle}
         idioma={idioma}
-        configurado={googleAdsEstaConfigurado()}
-        falta={faltaParaConectarOGoogleAds()}
+        configurado={googleAdsEstaConfigurado(estadoGoogle.api)}
+        dataManagerConfigurado={googleAdsEstaConfigurado("data_manager")}
+        falta={faltaParaConectarOGoogleAds(estadoGoogle.api)}
       />
 
+      <p className="text-sm text-muted-foreground">
+        {t(
+          "Aceite da API não confirma atribuição ao anúncio. Confira os diagnósticos no gerenciador da plataforma. Depois de corrigir uma pendência, use o botão de reprocessamento.",
+        )}
+      </p>
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-semibold">{t("Vendas que não foram reportadas")}</h2>
           <span className="text-sm text-muted-foreground">
-            {enviadas} {t("reportadas com sucesso")}
+            {enviadas} {t("aceitas pela plataforma")}
           </span>
         </div>
 
@@ -183,7 +197,9 @@ export default async function ConversoesPage({
               fechou uma venda vinda de anúncio. Quem acabou de conectar precisa
               saber que a lista vazia ainda não prova que funciona.
             */}
-            {t("Nenhuma pendência. Ou tudo que veio de anúncio foi reportado, ou ainda não fechou nenhuma venda com origem em anúncio.")}
+            {t(
+              "Nenhuma pendência. Ou tudo que veio de anúncio foi reportado, ou ainda não fechou nenhuma venda com origem em anúncio.",
+            )}
           </p>
         ) : (
           <div className="overflow-x-auto rounded-md border">
@@ -191,18 +207,30 @@ export default async function ConversoesPage({
               <thead className="bg-muted/50 text-left">
                 <tr>
                   <th className="p-3 font-medium">{t("Negócio")}</th>
+                  <th className="p-3 font-medium">{t("Origem")}</th>
                   <th className="p-3 font-medium">{t("Valor")}</th>
                   <th className="p-3 font-medium">{t("O que houve")}</th>
                   <th className="p-3 font-medium">{t("Quando")}</th>
+                  <th className="p-3 font-medium">{t("Próximo passo")}</th>
                 </tr>
               </thead>
               <tbody>
                 {pendencias.map((p) => (
                   <tr key={p.leadId} className="border-t align-top">
                     <td className="p-3">
-                      <a className="underline underline-offset-2" href={`/app/kanban?lead=${p.leadId}`}>
+                      <a
+                        className="underline underline-offset-2"
+                        href={`/app/kanban?lead=${p.leadId}`}
+                      >
                         {p.tituloDoLead ?? t("(sem título)")}
                       </a>
+                    </td>
+                    <td className="p-3">
+                      {p.plataforma === "meta_ads"
+                        ? "Meta Ads"
+                        : p.plataforma === "google_ads"
+                          ? "Google Ads"
+                          : "—"}
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {p.valorCentavos === null ? "—" : formatCentsBRL(p.valorCentavos)}
@@ -210,11 +238,16 @@ export default async function ConversoesPage({
                     <td className="p-3">
                       <span>{t(MOTIVO_LEGIVEL[p.motivo ?? ""] ?? p.motivo ?? "—")}</span>
                       {p.detalhe && (
-                        <span className="mt-1 block text-xs text-muted-foreground">{p.detalhe}</span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {p.detalhe}
+                        </span>
                       )}
                     </td>
                     <td className="p-3 whitespace-nowrap text-muted-foreground">
                       {new Date(p.tentadoEm).toLocaleString(idioma)}
+                    </td>
+                    <td className="p-3">
+                      <ReprocessarConversao leadId={p.leadId} idioma={idioma} />
                     </td>
                   </tr>
                 ))}
@@ -290,7 +323,9 @@ export default async function ConversoesPage({
           />
         ) : (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-            {t("Esta organização ainda não tem um apelido de URL, e o endereço de captura precisa de um. Fale com quem administra o servidor.")}
+            {t(
+              "Esta organização ainda não tem um apelido de URL, e o endereço de captura precisa de um. Fale com quem administra o servidor.",
+            )}
           </div>
         )}
 

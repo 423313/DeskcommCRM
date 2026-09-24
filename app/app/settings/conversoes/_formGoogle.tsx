@@ -37,6 +37,7 @@ export function FormularioDeConversoesGoogle({
   idioma,
   configurado,
   falta,
+  dataManagerConfigurado = false,
 }: {
   estado: EstadoDaConexaoGoogle;
   idioma: Idioma;
@@ -44,6 +45,7 @@ export function FormularioDeConversoesGoogle({
   configurado: boolean;
   /** O que falta, PELO NOME — para a tela dizer em vez de só esconder o botão. */
   falta: string[];
+  dataManagerConfigurado?: boolean;
 }) {
   const t = (texto: string) => traduzir(texto, idioma);
   const router = useRouter();
@@ -53,6 +55,9 @@ export function FormularioDeConversoesGoogle({
   const [loginCustomerId, setLoginCustomerId] = useState(estado.loginCustomerId ?? "");
   const [conversionActionId, setConversionActionId] = useState(estado.conversionActionId ?? "");
   const [habilitada, setHabilitada] = useState(estado.habilitada);
+
+  const api = estado.api ?? "data_manager";
+  const linkDeConexao = `/api/v1/plataformas-de-anuncio/google/connect?api=${api}`;
 
   const podeSalvar =
     customerId.replace(/\D/g, "").length === 10 && conversionActionId.trim().length > 0;
@@ -89,8 +94,18 @@ export function FormularioDeConversoesGoogle({
       <Card className="p-6" data-testid="google-ads-nao-configurado">
         <div className="flex flex-col gap-2">
           <h3 className="font-medium">{t("Google Ads")}</h3>
+          {api === "google_ads" && dataManagerConfigurado && (
+            <a
+              className="text-sm underline"
+              href="/api/v1/plataformas-de-anuncio/google/connect?api=data_manager"
+            >
+              {t("Autorizar nova integração do Google")}
+            </a>
+          )}
           <p className="text-sm text-muted-foreground">
-            {t("Enviar vendas para o Google Ads ainda não está disponível nesta instalação — não é nada que você tenha feito. Quem instalou o sistema precisa configurar")}
+            {t(
+              "Enviar vendas para o Google Ads ainda não está disponível nesta instalação — não é nada que você tenha feito. Quem instalou o sistema precisa configurar",
+            )}
             {falta.length > 0 ? (
               <>
                 {" "}
@@ -112,12 +127,20 @@ export function FormularioDeConversoesGoogle({
       <Card className="p-6">
         <div className="flex flex-col gap-3">
           <h3 className="font-medium">{t("Google Ads")}</h3>
+          {api === "google_ads" && dataManagerConfigurado && (
+            <a
+              className="text-sm underline"
+              href="/api/v1/plataformas-de-anuncio/google/connect?api=data_manager"
+            >
+              {t("Autorizar nova integração do Google")}
+            </a>
+          )}
           <p className="text-sm text-muted-foreground">
             {t(
               "Autorize o acesso à conta de anúncios do Google. Depois de autorizar, você informa aqui qual conta e qual ação de conversão recebem as vendas.",
             )}
           </p>
-          <a href="/api/v1/plataformas-de-anuncio/google/connect">
+          <a href={linkDeConexao}>
             <Button type="button">{t("Conectar com Google")}</Button>
           </a>
         </div>
@@ -128,9 +151,24 @@ export function FormularioDeConversoesGoogle({
   return (
     <Card className="p-6">
       <form onSubmit={salvar} className="flex flex-col gap-5">
+        <p className="text-sm text-muted-foreground">
+          {t(
+            api === "data_manager"
+              ? "Integração atual: Data Manager. Ative a Data Manager API no projeto Google Cloud usado na autorização. A confirmação pode levar alguns minutos."
+              : "Integração anterior do Google Ads. Novas contas podem precisar autorizar a Data Manager API.",
+          )}
+        </p>
         <div className="flex items-center justify-between">
           <h3 className="font-medium">{t("Google Ads")}</h3>
-          <a href="/api/v1/plataformas-de-anuncio/google/connect" className="text-xs underline underline-offset-2">
+          {api === "google_ads" && dataManagerConfigurado && (
+            <a
+              className="text-sm underline"
+              href="/api/v1/plataformas-de-anuncio/google/connect?api=data_manager"
+            >
+              {t("Autorizar nova integração do Google")}
+            </a>
+          )}
+          <a href={linkDeConexao} className="text-xs underline underline-offset-2">
             {t("Reconectar")}
           </a>
         </div>
@@ -173,7 +211,9 @@ export function FormularioDeConversoesGoogle({
             placeholder="123456789"
           />
           <p className="text-xs text-muted-foreground">
-            {t("O ID da ação de conversão dentro da conta acima, que vai receber os envios de venda.")}
+            {t(
+              "O ID da ação de conversão dentro da conta acima, que vai receber os envios de venda.",
+            )}
           </p>
         </div>
 

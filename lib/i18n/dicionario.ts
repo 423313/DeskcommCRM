@@ -37,6 +37,25 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "A plataforma recebeu o envio. A confirmação será consultada automaticamente.": { es: "La plataforma recibió el envío. La confirmación se consultará automáticamente." },
+  "A plataforma não concluiu em 24 horas. Consulte o gerenciador e use o botão para verificar novamente.": { es: "La plataforma no terminó en 24 horas. Consulta el administrador y usa el botón para verificar de nuevo." },
+  "Falha temporária. Uma nova tentativa foi agendada automaticamente.": { es: "Fallo temporal. Se programó automáticamente un nuevo intento." },
+  "Evento recebido em modo de teste. Desative o teste antes de reportar a venda real.": { es: "Evento recibido en modo de prueba. Desactiva la prueba antes de reportar la venta real." },
+  "A venda fechou sem valor preenchido. A plataforma exige valor e moeda em uma compra — preencha o valor do negócio e use o botão de reprocessamento.": { es: "La venta se cerró sin importe. La plataforma exige importe y moneda en una compra: completa el valor del negocio y usa el botón para reprocesar." },
+
+  // Conversões de anúncios: recebimento, diagnóstico e recuperação.
+  "Autorizar nova integração do Google": { es: "Autorizar nueva integración de Google" },
+  "Não foi possível reprocessar. Confira sua sessão e tente novamente.": { es: "No se pudo reprocesar. Comprueba tu sesión e inténtalo de nuevo." },
+  "Aceite da API não confirma atribuição ao anúncio. Confira os diagnósticos no gerenciador da plataforma. Depois de corrigir uma pendência, use o botão de reprocessamento.": { es: "La aceptación de la API no confirma la atribución al anuncio. Revisa los diagnósticos en el administrador de la plataforma. Después de corregir un problema pendiente, usa el botón para reprocesar." },
+  "aceitas pela plataforma": { es: "aceptadas por la plataforma" },
+  "Próximo passo": { es: "Próximo paso" },
+  "Reprocessamento agendado. Acompanhe o resultado nesta tela.": { es: "Reprocesamiento programado. Sigue el resultado en esta pantalla." },
+  "Não há novo envio a agendar. Atualizamos a lista.": { es: "No hay un nuevo envío que programar. Actualizamos la lista." },
+  "Agendando...": { es: "Programando..." },
+  "Verificar ou tentar novamente": { es: "Verificar o volver a intentar" },
+  "Integração atual: Data Manager. Ative a Data Manager API no projeto Google Cloud usado na autorização. A confirmação pode levar alguns minutos.": { es: "Integración actual: Data Manager. Activa la Data Manager API en el proyecto Google Cloud usado en la autorización. La confirmación puede tardar unos minutos." },
+  "Integração anterior do Google Ads. Novas contas podem precisar autorizar a Data Manager API.": { es: "Integración anterior de Google Ads. Las cuentas nuevas pueden necesitar autorizar la Data Manager API." },
+
   "Sobre a empresa": { es: "Sobre la empresa" },
   "Não foi possível carregar o enriquecimento.": { es: "No se pudo cargar el enriquecimiento." },
   "Sem dados de enriquecimento para este contato.": { es: "Sin datos de enriquecimiento para este contacto." },

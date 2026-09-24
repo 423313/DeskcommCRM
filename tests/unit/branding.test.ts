@@ -804,6 +804,10 @@ type CategoriaDeHost =
 type EntradaDeHost = { categoria: CategoriaDeHost; motivo: string };
 
 const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
+  "datamanager.googleapis.com": {
+    categoria: "FORNECEDOR",
+    motivo: "endpoint oficial da Google Data Manager API: recebe conversões e consulta o processamento na conta autorizada pela própria organização. O destino pertence ao fornecedor e não à instalação do CRM.",
+  },
   // ── prospecção (PR #963): destino de chamada do crawler ──
   "api.apify.com": {
     categoria: "FORNECEDOR",

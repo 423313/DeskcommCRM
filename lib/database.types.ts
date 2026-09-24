@@ -891,6 +891,8 @@ export type Database = {
           lead_id: string
           organization_id: string
           platform: string
+          remote_request_id: string | null
+          remote_requested_at: string | null
           reason: string | null
           status: string
           updated_at: string
@@ -907,6 +909,8 @@ export type Database = {
           lead_id: string
           organization_id: string
           platform: string
+          remote_request_id?: string | null
+          remote_requested_at?: string | null
           reason?: string | null
           status: string
           updated_at?: string
@@ -923,6 +927,8 @@ export type Database = {
           lead_id?: string
           organization_id?: string
           platform?: string
+          remote_request_id?: string | null
+          remote_requested_at?: string | null
           reason?: string | null
           status?: string
           updated_at?: string
@@ -952,6 +958,7 @@ export type Database = {
           dataset_id: string | null
           enabled: boolean
           google_conversion_action_id: string | null
+          google_api: string
           google_customer_id: string | null
           google_login_customer_id: string | null
           google_refresh_token_encrypted: string | null
@@ -968,6 +975,7 @@ export type Database = {
           dataset_id?: string | null
           enabled?: boolean
           google_conversion_action_id?: string | null
+          google_api?: string
           google_customer_id?: string | null
           google_login_customer_id?: string | null
           google_refresh_token_encrypted?: string | null
@@ -984,6 +992,7 @@ export type Database = {
           dataset_id?: string | null
           enabled?: boolean
           google_conversion_action_id?: string | null
+          google_api?: string
           google_customer_id?: string | null
           google_login_customer_id?: string | null
           google_refresh_token_encrypted?: string | null
@@ -9192,6 +9201,10 @@ export type Database = {
       activate_kb_version: {
         Args: { p_agent_id: string; p_version_id: string }
         Returns: undefined
+      }
+      fn_solicitar_reenvio_conversao: {
+        Args: { p_org: string; p_lead: string }
+        Returns: boolean
       }
       emit_event: {
         Args: {

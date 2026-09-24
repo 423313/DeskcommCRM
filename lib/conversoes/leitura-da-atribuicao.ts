@@ -41,13 +41,14 @@ export async function lerAtribuicao(
 ): Promise<LeituraDeAtribuicao> {
   if (!contactId) return { temAtribuicao: false, motivo: "sem_contato" };
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from("contacts")
     .select("phone_number, source_metadata")
     .eq("id", contactId)
     .eq("organization_id", organizationId)
     .maybeSingle();
 
+  if (error) throw new Error("Não foi possível ler a origem do contato.");
   if (!data) return { temAtribuicao: false, motivo: "sem_contato" };
 
   const linha = data as { phone_number: string | null; source_metadata: unknown };
