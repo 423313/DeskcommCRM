@@ -118,7 +118,7 @@ export function FormularioDeConversoesGoogle({
           )}
           <p className="text-sm text-muted-foreground">
             {t(
-              "Enviar vendas para o Google Ads ainda não está disponível nesta instalação — não é nada que você tenha feito. Quem instalou o sistema precisa configurar",
+              "Enviar conversões para o Google Ads ainda não está disponível nesta instalação — não é nada que você tenha feito. Quem instalou o sistema precisa configurar",
             )}
             {falta.length > 0 ? (
               <>
@@ -283,7 +283,7 @@ export function FormularioDeConversoesGoogle({
 
         <div className="flex items-center gap-3">
           <Switch id="google_enabled" checked={habilitada} onCheckedChange={setHabilitada} />
-          <Label htmlFor="google_enabled">{t("Enviar vendas para o Google Ads")}</Label>
+          <Label htmlFor="google_enabled">{t("Enviar conversões para o Google Ads")}</Label>
         </div>
 
         <Button type="submit" disabled={!podeSalvar || isPending}>
