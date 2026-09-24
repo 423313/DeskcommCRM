@@ -92,7 +92,21 @@ vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
 import { deriveMessageMedia, MARCADOR_NAO_LIDA } from "@/workers/media-derive-worker";
 import { deriveMediaText } from "@/lib/messaging/media/derive";
 import { DETALHE_TECNICO } from "@/lib/event-log/aviso-de-evento-morto";
-import { resolveOrgLlmConfig } from "@/lib/agent-engine/edge/llm/credentials";
+import { resolveOrgLlmConfig, type OrgLlmConfig } from "@/lib/agent-engine/edge/llm/credentials";
+
+function configResolvida(over: Partial<OrgLlmConfig> = {}): OrgLlmConfig {
+  return {
+    provider: "openai",
+    apiKey: "sk-test",
+    origemDaChave: "credencial_da_organizacao",
+    defaultModel: "gpt-5",
+    params: {},
+    enabledModels: [],
+    orcamento: { modo: "off", tetoCents: 0, efetivoEm: null, limiarPct: 80 },
+    orcamentoIndisponivelPorque: null,
+    ...over,
+  };
+}
 
 function eventRow(attempts = 0) {
   return {
@@ -116,15 +130,8 @@ describe("deriveMessageMedia", () => {
     messageRow.media_derived_status = null;
     messageRow.type = "audio";
     bindingDeVisao = null;
-    vi.mocked(resolveOrgLlmConfig).mockReset().mockResolvedValue({
-      provider: "openai",
-      apiKey: "sk-test",
-      defaultModel: "gpt-5",
-      params: {},
-      enabledModels: [],
-      orcamento: { modo: "off", tetoCents: 0, efetivoEm: null, limiarPct: 80 },
-      orcamentoIndisponivelPorque: null,
-    } as any);
+    messageRow.media_mime = "audio/ogg";
+    vi.mocked(resolveOrgLlmConfig).mockReset().mockResolvedValue(configResolvida());
     vi.mocked(deriveMediaText).mockReset().mockResolvedValue("transcrição do áudio real");
   });
 
@@ -136,15 +143,7 @@ describe("deriveMessageMedia", () => {
     // Sem override (padrão da org) rejeita; com override (binding) resolve com sucesso
     vi.mocked(resolveOrgLlmConfig).mockImplementation(async (_pool, _cfg, _orgId, override) => {
       if (override?.credentialId === "cred-vision") {
-        return {
-          provider: "openai",
-          apiKey: "sk-vision",
-          defaultModel: "gpt-4o",
-          params: {},
-          enabledModels: [],
-          orcamento: { modo: "off", tetoCents: 0, efetivoEm: null, limiarPct: 80 },
-          orcamentoIndisponivelPorque: null,
-        } as any;
+        return configResolvida({ apiKey: "sk-vision", defaultModel: "gpt-4o" });
       }
       throw new Error("Nenhuma credencial padrão encontrada para a organização");
     });
