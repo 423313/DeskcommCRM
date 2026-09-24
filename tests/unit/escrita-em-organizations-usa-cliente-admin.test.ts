@@ -501,6 +501,45 @@ describe("toda escrita em `organizations` passa pelo cliente admin", () => {
           "}",
         esperado: ["cliente.update", "cliente.update"],
       },
+      {
+        forma:
+          "valor padrão aponta para uma local de SESSÃO homônima do admin do módulo " +
+          "(vale a declaração que o nome alcança, não o nome no arquivo)",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const admin = createAdminClient();\n" +
+          "export async function b(orgId: string, settings: unknown) {\n" +
+          "  const admin = await createClient();\n" +
+          `  const run = async (cliente = admin) => { ${MUTA_PELO_CLIENTE_PASSADO} };\n` +
+          "  await run();\n" +
+          "}",
+        esperado: ["cliente.update"],
+      },
+      {
+        forma: "argumento é uma local de SESSÃO homônima do admin do módulo",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const admin = createAdminClient();\n" +
+          "async function aplicar(cliente = admin, orgId: string, settings: unknown) " +
+          `{ ${MUTA_PELO_CLIENTE_PASSADO} }\n` +
+          "export async function vazar(orgId: string, settings: unknown) " +
+          "{ const admin = await createClient(); await aplicar(admin, orgId, settings); }",
+        esperado: ["cliente.update"],
+      },
+      {
+        forma: "argumento `admin.schema(...)` sobre uma local de SESSÃO homônima do admin do módulo",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const admin = createAdminClient();\n" +
+          "async function aplicar(cliente = admin, orgId: string, settings: unknown) " +
+          `{ ${MUTA_PELO_CLIENTE_PASSADO} }\n` +
+          "export async function vazar(orgId: string, settings: unknown) " +
+          '{ const admin = await createClient(); await aplicar(admin.schema("public"), orgId, settings); }',
+        esperado: ["cliente.update"],
+      },
     ];
     for (const { forma, codigo, esperado = ["p.admin.update"] } of reprovados) {
       // `expect.soft` pelo mesmo motivo do CONTROLE verde: uma sabotagem por vez

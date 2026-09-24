@@ -719,7 +719,13 @@ function argumentoEntregaAdmin(
   vistos: ReadonlySet<string>,
 ): boolean {
   if (argumento === undefined) return false;
-  if (ehClienteDeServico(argumento, admins)) return true;
+  // O argumento é um nome: vale a declaração que ele alcança, não o nome no arquivo.
+  if (ts.isIdentifier(argumento)) {
+    const decl = declaracaoDoIdentificador(argumento, fonte);
+    if (decl !== null && !ts.isParameter(decl)) return ehDeclaracaoAdmin(decl, argumento, fonte, escopo, caminhos);
+  } else if (ehReceptorAdmin(argumento, fonte, escopo, caminhos)) {
+    return true;
+  }
   const caminho = caminhoDaCadeia(argumento);
   if (caminho === null) return false;
   if (caminhos.has(caminho)) return true;
