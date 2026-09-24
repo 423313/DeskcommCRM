@@ -11,7 +11,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateText, type LanguageModel } from "ai";
 
-import { createDefaultRegistry, esforcoDeRaciocinioOpenAI } from "@/lib/agent-engine/edge/llm/providers";
+import {
+  createDefaultRegistry,
+  esforcoDeRaciocinioOpenAI,
+  modeloOpenAIRaciocina,
+} from "@/lib/agent-engine/edge/llm/providers";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -60,10 +64,23 @@ describe("knob desligado ou fora do escopo: nada é injetado", () => {
     expect(corpos[0]?.reasoning).toBeUndefined();
   });
 
+  it("modelo da OpenAI SEM raciocínio não recebe o campo (a API recusaria com 400)", async () => {
+    const { corpos } = interceptarSaida();
+    await disparar(createDefaultRegistry({ openaiReasoningEffort: "none" })["openai"]!("sk-de-teste", "gpt-4.1-nano"));
+    expect(corpos[0]?.reasoning).toBeUndefined();
+  });
+
   it("a DeepSeek não herda o knob da OpenAI", async () => {
     const { corpos } = interceptarSaida();
     await disparar(createDefaultRegistry({ openaiReasoningEffort: "none" })["deepseek"]!("sk-de-teste", "deepseek-flash"));
     expect(corpos[0]?.reasoning).toBeUndefined();
+  });
+});
+
+describe("quais modelos raciocinam", () => {
+  it("famílias o*, gpt-5* e gpt-6* sim; -chat e gpt-4.x não", () => {
+    for (const m of ["gpt-6-luna", "gpt-5.4-mini", "o3", "o4-mini"]) expect(modeloOpenAIRaciocina(m)).toBe(true);
+    for (const m of ["gpt-4.1-nano", "gpt-4o-mini", "gpt-5-chat-latest", "gpt-5.2-chat-latest"]) expect(modeloOpenAIRaciocina(m)).toBe(false);
   });
 });
 

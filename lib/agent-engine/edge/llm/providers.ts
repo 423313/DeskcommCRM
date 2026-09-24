@@ -163,10 +163,11 @@ function comRaciocinioDesligado(inner: typeof fetch): typeof fetch {
  * roda outra etapa. É o mesmo campo que a DeepSeek já recebe
  * (`comRaciocinioDesligado`), só que com o valor escolhido pelo operador.
  *
- * ⚠️ Só vale para o provider `openai` (endpoint oficial, Responses API). Modelo
- * SEM raciocínio (ex.: gpt-4.1-mini) recusa o campo com 400 — por isso é
- * opt-in, e o valor é validado aqui: grafia errada falha na subida, não vira
- * requisição recusada no meio de um atendimento.
+ * ⚠️ Só vale para o provider `openai` (endpoint oficial, Responses API) e só
+ * em modelo que raciocina (`modeloOpenAIRaciocina`): modelo SEM raciocínio
+ * recusa o campo — medido: `gpt-4.1-nano` + `reasoning.effort` → 400
+ * "Unsupported parameter". O valor é validado aqui: grafia errada falha na
+ * leitura, não vira requisição recusada no meio de um atendimento.
  */
 export type EsforcoDeRaciocinioOpenAI = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 const ESFORCOS_OPENAI: readonly EsforcoDeRaciocinioOpenAI[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
@@ -180,6 +181,15 @@ export function esforcoDeRaciocinioOpenAI(
     throw new Error(`OPENAI_REASONING_EFFORT inválido — use ${ESFORCOS_OPENAI.join(', ')} (ou deixe vazio)`);
   }
   return v as EsforcoDeRaciocinioOpenAI;
+}
+
+/**
+ * Famílias de raciocínio da OpenAI: `o1`/`o3`/`o4-…`, `gpt-5…` e `gpt-6…` — menos
+ * as variantes `-chat`, que não raciocinam. Fora daqui o knob não injeta nada.
+ */
+export function modeloOpenAIRaciocina(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return /^(o\d|gpt-5|gpt-6)/.test(id) && !id.includes('chat');
 }
 
 /** Injeta `reasoning.effort` no corpo, preservando o resto de `reasoning` e da chamada. */
@@ -225,7 +235,10 @@ export function createDefaultRegistry(opts?: {
       createAnthropic({ apiKey, fetch: contain(ANTHROPIC_ENDPOINT) })(modelId),
     openai: (apiKey, modelId) => {
       const contido = contain(OPENAI_ENDPOINT);
-      const fetchFinal = esforcoOpenAI ? comEsforcoDeRaciocinio(contido, esforcoOpenAI) : contido;
+      const fetchFinal =
+        esforcoOpenAI && modeloOpenAIRaciocina(modelId)
+          ? comEsforcoDeRaciocinio(contido, esforcoOpenAI)
+          : contido;
       return createOpenAI({ apiKey, fetch: fetchFinal })(modelId);
     },
     google: (apiKey, modelId) =>
