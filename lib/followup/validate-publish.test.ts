@@ -796,7 +796,10 @@ describe('publish por superfície (roteiro de atendimento, #1130)', () => {
 
   describe('encadeamento em ciclo (revisão do #1573)', () => {
     const encadeiaPara = (fluxo: string): FlowNode => ({
-      ...end('f'),
+      id: 'f',
+      type: 'end',
+      label: 'f',
+      position: pos,
       config: { outcome: 'converted', ao_finalizar: { tipo: 'proximo_fluxo', fluxo } },
     });
     const roteiroQueVaiPara = (fluxo: string) =>

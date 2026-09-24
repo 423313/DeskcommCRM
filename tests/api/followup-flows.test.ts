@@ -802,8 +802,11 @@ describe("POST /api/v1/ai/followup-flows/:id/publish — roteiro que encadeia (r
         config: { key: "nome", label: "Nome", type: "text", required: true, permite_correcao: true },
       },
       {
-        ...end("f", "converted"),
-        config: { outcome: "converted", ...(fluxo ? { ao_finalizar: { tipo: "proximo_fluxo", fluxo } } : {}) },
+        id: "f",
+        type: "end",
+        label: "f",
+        position: pos,
+        config: { outcome: "converted", ...(fluxo ? { ao_finalizar: { tipo: "proximo_fluxo" as const, fluxo } } : {}) },
       },
     ],
     edges: [edge("e1", "t", "c"), edge("e2", "c", "f")],
