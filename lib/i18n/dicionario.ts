@@ -1024,8 +1024,8 @@ export const DICIONARIO: Traducoes = {
     es: "La clave del proveedor de IA que los agentes usan para pensar.",
   },
   Provedores: { es: "Proveedores" },
-  "Qual inteligência atende cada parte do sistema, o que acontece se ela falhar e onde ligar o Jev, que percebe na hora quando um cliente está irritado.": {
-    es: "Qué inteligencia atiende cada parte del sistema, qué ocurre si falla y dónde activar Jev, que nota al instante cuando un cliente está molesto.",
+  "Ligue o Jev para decisões rápidas e escolha qual inteligência atende cada parte do sistema.": {
+    es: "Activa Jev para decisiones rápidas y elige qué inteligencia atiende cada parte del sistema.",
   },
   Conhecimento: { es: "Conocimiento" },
   "Os materiais que o agente consulta antes de responder sobre o seu negócio.": {
@@ -1136,7 +1136,6 @@ export const DICIONARIO: Traducoes = {
   // Rotulo so-para-leitor-de-tela do X de fechar em Dialog e Sheet. Ele esta
   // em INGLES no produto desde o shadcn, e continua: traduzi-lo mudaria o
   // portugues. Consertar o rotulo pt-BR e mudanca de UX, com PR proprio.
-  Close: { es: "Cerrar" },
   "Menu do usuário": { es: "Menú del usuario" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },

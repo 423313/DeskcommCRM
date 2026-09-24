@@ -143,6 +143,10 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
           {resultados.map((d, i) => {
             const Icon = d.icon;
             const ativo = i === destacado;
+            // No item destacado o fundo é a cor de destaque: o cinza de apoio
+            // ficava 1,2:1 sobre o verde (medido), ilegível. A cor de frente do
+            // destaque a 90% dá 5,1:1 no claro e 5,5:1 no escuro (AA pede 4,5).
+            const secundario = ativo ? "text-accent-foreground/90" : "text-muted-foreground";
             return (
               <li
                 key={d.href}
@@ -157,15 +161,17 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
                   ativo && "bg-accent text-accent-foreground",
                 )}
               >
-                <Icon size={18} aria-hidden className="mt-0.5 shrink-0 text-muted-foreground" />
+                <Icon size={18} aria-hidden className={cn("mt-0.5 shrink-0", secundario)} />
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm font-medium">{t(d.label)}</span>
-                    <span className="truncate text-[11px] tracking-wider text-muted-foreground uppercase">
+                    <span className={cn("truncate text-[11px] tracking-wider uppercase", secundario)}>
                       {t(ROTULO_GRUPO.get(d.group) ?? "")}
                     </span>
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">{t(d.description)}</p>
+                  {/* Duas linhas, não uma cortada: a palavra que a pessoa buscou
+                      pode estar no fim da descrição. */}
+                  <p className={cn("line-clamp-2 text-xs", secundario)}>{t(d.description)}</p>
                 </div>
               </li>
             );
