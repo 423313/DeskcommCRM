@@ -19,9 +19,12 @@
  * O `page.tsx` é Server Component com `requireAuth`/Supabase: testá-lo aqui
  * exigiria simular a sessão inteira e mediria o mock. O que precisa estar
  * travado é a REGRA DE DESENHO — três estados distintos —, e ela vive no
- * cliente. A ponte (a página passar `erroDeLeitura`) é cobrada no teste de
- * unidade irmão, por leitura do fonte, porque é uma linha que some sem doer.
+ * cliente. A ponte (a página passar `erroDeLeitura`) é cobrada no último caso
+ * deste arquivo, por leitura do fonte, porque é uma linha que some sem doer.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -107,5 +110,14 @@ describe("os três estados da lista de tipos", () => {
     expect(screen.queryByTestId("sem-tipos")).toBeNull();
     // A mensagem técnica fica visível para quem for consertar a instalação.
     expect(erro.textContent).toContain("reminder_extra_offsets_minutes");
+  });
+
+  it("a página repassa o erro da leitura em vez de descartá-lo", () => {
+    // Sem comentários: uma linha comentada não pode contar como ponte presente.
+    const fonte = readFileSync(join(__dirname, "page.tsx"), "utf8").replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "");
+
+    // O defeito original: `const [{ data: tipos }] = await Promise.all(...)`.
+    expect(fonte).toMatch(/\[\s*\{[^}]*\berror:\s*erroTipos\b[^}]*\}/);
+    expect(fonte).toMatch(/erroDeLeitura=\{\s*erroTipos\b/);
   });
 });
