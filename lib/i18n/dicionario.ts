@@ -8172,6 +8172,8 @@ export const DICIONARIO: Traducoes = {
   "Contato inválido.": { es: "Contacto inválido." },
   "Não foi possível desbloquear o contato.": { es: "No fue posible desbloquear el contacto." },
   Desbloquear: { es: "Desbloquear" },
+  "Desbloquear este contato?": { es: "¿Desbloquear este contacto?" },
+  "Este contato pediu para não receber mais mensagens. Desbloquear volta a permitir campanhas, follow-ups e respostas da IA para ele, e a ação fica registrada na auditoria em seu nome.": { es: "Este contacto pidió no recibir más mensajes. Desbloquearlo vuelve a permitir campañas, seguimientos y respuestas de la IA para él, y la acción queda registrada en la auditoría a tu nombre." },
   "content é obrigatório.": { es: "content es obligatorio." },
   "Conversa do caso sem contato associado.": { es: "La conversación del caso no tiene contacto asociado." },
   "Conversa não encontrada.": { es: "Conversación no encontrada." },
