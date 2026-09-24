@@ -866,9 +866,10 @@ export const AUDIT_ACTIONS = [
   "registration.requested",
   "registration.approved",
   "registration.rejected",
-  // O interruptor do Jev (PATCH /api/v1/ai/jev). Ligar manda a última mensagem
-  // de cada cliente para um fornecedor nos EUA: "quem ligou, quando, e se o
-  // aceite foi dado ali" é a pergunta de LGPD que só estas linhas respondem.
+  // O interruptor do Jev (PATCH /api/v1/ai/jev). Ligar manda cada mensagem
+  // recebida dos clientes, uma de cada vez e sem o histórico da conversa, para
+  // um fornecedor nos EUA: "quem ligou, quando, e se o aceite foi dado ali" é a
+  // pergunta de LGPD que só estas linhas respondem.
   // `desligado` também sai quando a exclusão da última chave apta dele o
   // desliga (`DELETE /api/v1/ai/credentials/:id`, metadata.motivo "chave_excluida").
   "ai.jev.ligado",
