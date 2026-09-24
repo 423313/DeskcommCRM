@@ -209,6 +209,18 @@ type EntradaDeMarca = {
 
 const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
   // ─── PROTOCOLO — contrato de fio. Renomear quebra integração alheia. ───
+  "app/app/settings/conversoes/_scriptDoSite.tsx": {
+    categoria: "PROTOCOLO",
+    motivo:
+      "atributo HTML público que exclui um link do script instalado no site do cliente; o nome precisa casar com o leitor em public/rastreio/v1.js, independentemente da marca da instalação",
+    marcas: ["data-deskcomm-ignore"],
+  },
+  "lib/i18n/dicionario.ts": {
+    categoria: "PROTOCOLO",
+    motivo:
+      "a instrução de instalação em português e espanhol cita o atributo HTML público de exclusão do script do site; traduzir ou trocar esse identificador quebra a exclusão dos links",
+    marcas: ["data-deskcomm-ignore", "data-deskcomm-ignore"],
+  },
   "app/api/v1/webhooks/in/[token]/route.ts": {
     categoria: "PROTOCOLO",
     motivo:

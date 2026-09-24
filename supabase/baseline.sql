@@ -37140,8 +37140,8 @@ end; $$;
 revoke execute on function public.fn_service_inbound(uuid) from public,anon,authenticated;
 grant execute on function public.fn_service_inbound(uuid) to service_role;
 
--- ---- Conversões: processamento e reenvio (migration 0398) ----
--- 0398: preservar conexões existentes; novos protocolos têm consulta durável.
+-- ---- Conversões: processamento e reenvio (migration 0401) ----
+-- 0401: preservar conexões existentes; novos protocolos têm consulta durável.
 alter table public.ad_platform_connections
   add column if not exists google_api text not null default 'google_ads';
 alter table public.ad_platform_connections drop constraint if exists ad_platform_connections_google_api_check;
@@ -37186,7 +37186,7 @@ $$;
 revoke execute on function public.fn_solicitar_reenvio_conversao(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.fn_solicitar_reenvio_conversao(uuid, uuid) to service_role;
 
--- ---- Google: captura e qualificação (migration 0399) ----
+-- ---- Google: captura e qualificação (migration 0402) ----
 -- Evolução de conversões já distribuídas: nenhuma integração é ligada automaticamente.
 alter table public.google_ads_click_refs alter column gclid drop not null;
 alter table public.google_ads_click_refs add column if not exists gbraid text,

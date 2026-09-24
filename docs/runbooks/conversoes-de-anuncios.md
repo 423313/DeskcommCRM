@@ -50,13 +50,13 @@ CONFIRMADO no código desta entrega:
 
 Fontes do contrato Google: [identificadores e evento Data Manager](https://developers.google.com/data-manager/api/reference/rest/v1/events/ingest), [envio de eventos](https://developers.google.com/data-manager/api/devguides/events/send-events).
 
-Migration 0399 preserva conexões existentes e grants privados, acrescenta identificadores de clique, etapa opcional com FK composta por organização e snapshot de qualificação. A assinatura anterior da RPC de reenvio permanece compatível com compras.
+Migration 0402 preserva conexões existentes e grants privados, acrescenta identificadores de clique, etapa opcional com FK composta por organização e snapshot de qualificação. A assinatura anterior da RPC de reenvio permanece compatível com compras.
 
 Aceite do piloto: primeiro verificar captura real do identificador e da mensagem; depois mover um negócio elegível à etapa escolhida, conferir o evento de qualificação e seu diagnóstico; por fim ganhar o negócio com valor e conferir a compra. Designar um único emissor por evento durante a comparação com outro rastreador, evitando dupla contagem.
 
 ## Contratos e verificação
 
-Migration 0398 adiciona API da conexão e protocolo do envio, preserva RLS/grants existentes e impede rebaixar `sent` numa execução atrasada. A RPC de reprocessamento só é executável por `service_role`; a rota exige administrador, MFA pelo guard canônico e bloqueia suporte somente leitura. Organização vem da sessão. A RPC usa lock no registro e evita dois pedidos pendentes simultâneos.
+Migration 0401 adiciona API da conexão e protocolo do envio, preserva RLS/grants existentes e impede rebaixar `sent` numa execução atrasada. A RPC de reprocessamento só é executável por `service_role`; a rota exige administrador, MFA pelo guard canônico e bloqueia suporte somente leitura. Organização vem da sessão. A RPC usa lock no registro e evita dois pedidos pendentes simultâneos.
 
 - Unitários: `conversoes-entrega-confiavel`, `conversoes-de-anuncio`, `conversao-reprocessar-rota`, `google-ads-conversoes` e `google-ads-cartao-sem-credenciais`.
 - Banco: `tests/invariants/conversoes-reprocessamento-isolado.test.ts` e vocabulário banco/TypeScript.

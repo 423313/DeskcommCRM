@@ -77,7 +77,7 @@ export function ScriptDoSite({
       </p>
       <p className="text-sm text-muted-foreground">
         {t(
-          "A origem fica na mesma aba e no mesmo domínio durante a navegação. Uma nova campanha substitui a anterior. Ao clicar, o Deskcomm gera o código na mensagem; ele precisa ser enviado pelo visitante. A mensagem usada é a que você salvou na captura.",
+          "A origem fica na mesma aba e no mesmo domínio durante a navegação. Uma nova campanha substitui a anterior. Ao clicar, o CRM gera o código na mensagem; ele precisa ser enviado pelo visitante. A mensagem usada é a que você salvou na captura.",
         )}
       </p>
       <p className="text-sm text-muted-foreground">
