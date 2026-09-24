@@ -1128,6 +1128,16 @@ export const DICIONARIO: Traducoes = {
   "Buscar telas": { es: "Buscar pantallas" },
   "Buscar telas do sistema…": { es: "Buscar pantallas del sistema…" },
   Telas: { es: "Pantallas" },
+  "Buscar por nome, objetivo ou função (ex: leads, agenda, prompt, whatsapp)...": {
+    es: "Buscar por nombre, objetivo o función (ej.: leads, agenda, prompt, whatsapp)...",
+  },
+  "Tente buscar por outro termo ou selecione 'Todas' nas categorias.": {
+    es: "Prueba con otro término o selecciona 'Todas' en las categorías.",
+  },
+  ferramenta: { es: "herramienta" },
+  ferramentas: { es: "herramientas" },
+  "Use as setas ↑↓ e Enter para navegar": { es: "Usa las flechas ↑↓ y Enter para navegar" },
+  "ESC para fechar": { es: "ESC para cerrar" },
   // O gatilho da busca no topo mostra RETICENCIA ASCII desde antes do i18n
   // (`Buscar...`). A chave e o byte que a tela ja mostrava: trocar por "…"
   // aqui mudaria a tela de quem usa em portugues — que e o unico jeito de
@@ -8169,6 +8179,11 @@ export const DICIONARIO: Traducoes = {
   "Conexão sem identificador utilizável.": { es: "Conexión sin identificador utilizable." },
   "Conflito de versionamento — tente novamente.": { es: "Conflicto de versiones. Intenta de nuevo." },
   "Contato não encontrado.": { es: "Contacto no encontrado." },
+  "Contato inválido.": { es: "Contacto inválido." },
+  "Não foi possível desbloquear o contato.": { es: "No fue posible desbloquear el contacto." },
+  Desbloquear: { es: "Desbloquear" },
+  "Desbloquear este contato?": { es: "¿Desbloquear este contacto?" },
+  "Este contato pediu para não receber mais mensagens. Desbloquear volta a permitir campanhas, follow-ups e respostas da IA para ele, e a ação fica registrada na auditoria em seu nome.": { es: "Este contacto pidió no recibir más mensajes. Desbloquearlo vuelve a permitir campañas, seguimientos y respuestas de la IA para él, y la acción queda registrada en la auditoría a tu nombre." },
   "content é obrigatório.": { es: "content es obligatorio." },
   "Conversa do caso sem contato associado.": { es: "La conversación del caso no tiene contacto asociado." },
   "Conversa não encontrada.": { es: "Conversación no encontrada." },
