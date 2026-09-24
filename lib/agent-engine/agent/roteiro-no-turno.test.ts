@@ -42,12 +42,26 @@ const GRAFO_SIM_NAO: FlowGraph = {
 };
 
 /** Banco fake: um roteiro 'coletando' passa a existir quando alguém o insere. */
-function banco(opts: { roteiroJaExiste?: boolean; grafo?: FlowGraph } = {}) {
+function banco(
+  opts: {
+    roteiroJaExiste?: boolean;
+    grafo?: FlowGraph;
+    /** A linha da mensagem do turno, como o roteiro a lê (legenda + derivado da mídia). */
+    mensagem?: { body: string | null; media_derived_text?: string | null } | null;
+  } = {},
+) {
   const GRAFO_DO_BANCO = opts.grafo ?? GRAFO;
+  const mensagem =
+    opts.mensagem === undefined ? { body: 'quero financiar, meu nome é Lia Mendes', media_derived_text: null } : opts.mensagem;
   let existe = opts.roteiroJaExiste ?? false;
   const sqls: string[] = [];
-  const query = vi.fn(async (sql: string, _params: unknown[] = []) => {
+  const chaves = new Set<string>();
+  const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     sqls.push(sql);
+    if (/insert into followup_enrollment_events/.test(sql) && typeof params[5] === 'string') {
+      if (chaves.has(params[5])) return { rows: [], rowCount: 0 };
+      chaves.add(params[5]);
+    }
     if (/from followup_enrollments e[\s\S]*e\.status = 'coletando'/.test(sql)) {
       return existe
         ? {
@@ -77,6 +91,7 @@ function banco(opts: { roteiroJaExiste?: boolean; grafo?: FlowGraph } = {}) {
       existe = true;
       return { rows: [{ id: 'enr-1' }], rowCount: 1 };
     }
+    if (/from messages/.test(sql)) return { rows: mensagem === null ? [] : [mensagem], rowCount: mensagem === null ? 0 : 1 };
     if (/select custom_fields from contacts/.test(sql)) return { rows: [{ custom_fields: {} }], rowCount: 1 };
     if (/insert into followup_enrollment_events|update /.test(sql)) return { rows: [], rowCount: 1 };
     return { rows: [], rowCount: 0 };
@@ -112,7 +127,7 @@ describe('prepararRoteiroDoTurno', () => {
   });
 
   it('sem roteiro e sem palavra-gatilho: null, nada é criado', async () => {
-    const b = banco();
+    const b = banco({ mensagem: { body: 'oi, tudo bem?' } });
     const r = await prepararRoteiroDoTurno(
       { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
       { ...turno, texto: 'oi, tudo bem?' },
@@ -134,7 +149,7 @@ describe('prepararRoteiroDoTurno', () => {
   });
 
   it('no turno de início, a captura determinística não roda: "sim, quero financiar" não responde a CNH', async () => {
-    const b = banco({ grafo: GRAFO_SIM_NAO });
+    const b = banco({ grafo: GRAFO_SIM_NAO, mensagem: { body: 'sim, quero financiar' } });
     const r = await prepararRoteiroDoTurno(
       { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
       { ...turno, texto: 'sim, quero financiar' },
@@ -160,7 +175,7 @@ describe('prepararRoteiroDoTurno', () => {
   });
 
   it('o roteador começa o roteiro que a intenção aponta, sem olhar palavra-gatilho', async () => {
-    const b = banco();
+    const b = banco({ mensagem: { body: 'oi' } });
     const r = await prepararRoteiroDoTurno(
       { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
       { ...turno, texto: 'oi', flowPointerDoRoteador: 'ptr-1' },
@@ -170,7 +185,7 @@ describe('prepararRoteiroDoTurno', () => {
   });
 
   it('o log do turno nunca leva o texto do cliente nem o valor lido', async () => {
-    const b = banco({ roteiroJaExiste: true });
+    const b = banco({ roteiroJaExiste: true, mensagem: { body: 'meu CPF é 529.982.247-25 e sou Lia Mendes' } });
     const l = log();
     await prepararRoteiroDoTurno(
       {
@@ -200,6 +215,39 @@ describe('prepararRoteiroDoTurno', () => {
     );
     expect(r).toBeNull();
     expect(l.warn).toHaveBeenCalled();
+  });
+});
+
+describe('mídia e retry (achado 8 da prova; revisão do PR 1)', () => {
+  it('figurinha ou áudio sem transcrição: nem tentativa, nem validador', async () => {
+    const b = banco({ roteiroJaExiste: true, mensagem: { body: null, media_derived_text: null } });
+    const validar = vi.fn(semLeitura);
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar, log: log() as never },
+      { ...turno, texto: '[sticker]' },
+    );
+    expect(r).not.toBeNull();
+    expect(validar).not.toHaveBeenCalled();
+    expect(b.sqls.some((s) => /insert into followup_enrollment_events/.test(s))).toBe(false);
+  });
+
+  it('áudio TRANSCRITO: o roteiro lê a transcrição, sem o enquadramento do histórico', async () => {
+    const b = banco({ roteiroJaExiste: true, mensagem: { body: null, media_derived_text: 'meu nome é Lia Mendes' } });
+    const validar = vi.fn(semLeitura);
+    await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar, log: log() as never },
+      { ...turno, texto: '[Mídia do cliente: ele enviou um áudio…]\nConteúdo: meu nome é Lia Mendes' },
+    );
+    expect(validar).toHaveBeenCalledWith(expect.objectContaining({ textoAtual: 'meu nome é Lia Mendes' }));
+  });
+
+  it('retry da mesma mensagem não chama o validador de novo', async () => {
+    const b = banco({ roteiroJaExiste: true });
+    const validar = vi.fn(semLeitura);
+    const deps = { pool: b.pool, moduloLigado: async () => true, validar, log: log() as never };
+    await prepararRoteiroDoTurno(deps, turno);
+    await prepararRoteiroDoTurno(deps, turno);
+    expect(validar).toHaveBeenCalledTimes(1);
   });
 });
 

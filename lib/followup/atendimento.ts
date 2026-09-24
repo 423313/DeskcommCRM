@@ -542,6 +542,51 @@ export async function registrarEventoDoRoteiro(
 }
 
 /**
+ * Reivindica a mensagem para este roteiro (`roteiro_msg:<id>` no índice único
+ * de eventos). `false` = ela já foi processada — um job reexecutado (retry da
+ * fila) não grava, não conta tentativa e, chamado ANTES do validador, não paga
+ * de novo a chamada de modelo (revisão do PR 1).
+ */
+export async function reivindicarMensagemDoRoteiro(
+  db: BancoDoRoteiro,
+  args: { organizationId: string; enrollmentId: string; messageId: string },
+): Promise<boolean> {
+  return registrarEventoDoRoteiro(db, {
+    organizationId: args.organizationId,
+    enrollmentId: args.enrollmentId,
+    tipo: "roteiro_mensagem",
+    idempotencyKey: `roteiro_msg:${args.messageId}`,
+  });
+}
+
+/**
+ * O texto de uma mensagem do cliente PARA O ROTEIRO: a legenda e o conteúdo
+ * derivado da mídia (transcrição do áudio, leitura da imagem), sem o
+ * enquadramento que o histórico do agente usa. `null` = mídia sem leitura
+ * (figurinha, áudio ainda não transcrito): não há o que ler, e isso NÃO é
+ * "não respondeu" — achado 8 da prova do #1130, em que três áudios esgotavam
+ * a pergunta.
+ */
+export async function lerMensagemParaORoteiro(
+  db: BancoDoRoteiro,
+  args: { organizationId: string; conversationId: string; messageId: string },
+): Promise<string | null> {
+  const { rows } = await db.query<{ body: string | null; media_derived_text: string | null }>(
+    `select body, media_derived_text
+       from messages
+      where organization_id = $1 and conversation_id = $2 and id = $3 and direction = 'inbound'
+      limit 1`,
+    [args.organizationId, args.conversationId, args.messageId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const partes = [row.body, row.media_derived_text]
+    .map((p) => (p ?? "").trim())
+    .filter((p) => p !== "");
+  return partes.length === 0 ? null : partes.join("\n");
+}
+
+/**
  * Marca o turno: soma uma tentativa na PRÓXIMA pergunta pendente e, se com isso
  * ela esgotou, recalcula a situação e conclui quando não sobra pendente.
  */
@@ -639,11 +684,10 @@ export async function processarInboundDoFluxo(
   const contactId = estado.enrollment.contact_id;
 
   if (args.messageId !== undefined && args.messageId !== null) {
-    const primeiraVez = await registrarEventoDoRoteiro(db, {
+    const primeiraVez = await reivindicarMensagemDoRoteiro(db, {
       organizationId: args.organizationId,
       enrollmentId: estado.enrollment.id,
-      tipo: "roteiro_mensagem",
-      idempotencyKey: `roteiro_msg:${args.messageId}`,
+      messageId: args.messageId,
     });
     if (!primeiraVez) return { estado, concluiu: false };
   }

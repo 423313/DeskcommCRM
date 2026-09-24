@@ -34,7 +34,9 @@ import {
   carregarEstadoDeAtendimento,
   escolherFluxoPeloGatilho,
   iniciarFluxoDeAtendimento,
+  lerMensagemParaORoteiro,
   processarInboundDoFluxo,
+  reivindicarMensagemDoRoteiro,
   registrarEventoDoRoteiro,
   renderBlocoDeAtendimento,
   type BancoDoRoteiro,
@@ -115,7 +117,18 @@ export async function prepararRoteiroDoTurno(
 
   let estado: EstadoDeAtendimento | null;
   let iniciado = false;
+  // O texto que o ROTEIRO lê: legenda + conteúdo derivado da mídia, da própria
+  // linha da mensagem (não o corpo enquadrado do histórico do agente). `null`
+  // com mensagem = mídia sem leitura.
+  let texto = t.texto;
   try {
+    if (t.messageId !== null && t.conversationId !== null) {
+      texto = await lerMensagemParaORoteiro(deps.pool, {
+        organizationId: t.organizationId,
+        conversationId: t.conversationId,
+        messageId: t.messageId,
+      });
+    }
     estado = await carregarEstadoDeAtendimento(deps.pool, {
       organizationId: t.organizationId,
       contactId: t.contactId,
@@ -123,7 +136,7 @@ export async function prepararRoteiroDoTurno(
     if (estado === null) {
       const porGatilho =
         t.flowPointerDoRoteador === null
-          ? await escolherFluxoPeloGatilho(deps.pool, { organizationId: t.organizationId, texto: t.texto })
+          ? await escolherFluxoPeloGatilho(deps.pool, { organizationId: t.organizationId, texto })
           : null;
       const alvo = t.flowPointerDoRoteador ?? porGatilho?.id ?? null;
       if (alvo !== null) {
@@ -151,7 +164,25 @@ export async function prepararRoteiroDoTurno(
   if (t.messageId === null) return montar(estado, iniciado);
 
   const atual = estado;
+  // Áudio sem transcrição, figurinha: não há o que ler. Não conta tentativa
+  // nem gasta o validador — a pergunta segue de pé para a próxima mensagem.
+  if (texto === null) {
+    deps.log.info('roteiro: mensagem sem texto legível (mídia) — não conta como resposta nem como tentativa', {
+      enrollment_id: atual.enrollment.id,
+    });
+    return montar(atual, iniciado);
+  }
+  const messageId = t.messageId;
   try {
+    // Reivindica a mensagem ANTES do validador: um retry da fila não paga a
+    // chamada de modelo de novo, nem grava ou conta duas vezes.
+    const primeiraVez = await reivindicarMensagemDoRoteiro(deps.pool, {
+      organizationId: t.organizationId,
+      enrollmentId: atual.enrollment.id,
+      messageId,
+    });
+    if (!primeiraVez) return montar(atual, iniciado);
+
     const perguntas: PerguntaDoFluxo[] = atual.situacao.pendentes.map((n) => ({
       key: n.config.key,
       label: n.config.label,
@@ -175,8 +206,8 @@ export async function prepararRoteiroDoTurno(
     );
 
     let validacoes: Array<{ campo: string; valor: string }> | undefined;
-    if ((perguntas.length > 0 || preenchidos.length > 0) && (t.texto ?? '').trim() !== '') {
-      const leitura = await deps.validar({ perguntas, preenchidos, mensagens: t.mensagens, textoAtual: t.texto });
+    if (perguntas.length > 0 || preenchidos.length > 0) {
+      const leitura = await deps.validar({ perguntas, preenchidos, mensagens: t.mensagens, textoAtual: texto });
       if (leitura.resultado === 'respondeu') validacoes = leitura.respostas;
       // Só chaves e o desfecho — nunca o texto do cliente nem o valor lido.
       deps.log.info('roteiro: leitura do validador', {
@@ -197,8 +228,9 @@ export async function prepararRoteiroDoTurno(
     const r = await processarInboundDoFluxo(deps.pool, {
       organizationId: t.organizationId,
       estado: atual,
-      texto: t.texto,
-      messageId: t.messageId,
+      texto,
+      // Já reivindicada acima: o processamento não reivindica de novo.
+      messageId: null,
       ...(validacoes !== undefined ? { validacoes } : {}),
     });
     if (!r.concluiu) return montar(r.estado, iniciado);
