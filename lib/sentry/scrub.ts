@@ -70,8 +70,15 @@ export function scrubMessage(input: string): string {
     )
     // CPF com qualquer separador entre os blocos (ponto, espaço, hífen ou nada):
     // `123 456 789 09` e `123.456.789.09` também são CPF de quem digita rápido.
-    .replace(/\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}/g, "[CPF]")
-    .replace(/\+?\d{2}\s?\d{4,5}-?\d{4}/g, "[PHONE]");
+    // Aceitar hífen ENTRE os blocos exige borda FORA deles: sem letra, dígito
+    // ou hífen vizinho. Sem ela, o padrão comia pedaço de UUID — medido, casava
+    // em 67 de 5.000 UUIDs (`…-a9ff-811889831080` virava `…-a9ff-[CPF]0`).
+    .replace(/(^|[^A-Za-z0-9-])\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}(?![A-Za-z0-9-])/g, "$1[CPF]")
+    // O número colado em outro texto (`zap11987654321`), que a borda do padrão
+    // de cima deixa passar. A borda aqui é só hexadecimal e hífen — exatamente
+    // os vizinhos possíveis dentro de um UUID —, porque sem ela este padrão
+    // também comia UUID: casava em 126 de 5.000 (`…-a8322618067f` virava `…-a[PHONE]f`).
+    .replace(/(^|[^0-9A-Fa-f-])\+?\d{2}\s?\d{4,5}-?\d{4}(?![0-9A-Fa-f-])/g, "$1[PHONE]");
 }
 
 /**

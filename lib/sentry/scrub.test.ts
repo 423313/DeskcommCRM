@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import { scrubMessage, scrubUrl, sentryScrubHooks } from "./scrub";
@@ -119,9 +121,27 @@ describe("scrubMessage", () => {
     expect(scrubMessage("98765-4321 ou (21) 3456-7890")).toBe("[PHONE] ou [PHONE]");
   });
 
-  it("não come pedaço de UUID, de hora nem de data", () => {
-    const uuid = "3f2504e0-4f89-1234-5678-0305e82c3301";
-    expect(scrubMessage(`agente ${uuid}`)).toBe(`agente ${uuid}`);
+  it("o número colado em texto também sai", () => {
+    expect(scrubMessage("zap11987654321 ok")).toBe("zap[PHONE] ok");
+  });
+
+  // Um UUID fixo passa por sorte: sem borda, 141 destes 5.000 saíam alterados,
+  // sempre num trecho só de dígitos. Por isso milhares,
+  // gerados de forma determinística (sha256 do índice) — a mesma amostra em
+  // toda execução, e uma falha reproduzível pelo índice.
+  it("não come pedaço de UUID — em milhares deles", () => {
+    const alterados: string[] = [];
+    for (let i = 0; i < 5000; i++) {
+      const h = createHash("sha256").update(`uuid-${i}`).digest("hex");
+      const variante = "89ab"[parseInt(h[16]!, 16) % 4];
+      const uuid = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${variante}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+      const texto = `agente ${uuid} falhou`;
+      if (scrubMessage(texto) !== texto) alterados.push(`${i}: ${uuid} -> ${scrubMessage(texto)}`);
+    }
+    expect(alterados.slice(0, 5)).toEqual([]);
+  });
+
+  it("não come pedaço de hora nem de data", () => {
     expect(scrubMessage("em 2026-09-23T18:46:39Z")).toBe("em 2026-09-23T18:46:39Z");
   });
 });
