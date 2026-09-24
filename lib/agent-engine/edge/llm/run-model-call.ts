@@ -16,7 +16,7 @@ import { guardServiceTools } from "@/lib/atendimento/fronteira-server";
  * cacheWriteTokens}. Validado no ai@7 via scripts/smoke-llm.sh (modelo real) —
  * upgrade de major re-valida esses paths pelo mesmo gate (regra dura 16).
  */
-import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
+import { generateText, hasToolCall, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
 import type pg from 'pg';
 import { z } from 'zod';
 
@@ -212,6 +212,12 @@ export interface RunModelCallInput {
    * agente), nunca constante.
    */
   maxSteps?: number;
+  /**
+   * Encerra o loop assim que o modelo chamar esta tool (além do teto de
+   * `maxSteps`). O rascunho assistido usa `send_message`: depois dela o modelo
+   * só faz uma etapa a mais para "encerrar", que custava ~1,5 s medido.
+   */
+  pararAoChamar?: string;
   /** Teto por chamada auxiliar; nunca aumenta o limite configurado pela organização. */
   maxOutputTokens?: number;
   /** Cancelamento propagado pelo chamador; a falha continua registrada em llm_calls. */
@@ -662,7 +668,12 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       messages: input.messages,
       abortSignal: input.abortSignal,
       tools: guardServiceTools(prefix.tools),
-      stopWhen: input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
+      stopWhen:
+        input.maxSteps === undefined
+          ? undefined
+          : input.pararAoChamar === undefined
+            ? stepCountIs(input.maxSteps)
+            : [stepCountIs(input.maxSteps), hasToolCall(input.pararAoChamar)],
       temperature,
       topP,
       topK,

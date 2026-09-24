@@ -4072,6 +4072,8 @@ async function executarTurnoDoAgente(
         messages: openingMessages,
         tools,
         maxSteps,
+        // Rascunho: a resposta É o send_message; a etapa seguinte só "encerrava".
+        ...(preview?.kind === 'assisted' ? { pararAoChamar: 'send_message' } : {}),
         ...(agentConfig !== null
           ? {
               model: agentConfig.model,

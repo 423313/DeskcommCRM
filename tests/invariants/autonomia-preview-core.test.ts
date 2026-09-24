@@ -258,4 +258,11 @@ it("assistência sob demanda instala fronteira original antes de ler checkpoint"
     [f.org, f.conversation],
   );
   expect(rascunho.rows[0]?.original_body).toContain("nove horas");
+  // E o loop para no send_message: nenhuma chamada ao modelo depois do envio proposto.
+  const depoisDoEnvio = prompts.filter((p) =>
+    (JSON.parse(p) as Array<{ role: string; content: unknown }>).some(
+      (m) => m.role === "tool" && JSON.stringify(m.content).includes('"toolName":"send_message"'),
+    ),
+  );
+  expect(depoisDoEnvio).toHaveLength(0);
 });
