@@ -1,4 +1,4 @@
--- 0397: preservar conexões existentes; novos protocolos têm consulta durável.
+-- 0398: preservar conexões existentes; novos protocolos têm consulta durável.
 alter table public.ad_platform_connections
   add column if not exists google_api text not null default 'google_ads';
 alter table public.ad_platform_connections drop constraint if exists ad_platform_connections_google_api_check;

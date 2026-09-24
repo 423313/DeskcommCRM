@@ -305,7 +305,12 @@ export const conditionConfigSchema = z
  * `contact_flow_data.field_key` (migration 0236) — a regex espelha o CHECK do
  * banco (minúsculas, começa com letra).
  */
-export const contactFlowFieldTypeSchema = z.enum(['text', 'number', 'date', 'boolean', 'select']);
+/**
+ * `cpf` (PR 2 do port): o número confere pelo dígito verificador (mod-11 da
+ * Receita) antes de ser aceito — na prova prática, um CPF com dígito errado foi
+ * gravado como resposta porque o campo era "Número".
+ */
+export const contactFlowFieldTypeSchema = z.enum(['text', 'number', 'date', 'boolean', 'select', 'cpf']);
 export type ContactFlowFieldType = z.infer<typeof contactFlowFieldTypeSchema>;
 
 export const collectConfigSchema = z
@@ -543,6 +548,12 @@ export const flowSettingsSchema = z.strictObject({
    * do modelo). Vazio/ausente = o fluxo só começa por `flow_start` ou roteador.
    */
   gatilhos: z.array(z.string().min(1).max(60)).max(30).optional(),
+  /**
+   * Em quantas horas SEM mensagem do cliente o roteiro em andamento expira
+   * (0397, `fn_encerrar_roteiros_vencidos`). Ausente = 72 h. Sem prazo, um
+   * roteiro abandonado voltava a perguntar semanas depois (prova do #1130).
+   */
+  expira_em_horas: z.number().int().min(1).max(720).optional(),
 });
 export type FlowSettings = z.infer<typeof flowSettingsSchema>;
 

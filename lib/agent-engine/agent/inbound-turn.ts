@@ -133,7 +133,7 @@ import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memor
 import { matchesHandoffKeyword } from './agent-config';
 import { garantirPerguntaDoRoteiro, prepararRoteiroDoTurno } from './roteiro-no-turno';
 import { validarRespostaDoFluxo } from './flow-validate';
-import { moduloLigado } from '@/lib/instalacao/modulos';
+import { moduloLigadoComMemo } from '@/lib/instalacao/modulos';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
@@ -2390,7 +2390,7 @@ async function executarTurnoDoAgente(
       ? await prepararRoteiroDoTurno(
           {
             pool,
-            moduloLigado: () => moduloLigado(deps.crmCfg.supabase, 'fluxos_atendimento'),
+            moduloLigado: () => moduloLigadoComMemo(deps.crmCfg.supabase, 'fluxos_atendimento'),
             validar: (args) =>
               validarRespostaDoFluxo(
                 pool,
@@ -4108,8 +4108,10 @@ async function executarTurnoDoAgente(
     }
 
     // ROTEIRO: a pergunta pendente é compromisso. Se o modelo não a fez, o motor
-    // a manda — pela MESMA cadeia de guardrails, dentro do teto de envios.
-    if (roteiro !== null && seq < maxSendsPerTurn) {
+    // a manda — pela MESMA cadeia de guardrails, dentro do teto de envios. Roda
+    // mesmo com o teto cheio: registrar que o MODELO fez a pergunta é o que a
+    // torna "a pergunta atual" no turno seguinte.
+    if (roteiro !== null) {
       await garantirPerguntaDoRoteiro(
         { pool, log: runLog },
         {
@@ -4117,6 +4119,7 @@ async function executarTurnoDoAgente(
           roteiro,
           corposEnviados,
           enviar: async (texto) => {
+            if (seq >= maxSendsPerTurn) return false;
             const chain = await runBeforeSend({
               pool,
               log: runLog,

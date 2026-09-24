@@ -36,7 +36,7 @@ Esta entrega usa a origem já capturada no contato e o evento de venda `Purchase
 
 ## Contratos e verificação
 
-Migration 0397 adiciona API da conexão e protocolo do envio, preserva RLS/grants existentes e impede rebaixar `sent` numa execução atrasada. A RPC de reprocessamento só é executável por `service_role`; a rota exige administrador, MFA pelo guard canônico e bloqueia suporte somente leitura. Organização vem da sessão. A RPC usa lock no registro e evita dois pedidos pendentes simultâneos.
+Migration 0398 adiciona API da conexão e protocolo do envio, preserva RLS/grants existentes e impede rebaixar `sent` numa execução atrasada. A RPC de reprocessamento só é executável por `service_role`; a rota exige administrador, MFA pelo guard canônico e bloqueia suporte somente leitura. Organização vem da sessão. A RPC usa lock no registro e evita dois pedidos pendentes simultâneos.
 
 - Unitários: `conversoes-entrega-confiavel`, `conversoes-de-anuncio`, `conversao-reprocessar-rota`, `google-ads-conversoes` e `google-ads-cartao-sem-credenciais`.
 - Banco: `tests/invariants/conversoes-reprocessamento-isolado.test.ts` e vocabulário banco/TypeScript.
