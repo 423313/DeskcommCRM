@@ -32,6 +32,7 @@ import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conversa";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
+import { DialButton } from "@/components/voice/DialButton";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
@@ -221,6 +222,11 @@ export function ConversationHeader({ conversation, onAbrirConversa }: Props) {
           barra pode encolher e quebrar internamente, e os botões continuam
           todos visíveis e clicáveis — só que em duas linhas quando preciso. */}
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {/* A chamada usa o telefone da ficha, mesmo quando o contato chegou por
+            outro canal. Grupos não representam uma pessoa para ligar. */}
+        {!conversation.is_group && c?.id && (
+          <DialButton contactId={c.id} hasPhone={!!c.phone_number} />
+        )}
         {isOpen && (
           <Button
             size="sm"
