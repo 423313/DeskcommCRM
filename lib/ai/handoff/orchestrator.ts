@@ -49,6 +49,7 @@ import {
   type MotivoDaPassagem,
   type OrigemDaPassagem,
 } from "@/lib/escalacao/passagem";
+import { CHAVES_DO_CLIMA, type MotorDoClima } from "@/lib/ai/decisao/metadados-do-clima";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 
@@ -412,7 +413,8 @@ export async function triggerHandoff(
       const idiomaDaOrg = await idiomaDaOrganizacao(admin, input.organizationId);
       // D11: o worker de clima diz qual motor mediu (`sentiment_engine`).
       const percebidoPeloJev =
-        input.reason === "low_sentiment" && input.metadata?.["sentiment_engine"] === "jev";
+        input.reason === "low_sentiment" &&
+        input.metadata?.[CHAVES_DO_CLIMA.motor] === ("jev" satisfies MotorDoClima);
       // Step 5.5 — A LINHA DE FATO. Este motor abria o aviso da Central SEM
       // resumo nenhum: quem assumia uma conversa escalada por sentimento
       // recebia "Motivo: low_sentiment" e mais nada. Agora o contexto é uma

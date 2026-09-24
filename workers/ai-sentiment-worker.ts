@@ -25,6 +25,7 @@ import { computeCost } from "@/lib/ai/cost";
 import { MODELO_DO_JEV, type MotivoComRede } from "@/lib/ai/decisao/cliente";
 import { medirClima, type ClimaMedido } from "@/lib/ai/decisao/clima";
 import { lerConfigDoJev } from "@/lib/ai/decisao/config";
+import { CHAVES_DO_CLIMA, type MotorDoClima } from "@/lib/ai/decisao/metadados-do-clima";
 import { AVISO_DO_JEV, avisoDoJevNaCentral, codigoDoErroDoJev } from "@/lib/ai/decisao/textos";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
@@ -313,7 +314,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       });
     };
 
-    let decisao: { score: number; engine: "jev" | "llm"; latenciaMs: number };
+    let decisao: { score: number; engine: MotorDoClima; latenciaMs: number };
     if (clima?.ok && (jev.modo === "decide" || resolvido === null)) {
       decisao = { score: clima.score01, engine: "jev", latenciaMs: clima.latenciaMs };
     } else if (resolvido === null) {
@@ -399,10 +400,12 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     const existingMetadata = (message.metadata as Record<string, unknown> | null) ?? {};
     const updatedMetadata = {
       ...existingMetadata,
-      sentiment_score: decisao.score,
+      [CHAVES_DO_CLIMA.nota]: decisao.score,
       sentiment_latency_ms: decisao.latenciaMs,
-      sentiment_engine: decisao.engine,
-      ...(clima?.ok ? { sentiment_jev_score: clima.score01, sentiment_jev_model: clima.modelo } : {}),
+      [CHAVES_DO_CLIMA.motor]: decisao.engine,
+      ...(clima?.ok
+        ? { [CHAVES_DO_CLIMA.notaDoJev]: clima.score01, [CHAVES_DO_CLIMA.modeloDoJev]: clima.modelo }
+        : {}),
     };
 
     const { error: updateErr } = await admin
@@ -429,10 +432,10 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
           p_payload: {
             message_id: messageId,
             conversation_id: conversationId ?? message.conversation_id ?? null,
-            sentiment_score: decisao.score,
+            [CHAVES_DO_CLIMA.nota]: decisao.score,
             // Qual motor mediu: a passagem para humano marca "(percebido pelo
             // Jev)" na linha do tempo da equipe (D11).
-            sentiment_engine: decisao.engine,
+            [CHAVES_DO_CLIMA.motor]: decisao.engine,
           },
           // `agent_id` e `motivo` viajam com o alerta porque o limiar é o número
           // que decidiu emiti-lo: sem eles, "por que este alerta saiu?" recomeça

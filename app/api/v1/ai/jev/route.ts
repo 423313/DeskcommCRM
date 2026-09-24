@@ -21,6 +21,7 @@ import { z } from "zod";
 
 import { credencialEmUsoPeloJev, PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
 import { gravarConfigDoJev, lerConfigDoJev, type ConfigDoJev } from "@/lib/ai/decisao/config";
+import { CHAVES_DO_CLIMA, type MotorDoClima } from "@/lib/ai/decisao/metadados-do-clima";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { PROVEDORES_DE_DECISAO } from "@/lib/ai/pontos/provedores";
@@ -185,11 +186,11 @@ export async function GET(): Promise<Response> {
     // `metadata ? 'sentiment_jev_score'` (migration) quando pesar.
     db
       .from("messages")
-      .select("nota:metadata->sentiment_score, nota_do_jev:metadata->sentiment_jev_score")
+      .select(`nota:metadata->${CHAVES_DO_CLIMA.nota}, nota_do_jev:metadata->${CHAVES_DO_CLIMA.notaDoJev}`)
       .eq("organization_id", org.orgId)
       .gte("created_at", diasAtras(DIAS_DA_CONCORDANCIA))
-      .eq("metadata->>sentiment_engine", "llm")
-      .not("metadata->sentiment_jev_score", "is", null)
+      .eq(`metadata->>${CHAVES_DO_CLIMA.motor}`, "llm" satisfies MotorDoClima)
+      .not(`metadata->${CHAVES_DO_CLIMA.notaDoJev}`, "is", null)
       .order("created_at", { ascending: false })
       .limit(MENSAGENS_COMPARADAS_MAX),
     // A MESMA pergunta que o worker faz antes de medir: sem ela, o cartão diria
