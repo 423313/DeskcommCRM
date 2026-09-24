@@ -1104,7 +1104,7 @@ describe("catraca de host de terceiro no código que embarca", () => {
       "aistudio.google.com",
       "console.anthropic.com",
       // Decisão escrita: é o painel de chaves do Jev, o mesmo caso dos outros
-      // CONSOLE — o link "Pegar chave em" da tela de Credenciais.
+      // CONSOLE — o link "Onde pegar a chave" da tela de Credenciais.
       "console.typesafe.ai",
       "deskcomm.app",
       "meet.google.com",

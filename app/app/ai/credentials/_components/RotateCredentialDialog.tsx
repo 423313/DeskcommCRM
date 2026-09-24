@@ -24,7 +24,7 @@ import {
   credentialsListQueryKey,
   type CredentialRow,
 } from "@/hooks/ai/useCredentials";
-import { PROVEDORES_COM_CHAVE } from "@/lib/ai/pontos/provedores";
+import { ehProvedorDeDecisao, PROVEDORES_COM_CHAVE } from "@/lib/ai/pontos/provedores";
 import { descreverErroDeValidacao } from "@/lib/ai/credenciais/erro-de-validacao";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -123,7 +123,7 @@ export function RotateCredentialDialog({ open, onOpenChange, credential }: Props
               `${t("Validada")} — ${atual.models_available.length} ${t("modelos disponíveis.")}`,
             );
           } else if (atual?.validation_error) {
-            const erro = descreverErroDeValidacao(atual.validation_error);
+            const erro = descreverErroDeValidacao(atual.validation_error, credential.provider);
             toast.error(
               erro.generico
                 ? `${t("Falha na validação")} (${atual.validation_error}).`
@@ -154,9 +154,14 @@ export function RotateCredentialDialog({ open, onOpenChange, credential }: Props
         <DialogHeader>
           <DialogTitle>{t("Editar credencial")}</DialogTitle>
           <DialogDescription>
-            {t(
-              "Trocar a chave aqui mantém os agentes ligados nela: no próximo atendimento eles já usam a chave nova. Deixe a chave em branco para mudar só o nome.",
-            )}
+            {/* A chave do Jev não tem agente ligado nela: quem a usa é ele. */}
+            {ehProvedorDeDecisao(credential.provider)
+              ? t(
+                  "Trocar a chave aqui mantém o Jev ligado: na próxima mensagem ele já usa a chave nova. Deixe a chave em branco para mudar só o nome.",
+                )
+              : t(
+                  "Trocar a chave aqui mantém os agentes ligados nela: no próximo atendimento eles já usam a chave nova. Deixe a chave em branco para mudar só o nome.",
+                )}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -182,7 +187,7 @@ export function RotateCredentialDialog({ open, onOpenChange, credential }: Props
                 target="_blank"
                 rel="noreferrer"
               >
-                {t("Pegar chave em")} {provedor.rotulo}
+                {t("Onde pegar a chave")}
               </a>
             </div>
             <Input

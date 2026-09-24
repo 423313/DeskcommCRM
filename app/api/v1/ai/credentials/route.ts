@@ -102,7 +102,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (guardado.motivo === "label_em_uso") {
       return fail(
         "label_already_used",
-        t("Já existe uma credential com este label e provider."),
+        t("Já existe uma chave deste provedor com este nome. Dê outro nome a ela."),
         409,
         { requestId },
       );

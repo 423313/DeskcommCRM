@@ -48,6 +48,20 @@ describe("descreverErroDeValidacao", () => {
     expect(r.frase).toBe("Falha na validação (unknown_provider:foo).");
   });
 
+  it("chave do Jev: diz QUEM recusou, e os outros provedores seguem com a frase comum", () => {
+    expect(descreverErroDeValidacao("auth_failed_401", "typesafe")).toEqual({
+      frase: "A TypeSafe recusou a chave. Confira se copiou inteira ou gere uma nova.",
+      chaveErrada: true,
+      generico: false,
+    });
+    expect(descreverErroDeValidacao("provider_status_402", "typesafe").frase).toBe(
+      "A TypeSafe recusou a chave. Confira se ela está inteira e se a conta na TypeSafe tem crédito.",
+    );
+    expect(descreverErroDeValidacao("auth_failed_401", "anthropic").frase).toMatch(/^O provedor recusou/);
+    // Fora do ar não é recusa: a frase comum serve.
+    expect(descreverErroDeValidacao("provider_status_503", "typesafe").frase).toMatch(/^O provedor está fora/);
+  });
+
   it("null é string vazia", () => {
     expect(descreverErroDeValidacao(null).frase).toBe("");
   });

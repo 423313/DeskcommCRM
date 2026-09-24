@@ -127,7 +127,7 @@ describe("CartaoDoJev — (1) sem chave", () => {
     fireEvent.click(screen.getByRole("button", { name: "Colar a chave" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText("Chave")).toHaveAttribute("placeholder", "apikey_…");
-    expect(screen.getByRole("link", { name: /Pegar chave em/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Onde pegar a chave" })).toHaveAttribute(
       "href",
       "https://console.typesafe.ai/keys",
     );
@@ -146,7 +146,7 @@ describe("CartaoDoJev — (2) chave que não passou no teste", () => {
   it("diz o motivo em português de gente e testa de novo pela rota de revalidar", async () => {
     montar(dados({ chave: { validada: false, erro_de_validacao: "auth_failed_401" } }));
     expect(cartao()).toHaveAttribute("data-estado", "chave_nao_validada");
-    expect(screen.getByText(/O provedor recusou a chave/)).toBeInTheDocument();
+    expect(screen.getByText(/A TypeSafe recusou a chave/)).toBeInTheDocument();
     // "Gere uma nova" com o caminho para gerar.
     expect(screen.getByRole("link", { name: "Pegar uma chave nova na TypeSafe" })).toHaveAttribute(
       "href",

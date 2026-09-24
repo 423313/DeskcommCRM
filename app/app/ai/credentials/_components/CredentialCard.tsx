@@ -79,7 +79,7 @@ export function CredentialCard({ credential, canWrite, usageCount, usadaEm = [],
   const status = credentialStatus(credential);
   const last4 = credential.api_key_last4 ?? "????";
   const inUse = usageCount > 0;
-  const erro = descreverErroDeValidacao(credential.validation_error);
+  const erro = descreverErroDeValidacao(credential.validation_error, credential.provider);
   const provedor = PROVEDORES_COM_CHAVE.find((p) => p.id === credential.provider);
 
   const onRevalidate = () => {
@@ -159,7 +159,7 @@ export function CredentialCard({ credential, canWrite, usageCount, usadaEm = [],
                 target="_blank"
                 rel="noreferrer"
               >
-                {t("Pegar chave em")} {provedor.rotulo}
+                {t("Onde pegar a chave")}
               </a>
             </>
           )}

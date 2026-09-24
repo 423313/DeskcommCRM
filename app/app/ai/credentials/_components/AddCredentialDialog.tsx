@@ -35,7 +35,9 @@ import { useT } from "@/hooks/i18n/useT";
 const formSchema = z.object({
   // Derivado das listas (`lib/ai/pontos/provedores.ts`), como a rota.
   provider: z.enum(IDS_COM_CHAVE),
-  label: z.string().trim().min(1, "Obrigatório").max(80),
+  // Opcional: o leigo cola só a chave. Em branco, o nome vira o do provedor
+  // (ver `onSubmit`) — o banco exige um, e a pessoa não precisa inventá-lo.
+  label: z.string().trim().max(80),
   api_key: z.string().trim().min(8, "Chave muito curta").max(2048),
 });
 
@@ -90,10 +92,10 @@ export function AddCredentialDialog({ open, onOpenChange, providerInicial = "ant
     setSubmitting(true);
     const validatingToast = toast.loading(t("Credencial salva. Validando…"));
     try {
-      const res = await apiClient.post<CreateResponse>(
-        "/api/v1/ai/credentials",
-        parsed.data,
-      );
+      const res = await apiClient.post<CreateResponse>("/api/v1/ai/credentials", {
+        ...parsed.data,
+        label: parsed.data.label || provedor.rotulo,
+      });
       toast.dismiss(validatingToast);
       toast.success(t("Credencial salva. Validação em segundo plano."));
       reset();
@@ -110,7 +112,7 @@ export function AddCredentialDialog({ open, onOpenChange, providerInicial = "ant
             `${t("Validada")} — ${justCreated.models_available.length} ${t("modelos disponíveis.")}`,
           );
         } else if (justCreated?.validation_error) {
-          const erro = descreverErroDeValidacao(justCreated.validation_error);
+          const erro = descreverErroDeValidacao(justCreated.validation_error, justCreated.provider);
           toast.error(
             erro.generico
               ? `${t("Falha na validação")} (${justCreated.validation_error}).`
@@ -171,9 +173,8 @@ export function AddCredentialDialog({ open, onOpenChange, providerInicial = "ant
               id="cred-label"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder={t("Ex: Produção")}
+              placeholder={t("Opcional — ex.: Chave da clínica")}
               maxLength={80}
-              required
             />
             {errors.label && <p className="text-xs text-destructive">{errors.label}</p>}
           </div>
@@ -187,7 +188,7 @@ export function AddCredentialDialog({ open, onOpenChange, providerInicial = "ant
                 target="_blank"
                 rel="noreferrer"
               >
-                {t("Pegar chave em")} {provedor.rotulo}
+                {t("Onde pegar a chave")}
               </a>
             </div>
             <Input

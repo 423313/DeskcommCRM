@@ -65,6 +65,23 @@ describe("CredentialCard — chave do Jev", () => {
     expect(screen.getByText(AVISO)).toBeInTheDocument();
   });
 
+  it("editar a chave do Jev fala do Jev, não de agentes ligados nela", () => {
+    montar(credencial({ provider: "typesafe", label: "Jev" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar credencial" }));
+    const dialogo = screen.getByRole("dialog");
+    expect(dialogo).toHaveTextContent(/mantém o Jev ligado: na próxima mensagem ele já usa a chave nova/);
+    expect(dialogo).not.toHaveTextContent(/agentes ligados/);
+    expect(screen.getByRole("link", { name: "Onde pegar a chave" })).toHaveAttribute(
+      "href",
+      "https://console.typesafe.ai/keys",
+    );
+  });
+
+  it("chave do Jev recusada: a frase diz que foi a TypeSafe", () => {
+    montar(credencial({ provider: "typesafe", validated_at: null, validation_error: "auth_failed_401" }));
+    expect(screen.getByText(/^A TypeSafe recusou a chave/)).toBeInTheDocument();
+  });
+
   it("controle: chave que o Jev não usa não tem a linha nem o aviso", () => {
     montar(credencial({ provider: "typesafe", label: "Jev reserva" }));
     expect(screen.queryByTestId("credencial-usada-em")).toBeNull();
@@ -90,7 +107,7 @@ describe("CredentialCard — erro de validação", () => {
   it("401 vira frase e link para pegar chave nova", () => {
     montar(credencial({ validated_at: null, validation_error: "auth_failed_401" }));
     expect(screen.getByText(/recusou a chave/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Pegar chave em/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Onde pegar a chave" })).toHaveAttribute(
       "href",
       "https://console.anthropic.com/settings/keys",
     );
@@ -99,6 +116,6 @@ describe("CredentialCard — erro de validação", () => {
 
   it("erro de rede não oferece link: a chave não é o problema", () => {
     montar(credencial({ validated_at: null, validation_error: "network_error" }));
-    expect(screen.queryByRole("link", { name: /Pegar chave em/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Onde pegar a chave" })).toBeNull();
   });
 });

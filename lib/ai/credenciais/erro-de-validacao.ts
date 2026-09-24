@@ -5,6 +5,8 @@
  *
  * As frases são chaves de `t()`: pt-BR aqui, espanhol em `lib/i18n/dicionario.ts`.
  */
+import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
+
 export interface ErroDescrito {
   frase: string;
   /** Vale oferecer o link "pegar chave em…"? Só quando a chave em si é o problema. */
@@ -22,12 +24,25 @@ export interface ErroDescrito {
 
 const REDE = "Não foi possível falar com o provedor a partir deste servidor. Revalide mais tarde.";
 
-export function descreverErroDeValidacao(codigo: string | null): ErroDescrito {
+/**
+ * A recusa com o NOME de quem recusou, para a chave do Jev: "o provedor" não diz
+ * nada a quem nunca ouviu falar da TypeSafe. Frases inteiras, e não o nome
+ * encaixado numa frase comum, para cada idioma poder construí-las do seu jeito.
+ */
+const RECUSA_DA_TYPESAFE = {
+  chave: "A TypeSafe recusou a chave. Confira se copiou inteira ou gere uma nova.",
+  chaveOuCredito: "A TypeSafe recusou a chave. Confira se ela está inteira e se a conta na TypeSafe tem crédito.",
+} as const;
+
+export function descreverErroDeValidacao(codigo: string | null, provedor?: string): ErroDescrito {
   if (!codigo) return { frase: "", chaveErrada: false, generico: false };
+  const ehTypeSafe = provedor === PROVEDOR_DO_JEV;
 
   if (codigo === "auth_failed_401") {
     return {
-      frase: "O provedor recusou a chave. Confira se copiou inteira ou gere uma nova.",
+      frase: ehTypeSafe
+        ? RECUSA_DA_TYPESAFE.chave
+        : "O provedor recusou a chave. Confira se copiou inteira ou gere uma nova.",
       chaveErrada: true,
       generico: false,
     };
@@ -46,7 +61,9 @@ export function descreverErroDeValidacao(codigo: string | null): ErroDescrito {
   // código cru na tela ("provider_status_402") não diz nada a ninguém.
   if (/^provider_status_4\d\d$/.test(codigo)) {
     return {
-      frase: "O provedor recusou a chave. Confira se ela está inteira e se a conta no provedor tem crédito.",
+      frase: ehTypeSafe
+        ? RECUSA_DA_TYPESAFE.chaveOuCredito
+        : "O provedor recusou a chave. Confira se ela está inteira e se a conta no provedor tem crédito.",
       chaveErrada: true,
       generico: false,
     };

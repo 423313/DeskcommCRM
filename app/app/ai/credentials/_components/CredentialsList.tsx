@@ -11,6 +11,8 @@ import {
   type ProvedorComChave,
 } from "@/lib/ai/pontos/provedores";
 import { credentialStatus, useCredentialsList, type CredentialRow } from "@/hooks/ai/useCredentials";
+import { credencialEmUsoPeloJev } from "@/lib/ai/decisao/credencial";
+import { AO_EXCLUIR_A_CHAVE_DO_JEV } from "@/lib/ai/decisao/textos";
 import { useT } from "@/hooks/i18n/useT";
 import { CredentialCard } from "./CredentialCard";
 import { AddCredentialDialog } from "./AddCredentialDialog";
@@ -19,10 +21,11 @@ interface Props {
   initialData: CredentialRow[];
   canWrite: boolean;
   usageMap: Record<string, number>;
-  /** Onde a chave trabalha fora dos agentes — hoje, as tarefas do Jev na chave que ele usa. */
-  usadaEmMap?: Record<string, string[]>;
-  /** O efeito de excluir a chave que o Jev usa, calculado no servidor (`page.tsx`). */
-  avisoAoExcluirMap?: Record<string, string>;
+  /**
+   * O Jev LIGADO: as tarefas dele e se há IA principal para medir sem ele
+   * (`page.tsx`). Qual chave ele usa sai da lista viva, aqui — ver `doJev`.
+   */
+  jev?: { tarefas: readonly string[]; temIaPrincipal: boolean } | null;
   /**
    * A instalação trouxe chave de IA no `.env` (a do provedor ou a do gateway)?
    * É o caso mais comum do kit, e essa chave não é linha desta lista.
@@ -43,8 +46,7 @@ export function CredentialsList({
   initialData,
   canWrite,
   usageMap,
-  usadaEmMap = {},
-  avisoAoExcluirMap = {},
+  jev = null,
   instalacaoTemIa = false,
 }: Props) {
   const t = useT();
@@ -62,6 +64,18 @@ export function CredentialsList({
   for (const c of credentials) {
     grouped[c.provider]?.push(c);
   }
+
+  // A chave que o Jev usa, pela mesma regra que a escolhe para a rede, sobre a
+  // lista que a tela relê: trocar a chave tira a linha "Usada em" enquanto a
+  // nova é testada (ela não sai para a rede) e a devolve quando passa.
+  const doJev = jev ? credencialEmUsoPeloJev(credentials) : null;
+  const avisoAoExcluirOJev = !doJev
+    ? undefined
+    : credencialEmUsoPeloJev(credentials.filter((c) => c.id !== doJev.id))
+      ? AO_EXCLUIR_A_CHAVE_DO_JEV.outraChave
+      : jev?.temIaPrincipal
+        ? AO_EXCLUIR_A_CHAVE_DO_JEV.iaPrincipalAssume
+        : AO_EXCLUIR_A_CHAVE_DO_JEV.climaPara;
 
   // Só a chave do Jev não faz o atendimento funcionar: ele decide, não conversa.
   // Sem este aviso a tela sairia do estado vazio e pareceria pronta. Mas quem
@@ -131,8 +145,8 @@ export function CredentialsList({
                     credential={row}
                     canWrite={canWrite}
                     usageCount={usageMap[row.id] ?? 0}
-                    usadaEm={usadaEmMap[row.id] ?? []}
-                    avisoAoExcluir={avisoAoExcluirMap[row.id]}
+                    usadaEm={row.id === doJev?.id ? jev?.tarefas : undefined}
+                    avisoAoExcluir={row.id === doJev?.id ? avisoAoExcluirOJev : undefined}
                   />
                 </li>
               ))}

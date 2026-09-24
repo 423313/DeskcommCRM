@@ -2211,10 +2211,9 @@ export const DICIONARIO: Traducoes = {
       es: "Top K = cuántos fragmentos buscar. Similarity threshold = relevancia mínima (cosine). Confidence = umbral por debajo del cual el agente escala a un humano.",
     },
   "Chaves de acesso à IA": { es: "Claves de acceso a la IA" },
-  "A conta de inteligência artificial é sua: você contrata direto na Anthropic, OpenAI ou Google e cola a chave aqui. Ela é guardada criptografada e nunca mais aparece na tela depois de salva — nem para você.":
-    {
-      es: "La cuenta de inteligencia artificial es tuya: la contratas directamente con Anthropic, OpenAI o Google y pegas aquí la clave. Se guarda cifrada y, una vez guardada, no vuelve a mostrarse en pantalla, ni siquiera para ti.",
-    },
+  "A conta de inteligência artificial é sua: você contrata direto com {provedores} e cola a chave aqui. A chave fica guardada criptografada e nunca mais aparece na tela depois de salva — nem para você. O Jev (TypeSafe) não conversa com o cliente: a chave dele serve só para decisões rápidas.": {
+    es: "La cuenta de inteligencia artificial es tuya: la contratas directamente con {provedores} y pegas la clave aquí. La clave queda guardada cifrada y nunca más aparece en pantalla después de guardarla, ni siquiera para ti. Jev (TypeSafe) no conversa con el cliente: su clave sirve solo para decisiones rápidas.",
+  },
   "Nenhuma chave cadastrada ainda": { es: "Todavía no hay ninguna clave registrada" },
   "Seus agentes só conseguem pensar depois que você cola aqui uma chave da Anthropic, da OpenAI ou do Google. A cobrança vai direto para a sua conta no provedor, e a chave fica guardada criptografada.":
     {
@@ -2230,8 +2229,14 @@ export const DICIONARIO: Traducoes = {
   "O provedor recusou a chave. Confira se copiou inteira ou gere uma nova.": {
     es: "El proveedor rechazó la clave. Verifica que la hayas copiado completa o genera una nueva.",
   },
+  "A TypeSafe recusou a chave. Confira se copiou inteira ou gere uma nova.": {
+    es: "TypeSafe rechazó la clave. Verifica que la copiaste completa o genera una nueva.",
+  },
   "O provedor recusou a chave. Confira se ela está inteira e se a conta no provedor tem crédito.": {
     es: "El proveedor rechazó la clave. Revisa que esté completa y que la cuenta en el proveedor tenga crédito.",
+  },
+  "A TypeSafe recusou a chave. Confira se ela está inteira e se a conta na TypeSafe tem crédito.": {
+    es: "TypeSafe rechazó la clave. Verifica que esté completa y que la cuenta en TypeSafe tenga crédito.",
   },
   "O provedor limitou as chamadas desta chave. Tente de novo em alguns minutos.": {
     es: "El proveedor limitó las llamadas de esta clave. Inténtalo de nuevo en unos minutos.",
@@ -2243,7 +2248,7 @@ export const DICIONARIO: Traducoes = {
     es: "No se pudo conectar con el proveedor desde este servidor. Revalida más tarde.",
   },
   "Falha na validação": { es: "Falló la validación" },
-  "Pegar chave em": { es: "Obtener clave en" },
+  "Onde pegar a chave": { es: "Dónde obtener la clave" },
   "O padrão recomendado para conversar com o cliente: é o que melhor segue instruções longas e usa as ferramentas do CRM.": {
     es: "La opción recomendada por defecto para conversar con el cliente. Es la que mejor sigue instrucciones largas y usa las herramientas del CRM.",
   },
@@ -2286,6 +2291,7 @@ export const DICIONARIO: Traducoes = {
     es: "La clave se guarda cifrada. Una vez guardada, solo los cuatro últimos caracteres aparecen en pantalla.",
   },
   "Ex: Produção": { es: "Ej.: Producción" },
+  "Opcional — ex.: Chave da clínica": { es: "Opcional — ej.: Clave de la clínica" },
   "Credencial salva. Validando…": { es: "Credencial guardada. Validando…" },
   "Credencial salva. Validação em segundo plano.": { es: "Credencial guardada. Se validará en segundo plano." },
   "modelos disponíveis.": { es: "modelos disponibles." },
@@ -9343,6 +9349,9 @@ export const DICIONARIO: Traducoes = {
   "Trocar a chave aqui mantém os agentes ligados nela: no próximo atendimento eles já usam a chave nova. Deixe a chave em branco para mudar só o nome.": {
     es: "Al cambiar la clave aquí, los agentes que la usan se mantienen conectados: en su próxima conversación ya usarán la clave nueva. Deja la clave en blanco para cambiar solo el nombre.",
   },
+  "Trocar a chave aqui mantém o Jev ligado: na próxima mensagem ele já usa a chave nova. Deixe a chave em branco para mudar só o nome.": {
+    es: "Cambiar la clave aquí mantiene Jev activado: en el próximo mensaje ya usa la clave nueva. Deja la clave en blanco para cambiar solo el nombre.",
+  },
   "versão(ões) de agente": { es: "versión(es) de agente" },
   "Para trocar a chave, use editar. Para excluir, nenhuma versão pode estar usando a chave — e versão já publicada ou substituída não aceita mais apontar para outra chave, então a exclusão fica travada enquanto esse histórico existir.": {
     es: "Para cambiar la clave, usa Editar. Para eliminarla, ninguna versión debe estar usándola. Una versión ya publicada o reemplazada no puede apuntar a otra clave, así que la eliminación queda bloqueada mientras exista ese historial.",
@@ -9373,7 +9382,9 @@ export const DICIONARIO: Traducoes = {
   "Header Idempotency-Key é obrigatório.": { es: "El header Idempotency-Key es obligatorio." },
   "JSON inválido.": { es: "JSON inválido." },
   "Já existe um produto com esse código.": { es: "Ya existe un producto con ese código." },
-  "Já existe uma credential com este label e provider.": { es: "Ya existe una credential con este label y provider." },
+  "Já existe uma chave deste provedor com este nome. Dê outro nome a ela.": {
+    es: "Ya existe una clave de este proveedor con este nombre. Ponle otro nombre.",
+  },
   "Já existe uma atualização em andamento.": { es: "Ya hay una actualización en curso." },
   "Lead foi modificado por outro usuário. Recarregue e tente novamente.": { es: "Otro usuario modificó el lead. Recarga e inténtalo de nuevo." },
   "Liberou a conversa de volta para a fila": { es: "Devolvió la conversación a la cola" },

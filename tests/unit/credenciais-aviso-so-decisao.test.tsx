@@ -96,13 +96,16 @@ function ambiente(preenchidas: string[]) {
   }
 }
 
+let qc: QueryClient;
+
 async function abrir(linhas: CredentialRow[]) {
   banco.linhas = linhas;
   api.get.mockResolvedValue({ data: linhas });
   const pagina = await CredentialsPage();
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <IdiomaProvider locale="pt-BR">
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <QueryClientProvider client={qc}>
         {pagina}
       </QueryClientProvider>
     </IdiomaProvider>,
@@ -161,6 +164,23 @@ describe("tela de Credenciais — onde a chave do Jev trabalha", () => {
     expect(screen.getByTestId("credencial-usada-em")).toHaveTextContent("Usada em: Medir o clima da conversa");
     // Só na chave do Jev: a de conversa não ganha a linha.
     expect(screen.getAllByTestId("credencial-usada-em")).toHaveLength(1);
+  });
+
+  it("chave trocada: a linha volta sozinha quando a lista relida traz a chave validada", async () => {
+    // A tela se relê logo depois de salvar a chave nova, quando ela ainda não
+    // passou no teste (`validated_at` nulo). Enquanto o "Usada em" vinha dessa
+    // foto, a linha sumia e só voltava recarregando a página — medido em campo.
+    ambiente([]);
+    banco.settings = { jev: { ligado: true, modo: "decide", aceite: ACEITE } };
+    await abrir([{ ...JEV, validated_at: null }, ANTHROPIC]);
+    expect(screen.queryByTestId("credencial-usada-em"), "chave em teste não sai para a rede").toBeNull();
+
+    // A lista relida (o que o diálogo pede 3 s depois) já traz a chave validada.
+    api.get.mockResolvedValue({ data: [JEV, ANTHROPIC] });
+    await qc.invalidateQueries();
+    expect(await screen.findByTestId("credencial-usada-em")).toHaveTextContent(
+      "Usada em: Medir o clima da conversa",
+    );
   });
 
   it("Jev desligado: a chave dele não trabalha em nada", async () => {
