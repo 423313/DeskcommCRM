@@ -116,6 +116,30 @@ printf '%s\n' 'SUPABASE_DB_URL="postgresql://postgres:x@db.exemplo.supabase.co:5
 (cd "$APROJ" && bash "$KIT_DIR/backup.sh") >/dev/null 2>&1; rc=$?
 check "backup.sh comum termina bem" test "$rc" -eq 0
 check "backup.sh comum não procura Storage local" nao_contem "$LOG" 'volumes/storage'
+check "backup.sh diz que conferiu o dump" \
+  bash -c "cd '$APROJ' && bash '$KIT_DIR/backup.sh' 2>&1 | grep -qF '(conferido)'"
+
+# Backup que ninguém consegue ler não é backup: um dump truncado (disco cheio,
+# processo morto no meio) tem de reprovar o backup e sumir, e não sair verde.
+# O `gzip` de mentira grava lixo; o `gzip -t` que confere é o de verdade.
+GZIP_REAL="$(command -v gzip)"
+mkdir -p "$WORK/gzip-quebrado"
+{
+  printf '#!/usr/bin/env bash
+GZIP_REAL=%q
+' "$GZIP_REAL"
+  cat <<'G'
+case " $* " in *" -t "*) exec "$GZIP_REAL" "$@" ;; esac
+cat >/dev/null; printf 'nao-e-gzip'
+G
+} > "$WORK/gzip-quebrado/gzip"
+chmod +x "$WORK/gzip-quebrado/gzip"
+rm -f "$APROJ"/backups/db-*.sql.gz
+(cd "$APROJ" && PATH="$WORK/gzip-quebrado:$PATH" bash "$KIT_DIR/backup.sh") > "$WORK/bk-corrompido.out" 2>&1; rc=$?
+check "dump corrompido reprova o backup" test "$rc" -ne 0
+check "e diz que o dump saiu corrompido" contem "$WORK/bk-corrompido.out" "saiu corrompido"
+check "e não deixa o arquivo corrompido para ninguém confiar nele" \
+  bash -c "! ls '$APROJ'/backups/db-*.sql.gz >/dev/null 2>&1"
 printf 'x' | gzip > "$APROJ/backups/db-20260922-030000.sql.gz"
 : > "$LOG"
 (cd "$APROJ" && printf 'RESTAURAR\n' | bash "$KIT_DIR/restore.sh" backups/db-20260922-030000.sql.gz) > "$WORK/rs-comum.out" 2>&1; rc=$?

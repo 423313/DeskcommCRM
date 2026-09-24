@@ -18,7 +18,15 @@ step "Dump do banco → $BACKUP_DIR/db-$ts.sql.gz"
 # de backup é a pior das falhas: só aparece na hora de restaurar.
 pg_container postgres:17-alpine pg_dump "$(url_do_schema)" --no-owner --no-privileges \
   | gzip > "$BACKUP_DIR/db-$ts.sql.gz"
-c_grn "✓ banco: $(du -h "$BACKUP_DIR/db-$ts.sql.gz" | awk '{print $1}')"
+# BACKUP QUE NINGUÉM CONSEGUE LER NÃO É BACKUP. O `pipefail` pega `pg_dump` com
+# exit≠0, mas NÃO pega arquivo truncado por disco cheio ou processo morto no
+# meio da escrita — e esse é exatamente o dump que parece bom até a hora de
+# restaurar. `gzip -t` percorre o arquivo inteiro e confere o CRC.
+if ! gzip -t "$BACKUP_DIR/db-$ts.sql.gz" 2>/dev/null; then
+  rm -f "$BACKUP_DIR/db-$ts.sql.gz"
+  die "o dump do banco saiu corrompido (gzip -t reprovou) — removi o arquivo para ninguém confiar nele. Sem backup válido, não siga com atualização."
+fi
+c_grn "✓ banco: $(du -h "$BACKUP_DIR/db-$ts.sql.gz" | awk '{print $1}') (conferido)"
 
 step "Snapshot das sessões do WhatsApp → $BACKUP_DIR/waha-$ts.tgz"
 vol="$(volume_waha_data)"
