@@ -11,9 +11,20 @@
 -- 1. Remove da escala de elegibilidade (`channel_routing_responsibles`);
 -- 2. Desatribui todas as conversas abertas (`status in ('open','pending','claimed','ai_handling')`),
 --    limpando `assigned_to_user_id`, `assigned_to_user_name`, `assignee_kind`,
---    resetando status para 'open', soltando o silêncio do bot (`bot_silenced_until = null`)
+--    resetando status para 'open', soltando o silêncio do bot com a regra do release
+--    (`null` só sem `last_handoff_at`: conversa passada pela IA a um humano segue humana)
 --    e registrando evento em `conversation_assignment_events` (`reason = 'member_revoked'`);
 -- 3. Aciona o despertar do roteamento por canal (`fn_wake_channel_routing`).
+
+-- O CHECK inline de conversation_assignment_events.reason só aceitava
+-- claim/transfer/release/routing/handoff: sem ampliá-lo, o insert abaixo
+-- falhava com 23514 e TODA revogação de membro com conversa aberta dava 500.
+-- As linhas existentes cabem no conjunto novo; não há backfill.
+alter table public.conversation_assignment_events
+  drop constraint if exists conversation_assignment_events_reason_check;
+alter table public.conversation_assignment_events
+  add constraint conversation_assignment_events_reason_check
+  check (reason in ('claim','transfer','release','routing','handoff','member_revoked'));
 
 create or replace function public.fn_routing_member_revoked()
 returns trigger language plpgsql security definer set search_path=public as $$
@@ -38,7 +49,9 @@ begin
            status='open',
            status_changed_at=now(),
            unread_count_for_assignee=0,
-           bot_silenced_until=null,
+           -- Mesma regra do release de fn_conversation_assign: a conversa que a IA
+           -- passou a um humano (last_handoff_at) continua com a IA calada.
+           bot_silenced_until=case when last_handoff_at is null then null else bot_silenced_until end,
            updated_at=now()
      where id=v_conv.id;
 

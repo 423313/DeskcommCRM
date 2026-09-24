@@ -22706,7 +22706,9 @@ begin
            status='open',
            status_changed_at=now(),
            unread_count_for_assignee=0,
-           bot_silenced_until=null,
+           -- Mesma regra do release de fn_conversation_assign: a conversa que a IA
+           -- passou a um humano (last_handoff_at) continua com a IA calada.
+           bot_silenced_until=case when last_handoff_at is null then null else bot_silenced_until end,
            updated_at=now()
      where id=v_conv.id;
 
@@ -37240,6 +37242,19 @@ update public.crm_leads l
    and o.currency <> 'BRL'
    and l.currency = 'BRL'
    and l.value_cents is null;
+
+-- ---- o motivo 'member_revoked' na auditoria de atribuição (migration 0405, #1562, @webtecnica) ----
+-- `fn_routing_member_revoked` (editada no lugar, no bloco da 0228) grava
+-- reason='member_revoked' ao devolver à fila as conversas de quem foi revogado.
+-- O CHECK inline da tabela (batizado `conversation_assignment_events_reason_check`)
+-- não aceitava o valor: toda revogação com conversa aberta falhava com 23514.
+-- Bloco ÚNICO desta constraint, com o conjunto final; as linhas existentes
+-- cabem nele, então reaplicar no `update.sh` não viola nada.
+alter table public.conversation_assignment_events
+  drop constraint if exists conversation_assignment_events_reason_check;
+alter table public.conversation_assignment_events
+  add constraint conversation_assignment_events_reason_check
+  check (reason in ('claim','transfer','release','routing','handoff','member_revoked'));
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
