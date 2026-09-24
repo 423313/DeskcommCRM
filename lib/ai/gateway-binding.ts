@@ -31,6 +31,7 @@ import { decryptKey, byteaToBuffer } from "@/lib/crypto/aes_gcm";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { escolherModeloNoCatalogo } from "./agents/escolher-modelo";
 import { OPENROUTER_BASE_URL, resolveLanguageModel, type ModelId } from "./gateway";
 
 export interface ModeloResolvido {
@@ -242,10 +243,11 @@ async function padraoDaOrganizacao(
 ): Promise<ModeloResolvido | null> {
   const llm = await llmDaOrganizacao(organizationId);
   if (llm === null || llm.defaultModel === null) return null;
+  const defaultModel = await modeloDoProvedor(organizationId, llm.provider, llm.defaultModel);
   const modelId =
-    llm.provider === "openrouter" || llm.defaultModel.startsWith(`${llm.provider}/`)
-      ? llm.defaultModel
-      : `${llm.provider}/${llm.defaultModel}`;
+    llm.provider === "openrouter" || defaultModel.startsWith(`${llm.provider}/`)
+      ? defaultModel
+      : `${llm.provider}/${defaultModel}`;
   if (daOrg !== null && daOrg.provider === llm.provider) {
     const id = idParaOProvider(llm.provider, modelId);
     const model = id === null ? null : instanciar(llm.provider, daOrg.apiKey, id, null);
@@ -253,6 +255,69 @@ async function padraoDaOrganizacao(
   }
   const model = await padraoDaInstalacao(() => Promise.resolve(llm.provider), modelId as ModelId);
   return model === null ? null : { model, modelId, origem: "padrao" };
+}
+
+/**
+ * O `default_model` da organização, se ele for DESTE provedor — senão, o do
+ * catálogo do provedor pela régua do onboarding.
+ *
+ * Instalações feitas antes de `bootstrap-owner.ts` e `install.sh` gravarem o
+ * par inteiro têm `{provider: 'openai', default_model: 'claude-sonnet-5'}`: o
+ * gatilho semeou o par da Anthropic e o instalador trocou só o provedor. Montar
+ * `openai/claude-sonnet-5` com isso mandava à OpenAI um id que ela não conhece,
+ * em todo ponto que cai no padrão da empresa — e sem migration de dados, é aqui
+ * que o par se conserta, na leitura.
+ *
+ * A pertença é conferida pelo id como o catálogo o guarda: sem o prefixo do
+ * próprio provedor, exceto na OpenRouter, onde o `/` faz parte do id. Par
+ * coerente passa intacto, inclusive quando não é o curado — é a escolha de
+ * alguém. Catálogo vazio ou ilegível devolve o gravado: o desfecho de antes,
+ * nunca um id inventado. Nunca lança.
+ */
+async function modeloDoProvedor(
+  organizationId: string,
+  provider: string,
+  defaultModel: string,
+): Promise<string> {
+  const idNoCatalogo =
+    provider !== "openrouter" && defaultModel.startsWith(`${provider}/`)
+      ? defaultModel.slice(provider.length + 1)
+      : defaultModel;
+  const oGravado = (motivo: string): string => {
+    logger.warn("[gateway-binding] não consegui conferir o modelo padrão no catálogo — usando o gravado", {
+      organization_id: organizationId,
+      provider,
+      motivo,
+    });
+    return defaultModel;
+  };
+  try {
+    // `ai_models` é o catálogo da instalação, sem `organization_id`: não há
+    // tenant a filtrar aqui.
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("ai_models")
+      .select("model_id")
+      .eq("provider", provider)
+      .eq("model_id", idNoCatalogo)
+      .limit(1)
+      .maybeSingle();
+    if (error) return oGravado(error.message);
+    if (data !== null) return defaultModel;
+
+    const escolha = await escolherModeloNoCatalogo(admin, provider);
+    if (escolha === null) return oGravado("catálogo ilegível");
+    if (!escolha.escolhido) return defaultModel;
+    logger.warn("[gateway-binding] o modelo padrão da organização não é do provedor dela — usando o do catálogo", {
+      organization_id: organizationId,
+      provider,
+      gravado: defaultModel,
+      usado: escolha.modelId,
+    });
+    return escolha.modelId;
+  } catch (erro) {
+    return oGravado(erro instanceof Error ? erro.name : typeof erro);
+  }
 }
 
 /**
