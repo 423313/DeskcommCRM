@@ -31,10 +31,11 @@ import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
 const usd = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "USD",
-  // 4 casas porque uma execução isolada custa fração de centavo, e arredondar
-  // para 2 mostraria "R$ 0,00" para todas elas — o zero que não é zero.
+  // 6 casas porque uma execução isolada custa fração de centavo, e arredondar
+  // mostraria "US$ 0,00" — o zero que não é zero. Com 4, era o caso de TODA
+  // medição do Jev (~US$ 0,000016); o cartão dele já usava 6.
   minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
+  maximumFractionDigits: 6,
 });
 
 interface Execucao {
@@ -252,7 +253,7 @@ export function ExecucoesDeIa() {
                 </div>
               ) : (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {e.input_tokens + e.output_tokens} tokens
+                  {e.input_tokens + e.output_tokens} {t("tokens")}
                   {e.latency_ms !== null ? ` · ${e.latency_ms} ms` : ""}
                   {/* `cost_cents` está em CENTAVOS: dividir por 100 dá REAIS, e o
                       rótulo dizia "centavos" — uma execução de 25 centavos
