@@ -133,7 +133,7 @@ import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memor
 import { matchesHandoffKeyword } from './agent-config';
 import { garantirPerguntaDoRoteiro, prepararRoteiroDoTurno } from './roteiro-no-turno';
 import { validarRespostaDoFluxo } from './flow-validate';
-import { moduloLigado } from '@/lib/instalacao/modulos';
+import { moduloLigadoComMemo } from '@/lib/instalacao/modulos';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
@@ -2390,7 +2390,7 @@ async function executarTurnoDoAgente(
       ? await prepararRoteiroDoTurno(
           {
             pool,
-            moduloLigado: () => moduloLigado(deps.crmCfg.supabase, 'fluxos_atendimento'),
+            moduloLigado: () => moduloLigadoComMemo(deps.crmCfg.supabase, 'fluxos_atendimento'),
             validar: (args) =>
               validarRespostaDoFluxo(
                 pool,
