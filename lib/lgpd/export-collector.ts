@@ -9,6 +9,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { citacaoDaLei, perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import { logger } from "@/lib/logger";
+import { camposLegiveis, perguntasDosGrafos, type CampoLegivel } from "@/lib/lgpd/campos-personalizados";
 import { maskPhone } from "@/lib/lgpd/mask";
 import type { Json } from "@/lib/database.types";
 
@@ -40,6 +41,10 @@ export interface ContactSnapshot {
    * linha o titular pedia acesso e não recebia o que o roteiro coletou.
    */
   custom_fields: Record<string, unknown>;
+  /** Para o PDF: rótulo da pergunta + valor, sem o CPF (ver `campos-personalizados.ts`). */
+  campos_legiveis: CampoLegivel[];
+  /** Um roteiro guardou o CPF nos campos (texto, não a coluna cifrada). */
+  cpf_informado_na_conversa: boolean;
 }
 
 export interface ConsentRow {
@@ -675,6 +680,33 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       });
     }
     if (data) {
+      const customFields =
+        data.custom_fields && typeof data.custom_fields === "object" && !Array.isArray(data.custom_fields)
+          ? (data.custom_fields as Record<string, unknown>)
+          : {};
+      // Os rótulos vêm das perguntas dos roteiros que o contato percorreu.
+      const { data: grafos, error: grafosErr } = await admin
+        .from("followup_enrollments")
+        .select("started_at, followup_flow_versions(graph)")
+        .eq("organization_id", organizationId)
+        .eq("contact_id", contactId)
+        .order("started_at", { ascending: false })
+        .limit(50);
+      if (grafosErr) {
+        logger.warn("[lgpd-export-worker] roteiros load failed", {
+          request_id: requestId,
+          error: grafosErr.message,
+        });
+      }
+      const legiveis = camposLegiveis(
+        customFields,
+        perguntasDosGrafos(
+          (grafos ?? []).flatMap((r) => {
+            const v = (r as { followup_flow_versions: unknown }).followup_flow_versions;
+            return (Array.isArray(v) ? v : [v]).map((x) => (x as { graph?: unknown } | null)?.graph);
+          }),
+        ),
+      );
       contact = {
         id: data.id,
         name: data.name ?? null,
@@ -692,10 +724,9 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         created_at: data.created_at,
         last_activity_at: data.last_activity_at ?? null,
         first_service_at: data.first_service_at ?? null,
-        custom_fields:
-          data.custom_fields && typeof data.custom_fields === "object" && !Array.isArray(data.custom_fields)
-            ? (data.custom_fields as Record<string, unknown>)
-            : {},
+        custom_fields: customFields,
+        campos_legiveis: legiveis.campos,
+        cpf_informado_na_conversa: legiveis.cpfInformado,
       };
     }
   }

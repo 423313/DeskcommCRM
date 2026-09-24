@@ -212,7 +212,11 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
             <View style={styles.row}>
               <Text style={styles.label}>{data.documento_rotulo}:</Text>
               <Text style={styles.value}>
-                {data.contact.cpf_present ? "Armazenado (criptografado)" : "—"}
+                {data.contact.cpf_present
+                  ? "Armazenado (criptografado)"
+                  : data.contact.cpf_informado_na_conversa
+                    ? "Informado na conversa (valor no arquivo de dados)"
+                    : "—"}
               </Text>
             </View>
             <View style={styles.row}>
@@ -227,10 +231,19 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
               <Text style={styles.label}>Anonimizado:</Text>
               <Text style={styles.value}>{data.contact.is_anonymized ? "Sim" : "Não"}</Text>
             </View>
-            {Object.entries(data.contact.custom_fields ?? {}).map(([chave, valor]) => (
-              <View key={chave} style={styles.row}>
-                <Text style={styles.label}>{chave}:</Text>
-                <Text style={styles.value}>{typeof valor === "string" ? valor : JSON.stringify(valor)}</Text>
+          </View>
+        ) : null}
+
+        {/* Respostas e campos personalizados (roteiros de atendimento, etc.) */}
+        {data.contact && (data.contact.campos_legiveis ?? []).length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Respostas e campos personalizados</Text>
+            {/* A pergunta em linha própria: rótulo de roteiro é frase, e na coluna
+                de 110pt dos dados fixos ele quebrava no meio da palavra. */}
+            {data.contact.campos_legiveis.map((campo, i) => (
+              <View key={i} style={styles.itemBlock}>
+                <Text style={styles.small}>{campo.rotulo}</Text>
+                <Text>{campo.valor}</Text>
               </View>
             ))}
           </View>

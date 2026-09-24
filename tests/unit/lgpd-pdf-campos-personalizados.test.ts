@@ -5,6 +5,7 @@ import { expect, it } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { renderLgpdPdf } from "@/lib/lgpd/pdf-renderer";
 import type { ExportPayload } from "@/lib/lgpd/export-collector";
+import { camposLegiveis, perguntasDosGrafos } from "@/lib/lgpd/campos-personalizados";
 
 /**
  * O que o ROTEIRO de atendimento coletou mora em `contacts.custom_fields` — o
@@ -108,8 +109,20 @@ async function rendered(data: ExportPayload) {
   }
 }
 
-it("o PDF do titular lista os campos personalizados do contato", async () => {
+it("o PDF lista as respostas pelo rótulo da pergunta, e o CPF só na linha do documento", async () => {
   const data = payload();
+  const custom_fields = { cpf: "52998224725", modelo_interesse: "XRE 300", cidade_natal: "Uberaba" };
+  const { campos, cpfInformado } = camposLegiveis(
+    custom_fields,
+    perguntasDosGrafos([
+      {
+        nodes: [
+          { type: "collect", config: { key: "cpf", label: "Seu CPF", type: "cpf" } },
+          { type: "collect", config: { key: "modelo_interesse", label: "Qual modelo te interessa?", type: "select" } },
+        ],
+      },
+    ]),
+  );
   data.contact = {
     id: "contato-1",
     name: "Lia",
@@ -127,9 +140,20 @@ it("o PDF do titular lista os campos personalizados do contato", async () => {
     created_at: "2030-01-02T13:05:00Z",
     last_activity_at: null,
     first_service_at: null,
-    custom_fields: { cpf: "52998224725", modelo_interesse: "XRE 300", ano: 2020 },
+    custom_fields,
+    campos_legiveis: campos,
+    cpf_informado_na_conversa: cpfInformado,
   };
   const pdf = await rendered(data);
-  for (const valor of ["cpf:", "52998224725", "modelo_interesse:", "XRE 300", "ano:", "2020"])
+  for (const valor of [
+    "Respostas e campos personalizados",
+    "Qual modelo te interessa?",
+    "XRE 300",
+    // Chave sem pergunta conhecida: legível, não técnica.
+    "Cidade natal",
+    "Uberaba",
+    "Informado na conversa",
+  ])
     expect(pdf.text).toContain(valor);
+  for (const valor of ["modelo_interesse", "cidade_natal", "52998224725", "Seu CPF"]) expect(pdf.text).not.toContain(valor);
 });
