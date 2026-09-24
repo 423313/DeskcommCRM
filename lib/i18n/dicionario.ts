@@ -5516,6 +5516,8 @@ export const DICIONARIO: Traducoes = {
   "Imagem recebida": { es: "Imagen recibida" },
   Baixar: { es: "Descargar" },
   "Abrir conversa com este contato": { es: "Abrir conversación con este contacto" },
+  "Localização compartilhada": { es: "Ubicación compartida" },
+  "Abrir no mapa": { es: "Abrir en el mapa" },
   "Não foi possível abrir a conversa.": { es: "No se pudo abrir la conversación." },
   "Enter salva a nota · Shift+Enter quebra linha": { es: "Enter guarda la nota · Shift+Enter agrega un salto de línea" },
   "Enter envia · Shift+Enter quebra linha": { es: "Enter envía · Shift+Enter agrega un salto de línea" },
