@@ -79,17 +79,28 @@ e ganha índice único próprio (`um roteiro coletando por contato`). O CHECK
 terminais. Por que não uma coluna `surface` no enrollment: duplicaria o pointer e ainda
 exigiria filtro em cada consulta — o status resolve os dois.
 
+**D2b (acrescentado na execução).** Os produtores do relógio (gatilhos de etapa, lead,
+caso, retorno, silêncio, o enroll manual) escolhem pointer pelo `trigger_config`, não pela
+superfície. Um roteiro com gatilho de silêncio viraria enrollment `active` e o motor de
+follow-up rodaria as perguntas. Gatilho `trg_enrollment_superficie_coerente` (BEFORE
+INSERT/UPDATE de `status`/`pointer_id`) recusa com `23514` roteiro fora de
+`coletando`/terminal e `coletando` fora de roteiro. O publish exige gatilho `manual` no
+roteiro, e o enroll manual recusa roteiro com 422 legível. No relógio, `collect`/`skill`
+seguem como passagem (código do autor): o publish e o gatilho já impedem que cheguem lá.
+
 ### D3 — A trilha vai para `followup_enrollment_events`, sem valores
 
 `contact_flow_events` duplicava a tabela de eventos que o enrollment já tem.
-`event_type` ∈ `roteiro_iniciado | roteiro_resposta | roteiro_fora_do_fluxo |
-roteiro_tentativa | roteiro_pergunta_feita | roteiro_concluido | roteiro_esgotado |
-roteiro_encadeou | roteiro_cancelado`, `node_id` = nó da pergunta, `payload` só com
-`{ campo, origem?, correcao? }`. **Tentativas por pergunta = contagem de
-`roteiro_tentativa` por `campo`** (DIRC Calcular — some a coluna `attempts`).
-Idempotência por mensagem: `idempotency_key = 'roteiro_msg:<message_id>'` no evento
-de resposta/desvio/tentativa (o índice único `(enrollment_id, idempotency_key)` já existe)
-— um job reexecutado não reprocessa a mesma mensagem (achado do autor, 60bbe49b5).
+`event_type` ∈ `roteiro_iniciado | roteiro_mensagem | roteiro_resposta |
+roteiro_fora_do_fluxo | roteiro_tentativa | roteiro_pergunta_feita | roteiro_concluido |
+roteiro_encadeou` (`EVENTOS_DO_ROTEIRO`), `node_id` = nó da pergunta, `payload` tipado
+por `PayloadDoEvento` (`campo`, `origem`, `correcao`, `esgotadas`, `proximo_fluxo`) — sem
+campo de valor. Esgotar vira `roteiro_concluido` com `esgotadas` e desfecho `exhausted`.
+**Tentativas por pergunta = contagem de `roteiro_tentativa` por `campo`** (DIRC Calcular —
+some a coluna `attempts`). Idempotência por mensagem: a primeira coisa do processamento é
+reivindicar a mensagem com um evento `roteiro_mensagem` de `idempotency_key =
+'roteiro_msg:<message_id>'` no índice único `(enrollment_id, idempotency_key)` que já existe;
+um job reexecutado não consegue a chave e não reprocessa (achado do autor, 60bbe49b5).
 Sem valor no payload, a trilha não é dado pessoal: a LGPD não precisa redigi-la.
 
 ### D4 — Sem síntese por IA e sem `completion_note` (decisão do titular, 23/09 ~20h)
@@ -158,6 +169,7 @@ roteiro de outra organização (a FK simples permitiria). Exige índice único
 | 7 | CPF sem validação e duplicado | duplicação: **PR 1** (D1); tipo `cpf` com dígito e cifra em `cpf_encrypted`: PR 2 |
 | 8 | Áudio/figurinha = "não respondeu" | PR 2 |
 | 9 | Roteiro segue ativo com humano assumindo / não expira | PR 2 |
+| — | "Esgotado" em todo roteiro concluído (menor) | **PR 1** (desfecho `converted`/`exhausted` pelo que de fato aconteceu) |
 | menores | editor oferece nós recusados; "Esgotado" em todo concluído; Follow-ups listando roteiros; PDF LGPD sem os dados; guia desatualizado | PR 2 (motor/validação) e PR 3 (tela) |
 
 ### D11 — LGPD nos dois caminhos
@@ -169,6 +181,16 @@ perguntando. Gatilho novo `trg_contato_anonimizado_encerra_roteiro` (AFTER UPDAT
 desenho dos sete gatilhos de redação do schema, um lugar para os dois caminhos. Provado
 por invariante novo que roda os dois caminhos (`fn_lgpd_anonymize_contact` e
 `fn_lgpd_cascade_redact_contact`).
+
+### D12 — Achados da execução do PR 1 (não estavam na prova)
+
+- **Sticky recomeçava o roteiro.** O membro sticky do roteador também devolvia o roteiro:
+  todo turno do mesmo assunto tentaria começá-lo, e depois de concluído recomeçaria para
+  sempre. Só a intenção casada agora (`classified`/`reclassified`) começa roteiro.
+- **Validador sem modelo.** `validarRespostaDoFluxo` chamava o modelo sem `model`: numa
+  instalação configurada só pela tela (sem `default_model`), todo turno cairia calado em
+  `indefinido`. Passa a usar `auxModelArgs` do turno, a regra dos outros auxiliares.
+- **Bloco do turno mandava chamar `flow_collect`**, ferramenta que não existe aqui (D5).
 
 ## Foco de revisão (o que nenhum teste de tarefa cobre por acaso)
 
@@ -349,11 +371,12 @@ export async function garantirPerguntaDoRoteiro(deps, t: { roteiro: RoteiroDoTur
   `detectHumanHandoffRequest`, e depois do `pausedAt`. Sabotar movendo a chamada → vermelho.
 - [ ] Commit nosso (o encaixe é reescrita; a lógica portada já tem autoria nas Tasks 4–5).
 
-### Task 7: LGPD — o gatilho e a prova estática
+### Task 7: LGPD — o gatilho e a prova
 
-Coberto pela migration (Task 2). Aqui: teste unitário que lê o baseline e cobra que o
-gatilho existe, revoga as duas origens de EXECUTE, e que nenhum `payload` montado em
-`atendimento.ts` carrega `valor`.
+Coberto pela migration (Task 2) e provado no invariante da Task 8. O payload sem valor é
+cercado pelo TIPO (`PayloadDoEvento` não tem campo de valor) e pelo teste da trilha em
+`lib/followup/atendimento.test.ts`; a exposição das funções novas é vigiada pelo
+`tests/invariants/hardening-definer-varredura.test.ts` que já existe.
 
 ### Task 8: invariante novo (roda no `test:db` do CI)
 
