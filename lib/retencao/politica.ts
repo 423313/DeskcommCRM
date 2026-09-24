@@ -167,7 +167,7 @@ export const RETENCAO_AVISO_DE_CASO_DIAS_PISO = 30;
 
 /**
  * 365 dias para os CANDIDATOS da prospecção nativa (`prospecting_candidates`,
- * migration 0369; expurgo na 0402, issue #1313).
+ * migration 0369; expurgo na 0408, issue #1313).
  *
  * Guarda nome, telefone, endereço e identificador de lugar — a pessoa que mais
  * cedo ou mais tarde vai ser abordada, e que em muitos casos nunca falou com a
@@ -175,7 +175,7 @@ export const RETENCAO_AVISO_DE_CASO_DIAS_PISO = 30;
  * alinhado ao horizonte da conversa do caso e da captação: depois disso o
  * funil responde por EVENTOS, não por raspagem parada.
  *
- * Quem APLICA é `fn_expurgar_prospeccao_vencida` (migration 0402), chamada em
+ * Quem APLICA é `fn_expurgar_prospeccao_vencida` (migration 0408), chamada em
  * lotes pelo cron `data-retention` — e o piso mora DENTRO do corpo da função,
  * `greatest(...)`, como as sete irmãs: só assim ele vale para qualquer
  * chamador, inclusive um `psql` na mão.

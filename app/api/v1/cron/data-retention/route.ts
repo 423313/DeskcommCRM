@@ -122,7 +122,7 @@ export interface ResultadoDaRetencao {
   avisos_de_caso_apagados: number;
   lotes_avisos_de_caso: number;
   avisos_de_caso_tem_resto: boolean;
-  /** O candidato de prospecção nativa vencido (migration 0402, issue #1313). */
+  /** O candidato de prospecção nativa vencido (migration 0408, issue #1313). */
   prospeccao_apagada: number;
   lotes_prospeccao: number;
   prospeccao_tem_resto: boolean;
@@ -265,7 +265,7 @@ export async function podarHistorico(
   // poda aqui é volume de operação — e é a poda de horizonte mais curto das
   // sete, porque a única pergunta que a linha responde é de semanas.
   const avisosDeCaso = await drenar(db, "fn_expurgar_avisos_de_caso_vencidos", avisoDeCaso.dias);
-  // Oitava poda: o candidato de prospecção nativa vencido (migration 0402,
+  // Oitava poda: o candidato de prospecção nativa vencido (migration 0408,
   // issue #1313). Padrão 365 / piso 90 — decisão do dono, alinhada ao
   // horizonte da conversa do caso e da captação. O piso mora no CORPO da
   // função; o relógio é `coalesce(attempted_at, created_at)`; `queued` e
@@ -348,7 +348,7 @@ export function houveEfeito(resultado: ResultadoDaRetencao): boolean {
     resultado.avisos_de_caso_apagados > 0 ||
     // A oitava, pela MESMA razão das sete anteriores: uma rodada que só podou
     // candidato de prospecção vencido apagaria linhas e não deixaria registro.
-    // Esta é a poda de dado de PESSOA que nunca falou com a empresa (0402) —
+    // Esta é a poda de dado de PESSOA que nunca falou com a empresa (0408) —
     // silenciar aqui seria apagar dado sensível sem trilha.
     resultado.prospeccao_apagada > 0
   );

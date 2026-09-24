@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0402 — os candidatos da prospecção nativa ganham prazo, e o CRON é quem aplica.
+-- 0408 — os candidatos da prospecção nativa ganham prazo, e o CRON é quem aplica.
 --
 -- ─── O que não existia ────────────────────────────────────────────────────
 -- A tabela nasce na 0369 sem dono de expurgo: nome, telefone, endereço e
@@ -50,7 +50,7 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  -- 365 = um ano, o horizonte decidido pelo dono (0402, issue #1313). O piso
+  -- 365 = um ano, o horizonte decidido pelo dono (0408, issue #1313). O piso
   -- de 90 impede que o knob vire apagador de rastro recente — e mora AQUI,
   -- no corpo, para valer contra qualquer chamador.
   v_dias int := greatest(coalesce(p_retencao_dias, 365), 90);

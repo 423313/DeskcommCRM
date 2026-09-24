@@ -37214,7 +37214,7 @@ update public.crm_leads l
    and l.value_cents is null;
 
 
--- ---- 0402 — os candidatos da prospecção nativa ganham prazo (issue #1313) ----
+-- ---- 0408 — os candidatos da prospecção nativa ganham prazo (issue #1313) ----
 --
 -- Apêndice idempotente: o `update.sh` do clone re-executa este bloco inteiro a
 -- cada atualização. Quem aplica o prazo é ESTA função, chamada em lotes pelo
@@ -37234,7 +37234,7 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  -- 365 = um ano, o horizonte decidido pelo dono (0402, issue #1313). O piso
+  -- 365 = um ano, o horizonte decidido pelo dono (0408, issue #1313). O piso
   -- de 90 impede que o knob vire apagador de rastro recente — e mora AQUI,
   -- no corpo, para valer contra qualquer chamador.
   v_dias int := greatest(coalesce(p_retencao_dias, 365), 90);

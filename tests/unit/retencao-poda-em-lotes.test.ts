@@ -188,7 +188,7 @@ describe("podarHistorico — o laço de lotes", () => {
   });
 
   it("drena a prospecção com o padrão 365 e eleva o knob de 5 ao piso 90", async () => {
-    // A oitava poda entra no MESMO commit da migration (0402): o knob abaixo
+    // A oitava poda entra no MESMO commit da migration (0408): o knob abaixo
     // do piso é ELEVADO, como todas as irmãs — e o aviso acompanha.
     const { db, chamadas } = bancoQueDevolve({ fila: [0], auditoria: [0] });
     const r = await podarHistorico(db, { PROSPECCAO_RETENTION_DAYS: "5" });
@@ -241,7 +241,7 @@ describe("houveEfeito — as duas direções", () => {
     lotes_avisos_de_caso: 0,
     avisos_de_caso_tem_resto: false,
     retencao_aviso_de_caso_dias: RETENCAO_AVISO_DE_CASO_DIAS_PADRAO,
-    // Oitava poda (migration 0402): o candidato de prospecção vencido.
+    // Oitava poda (migration 0408): o candidato de prospecção vencido.
     prospeccao_apagada: 0,
     lotes_prospeccao: 0,
     prospeccao_tem_resto: false,
@@ -261,7 +261,7 @@ describe("houveEfeito — as duas direções", () => {
     expect(houveEfeito({ ...base, nonces_apagados: 1 })).toBe(true);
   });
 
-  it("...e apagou candidato de prospecção vencido → TAMBÉM audita (0402)", () => {
+  it("...e apagou candidato de prospecção vencido → TAMBÉM audita (0408)", () => {
     // A oitava poda entra em `houveEfeito` no MESMO commit em que entra no
     // laço — é a lição da quarta e da quinta. E esta é a única poda da casa
     // que apaga dado de uma pessoa que NUNCA falou com a empresa: silenciar

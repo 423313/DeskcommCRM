@@ -383,7 +383,7 @@ const schema = z.object({
    */
   CASE_ALERT_RETENTION_DAYS: z.string().optional().default(""),
   /**
-   * Candidato da prospecção nativa vencido (migration 0402, issue #1313).
+   * Candidato da prospecção nativa vencido (migration 0408, issue #1313).
    * `z.string()` pela MESMA razão das cinco acima — quem interpreta é
    * `lib/retencao/politica.ts`, onde lixo resolve para o lado seguro e o
    * operador vê o aviso no log, em vez de o contêiner ficar `healthy`
