@@ -84,7 +84,7 @@ O arquivo `public/rastreio/v1.js` é servido anonimamente, inclusive no Docker q
 
 - A origem é mantida no `sessionStorage`, por domínio do site, instalação e organização, para a navegação na mesma aba. Não há cookie nem persistência entre dispositivos/domínios. Uma nova entrada explícita substitui a anterior, sem misturar identificadores; parâmetros inválidos não recuperam um clique antigo.
 - `data-storage="none"` desliga leitura e gravação em storage: só os parâmetros da página atual são usados. Armazenamento bloqueado não impede o uso na página atual. A instalação deve respeitar as escolhas de armazenamento do site; se houver carregamento condicionado a consentimento, inclua o script depois dessa escolha.
-- `data-deskcomm-ignore` exclui um link. Elementos adicionados depois são observados. Cliques normais, teclado e nova aba preservam a navegação nativa; o script não usa `preventDefault`.
+- `data-rastreio-ignorar` exclui um link. Elementos adicionados depois são observados. Cliques normais, teclado e nova aba preservam a navegação nativa; o script não usa `preventDefault`.
 - Só identificadores e chaves de campanha permitidos atravessam; não copia a query inteira, cookies, campos de formulários nem o texto original do botão. O texto e número finais são os salvos na captura do CRM.
 - Sem origem utilizável ou sem carregar o script, os links originais permanecem. Depois de um link apontar para a captura, a disponibilidade do CRM é necessária. O código curto é gerado apenas no clique, pelo servidor; remover o código da mensagem impede o casamento.
 - A atribuição do contato continua sendo de primeiro toque. A origem de uma visita nova não altera automaticamente um contato já atribuído.

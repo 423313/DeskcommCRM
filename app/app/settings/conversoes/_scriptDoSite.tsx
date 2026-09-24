@@ -82,7 +82,7 @@ export function ScriptDoSite({
       </p>
       <p className="text-sm text-muted-foreground">
         {t(
-          'Para não guardar a origem na aba, adicione data-storage="none" ao script. Para excluir um link, adicione data-deskcomm-ignore nele. Botões controlados apenas por JavaScript e links abreviados precisam de adaptação no site.',
+          'Para não guardar a origem na aba, adicione data-storage="none" ao script. Para excluir um link, adicione data-rastreio-ignorar nele. Botões controlados apenas por JavaScript e links abreviados precisam de adaptação no site.',
         )}
       </p>
       <p className="text-sm text-muted-foreground">

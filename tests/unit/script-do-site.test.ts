@@ -13,7 +13,7 @@ function site(query = "", stored?: string, extra = "", blocked = false) {
   );
   windows.push(dom);
   const { window } = dom;
-  const key = "deskcomm:v1:https://crm.example:loja";
+  const key = "rastreio:v1:https://crm.example:loja";
   if (stored) window.sessionStorage.setItem(key, stored);
   if (blocked)
     Object.defineProperty(window, "sessionStorage", {
@@ -94,7 +94,7 @@ describe("script público do site", () => {
     window.document.body.append(dynamic);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(dynamic.href).toContain("/anuncios/google/");
-    link.setAttribute("data-deskcomm-ignore", "");
+    link.setAttribute("data-rastreio-ignorar", "");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(link.href).toBe("https://wa.me/5511999999999?text=original");
     dynamic.href = "https://example.org/";

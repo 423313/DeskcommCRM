@@ -1,4 +1,4 @@
-/** Deskcomm — captura de origem para links de WhatsApp. Sem dependências ou credenciais. */
+/** Rastreio de origem — captura de origem para links de WhatsApp. Sem dependências ou credenciais. */
 (function () {
   "use strict";
   var script = document.currentScript;
@@ -19,9 +19,9 @@
   var google = phone(script.getAttribute("data-google-whatsapp"));
   var meta = phone(script.getAttribute("data-meta-whatsapp"));
   if (!google && !meta) return;
-  var key = "deskcomm:v1:" + base.origin + ":" + org;
+  var key = "rastreio:v1:" + base.origin + ":" + org;
   // Uma instalação por página. Carregar o mesmo snippet duas vezes não duplica observadores.
-  var installed = window.__deskcommCaptureV1 || (window.__deskcommCaptureV1 = {});
+  var installed = window.__rastreioCaptureV1 || (window.__rastreioCaptureV1 = {});
   if (installed[key]) return;
   installed[key] = true;
   var storage = script.getAttribute("data-storage") !== "none";
@@ -124,7 +124,7 @@
     else if (url.protocol === "whatsapp:" && url.hostname === "send")
       number = phone(url.searchParams.get("phone"));
     var rewritten =
-      !link.hasAttribute("data-deskcomm-ignore") && target && number === target.phone
+      !link.hasAttribute("data-rastreio-ignorar") && target && number === target.phone
         ? target.url
         : original;
     links.set(link, { original: original, rewritten: rewritten });
@@ -150,7 +150,7 @@
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["href", "data-deskcomm-ignore"],
+    attributeFilter: ["href", "data-rastreio-ignorar"],
   });
   // Executa antes da navegação normal; não cancela cliques nem handlers do site.
   ["click", "auxclick", "pointerdown", "contextmenu"].forEach(function (name) {
