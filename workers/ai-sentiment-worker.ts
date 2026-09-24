@@ -25,6 +25,7 @@ import { computeCost } from "@/lib/ai/cost";
 import { MODELO_DO_JEV, type MotivoComRede } from "@/lib/ai/decisao/cliente";
 import { medirClima, type ClimaMedido } from "@/lib/ai/decisao/clima";
 import { lerConfigDoJev } from "@/lib/ai/decisao/config";
+import { falhasSeguidas } from "@/lib/ai/decisao/disjuntor";
 import { CHAVES_DO_CLIMA, type MotorDoClima } from "@/lib/ai/decisao/metadados-do-clima";
 import { AVISO_DO_JEV, avisoDoJevNaCentral, codigoDoErroDoJev } from "@/lib/ai/decisao/textos";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
@@ -321,6 +322,22 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       registrarFalhaDoJev();
       if (jevFalhouNaRede) {
         await avisarSeExigeAcao(false);
+        // Sem IA de linguagem, a falha que "passa sozinha" (fora do ar, lento,
+        // ilegível) deixa o clima sem medição do mesmo jeito — e enquanto ela
+        // não passa, ninguém sabe. Várias seguidas é queda, não tropeço: vira o
+        // MESMO aviso (mesmo título, mesmo dedupe, fecha no próximo sucesso).
+        if (
+          !jevFalhouNaRede.exigeAcao &&
+          falhasSeguidas(event.organization_id) >= FALHAS_SEGUIDAS_PARA_AVISAR_SEM_RESERVA
+        ) {
+          await avisarNaCentral(admin, {
+            organizationId: event.organization_id,
+            idioma: normalizarIdioma(daOrg?.locale ?? null),
+            motivo: jevFalhouNaRede.motivo,
+            temReserva: false,
+            quedaSustentada: true,
+          });
+        }
         return { skipped: true, reason: "jev_falhou_sem_reserva" };
       }
       // O Jev está ligado aqui (desligado e sem IA de linguagem, o worker já saiu
@@ -526,6 +543,14 @@ const TITULOS_DO_AVISO_DO_JEV = [...new Set(IDIOMAS.map((i) => traduzir(AVISO_DO
 const semAvisoDoJevAberto = new Set<string>();
 
 /**
+ * Quantas falhas seguidas, sem IA de linguagem, fazem de um tropeço uma queda.
+ * O disjuntor abre na 3ª e deixa passar uma tentativa a cada 5 minutos, então a
+ * 5ª chega depois de uns 10 minutos de clima sem medição — tempo de sobra para
+ * não avisar por um soluço, e pouco para o dono não saber.
+ */
+const FALHAS_SEGUIDAS_PARA_AVISAR_SEM_RESERVA = 5;
+
+/**
  * Aviso na Central para a falha do Jev que não passa sozinha.
  *
  * `kind='other'` sem referência, e o título fixo como chave — o mesmo desenho de
@@ -548,10 +573,21 @@ const semAvisoDoJevAberto = new Set<string>();
  */
 async function avisarNaCentral(
   admin: ReturnType<typeof createAdminClient>,
-  a: { organizationId: string; idioma: Idioma; motivo: MotivoComRede; temReserva: boolean },
+  a: {
+    organizationId: string;
+    idioma: Idioma;
+    motivo: MotivoComRede;
+    temReserva: boolean;
+    quedaSustentada?: boolean;
+  },
 ): Promise<void> {
   semAvisoDoJevAberto.delete(a.organizationId);
-  const { title, body } = avisoDoJevNaCentral(a.motivo, a.temReserva, (t) => traduzir(t, a.idioma));
+  const { title, body } = avisoDoJevNaCentral(
+    a.motivo,
+    a.temReserva,
+    (t) => traduzir(t, a.idioma),
+    a.quedaSustentada,
+  );
   // Sem reserva, o clima parou de vez: ninguém é chamado quando o cliente se irrita.
   const severity = a.temReserva ? "warn" : "critical";
   const { data: abertos, error: erroDaBusca } = await admin

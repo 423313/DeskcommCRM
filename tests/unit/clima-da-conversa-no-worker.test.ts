@@ -677,6 +677,66 @@ describe("o aviso do Jev na Central", () => {
     expect(segunda.banco.agent_inbox_items[0]).toMatchObject({ status: "resolved" });
   });
 
+  // ── A queda que "passa sozinha" e não passa ─────────────────────────────────
+  //
+  // Sem IA de linguagem, fora do ar / lento / ilegível não exigem ação, mas
+  // deixam o clima sem medição do mesmo jeito. As falhas anteriores entram pelo
+  // disjuntor com relógio no passado: é o estado que ele teria depois de uns
+  // 10 minutos de fornecedor caído, e fechado agora para a próxima tentativa.
+  const foraDoAr = async () => new Response("{}", { status: 503 });
+  function falhasAnteriores(n: number): void {
+    const haDezMinutos = Date.now() - 10 * 60_000;
+    for (let i = 0; i < n; i++) registrarFalha(ORG, "provedor_indisponivel", haDezMinutos);
+  }
+
+  it("sem IA de linguagem, a 4ª falha seguida que passa sozinha ainda não avisa (controle)", async () => {
+    fornecedor(foraDoAr);
+    falhasAnteriores(3);
+    const { resultado, banco } = await rodar(jevLigado("decide", false));
+
+    expect(chamadasAoJev, "a 4ª tentativa saiu").toHaveLength(1);
+    expect(resultado).toEqual({ skipped: true, reason: "jev_falhou_sem_reserva" });
+    expect(banco.agent_inbox_items).toHaveLength(0);
+  });
+
+  it("sem IA de linguagem, a 5ª falha seguida abre UM aviso crítico — e ele fecha quando o Jev volta", async () => {
+    fornecedor(foraDoAr);
+    falhasAnteriores(4);
+    const cenario = jevLigado("decide", false);
+    const primeira = await rodar(cenario);
+
+    expect(chamadasAoJev).toHaveLength(1);
+    expect(primeira.banco.agent_inbox_items).toHaveLength(1);
+    const aviso = primeira.banco.agent_inbox_items[0]!;
+    expect(aviso).toMatchObject({ title: AVISO_DO_JEV.titulo, severity: "critical", status: "open" });
+    expect(aviso.body).toContain(O_QUE_FAZER_DO_JEV.jev_provedor_indisponivel);
+    expect(aviso.body).toContain(AVISO_DO_JEV.semReserva);
+    expect(aviso.body).toContain(AVISO_DO_JEV.quedaSustentada);
+    expect(aviso.body).toContain(AVISO_DO_JEV.rearme);
+
+    // Passados os 5 minutos do disjuntor, o Jev responde: o mesmo aviso se fecha.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      fornecedor(async () => respostaDoJev(4));
+      const segunda = await rodar(cenario, primeira.banco);
+      expect(segunda.resultado).toEqual({ skipped: false, sentiment_score: 1 });
+      expect(segunda.banco.agent_inbox_items).toHaveLength(1);
+      expect(segunda.banco.agent_inbox_items[0]).toMatchObject({ status: "resolved" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("com IA de linguagem, a queda do Jev não avisa: a reserva mede no lugar dele", async () => {
+    fornecedor(foraDoAr);
+    falhasAnteriores(4);
+    const { resultado, banco } = await rodar(jevLigado("decide"));
+
+    expect(resultado).toEqual({ skipped: false, sentiment_score: 0.2 });
+    expect(banco.agent_inbox_items).toHaveLength(0);
+  });
+
   it("o aviso aberto em outro idioma é o mesmo aviso — trocar o idioma não abre um segundo", async () => {
     fornecedor(recusa402);
     const cenario = jevLigado("decide");

@@ -44,6 +44,15 @@ export function podeTentar(organizationId: string, agora: number = Date.now()): 
   return estado === undefined || agora >= estado.abertoAte;
 }
 
+/**
+ * Quantas falhas seguidas o Jev acumula nesta organização — zera no sucesso.
+ * Com o disjuntor aberto nada sai para a rede e a conta não sobe, então ela
+ * mede tentativas reais: é o que o worker usa para separar tropeço de queda.
+ */
+export function falhasSeguidas(organizationId: string): number {
+  return estados.get(organizationId)?.falhasSeguidas ?? 0;
+}
+
 export function registrarSucesso(organizationId: string): void {
   estados.delete(organizationId);
 }

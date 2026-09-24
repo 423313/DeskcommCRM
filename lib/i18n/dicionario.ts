@@ -3318,6 +3318,9 @@ export const DICIONARIO: Traducoes = {
   "Enquanto isso, o clima não está sendo medido: ninguém da equipe é chamado quando um cliente se irrita.": {
     es: "Mientras tanto, el clima no se está midiendo: nadie del equipo recibe aviso cuando un cliente se molesta.",
   },
+  "Já foram várias falhas seguidas. O sistema segue tentando sozinho; se continuar assim, confira na sua conta da TypeSafe se o serviço do Jev está no ar.": {
+    es: "Ya van varias fallas seguidas. El sistema sigue intentando solo; si continúa así, revise en su cuenta de TypeSafe si el servicio de Jev está en línea.",
+  },
   "Este aviso se fecha sozinho quando o Jev voltar a medir.": {
     es: "Este aviso se cierra solo cuando Jev vuelva a medir.",
   },

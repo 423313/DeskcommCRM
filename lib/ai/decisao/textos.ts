@@ -54,8 +54,8 @@ export const AO_EXCLUIR_A_CHAVE_DO_JEV = {
 } as const;
 
 /**
- * O aviso da Central, só para falha que não passa sozinha (`exigeAcao`). O
- * título é FIXO porque é a chave do dedupe: uma chave recusada vira UM aviso,
+ * O aviso da Central, para falha que não passa sozinha (`exigeAcao`) e, sem IA
+ * de linguagem, para a que deveria passar e não passou. O título é FIXO porque é a chave do dedupe: uma chave recusada vira UM aviso,
  * não um por mensagem do dia.
  */
 export const AVISO_DO_JEV = {
@@ -63,6 +63,12 @@ export const AVISO_DO_JEV = {
   comReserva: "Enquanto isso, a IA de sempre mede o clima no lugar dele.",
   semReserva:
     "Enquanto isso, o clima não está sendo medido: ninguém da equipe é chamado quando um cliente se irrita.",
+  /**
+   * A falha que costuma passar sozinha e não passou, sem IA de linguagem para
+   * medir no lugar dele: sem esta frase, o clima ficava parado sem nada na tela.
+   */
+  quedaSustentada:
+    "Já foram várias falhas seguidas. O sistema segue tentando sozinho; se continuar assim, confira na sua conta da TypeSafe se o serviço do Jev está no ar.",
   rearme: "Este aviso se fecha sozinho quando o Jev voltar a medir.",
 } as const;
 
@@ -70,12 +76,14 @@ export function avisoDoJevNaCentral(
   motivo: MotivoComRede,
   temReserva: boolean,
   traduzirTexto: (texto: string) => string,
+  quedaSustentada = false,
 ): { title: string; body: string } {
   return {
     title: traduzirTexto(AVISO_DO_JEV.titulo),
     body: [
       O_QUE_FAZER_DO_JEV[codigoDoErroDoJev(motivo)],
       temReserva ? AVISO_DO_JEV.comReserva : AVISO_DO_JEV.semReserva,
+      ...(quedaSustentada ? [AVISO_DO_JEV.quedaSustentada] : []),
       AVISO_DO_JEV.rearme,
     ]
       .map(traduzirTexto)
