@@ -179,6 +179,8 @@ test.describe("Jev — decisões rápidas, pela tela", () => {
       await expect(page.getByRole("dialog")).toBeHidden();
       // Sem recarregar: o cartão se relê sozinho depois do teste da chave.
       await esperarNoCartao(page, ["pronto"]);
+      // E diz que a chave FUNCIONA, não só que foi guardada.
+      await expect(cartao.getByTestId("jev-chave-conferida")).toBeVisible();
       // O teste da chave foi ao dublê, com a chave certa.
       const doTeste = JSON.parse(fs.readFileSync(ARQUIVO_DE_CHAMADAS, "utf8")) as Chamada[];
       expect(doTeste.some((c) => c.caminho === "/v1/models" && c.autorizado)).toBe(true);

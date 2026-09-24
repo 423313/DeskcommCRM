@@ -56,6 +56,7 @@ function dados(extra: Parcial = {}): DadosDoJev {
       custo_incompleto: false,
       latencia_media_ms: null,
       reservas: 0,
+      irritados: 0,
       observacao: { dias: 30, comparadas: 0, concordaram: 0 },
     },
     ultima_falha: null,
@@ -212,11 +213,11 @@ describe("CartaoDoJev — (3) pronto para ligar", () => {
     expect(chamadas[0]?.corpo).toEqual({ ligado: true });
   });
 
-  it("sem a IA de sempre, avisa que o atendimento precisa dela", () => {
+  it("sem a IA de sempre, explica que ele começa decidindo sozinho", () => {
+    // A falta da IA principal é avisada no topo da página, não aqui (ver o bloco
+    // "sem a IA de sempre, em qualquer estado").
     montar(dados({ tem_ia_de_sempre: false }));
-    expect(
-      screen.getByText("O Jev não conversa com o cliente — falta a chave da sua IA principal."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/já começa decidindo sozinho/)).toBeInTheDocument();
   });
 });
 
@@ -248,8 +249,11 @@ describe("CartaoDoJev — (5) ligado, decidindo", () => {
   const decidindo = () =>
     dados({
       config: { ligado: true, modo: "decide" },
-      numeros: { decisoes: 1200, custo_cents: 0.21, latencia_media_ms: 361, reservas: 2 },
+      numeros: { decisoes: 1200, custo_cents: 0.21, latencia_media_ms: 361, reservas: 2, irritados: 7 },
     });
+
+  /** O valor que acompanha o rótulo na grade de números. */
+  const numero = (rotulo: string) => screen.getByText(rotulo).nextElementSibling?.textContent;
 
   it("mostra os números da semana, com o custo em casas que não viram zero", () => {
     montar(decidindo());
@@ -259,7 +263,35 @@ describe("CartaoDoJev — (5) ligado, decidindo", () => {
     // 0,21 centavo de dólar = US$ 0,0021 — com 2 casas seria "US$ 0,00".
     expect(numeros).toHaveTextContent(/US\$\s?0,0021/);
     expect(numeros).toHaveTextContent(/0,4\s?s/);
-    expect(numeros).toHaveTextContent(/2/);
+    expect(numero("Vezes que a IA de sempre cobriu o Jev")).toBe("2");
+    // O número que mostra o valor do Jev: quantos clientes irritados ele percebeu.
+    expect(numero("Clientes irritados percebidos")).toBe("7");
+    // "Mensagens medidas" segue o primeiro: é o que a spec do e2e lê.
+    expect(numeros.querySelector("dt")).toHaveTextContent("Mensagens medidas");
+  });
+
+  it("a chave que passou no teste se diz conferida, em palavras", () => {
+    montar(decidindo());
+    expect(screen.getByTestId("jev-chave-conferida")).toHaveTextContent("Chave conferida com a TypeSafe");
+  });
+
+  it("controle: chave recusada não se diz conferida", () => {
+    montar({ ...decidindo(), chave: { ...decidindo().chave, validada: false, erro_de_validacao: "auth_failed_401" } });
+    expect(screen.queryByTestId("jev-chave-conferida")).toBeNull();
+  });
+
+  it("o link para as decisões tem alvo de toque maior que o texto", () => {
+    montar(decidindo());
+    expect(screen.getByRole("link", { name: /Ver as decisões do Jev/ }).className).toMatch(/\binline-block\b.*\bpy-1\b/);
+  });
+
+  it("a grade de números é de uma coluna no celular", () => {
+    // No celular (375 px), em duas colunas "US$ 0,000049" passava da borda.
+    // jsdom não mede layout: a garantia aqui é a classe; a medida é da prova em tela.
+    montar(decidindo());
+    const classes = screen.getByTestId("jev-numeros").className.split(/\s+/);
+    expect(classes).toContain("grid-cols-1");
+    expect(classes.filter((c) => /^grid-cols-/.test(c))).toEqual(["grid-cols-1"]);
   });
 
   it("leva às decisões do Jev em Execuções, já filtradas", () => {
@@ -330,12 +362,32 @@ describe("CartaoDoJev — (6) sem a IA de sempre", () => {
     montar(dados({ config: { ligado: true, modo: "observacao" }, tem_ia_de_sempre: false }));
     expect(cartao()).toHaveAttribute("data-estado", "sozinho");
     expect(screen.getByText(/sem reserva/)).toBeInTheDocument();
-    expect(
-      screen.getByText("O Jev não conversa com o cliente — falta a chave da sua IA principal."),
-    ).toBeInTheDocument();
+    // O topo da página já avisa que falta a IA principal; repetido aqui, com o
+    // Jev funcionando, lia-se como erro dele (medido em campo).
+    expect(cartao()).not.toHaveTextContent(/falta a chave da sua IA principal/);
     expect(screen.queryByRole("button", { name: "Deixar o Jev decidir" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Voltar a só observar" })).toBeNull();
     expect(screen.getByRole("button", { name: "Desligar" })).toBeInTheDocument();
+  });
+});
+
+describe("CartaoDoJev — sem a IA de sempre, em qualquer estado", () => {
+  it.each([
+    ["pronto", dados({ tem_ia_de_sempre: false })],
+    [
+      "parado",
+      dados({
+        config: { ligado: true, modo: "decide" },
+        tem_ia_de_sempre: false,
+        chave: { validada: false, erro_de_validacao: "auth_failed_401" },
+      }),
+    ],
+    ["sozinho", dados({ config: { ligado: true, modo: "decide" }, tem_ia_de_sempre: false })],
+  ])("%s: nem o aviso repetido, nem o zero de reserva que nunca muda", (estado, d) => {
+    montar(d);
+    expect(cartao()).toHaveAttribute("data-estado", estado);
+    expect(cartao()).not.toHaveTextContent(/falta a chave da sua IA principal/);
+    expect(screen.queryByText("Vezes que a IA de sempre cobriu o Jev")).toBeNull();
   });
 });
 

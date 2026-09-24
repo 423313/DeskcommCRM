@@ -211,6 +211,7 @@ describe("GET /api/v1/ai/jev", () => {
       custo_incompleto: false,
       latencia_media_ms: null,
       reservas: 0,
+      irritados: 0,
       observacao: { dias: 30, comparadas: 0, concordaram: 0 },
     });
     expect(d.ultima_falha).toBeNull();
@@ -323,6 +324,24 @@ describe("GET /api/v1/ai/jev", () => {
     const dia = 24 * 60 * 60 * 1000;
     expect(Math.abs(desde("llm_calls") - (Date.now() - 7 * dia))).toBeLessThan(5_000);
     expect(Math.abs(desde("messages") - (Date.now() - 30 * dia))).toBeLessThan(5_000);
+    // A segunda leitura de mensagens é a dos clientes irritados: janela da semana.
+    const percebidas = estado.consultas.filter((x) => x.tabela === "messages")[1];
+    const par = percebidas?.gte.find(([col]) => col === "created_at");
+    expect(Math.abs(Date.parse(String(par?.[1])) - (Date.now() - 7 * dia))).toBeLessThan(5_000);
+  });
+
+  it("clientes irritados: conversas com a nota DO JEV abaixo do mesmo limiar da passagem para humano", async () => {
+    const T = DEFAULT_SENTIMENT_THRESHOLD;
+    estado.mensagens = [
+      { conversa: "c1", nota_do_jev: T - 0.2 },
+      { conversa: "c1", nota_do_jev: T - 0.1 }, // o mesmo cliente de novo: conta uma vez
+      { conversa: "c2", nota_do_jev: T - 0.01 }, // colado no corte, abaixo
+      { conversa: "c3", nota_do_jev: T }, // no corte não é "abaixo"
+      { conversa: "c4", nota_do_jev: T + 0.01 },
+      { conversa: "c5", nota_do_jev: null },
+    ];
+    const { corpo } = await ler();
+    expect(corpo.data.numeros.irritados).toBe(2);
   });
 
   it("falha que o Jev já superou (mediu depois dela) não aparece como última falha", async () => {

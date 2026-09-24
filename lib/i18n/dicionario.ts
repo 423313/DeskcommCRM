@@ -3433,6 +3433,8 @@ export const DICIONARIO: Traducoes = {
     es: "mensajes: los dos llamarían, o no, a una persona para la conversación.",
   },
   "Mensagens medidas": { es: "Mensajes medidos" },
+  "Chave conferida com a TypeSafe": { es: "Clave verificada con TypeSafe" },
+  "Clientes irritados percebidos": { es: "Clientes molestos detectados" },
   "Tempo médio": { es: "Tiempo promedio" },
   "Vezes que a IA de sempre cobriu o Jev": { es: "Veces que la IA de siempre cubrió a Jev" },
   "O Jev não conseguiu medir.": { es: "Jev no pudo medir." },

@@ -53,6 +53,8 @@ export interface DadosDoJev {
     custo_incompleto: boolean;
     latencia_media_ms: number | null;
     reservas: number;
+    /** Conversas em que a nota do Jev ficou abaixo do corte da passagem para humano. */
+    irritados: number;
     observacao: { dias: number; comparadas: number; concordaram: number };
   };
   ultima_falha: { motivo: string | null; em: string } | null;
@@ -175,13 +177,25 @@ export function CartaoDoJev({
 
   return (
     <Card className="mb-6 p-4" data-testid="cartao-do-jev" data-estado={estado}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold">{t("Jev — decisões rápidas")}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{t(dados.provedor.quandoUsar)}</p>
+      {/* No celular o selo desce para baixo do título e a descrição ocupa a
+          largura toda: lado a lado, o selo espremia o texto numa coluna
+          estreita (medido a 375 px). Do `sm` para cima, selo à direita. */}
+      <div className="grid gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <h2 className="text-base font-semibold">{t("Jev — decisões rápidas")}</h2>
+        <div className="sm:col-start-2 sm:row-start-1">
+          <SeloDoEstado estado={estado} />
         </div>
-        <SeloDoEstado estado={estado} />
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{t(dados.provedor.quandoUsar)}</p>
       </div>
+
+      {/* Depois de colar a chave nada confirmava que ela FUNCIONA: esta linha é
+          o resultado do teste, dito em palavras (o ✓ é enfeite). */}
+      {dados.chave.validada && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-success-fg" data-testid="jev-chave-conferida">
+          <span aria-hidden>✓</span>
+          {t("Chave conferida com a TypeSafe")}
+        </p>
+      )}
 
       {estado === "sem_chave" && <SemChave dados={dados} recarregar={recarregar} />}
 
@@ -193,14 +207,10 @@ export function CartaoDoJev({
 
       {estado === "pronto" && <ProntoParaLigar dados={dados} recarregar={recarregar} />}
 
-      {!dados.tem_ia_de_sempre && (
-        <p className="mt-3 rounded-md bg-warning-bg p-2 text-xs text-warning-fg" data-testid="jev-sem-ia">
-          {t("O Jev não conversa com o cliente — falta a chave da sua IA principal.")}{" "}
-          <Link className="underline underline-offset-4" href="/app/ai/credentials">
-            {t("Cadastrar uma chave")}
-          </Link>
-        </p>
-      )}
+      {/* A falta da IA principal NÃO é avisada aqui: o topo da página já a
+          avisa, e a linha de estado ("Decidindo sozinho — …") explica o efeito
+          no Jev. Repetida dentro do cartão, com o Jev funcionando, lia-se como
+          erro dele. */}
 
       {ligado && <Ligado dados={dados} estado={estado} recarregar={recarregar} />}
 
@@ -516,11 +526,14 @@ function Ligado({
         <p className="text-xs text-muted-foreground">
           {t("Nos últimos")} {n.dias} {t("dias")}
         </p>
+        {/* Uma coluna no celular: em duas, "US$ 0,000049" passava da borda do
+            cartão a 375 px. */}
         <dl
-          className="mt-2 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-3 sm:grid-cols-4"
+          className="mt-2 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-border pt-3 min-[420px]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-5"
           data-testid="jev-numeros"
         >
           <Numero rotulo={t("Mensagens medidas")} valor={inteiro.format(n.decisoes)} />
+          <Numero rotulo={t("Clientes irritados percebidos")} valor={inteiro.format(n.irritados)} />
           <Numero
             rotulo={t("Custo")}
             valor={n.custo_cents === null ? "—" : usd.format(n.custo_cents / 100)}
@@ -529,7 +542,8 @@ function Ligado({
             rotulo={t("Tempo médio")}
             valor={n.latencia_media_ms === null ? "—" : `${segundos.format(n.latencia_media_ms / 1000)} s`}
           />
-          {estado !== "sozinho" && (
+          {/* Sem IA de sempre não há quem cubra: um zero que nunca muda só confunde. */}
+          {dados.tem_ia_de_sempre && (
             <Numero rotulo={t("Vezes que a IA de sempre cobriu o Jev")} valor={inteiro.format(n.reservas)} />
           )}
         </dl>
@@ -552,8 +566,9 @@ function Ligado({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
+        {/* `py-1`: 28 px de alvo de toque (tinha 20), sem deixar de parecer link. */}
         <Link
-          className="text-sm underline underline-offset-4"
+          className="inline-block py-1 text-sm underline underline-offset-4"
           href={`/app/ai/runs?provider=${PROVEDOR_DO_JEV}`}
         >
           {t("Ver as decisões do Jev")}
@@ -600,7 +615,7 @@ function Numero({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
     <div>
       <dt className="text-xs text-muted-foreground">{rotulo}</dt>
-      <dd className="mt-0.5 font-mono text-lg">{valor}</dd>
+      <dd className="mt-0.5 font-mono text-lg break-words">{valor}</dd>
     </div>
   );
 }

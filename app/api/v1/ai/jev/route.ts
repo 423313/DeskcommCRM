@@ -110,16 +110,19 @@ function numerosDaSemana(linhas: readonly LinhaDaSemana[]) {
 }
 
 /**
- * Concordância em observação: as duas notas caíram do MESMO LADO do corte que
- * decide a passagem para humano? É a pergunta que importa antes de deixar o Jev
- * decidir — "chamou uma pessoa quando a IA de sempre chamaria".
- *
- * O corte é `DEFAULT_SENTIMENT_THRESHOLD` (`lib/ai/prompts/sentiment.ts:34`),
- * o mesmo que `workers/ai-sentiment-worker.ts:401` compara (`score < threshold`)
- * para emitir `ai.sentiment_alert`.
+ * A nota chamaria uma pessoa? O corte é `DEFAULT_SENTIMENT_THRESHOLD`
+ * (`lib/ai/prompts/sentiment.ts:34`), o mesmo que `workers/ai-sentiment-worker.ts`
+ * compara (`score < threshold`) para emitir `ai.sentiment_alert`.
  * ponytail: o limiar por agente (`config.sentiment_threshold`) não entra — não
  * tem tela que o grave hoje. Se ganhar, o worker passa a gravar o limiar usado
  * em `messages.metadata` e a conta lê de lá.
+ */
+const abaixo = (n: number) => n < DEFAULT_SENTIMENT_THRESHOLD;
+
+/**
+ * Concordância em observação: as duas notas caíram do MESMO LADO do corte que
+ * decide a passagem para humano? É a pergunta que importa antes de deixar o Jev
+ * decidir — "chamou uma pessoa quando a IA de sempre chamaria".
  */
 function concordancia(linhas: ReadonlyArray<{ nota: unknown; nota_do_jev: unknown }>) {
   const pares = linhas.flatMap((l) =>
@@ -127,12 +130,24 @@ function concordancia(linhas: ReadonlyArray<{ nota: unknown; nota_do_jev: unknow
       ? [[l.nota, l.nota_do_jev] as const]
       : [],
   );
-  const abaixo = (n: number) => n < DEFAULT_SENTIMENT_THRESHOLD;
   return {
     dias: DIAS_DA_CONCORDANCIA,
     comparadas: pares.length,
     concordaram: pares.filter(([ia, jev]) => abaixo(ia) === abaixo(jev)).length,
   };
+}
+
+/**
+ * "Clientes irritados percebidos": conversas em que a nota DO JEV ficou abaixo
+ * do corte da passagem para humano. A nota dele, e não a que decidiu: em
+ * observação quem decide é a IA de sempre, e o número do cartão ficaria em zero
+ * enquanto o Jev percebe a irritação do mesmo jeito. Conversa, e não mensagem:
+ * o cliente irritado que manda três mensagens é um cliente.
+ */
+function irritadosPercebidos(linhas: ReadonlyArray<{ conversa: unknown; nota_do_jev: unknown }>): number {
+  return new Set(
+    linhas.flatMap((l) => (typeof l.nota_do_jev === "number" && abaixo(l.nota_do_jev) ? [l.conversa] : [])),
+  ).size;
 }
 
 function configPublica(c: ConfigDoJev) {
@@ -172,7 +187,7 @@ export async function GET(): Promise<Response> {
     return { linhas, erro: null };
   };
 
-  const [orgRes, credsRes, semana, comparadasRes, iaDeSempre] = await Promise.all([
+  const [orgRes, credsRes, semana, comparadasRes, iaDeSempre, percebidasRes] = await Promise.all([
     db.from("organizations").select("settings").eq("id", org.orgId).maybeSingle(),
     db
       .from("ai_provider_credentials")
@@ -198,9 +213,24 @@ export async function GET(): Promise<Response> {
     resolverModeloDoPonto("sentiment_classify", org.orgId, DEFAULT_CLASSIFIER_MODEL, {
       naFaltaUsarOPadraoDaOrganizacao: true,
     }),
+    // ponytail: uma página (1000 mensagens medidas pelo Jev na semana); acima
+    // disso a conta sai das mais recentes. O agregado em SQL é o passo seguinte.
+    db
+      .from("messages")
+      .select(`conversa:conversation_id, nota_do_jev:metadata->${CHAVES_DO_CLIMA.notaDoJev}`)
+      .eq("organization_id", org.orgId)
+      .gte("created_at", diasAtras(DIAS_DOS_NUMEROS))
+      .not(`metadata->${CHAVES_DO_CLIMA.notaDoJev}`, "is", null)
+      .order("created_at", { ascending: false })
+      .limit(PAGINA),
   ]);
 
-  const erro = orgRes.error?.message ?? credsRes.error?.message ?? semana.erro ?? comparadasRes.error?.message;
+  const erro =
+    orgRes.error?.message ??
+    credsRes.error?.message ??
+    semana.erro ??
+    comparadasRes.error?.message ??
+    percebidasRes.error?.message;
   if (erro) return fail("query_failed", erro, 500, { requestId });
 
   const credenciais = credsRes.data ?? [];
@@ -232,7 +262,11 @@ export async function GET(): Promise<Response> {
       config: configPublica(lerConfigDoJev(orgRes.data?.settings)),
       tarefas: TAREFAS,
       tem_ia_de_sempre: iaDeSempre !== null,
-      numeros: { ...numeros, observacao: concordancia(comparadasRes.data ?? []) },
+      numeros: {
+        ...numeros,
+        irritados: irritadosPercebidos(percebidasRes.data ?? []),
+        observacao: concordancia(comparadasRes.data ?? []),
+      },
       ultima_falha,
       pode_editar: roleAtLeast(org.role, "admin"),
     },
