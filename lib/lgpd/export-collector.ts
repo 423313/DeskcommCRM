@@ -34,6 +34,12 @@ export interface ContactSnapshot {
   last_activity_at: string | null;
   /** Primeiro atendimento marcado. Sobrevive à anonimização: é registro de operação. */
   first_service_at: string | null;
+  /**
+   * Campos personalizados — onde os roteiros de atendimento gravam o que o
+   * cliente respondeu (CPF inclusive). A anonimização já os zera; sem esta
+   * linha o titular pedia acesso e não recebia o que o roteiro coletou.
+   */
+  custom_fields: Record<string, unknown>;
 }
 
 export interface ConsentRow {
@@ -686,6 +692,10 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         created_at: data.created_at,
         last_activity_at: data.last_activity_at ?? null,
         first_service_at: data.first_service_at ?? null,
+        custom_fields:
+          data.custom_fields && typeof data.custom_fields === "object" && !Array.isArray(data.custom_fields)
+            ? (data.custom_fields as Record<string, unknown>)
+            : {},
       };
     }
   }

@@ -227,6 +227,12 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
               <Text style={styles.label}>Anonimizado:</Text>
               <Text style={styles.value}>{data.contact.is_anonymized ? "Sim" : "Não"}</Text>
             </View>
+            {Object.entries(data.contact.custom_fields ?? {}).map(([chave, valor]) => (
+              <View key={chave} style={styles.row}>
+                <Text style={styles.label}>{chave}:</Text>
+                <Text style={styles.value}>{typeof valor === "string" ? valor : JSON.stringify(valor)}</Text>
+              </View>
+            ))}
           </View>
         ) : null}
 
