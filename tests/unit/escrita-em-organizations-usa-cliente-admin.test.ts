@@ -554,6 +554,37 @@ describe("toda escrita em `organizations` passa pelo cliente admin", () => {
           "{ const sessao = await createClient(); const args = [orgId, settings, sessao] as const; await aplicar(...args); }",
         esperado: ["cliente.update"],
       },
+      {
+        forma:
+          "closure com valor padrão escrita ANTES da local de SESSÃO homônima do admin do módulo " +
+          "(const vale para o bloco inteiro: a posição não devolve o nome ao módulo)",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const admin = createAdminClient();\n" +
+          "export async function b(orgId: string, settings: unknown) {\n" +
+          `  const run = async (cliente = admin) => { ${MUTA_PELO_CLIENTE_PASSADO} };\n` +
+          "  const admin = await createClient();\n" +
+          "  await run();\n" +
+          "}",
+        esperado: ["cliente.update"],
+      },
+      {
+        forma:
+          "closure escreve com um APELIDO do admin do módulo, sombreado depois no mesmo bloco " +
+          "por um cliente de SESSÃO",
+        codigo:
+          IMPORTA_A_FABRICA +
+          IMPORTA_A_SESSAO +
+          "const servico = createAdminClient();\n" +
+          "const cliente = servico;\n" +
+          "export async function b(orgId: string, settings: unknown) {\n" +
+          `  const run = async () => { ${MUTA_PELO_CLIENTE_PASSADO} };\n` +
+          "  const cliente = await createClient();\n" +
+          "  await run();\n" +
+          "}",
+        esperado: ["cliente.update"],
+      },
     ];
     for (const { forma, codigo, esperado = ["p.admin.update"] } of reprovados) {
       // `expect.soft` pelo mesmo motivo do CONTROLE verde: uma sabotagem por vez

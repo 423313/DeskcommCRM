@@ -851,17 +851,15 @@ export function declaracaoDoIdentificador(
           for (const decl of stmt.declarationList.declarations) {
             if (decl.name === id) continue;
             if (ts.isIdentifier(decl.name) && decl.name.text === nome) {
-              if (ts.isSourceFile(atual) || decl.pos <= id.pos) {
-                return decl;
-              }
+              // const/let valem para o bloco INTEIRO: a closure escrita antes da
+              // declaração alcança a do bloco, não a do módulo (a posição não decide).
+              return decl;
             }
             if (ts.isObjectBindingPattern(decl.name)) {
               for (const elem of decl.name.elements) {
                 if (elem.name === id) continue;
                 if (ts.isIdentifier(elem.name) && elem.name.text === nome) {
-                  if (ts.isSourceFile(atual) || elem.pos <= id.pos) {
-                    return elem;
-                  }
+                  return elem;
                 }
               }
             }
