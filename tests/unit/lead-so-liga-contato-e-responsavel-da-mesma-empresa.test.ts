@@ -135,6 +135,11 @@ const novo = (extra: Linha = {}) =>
   ({ pipeline_id: PIPELINE, stage_id: ETAPA, title: "Lead", tags: [], source: "manual", ...extra }) as never;
 
 const leadsGravados = () => escritas.filter((e) => e.tabela === "crm_leads");
+const primeiroLead = () => {
+  const [lead] = leadsGravados();
+  if (!lead) throw new Error("nenhuma escrita em crm_leads");
+  return lead;
+};
 
 beforeEach(() => {
   reiniciaBanco();
@@ -167,7 +172,7 @@ describe("createLeadHandler — contato", () => {
   it("contato da própria empresa: grava com o contato", async () => {
     await createLeadHandler(banco as never, ctx, novo({ contact_id: CONTATO_A }));
     expect(leadsGravados()).toHaveLength(1);
-    expect(leadsGravados()[0].valores).toMatchObject({ contact_id: CONTATO_A, organization_id: ORG_A });
+    expect(primeiroLead().valores).toMatchObject({ contact_id: CONTATO_A, organization_id: ORG_A });
   });
 });
 
@@ -185,7 +190,7 @@ describe("createLeadHandler — responsável", () => {
 
   it("atendente ativo da própria empresa: grava com o responsável", async () => {
     await createLeadHandler(banco as never, ctx, novo({ owner_user_id: ATENDENTE_A }));
-    expect(leadsGravados()[0].valores).toMatchObject({ owner_user_id: ATENDENTE_A, owner_kind: "user" });
+    expect(primeiroLead().valores).toMatchObject({ owner_user_id: ATENDENTE_A, owner_kind: "user" });
   });
 });
 
@@ -209,7 +214,7 @@ describe("updateLeadHandler", () => {
       contact_id: CONTATO_A,
       owner_user_id: ATENDENTE_A,
     } as never);
-    expect(leadsGravados()[0].valores).toMatchObject({ contact_id: CONTATO_A, owner_user_id: ATENDENTE_A });
+    expect(primeiroLead().valores).toMatchObject({ contact_id: CONTATO_A, owner_user_id: ATENDENTE_A });
   });
 
   it("reenviar o responsável que o lead JÁ tem (mesmo desligado) não trava a edição", async () => {
@@ -217,7 +222,7 @@ describe("updateLeadHandler", () => {
       title: "Negócio renomeado",
       owner_user_id: DESLIGADO_A,
     } as never);
-    expect(leadsGravados()[0].valores).toMatchObject({ title: "Negócio renomeado" });
+    expect(primeiroLead().valores).toMatchObject({ title: "Negócio renomeado" });
   });
 });
 
@@ -276,7 +281,7 @@ describe("clone para outro funil: o dono vem da ORIGEM", () => {
   it("dono desligado: o clone nasce SEM dono, e a linha do tempo diz por quê — nunca 422", async () => {
     await createLeadHandler(banco as never, ctx, montaPayloadDoClone(origem(DESLIGADO_A), etapa));
     expect(leadsGravados()).toHaveLength(1);
-    expect(leadsGravados()[0].valores).toMatchObject({
+    expect(primeiroLead().valores).toMatchObject({
       owner_user_id: null,
       owner_agent_id: null,
       owner_kind: null,
@@ -290,7 +295,7 @@ describe("clone para outro funil: o dono vem da ORIGEM", () => {
 
   it("dono ainda ativo: o clone mantém o dono, sem atividade extra", async () => {
     await createLeadHandler(banco as never, ctx, montaPayloadDoClone(origem(ATENDENTE_A), etapa));
-    expect(leadsGravados()[0].valores).toMatchObject({ owner_user_id: ATENDENTE_A, owner_kind: "user" });
+    expect(primeiroLead().valores).toMatchObject({ owner_user_id: ATENDENTE_A, owner_kind: "user" });
     expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
   });
 
