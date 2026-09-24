@@ -41,6 +41,17 @@ export function descreverErroDeValidacao(codigo: string | null): ErroDescrito {
     };
   }
 
+  // Outro 4xx (402 e afins): o provedor recusou, e o motivo mais comum fora a
+  // chave errada é a conta sem crédito. Afirmar só um dos dois seria chute; o
+  // código cru na tela ("provider_status_402") não diz nada a ninguém.
+  if (/^provider_status_4\d\d$/.test(codigo)) {
+    return {
+      frase: "O provedor recusou a chave. Confira se ela está inteira e se a conta no provedor tem crédito.",
+      chaveErrada: true,
+      generico: false,
+    };
+  }
+
   if (/^provider_status_5\d\d$/.test(codigo)) {
     return {
       frase: "O provedor está fora do ar. A chave pode estar certa; revalide mais tarde.",

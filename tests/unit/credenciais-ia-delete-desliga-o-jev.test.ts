@@ -46,7 +46,12 @@ function fakeAdmin() {
       const eq: Array<[string, unknown]> = [];
       const lista = () => {
         if (tabela === "ai_provider_credentials" && op === "select") {
-          return { data: estado.restantes, error: null };
+          // Aplica os filtros de igualdade: sem isto, a chave de OUTRA
+          // organização contaria como "sobra outra chave" sem ninguém ver.
+          return {
+            data: estado.restantes.filter((l) => eq.every(([col, v]) => l[col] === v)),
+            error: null,
+          };
         }
         return { data: tabela === "ai_agent_versions" ? [] : null, error: null };
       };
@@ -89,6 +94,7 @@ function fakeAdmin() {
 
 function chaveDoJev(over: Linha = {}): Linha {
   return {
+    organization_id: ORG,
     provider: "typesafe",
     is_active: true,
     validated_at: "2026-09-20T12:00:00.000Z",
@@ -167,6 +173,15 @@ describe("DELETE /api/v1/ai/credentials/:id — a chave do Jev", () => {
     expect(corpo.data.jev_desligado).toBe(false);
     expect(estado.escritasEmOrg).toEqual([]);
     expect(acoesAuditadas()).toEqual(["ai.credential_deleted"]);
+  });
+
+  it("a chave validada de OUTRA organização não segura o Jev desta ligado", async () => {
+    // Cliente admin passa por cima da RLS: o filtro de organização é a única
+    // cerca entre "sobrou chave" e "sobrou chave de outra empresa".
+    estado.restantes = [chaveDoJev({ organization_id: "99999999-9999-4999-8999-999999999999" })];
+    const { corpo } = await excluir();
+    expect(corpo.data.jev_desligado).toBe(true);
+    expect(estado.settings.jev).toMatchObject({ ligado: false });
   });
 
   it("o Jev já desligado: nada a desligar", async () => {

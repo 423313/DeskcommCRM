@@ -14,6 +14,17 @@ describe("descreverErroDeValidacao", () => {
     );
   });
 
+  it("outro 4xx (402, 404…) é recusa com frase, não código cru", () => {
+    const r = descreverErroDeValidacao("provider_status_402");
+    expect(r.generico).toBe(false);
+    expect(r.chaveErrada).toBe(true);
+    expect(r.frase).toBe(
+      "O provedor recusou a chave. Confira se ela está inteira e se a conta no provedor tem crédito.",
+    );
+    // O 429 continua com a frase própria.
+    expect(descreverErroDeValidacao("provider_status_429").frase).toMatch(/limitou/);
+  });
+
   it("5xx é provedor fora", () => {
     expect(descreverErroDeValidacao("provider_status_503").frase).toBe(
       "O provedor está fora do ar. A chave pode estar certa; revalide mais tarde.",

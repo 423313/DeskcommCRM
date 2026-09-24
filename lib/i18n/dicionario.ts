@@ -2229,6 +2229,9 @@ export const DICIONARIO: Traducoes = {
   "O provedor recusou a chave. Confira se copiou inteira ou gere uma nova.": {
     es: "El proveedor rechazó la clave. Verifica que la hayas copiado completa o genera una nueva.",
   },
+  "O provedor recusou a chave. Confira se ela está inteira e se a conta no provedor tem crédito.": {
+    es: "El proveedor rechazó la clave. Revisa que esté completa y que la cuenta en el proveedor tenga crédito.",
+  },
   "O provedor limitou as chamadas desta chave. Tente de novo em alguns minutos.": {
     es: "El proveedor limitó las llamadas de esta clave. Inténtalo de nuevo en unos minutos.",
   },
@@ -2850,8 +2853,8 @@ export const DICIONARIO: Traducoes = {
   "Ver habilidades disponíveis": { es: "Ver habilidades disponibles" },
   "Ver sugestões de melhoria": { es: "Ver sugerencias de mejora" },
   "Ver só as falhas": { es: "Ver solo las fallas" },
-  "Você ainda não cadastrou nenhuma chave de provedor. Enquanto isso, tudo usa a chave que veio na instalação.": {
-    es: "Todavía no registraste ninguna clave de proveedor. Mientras tanto, todo usa la clave que vino con la instalación.",
+  "Você ainda não cadastrou a chave da sua IA principal, a que conversa com os clientes.": {
+    es: "Todavía no registraste la clave de tu IA principal, la que conversa con los clientes.",
   },
   "Volume de texto processado por dia": { es: "Volumen de texto procesado por día" },
   "a cada 100": { es: "por cada 100" },
@@ -3313,6 +3316,39 @@ export const DICIONARIO: Traducoes = {
     es: "Este aviso se cierra solo cuando Jev vuelva a medir.",
   },
   // O cartão do Jev em IA › Provedores (`app/app/ai/providers/_components/CartaoDoJev.tsx`).
+  "Enquanto isso, o atendimento usa a chave que veio na instalação.": {
+    es: "Mientras tanto, la atención usa la clave que vino con la instalación.",
+  },
+  "Não consegui carregar o cartão agora.": {
+    es: "No pude cargar la tarjeta ahora.",
+  },
+  "Não consegui falar com o servidor. Confira a internet e tente de novo.": {
+    es: "No pude comunicarme con el servidor. Revisa la conexión e inténtalo de nuevo.",
+  },
+  "Para pegar a chave, você cria uma conta na TypeSafe AI e põe crédito: cada mensagem medida custa uma fração de centavo de dólar, cobrada lá. A chave começa com": {
+    es: "Para obtener la clave, creas una cuenta en TypeSafe AI y cargas crédito: cada mensaje medido cuesta una fracción de centavo de dólar, cobrada allí. La clave empieza con",
+  },
+  "A chave está sendo testada. Se esta mensagem não sumir em alguns segundos, recarregue a página.": {
+    es: "La clave se está probando. Si este mensaje no desaparece en unos segundos, recarga la página.",
+  },
+  "Não consegui testar a chave. Tente de novo em instantes.": {
+    es: "No pude probar la clave. Inténtalo de nuevo en unos instantes.",
+  },
+  "Não consegui testar a chave agora. Tente de novo em instantes.": {
+    es: "No pude probar la clave ahora. Inténtalo de nuevo en unos instantes.",
+  },
+  "Pegar uma chave nova na TypeSafe": {
+    es: "Obtener una clave nueva en TypeSafe",
+  },
+  "Sem uma IA principal que meça o clima, ele já começa decidindo sozinho: não há com quem comparar nem quem cubra uma falha dele.": {
+    es: "Sin una IA principal que mida el clima, empieza decidiendo solo: no hay con quién comparar ni quién cubra una falla suya.",
+  },
+  "Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.": {
+    es: "Activado, pero detenido: Jev solo vuelve a medir cuando la clave pase la prueba.",
+  },
+  "Parte das medições veio de uma versão do Jev sem preço conhecido: o custo mostrado soma só as outras.": {
+    es: "Parte de las mediciones vino de una versión de Jev sin precio conocido: el costo mostrado suma solo las demás.",
+  },
   "Jev — decisões rápidas": { es: "Jev: decisiones rápidas" },
   "Não consegui carregar o cartão do Jev": { es: "No pude cargar la tarjeta de Jev" },
   Observando: { es: "Observando" },
@@ -3326,8 +3362,8 @@ export const DICIONARIO: Traducoes = {
   "Só quem administra a empresa pode mudar o Jev.": {
     es: "Solo quien administra la empresa puede cambiar Jev.",
   },
-  "A chave ainda está sendo testada. Leva alguns segundos.": {
-    es: "La clave todavía se está probando. Tarda unos segundos.",
+  "A chave está sendo testada. Se esta mensagem não sumir em alguns segundos, clique em “Testar de novo”.": {
+    es: "La clave se está probando. Si este mensaje no desaparece en unos segundos, haz clic en “Probar de nuevo”.",
   },
   "O Jev está ligado, mas sem chave ativa: enquanto isso, ele não mede nada.": {
     es: "Jev está activado, pero sin clave activa: mientras tanto, no mide nada.",
@@ -3361,8 +3397,8 @@ export const DICIONARIO: Traducoes = {
   "Decidindo — o Jev mede primeiro, e a sua IA de sempre só entra se ele não responder.": {
     es: "Decidiendo: Jev mide primero, y tu IA de siempre solo entra si él no responde.",
   },
-  "Decidindo sozinho — a empresa não tem a IA de sempre, então o Jev mede o clima sem reserva.": {
-    es: "Decidiendo solo: la empresa no tiene la IA de siempre, así que Jev mide el clima sin respaldo.",
+  "Decidindo sozinho — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva.": {
+    es: "Decidiendo solo: la empresa todavía no tiene una IA principal que mida el clima, así que Jev mide sin respaldo.",
   },
   "Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.": {
     es: "Todavía no hay mensajes medidos por los dos. La comparación aparece aquí en cuanto los haya.",

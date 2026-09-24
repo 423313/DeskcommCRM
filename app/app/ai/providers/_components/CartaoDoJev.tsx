@@ -47,7 +47,10 @@ export interface DadosDoJev {
   numeros: {
     dias: number;
     decisoes: number;
-    custo_cents: number;
+    /** `null` quando nenhuma medição tem preço conhecido. */
+    custo_cents: number | null;
+    /** Alguma medição veio de uma versão sem preço na tabela: a soma é parcial. */
+    custo_incompleto: boolean;
     latencia_media_ms: number | null;
     reservas: number;
     observacao: { dias: number; comparadas: number; concordaram: number };
@@ -56,10 +59,20 @@ export interface DadosDoJev {
   pode_editar: boolean;
 }
 
-type Estado = "sem_chave" | "chave_nao_validada" | "pronto" | "observando" | "decidindo" | "sozinho";
+type Estado =
+  | "sem_chave"
+  | "chave_nao_validada"
+  | "pronto"
+  | "observando"
+  | "decidindo"
+  | "sozinho"
+  | "parado";
 
 function estadoDoJev(d: DadosDoJev): Estado {
   if (d.config.ligado) {
+    // Ligado sem chave que passou no teste, o Jev não mede nada (o worker só
+    // usa chave validada). Um selo "Decidindo" aqui afirmaria o contrário.
+    if (!d.chave.validada) return "parado";
     // Sem a IA de sempre não há com quem comparar nem quem cubra: o worker
     // deixa o Jev decidir qualquer que seja o modo gravado.
     if (!d.tem_ia_de_sempre) return "sozinho";
@@ -75,12 +88,30 @@ export function jevNoPonto(
   d: DadosDoJev | null,
   pontoId: string,
 ): "observacao" | "decide" | "sozinho" | null {
-  if (!d?.config.ligado || !d.tarefas.some((t) => t.id === pontoId)) return null;
+  if (!d?.config.ligado || !d.chave.validada || !d.tarefas.some((t) => t.id === pontoId)) return null;
   if (!d.tem_ia_de_sempre) return "sozinho";
   return d.config.modo;
 }
 
 type Resposta = { data?: DadosDoJev; error?: { message?: string } };
+
+/**
+ * Uma leitura da rota. A recusa dela já vem escrita para leigo; o que o
+ * navegador diz numa falha de rede ("Failed to fetch") é inglês e não diz nada,
+ * e um corpo sem mensagem (proxy) não tem o que mostrar além do fato.
+ */
+async function buscarDadosDoJev(
+  t: (texto: string) => string,
+): Promise<{ dados: DadosDoJev } | { erro: string }> {
+  try {
+    const res = await fetch("/api/v1/ai/jev");
+    const json = (await res.json().catch(() => null)) as Resposta | null;
+    if (res.ok && json?.data) return { dados: json.data };
+    return { erro: json?.error?.message ? t(json.error.message) : t("Não consegui carregar o cartão agora.") };
+  } catch {
+    return { erro: t("Não consegui falar com o servidor. Confira a internet e tente de novo.") };
+  }
+}
 
 /** Carrega o cartão. Mora no painel porque o cartão do ponto também o lê. */
 export function useDadosDoJev() {
@@ -88,26 +119,28 @@ export function useDadosDoJev() {
   const [dados, setDados] = useState<DadosDoJev | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
-  const recarregar = useCallback(async () => {
-    try {
-      const res = await fetch("/api/v1/ai/jev");
-      const json = (await res.json().catch(() => null)) as Resposta | null;
-      if (!res.ok || !json?.data) {
-        setErro(
-          json?.error?.message ? t(json.error.message) : `${t("não consegui carregar")} (${res.status})`,
-        );
-        return;
-      }
-      setErro(null);
-      setDados(json.data);
-    } catch (e) {
-      setErro(e instanceof Error ? t(e.message) : t("não consegui falar com o servidor"));
+  const aplicar = useCallback((r: { dados: DadosDoJev } | { erro: string }) => {
+    if ("erro" in r) {
+      setErro(r.erro);
+      return;
     }
-  }, [t]);
+    setErro(null);
+    setDados(r.dados);
+  }, []);
+
+  const recarregar = useCallback(async () => aplicar(await buscarDadosDoJev(t)), [aplicar, t]);
 
   useEffect(() => {
-    void recarregar();
-  }, [recarregar]);
+    // A primeira leitura resolve DEPOIS do efeito (nada de setState no corpo
+    // dele), e a resposta de um cartão já desmontado é descartada.
+    let vivo = true;
+    void buscarDadosDoJev(t).then((r) => {
+      if (vivo) aplicar(r);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [aplicar, t]);
 
   return { dados, erro, recarregar };
 }
@@ -183,6 +216,7 @@ function SeloDoEstado({ estado }: { estado: Estado }) {
   if (estado === "observando") return <Badge variant="info">{t("Observando")}</Badge>;
   if (estado === "decidindo") return <Badge variant="success">{t("Decidindo")}</Badge>;
   if (estado === "sozinho") return <Badge variant="warning">{t("Decidindo sozinho")}</Badge>;
+  if (estado === "parado") return <Badge variant="warning">{t("Parado")}</Badge>;
   return <Badge variant="neutral">{t("Desligado")}</Badge>;
 }
 
@@ -208,9 +242,11 @@ function SemChave({ dados, recarregar }: { dados: DadosDoJev; recarregar: () => 
             providerInicial={PROVEDOR_DO_JEV}
             aoSalvar={() => {
               void recarregar();
-              // O teste da chave roda depois da resposta (ver a rota de criar):
-              // a segunda leitura pega o resultado sem a pessoa recarregar a tela.
+              // O teste da chave roda depois da resposta (ver a rota de criar), com
+              // teto de 5 s: as releituras pegam o resultado sem a pessoa
+              // recarregar a tela, até no teste mais lento.
               setTimeout(() => void recarregar(), 3000);
+              setTimeout(() => void recarregar(), 8000);
             }}
           />
         </>
@@ -219,6 +255,14 @@ function SemChave({ dados, recarregar }: { dados: DadosDoJev; recarregar: () => 
           {t("Só quem administra a empresa pode colar a chave e ligar o Jev.")}
         </p>
       )}
+      {/* O Jev é pago à parte, numa conta da TypeSafe: sem esta frase a pessoa
+          só descobria o crédito pela falha. */}
+      <p className="w-full text-xs text-muted-foreground" data-testid="jev-como-pegar-a-chave">
+        {t(
+          "Para pegar a chave, você cria uma conta na TypeSafe AI e põe crédito: cada mensagem medida custa uma fração de centavo de dólar, cobrada lá. A chave começa com",
+        )}{" "}
+        <span className="font-mono">{dados.provedor.prefixoDaChave}</span>
+      </p>
     </div>
   );
 }
@@ -230,9 +274,11 @@ function ProblemaDaChave({ dados, recarregar }: { dados: DadosDoJev; recarregar:
   const motivo = !dados.chave.existe
     ? t("O Jev está ligado, mas sem chave ativa: enquanto isso, ele não mede nada.")
     : !dados.chave.erro_de_validacao
-      ? t("A chave ainda está sendo testada. Leva alguns segundos.")
+      ? dados.pode_editar
+        ? t("A chave está sendo testada. Se esta mensagem não sumir em alguns segundos, clique em “Testar de novo”.")
+        : t("A chave está sendo testada. Se esta mensagem não sumir em alguns segundos, recarregue a página.")
       : erro.generico
-        ? `${t("Falha na validação")} (${dados.chave.erro_de_validacao}).`
+        ? t("Não consegui testar a chave. Tente de novo em instantes.")
         : t(erro.frase);
 
   async function testar() {
@@ -247,7 +293,13 @@ function ProblemaDaChave({ dados, recarregar }: { dados: DadosDoJev; recarregar:
         data?: { validated_at: string | null };
         error?: { message?: string };
       } | null;
-      if (!res.ok) toast.error(json?.error?.message ? t(json.error.message) : t("não consegui salvar"));
+      if (!res.ok) {
+        toast.error(
+          json?.error?.message
+            ? t(json.error.message)
+            : t("Não consegui testar a chave agora. Tente de novo em instantes."),
+        );
+      }
       else if (json?.data?.validated_at) toast.success(t("A chave passou no teste."));
       else toast.error(t("A chave não passou no teste."));
       await recarregar();
@@ -260,12 +312,24 @@ function ProblemaDaChave({ dados, recarregar }: { dados: DadosDoJev; recarregar:
 
   return (
     <div className="mt-4 rounded-md bg-warning-bg p-3 text-sm text-warning-fg" data-testid="jev-chave">
-      <p>{motivo}</p>
+      {/* O código cru fica no `title`, para quem for investigar — nunca na frase. */}
+      <p title={dados.chave.erro_de_validacao ?? undefined}>{motivo}</p>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         {dados.pode_editar && dados.chave.credencial_id && (
           <Button size="sm" variant="outline" disabled={testando} onClick={() => void testar()}>
             {testando ? t("Testando…") : t("Testar de novo")}
           </Button>
+        )}
+        {/* "Gere uma nova" precisa de caminho: a chave recusada leva à TypeSafe. */}
+        {erro.chaveErrada && (
+          <a
+            className="text-xs underline underline-offset-4"
+            href={dados.provedor.ondePegarAChave}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("Pegar uma chave nova na TypeSafe")}
+          </a>
         )}
         <Link className="text-xs underline underline-offset-4" href="/app/ai/credentials">
           {t("Trocar a chave em Credenciais")}
@@ -334,6 +398,13 @@ function ProntoParaLigar({ dados, recarregar }: { dados: DadosDoJev; recarregar:
                   "Ele começa só observando: a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.",
                 )
               : t("Ele volta decidindo, como estava antes de ser desligado.")}
+          </p>
+        )}
+        {!dados.tem_ia_de_sempre && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t(
+              "Sem uma IA principal que meça o clima, ele já começa decidindo sozinho: não há com quem comparar nem quem cubra uma falha dele.",
+            )}
           </p>
         )}
       </div>
@@ -420,7 +491,9 @@ function Ligado({
         {estado === "decidindo" &&
           t("Decidindo — o Jev mede primeiro, e a sua IA de sempre só entra se ele não responder.")}
         {estado === "sozinho" &&
-          t("Decidindo sozinho — a empresa não tem a IA de sempre, então o Jev mede o clima sem reserva.")}
+          t("Decidindo sozinho — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva.")}
+        {estado === "parado" &&
+          t("Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.")}
       </p>
 
       {estado === "observando" && (
@@ -448,7 +521,10 @@ function Ligado({
           data-testid="jev-numeros"
         >
           <Numero rotulo={t("Mensagens medidas")} valor={inteiro.format(n.decisoes)} />
-          <Numero rotulo={t("Custo")} valor={usd.format(n.custo_cents / 100)} />
+          <Numero
+            rotulo={t("Custo")}
+            valor={n.custo_cents === null ? "—" : usd.format(n.custo_cents / 100)}
+          />
           <Numero
             rotulo={t("Tempo médio")}
             valor={n.latencia_media_ms === null ? "—" : `${segundos.format(n.latencia_media_ms / 1000)} s`}
@@ -457,6 +533,13 @@ function Ligado({
             <Numero rotulo={t("Vezes que a IA de sempre cobriu o Jev")} valor={inteiro.format(n.reservas)} />
           )}
         </dl>
+        {n.custo_incompleto && (
+          <p className="mt-2 text-xs text-muted-foreground" data-testid="jev-custo-parcial">
+            {t(
+              "Parte das medições veio de uma versão do Jev sem preço conhecido: o custo mostrado soma só as outras.",
+            )}
+          </p>
+        )}
       </div>
 
       {falha && (

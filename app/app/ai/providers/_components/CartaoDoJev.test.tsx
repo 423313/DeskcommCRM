@@ -5,12 +5,12 @@
  * e "por que ele decide sozinho?". Os dados vêm de `GET /api/v1/ai/jev`.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
-import { CartaoDoJev, jevNoPonto, type DadosDoJev } from "./CartaoDoJev";
+import { CartaoDoJev, jevNoPonto, useDadosDoJev, type DadosDoJev } from "./CartaoDoJev";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/app/app/ai/credentials/_actions", () => ({ refreshCredentialsView: vi.fn() }));
@@ -53,6 +53,7 @@ function dados(extra: Parcial = {}): DadosDoJev {
       dias: 7,
       decisoes: 0,
       custo_cents: 0,
+      custo_incompleto: false,
       latencia_media_ms: null,
       reservas: 0,
       observacao: { dias: 30, comparadas: 0, concordaram: 0 },
@@ -117,6 +118,8 @@ describe("CartaoDoJev — (1) sem chave", () => {
     expect(pegar).toHaveAttribute("href", "https://console.typesafe.ai/keys");
     expect(pegar).toHaveAttribute("target", "_blank");
     expect(screen.getByRole("button", { name: "Colar a chave" })).toBeInTheDocument();
+    // O Jev é pago à parte: a pessoa sabe antes de ir à TypeSafe.
+    expect(screen.getByTestId("jev-como-pegar-a-chave")).toHaveTextContent(/põe crédito/);
   });
 
   it("'Colar a chave' abre o cadastro já no Jev, e não na Anthropic", () => {
@@ -144,6 +147,11 @@ describe("CartaoDoJev — (2) chave que não passou no teste", () => {
     montar(dados({ chave: { validada: false, erro_de_validacao: "auth_failed_401" } }));
     expect(cartao()).toHaveAttribute("data-estado", "chave_nao_validada");
     expect(screen.getByText(/O provedor recusou a chave/)).toBeInTheDocument();
+    // "Gere uma nova" com o caminho para gerar.
+    expect(screen.getByRole("link", { name: "Pegar uma chave nova na TypeSafe" })).toHaveAttribute(
+      "href",
+      "https://console.typesafe.ai/keys",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Testar de novo" }));
     await waitFor(() => expect(recarregar).toHaveBeenCalled());
@@ -154,8 +162,19 @@ describe("CartaoDoJev — (2) chave que não passou no teste", () => {
 
   it("chave recém-colada, sem resultado ainda, não é tratada como recusada", () => {
     montar(dados({ chave: { validada: false, erro_de_validacao: null } }));
-    expect(screen.getByText(/A chave ainda está sendo testada/)).toBeInTheDocument();
+    // A frase não promete que se resolve sozinha: aponta o botão.
+    expect(screen.getByText(/A chave está sendo testada\. .*Testar de novo/)).toBeInTheDocument();
     expect(screen.queryByText(/recusou/)).toBeNull();
+  });
+
+  it("código sem tradução não vai para a frase: fica só no title", () => {
+    montar(dados({ chave: { validada: false, erro_de_validacao: "SyntaxError" } }));
+    const caixa = screen.getByTestId("jev-chave");
+    expect(caixa).not.toHaveTextContent("SyntaxError");
+    expect(screen.getByText("Não consegui testar a chave. Tente de novo em instantes.")).toHaveAttribute(
+      "title",
+      "SyntaxError",
+    );
   });
 });
 
@@ -274,6 +293,28 @@ describe("CartaoDoJev — (5) ligado, decidindo", () => {
     expect(screen.getByRole("button", { name: "Testar de novo" })).toBeInTheDocument();
   });
 
+  it("ligado com a chave recusada: selo 'Parado', nunca 'Decidindo'", () => {
+    // O worker só usa chave validada: com esta, o Jev não mede nada.
+    montar({
+      ...decidindo(),
+      chave: { ...decidindo().chave, validada: false, erro_de_validacao: "auth_failed_401" },
+    });
+    expect(cartao()).toHaveAttribute("data-estado", "parado");
+    expect(screen.getByText("Parado")).toBeInTheDocument();
+    expect(screen.queryByText("Decidindo")).toBeNull();
+    expect(screen.queryByText(/o Jev mede primeiro/)).toBeNull();
+    expect(screen.getByText(/Ligado, mas parado/)).toBeInTheDocument();
+  });
+
+  it("custo sem preço conhecido: traço, e o aviso de conta parcial", () => {
+    montar({
+      ...decidindo(),
+      numeros: { ...decidindo().numeros, custo_cents: null, custo_incompleto: true },
+    });
+    expect(screen.getByTestId("jev-numeros")).not.toHaveTextContent(/US\$\s?0,00/);
+    expect(screen.getByTestId("jev-custo-parcial")).toBeInTheDocument();
+  });
+
   it("ligado sem chave ativa (desativada em Credenciais) não finge que mede", () => {
     montar({
       ...decidindo(),
@@ -332,5 +373,23 @@ describe("jevNoPonto — a linha do cartão do ponto", () => {
     expect(
       jevNoPonto(dados({ config: { ligado: true }, tem_ia_de_sempre: false }), "sentiment_classify"),
     ).toBe("sozinho");
+    // Parado (chave sem passar no teste): o ponto não diz que o Jev mede.
+    expect(jevNoPonto(dados({ config: { ligado: true }, chave: { validada: false } }), "sentiment_classify")).toBeNull();
+  });
+});
+
+describe("useDadosDoJev — falha de rede", () => {
+  it("vira frase em português, não o inglês do navegador", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    const { result } = renderHook(() => useDadosDoJev(), {
+      wrapper: ({ children }) => <IdiomaProvider locale="pt-BR">{children}</IdiomaProvider>,
+    });
+    await waitFor(() => expect(result.current.erro).not.toBeNull());
+    expect(result.current.erro).toBe("Não consegui falar com o servidor. Confira a internet e tente de novo.");
   });
 });

@@ -67,9 +67,16 @@ function numerosDaSemana(linhas: readonly LinhaDaSemana[]) {
   const doJev = linhas.filter((l) => l.provider === PROVEDOR_DO_JEV);
   const medidas = doJev.filter((l) => l.status === "ok");
   const latencias = medidas.flatMap((l) => (l.latency_ms === null ? [] : [l.latency_ms]));
-  // Soma como o SUM do SQL: linha sem preço (`null`, versão fora da tabela)
-  // não vira zero inventado — fica fora da conta.
-  const custo = doJev.reduce((soma, l) => soma + (l.cost_cents === null ? 0 : Number(l.cost_cents)), 0);
+  // Linha sem preço (`null`, versão que o fornecedor devolveu fora da tabela)
+  // fica fora da soma e AVISA que a soma está incompleta; sem nenhuma linha com
+  // preço, o custo é desconhecido (`null`), como no SUM do SQL — nunca um zero
+  // inventado ao lado de N medições.
+  const comPreco = doJev.filter((l) => l.cost_cents !== null);
+  const custo =
+    comPreco.length === 0 && doJev.length > 0
+      ? null
+      : comPreco.reduce((soma, l) => soma + Number(l.cost_cents), 0);
+  const custoIncompleto = comPreco.length < doJev.length;
   // A mais recente pela DATA, não pela posição: a ordem da leitura existe para
   // a paginação, e mudar a ordem não pode trocar a falha que o cartão mostra.
   const maisNova = (atual: LinhaDaSemana | null, l: LinhaDaSemana) =>
@@ -88,6 +95,7 @@ function numerosDaSemana(linhas: readonly LinhaDaSemana[]) {
       dias: DIAS_DOS_NUMEROS,
       decisoes: medidas.length,
       custo_cents: custo,
+      custo_incompleto: custoIncompleto,
       latencia_media_ms:
         latencias.length === 0
           ? null

@@ -42,6 +42,7 @@ interface Consulta {
   cliente: "admin" | "sessao";
   tabela: string;
   eq: Array<[string, unknown]>;
+  gte: Array<[string, unknown]>;
   range: [number, number] | null;
   patch: Linha | null;
 }
@@ -63,7 +64,7 @@ const MAX_ROWS = 1000;
 function cliente(tipo: Consulta["cliente"]) {
   return {
     from(tabela: string) {
-      const c: Consulta = { cliente: tipo, tabela, eq: [], range: null, patch: null };
+      const c: Consulta = { cliente: tipo, tabela, eq: [], gte: [], range: null, patch: null };
       estado.consultas.push(c);
       const linhasDaTabela = (): Linha[] => {
         const base =
@@ -79,7 +80,10 @@ function cliente(tipo: Consulta["cliente"]) {
         select: () => chain,
         not: () => chain,
         or: () => chain,
-        gte: () => chain,
+        gte: (col: string, v: unknown) => {
+          c.gte.push([col, v]);
+          return chain;
+        },
         order: () => chain,
         limit: () => chain,
         eq: (col: string, v: unknown) => {
@@ -110,6 +114,7 @@ function cliente(tipo: Consulta["cliente"]) {
 function credencial(over: Linha = {}): Linha {
   return {
     id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    organization_id: ORG,
     label: "Jev da loja",
     provider: "typesafe",
     is_active: true,
@@ -203,6 +208,7 @@ describe("GET /api/v1/ai/jev", () => {
       dias: 7,
       decisoes: 0,
       custo_cents: 0,
+      custo_incompleto: false,
       latencia_media_ms: null,
       reservas: 0,
       observacao: { dias: 30, comparadas: 0, concordaram: 0 },
@@ -289,12 +295,34 @@ describe("GET /api/v1/ai/jev", () => {
     const n = corpo.data.numeros;
     expect(n.decisoes).toBe(3);
     expect(n.custo_cents).toBeCloseTo(0.00126, 10);
+    // A linha sem preço fica fora da soma e a soma se declara incompleta.
+    expect(n.custo_incompleto).toBe(true);
     expect(n.latencia_media_ms).toBe(400);
     expect(n.reservas).toBe(1);
     expect(corpo.data.ultima_falha).toEqual({
       motivo: "jev_credencial_invalida",
       em: "2026-09-22T13:00:00.000Z",
     });
+  });
+
+  it("nenhuma medição com preço: o custo é desconhecido, não um zero ao lado de N decisões", async () => {
+    estado.llmCalls = [chamada({ cost_cents: null }), chamada({ cost_cents: null })];
+    const { corpo } = await ler();
+    expect(corpo.data.numeros).toMatchObject({ decisoes: 2, custo_cents: null, custo_incompleto: true });
+  });
+
+  it("as janelas: 7 dias para os números, 30 para a concordância", async () => {
+    // O dublê não filtra por data: sem esta conferência, apagar o filtro deixaria
+    // o cartão dizendo "nos últimos 7 dias" com o histórico inteiro.
+    await ler();
+    const desde = (tabela: string) => {
+      const c = estado.consultas.find((x) => x.tabela === tabela);
+      const par = c?.gte.find(([col]) => col === "created_at");
+      return par ? Date.parse(String(par[1])) : NaN;
+    };
+    const dia = 24 * 60 * 60 * 1000;
+    expect(Math.abs(desde("llm_calls") - (Date.now() - 7 * dia))).toBeLessThan(5_000);
+    expect(Math.abs(desde("messages") - (Date.now() - 30 * dia))).toBeLessThan(5_000);
   });
 
   it("falha que o Jev já superou (mediu depois dela) não aparece como última falha", async () => {
@@ -326,10 +354,13 @@ describe("GET /api/v1/ai/jev", () => {
       { nota: T + 0.5, nota_do_jev: T - 0.2 }, // só o Jev chamaria
       { nota: T - 0.01, nota_do_jev: T + 0.01 }, // um de cada lado do corte
       { nota: T, nota_do_jev: T + 0.3 }, // no corte não é "abaixo": nenhum chamaria
+      // Colado nos dois lados do corte: qualquer limiar diferente do real (um
+      // 0,5 "neutro" digitado na rota) muda a contagem.
+      { nota: T + 0.02, nota_do_jev: T - 0.02 },
       { nota: 0.5, nota_do_jev: null }, // sem par, não entra
     ];
     const { corpo } = await ler();
-    expect(corpo.data.numeros.observacao).toEqual({ dias: 30, comparadas: 4, concordaram: 2 });
+    expect(corpo.data.numeros.observacao).toEqual({ dias: 30, comparadas: 5, concordaram: 2 });
     const consulta = estado.consultas.find((c) => c.tabela === "messages");
     expect(consulta?.eq).toContainEqual(["metadata->>sentiment_engine", "llm"]);
   });
@@ -348,6 +379,16 @@ describe("PATCH /api/v1/ai/jev", () => {
 
   it("ligar sem chave validada é recusado com código próprio", async () => {
     estado.credenciais = [credencial({ validated_at: null })];
+    const { status, corpo } = await mudar({ ligado: true, aceite_lgpd: true });
+    expect(status).toBe(422);
+    expect(corpo.error.code).toBe("jev_exige_chave_validada");
+    expect(escritas()).toEqual([]);
+  });
+
+  it("a chave validada de OUTRA organização não liga o Jev desta", async () => {
+    // A leitura é pelo cliente admin, que passa por cima da RLS: o filtro de
+    // organização é a única cerca, e sem este caso apagá-lo passava verde.
+    estado.credenciais = [credencial({ organization_id: OUTRA_ORG })];
     const { status, corpo } = await mudar({ ligado: true, aceite_lgpd: true });
     expect(status).toBe(422);
     expect(corpo.error.code).toBe("jev_exige_chave_validada");

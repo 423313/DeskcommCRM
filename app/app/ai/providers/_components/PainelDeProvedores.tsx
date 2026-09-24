@@ -94,6 +94,8 @@ interface Dados {
   pontos: Ponto[];
   provedores: Provedor[];
   credenciais: Credencial[];
+  /** Há chave de IA no `.env` da instalação (`lerAmbiente`). */
+  instalacaoTemChave: boolean;
   modelos: Modelo[];
   padrao: { provider: string; defaultModel: string | null };
   podeEditar: boolean;
@@ -136,8 +138,9 @@ export function PainelDeProvedores() {
       }
       setErro(null);
       setDados(json?.data as Dados);
-    } catch (e) {
-      setErro(e instanceof Error ? t(e.message) : t("não consegui falar com o servidor"));
+    } catch {
+      // A mensagem do navegador ("Failed to fetch") é inglês e não diz nada.
+      setErro(t("não consegui falar com o servidor"));
     }
   }, [t]);
 
@@ -191,9 +194,10 @@ export function PainelDeProvedores() {
       {semChave && (
         <Card className="mb-6 border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
           <p className="text-sm">
-            {t(
-              "Você ainda não cadastrou nenhuma chave de provedor. Enquanto isso, tudo usa a chave que veio na instalação.",
-            )}{" "}
+            {t("Você ainda não cadastrou a chave da sua IA principal, a que conversa com os clientes.")}{" "}
+            {/* Só é verdade quando a instalação tem chave; sem ela, a frase
+                contradizia o cartão do Jev logo abaixo. */}
+            {dados.instalacaoTemChave && t("Enquanto isso, o atendimento usa a chave que veio na instalação.")}{" "}
             <Link className="underline underline-offset-4" href="/app/ai/credentials">
               {t("Cadastrar uma chave")}
             </Link>
