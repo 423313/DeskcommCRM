@@ -135,7 +135,10 @@ const servidor = http.createServer(async (req, res) => {
 
     return responder(res, 404, { error_type: "not_found", message: `rota desconhecida: ${url.pathname}` });
   } catch (erro) {
-    return responder(res, 500, { error_type: "erro_no_duble", message: String(erro?.message ?? erro) });
+    // O detalhe fica no log deste processo (a spec imprime a saída do dublê);
+    // a resposta HTTP não carrega mensagem nem pilha de erro.
+    console.error("[duble-jev] falhou ao responder:", erro);
+    return responder(res, 500, { error_type: "erro_no_duble", message: "o dublê falhou — veja o log dele" });
   }
 });
 

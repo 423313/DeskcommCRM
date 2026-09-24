@@ -55,6 +55,20 @@ function baseDoServidor(): string {
 
 let orgId = "";
 
+/**
+ * Vazio = o default do produto (a API real). Qualquer outro valor só vale se a
+ * ORIGEM for exatamente a da TypeSafe: comparar prefixo de texto aceitaria
+ * `https://api.typesafe.ai.outro-host.com`, e um verde ali provaria outro servidor.
+ */
+function apontaParaAApiReal(base: string): boolean {
+  if (base === "") return true;
+  try {
+    return new URL(base).origin === "https://api.typesafe.ai";
+  } catch {
+    return false;
+  }
+}
+
 test.describe("Jev — contra a API de verdade", () => {
   test.describe.configure({ timeout: 240_000 });
 
@@ -65,7 +79,7 @@ test.describe("Jev — contra a API de verdade", () => {
     // Falha alto em vez de pular: com a chave em mãos e o servidor apontado
     // para o dublê, um verde provaria o dublê, não a API.
     expect(
-      base === "" || base.startsWith("https://api.typesafe.ai"),
+      apontaParaAApiReal(base),
       `o servidor sob teste aponta o Jev para ${base}. Deixe JEV_API_BASE_URL= vazio no .env.e2e ` +
         "e suba o servidor de novo (o cabeçalho desta spec tem a receita).",
     ).toBe(true);
