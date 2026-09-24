@@ -285,13 +285,16 @@ describe("CartaoDoJev — (5) ligado, decidindo", () => {
     expect(screen.getByRole("link", { name: /Ver as decisões do Jev/ }).className).toMatch(/\binline-block\b.*\bpy-1\b/);
   });
 
-  it("a grade de números é de uma coluna no celular", () => {
-    // No celular (375 px), em duas colunas "US$ 0,000049" passava da borda.
-    // jsdom não mede layout: a garantia aqui é a classe; a medida é da prova em tela.
+  it("a grade de números acompanha a largura do cartão, não a da tela", () => {
+    // A 375 px, duas colunas punham "US$ 0,000049" fora do cartão; num tablet
+    // com a barra lateral aberta, três colunas de 117 px o partiam em duas
+    // linhas. Colunas por breakpoint de TELA erram nos dois casos; jsdom não
+    // mede layout, então a garantia aqui é a classe e a medida é da prova em tela.
     montar(decidindo());
     const classes = screen.getByTestId("jev-numeros").className.split(/\s+/);
-    expect(classes).toContain("grid-cols-1");
-    expect(classes.filter((c) => /^grid-cols-/.test(c))).toEqual(["grid-cols-1"]);
+    expect(classes.filter((c) => /grid-cols-/.test(c))).toEqual([
+      "grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]",
+    ]);
   });
 
   it("leva às decisões do Jev em Execuções, já filtradas", () => {

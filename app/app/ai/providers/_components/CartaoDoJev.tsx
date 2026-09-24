@@ -526,10 +526,12 @@ function Ligado({
         <p className="text-xs text-muted-foreground">
           {t("Nos últimos")} {n.dias} {t("dias")}
         </p>
-        {/* Uma coluna no celular: em duas, "US$ 0,000049" passava da borda do
-            cartão a 375 px. */}
+        {/* As colunas seguem a largura do CARTÃO, não a da tela: com a barra
+            lateral aberta, um tablet de 800 px dava 3 colunas de 117 px e
+            partia "US$ 0,000049" (130 px) em duas linhas. 9rem cabe o número
+            mais largo; abaixo disso a coluna desce para a linha seguinte. */}
         <dl
-          className="mt-2 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-border pt-3 min-[420px]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-5"
+          className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-x-6 gap-y-3 border-t border-border pt-3"
           data-testid="jev-numeros"
         >
           <Numero rotulo={t("Mensagens medidas")} valor={inteiro.format(n.decisoes)} />
