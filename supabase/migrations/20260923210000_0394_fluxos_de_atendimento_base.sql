@@ -49,6 +49,11 @@
 --    roteiro de atendimento só existe como 'coletando' (ou terminal), e
 --    'coletando' só existe em roteiro de atendimento.
 --
+-- 7. A superfície é IMUTÁVEL depois de criada (`trg_superficie_do_fluxo_imutavel`)
+--    e roteiro só tem gatilho manual (CHECK `followup_flow_pointers_roteiro_so_manual`)
+--    — revisão adversarial: sem isso, um viewer mudava pelo PostgREST a superfície
+--    de um fluxo de silêncio e a varredura de silêncio abortava a cada tick.
+--
 -- Idempotente, sem BEGIN/COMMIT. Nenhum dado existente é reescrito: os valores
 -- novos só ampliam conjuntos aceitos.
 
@@ -164,5 +169,45 @@ create trigger trg_enrollment_superficie_coerente
   before insert or update of status, pointer_id on public.followup_enrollments
   for each row
   execute function public.fn_enrollment_superficie_coerente();
+
+-- A superfície de um fluxo é IMUTÁVEL depois de criado, e roteiro de atendimento
+-- só tem gatilho manual (revisão adversarial do #1559). A policy de
+-- `followup_flow_pointers` é só de tenant: qualquer membro da empresa, até
+-- viewer, faria pelo PostgREST `update ... set surface = 'atendimento'` num
+-- fluxo de silêncio ativo — e o `trg_enrollment_superficie_coerente` passaria a
+-- recusar (23514) cada inscrição da varredura. E um PATCH de gatilho levaria um
+-- roteiro publicado de Manual para Silêncio. As duas portas fecham no BANCO.
+-- Nenhuma linha antes da 0394 pode ter 'atendimento' (o CHECK de conjunto o
+-- recusava), então o CHECK abaixo não tem dado a corrigir.
+alter table public.followup_flow_pointers
+  drop constraint if exists followup_flow_pointers_roteiro_so_manual;
+alter table public.followup_flow_pointers
+  add constraint followup_flow_pointers_roteiro_so_manual
+  check (surface <> 'atendimento' or coalesce(trigger_config->>'kind', 'manual') = 'manual');
+
+create or replace function public.fn_superficie_do_fluxo_imutavel()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if new.surface is distinct from old.surface then
+    raise exception 'a superfície de um fluxo não muda depois de criado (% → %)', old.surface, new.surface
+      using errcode = '23514';
+  end if;
+  return new;
+end
+$$;
+
+revoke all on function public.fn_superficie_do_fluxo_imutavel() from public;
+revoke execute on function public.fn_superficie_do_fluxo_imutavel() from anon;
+revoke execute on function public.fn_superficie_do_fluxo_imutavel() from authenticated;
+
+drop trigger if exists trg_superficie_do_fluxo_imutavel on public.followup_flow_pointers;
+create trigger trg_superficie_do_fluxo_imutavel
+  before update of surface on public.followup_flow_pointers
+  for each row
+  execute function public.fn_superficie_do_fluxo_imutavel();
 
 notify pgrst, 'reload schema';

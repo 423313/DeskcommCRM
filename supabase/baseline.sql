@@ -14101,6 +14101,34 @@ update public.lead_state_transitions t set contact_id = c.is_merged_into from pu
 update public.cron_jobs           t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.lead_notes          t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.before_send_traces  t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
+-- Roteiro de atendimento vivo ('coletando', 0394): UM por contato
+-- (`idx_followup_enrollments_um_roteiro_coletando`). Reapontar sem deduplicar
+-- daria 23505 quando os dois contatos fundidos têm roteiro vivo — e este bloco
+-- roda de novo a cada `update.sh`. Fica o mais NOVO; o excedente é encerrado,
+-- com o evento na trilha. Idempotente: encerrado deixa de ser 'coletando'.
+with vivos as (
+  select e.id, e.organization_id, e.current_node_id,
+         row_number() over (
+           partition by e.organization_id, coalesce(c.is_merged_into, c.id)
+           order by e.started_at desc, e.id desc
+         ) as posicao
+    from public.followup_enrollments e
+    join public.contacts c on c.id = e.contact_id and c.organization_id = e.organization_id
+   where e.status = 'coletando'
+),
+encerrados as (
+  update public.followup_enrollments e
+     set status = 'cancelled', cancel_reason = 'nono_digito_merge', completed_at = now(), updated_at = now()
+    from vivos v
+   where e.id = v.id and v.posicao > 1
+  returning e.id, e.organization_id, e.current_node_id
+)
+insert into public.followup_enrollment_events
+  (organization_id, enrollment_id, node_id, event_type, payload, idempotency_key)
+select organization_id, id, current_node_id, 'roteiro_cancelado',
+       '{"motivo":"nono_digito_merge"}'::jsonb, 'roteiro_cancelado:nono_digito_merge'
+  from encerrados
+on conflict do nothing;
 update public.followup_enrollments t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.demandas            t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.contact_field_proposals t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
@@ -36866,6 +36894,46 @@ create trigger trg_enrollment_superficie_coerente
   before insert or update of status, pointer_id on public.followup_enrollments
   for each row
   execute function public.fn_enrollment_superficie_coerente();
+
+-- A superfície de um fluxo é IMUTÁVEL depois de criado, e roteiro de atendimento
+-- só tem gatilho manual (revisão adversarial do #1559). A policy de
+-- `followup_flow_pointers` é só de tenant: qualquer membro da empresa, até
+-- viewer, faria pelo PostgREST `update ... set surface = 'atendimento'` num
+-- fluxo de silêncio ativo — e o `trg_enrollment_superficie_coerente` passaria a
+-- recusar (23514) cada inscrição da varredura. E um PATCH de gatilho levaria um
+-- roteiro publicado de Manual para Silêncio. As duas portas fecham no BANCO.
+-- Nenhuma linha antes da 0394 pode ter 'atendimento' (o CHECK de conjunto o
+-- recusava), então o CHECK abaixo não tem dado a corrigir.
+alter table public.followup_flow_pointers
+  drop constraint if exists followup_flow_pointers_roteiro_so_manual;
+alter table public.followup_flow_pointers
+  add constraint followup_flow_pointers_roteiro_so_manual
+  check (surface <> 'atendimento' or coalesce(trigger_config->>'kind', 'manual') = 'manual');
+
+create or replace function public.fn_superficie_do_fluxo_imutavel()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if new.surface is distinct from old.surface then
+    raise exception 'a superfície de um fluxo não muda depois de criado (% → %)', old.surface, new.surface
+      using errcode = '23514';
+  end if;
+  return new;
+end
+$$;
+
+revoke all on function public.fn_superficie_do_fluxo_imutavel() from public;
+revoke execute on function public.fn_superficie_do_fluxo_imutavel() from anon;
+revoke execute on function public.fn_superficie_do_fluxo_imutavel() from authenticated;
+
+drop trigger if exists trg_superficie_do_fluxo_imutavel on public.followup_flow_pointers;
+create trigger trg_superficie_do_fluxo_imutavel
+  before update of surface on public.followup_flow_pointers
+  for each row
+  execute function public.fn_superficie_do_fluxo_imutavel();
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

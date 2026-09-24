@@ -237,6 +237,9 @@ export const EVENTOS_DO_ROTEIRO = [
   "roteiro_pergunta_feita",
   "roteiro_concluido",
   "roteiro_encadeou",
+  // Emitido só pelo banco hoje: a fusão por nono dígito encerra o roteiro vivo
+  // excedente (baseline, bloco da 0198). O PR 2 o usa no handoff e na expiração.
+  "roteiro_cancelado",
 ] as const;
 export type EventoDoRoteiro = (typeof EVENTOS_DO_ROTEIRO)[number];
 
@@ -252,6 +255,7 @@ export interface PayloadDoEvento {
   esgotadas?: string[];
   proximo_fluxo?: string;
   proximo_enrollment_id?: string;
+  motivo?: string;
 }
 
 /**

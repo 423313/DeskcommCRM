@@ -192,6 +192,32 @@ por invariante novo que roda os dois caminhos (`fn_lgpd_anonymize_contact` e
   `indefinido`. Passa a usar `auxModelArgs` do turno, a regra dos outros auxiliares.
 - **Bloco do turno mandava chamar `flow_collect`**, ferramenta que não existe aqui (D5).
 
+### D13 — Revisão adversarial do PR 1 (head c0659740b)
+
+Consertado no próprio PR 1:
+- **Bloqueador:** a policy de `followup_flow_pointers` é só de tenant; um viewer mudava
+  pelo PostgREST a superfície de um fluxo de silêncio ativo para `atendimento`, o
+  `trg_enrollment_superficie_coerente` recusava cada inscrição e a varredura de silêncio
+  abortava a cada tick — para todas as empresas depois daquele pointer. Três cortes:
+  (a) os cinco carregadores de pointer do relógio pulam `atendimento`; (b) try por
+  pointer na varredura (`pointers_failed`); (c) no banco, superfície imutável
+  (`trg_superficie_do_fluxo_imutavel`) e roteiro só com gatilho manual (CHECK
+  `followup_flow_pointers_roteiro_so_manual`); o PATCH devolve 422 legível.
+- **update.sh:** a fusão por nono dígito (bloco da 0198) reapontava `followup_enrollments`
+  sem deduplicar o roteiro vivo; fica o mais novo, o excedente é encerrado com evento
+  `roteiro_cancelado`.
+
+Registrado para o PR 2:
+- `moduloLigado` sem memo: +1 leitura de `platform_config` por turno de inbound.
+- `updateModuloDaInstalacao` já aceita `fluxos_atendimento` (o `z.enum` vem de
+  `MODULOS_OPCIONAIS`). Não há botão na tela até o PR 3, e ligar antes só ativa o motor
+  para roteiros criados pela API. Documentado aqui; se o titular preferir, o PR 2 recusa
+  ligar até o PR 3.
+- `coletando` fora das listas `ENROLLMENT_STATUSES`, do 409 de cancelar, do
+  `outcome-stats` e do `EnrollmentStatus` do motor.
+- O validador roda antes da reivindicação da mensagem: um retry paga a chamada de modelo
+  de novo (a gravação continua idempotente).
+
 ## Foco de revisão (o que nenhum teste de tarefa cobre por acaso)
 
 1. Mensagem de "pare" / pedido de humano que contém palavra-gatilho → nenhum roteiro nasce
