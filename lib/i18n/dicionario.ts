@@ -8312,6 +8312,7 @@ export const DICIONARIO: Traducoes = {
   "O assistente prometeu algo ao cliente e ninguém ficou responsável": {
     es: "El asistente prometió algo al cliente y nadie quedó a cargo",
   },
+  "promessas ao cliente sem ninguém responsável": { es: "promesas al cliente sin nadie a cargo" },
   "Nesta conversa o assistente combinou algo com o cliente. Ele ainda não tem nenhuma capacidade marcada para registrar isso no sistema, então nada foi agendado nem anotado. Abra a conversa para ver o que foi combinado — e, na tela do assistente, marque o que ele pode fazer.": {
     es: "En esta conversación el asistente acordó algo con el cliente. Como aún no tiene ninguna capacidad marcada para registrarlo en el sistema, no se programó ni se anotó nada. Abre la conversación para ver qué se acordó y, en la pantalla del asistente, marca lo que puede hacer.",
   },
