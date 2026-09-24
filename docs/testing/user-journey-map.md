@@ -167,6 +167,29 @@ buildado ainda. Esta linha muda quando a primeira rodada da parte 5 medir.
 6. **O filtro `?provider=` de Execuções** era afirmado no cabeçalho da rota e não
    existia (`4a38195fc`).
 
+### Achados da prova em campo (2026-09-23, instalação zerada, chave real do Jev)
+
+Dirigida pela tela como leigo; capturas fora do repo (bancada do coordenador). Os
+consertos estão em commits próprios desta branch — procure pelas palavras abaixo em
+`git log main..HEAD`.
+
+1. **A spec abortava o próprio cadastro da chave** — recarregava a página logo depois
+   de "Salvar e validar", e o `POST` saía com status -1. Agora espera a resposta e o
+   cartão mudar sozinho.
+2. **Aviso do Jev fechado sem `resolved_at`**, fora da convenção da Central.
+3. **"Usada em" sumia depois de trocar a chave** até recarregar: vinha de uma foto
+   tirada no servidor com a chave nova ainda em teste. Hoje sai da lista viva.
+4. **O "Nome" obrigatório barrava quem colava só a chave.** Opcional; vazio vira o
+   nome do provedor.
+5. **⌘K ilegível no item destacado** (cinza sobre verde, 1,20:1) e a descrição de
+   Provedores cortada antes do "Jev". O "X" dos diálogos se anunciava "Close".
+6. **Cartão**: aviso de "falta a IA principal" repetido com o Jev funcionando, nada
+   dizendo que a chave foi conferida, sem número de valor ("Clientes irritados
+   percebidos"), um zero de reserva que nunca muda sem IA de sempre, cabeçalho e
+   números espremidos a 375 px, link com 20 px de alvo.
+7. **Execuções não dizia se o Jev decidiu ou observou**, e o motivo da passagem no
+   Inbox só atribuía ao Jev no resumo, não na frase em destaque.
+
 ## J4 — CRM e Pipelines `[P1]`
 
 | # | Caso | Expectativa |
