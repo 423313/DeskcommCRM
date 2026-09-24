@@ -1262,7 +1262,7 @@
       "id": "e106",
       "from": "sentimento",
       "to": "jevLlmCalls",
-      "label": "linha do Jev (origem jev) ou da reserva que o cobriu (reserva_do_jev)"
+      "label": "linha do Jev (origem jev quando ele decidiu, jev_observacao quando só observou) ou da reserva que o cobriu (reserva_do_jev)"
     },
     {
       "id": "e107",
