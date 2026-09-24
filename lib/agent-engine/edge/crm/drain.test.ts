@@ -150,6 +150,18 @@ it('espera da mídia: âncora é created_at (não sent_at) e só conta mídia co
 });
 
 /**
+ * Mídia que o worker PULA de propósito (vídeo com leitura desligada — o padrão)
+ * é gravada como `skipped` e não segura o turno. Antes ficava null para sempre,
+ * e "vídeo + texto" atrasava a resposta do texto até o teto de 120s.
+ */
+it('mídia skipped (vídeo com leitura desligada): turno segue sem esperar', async () => {
+  const calls: string[] = [];
+  process.env.__ESPERA__ = '1000';
+  await drainTick(poolFalso({ type: 'video', media_derived_status: 'skipped' }, calls), knobs, log);
+  expect(calls.some((s) => s.includes('job_queue'))).toBe(true);
+});
+
+/**
  * Catraca do teto (issue #543): 90s é o valor que o #530 teve de abandonar.
  *
  * O PR #530 subiu o teto de 45s para 120s, mas os dois casos que exercitam o
