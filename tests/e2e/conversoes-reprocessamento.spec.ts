@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { expect, test } from "@playwright/test";
@@ -130,6 +131,7 @@ test("captura Google: configure pela tela, recarregue e leve wbraid ao link do W
     .maybeSingle();
   if (erroAnterior) throw erroAnterior;
   const click = `teste-${randomUUID()}`;
+  let site: ReturnType<typeof createServer> | undefined;
   try {
     await page.goto("/app/settings/conversoes");
     const form = page.getByTestId("captura-google");
@@ -160,14 +162,26 @@ test("captura Google: configure pela tela, recarregue e leve wbraid ao link do W
       }),
     );
     const snippet = await page.getByTestId("script-do-site").locator("code").innerText();
-    await page.route("http://localhost:41739/**", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "text/html",
-        body: `<!doctype html><html><head>${snippet}</head><body><h1>Site de teste</h1><a href="/produto">Ver produto</a><a id="whatsapp" href="https://wa.me/5511999999999">WhatsApp</a></body></html>`,
-      }),
+    // Um documento criado só com route.fulfill não tem endereço de rede real:
+    // o Chromium pode impedir que ele carregue o script no loopback do app.
+    // Duas origens HTTP reais exercitam a instalação externa sem dispensar CORS.
+    site = createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(
+        `<!doctype html><html><head>${snippet}</head><body><h1>Site de teste</h1><a href="/produto">Ver produto</a><a id="whatsapp" href="https://wa.me/5511999999999">WhatsApp</a></body></html>`,
+      );
+    });
+    await new Promise<void>((resolve, reject) => {
+      site!.once("error", reject);
+      site!.listen(0, "127.0.0.1", resolve);
+    });
+    const address = site.address();
+    if (!address || typeof address === "string") throw new Error("Site de teste sem porta");
+    const asset = page.waitForResponse(
+      (response) => response.url() === new URL("/rastreio/v1.js", link).href,
     );
-    await page.goto(`http://localhost:41739/?wbraid=${click}&email=nao-capturar`);
+    await page.goto(`http://127.0.0.1:${address.port}/?wbraid=${click}&email=nao-capturar`);
+    expect((await asset).status()).toBe(200);
     await expect(page.locator("#whatsapp")).toHaveAttribute("href", `${link}?wbraid=${click}`);
     await page.getByRole("link", { name: "Ver produto", exact: true }).click();
     await expect(page.locator("#whatsapp")).toHaveAttribute("href", `${link}?wbraid=${click}`);
@@ -191,6 +205,11 @@ test("captura Google: configure pela tela, recarregue e leve wbraid ao link do W
     if (error) throw error;
     expect(ref).toEqual({ gclid: null, wbraid: click });
   } finally {
+    if (site?.listening) {
+      await new Promise<void>((resolve, reject) =>
+        site!.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
     await db.from("google_ads_click_refs").delete().eq("organization_id", org).eq("wbraid", click);
     if (anterior) await db.from("google_ads_landing_pages").upsert(anterior);
     else await db.from("google_ads_landing_pages").delete().eq("organization_id", org);
