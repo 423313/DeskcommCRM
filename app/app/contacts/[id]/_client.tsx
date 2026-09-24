@@ -34,6 +34,7 @@ import { TimelineView } from "@/components/contacts/TimelineView";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
+import { RoteirosDoContato } from "@/components/contacts/RoteirosDoContato";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { origemDoContato } from "@/lib/leads/origem-do-contato";
@@ -334,6 +335,9 @@ export function ContactDetailClient({ contactId }: Props) {
               </div>
             </dl>
           </Card>
+          <div className="mt-4">
+            <RoteirosDoContato contactId={contactId} />
+          </div>
         </TabsContent>
 
         <TabsContent value="timeline" className="mt-4">
