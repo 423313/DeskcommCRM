@@ -53,6 +53,9 @@ export const DICIONARIO: Traducoes = {
       es: "El botón del sitio debe transmitir el gclid, gbraid o wbraid recibido en la página. Una dirección fija sin estos parámetros no identifica el clic. Mantenga el código en el mensaje enviado a WhatsApp.",
     },
   "Lead qualificado (opcional)": { es: "Lead cualificado (opcional)" },
+  "Lead qualificado": { es: "Lead cualificado" },
+  Compra: { es: "Compra" },
+  "Captura de origem do Google Ads": { es: "Captura de origen de Google Ads" },
   "Ao entrar na etapa escolhida, o negócio envia uma qualificação sem valor monetário. A compra continua sendo enviada ao ganhar o negócio com valor. Cada evento é contado uma vez por negócio.":
     {
       es: "Al entrar en la etapa elegida, el negocio envía una cualificación sin valor monetario. La compra se sigue enviando al ganar el negocio con un valor. Cada evento se cuenta una vez por negocio.",
