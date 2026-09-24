@@ -24,10 +24,11 @@ type TipoDeFinalizacao = "nada" | "ia" | "skill" | "proximo_fluxo";
 
 /**
  * Rótulos LOCAIS de propósito: `ao_finalizar` é união de literais (discriminante
- * estrutural), não um enum de wire — o invariante de vocabulário não o cobra, e
- * três palavras usadas só aqui não justificam engordar o dicionário.
+ * estrutural), não um enum de wire — o invariante de vocabulário não o cobra.
+ * Passam por `t()` num `.map()`, que a varredura do i18n não enxerga: o
+ * `EndForm.test.tsx` cobra a tradução de cada um.
  */
-const ACOES_AO_FINALIZAR: ReadonlyArray<{ valor: TipoDeFinalizacao; rotulo: string }> = [
+export const ACOES_AO_FINALIZAR: ReadonlyArray<{ valor: TipoDeFinalizacao; rotulo: string }> = [
   { valor: "nada", rotulo: "Nada (só encerra)" },
   { valor: "ia", rotulo: "Devolver à IA" },
   { valor: "skill", rotulo: "Chamar uma skill" },

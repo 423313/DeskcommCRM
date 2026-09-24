@@ -11613,6 +11613,11 @@ export const DICIONARIO: Traducoes = {
   "Versão não encontrada para esta skill.": { es: "No se encontró esa versión para esta skill." },
   "Versão da skill não encontrada.": { es: "No se encontró la versión de la skill." },
   // ─── Roteiros de atendimento (PR 3 do port do #1130) ───
+  "Nada (só encerra)": { es: "Nada (solo termina)" },
+  "Devolver à IA": { es: "Devolver a la IA" },
+  "Chamar uma skill": { es: "Llamar una skill" },
+  "Iniciar outro fluxo de atendimento": { es: "Iniciar otro flujo de atención" },
+  "O fluxo de atendimento escolhido não existe nesta organização.": { es: "El flujo de atención elegido no existe en esta organización." },
   "Como usar os fluxos de atendimento (guia rápido)": { es: "Cómo usar los flujos de atención (guía rápida)" },
   "É um roteiro de perguntas que a IA segue durante a conversa: ela pergunta uma coisa por vez, entende a resposta e guarda o dado no cadastro do cliente.": { es: "Es un guion de preguntas que la IA sigue durante la conversación: pregunta una cosa a la vez, entiende la respuesta y guarda el dato en el registro del cliente." },
   "Montando o roteiro": { es: "Armando el guion" },

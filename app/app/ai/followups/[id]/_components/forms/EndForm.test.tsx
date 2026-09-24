@@ -10,7 +10,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { EndForm } from "./EndForm";
+import { DICIONARIO } from "@/lib/i18n/dicionario";
+
+import { ACOES_AO_FINALIZAR, EndForm } from "./EndForm";
 
 // A lista de fluxos para encadear vem de um hook de rede; o teste isola o
 // formulário e fixa a lista (um ativo, um rascunho — só o ativo é oferecido).
@@ -147,3 +149,10 @@ describe("EndForm por superfície (PR 3 do port do #1130)", () => {
   });
 });
 
+describe("tradução das ações ao concluir", () => {
+  // Saem de um `.map()` — a varredura de texto do i18n não as vê.
+  it("toda ação tem espanhol no dicionário", () => {
+    const sem = ACOES_AO_FINALIZAR.filter(({ rotulo }) => !DICIONARIO[rotulo]?.es).map((a) => a.rotulo);
+    expect(sem).toEqual([]);
+  });
+});
