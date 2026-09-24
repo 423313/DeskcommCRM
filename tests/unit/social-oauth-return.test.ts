@@ -1,4 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// A marca vem do banco (instalação → `.env` → padrão). Aqui ela é fixa: o teste
+// é da ponte, e sem o mock cada caso esperava ~7s pela leitura que não responde.
+// O nome traz `<` e `&` de propósito — ele entra no HTML e tem de sair escapado.
+vi.mock("@/lib/branding/saida", () => ({
+  marcaDaSaida: vi.fn(async () => ({ nome: "Marca <b>& Cia</b>" })),
+}));
 import { createHash } from "node:crypto";
 import { GET } from "@/app/auth/social-return/route";
 import { isPublicPath } from "@/lib/auth/public-paths";
@@ -26,6 +33,8 @@ describe("social OAuth return", () => {
     );
     expect(html).not.toContain("connect_token");
     expect(html).toContain("Voltando para suas conexões…");
+    expect(html).toContain("Marca &lt;b&gt;&amp; Cia&lt;/b&gt;");
+    expect(html).not.toContain("<b>");
   });
 
   // A tela de Redes sociais lê `error` e `connected` para dizer se a autorização
