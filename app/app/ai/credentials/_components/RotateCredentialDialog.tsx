@@ -112,25 +112,38 @@ export function RotateCredentialDialog({ open, onOpenChange, credential }: Props
       await qc.invalidateQueries({ queryKey: credentialsListQueryKey });
 
       if (chaveMudou) {
-        // Mesma janela do cadastro: o resultado da validação chega depois da
-        // resposta, então a tela busca uma vez para refletir no card.
-        setTimeout(async () => {
-          await qc.invalidateQueries({ queryKey: credentialsListQueryKey });
-          const fresh = qc.getQueryData<CredentialRow[]>(credentialsListQueryKey);
-          const atual = fresh?.find((c) => c.id === credential.id);
-          if (atual?.models_available != null) {
-            toast.success(
-              `${t("Validada")} — ${atual.models_available.length} ${t("modelos disponíveis.")}`,
-            );
-          } else if (atual?.validation_error) {
-            const erro = descreverErroDeValidacao(atual.validation_error, credential.provider);
-            toast.error(
-              erro.generico
-                ? `${t("Falha na validação")} (${atual.validation_error}).`
-                : t(erro.frase),
-            );
+        // O teste da chave nova roda depois da resposta. A lista só se relê
+        // sozinha enquanto a linha está "validando", e isso sai de
+        // `created_at`, que a troca não mexe: para ela, uma chave antiga
+        // trocada já está "sem validação". Uma releitura só, aos 3 s, perdia o
+        // teste que demorasse mais (o teto é 5 s por chamada, em
+        // lib/ai/provider-validators.ts) e o card — com o "Usada em" do Jev —
+        // só voltava recarregando a página. Relê até o veredito, por 10 s.
+        void (async () => {
+          for (const espera of [3000, 3000, 4000]) {
+            await new Promise((pronto) => setTimeout(pronto, espera));
+            await qc.invalidateQueries({ queryKey: credentialsListQueryKey });
+            const fresh = qc.getQueryData<CredentialRow[]>(credentialsListQueryKey);
+            const atual = fresh?.find((c) => c.id === credential.id);
+            if (atual?.validation_error) {
+              const erro = descreverErroDeValidacao(atual.validation_error, credential.provider);
+              toast.error(
+                erro.generico
+                  ? `${t("Falha na validação")} (${atual.validation_error}).`
+                  : t(erro.frase),
+              );
+              return;
+            }
+            if (atual?.validated_at) {
+              if (atual.models_available != null) {
+                toast.success(
+                  `${t("Validada")} — ${atual.models_available.length} ${t("modelos disponíveis.")}`,
+                );
+              }
+              return;
+            }
           }
-        }, 3000);
+        })();
       }
 
       await refreshCredentialsView();
