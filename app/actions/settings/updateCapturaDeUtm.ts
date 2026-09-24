@@ -94,16 +94,18 @@ export async function updateCapturaDeUtm(
 
   const tabela =
     parsed.data.plataforma === "google_ads" ? "google_ads_landing_pages" : "meta_ads_landing_pages";
-  const { error } = await admin.from(tabela).upsert(
-    {
-      organization_id: activeOrg.orgId,
-      whatsapp_e164: parsed.data.whatsapp_e164,
-      message_template: parsed.data.message_template,
-      enabled: parsed.data.enabled,
-      updated_by: authUser.id,
-    },
-    { onConflict: "organization_id" },
-  );
+  const valores = {
+    organization_id: activeOrg.orgId,
+    whatsapp_e164: parsed.data.whatsapp_e164,
+    message_template: parsed.data.message_template,
+    enabled: parsed.data.enabled,
+    updated_by: authUser.id,
+  };
+  // Tabelas literais permitem conferir cada alvo de conflito contra o schema real.
+  const { error } =
+    tabela === "google_ads_landing_pages"
+      ? await admin.from("google_ads_landing_pages").upsert(valores, { onConflict: "organization_id" })
+      : await admin.from("meta_ads_landing_pages").upsert(valores, { onConflict: "organization_id" });
 
   if (error) return { ok: false, error: "erro_ao_gravar", details: error.message };
 
