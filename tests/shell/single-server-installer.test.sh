@@ -110,13 +110,8 @@ check "piso irreconhecivel vale aberto (nao fecha por erro de digitacao)" \
   test "$(sync_signup_mode '' false so_convit)" = 'IGUAL|false'
 check "banco fora ou sem a coluna: nao mexe em nada, nem cai no piso" \
   test "$(sync_signup_mode __falha__ false so_convite)" = 'IGUAL|false'
-posicao_no_update() {  # a sincronizacao roda DEPOIS do checkout, com o kit novo
-  awk '/git checkout --quiet "\$TARGET_TAG"/ { depois = 1 }
-       depois && /^[[:space:]]*if sincronizar_signup_mode_do_gotrue; then/ { achou = 1 }
-       END { exit achou ? 0 : 1 }' "$ROOT_DIR/hostgator-setup-kit/update.sh"
-}
-check "update.sh sincroniza DEPOIS do checkout (senao o fechamento so chega no update seguinte)" \
-  posicao_no_update
+# O efeito na atualização (o update.sh ANTIGO chamando a função do kit NOVO) é
+# provado em tests/shell/single-server-operacao.test.sh, bloco (d).
 check "instalador entrega a sincronizacao ao Supabase" \
   grep -q 'sincronizar_signup_mode_do_gotrue' "$INSTALLER"
 check "override leva a chave oficial DISABLE_SIGNUP ao container auth" \

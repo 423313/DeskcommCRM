@@ -250,7 +250,20 @@ atualizar_supabase_single_server() {
       c_ylw "⚠ O Supabase não foi atualizado; segue na versão ${atual:-anterior}. A próxima atualização tenta de novo."
     fi
   fi
-  dc_supabase up -d --wait
+  dc_supabase up -d --wait || return 1
+  # #1653 — a sincronização do modo de cadastro mora AQUI, no corpo desta
+  # função, e não numa linha do update.sh. Na atualização que traz este
+  # conserto, quem executa é o update.sh ANTIGO: o bash segue lendo o arquivo
+  # que abriu, e uma linha nova no texto do update.sh nunca roda (medido: o
+  # `git checkout` troca o inode e o script antigo vai até o fim). O que o
+  # update.sh antigo faz depois do checkout é reler este `_common.sh` e chamar
+  # esta função — em toda versão com single-server (desde a v1.42.0) —, então
+  # é o corpo NOVO dela que roda já na primeira atualização. Falha aqui é
+  # aviso, não saída 1: o CRM segue atualizável.
+  if sincronizar_signup_mode_do_gotrue; then
+    dc_supabase up -d --no-deps auth >/dev/null 2>&1 || c_ylw "⚠ Não consegui reiniciar o auth do Supabase com o modo de cadastro (#1653)."
+  fi
+  return 0
 }
 
 # Nome FÍSICO do volume que guarda as sessões do WAHA. `docker compose config
