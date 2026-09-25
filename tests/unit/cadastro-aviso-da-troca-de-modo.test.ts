@@ -66,7 +66,8 @@ import { disableSignupEsperado } from "@/lib/auth/aviso-da-troca-de-modo";
 import Page from "@/app/admin/(protected)/cadastro/page";
 
 const TITULO = "A troca de modo ainda não chegou ao servidor.";
-const FRASE_DA_ISSUE = /A troca só vale para o cadastro direto depois da próxima atualização do servidor/;
+const FRASE_DA_ISSUE =
+  /A troca só vale para o cadastro direto depois da próxima atualização do servidor/;
 const COMANDO = "bash hostgator-setup-kit/update.sh";
 const CHAVE_DO_ROTULO = "Quem pode criar uma conta nesta instalação.";
 
