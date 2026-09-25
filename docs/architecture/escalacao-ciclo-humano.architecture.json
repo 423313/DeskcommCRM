@@ -1238,7 +1238,7 @@
       "id": "e102",
       "from": "jevConfig",
       "to": "sentimento",
-      "label": "o worker lê ligado e modo antes de medir"
+      "label": "o worker lê o estado da tarefa clima (interruptor, aceite, tarefas.clima ou modo) antes de medir"
     },
     {
       "id": "e103",

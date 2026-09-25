@@ -73,11 +73,21 @@ describe("estadoEfetivoDaTarefa", () => {
     expect(estadoEfetivoDaTarefa(c, TAREFA_DO_CLIMA)).toBe("desligada");
   });
 
-  it("valor ruim na tarefa ⇒ ela cai no `modo`, e o resto da config segue de pé", () => {
-    const c = config({ ligado: true, modo: "decide", aceite: ACEITE, tarefas: { clima: { estado: "turbo" } } });
-    expect(c.ligado).toBe(true);
-    expect(estadoEfetivoDaTarefa(c, TAREFA_DO_CLIMA)).toBe("decidindo");
-  });
+  /**
+   * Ilegível não é ausente. Ausente, a tarefa nova começaria observando
+   * sozinha (R7) e o clima seguiria o `modo` — e um estado que uma versão mais
+   * nova gravou (e esta não lê) voltaria a mandar mensagem para fora depois de
+   * um rollback, mesmo que lá ele quisesse dizer "desligada". Para TODA tarefa.
+   */
+  it.each(TAREFAS_DO_JEV.map((t) => [t.id, t] as const))(
+    "%s com valor ilegível ⇒ desligada, sem selo Novo, e o resto da config segue de pé",
+    (id, tarefa) => {
+      const c = config({ ligado: true, modo: "decide", aceite: ACEITE, tarefas: { [id]: { estado: "turbo" } } });
+      expect(c.ligado).toBe(true);
+      expect(estadoEfetivoDaTarefa(c, tarefa)).toBe("desligada");
+      expect(tarefaEhNova(c, tarefa)).toBe(false);
+    },
+  );
 
   it("tarefa nova de alcance 'mensagem' começa observando sozinha (DEC-012 #3), com o selo Novo", () => {
     const c = config({ ligado: true, modo: "decide", aceite: ACEITE });

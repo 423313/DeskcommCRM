@@ -31,6 +31,9 @@ describe("lerConfigDoJev", () => {
     // LGPD: ligar manda a mensagem do cliente para fora do país. Sem o aceite
     // do administrador, o JSON não liga nada — mesmo que diga `ligado: true`.
     ["ligado sem aceite", { ligado: true }],
+    // Não é "uma tarefa ruim": o contêiner delas nem é objeto (ver `./config.ts`).
+    ["tarefas não é objeto", { ligado: true, aceite: ACEITE, tarefas: "clima" }],
+    ["tarefas é lista", { ligado: true, aceite: ACEITE, tarefas: [{ estado: "decidindo" }] }],
   ])("%s → desligado, sem lançar", (_caso, jev) => {
     expect(lerConfigDoJev({ jev }).ligado).toBe(false);
   });
@@ -123,18 +126,32 @@ describe("gravarConfigDoJev", () => {
 
 describe("lerConfigDoJev — por tarefa", () => {
   const LIGADO = { ligado: true, modo: "decide", aceite: ACEITE };
+  const GRAVADA = { estado: "decidindo", alterado_em: "2026-09-24T10:00:00.000Z", alterado_por: ADMIN };
+  const LIXO = [
+    ["estado desconhecido", { estado: "turbo" }],
+    ["carimbo torto", { estado: "decidindo", alterado_por: "eu" }],
+    ["tarefa não é objeto", "decidindo"],
+    ["tarefa nula", null],
+  ] as const;
 
-  it.each([
-    ["estado desconhecido", { clima: { estado: "turbo" } }],
-    ["carimbo torto", { clima: { estado: "decidindo", alterado_por: "eu" } }],
-    ["tarefa não é objeto", { clima: "decidindo" }],
-    ["tarefas não é objeto", "clima"],
-  ])("%s: só a tarefa cai, o interruptor e o `modo` ficam de pé", (_caso, tarefas) => {
-    const c = lerConfigDoJev({ jev: { ...LIGADO, tarefas } });
-    expect(c.ligado).toBe(true);
-    expect(c.modo).toBe("decide");
-    expect(c.tarefas?.clima).toBeUndefined();
-  });
+  /**
+   * Para CADA chave, e com as outras gravadas: o valor ruim desliga só ela.
+   * Sem o `.catch` de uma chave, a config inteira cai no desligado — medido
+   * trocando o do clima por `.optional()`: este caso fica vermelho. Na segunda
+   * tarefa, as outras passam a existir e o "as outras intactas" passa a pesar
+   * sem ninguém editar o caso.
+   */
+  it.each(idDaTarefaSchema.options.flatMap((id) => LIXO.map(([caso, lixo]) => [id, caso, lixo] as const)))(
+    "%s com %s: só ela cai (desligada), o interruptor, o `modo` e as outras ficam de pé",
+    (id, _caso, lixo) => {
+      const outras = Object.fromEntries(idDaTarefaSchema.options.filter((o) => o !== id).map((o) => [o, GRAVADA]));
+      const c = lerConfigDoJev({ jev: { ...LIGADO, tarefas: { ...outras, [id]: lixo } } });
+      expect(c.ligado).toBe(true);
+      expect(c.modo).toBe("decide");
+      expect(c.aceite).toEqual(ACEITE);
+      expect(c.tarefas).toEqual({ ...outras, [id]: { estado: "desligada" } });
+    },
+  );
 
   it("a tarefa ruim não leva a boa junto: chave de versão mais nova é descartada, o clima fica", () => {
     const c = lerConfigDoJev({

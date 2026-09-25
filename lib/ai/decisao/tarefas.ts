@@ -12,7 +12,8 @@
  *  1. Interruptor mestre desligado (ou sem aceite) ⇒ desligada.
  *  2. A tarefa pede mais do que o aceite cobre (alcance) ⇒ desligada. Falha
  *     FECHADA: o aceite é o que a empresa consentiu mandar para fora do país.
- *  3. Estado gravado para a tarefa ⇒ ele.
+ *  3. Estado gravado para a tarefa ⇒ ele. Gravado e ilegível já chega aqui
+ *     como `desligada` (`./config.ts`): ilegível nunca é "ninguém escolheu".
  *  4. O clima sem estado gravado ⇒ o `modo` da onda 1.
  *  5. Tarefa nova, sem estado gravado, que cabe no aceite de "cada mensagem,
  *     sozinha" ⇒ observando (DEC-012 #3): observar não muda nada para o

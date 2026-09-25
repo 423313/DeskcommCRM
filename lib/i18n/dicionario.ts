@@ -3429,6 +3429,12 @@ export const DICIONARIO: Traducoes = {
   "Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.": {
     es: "Activado, pero detenido: Jev solo vuelve a medir cuando la clave pase la prueba.",
   },
+  "Ligado, mas com todas as tarefas desligadas: o Jev não mede nada até você religar uma abaixo.": {
+    es: "Activado, pero con todas las tareas desactivadas: Jev no mide nada hasta que reactives una abajo.",
+  },
+  "Em pausa": { es: "En pausa" },
+  Religar: { es: "Reactivar" },
+  "A tarefa foi religada.": { es: "La tarea se reactivó." },
   "Parte das medições veio de uma versão do Jev sem preço conhecido: o custo mostrado soma só as outras.": {
     es: "Parte de las mediciones vino de una versión de Jev sin precio conocido: el costo mostrado suma solo las demás.",
   },

@@ -18,11 +18,14 @@
  *
  * `ligado` continua o interruptor MESTRE. Cada tarefa (`./tarefas.ts`) tem o
  * seu estado em `tarefas.<id>`, e um valor ruim numa tarefa deixa só ELA
- * ausente — `.catch` por chave, e não um `z.record`, que recusaria o objeto
- * inteiro e desligaria o clima junto (medido no zod 4.6.5). O `modo` da onda 1
- * segue sendo o estado do clima quando `tarefas.clima` não existe: nada é
- * reescrito na leitura, e a imagem anterior, que não conhece `tarefas`, lê o
- * `modo` e descarta o resto sem erro.
+ * desligada — `.catch` por chave, e não um `z.record`, que recusaria o objeto
+ * inteiro e desligaria o clima junto (medido no zod 4.6.5). Ilegível é
+ * DESLIGADA, e não ausente: ausente, uma tarefa nova começa observando sozinha
+ * (`./tarefas.ts`, item 5), e um estado que uma versão mais nova gravou e esta
+ * não conhece — "desligada por outro nome" — voltaria a mandar mensagem para
+ * fora. O `modo` da onda 1 segue sendo o estado do clima quando
+ * `tarefas.clima` não existe: nada é reescrito na leitura, e a imagem
+ * anterior, que não conhece `tarefas`, lê o `modo` e descarta o resto sem erro.
  */
 import { z } from "zod";
 
@@ -47,10 +50,12 @@ export type TarefaGravada = z.infer<typeof tarefaGravadaSchema>;
 
 /**
  * Uma chave por tarefa de `TAREFAS_DO_JEV` — `./tarefas.test.ts` cobra os dois
- * lados. Chave desconhecida (de uma versão mais nova) é descartada.
+ * lados, e `./config.test.ts` cobra o `.catch` de CADA chave. Chave
+ * desconhecida (de uma versão mais nova) é descartada.
  */
+const tarefaIlegivel = (): TarefaGravada => ({ estado: "desligada" });
 const tarefasSchema = z.object({
-  clima: tarefaGravadaSchema.optional().catch(undefined),
+  clima: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
 });
 
 export const idDaTarefaSchema = tarefasSchema.keyof();
@@ -78,7 +83,13 @@ export const configDoJevSchema = z
       })
       .nullable()
       .default(null),
-    tarefas: tarefasSchema.optional().catch(undefined),
+    /**
+     * Sem `.catch` aqui de propósito: o `tarefas` que nem é objeto não é "uma
+     * tarefa ruim", é config ilegível, e cai no desligado como o aceite torto.
+     * Um `.catch` neste nível também esconderia a falta do `.catch` de uma
+     * chave — o objeto inteiro sumiria, e com ele as tarefas boas.
+     */
+    tarefas: tarefasSchema.optional(),
     alterado_em: z.string().datetime().optional(),
     alterado_por: z.string().uuid().optional(),
   })

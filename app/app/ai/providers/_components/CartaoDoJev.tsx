@@ -114,6 +114,7 @@ type Estado =
   | "observando"
   | "decidindo"
   | "sozinho"
+  | "em_pausa"
   | "parado";
 
 function estadoDoJev(d: DadosDoJev): Estado {
@@ -121,10 +122,16 @@ function estadoDoJev(d: DadosDoJev): Estado {
     // Ligado sem chave que passou no teste, o Jev não mede nada (o worker só
     // usa chave validada). Um selo "Decidindo" aqui afirmaria o contrário.
     if (!d.chave.validada) return "parado";
+    // Pelo estado de cada TAREFA, e não pelo `modo`: o clima desligado sozinho
+    // guarda o `modo` de antes, e um "Observando" aqui afirmaria que ele mede.
+    const tarefas = tarefasDoCartao(d);
+    const clima = tarefas.find((t) => t.id === TAREFA_DO_CLIMA.id);
     // Sem a IA de sempre não há com quem comparar nem quem cubra: o worker
-    // deixa o Jev decidir qualquer que seja o modo gravado.
-    if (!d.tem_ia_de_sempre) return "sozinho";
-    return d.config.modo === "decide" ? "decidindo" : "observando";
+    // deixa o Jev decidir o clima qualquer que seja o estado — menos desligado.
+    if (!d.tem_ia_de_sempre && clima && clima.estado !== "desligada") return "sozinho";
+    if (tarefas.some((t) => t.estado === "decidindo")) return "decidindo";
+    if (tarefas.some((t) => t.estado === "observando")) return "observando";
+    return "em_pausa";
   }
   if (!d.chave.existe) return "sem_chave";
   if (!d.chave.validada) return "chave_nao_validada";
@@ -276,6 +283,7 @@ function SeloDoEstado({ estado }: { estado: Estado }) {
   if (estado === "decidindo") return <Badge variant="success">{t("Decidindo")}</Badge>;
   if (estado === "sozinho") return <Badge variant="warning">{t("Decidindo sozinho")}</Badge>;
   if (estado === "parado") return <Badge variant="warning">{t("Parado")}</Badge>;
+  if (estado === "em_pausa") return <Badge variant="neutral">{t("Em pausa")}</Badge>;
   return <Badge variant="neutral">{t("Desligado")}</Badge>;
 }
 
@@ -538,8 +546,9 @@ function Ligado({
   });
   const segundos = new Intl.NumberFormat(tagDoIdioma, { maximumFractionDigits: 1 });
   const inteiro = new Intl.NumberFormat(tagDoIdioma);
-  // Só com o Jev medindo de verdade a linha de cada tarefa mostra o estado e o botão.
-  const rodando = estado === "observando" || estado === "decidindo";
+  // Só com o Jev medindo de verdade a linha de cada tarefa mostra o estado e o
+  // botão — e em pausa também, que é de onde se religa a tarefa desligada.
+  const rodando = estado === "observando" || estado === "decidindo" || estado === "em_pausa";
   const falha = dados.ultima_falha;
   const frasesDeFalha: Readonly<Record<string, string>> = O_QUE_FAZER_DO_JEV;
   const oQueFazer = falha?.motivo ? frasesDeFalha[falha.motivo] : undefined;
@@ -555,82 +564,92 @@ function Ligado({
           t("Decidindo sozinho — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva.")}
         {estado === "parado" &&
           t("Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.")}
+        {estado === "em_pausa" &&
+          t("Ligado, mas com todas as tarefas desligadas: o Jev não mede nada até você religar uma abaixo.")}
       </p>
 
       {/* Uma linha por tarefa: o estado dela e o "Deixar o Jev decidir" dela.
           Com a chave parada ou sem a IA de sempre, o selo do cartão já diz o
           estado de todas, e a linha não repete nem oferece o botão. */}
       <ul className="divide-y divide-border rounded-md border border-border" data-testid="jev-tarefas">
-        {tarefasDoCartao(dados).map((tarefa) => {
-          const aqui = rodando && tarefa.estado !== "desligada";
-          return (
-            <li
-              key={tarefa.id}
-              className="space-y-2 p-3"
-              data-testid={`jev-tarefa-${tarefa.id}`}
-              data-estado={tarefa.estado}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">{t(tarefa.rotulo)}</span>
-                {rodando && (
-                  <Badge variant={tarefa.estado === "decidindo" ? "success" : "neutral"}>
-                    {tarefa.estado === "observando"
-                      ? t("Só observa")
-                      : tarefa.estado === "decidindo"
-                        ? t("Decide")
-                        : t("Desligada")}
-                  </Badge>
+        {tarefasDoCartao(dados).map((tarefa) => (
+          <li
+            key={tarefa.id}
+            className="space-y-2 p-3"
+            data-testid={`jev-tarefa-${tarefa.id}`}
+            data-estado={tarefa.estado}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">{t(tarefa.rotulo)}</span>
+              {rodando && (
+                <Badge variant={tarefa.estado === "decidindo" ? "success" : "neutral"}>
+                  {tarefa.estado === "observando"
+                    ? t("Só observa")
+                    : tarefa.estado === "decidindo"
+                      ? t("Decide")
+                      : t("Desligada")}
+                </Badge>
+              )}
+              {tarefa.novo && <Badge variant="info">{t("Novo")}</Badge>}
+            </div>
+
+            {/* A concordância medida é a do clima (as notas em messages.metadata). */}
+            {rodando && tarefa.estado === "observando" && tarefa.id === TAREFA_DO_CLIMA.id && (
+              <p className="text-sm" data-testid="jev-concordancia">
+                {o.comparadas === 0 ? (
+                  t("Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.")
+                ) : (
+                  <>
+                    {t("Nos últimos")} {o.dias} {t("dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em")}{" "}
+                    <span className="font-mono font-medium">
+                      {inteiro.format(o.concordaram)} {t("de")} {inteiro.format(o.comparadas)}
+                    </span>{" "}
+                    {t("mensagens — os dois chamariam, ou não, uma pessoa para a conversa.")}
+                  </>
                 )}
-                {tarefa.novo && <Badge variant="info">{t("Novo")}</Badge>}
+              </p>
+            )}
+
+            {dados.pode_editar && rodando && (
+              <div className="flex flex-wrap items-center gap-3">
+                {tarefa.estado === "observando" && (
+                  <Button
+                    size="sm"
+                    disabled={enviando}
+                    onClick={() => void mudar(corpoDaMudanca(tarefa, "decidindo"), t("Agora o Jev decide."))}
+                  >
+                    {t("Deixar o Jev decidir")}
+                  </Button>
+                )}
+                {/* Sem este caminho, quem deixou o Jev decidir só voltaria a
+                    comparar desligando — e religar mantém o estado gravado. */}
+                {tarefa.estado === "decidindo" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={enviando}
+                    onClick={() =>
+                      void mudar(corpoDaMudanca(tarefa, "observando"), t("O Jev voltou a só observar."))
+                    }
+                  >
+                    {t("Voltar a só observar")}
+                  </Button>
+                )}
+                {/* Desligada, a tarefa volta observando — nunca direto a decidir. */}
+                {tarefa.estado === "desligada" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={enviando}
+                    onClick={() => void mudar(corpoDaMudanca(tarefa, "observando"), t("A tarefa foi religada."))}
+                  >
+                    {t("Religar")}
+                  </Button>
+                )}
               </div>
-
-              {/* A concordância medida é a do clima (as notas em messages.metadata). */}
-              {aqui && tarefa.estado === "observando" && tarefa.id === TAREFA_DO_CLIMA.id && (
-                <p className="text-sm" data-testid="jev-concordancia">
-                  {o.comparadas === 0 ? (
-                    t("Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.")
-                  ) : (
-                    <>
-                      {t("Nos últimos")} {o.dias} {t("dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em")}{" "}
-                      <span className="font-mono font-medium">
-                        {inteiro.format(o.concordaram)} {t("de")} {inteiro.format(o.comparadas)}
-                      </span>{" "}
-                      {t("mensagens — os dois chamariam, ou não, uma pessoa para a conversa.")}
-                    </>
-                  )}
-                </p>
-              )}
-
-              {dados.pode_editar && aqui && (
-                <div className="flex flex-wrap items-center gap-3">
-                  {tarefa.estado === "observando" && (
-                    <Button
-                      size="sm"
-                      disabled={enviando}
-                      onClick={() => void mudar(corpoDaMudanca(tarefa, "decidindo"), t("Agora o Jev decide."))}
-                    >
-                      {t("Deixar o Jev decidir")}
-                    </Button>
-                  )}
-                  {/* Sem este caminho, quem deixou o Jev decidir só voltaria a
-                      comparar desligando — e religar mantém o estado gravado. */}
-                  {tarefa.estado === "decidindo" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={enviando}
-                      onClick={() =>
-                        void mudar(corpoDaMudanca(tarefa, "observando"), t("O Jev voltou a só observar."))
-                      }
-                    >
-                      {t("Voltar a só observar")}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
+            )}
+          </li>
+        ))}
       </ul>
 
       <div>

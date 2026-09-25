@@ -498,16 +498,42 @@ describe("CartaoDoJev — por tarefa", () => {
     ]);
   });
 
-  it("tarefa desligada não oferece botão nem concordância", () => {
+  /**
+   * O clima desligado sozinho guarda o `modo` de antes. O cartão dizia
+   * "Observando — a sua IA de sempre ainda decide" (ou, sem IA, "Decidindo
+   * sozinho") para um Jev que não mede nada, e não havia botão de volta.
+   */
+  it.each([
+    ["com a IA de sempre", true],
+    ["sem a IA de sempre", false],
+  ])("tarefa desligada (%s): o cartão diz em pausa, sem concordância, e oferece religar observando", async (_c, ia) => {
     montar(
       dados({
-        config: { ligado: true, modo: "observacao" },
+        config: { ligado: true, modo: "decide" },
+        tem_ia_de_sempre: ia,
         por_tarefa: [{ ...CLIMA, estado: "desligada" }],
       }),
     );
+    expect(cartao()).toHaveAttribute("data-estado", "em_pausa");
+    expect(cartao()).toHaveTextContent("Ligado, mas com todas as tarefas desligadas");
     expect(screen.getByTestId("jev-tarefa-clima")).toHaveAttribute("data-estado", "desligada");
     expect(screen.queryByRole("button", { name: "Deixar o Jev decidir" })).toBeNull();
     expect(screen.queryByTestId("jev-concordancia")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Religar" }));
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(1));
+    expect(chamadas.map((c) => c.corpo)).toEqual([{ modo: "observacao" }]);
+  });
+
+  it("uma tarefa desligada não apaga o estado geral das que rodam", () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        por_tarefa: [{ ...CLIMA, estado: "desligada" }, NOVA],
+      }),
+    );
+    expect(cartao()).toHaveAttribute("data-estado", "observando");
+    expect(screen.getByTestId("jev-tarefa-manipulacao")).toHaveAttribute("data-estado", "observando");
   });
 
   it("o selo de cada tarefa sai em espanhol", () => {
