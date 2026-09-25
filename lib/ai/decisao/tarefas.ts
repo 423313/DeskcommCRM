@@ -85,14 +85,27 @@ export function estadoGravadoDaTarefa(config: ConfigDoJev, id: string): EstadoDa
  */
 type TarefaNaRegra = Pick<TarefaDoJev, "alcance"> & { id: string };
 
-/** O estado que vale agora — ver o cabeçalho. */
-export function estadoEfetivoDaTarefa(config: ConfigDoJev, tarefa: TarefaNaRegra): EstadoDaTarefa {
-  if (!config.ligado || config.aceite === null) return "desligada";
-  const aceito = config.aceite.alcance ?? "mensagem";
+/** Itens 2 a 5 do cabeçalho, com o Jev ligado sob o aceite `aceito`. */
+function estadoSobOAceite(config: ConfigDoJev, tarefa: TarefaNaRegra, aceito: Alcance): EstadoDaTarefa {
   if (ALCANCES.indexOf(tarefa.alcance) > ALCANCES.indexOf(aceito)) return "desligada";
   return (
     estadoGravadoDaTarefa(config, tarefa.id) ?? (tarefa.alcance === "mensagem" ? "observando" : "desligada")
   );
+}
+
+/** O estado que vale agora — ver o cabeçalho. */
+export function estadoEfetivoDaTarefa(config: ConfigDoJev, tarefa: TarefaNaRegra): EstadoDaTarefa {
+  if (!config.ligado || config.aceite === null) return "desligada";
+  return estadoSobOAceite(config, tarefa, config.aceite.alcance ?? "mensagem");
+}
+
+/**
+ * O estado em que a tarefa fica se o Jev for ligado AGORA — o que o "pronto
+ * para ligar" promete. Sem aceite ainda, vale o que a tela pede: cada
+ * mensagem, sozinha (`app/api/v1/ai/jev/route.ts`, ao ligar).
+ */
+export function estadoAoLigar(config: ConfigDoJev, tarefa: TarefaNaRegra): EstadoDaTarefa {
+  return estadoSobOAceite(config, tarefa, config.aceite?.alcance ?? "mensagem");
 }
 
 /** Começou sozinha e ninguém escolheu nada ainda: é o selo "Novo" do cartão. */

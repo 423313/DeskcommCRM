@@ -3471,6 +3471,9 @@ export const DICIONARIO: Traducoes = {
   "Ele volta decidindo, como estava antes de ser desligado.": {
     es: "Vuelve decidiendo, como estaba antes de desactivarlo.",
   },
+  "A medição do clima está desligada e continua assim: depois de ligar o Jev, religue-a na lista de tarefas que aparece aqui.": {
+    es: "La medición del clima está desactivada y sigue así: después de activar Jev, reactívala en la lista de tareas que aparece aquí.",
+  },
   "Ao ligar, cada mensagem que o cliente manda vai para a TypeSafe AI, nos Estados Unidos, uma de cada vez e sem o resto da conversa, para o Jev avaliar. Antes de sair, o sistema apaga CPF, telefone e e-mail do texto. Com o Jev desligado, nada é enviado.": {
     es: "Al activarlo, cada mensaje que envía el cliente va a TypeSafe AI, en Estados Unidos, uno por vez y sin el resto de la conversación, para que Jev lo evalúe. Antes de salir, el sistema borra del texto el CPF, el teléfono y el correo. Con Jev desactivado, no se envía nada.",
   },

@@ -219,6 +219,37 @@ describe("CartaoDoJev — (3) pronto para ligar", () => {
     montar(dados({ tem_ia_de_sempre: false }));
     expect(screen.getByText(/já começa decidindo sozinho/)).toBeInTheDocument();
   });
+
+  /**
+   * O clima desligado guarda o `modo` de antes. Lido pelo `modo`, o cartão
+   * prometia "volta decidindo" (ou, sem IA, "decidindo sozinho") e, ligado,
+   * caía em pausa sem medir nada.
+   */
+  it.each([
+    ["com a IA de sempre", true],
+    ["sem a IA de sempre", false],
+  ])("clima desligado (%s): diz que ele volta desligado, e não o que o `modo` diria", (_c, ia) => {
+    montar(
+      dados({
+        config: { modo: "decide", aceite: { em: "2026-09-20T12:00:00Z", por: "u1" } },
+        tem_ia_de_sempre: ia,
+        por_tarefa: [
+          {
+            id: "clima",
+            ponto: "sentiment_classify",
+            rotulo: "Medir o clima da conversa",
+            oQueFaz: "Percebe se o cliente está irritado.",
+            estado: "desligada",
+            ao_ligar: "desligada",
+            novo: false,
+          },
+        ],
+      }),
+    );
+    expect(cartao()).toHaveAttribute("data-estado", "pronto");
+    expect(screen.getByTestId("jev-ao-ligar")).toHaveTextContent(/medição do clima está desligada e continua assim/);
+    expect(cartao()).not.toHaveTextContent(/volta decidindo|decidindo sozinho/);
+  });
 });
 
 describe("CartaoDoJev — (4) ligado, observando", () => {

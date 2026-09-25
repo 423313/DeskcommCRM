@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { idDaTarefaSchema, lerConfigDoJev, type ConfigDoJev } from "@/lib/ai/decisao/config";
 import {
+  estadoAoLigar,
   estadoEfetivoDaTarefa,
   estadoGravadoDaTarefa,
   TAREFA_DO_CLIMA,
@@ -123,6 +124,25 @@ describe("estadoEfetivoDaTarefa", () => {
     const c = config({ ligado: true, aceite: { ...ACEITE, alcance: "tudo" } });
     expect(c.ligado).toBe(false);
     expect(estadoEfetivoDaTarefa(c, TAREFA_DO_CLIMA)).toBe("desligada");
+  });
+});
+
+describe("estadoAoLigar — o que o 'pronto para ligar' promete", () => {
+  it("com o Jev desligado, é o estado gravado: o clima desligado volta desligado, e não pelo `modo`", () => {
+    expect(estadoAoLigar(config({ ligado: false, modo: "decide", aceite: ACEITE }), TAREFA_DO_CLIMA)).toBe("decidindo");
+    const climaDesligado = config({ ligado: false, modo: "decide", aceite: ACEITE, tarefas: { clima: { estado: "desligada" } } });
+    expect(estadoAoLigar(climaDesligado, TAREFA_DO_CLIMA)).toBe("desligada");
+  });
+
+  it("sem aceite ainda, vale o aceite que a tela pede — cada mensagem, sozinha", () => {
+    expect(estadoAoLigar(config({}), TAREFA_DO_CLIMA)).toBe("observando");
+    expect(estadoAoLigar(config({}), NOVA_DA_MENSAGEM)).toBe("observando");
+    expect(estadoAoLigar(config({}), NOVA_DA_CONVERSA), "falha fechada pelo alcance").toBe("desligada");
+  });
+
+  it("ligado, é o estado efetivo", () => {
+    const c = config({ ligado: true, aceite: ACEITE, tarefas: { clima: { estado: "decidindo", ...QUANDO } } });
+    expect(estadoAoLigar(c, TAREFA_DO_CLIMA)).toBe(estadoEfetivoDaTarefa(c, TAREFA_DO_CLIMA));
   });
 });
 

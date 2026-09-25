@@ -9,7 +9,8 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * sempre.
  *
  * GET também responde, por tarefa (`por_tarefa`, de `TAREFAS_DO_JEV`), o estado
- * que vale agora e se ela é nova — começou sozinha e ninguém escolheu ainda.
+ * que vale agora, o que ela vira ao ligar o Jev (`ao_ligar`) e se ela é nova —
+ * começou sozinha e ninguém escolheu ainda.
  *
  * PATCH liga, desliga, troca o modo do clima (`modo`, o nome da onda 1) e o
  * estado de uma tarefa (`tarefa` + `estado`). Ligar manda cada mensagem que o cliente
@@ -35,6 +36,7 @@ import {
 } from "@/lib/ai/decisao/config";
 import { CHAVES_DO_CLIMA, type MotorDoClima } from "@/lib/ai/decisao/metadados-do-clima";
 import {
+  estadoAoLigar,
   estadoEfetivoDaTarefa,
   estadoGravadoDaTarefa,
   TAREFA_DO_CLIMA,
@@ -79,6 +81,7 @@ function porTarefa(c: ConfigDoJev) {
     rotulo: t.rotulo,
     oQueFaz: t.oQueFaz,
     estado: estadoEfetivoDaTarefa(c, t),
+    ao_ligar: estadoAoLigar(c, t),
     novo: tarefaEhNova(c, t),
   }));
 }

@@ -79,8 +79,19 @@ export interface TarefaNoCartao {
   rotulo: string;
   oQueFaz: string;
   estado: EstadoDaTarefa;
+  /** O estado em que ela fica se o Jev for ligado agora. Ausente, o clima volta pelo `modo`. */
+  ao_ligar?: EstadoDaTarefa;
   /** Começou sozinha e ninguém escolheu nada ainda. */
   novo: boolean;
+}
+
+/**
+ * Como o clima volta ao ligar o Jev. O `modo` sozinho mentia: o clima desligado
+ * guarda o `modo` de antes, e o cartão prometia "volta decidindo".
+ */
+function climaAoLigar(d: DadosDoJev): EstadoDaTarefa {
+  const clima = d.por_tarefa?.find((t) => t.id === TAREFA_DO_CLIMA.id);
+  return clima?.ao_ligar ?? (d.config.modo === "decide" ? "decidindo" : "observando");
 }
 
 function tarefasDoCartao(d: DadosDoJev): TarefaNoCartao[] {
@@ -445,6 +456,7 @@ function ProntoParaLigar({ dados, recarregar }: { dados: DadosDoJev; recarregar:
   // O aceite é da empresa, e vale uma vez (D6): religar não pergunta de novo.
   const aceite = dados.config.aceite;
   const pedeAceite = aceite === null;
+  const clima = climaAoLigar(dados);
 
   return (
     <div className="mt-4 space-y-4">
@@ -458,22 +470,21 @@ function ProntoParaLigar({ dados, recarregar }: { dados: DadosDoJev; recarregar:
             </li>
           ))}
         </ul>
-        {dados.tem_ia_de_sempre && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {dados.config.modo === "observacao"
+        <p className="mt-2 text-xs text-muted-foreground" data-testid="jev-ao-ligar">
+          {clima === "desligada"
+            ? t(
+                "A medição do clima está desligada e continua assim: depois de ligar o Jev, religue-a na lista de tarefas que aparece aqui.",
+              )
+            : !dados.tem_ia_de_sempre
               ? t(
-                  "Ele começa só observando: a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.",
+                  "Sem uma IA principal que meça o clima, ele já começa decidindo sozinho: não há com quem comparar nem quem cubra uma falha dele.",
                 )
-              : t("Ele volta decidindo, como estava antes de ser desligado.")}
-          </p>
-        )}
-        {!dados.tem_ia_de_sempre && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {t(
-              "Sem uma IA principal que meça o clima, ele já começa decidindo sozinho: não há com quem comparar nem quem cubra uma falha dele.",
-            )}
-          </p>
-        )}
+              : clima === "decidindo"
+                ? t("Ele volta decidindo, como estava antes de ser desligado.")
+                : t(
+                    "Ele começa só observando: a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.",
+                  )}
+        </p>
       </div>
 
       <div className="rounded-md border border-border p-3 text-sm">

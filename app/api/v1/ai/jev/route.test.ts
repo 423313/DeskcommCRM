@@ -539,6 +539,16 @@ describe("o Jev por tarefa na rota", () => {
     expect(clima).toMatchObject({ id: "clima", estado: "decidindo", novo: false, rotulo: "Medir o clima da conversa" });
   });
 
+  it("GET: com o Jev desligado, `ao_ligar` diz como cada tarefa volta — o clima desligado não volta pelo `modo`", async () => {
+    estado.settings = { jev: { ligado: false, modo: "decide", aceite: ACEITE_ANTIGO } };
+    expect((await ler()).corpo.data.por_tarefa[0]).toMatchObject({ estado: "desligada", ao_ligar: "decidindo" });
+
+    estado.settings = {
+      jev: { ligado: false, modo: "decide", aceite: ACEITE_ANTIGO, tarefas: { clima: { estado: "desligada" } } },
+    };
+    expect((await ler()).corpo.data.por_tarefa[0]).toMatchObject({ estado: "desligada", ao_ligar: "desligada" });
+  });
+
   it("GET: `tarefas` continua na forma da onda 1 (a página aberta durante a atualização a lê)", async () => {
     expect((await ler()).corpo.data.tarefas).toEqual([
       expect.objectContaining({ id: "sentiment_classify", rotulo: "Medir o clima da conversa" }),
