@@ -38856,9 +38856,10 @@ on conflict (model) do update set
 -- Roteador OpenAI-compatível, como a OpenRouter: ids `fabricante/modelo`
 -- verificados em `GET https://router.requesty.ai/v1/models`, preço do mesmo
 -- endpoint convertido para CENTAVOS por milhão. `supports_vision` entra junto
--- porque num roteador é o catálogo que diz se o modelo enxerga imagem. Sem
--- `ai_pricing`: ela é keyed só por `model`, e estes ids também são da
--- OpenRouter; o custo cai no catálogo. Racional inteiro na migration 0410.
+-- porque num roteador é o catálogo que diz se o modelo enxerga imagem. Não
+-- insere em `ai_pricing`; o backfill 0113 acima cria a linha por `model_id` na
+-- próxima reaplicação (update.sh), e o preço é resolvido só por `model_id`,
+-- sem provider. Racional inteiro na migration 0410.
 insert into public.ai_models
   (provider, model_id, display_name, description, context_window,
    input_price_per_million_cents, output_price_per_million_cents,

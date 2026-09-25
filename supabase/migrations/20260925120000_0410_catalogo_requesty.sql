@@ -23,11 +23,17 @@
 -- (`lib/agent-engine/edge/llm/capabilities.ts`): num roteador, é o catálogo
 -- que diz se o modelo enxerga imagem, não o provedor.
 --
--- Sem linha em `ai_pricing`: ela é keyed por `model`, sem provider, e estes
--- mesmos ids também são servidos pela OpenRouter. Uma linha aqui passaria a
--- valer para a conta da OpenRouter também. `computeCost` já cai no catálogo
--- (`ai_models`) quando `ai_pricing` não conhece o id, que é o caminho dos
--- modelos de roteador desde a 0130.
+-- Esta migration não insere em `ai_pricing`, mas a linha aparece mesmo assim:
+-- o bloco "ai_pricing backfill (migration 0113)" do `baseline.sql` deriva
+-- `ai_pricing` de `ai_models` para todo `model_id` ainda sem linha, e o
+-- `update.sh` reaplica o baseline. Numa instalação nova a linha nasce no
+-- primeiro `update.sh` (no install o backfill roda antes deste bloco).
+-- `ai_pricing` e `precoDoCatalogo` (`lib/ai/cost.ts`) resolvem só por
+-- `model_id`, sem provider: o mesmo id servido pela OpenRouter e pela Requesty
+-- divide o preço com ou sem essa linha. Os números acima são o preço publicado
+-- pela Requesty; se a OpenRouter cobrar diferente pelo mesmo id, a conta de uma
+-- das duas sai com o preço da outra. Limite do esquema, anterior a esta
+-- migration.
 --
 -- Sem `is_default_for_provider`: a escolha recai no mais barato com
 -- ferramentas (`escolherModeloDoProvedor`), como na OpenRouter e na DeepSeek.
