@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { gravarConfigDoJev, lerConfigDoJev } from "@/lib/ai/decisao/config";
+import { gravarConfigDoJev, idDaTarefaSchema, lerConfigDoJev } from "@/lib/ai/decisao/config";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const ADMIN = "22222222-2222-4222-8222-222222222222";
@@ -194,6 +194,32 @@ describe("gravarConfigDoJev — mescla profunda de `tarefas`", () => {
     const jev = (f.updates[0]!.settings as { jev: Record<string, unknown> }).jev;
     expect(jev.modo).toBe("decide");
     expect(jev.tarefas).toMatchObject({ clima: { estado: "desligada" } });
+  });
+
+  /**
+   * Com só o clima não há par de tarefas, e mesclar raso passaria em todos os
+   * casos acima (medido: trocar a cópia de `atual.tarefas` por `{}` deixa este
+   * arquivo verde). O caso fica declarado e PULADO — não verde — até a segunda
+   * tarefa existir; aí ele passa a valer sem ninguém editá-lo.
+   */
+  const pares = idDaTarefaSchema.options.flatMap((a) =>
+    idDaTarefaSchema.options.filter((b) => b !== a).map((b) => [a, b] as const),
+  );
+  it.skipIf(pares.length === 0)("mudar uma tarefa nunca apaga outra", async () => {
+    for (const [mudada, outra] of pares) {
+      const f = adminFalso({
+        settings: { jev: { ligado: true, aceite: ACEITE, tarefas: { [outra]: GRAVADA } } },
+      });
+      await gravarConfigDoJev({
+        admin: f.admin,
+        orgId: ORG,
+        actorUserId: ADMIN,
+        mudanca: { tarefas: { [mudada]: "observando" } },
+        agora: AGORA,
+      });
+      const jev = (f.updates[0]!.settings as { jev: { tarefas: Record<string, unknown> } }).jev;
+      expect(jev.tarefas[outra], `mudar ${mudada} apagou ${outra}`).toEqual(GRAVADA);
+    }
   });
 
   it("nada de tarefa gravada, nada de `tarefas` escrito", async () => {
