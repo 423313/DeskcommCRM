@@ -51,6 +51,15 @@ export const OPENROUTER_ENDPOINT = process.env.OPENROUTER_BASE_URL?.trim() || 'h
 export const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com';
 
 /**
+ * A Requesty é um roteador OpenAI-compatível como a OpenRouter: uma chave dá
+ * acesso a modelos de vários fabricantes, e os ids vêm no formato
+ * `fabricante/modelo` (`openai/gpt-4o-mini`). Mesma fábrica, sem SDK novo.
+ * Quem precisa ficar na Europa aponta o endpoint próprio do painel para
+ * `https://router.eu.requesty.ai/v1`.
+ */
+export const REQUESTY_ENDPOINT = 'https://router.requesty.ai/v1';
+
+/**
  * Cabeçalhos OPCIONAIS de atribuição da OpenRouter.
  *
  * A doc deles chama `HTTP-Referer` e `X-Title` de "optional headers to identify
@@ -281,6 +290,16 @@ export function createDefaultRegistry(opts?: {
       const fetchFinal =
         opts?.deepseekThinking === 'disabled' ? comRaciocinioDesligado(contido) : contido;
       return createOpenAI({ apiKey, baseURL: endpoint, fetch: fetchFinal })(modelId);
+    },
+    /**
+     * Requesty: roteador OpenAI-compatível, com `base_url` próprio pela mesma
+     * razão da OpenRouter (a allowlist do egress segue o endpoint escolhido).
+     * `.chat()` pela mesma razão também: Chat Completions é o formato que o
+     * roteador serve para qualquer família de modelo.
+     */
+    requesty: (apiKey, modelId, baseUrl) => {
+      const endpoint = baseUrl ?? REQUESTY_ENDPOINT;
+      return createOpenAI({ apiKey, baseURL: endpoint, fetch: contain(endpoint) }).chat(modelId);
     },
   };
 }

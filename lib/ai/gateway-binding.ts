@@ -26,7 +26,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 
-import { DEEPSEEK_ENDPOINT } from "@/lib/agent-engine/edge/llm/providers";
+import { DEEPSEEK_ENDPOINT, REQUESTY_ENDPOINT } from "@/lib/agent-engine/edge/llm/providers";
 import { decryptKey, byteaToBuffer } from "@/lib/crypto/aes_gcm";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -177,13 +177,14 @@ async function lerBinding(
  * de modelo: quem já está dentro do provedor recebe só o nome, e é o que
  * `resolveLanguageModel` faz ao rotear pelo prefixo. A OpenRouter é a exceção
  * porque é agregadora — lá o prefixo é parte do endereço e vai inteiro.
+ * A Requesty também é agregadora, e segue a mesma regra.
  *
  * O `null` é o freio do PR #151: id de outro provedor não vira chamada com a
  * chave da organização, vira queda para `resolveLanguageModel`, que sabe achar
  * a chave certa para aquele prefixo.
  */
 function idParaOProvider(provider: string, id: string): string | null {
-  if (provider === "openrouter") return id;
+  if (provider === "openrouter" || provider === "requesty") return id;
   if (!id.includes("/")) return id;
   if (id.startsWith(`${provider}/`)) return id.slice(provider.length + 1);
   return null;
@@ -301,7 +302,9 @@ async function padraoDaOrganizacao(
   if (llm === null || llm.defaultModel === null) return null;
   const defaultModel = await modeloDoProvedor(organizationId, llm.provider, llm.defaultModel);
   const modelId =
-    llm.provider === "openrouter" || defaultModel.startsWith(`${llm.provider}/`)
+    llm.provider === "openrouter" ||
+    llm.provider === "requesty" ||
+    defaultModel.startsWith(`${llm.provider}/`)
       ? defaultModel
       : `${llm.provider}/${defaultModel}`;
   if (daOrg !== null && daOrg.provider === llm.provider) {
@@ -547,6 +550,8 @@ function instanciar(
     // padrão com aviso — a tela ofereceria um provedor que estes workers ignoram.
     case "deepseek":
       return createOpenAI({ apiKey, baseURL: baseUrl ?? DEEPSEEK_ENDPOINT })(modelId);
+    case "requesty":
+      return createOpenAI({ apiKey, baseURL: baseUrl ?? REQUESTY_ENDPOINT }).chat(modelId); // ver providers.ts
     default:
       return null;
   }
