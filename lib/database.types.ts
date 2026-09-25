@@ -6641,6 +6641,7 @@ export type Database = {
           revoked_at: string | null
           sent_at: string
           sent_by_user_id: string | null
+          sent_on_behalf_of_user_id: string | null
           sent_via: string
           service_revision: number | null
           status: string
@@ -6679,6 +6680,7 @@ export type Database = {
           revoked_at?: string | null
           sent_at?: string
           sent_by_user_id?: string | null
+          sent_on_behalf_of_user_id?: string | null
           sent_via?: string
           service_revision?: number | null
           status?: string
@@ -6717,6 +6719,7 @@ export type Database = {
           revoked_at?: string | null
           sent_at?: string
           sent_by_user_id?: string | null
+          sent_on_behalf_of_user_id?: string | null
           sent_via?: string
           service_revision?: number | null
           status?: string
