@@ -1084,14 +1084,16 @@ export async function sendMessageHandler(
 
   }
   const a = actorAuditPayload(ctx.actor);
-  // Dois atores, uma linha (#1613): quem DECIDIU — a pessoa em nome de quem
-  // o token enviou — vira o `actor_user_id`, e o token que apertou continua
-  // no `actor_api_token_id` e nos metadata. Sem isto a auditoria diria que a
-  // integração agiu sozinha, que é o mesmo defeito do balão visto do log.
+  // Dois atores, uma linha (#1613): o `actor_user_id` continua sendo quem
+  // AUTENTICOU — nulo num envio por token, como sempre foi —, o token vai no
+  // `actor_api_token_id`, e a pessoa em nome de quem ele enviou fica em
+  // `metadata.on_behalf_of_user_id`. A pessoa é uma alegação do token, não uma
+  // identidade provada: pô-la na coluna de autor faria o log dizer que ela
+  // agiu, quando ninguém a autenticou nesta chamada.
   const emNomeDe = ctx.onBehalfOf ? { on_behalf_of_user_id: ctx.onBehalfOf.userId } : {};
   await audit({
     action: "message.sent",
-    actorUserId: ctx.onBehalfOf?.userId ?? a.actorUserId,
+    actorUserId: a.actorUserId,
     actorApiTokenId: ctx.onBehalfOf ? apiTokenIdDoActor(ctx.actor) : undefined,
     organizationId: c.organization_id,
     resourceType: "message",
