@@ -960,6 +960,9 @@ export const DICIONARIO: Traducoes = {
   "Automático pausado — alguém assumiu": {
     es: "Automático pausado — alguien la asumió",
   },
+  "Automático pausado — atendimento pelo celular (#on religa)": {
+    es: "Automático pausado — atención desde el celular (#on lo reactiva)",
+  },
   "Automático pausado para este cliente": {
     es: "Automático pausado para este cliente",
   },
@@ -8559,6 +8562,19 @@ export const DICIONARIO: Traducoes = {
   // Ausentes de propósito, porque a palavra é a MESMA nos dois idiomas e
   // `traduzir()` devolve a chave: "nunca", "Preparado", "Consultado por",
   // "Preparando…". Entrada que repete a chave é ruído que envelhece.
+  "Estado da base de conhecimento": { es: "Estado de la base de conocimiento" },
+  "prontos": { es: "listos" },
+  "preparando": { es: "preparando" },
+  "preparando o material…": { es: "preparando el material…" },
+  "tudo pronto": { es: "todo listo" },
+  "Alguns materiais falharam ao preparar. O motivo está no cartão de cada um; depois de corrigir, clique em “Preparar tudo de novo”.": {
+    es: "Algunos materiales fallaron al prepararse. El motivo está en la tarjeta de cada uno; después de corregirlo, haz clic en “Preparar todo de nuevo”.",
+  },
+  "Preparar tudo de novo": { es: "Preparar todo de nuevo" },
+  "Não há material para reindexar.": { es: "No hay material para reindexar." },
+  "Vou preparar o que falta e o que mudou; o material sem alteração é pulado.": {
+    es: "Voy a preparar lo que falta y lo que cambió; el material sin cambios se omite.",
+  },
   "Vou preparar este material de novo — leva alguns instantes.": {
     es: "Voy a preparar este material de nuevo. Tardará unos instantes.",
   },
@@ -12042,6 +12058,20 @@ export const DICIONARIO: Traducoes = {
   "não respondido": { es: "no respondido" },
   "Ligado, cada empresa pode montar roteiros de perguntas que a IA conduz durante a conversa (nome, CPF, interesse…), e as respostas aparecem na ficha do cliente. Desligado, a tela, o menu e o roteiro no atendimento da IA somem.": { es: "Activado, cada empresa puede armar guiones de preguntas que la IA conduce durante la conversación (nombre, CPF, interés…), y las respuestas aparecen en la ficha del cliente. Desactivado, la pantalla, el menú y el guion en la atención de la IA desaparecen." },
   "Recurso não encontrado.": { es: "Recurso no encontrado." },
+  // ─── C-076: Comandos pelo celular (#on/#off) ───
+  "Comandos pelo celular": { es: "Comandos desde el celular" },
+  "Aceitar #on/#off enviados pelo celular": { es: "Aceptar #on/#off enviados desde el celular" },
+  "Ligado, QUALQUER mensagem enviada pelo WhatsApp do celular pausa a IA nesta conversa até alguém mandar #on — a pausa não vence sozinha. #off pausa sem precisar responder o cliente. Desligado, #on e #off são texto comum, e responder pelo celular pausa a IA só por um tempo.":
+    {
+      es: "Activado, CUALQUIER mensaje enviado desde el WhatsApp del celular pausa la IA en esta conversación hasta que alguien envíe #on — la pausa no vence sola. #off pausa sin necesidad de responder al cliente. Desactivado, #on y #off son texto normal, y responder desde el celular pausa la IA solo por un tiempo.",
+    },
+  "Atenção: o comando é digitado no chat do cliente e pode aparecer para ele. Vale por conversa, e a pausa só termina com #on ou pelo botão “devolver ao automático”.":
+    {
+      es: "Atención: el comando se escribe en el chat del cliente y puede aparecer para él. Vale por conversación, y la pausa solo termina con #on o con el botón “devolver al automático”.",
+    },
+  "Comandos pelo celular ligados — já valem no próximo atendimento.":
+    { es: "Comandos desde el celular activados — ya valen en la próxima atención." },
+  "Comandos pelo celular desligados.": { es: "Comandos desde el celular desactivados." },
 };
 
 /**
