@@ -170,10 +170,47 @@ describe("decidirNoPonto", () => {
 
 describe("chaveDaOrganizacao — a chave do Jev daquela empresa, e só dela", () => {
   const ORG = "33333333-3333-4333-8333-333333333333";
+  const PONTO_DO_CLIMA = "sentiment_classify";
+
+  /**
+   * A guarda por tarefa mora aqui, e não só no worker: um segundo chamador de
+   * `decidirNoPonto` (o agent-engine, na onda 2.1) mandaria a mensagem com a
+   * tarefa desligada.
+   */
+  describe("só com a tarefa daquele ponto rodando", () => {
+    const CREDENCIAL = { api_key_encrypted: "cifra", api_key_iv: "iv", api_key_tag: "tag" };
+
+    it("tarefa desligada: com o interruptor ligado, a chave não sai, e nem é lida", async () => {
+      banco.settings = { jev: { ...LIGADO.jev, tarefas: { clima: { estado: "desligada" } } } };
+      banco.linha = CREDENCIAL;
+      const fetchImpl = vi.fn();
+      const r = await decidirNoPonto(
+        { ponto: PONTO_DO_CLIMA, organizationId: ORG, estado: "x", perguntas: PERGUNTAS },
+        { fetchImpl },
+      );
+      expect(r.ok === false && r.motivo).toBe("sem_credencial");
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(banco.chamadas).not.toContainEqual(["from", "ai_provider_credentials"]);
+    });
+
+    it("ponto sem tarefa do Jev: nada sai, sem nem consultar o banco", async () => {
+      banco.linha = CREDENCIAL;
+      expect(await chaveDaOrganizacao(ORG, "intent_router")).toBeNull();
+      expect(banco.chamadas).toEqual([]);
+    });
+
+    it("tarefa observando ou decidindo: a chave sai (controle)", async () => {
+      for (const estado of ["observando", "decidindo"]) {
+        banco.settings = { jev: { ...LIGADO.jev, tarefas: { clima: { estado } } } };
+        banco.linha = CREDENCIAL;
+        expect(await chaveDaOrganizacao(ORG, PONTO_DO_CLIMA)).toBe("decifrada:cifra");
+      }
+    });
+  });
 
   it("lê a credencial typesafe ATIVA e VALIDADA mais recente, filtrando a organização", async () => {
     banco.linha = { api_key_encrypted: "cifra", api_key_iv: "iv", api_key_tag: "tag" };
-    const chave = await chaveDaOrganizacao(ORG);
+    const chave = await chaveDaOrganizacao(ORG, PONTO_DO_CLIMA);
 
     expect(chave).toBe("decifrada:cifra");
     expect(banco.chamadas).toContainEqual(["from", "ai_provider_credentials"]);
@@ -187,20 +224,20 @@ describe("chaveDaOrganizacao — a chave do Jev daquela empresa, e só dela", ()
   });
 
   it("sem credencial, devolve null sem barulho", async () => {
-    expect(await chaveDaOrganizacao(ORG)).toBeNull();
+    expect(await chaveDaOrganizacao(ORG, PONTO_DO_CLIMA)).toBeNull();
     expect(avisos).toEqual([]);
   });
 
   it("leitura que falha devolve null e deixa rastro", async () => {
     banco.erro = { name: "PostgrestError", message: "relation does not exist" };
-    expect(await chaveDaOrganizacao(ORG)).toBeNull();
+    expect(await chaveDaOrganizacao(ORG, PONTO_DO_CLIMA)).toBeNull();
     expect(avisos).toHaveLength(1);
   });
 
   it("decifragem quebrada devolve null, e o log leva só a CLASSE do erro", async () => {
     banco.linha = { api_key_encrypted: "cifra", api_key_iv: "iv", api_key_tag: "tag" };
     decifragem.falha = true;
-    expect(await chaveDaOrganizacao(ORG)).toBeNull();
+    expect(await chaveDaOrganizacao(ORG, PONTO_DO_CLIMA)).toBeNull();
     expect(avisos).toHaveLength(1);
     expect(JSON.stringify(avisos[0])).not.toContain("apikey_segredo");
     expect(avisos[0]![1].erro).toBe("DecryptError");
@@ -231,7 +268,7 @@ describe("chaveDaOrganizacao — a chave do Jev daquela empresa, e só dela", ()
     ])("%s: a chave validada não sai", async (_rotulo, settings) => {
       banco.settings = settings;
       banco.linha = CREDENCIAL;
-      expect(await chaveDaOrganizacao(ORG)).toBeNull();
+      expect(await chaveDaOrganizacao(ORG, PONTO_DO_CLIMA)).toBeNull();
       // Desligado é configuração, não incidente: sem rastro, e sem ler a credencial.
       expect(avisos).toEqual([]);
       expect(banco.chamadas).not.toContainEqual(["from", "ai_provider_credentials"]);
@@ -239,7 +276,7 @@ describe("chaveDaOrganizacao — a chave do Jev daquela empresa, e só dela", ()
 
     it("o interruptor lido é o DESTA organização", async () => {
       banco.linha = CREDENCIAL;
-      await chaveDaOrganizacao(ORG);
+      await chaveDaOrganizacao(ORG, PONTO_DO_CLIMA);
       expect(banco.chamadas).toContainEqual(["from", "organizations"]);
       expect(banco.chamadas).toContainEqual(["eq", "id", ORG]);
     });
@@ -247,7 +284,7 @@ describe("chaveDaOrganizacao — a chave do Jev daquela empresa, e só dela", ()
     it("organização não encontrada vale como desligado", async () => {
       banco.settings = null;
       banco.linha = CREDENCIAL;
-      expect(await chaveDaOrganizacao(ORG)).toBeNull();
+      expect(await chaveDaOrganizacao(ORG, PONTO_DO_CLIMA)).toBeNull();
     });
 
     it("com a chave validada e o Jev desligado, o caminho padrão não sai da máquina", async () => {

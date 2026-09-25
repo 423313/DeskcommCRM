@@ -112,8 +112,9 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     const admin = createAdminClient();
 
     // ── O Jev nesta tarefa ────────────────────────────────────────────────
-    // Lido aqui, além de dentro de `medirClima`, porque o ESTADO do clima muda
-    // quem decide. Leitura que falha vale como desligada (`lerConfigDoJev`
+    // Lido aqui, além de dentro do ponto (`chaveDaOrganizacao`, que com a
+    // tarefa desligada não manda nada), porque o ESTADO do clima muda quem
+    // decide. Leitura que falha vale como desligada (`lerConfigDoJev`
     // nunca lança). Sem `tarefas.clima` gravado, o estado é o `modo` da onda 1.
     const { data: org } = await admin
       .from("organizations")

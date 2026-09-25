@@ -27,8 +27,8 @@
  *
  * ═══ O QUE ELE NÃO FAZ ═══
  *
- * Fora o interruptor do administrador (que é consentimento, não estratégia — ver
- * `chaveDaOrganizacao`), não decide se o fornecedor DEVE ser usado, e não conhece
+ * Fora o interruptor e a tarefa desligada (que são consentimento, não estratégia —
+ * ver `chaveDaOrganizacao`), não decide se o fornecedor DEVE ser usado, e não conhece
  * o fallback. Isso é do call site, que é quem sabe o que fazer quando a resposta
  * não vem — e é por isso que o resultado é discriminado em vez de um valor com
  * default.
@@ -41,6 +41,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { baseDaApiDoJev, decidir, type Pergunta, type ResultadoDaDecisao } from "./cliente";
 import { lerConfigDoJev } from "./config";
 import { PROVEDOR_DO_JEV } from "./credencial";
+import { estadoEfetivoDaTarefa, TAREFAS_DO_JEV } from "./tarefas";
 
 export interface EntradaDoPonto {
   /** O ponto de IA, como no registro (`lib/ai/pontos/registro.ts`). Vai à telemetria. */
@@ -71,20 +72,24 @@ export interface DependenciasDoPonto {
  * (`lib/ai/gateway-binding.ts`): chave colada e ainda não conferida não sai
  * para a rede.
  *
- * **Só com o interruptor ligado** (`settings.jev`, que exige o aceite do
- * administrador). Cadastrar a chave não é consentir: sem esta guarda, colar a
+ * **Só com a tarefa DAQUELE ponto rodando** (`estadoEfetivoDaTarefa`: o
+ * interruptor ligado, o aceite do administrador cobrindo o alcance dela, e ela
+ * não desligada). Cadastrar a chave não é consentir: sem esta guarda, colar a
  * chave em Credenciais já mandava cada mensagem recebida ao fornecedor
- * estrangeiro, sem ninguém ter ligado nada (LGPD). A guarda mora AQUI, e não em
- * cada chamador, porque todo caminho até a rede passa por esta leitura. O
- * interruptor é lido primeiro: desligado é o estado de toda instalação, e custa
- * uma consulta só.
+ * estrangeiro, sem ninguém ter ligado nada (LGPD). E desligar uma tarefa é
+ * parar de mandar o que ELA manda, qualquer que seja o chamador. A guarda mora
+ * AQUI, e não em cada chamador, porque todo caminho até a rede passa por esta
+ * leitura. Ponto sem tarefa do Jev não manda nada. O interruptor é lido
+ * primeiro: desligado é o estado de toda instalação, e custa uma consulta só.
  *
  * Nunca lança. Leitura que falha devolve `null` e o chamador segue pelo caminho
  * de sempre — mas deixa rastro, porque sem ele uma decifragem quebrada é
  * indistinguível de "não cadastrou a chave". O log leva só a CLASSE do erro: a
  * mensagem pode carregar material da credencial.
  */
-export async function chaveDaOrganizacao(organizationId: string): Promise<string | null> {
+export async function chaveDaOrganizacao(organizationId: string, ponto: string): Promise<string | null> {
+  const tarefa = TAREFAS_DO_JEV.find((t) => t.ponto === ponto);
+  if (!tarefa) return null;
   try {
     // Admin client passa por cima da RLS: o filtro por organização é
     // PROGRAMÁTICO e obrigatório (CLAUDE.md, anti-pattern 10).
@@ -95,7 +100,7 @@ export async function chaveDaOrganizacao(organizationId: string): Promise<string
       .eq("id", organizationId)
       .maybeSingle();
     if (orgErr) throw orgErr;
-    if (!lerConfigDoJev(org?.settings).ligado) return null;
+    if (estadoEfetivoDaTarefa(lerConfigDoJev(org?.settings), tarefa) === "desligada") return null;
 
     const { data, error } = await admin
       .from("ai_provider_credentials")
@@ -127,7 +132,8 @@ export async function decidirNoPonto(
   entrada: EntradaDoPonto,
   deps: DependenciasDoPonto = {},
 ): Promise<ResultadoDaDecisao> {
-  const chave = await (deps.buscarChave ?? chaveDaOrganizacao)(entrada.organizationId);
+  const buscarChave = deps.buscarChave ?? ((org: string) => chaveDaOrganizacao(org, entrada.ponto));
+  const chave = await buscarChave(entrada.organizationId);
   if (chave === null || chave.trim() === "") {
     return { ok: false, motivo: "sem_credencial", exigeAcao: false, defeitoNosso: false, status: null };
   }
