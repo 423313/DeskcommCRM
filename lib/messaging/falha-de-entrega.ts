@@ -30,6 +30,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { logger } from "@/lib/logger";
+
 /** O que o integrador precisa ler sem fazer segunda consulta. */
 export interface FalhaDeEntrega {
   message_id: string;
@@ -98,12 +100,17 @@ export async function emitirFalhaDeEntrega(
       p_organization_id: args.organizationId,
     });
     if (error) {
-      console.error("[falha-de-entrega] emit message.failed falhou", error.message);
+      logger.warn("[falha-de-entrega] emit message.failed falhou", {
+        error: error.message,
+        message_id: args.falha.message_id,
+        requestId: args.requestId,
+      });
     }
   } catch (err) {
-    console.error(
-      "[falha-de-entrega] emit message.failed lançou",
-      err instanceof Error ? err.message : err,
-    );
+    logger.warn("[falha-de-entrega] emit message.failed lançou", {
+      error: err instanceof Error ? err.message : String(err),
+      message_id: args.falha.message_id,
+      requestId: args.requestId,
+    });
   }
 }
