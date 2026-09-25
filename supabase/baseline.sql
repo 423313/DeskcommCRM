@@ -38221,7 +38221,7 @@ returns table (
 language plpgsql
 security definer
 set search_path to 'public'
-as $
+as $$
 declare
   v_agent record;
   v_version record;
@@ -38352,7 +38352,7 @@ begin
   return query
     select p_agent_id, p_version_id, v_previous_version_id, v_published_at;
 end;
-$;
+$$;
 
 revoke all on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
 grant execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) to service_role;
