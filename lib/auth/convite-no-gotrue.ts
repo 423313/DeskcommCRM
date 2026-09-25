@@ -14,7 +14,7 @@
  *
  * ─── O conserto, em duas pezas ──────────────────────────────────────────────
  *
- * 1. a instalação em `so_convite` sincroniza `GOTRUE_DISABLE_SIGNUP` no
+ * 1. a instalação em `so_convite` sincroniza `DISABLE_SIGNUP` no .env do
  *    Supabase dela (função `sincronizar_signup_mode_do_gotrue` do kit) — é o
  *    que fecha o caminho direto para TODO MUNDO, inclusive para quem tem a anon
  *    key;
@@ -63,7 +63,11 @@ export type ConfigPublicaDoGoTrue = {
  */
 export async function lerConfigPublicaDoGoTrue(): Promise<ConfigPublicaDoGoTrue | null> {
   try {
-    const resposta = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/settings`, {
+    // Sem a barra final: `https://x/` + `/auth/v1/settings` vira `//auth`, o
+    // gateway responde 404, e o `null` mandaria o convite para o caminho que o
+    // GoTrue fechado recusa.
+    const base = env.NEXT_PUBLIC_SUPABASE_URL.replace(/\/+$/, "");
+    const resposta = await fetch(`${base}/auth/v1/settings`, {
       headers: { apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
       cache: "no-store",
     });

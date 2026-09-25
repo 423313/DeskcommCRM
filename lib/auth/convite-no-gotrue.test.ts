@@ -56,6 +56,22 @@ afterEach(() => {
 });
 
 describe("lerConfigPublicaDoGoTrue", () => {
+  it("URL do Supabase com barra final não vira `//auth` (404 no gateway)", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/env", () => ({
+      env: { NEXT_PUBLIC_SUPABASE_URL: "https://sb.exemplo.test/", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon" },
+    }));
+    try {
+      responderSettings({ disable_signup: true });
+      const { lerConfigPublicaDoGoTrue } = await convite();
+      await lerConfigPublicaDoGoTrue();
+      expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("https://sb.exemplo.test/auth/v1/settings");
+    } finally {
+      vi.doUnmock("@/lib/env");
+      vi.resetModules();
+    }
+  });
+
   it("lê `disable_signup` do endpoint público", async () => {
     responderSettings({ disable_signup: true, mailer_autoconfirm: false });
     await expect((await convite()).lerConfigPublicaDoGoTrue()).resolves.toEqual({ disable_signup: true });
