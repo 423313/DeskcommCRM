@@ -7,12 +7,12 @@
  * passa para humano (`force_human`), bloqueia o contato (`is_blocked`) ou manda
  * mensagem é o mecanismo de sempre, que lê o sinal — nunca o módulo do Jev.
  *
- * A cerca varre `lib/ai/decisao/**`, onde mora todo módulo do Jev (a mesma
+ * A cerca parte de `lib/ai/decisao/**`, onde mora todo módulo do Jev (a mesma
  * premissa de `pontos-de-ia-decisao-rapida.test.ts`), e reprova:
  *
- *  1. qualquer menção CÓDIGO às três colunas — comentário não conta, lido pelo
- *     scanner do TypeScript, que descarta comentário (o comentário que explica
- *     a proibição contém a palavra proibida);
+ *  1. qualquer menção CÓDIGO às três colunas nos módulos do Jev — comentário
+ *     não conta, lido pelo scanner do TypeScript, que descarta comentário (o
+ *     comentário que explica a proibição contém a palavra proibida);
  *  2. import de módulo que envia algo a alguém ou passa a conversa adiante —
  *     pelo alias `@/` OU por caminho relativo (`../../waha/send`), que o repo
  *     também usa entre módulos: o especificador é resolvido contra a pasta do
@@ -24,6 +24,19 @@
  *     ponytail: a consulta que chega por PARÂMETRO de função não é seguida — o
  *     próximo passo, se um módulo do Jev passar a receber um cliente de fora,
  *     é seguir a chamada até quem o criou.
+ *
+ * As regras 2 e 3 valem para TUDO o que o Jev executa, e não só para os
+ * arquivos da pasta: o import é seguido dentro do repo, e cada módulo alcançado
+ * passa pelas duas. Um Jev que chama `triggerHandoff` não menciona coluna
+ * nenhuma nem importa o WAHA — quem cala a conversa e avisa o cliente é o
+ * módulo importado (achado da revisão: só o import direto era visto, e
+ * importar o handoff passava verde). A regra 1 fica nos módulos do Jev: fora
+ * deles, LER `is_blocked` é legítimo, e escrevê-lo já é a regra 3.
+ * `import type` não é seguido: some na compilação e não executa nada.
+ * ponytail: `lib/channels` inteiro conta como quem envia, e há utilitário puro
+ * lá dentro (`phone-variants`, alcançado por `lib/contacts/rotulo-do-contato`).
+ * Se o Jev precisar de um deles, estreite o prefixo para os transportes
+ * (`adapters`, `transporte`) em vez de abrir exceção por arquivo.
  *
  * Cada regra tem controle positivo: uma varredura quebrada devolve zero, e zero
  * se lê como "tudo certo".
@@ -54,6 +67,9 @@ const QUEM_ENVIA = [
   /^lib\/notifications(\/|$)/,
   /^lib\/escalacao(\/|$)/,
   /^lib\/prospecting(\/|$)/,
+  /^lib\/ai\/handoff(\/|$)/,
+  /^app\/api\/v1\/messages(\/|$)/,
+  /^lib\/campanhas(\/|$)/,
 ];
 
 /** Um de cada prefixo, que existe e envia (ou passa adiante) — o controle de `QUEM_ENVIA`. */
@@ -68,6 +84,9 @@ const REMETENTES_CONHECIDOS = [
   "lib/notifications/web_push",
   "lib/escalacao/passagem",
   "lib/prospecting/worker",
+  "lib/ai/handoff/orchestrator",
+  "app/api/v1/messages/_handler",
+  "lib/campanhas/rodada",
 ];
 
 /**
@@ -105,10 +124,19 @@ function tokensDoCodigo(texto: string): string[] {
   return tokens;
 }
 
+/** Os módulos que o arquivo carrega ao rodar — `import type`/`export type` não contam. */
 function modulosImportados(texto: string): string[] {
   const modulos: string[] = [];
   const visitar = (no: ts.Node): void => {
-    if ((ts.isImportDeclaration(no) || ts.isExportDeclaration(no)) && no.moduleSpecifier && ts.isStringLiteral(no.moduleSpecifier)) {
+    const soTipo =
+      (ts.isImportDeclaration(no) && no.importClause?.isTypeOnly === true) ||
+      (ts.isExportDeclaration(no) && no.isTypeOnly);
+    if (
+      (ts.isImportDeclaration(no) || ts.isExportDeclaration(no)) &&
+      !soTipo &&
+      no.moduleSpecifier &&
+      ts.isStringLiteral(no.moduleSpecifier)
+    ) {
       modulos.push(no.moduleSpecifier.text);
     }
     if (
@@ -187,10 +215,45 @@ function escritasNaConversa(texto: string): string[] {
   return achadas;
 }
 
-const modulosDoJev = arquivosDeCodigo(["lib/ai/decisao"]).map((abs) => ({
+type Modulo = { arquivo: string; texto: string };
+
+/** O arquivo do repo que o módulo é (`.ts`, `.tsx` ou o índice da pasta), ou null: pacote. */
+function arquivoDoModulo(modulo: string): string | null {
+  return [`${modulo}.ts`, `${modulo}.tsx`, `${modulo}/index.ts`, `${modulo}/index.tsx`].find((c) => existsSync(c)) ?? null;
+}
+
+/**
+ * Tudo o que `inicio` executa dentro do repo, cada módulo com a cadeia de
+ * imports que leva até ele — a cadeia é o que diz a quem lê a falha POR ONDE
+ * o Jev chegou ao remetente.
+ */
+function alcancados(inicio: readonly Modulo[]): Array<Modulo & { cadeia: string[] }> {
+  const fila = inicio.map((m) => ({ ...m, cadeia: [m.arquivo] }));
+  const vistos = new Set(fila.map((m) => m.arquivo));
+  for (const atual of fila) {
+    for (const mod of modulosImportados(atual.texto)) {
+      const arquivo = arquivoDoModulo(moduloNoRepo(atual.arquivo, mod));
+      if (arquivo === null || vistos.has(arquivo)) continue;
+      vistos.add(arquivo);
+      fila.push({ arquivo, texto: readFileSync(arquivo, "utf8"), cadeia: [...atual.cadeia, arquivo] });
+    }
+  }
+  return fila;
+}
+
+function violacoesDeEnvio(alcance: ReturnType<typeof alcancados>): string[] {
+  return alcance.flatMap((m) => importsDeQuemEnvia(m.arquivo, m.texto).map((mod) => `${m.cadeia.join(" → ")} → ${mod}`));
+}
+
+function violacoesDeEscrita(alcance: ReturnType<typeof alcancados>): string[] {
+  return alcance.flatMap((m) => escritasNaConversa(m.texto).map((e) => `${m.cadeia.join(" → ")}: ${e}`));
+}
+
+const modulosDoJev: Modulo[] = arquivosDeCodigo(["lib/ai/decisao"]).map((abs) => ({
   arquivo: caminhoRelativo(abs),
   texto: readFileSync(abs, "utf8"),
 }));
+const alcanceDoJev = alcancados(modulosDoJev);
 
 describe("o Jev nunca cala, bloqueia nem responde o cliente", () => {
   it("a varredura enxerga os módulos do Jev (controle positivo)", () => {
@@ -215,6 +278,7 @@ describe("o Jev nunca cala, bloqueia nem responde o cliente", () => {
     expect(importsDeQuemEnvia(doJev, `import { x } from "@/lib/waha";`), "o índice da pasta também").toHaveLength(1);
     expect(importsDeQuemEnvia(doJev, `import { medir } from "./cliente";`)).toEqual([]);
     expect(importsDeQuemEnvia(doJev, `import { z } from "zod";`)).toEqual([]);
+    expect(importsDeQuemEnvia(doJev, `import type { Envio } from "@/lib/waha/send";`), "tipo não executa").toEqual([]);
 
     expect(escritasNaConversa(`await admin.from("messages").insert({ body: "oi" });`)).toHaveLength(1);
     expect(escritasNaConversa(`await db.from('conversations').update({ x: 1 }).eq("id", id);`)).toHaveLength(1);
@@ -226,6 +290,34 @@ describe("o Jev nunca cala, bloqueia nem responde o cliente", () => {
     expect(escritasNaConversa(`await admin.rpc("fn_qualquer", { p: 1 });`)).toHaveLength(1);
     // Um `Set.delete` não é escrita no banco (o aviso tem um).
     expect(escritasNaConversa(`const vistos = new Set<string>();\nvistos.delete(id);`)).toEqual([]);
+  });
+
+  it("o import é seguido até quem envia e quem escreve, com a cadeia (sabotagem com código real)", () => {
+    const doJev = (texto: string) => alcancados([{ arquivo: "lib/ai/decisao/zz-sabotagem.ts", texto }]);
+
+    // O achado da revisão: o Jev chama o handoff, que cala a conversa e avisa o
+    // cliente. O import direto já reprova, e a escrita do handoff aparece junto.
+    const handoff = doJev(`import { triggerHandoff } from "@/lib/ai/handoff/orchestrator";`);
+    expect(violacoesDeEnvio(handoff)[0]).toBe("lib/ai/decisao/zz-sabotagem.ts → @/lib/ai/handoff/orchestrator");
+    expect(
+      violacoesDeEscrita(handoff).some((v) => v.startsWith("lib/ai/decisao/zz-sabotagem.ts → lib/ai/handoff/orchestrator.ts: update em conversations")),
+      "a escrita de bot_silenced_until mora no módulo importado",
+    ).toBe(true);
+
+    // Um intermediário FORA da lista de remetentes, que envia pelo handler: só
+    // o segundo salto o alcança.
+    const intermediario = doJev(`import * as m from "../../mcp/tools/messages";`);
+    expect(violacoesDeEnvio(intermediario)).toContain(
+      "lib/ai/decisao/zz-sabotagem.ts → lib/mcp/tools/messages.ts → @/app/api/v1/messages/_handler",
+    );
+
+    expect(violacoesDeEnvio(doJev(`import type { HandoffInput } from "@/lib/ai/handoff/orchestrator";`))).toEqual([]);
+  });
+
+  it("o alcance do Jev sai da pasta (controle positivo do percurso)", () => {
+    const arquivos = alcanceDoJev.map((m) => m.arquivo);
+    expect(arquivos).toContain("lib/supabase/admin.ts");
+    expect(arquivos.length).toBeGreaterThan(modulosDoJev.length);
   });
 
   it("toda regra de remetente alcança um remetente que existe (controle de QUEM_ENVIA)", () => {
@@ -243,15 +335,11 @@ describe("o Jev nunca cala, bloqueia nem responde o cliente", () => {
     expect(tocam, "o Jev só dá o sinal; quem cala, passa ou bloqueia é o mecanismo de sempre").toEqual([]);
   });
 
-  it("nenhum módulo do Jev importa quem envia mensagem ou passa a conversa", () => {
-    const importam = modulosDoJev.flatMap((m) =>
-      importsDeQuemEnvia(m.arquivo, m.texto).map((mod) => `${m.arquivo} → ${mod}`),
-    );
-    expect(importam, "o Jev nunca fala com o cliente nem chama uma pessoa por conta própria").toEqual([]);
+  it("nada que o Jev executa importa quem envia mensagem ou passa a conversa", () => {
+    expect(violacoesDeEnvio(alcanceDoJev), "o Jev nunca fala com o cliente nem chama uma pessoa por conta própria").toEqual([]);
   });
 
-  it("nenhum módulo do Jev escreve na mensagem, na conversa ou no contato", () => {
-    const escrevem = modulosDoJev.flatMap((m) => escritasNaConversa(m.texto).map((e) => `${m.arquivo}: ${e}`));
-    expect(escrevem).toEqual([]);
+  it("nada que o Jev executa escreve na mensagem, na conversa ou no contato", () => {
+    expect(violacoesDeEscrita(alcanceDoJev)).toEqual([]);
   });
 });
