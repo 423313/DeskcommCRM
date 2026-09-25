@@ -1,9 +1,9 @@
 ---
 impacto: capacidade_nova
 secao: adicionado
-titulo: Permitir consulta a banco conectado (crm_query_external_data) no modo Teste do agente
+titulo: O Testar do agente consegue consultar o banco de dados conectado
 ---
 
-Inclui `crm_describe_external_data` e `crm_query_external_data` em `SCENARIO_READS` em `lib/agent-engine/agent/preview.ts`, permitindo que agentes que dependem de tabelas externas conectadas possam catalogar e consultar dados durante simulações na aba Teste sem exigir contato real associado.
+Na aba Teste do agente, as capacidades "Ver as tabelas do banco conectado" e "Buscar dados no banco conectado" eram sempre recusadas com "Esta consulta precisa de um contato real autorizado", e o agente respondia "vou confirmar e te retorno", o que parecia erro de configuração da conexão. Agora o Teste executa as duas consultas como o atendimento real: só leitura, com os mesmos limites de linhas, filtros e tamanho da conexão, e só quando o módulo de banco externo está ligado e há conexão ativa.
 
 Contribuição de @webtecnica.

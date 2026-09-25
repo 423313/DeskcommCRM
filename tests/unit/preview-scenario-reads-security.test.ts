@@ -24,4 +24,3 @@ describe("segurança da prévia: leituras de cenário não podem virar escrita",
     expect(SCENARIO_READS.has("crm_query_external_data")).toBe(true);
   });
 });
-
