@@ -112,6 +112,8 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 
 ## Chaves de acesso à IA `[P0]`
 
+- Orçamento do E2E: 60 s para login com MFA, validação e limpeza; o polling da validação continua limitado a 15 s. Na execução CI `36079389278` do PR #1566, o trace registrou 24,6 s aguardando a próxima janela TOTP, consumindo quase todo o antigo limite global de 30 s. A nova execução do E2E deve confirmar o ajuste.
+
 - `[P0]` Colar chave inválida e entender o motivo — `tests/e2e/credenciais-de-ia.spec.ts`. Achados corrigidos em 2026-09-02: lista de modelos colada por vírgula no card; "Validando…" eterno após restart; erro em código (`auth_failed_401`, no card e no toast); diálogo sem dizer quando usar cada provedor nem onde pegar a chave; contagem "em uso" divergente do DELETE. **PASS** — executada de verdade contra browser real (Supabase local pg17 + baseline + Chromium) em 2026-09-02, depois que o Docker da máquina (antes indisponível) voltou. A própria execução achou um SEXTO defeito que a leitura de código não tinha achado: `descreverErroDeValidacao` não classificava `TypeError` (o nome que o `fetch()` do Node usa para falha de rede/DNS) como erro de rede, e o card mostrava "Falha na validação (TypeError)." cru em vez da frase amigável — corrigido em `lib/ai/credenciais/erro-de-validacao.ts`, com caso de teste. Evidência em `.superpowers/evidence/credenciais-de-ia.png`.
 
 ## J32 — Ligar o Jev para perceber o cliente irritado `[P1]` (2026-09-23)
