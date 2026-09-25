@@ -1,5 +1,5 @@
 -- ============================================================================
--- 2026-09-25 — 0416: PUBLICAR AGENTE COM O PROVEDOR PERSONALIZADO (#1642)
+-- 2026-09-25 — 0418: PUBLICAR AGENTE COM O PROVEDOR PERSONALIZADO (#1642)
 --
 -- A 0413 trouxe o "Provedor personalizado (compatível com OpenAI)": cadastro,
 -- teste, validação e turno do agente. Faltou a PUBLICAÇÃO. A
@@ -129,7 +129,7 @@ begin
     raise exception 'channel_session_offline' using errcode = 'P0001';
   end if;
 
-  -- Provedor personalizado (0416): o endpoint é da empresa, e quem diz que o
+  -- Provedor personalizado (0418): o endpoint é da empresa, e quem diz que o
   -- modelo existe é a lista que ELE devolveu, gravada na credencial já
   -- conferida acima. Sem credencial própria não há lista — recusado.
   if v_version.provider = 'custom' then

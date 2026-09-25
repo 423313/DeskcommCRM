@@ -38187,7 +38187,7 @@ create trigger trg_teto_de_tokens_ativos
     for each row
     execute function public.fn_teto_de_tokens_ativos();
 
--- ---- publicar agente com o provedor personalizado (migration 0416, #1642) ----
+-- ---- publicar agente com o provedor personalizado (migration 0418, #1642) ----
 -- Para `custom`, o modelo é conferido na lista que o PRÓPRIO endpoint devolveu
 -- (`models_available` da credencial da versão), não no catálogo global
 -- `ai_models`, onde nada escreve linha `custom`. Racional inteiro no cabeçalho
@@ -38294,7 +38294,7 @@ begin
     raise exception 'channel_session_offline' using errcode = 'P0001';
   end if;
 
-  -- Provedor personalizado (0416): o endpoint é da empresa, e quem diz que o
+  -- Provedor personalizado (0418): o endpoint é da empresa, e quem diz que o
   -- modelo existe é a lista que ELE devolveu, gravada na credencial já
   -- conferida acima. Sem credencial própria não há lista — recusado.
   if v_version.provider = 'custom' then

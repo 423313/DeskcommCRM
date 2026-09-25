@@ -7,7 +7,7 @@
  * credencial validada, o rascunho com um modelo que o endpoint devolveu em
  * `/models`, e todo "Publicar" respondendo `model_not_found`.
  *
- * A 0416 confere, para `custom`, a lista gravada na credencial da versão
+ * A 0418 confere, para `custom`, a lista gravada na credencial da versão
  * (`models_available`). Este arquivo cobra no banco de verdade os dois
  * sentidos: o modelo da lista PUBLICA; o que está fora dela, ou a versão
  * `custom` sem credencial própria, continua RECUSADO.
