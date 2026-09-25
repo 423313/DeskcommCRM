@@ -134,7 +134,12 @@ export const SCENARIO_READS = new Set([
   'crm_list_stages',
   'crm_list_event_types',
   'crm_find_free_slots',
+  'crm_describe_external_data',
+  'crm_query_external_data',
 ]);
+
+
+
 /** Unknown tools fail closed. A write proposal never calls its original execute. */
 export function applyPreviewPolicy(
   tools: ToolSet,
