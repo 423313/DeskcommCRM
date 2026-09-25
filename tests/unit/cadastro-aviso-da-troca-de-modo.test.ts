@@ -82,6 +82,9 @@ beforeEach(() => {
   cena.settings = undefined;
   cena.redeFora = false;
   cena.http = 200;
+  // Os casos de cima medem o kit de servidor único, o único em que o
+  // `update.sh` leva o modo ao GoTrue; o Supabase separado tem o seu `describe`.
+  vi.stubEnv("SINGLE_SERVER", "1");
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => {
@@ -98,6 +101,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
 
@@ -181,6 +185,39 @@ describe("o aviso quando o GoTrue não acompanhou a troca", () => {
       `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "")}/auth/v1/settings`,
     );
     expect(updateSignupMode).not.toHaveBeenCalled();
+  });
+});
+
+describe("com Supabase separado, o update.sh não leva o modo ao GoTrue", () => {
+  const PAINEL = /Authentication → Sign In \/ Up/;
+
+  for (const valor of ["0", undefined]) {
+    it(`SINGLE_SERVER=${String(valor)} e 'só convite' com o GoTrue aberto → ensina a DESLIGAR no painel, sem update.sh`, async () => {
+      if (valor === undefined) delete process.env.SINGLE_SERVER;
+      else vi.stubEnv("SINGLE_SERVER", valor);
+      cena.modo = "so_convite";
+      cena.settings = { disable_signup: false };
+
+      await abrirTela();
+
+      expect(screen.getByText(TITULO)).toBeInTheDocument();
+      expect(screen.getByText(PAINEL).textContent).toMatch(/desligue "Allow new users to sign up"/);
+      expect(screen.getByText("DISABLE_SIGNUP=true")).toBeInTheDocument();
+      expect(screen.queryByText(COMANDO)).toBeNull();
+      expect(document.body.textContent).not.toMatch(/update\.sh/);
+    });
+  }
+
+  it("'aberto' com o GoTrue fechado → ensina a LIGAR no painel", async () => {
+    vi.stubEnv("SINGLE_SERVER", "0");
+    cena.modo = "aberto";
+    cena.settings = { disable_signup: true };
+
+    await abrirTela();
+
+    expect(screen.getByText(PAINEL).textContent).toMatch(/\bligue "Allow new users to sign up"/);
+    expect(screen.getByText("DISABLE_SIGNUP=false")).toBeInTheDocument();
+    expect(screen.queryByText(COMANDO)).toBeNull();
   });
 });
 

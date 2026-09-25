@@ -50,6 +50,12 @@ export default async function Page() {
   // só na próxima atualização. Se dá para perguntar ao GoTrue e ele está com
   // outro valor, a tela conta; não deu para perguntar, não há o que contar.
   const aviso = await haAvisoDeTrocaDeModo(modo);
+  // O `update.sh` só grava o `DISABLE_SIGNUP` sob `SINGLE_SERVER=1` (a mesma
+  // variável, no mesmo `.env` que o compose passa ao app). Com Supabase
+  // separado, mandar rodar o update.sh seria instrução errada e aviso eterno:
+  // ali quem muda é o operador, no painel ou no env do GoTrue próprio.
+  const kitSincroniza = process.env.SINGLE_SERVER === "1";
+  const alvoDoGoTrue = modo === "so_convite" ? "true" : "false";
 
   return (
     <div className="space-y-6">
@@ -69,18 +75,48 @@ export default async function Page() {
           <p className="font-medium">
             {traduzir("A troca de modo ainda não chegou ao servidor.", usuario.idioma)}
           </p>
-          <p className="mt-1">
-            {traduzir(
-              "A troca só vale para o cadastro direto depois da próxima atualização do servidor: o CRM já segue o modo novo, mas o GoTrue da VPS continua com o modo anterior. Esta tela só avisa — nada é corrigido aqui.",
-              usuario.idioma,
-            )}
-          </p>
-          <p className="mt-2">
-            {traduzir("Para aplicar agora, rode isto na VPS:", usuario.idioma)}
-          </p>
-          <code className="mt-1 block overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
-            bash hostgator-setup-kit/update.sh
-          </code>
+          {kitSincroniza ? (
+            <>
+              <p className="mt-1">
+                {traduzir(
+                  "A troca só vale para o cadastro direto depois da próxima atualização do servidor: o CRM já segue o modo novo, mas o GoTrue da VPS continua com o modo anterior. Esta tela só avisa — nada é corrigido aqui.",
+                  usuario.idioma,
+                )}
+              </p>
+              <p className="mt-2">
+                {traduzir("Para aplicar agora, rode isto na VPS:", usuario.idioma)}
+              </p>
+              <code className="mt-1 block overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
+                bash hostgator-setup-kit/update.sh
+              </code>
+            </>
+          ) : (
+            <>
+              <p className="mt-1">
+                {traduzir(
+                  "Com o Supabase separado, o cadastro direto não acompanha a troca sozinho: o CRM já segue o modo novo, mas o Supabase continua com o modo anterior. Esta tela só avisa — nada é corrigido aqui.",
+                  usuario.idioma,
+                )}
+              </p>
+              <p className="mt-2">
+                {modo === "so_convite"
+                  ? traduzir(
+                      'No painel do Supabase, em Authentication → Sign In / Up, desligue "Allow new users to sign up".',
+                      usuario.idioma,
+                    )
+                  : traduzir(
+                      'No painel do Supabase, em Authentication → Sign In / Up, ligue "Allow new users to sign up".',
+                      usuario.idioma,
+                    )}
+              </p>
+              <p className="mt-2">
+                {traduzir("Em GoTrue próprio, a chave equivalente é:", usuario.idioma)}
+              </p>
+              <code className="mt-1 block overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
+                DISABLE_SIGNUP={alvoDoGoTrue}
+              </code>
+            </>
+          )}
         </div>
       )}
       <FormularioDeCadastro modoInicial={modo} />

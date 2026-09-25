@@ -7439,6 +7439,18 @@ export const DICIONARIO: Traducoes = {
   "Para aplicar agora, rode isto na VPS:": {
     es: "Para aplicar ahora, ejecuta esto en el VPS:",
   },
+  "Com o Supabase separado, o cadastro direto não acompanha a troca sozinho: o CRM já segue o modo novo, mas o Supabase continua com o modo anterior. Esta tela só avisa — nada é corrigido aqui.": {
+    es: "Con Supabase separado, el registro directo no acompaña el cambio por sí solo: el CRM ya sigue el modo nuevo, pero Supabase sigue con el modo anterior. Esta pantalla solo avisa: aquí no se corrige nada.",
+  },
+  'No painel do Supabase, em Authentication → Sign In / Up, desligue "Allow new users to sign up".': {
+    es: 'En el panel de Supabase, en Authentication → Sign In / Up, desactiva "Allow new users to sign up".',
+  },
+  'No painel do Supabase, em Authentication → Sign In / Up, ligue "Allow new users to sign up".': {
+    es: 'En el panel de Supabase, en Authentication → Sign In / Up, activa "Allow new users to sign up".',
+  },
+  "Em GoTrue próprio, a chave equivalente é:": {
+    es: "En un GoTrue propio, la clave equivalente es:",
+  },
   "Não deu para salvar. Tente de novo em instantes.": {
     es: "No se pudo guardar. Inténtalo de nuevo en unos instantes.",
   },
