@@ -1014,6 +1014,7 @@ async function handleOutboundFromUserPhone(
   const ehEco = await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p);
   let comandoAplicado: typeof comando = null;
   if (!ehEco) {
+    let revogar = true;
     // C-076: o interruptor é do agente que atende ESTA conversa
     // (`ai_agents.config.aceita_comandos_celular`, ligado na tela). FAIL-CLOSED:
     // falha de leitura ⇒ desligado ⇒ o comportamento de antes do recurso.
@@ -1027,7 +1028,7 @@ async function handleOutboundFromUserPhone(
         motivo: MOTIVO_COMANDO_OFF,
       });
     } else if (comandoAplicado === "on") {
-      await devolverAtendimentoAoAgente(
+      const devolucao = await devolverAtendimentoAoAgente(
         {
           supabase: admin,
           organizationId: session.organization_id,
@@ -1036,6 +1037,17 @@ async function handleOutboundFromUserPhone(
         },
         { conversationId },
       );
+      if (!devolucao.ok) {
+        // O `#on` fica VISÍVEL no chat: é o único sinal de que o atendente
+        // precisa repetir (ou devolver pela tela).
+        revogar = false;
+        logger.warn("waha.ingest: #on do celular nao devolveu o atendimento ao agente", {
+          organization_id: session.organization_id,
+          conversation_id: conversationId,
+          erro: devolucao.erro,
+          detalhe: devolucao.detalhe,
+        });
+      }
     } else {
       await pausarIaPorAtendimentoManual(admin, {
         organizationId: session.organization_id,
@@ -1045,7 +1057,7 @@ async function handleOutboundFromUserPhone(
       });
     }
     // O comando não é fala de atendimento: esconde do cliente depois de aplicar.
-    if (comandoAplicado) await revogarComando(session, chatId, p.id);
+    if (comandoAplicado && revogar) await revogarComando(session, chatId, p.id);
   }
 
   await audit({

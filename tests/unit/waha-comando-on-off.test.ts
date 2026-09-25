@@ -36,6 +36,7 @@ const deleteMessage = vi.fn(async () => {});
 vi.mock("@/lib/waha/client", () => ({ getWahaClient: () => ({ deleteMessage }) }));
 
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { dispatchWahaEvent } from "@/lib/waha/ingest";
 
 const ORG = "org-1";
@@ -71,6 +72,8 @@ function makeAdmin(
     agentes?: AgenteFalso[];
     /** `conversations.active_ai_agent_id` — a stickiness gravada pelo router. */
     agenteDaConversa?: string | null;
+    /** A leitura da conversa por `devolverAtendimentoAoAgente` falha. */
+    devolucaoFalha?: boolean;
   } = {},
 ) {
   contactUpdates.length = 0;
@@ -87,9 +90,13 @@ function makeAdmin(
   }));
   const table = (name: string) => {
     let mode: "select" | "insert" | "update" = "select";
+    let colunas = "";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chain: any = {
-      select: () => chain,
+      select: (c?: string) => {
+        colunas = c ?? "";
+        return chain;
+      },
       insert: (linha: Record<string, unknown>) => {
         mode = "insert";
         if (name === "messages") cap.insertedMessages.push(linha);
@@ -120,6 +127,9 @@ function makeAdmin(
         if (name === "conversations" && mode === "update") {
           // Contrato de `pausarIaDuravelmente`: linha de volta = gravou.
           return Promise.resolve({ data: { id: "conv-1" }, error: null });
+        }
+        if (name === "conversations" && mode === "select" && opts.devolucaoFalha && colunas.includes("assigned_to_user_id")) {
+          return Promise.resolve({ data: null, error: { message: "conexão caiu" } });
         }
         if (name === "conversations" && mode === "select") {
           return Promise.resolve({
@@ -267,6 +277,23 @@ describe("C-076 · o comando só VALE se o agente aceitar (config da UI)", () =>
     expect(deleteMessage).toHaveBeenCalledTimes(1);
     // STOP/opt-out é do CLIENTE: o #on do operador nunca o desfaz.
     expect(contactUpdates.some((u) => "is_blocked" in u)).toBe(false);
+  });
+
+  it("LIGADO: '#on' que NÃO devolveu fica no chat (não revoga) e deixa log", async () => {
+    const cap: Captura = { conversationUpdates: [], insertedMessages: [], rpcs: [] };
+    await dispatchWahaEvent(
+      makeAdmin(cap, { aceitaComandos: true, devolucaoFalha: true }),
+      SESSION,
+      comando("#on"),
+      "req-on-falhou",
+    );
+
+    expect(cap.conversationUpdates.some((u) => u.bot_silenced_until === null)).toBe(false);
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.stringContaining("#on do celular nao devolveu"),
+      expect.objectContaining({ erro: "conversation_not_found" }),
+    );
   });
 
   it("LIGADO: resposta NORMAL pelo celular pausa DURÁVEL (o #on é quem religa)", async () => {

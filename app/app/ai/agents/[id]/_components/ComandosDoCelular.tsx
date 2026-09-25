@@ -59,7 +59,7 @@ export function ComandosDoCelular({ agentId, inicial, disabled, aoSalvar }: Prop
         <h3 className="text-sm font-medium">{t("Comandos pelo celular")}</h3>
         <p className="text-xs text-muted-foreground">
           {t(
-            "Ligado, o atendente pode enviar #off para pausar o automático e #on para devolvê-lo à IA, digitando no próprio WhatsApp do celular. Desligado, essas mensagens são tratadas como texto comum.",
+            "Ligado, QUALQUER mensagem enviada pelo WhatsApp do celular pausa a IA nesta conversa até alguém mandar #on — a pausa não vence sozinha. #off pausa sem precisar responder o cliente. Desligado, #on e #off são texto comum, e responder pelo celular pausa a IA só por um tempo.",
           )}
         </p>
       </div>
