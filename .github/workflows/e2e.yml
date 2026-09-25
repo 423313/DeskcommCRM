@@ -1080,6 +1080,7 @@ jobs:
         followup-journey.spec.ts
         followup-dossie.spec.ts
         followup-queue.spec.ts
+        fluxo-de-atendimento.spec.ts
         qa-l12-funil.spec.ts
         i18n-espanhol-na-tela.spec.ts
         extensoes-declarativas.spec.ts
@@ -1088,6 +1089,7 @@ jobs:
         suporte-temporario.spec.ts
         olhar-telas-do-epico.spec.ts
         jev-decisoes-rapidas.spec.ts
+        buffer-ssr-caixa-orfa.spec.ts
 
       # ─── FORA_DO_CI — as que ficaram fora, e o motivo de cada uma ───
       #

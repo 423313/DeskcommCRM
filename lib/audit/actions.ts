@@ -132,6 +132,10 @@ export const AUDIT_ACTIONS = [
   "lead.tags_changed",
   "message.sent",
   "message.received",
+  "message.edited",
+  "message.revoked",
+  "message.hidden_in_crm",
+  "message.restored_in_crm",
   // Uma rodada do cron `recover-stuck-messages` que de fato marcou mensagem
   // como falha (rodada vazia não vira linha — varredura não é mutação).
   "message.recover_stuck_run",
@@ -157,6 +161,9 @@ export const AUDIT_ACTIONS = [
   "lgpd.consent_changed",
   "lgpd.manually_approved",
   "webhook.hmac_invalid",
+  // Uma rodada do cron `webhook-replay` que reprocessou ou desistiu de algum
+  // arquivo de webhook do canal por QR (rodada vazia não vira linha).
+  "webhook.replay_run",
   "lgpd.sla_alarm_triggered",
   "lgpd.sla_watcher_run",
   "platform_admin.inbox_listed",
@@ -878,6 +885,12 @@ export const AUDIT_ACTIONS = [
   "ai.jev.ligado",
   "ai.jev.desligado",
   "ai.jev.modo_alterado",
+  // O pedido de descadastro é do cliente e o padrão é irreversível — mas a
+  // regra W-02 do catálogo de negócio prevê o override: admin desbloqueia à
+  // mão. Sem esta linha, a ação existiria sem rastro de QUEM a desfez, que é
+  // o dado que importa quando alguém pergunta "por que este cliente voltou a
+  // receber?".
+  "contact.unblocked",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

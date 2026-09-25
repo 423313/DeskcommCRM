@@ -417,6 +417,23 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // Os roteiros de atendimento (#1130, de @vgamkt): perguntas que a IA conduz
+    // durante a conversa. MÓDULO OPCIONAL da instalação, desligado por padrão
+    // (doc 64): a porta só existe onde quem administra o servidor o ligou.
+    //
+    // SEM `sidebar`, pela decisão (d) do doc 48: o menu lateral encheu e ficou
+    // configurável por empresa — o padrão não cresce; a porta mora no hub de IA
+    // e na busca, e quem usa pode pô-la no menu dela.
+    href: "/app/ai/atendimento",
+    label: "Fluxos de atendimento",
+    description: "Perguntas que a IA conduz durante a conversa, com as respostas guardadas na ficha do cliente.",
+    icon: "ListChecks",
+    group: "ia",
+    section: "Montar o agente",
+    minRole: "manager",
+    modulo: "fluxos_atendimento",
+  },
+  {
     href: "/app/ai/routers",
     label: "Roteadores",
     description: "Qual agente pega qual conversa, e quando o humano assume.",

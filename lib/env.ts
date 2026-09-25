@@ -206,6 +206,10 @@ const schema = z.object({
   VERCEL_AI_GATEWAY_URL: z.string().optional().default(""),
   ANTHROPIC_API_KEY: z.string().optional().default(""),
   OPENAI_API_KEY: z.string().optional().default(""),
+  // Esforço de raciocínio dos modelos da OpenAI (o*, gpt-5*, gpt-6*). `z.string()`
+  // e NUNCA `z.enum` (motivo mais abaixo, em AGENT_DISPATCH_CONSUMER): quem valida
+  // a grafia é o boot do worker, em `lib/agent-engine/env.ts`.
+  OPENAI_REASONING_EFFORT: z.string().optional().default(""),
   // Transcrição de áudio num serviço COMPATÍVEL com o da OpenAI (Groq, um
   // Whisper próprio): a chave vale só para `/audio/transcriptions` — a conversa
   // com o cliente e a leitura de imagem continuam no provedor do ponto.
@@ -387,6 +391,14 @@ const schema = z.object({
    * respondendo 500 a tudo.
    */
   CASE_ALERT_RETENTION_DAYS: z.string().optional().default(""),
+  /**
+   * Candidato da prospecção nativa vencido (migration 0408, issue #1313).
+   * `z.string()` pela MESMA razão das cinco acima — quem interpreta é
+   * `lib/retencao/politica.ts`, onde lixo resolve para o lado seguro e o
+   * operador vê o aviso no log, em vez de o contêiner ficar `healthy`
+   * respondendo 500 a tudo. Padrão 365, piso 90, decisão do dono (PR #1577).
+   */
+  PROSPECCAO_RETENTION_DAYS: z.string().optional().default(""),
 
   // LGPD export (S-08.04)
   LGPD_SIGNING_KEY: z.string().optional().default(""),
