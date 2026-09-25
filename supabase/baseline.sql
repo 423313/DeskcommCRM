@@ -38851,6 +38851,43 @@ on conflict (model) do update set
   notes = excluded.notes,
   superseded_at = null;
 
+-- ---- Catálogo da Requesty (migration 0410) ----
+--
+-- Roteador OpenAI-compatível, como a OpenRouter: ids `fabricante/modelo`
+-- verificados em `GET https://router.requesty.ai/v1/models`, preço do mesmo
+-- endpoint convertido para CENTAVOS por milhão. `supports_vision` entra junto
+-- porque num roteador é o catálogo que diz se o modelo enxerga imagem. Sem
+-- `ai_pricing`: ela é keyed só por `model`, e estes ids também são da
+-- OpenRouter; o custo cai no catálogo. Racional inteiro na migration 0410.
+insert into public.ai_models
+  (provider, model_id, display_name, description, context_window,
+   input_price_per_million_cents, output_price_per_million_cents,
+   supports_tools, supports_vision)
+values
+  ('requesty', 'openai/gpt-4o-mini', 'GPT-4o mini (Requesty)',
+   'Barato e rápido, bom para atendimento de volume. Enxerga imagem.',
+   128000, 15, 60, true, true),
+  ('requesty', 'openai/gpt-4.1-mini', 'GPT-4.1 mini (Requesty)',
+   'Segue instruções melhor que o 4o mini, com contexto longo. Enxerga imagem.',
+   1047576, 40, 160, true, true),
+  ('requesty', 'google/gemini-2.5-flash', 'Gemini 2.5 Flash (Requesty)',
+   'Contexto muito longo e custo baixo. Enxerga imagem.',
+   1048576, 30, 250, true, true),
+  ('requesty', 'anthropic/claude-haiku-4-5', 'Claude Haiku 4.5 (Requesty)',
+   'Rápido, para atendimentos curtos e classificação. Enxerga imagem.',
+   200000, 100, 500, true, true),
+  ('requesty', 'anthropic/claude-sonnet-4-5', 'Claude Sonnet 4.5 (Requesty)',
+   'O que melhor segue instruções longas e usa as ferramentas do CRM. Enxerga imagem.',
+   1000000, 300, 1500, true, true)
+on conflict (provider, model_id) do update set
+  display_name = excluded.display_name,
+  description = excluded.description,
+  context_window = excluded.context_window,
+  input_price_per_million_cents = excluded.input_price_per_million_cents,
+  output_price_per_million_cents = excluded.output_price_per_million_cents,
+  supports_tools = excluded.supports_tools,
+  supports_vision = excluded.supports_vision;
+
 -- ---- menu lateral por EMPRESA (migration 0367, issue #1341) ----
 --
 -- `organizations.interface_settings` é a escolha da EMPRESA: o universo de portas
