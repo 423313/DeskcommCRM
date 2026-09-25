@@ -1,4 +1,4 @@
--- ---- message.failed vira gatilho de verdade (migration 0416, issue #1614) ----
+-- ---- message.failed vira gatilho de verdade (migration 0417, issue #1614) ----
 --
 -- O gatilho `message.failed` nasce do banco (fn_emit_message_event, AFTER
 -- INSERT) e do cron recover-stuck-messages, mas a migration 0239 o colocou na
@@ -62,7 +62,7 @@ as $$
     'tenant.reactivated',
     'tenant.suspended',
     'user.profile_updated',
-    -- mensagem ('message.failed' SAIU aqui na 0416: ele tem consumidor)
+    -- mensagem ('message.failed' SAIU aqui na 0417: ele tem consumidor)
     'message.outbound',
     'message.sending',
     'message.sent',

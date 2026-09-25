@@ -248,7 +248,7 @@ function tiposConsumidos(): Set<string> {
  * `create or replace`, então o que vale é a última escrita em ordem de
  * aplicação — o baseline (o replay do schema, lido primeiro) e depois as
  * migrations em ordem alfabética. União só era equivalente enquanto todas as
- * definições eram idênticas, e a migration 0416 tirou `message.failed` da
+ * definições eram idênticas, e a migration 0417 tirou `message.failed` da
  * lista (ele ganhou consumidor na #1614) sem poder apagar a 0239, que já
  * rodou em toda instalação existente. Ler a 0239 aqui acusaria um tipo como
  * "nascendo `done`" quando o banco já nem o conhece.
