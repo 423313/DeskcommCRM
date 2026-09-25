@@ -274,7 +274,7 @@ describe('modo assistido: as detecções determinísticas rodam antes do rascunh
     p.query.mockImplementation(async (sql: string) => {
       if (sql.includes('lead_checkpoints')) return { rows: [] };
       if (sql.includes('from messages') && sql.includes('and id = $3')) {
-        return { rows: [{ type: 'text', body: 'SAIR' }] };
+        return { rows: [{ active_ai_agent_id: null, active_intent: null, body: 'SAIR' }] };
       }
       return { rows: [{ active_ai_agent_id: null, active_intent: null, body: 'oi' }] };
     });
