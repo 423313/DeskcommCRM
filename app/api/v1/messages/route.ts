@@ -176,9 +176,16 @@ export async function POST(req: NextRequest): Promise<Response> {
         ?.retry_after_seconds;
       return fail(err.code, err.message, err.status, {
         requestId,
+        // `details` saía SÓ no 429, e a recusa da janela (#1614) é um 422 que
+        // PROMETE detalhe: `use: "template"` e a última mensagem do cliente
+        // são a resposta inteira para quem integra. Repassar o que existe não
+        // muda resposta nenhuma anterior — os outros `ApiError` desta rota
+        // chamam o construtor com `details: undefined`.
+        ...(err.details !== undefined
+          ? { details: err.details as Record<string, unknown> }
+          : {}),
         ...(err.status === 429 && retryAfter
           ? {
-              details: err.details as Record<string, unknown>,
               headers: { "Retry-After": String(retryAfter) },
             }
           : {}),

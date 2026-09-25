@@ -36,6 +36,7 @@ import {
 } from "@/lib/channels";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
+import { estadoDaJanela } from "@/lib/channels/janela";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import {
   buildVcard,
@@ -45,6 +46,7 @@ import {
 } from "@/lib/messaging/contact-card";
 import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
+import { emitirFalhaDeEntrega } from "@/lib/messaging/falha-de-entrega";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
@@ -456,6 +458,53 @@ export async function sendMessageHandler(
       ctx.requestId,
       traduzir("Contato bloqueou o atendimento.", ctx.idioma ?? "pt-BR"),
     );
+  }
+
+  // ─── A janela de 24h, ANTES de qualquer linha nascer (#1614) ──────────────
+  //
+  // Em canal com hetero-restrição, texto livre só sai enquanto o cliente
+  // escreveu nas últimas 24h — fora disso só modelo aprovado, e a plataforma
+  // recusa com 131047. Antes disto a rota respondia 201, a linha virava `sent`
+  // e a recusa chegava DEPOIS, pelo webhook de status: quem integra registrava
+  // "cobrança enviada" e o cliente nunca recebia.
+  //
+  // Só quem chega POR TOKEN (`api_token` e `ai_agent`): a tela já barre o
+  // composer (components/inbox/InboxLayout.tsx, mesma régua) e o agente de IA
+  // tem o gate 3.5 da cadeia `before_send`. Os dois — operador e regra de
+  // automação — seguem com o contrato de antes; a issue é sobre quem integra.
+  //
+  // `estadoDaJanela` é a MESMA régua da tela (lib/channels/janela.ts): um só
+  // lugar decide o que é "janela fechada", e é ele que a tela já trata.
+  if (
+    (ctx.actor.type === "api_token" || ctx.actor.type === "ai_agent") &&
+    input.type !== "template"
+  ) {
+    const janela = estadoDaJanela(
+      c.channel_sessions?.provider ?? DEFAULT_CHANNEL_PROVIDER,
+      c.last_inbound_at,
+      new Date(),
+    );
+    if (janela.tipo === "fechada") {
+      throw new ApiError(
+        422,
+        "janela_fechada",
+        {
+          codigo: "janela_fechada",
+          // `null` = o cliente nunca escreveu: não houve abertura, e inventar
+          // um horário seria prometer uma janela que nunca existiu.
+          ultima_mensagem_do_cliente: c.last_inbound_at,
+          use: "template",
+          // O mesmo código que a recusa chega pelo webhook de status — é a
+          // prova de que a recusa de hoje é a falha silenciosa de ontem.
+          codigo_plataforma: "131047",
+        },
+        ctx.requestId,
+        traduzir(
+          "Janela de 24 horas fechada: texto livre é recusado pela plataforma (131047). Envie um modelo aprovado ou aguarde o cliente escrever.",
+          ctx.idioma ?? "pt-BR",
+        ),
+      );
+    }
   }
 
   if (
@@ -979,7 +1028,28 @@ export async function sendMessageHandler(
         .eq("id", message.id)
         .select(MSG_COLS)
         .maybeSingle();
-      if (updated) message = updated as unknown as Message;
+      if (updated) {
+        message = updated as unknown as Message;
+        // A linha passou a `failed` — é AGORA que o integrador tem de saber
+        // (#1614). Este é o caminho das falhas de PRÉ-VOO do envio; a recusa
+        // que chega depois, pelo webhook de status, emite pelo outro.
+        await emitirFalhaDeEntrega(supabase, {
+          organizationId: ctx.organization_id,
+          source: "messages-send",
+          requestId: ctx.requestId,
+          falha: {
+            message_id: message.id,
+            conversation_id: c.id,
+            contact_id: c.contact_id,
+            contact: c.contacts?.phone_number ?? null,
+            sent_via: message.sent_via ?? origemDaMensagem(ctx.actor),
+            erro: {
+              codigo: message.error_code ?? code,
+              titulo: message.error_message ?? msg,
+            },
+          },
+        });
+      }
     }
   }
 
