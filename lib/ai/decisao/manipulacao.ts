@@ -21,7 +21,8 @@
  *
  * ═══ O QUE SAI DA MÁQUINA ═══
  *
- * Só a última mensagem, passada pelo `scrubMessage` — o aceite em vigor ("cada
+ * Só o que o cliente digitou na última mensagem (`textoDoClienteNaUltimaMensagem`,
+ * sem a mídia), passado pelo `scrubMessage` — o aceite em vigor ("cada
  * mensagem, sozinha"). A guarda do interruptor, do aceite e da tarefa desligada
  * mora em `chaveDaOrganizacao` (`./ponto.ts`), por onde toda chamada passa; o
  * estado é lido aqui também, pelo `pg.Pool` do turno, porque é ele que diz se o
@@ -39,10 +40,12 @@ import type { JailbreakLevel } from "@/lib/agent-engine/guardrails/jailbreak/cla
 import { logger } from "@/lib/logger";
 import { scrubMessage } from "@/lib/sentry/scrub";
 
+import { MODELO_DO_JEV, type FalhaDaDecisao } from "./cliente";
 import { lerConfigDoJev, type EstadoQuePergunta } from "./config";
 import { podeTentar, registrarFalha, registrarSucesso } from "./disjuntor";
 import { decidirNoPonto, type DependenciasDoPonto } from "./ponto";
 import { estadoEfetivoDaTarefa, TAREFA_DA_MANIPULACAO } from "./tarefas";
+import { codigoDoErroDoJev } from "./textos";
 
 /**
  * Os níveis, do mais brando ao mais grave — a ORDEM é a regra do "o maior dos
@@ -105,12 +108,14 @@ async function estadoDaTarefa(pool: pg.Pool, organizationId: string) {
  * ou aceite), disjuntor aberto, sem chave, falha do fornecedor, resposta fora dos
  * três níveis — em todos, o turno segue exatamente como seguia sem o Jev.
  *
- * Quem chama garante as outras duas guardas: a camada anti-manipulação ligada
- * para a organização (sem ela não há com quem comparar) e fora da prévia (R5).
+ * Quem chama garante as outras guardas: a camada anti-manipulação ligada para a
+ * organização (sem ela não há com quem comparar), fora da prévia (R5), só no
+ * turno da mensagem nova, e `mensagem` sendo o que o cliente DIGITOU — mídia
+ * vem vazia (`textoDoClienteNaUltimaMensagem`, R4).
  */
 export async function perguntarManipulacaoAoJev(
   pool: pg.Pool,
-  entrada: { organizationId: string; mensagem: string },
+  entrada: { organizationId: string; mensagem: string; contactId?: string | null; jobId?: string | null },
   deps: DependenciasDoPonto = {},
 ): Promise<ManipulacaoDoJev | null> {
   if (entrada.mensagem.trim() === "") return null;
@@ -131,15 +136,17 @@ export async function perguntarManipulacaoAoJev(
   );
   if (!r.ok) {
     registrarFalha(alvo, r.motivo, Date.now(), r.retryAfterMs);
-    // Sem chave é configuração, não falha. O resto fica no log do processo: em
-    // observação a IA de sempre cobriu, e a falha que pede ação (chave, crédito)
-    // é a mesma da conta, que o clima já avisa na Central.
+    // Sem chave é configuração, não falha. A que passa sozinha (fora do ar,
+    // lento) fica no log: a IA de sempre decidiu, e ela não pede nada a ninguém.
+    // A que pede ação vira linha de erro em Execuções — é dela que o cartão tira
+    // a "Última falha", e com o clima pausado não haveria outro lugar na tela.
     if (r.motivo !== "sem_credencial") {
       logger.warn("Jev não respondeu sobre manipulação; vale só a IA de sempre", {
         organization_id: entrada.organizationId,
         motivo: r.motivo,
       });
     }
+    if (r.exigeAcao) await registrarFalhaQuePedeAcao(pool, entrada, r);
     return null;
   }
 
@@ -163,6 +170,41 @@ export async function perguntarManipulacaoAoJev(
     tokensDeSaida: r.uso.tokensDeSaida,
     latenciaMs: r.latenciaMs,
   };
+}
+
+/**
+ * A linha de erro da falha que pede ação (chave recusada, sem crédito, pergunta
+ * recusada) — a mesma forma da do clima (`workers/ai-sentiment-worker.ts`).
+ * Nunca lança: é telemetria.
+ */
+async function registrarFalhaQuePedeAcao(
+  pool: pg.Pool,
+  entrada: { organizationId: string; contactId?: string | null; jobId?: string | null },
+  falha: FalhaDaDecisao,
+): Promise<void> {
+  if (falha.motivo === "sem_credencial" || falha.motivo === "disjuntor_aberto") return;
+  try {
+    await pool.query(
+      `insert into public.llm_calls
+         (organization_id, contact_id, job_id, purpose, provider, model,
+          input_tokens, output_tokens, cost_cents, latency_ms, status, error_code, http_status, origem_da_escolha)
+       values ($1, $2, $3, 'jailbreak_detect', 'typesafe', $4, 0, 0, 0, $5, 'erro', $6, $7, 'jev')`,
+      [
+        entrada.organizationId,
+        entrada.contactId ?? null,
+        entrada.jobId ?? null,
+        `typesafe/${MODELO_DO_JEV}`,
+        falha.latenciaMs ?? null,
+        codigoDoErroDoJev(falha.motivo),
+        falha.status,
+      ],
+    );
+  } catch (erro) {
+    logger.warn("falha do Jev sobre manipulação não foi gravada", {
+      organization_id: entrada.organizationId,
+      erro: erro instanceof Error ? erro.message.slice(0, 200) : typeof erro,
+    });
+  }
 }
 
 /**
@@ -211,6 +253,9 @@ export async function registrarManipulacaoDoJev(pool: pg.Pool, r: RegistroDaMani
            (organization_id, tarefa, estado, conversation_id, message_id, job_id,
             rotulo_jev, probabilidade_jev, confianca_jev, rotulo_atual, modelo, latencia_ms)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         -- O retry do job pergunta de novo sobre a MESMA mensagem: a primeira
+         -- resposta fica, e o custo da segunda entra em llm_calls, porque houve.
+         on conflict (organization_id, tarefa, message_id) where message_id is not null do nothing
        )
        insert into public.llm_calls
          (organization_id, contact_id, job_id, purpose, provider, model,

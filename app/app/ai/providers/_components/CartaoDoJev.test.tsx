@@ -631,6 +631,50 @@ describe("CartaoDoJev — por tarefa", () => {
     ]);
   });
 
+  /**
+   * O clima observando e a manipulação decidindo: o cartão dizia "Decidindo —
+   * o Jev mede primeiro, e a sua IA de sempre só entra se ele não responder",
+   * falso para as duas (uma só observa; na outra a IA de sempre segue
+   * decidindo e o Jev só soma).
+   */
+  it("decidindo numa tarefa e observando noutra: o cartão não fala por todas, e cada linha diz o que é decidir nela", () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        por_tarefa: [
+          { ...CLIMA, estado: "observando" },
+          { ...NOVA, estado: "decidindo", novo: false },
+        ],
+      }),
+    );
+    expect(cartao()).toHaveAttribute("data-estado", "decidindo");
+    expect(screen.getByText("Decide em parte")).toBeInTheDocument();
+    expect(screen.queryByText("Decidindo")).toBeNull();
+    expect(cartao()).toHaveTextContent("Decidindo em parte — cada tarefa abaixo diz se o Jev decide ou só observa nela.");
+    expect(screen.queryByText(/o Jev mede primeiro/i)).toBeNull();
+    expect(screen.getByTestId("jev-decide-manipulacao")).toHaveTextContent(
+      "A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela",
+    );
+    expect(screen.queryByTestId("jev-decide-clima")).toBeNull();
+  });
+
+  it("as duas decidindo: selo inteiro, e o clima diz que o Jev mede primeiro — só na linha dele", () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "decide" },
+        por_tarefa: [
+          { ...CLIMA, estado: "decidindo" },
+          { ...NOVA, estado: "decidindo", novo: false },
+        ],
+      }),
+    );
+    expect(screen.getByText("Decidindo")).toBeInTheDocument();
+    expect(screen.getByTestId("jev-decide-clima")).toHaveTextContent(
+      "O Jev mede primeiro; a sua IA de sempre só entra se ele não responder.",
+    );
+    expect(screen.getByTestId("jev-decide-manipulacao")).not.toHaveTextContent(/mede primeiro/);
+  });
+
   it("tarefa nova sem observação na resposta não inventa concordância", () => {
     montar(dados({ config: { ligado: true, modo: "observacao" }, por_tarefa: [NOVA] }));
     expect(screen.queryByTestId("jev-concordancia-manipulacao")).toBeNull();

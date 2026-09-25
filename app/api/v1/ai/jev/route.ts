@@ -92,6 +92,8 @@ function porTarefa(c: ConfigDoJev, observacao: Readonly<Record<string, Concordan
 }
 
 interface LinhaDaSemana {
+  /** O ponto de cada tarefa — a falha de uma só se supera com a medida da MESMA. */
+  purpose: string;
   provider: string;
   status: string;
   origem_da_escolha: string | null;
@@ -120,15 +122,18 @@ function numerosDaSemana(linhas: readonly LinhaDaSemana[]) {
   // a paginação, e mudar a ordem não pode trocar a falha que o cartão mostra.
   const maisNova = (atual: LinhaDaSemana | null, l: LinhaDaSemana) =>
     atual === null || Date.parse(l.created_at) > Date.parse(atual.created_at) ? l : atual;
-  const ultimaFalha = doJev.filter((l) => l.status === "erro").reduce<LinhaDaSemana | null>(maisNova, null);
-  const ultimoSucesso = medidas.reduce<LinhaDaSemana | null>(maisNova, null);
-  // Só a falha que o Jev ainda não superou (D3: só alarma o que pede ação). Um
-  // 429 passageiro seguido de mil medidas não é notícia pela semana inteira.
-  const falha =
-    ultimaFalha !== null &&
-    (ultimoSucesso === null || Date.parse(ultimaFalha.created_at) > Date.parse(ultimoSucesso.created_at))
-      ? ultimaFalha
-      : null;
+  // Só a falha que o Jev ainda não superou NAQUELA tarefa (D3: só alarma o que
+  // pede ação). Um 429 passageiro seguido de mil medidas não é notícia pela
+  // semana inteira; mas a medida do clima não supera a pergunta da manipulação
+  // que a API recusa (o disjuntor dessa falha é por tarefa).
+  const ultimaMedida = new Map<string, number>();
+  for (const m of medidas) {
+    ultimaMedida.set(m.purpose, Math.max(ultimaMedida.get(m.purpose) ?? 0, Date.parse(m.created_at)));
+  }
+  const naoSuperada = (f: LinhaDaSemana) => Date.parse(f.created_at) > (ultimaMedida.get(f.purpose) ?? 0);
+  const falha = doJev
+    .filter((l) => l.status === "erro" && naoSuperada(l))
+    .reduce<LinhaDaSemana | null>(maisNova, null);
   return {
     numeros: {
       dias: DIAS_DOS_NUMEROS,
@@ -210,7 +215,7 @@ export async function GET(): Promise<Response> {
     for (let pagina = 0; pagina < PAGINAS_MAX; pagina++) {
       const { data, error } = await db
         .from("llm_calls")
-        .select("provider, status, origem_da_escolha, error_code, cost_cents, latency_ms, created_at")
+        .select("purpose, provider, status, origem_da_escolha, error_code, cost_cents, latency_ms, created_at")
         .eq("organization_id", org.orgId)
         .gte("created_at", desde)
         .or(`provider.eq.${PROVEDOR_DO_JEV},origem_da_escolha.eq.reserva_do_jev`)

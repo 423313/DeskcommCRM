@@ -38142,6 +38142,12 @@ create index if not exists jev_observacoes_org_tarefa_criada_idx
 -- A poda: a ponta mais velha, de todas as organizações.
 create index if not exists jev_observacoes_criada_idx
   on public.jev_observacoes (created_at);
+-- Uma resposta por tarefa e mensagem: o retry do job pergunta de novo sobre a
+-- mesma, e a segunda contaria em dobro na concordância. Sem deduplicar antes:
+-- a tabela nasce nesta migration, sem linha nenhuma.
+create unique index if not exists jev_observacoes_uma_por_mensagem_idx
+  on public.jev_observacoes (organization_id, tarefa, message_id)
+  where message_id is not null;
 
 -- Leitura por qualquer membro da organização (é concordância, não dado de
 -- pessoa); escrita só do servidor, que passa por cima da RLS. Sem policy ALL:

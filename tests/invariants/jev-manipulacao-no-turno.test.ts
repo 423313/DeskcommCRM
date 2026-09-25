@@ -9,6 +9,7 @@ import { newPreviewResult, scenarioContext, type TurnPreview } from "@/lib/agent
 import { createFakeRegistry } from "@/lib/agent-engine/edge/llm/providers";
 import type { Logger } from "@/lib/agent-engine/obs/logger";
 import { claimJobs, completeJob, enqueueJob, failJob } from "@/lib/agent-engine/queue/queue";
+import { registrarManipulacaoDoJev } from "@/lib/ai/decisao/manipulacao";
 
 import { replyFixture } from "../support/autonomia-fixture";
 import { seedGov } from "./gov-helpers";
@@ -102,13 +103,14 @@ function modelo(nivelDaIa: NivelDaIa, r: Rodada) {
   };
 }
 
-/** O Jev: devolve `escolha` no formato real da API e guarda o que recebeu. */
-function jevDuble(escolha: string, r: Rodada) {
+/** O Jev: devolve `escolha` no formato real da API e guarda o que recebeu. `status` ≠ 200 = a API recusa. */
+function jevDuble(escolha: string, r: Rodada, status = 200) {
   return {
     buscarChave: async () => "tsk_duble_do_teste",
     baseUrl: "https://jev.duble.test",
     fetchImpl: (async (url: string | URL | Request, init?: RequestInit) => {
       r.pedidosAoJev.push({ url: String(url), corpo: JSON.parse(String(init?.body)) });
+      if (status !== 200) return new Response("{}", { status });
       return new Response(
         JSON.stringify({
           model: "jev-1.13.0",
@@ -131,7 +133,7 @@ function capturador(r: Rodada): Logger {
   };
 }
 
-function deps(nivelDaIa: NivelDaIa, escolhaDoJev: string, r: Rodada) {
+function deps(nivelDaIa: NivelDaIa, escolhaDoJev: string, r: Rodada, statusDoJev = 200) {
   return {
     crmCfg: { supabase: {} as never },
     llmCfg: { anthropicApiKey: "fake" } as never,
@@ -164,7 +166,7 @@ function deps(nivelDaIa: NivelDaIa, escolhaDoJev: string, r: Rodada) {
       }) as never,
     clock: () => INSTANTE,
     sleep: async () => {},
-    jev: jevDuble(escolhaDoJev, r),
+    jev: jevDuble(escolhaDoJev, r, statusDoJev),
   };
 }
 
@@ -188,8 +190,12 @@ interface Cenario {
   mensagem: string;
 }
 
-/** Uma organização com canal, contato, conversa e a mensagem do cliente. */
-async function cenario(settings: unknown, camadaLigada = true): Promise<Cenario> {
+/**
+ * Uma organização com canal, contato, conversa e a mensagem do cliente. Com
+ * `derivado`, a mensagem é um PDF: o ataque vai na legenda e o sistema já leu o
+ * documento (`media_derived_text`), como o `media-derive-worker` deixa.
+ */
+async function cenario(settings: unknown, camadaLigada = true, derivado?: string): Promise<Cenario> {
   const [org, contato, sessao, conversa, mensagem] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
   await pool.query(
     `insert into organizations (id, slug, legal_name, display_name, settings)
@@ -218,9 +224,20 @@ async function cenario(settings: unknown, camadaLigada = true): Promise<Cenario>
   );
   await pool.query(
     `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
-       type, direction, status, body, sent_via, sent_at)
-     values ($1, $2, $3, $4, $5, 'text', 'inbound', 'delivered', $6, 'external_device', now())`,
-    [mensagem, org, conversa, sessao, contato, ATAQUE],
+       type, direction, status, body, sent_via, sent_at, media_storage_path, media_derived_text, media_derived_status)
+     values ($1, $2, $3, $4, $5, $7, 'inbound', 'delivered', $6, 'external_device', now(), $8, $9, $10)`,
+    [
+      mensagem,
+      org,
+      conversa,
+      sessao,
+      contato,
+      ATAQUE,
+      derivado === undefined ? "text" : "document",
+      derivado === undefined ? null : `${org}/laudo.pdf`,
+      derivado ?? null,
+      derivado === undefined ? null : "ready",
+    ],
   );
   return { org, sessao, contato, conversa, mensagem };
 }
@@ -389,6 +406,74 @@ describe("o Jev na camada anti-manipulação, pelo turno real", () => {
     expect(r.pedidosAoJev).toEqual([]);
     expect(await observacoes(c.org)).toEqual([]);
     expect(nivelNoTrace(r)).toBe("high");
+  });
+
+  it("mídia: o Jev não recebe o que o sistema leu dela (R4) — a IA de sempre segue classificando", async () => {
+    const laudo = "LAUDO: Maria da Silva, rua das Flores 12, diabetes tipo 2, HbA1c 9,1%";
+    const c = await cenario(settingsDoJev(), true, laudo);
+    const r = novaRodada();
+    await rodaTurno(c, deps("high", "high", r));
+
+    // Controle positivo: o documento chegou ao turno, lido, e a camada rodou sobre ele.
+    expect(r.jailbreakDaIa).toBe(1);
+    expect(nivelNoTrace(r)).toBe("high");
+    expect(r.pedidosAoJev).toEqual([]);
+    expect(await observacoes(c.org)).toEqual([]);
+    expect(await chamadasDoJev(c.org)).toEqual([]);
+  });
+
+  it("chave recusada: nenhuma observação, e uma linha de erro em Execuções com o que fazer", async () => {
+    const c = await cenario(settingsDoJev());
+    const r = novaRodada();
+    const jobId = await rodaTurno(c, deps("low", "high", r, 401));
+
+    expect(r.pedidosAoJev).toHaveLength(1);
+    expect(nivelNoTrace(r)).toBe("low");
+    expect(await observacoes(c.org)).toEqual([]);
+    const { rows } = await pool.query(
+      `select purpose, status, error_code, http_status, job_id, contact_id
+         from llm_calls where organization_id = $1 and provider = 'typesafe'`,
+      [c.org],
+    );
+    expect(rows).toEqual([
+      {
+        purpose: "jailbreak_detect",
+        status: "erro",
+        error_code: "jev_credencial_invalida",
+        http_status: 401,
+        job_id: jobId,
+        contact_id: c.contato,
+      },
+    ]);
+  });
+
+  it("a mesma mensagem gravada duas vezes (retry do job) é UMA observação, e o custo das duas", async () => {
+    const c = await cenario(settingsDoJev());
+    const jev = {
+      estado: "observando" as const,
+      nivel: "high" as const,
+      probabilidade: 0.9,
+      confianca: 0.8,
+      modelo: "jev-1.13.0",
+      tokensDeEntrada: 400,
+      tokensDeSaida: 3,
+      latenciaMs: 200,
+    };
+    const registro = {
+      organizationId: c.org,
+      contactId: c.contato,
+      conversationId: c.conversa,
+      messageId: c.mensagem,
+      jobId: null,
+      jev,
+      nivelDaIa: "low" as const,
+      nivelFinal: "low" as const,
+    };
+    await registrarManipulacaoDoJev(pool, registro);
+    await registrarManipulacaoDoJev(pool, { ...registro, jev: { ...jev, nivel: "none" } });
+
+    expect(await observacoes(c.org)).toMatchObject([{ rotulo_jev: "high" }]);
+    expect(await chamadasDoJev(c.org)).toHaveLength(2);
   });
 
   it("a prévia não grava: a IA de sempre classifica, o Jev não é chamado (R5)", async () => {

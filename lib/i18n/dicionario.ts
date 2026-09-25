@@ -3164,6 +3164,10 @@ export const DICIONARIO: Traducoes = {
   "Barrar tentativa de manipulação": {
     es: "Frenar intentos de manipulación",
   },
+  // A mesma pergunta, como tarefa do Jev: ele percebe e soma, não barra.
+  "Perceber tentativa de manipulação": {
+    es: "Detectar intentos de manipulación",
+  },
   "Percebe quando alguém tenta enganar o agente para ele fugir das suas regras.": {
     es: "Detecta cuando alguien intenta engañar al agente para que se salga de sus reglas.",
   },
@@ -3448,6 +3452,8 @@ export const DICIONARIO: Traducoes = {
   Observando: { es: "Observando" },
   Decidindo: { es: "Decidiendo" },
   "Decidindo sozinho": { es: "Decidiendo solo" },
+  // Decidindo numa tarefa e só observando noutra: o selo não fala por todas.
+  "Decide em parte": { es: "Decide en parte" },
   // O selo de cada tarefa do Jev no cartão (CartaoDoJev.tsx).
   "Só observa": { es: "Solo observa" },
   Decide: { es: "Decide" },
@@ -3494,8 +3500,18 @@ export const DICIONARIO: Traducoes = {
   "Observando — a sua IA de sempre ainda decide. Compare os dois antes de deixar o Jev decidir.": {
     es: "Observando: tu IA de siempre todavía decide. Compara los dos antes de dejar que Jev decida.",
   },
-  "Decidindo — o Jev mede primeiro, e a sua IA de sempre só entra se ele não responder.": {
-    es: "Decidiendo: Jev mide primero, y tu IA de siempre solo entra si él no responde.",
+  "Decidindo — cada tarefa abaixo diz o que o Jev decide nela.": {
+    es: "Decidiendo: cada tarea de abajo dice qué decide Jev en ella.",
+  },
+  "Decidindo em parte — cada tarefa abaixo diz se o Jev decide ou só observa nela.": {
+    es: "Decidiendo en parte: cada tarea de abajo dice si Jev decide o solo observa en ella.",
+  },
+  // O que "Decide" quer dizer em cada tarefa: tomar o lugar ou somar o sinal.
+  "O Jev mede primeiro; a sua IA de sempre só entra se ele não responder.": {
+    es: "Jev mide primero; tu IA de siempre solo entra si él no responde.",
+  },
+  "A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela, sem nunca apagá-lo.": {
+    es: "Tu IA de siempre sigue decidiendo; Jev solo suma su alerta a la de ella, sin borrarla nunca.",
   },
   "Decidindo sozinho — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva.": {
     es: "Decidiendo solo: la empresa todavía no tiene una IA principal que mida el clima, así que Jev mide sin respaldo.",

@@ -41,8 +41,7 @@ describe("TAREFAS_DO_JEV", () => {
       const igual =
         p?.decisaoRapida !== undefined &&
         p.decisaoRapida.primitiva === t.primitiva &&
-        p.decisaoRapida.oQueOJevFaz === t.oQueFaz &&
-        p.rotulo === t.rotulo;
+        p.decisaoRapida.oQueOJevFaz === t.oQueFaz;
       return igual ? [] : [t.id];
     });
     expect(divergentes).toEqual([]);

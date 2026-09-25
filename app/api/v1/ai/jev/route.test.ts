@@ -140,6 +140,7 @@ function credencial(over: Linha = {}): Linha {
 
 function chamada(over: Linha = {}): Linha {
   return {
+    purpose: "sentiment_classify",
     provider: "typesafe",
     status: "ok",
     origem_da_escolha: "jev",
@@ -368,6 +369,20 @@ describe("GET /api/v1/ai/jev", () => {
     expect(corpo.data.ultima_falha).toBeNull();
   });
 
+  it("a medida de uma tarefa não supera a falha de OUTRA: o clima medindo não apaga a pergunta recusada da manipulação", async () => {
+    estado.llmCalls = [
+      chamada({
+        purpose: "jailbreak_detect",
+        status: "erro",
+        error_code: "jev_contrato_invalido",
+        created_at: "2026-09-22T11:00:00.000Z",
+      }),
+      chamada({ created_at: "2026-09-22T12:00:00.000Z" }),
+    ];
+    const { corpo } = await ler();
+    expect(corpo.data.ultima_falha).toEqual({ motivo: "jev_contrato_invalido", em: "2026-09-22T11:00:00.000Z" });
+  });
+
   it("pagina: mais de 1000 execuções na semana contam todas", async () => {
     estado.llmCalls = Array.from({ length: 2500 }, () => chamada());
     const { corpo } = await ler();
@@ -567,7 +582,7 @@ describe("o Jev por tarefa na rota", () => {
   it("GET: `tarefas` continua na forma da onda 1 (a página aberta durante a atualização a lê)", async () => {
     expect((await ler()).corpo.data.tarefas).toEqual([
       expect.objectContaining({ id: "sentiment_classify", rotulo: "Medir o clima da conversa" }),
-      expect.objectContaining({ id: "jailbreak_detect", rotulo: "Barrar tentativa de manipulação" }),
+      expect.objectContaining({ id: "jailbreak_detect", rotulo: "Perceber tentativa de manipulação" }),
     ]);
   });
 

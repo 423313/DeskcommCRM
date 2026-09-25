@@ -45,7 +45,11 @@ export interface TarefaDoJev {
    * disse não) ou `novo` (não há mecanismo hoje).
    */
   familia: "substitui" | "soma" | "cascata" | "novo";
-  /** Para quem não é engenheiro: vão à tela por `t()`. */
+  /**
+   * Para quem não é engenheiro: vão à tela por `t()`. O `rotulo` é o nome do que
+   * o JEV faz, e pode diferir do nome do ponto; o `oQueFaz` é o `oQueOJevFaz` do
+   * registro, igual.
+   */
   rotulo: string;
   oQueFaz: string;
 }
@@ -78,7 +82,9 @@ export const TAREFA_DA_MANIPULACAO = {
   primitiva: "choice",
   alcance: "mensagem",
   familia: "soma",
-  rotulo: "Barrar tentativa de manipulação",
+  // O nome do ponto ("Barrar…") é o do classificador; o Jev não barra nada —
+  // percebe e soma o sinal. Dizer "barrar" ao leigo prometeria um bloqueio.
+  rotulo: "Perceber tentativa de manipulação",
   oQueFaz:
     "Percebe, na mensagem do cliente, quem tenta enganar o agente para ele fugir das suas regras — e soma esse sinal ao da sua IA de sempre, sem nunca apagá-lo.",
 } as const satisfies TarefaDoJev;

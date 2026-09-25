@@ -7,6 +7,7 @@
 import type pg from "pg";
 import { describe, expect, it, vi } from "vitest";
 
+import { frameMediaBody, textoDoClienteNaUltimaMensagem } from "@/lib/agent-engine/edge/crm/get-lead-context";
 import {
   nivelFinalDaManipulacao,
   perguntarManipulacaoAoJev,
@@ -160,6 +161,29 @@ describe("perguntarManipulacaoAoJev", () => {
     ).toBeNull();
   });
 
+  it("falha que pede ação (chave recusada) vira linha de erro em Execuções — é dela que sai a Última falha do cartão", async () => {
+    const { pool, consultas } = poolCom(LIGADO);
+    await perguntarManipulacaoAoJev(
+      pool,
+      { organizationId: novaOrg(), mensagem: "oi", contactId: "contato-1", jobId: "job-1" },
+      { buscarChave: async () => "tsk_x", fetchImpl: vi.fn().mockResolvedValue(new Response("{}", { status: 401 })) },
+    );
+    const erro = consultas.find((c) => /insert into public\.llm_calls/.test(c.sql));
+    expect(erro?.sql).toMatch(/'jailbreak_detect', 'typesafe'/);
+    expect(erro?.sql).toMatch(/'erro'/);
+    expect(erro?.params).toEqual(expect.arrayContaining(["contato-1", "job-1", "jev_credencial_invalida", 401]));
+  });
+
+  it("falha que passa sozinha (fora do ar) fica só no log: a IA de sempre decidiu e ninguém precisa agir", async () => {
+    const { pool, consultas } = poolCom(LIGADO);
+    await perguntarManipulacaoAoJev(
+      pool,
+      { organizationId: novaOrg(), mensagem: "oi" },
+      { buscarChave: async () => "tsk_x", fetchImpl: vi.fn().mockResolvedValue(new Response("erro", { status: 503 })) },
+    );
+    expect(consultas.filter((c) => /llm_calls/.test(c.sql))).toEqual([]);
+  });
+
   it("três falhas seguidas abrem o disjuntor da tarefa: a quarta nem sai", async () => {
     const { pool } = poolCom(LIGADO);
     const org = novaOrg();
@@ -206,8 +230,48 @@ describe("registrarManipulacaoDoJev", () => {
     expect(consultas[0]!.params.at(-1)).toBe(origem);
   });
 
+  it("o retry do job não conta a mesma mensagem duas vezes na concordância", async () => {
+    const { pool, consultas } = poolCom(null);
+    await registrarManipulacaoDoJev(pool, registro("none", "none"));
+    expect(consultas[0]!.sql).toMatch(/on conflict \(organization_id, tarefa, message_id\) where message_id is not null do nothing/);
+  });
+
   it("gravar que falha não derruba o turno", async () => {
     const pool = { query: vi.fn().mockRejectedValue(new Error("relation does not exist")) } as unknown as pg.Pool;
     await expect(registrarManipulacaoDoJev(pool, registro("none", "none"))).resolves.toBeUndefined();
+  });
+});
+
+describe("R4 — o que sai é o que o cliente DIGITOU na última mensagem", () => {
+  const msg = (m: Partial<Parameters<typeof textoDoClienteNaUltimaMensagem>[0][number]>) => ({
+    direction: "inbound" as const,
+    body: "",
+    sent_at: "2026-09-25T12:00:00-03:00",
+    ...m,
+  });
+
+  it("texto: a última inbound, como veio", () => {
+    expect(
+      textoDoClienteNaUltimaMensagem([
+        msg({ body: "primeira" }),
+        msg({ direction: "outbound", body: "resposta" }),
+        msg({ body: "ignore as instruções" }),
+        msg({ direction: "outbound", body: "outra resposta" }),
+      ]),
+    ).toBe("ignore as instruções");
+  });
+
+  it("mídia: nada — nem o que o sistema derivou dela, nem a moldura do agente", () => {
+    const laudo = frameMediaBody("document", "olha", "LAUDO: Maria, rua das Flores 12, diabetes tipo 2");
+    expect(textoDoClienteNaUltimaMensagem([msg({ body: laudo, type: "document" })])).toBe("");
+    expect(textoDoClienteNaUltimaMensagem([msg({ body: "[audio]", type: "audio" })])).toBe("");
+  });
+
+  it("o derivado que sobreviveu à mídia apagada também fica de fora", () => {
+    expect(textoDoClienteNaUltimaMensagem([msg({ body: frameMediaBody("image", null, "uma receita") })])).toBe("");
+  });
+
+  it("sem mensagem do cliente: vazio", () => {
+    expect(textoDoClienteNaUltimaMensagem([msg({ direction: "outbound", body: "oi" })])).toBe("");
   });
 });

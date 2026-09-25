@@ -165,6 +165,21 @@ function estadoDoJev(d: DadosDoJev): Estado {
 }
 
 /**
+ * "Decidindo" com uma tarefa ainda só observando. O selo e a frase do cartão
+ * inteiro não podem falar por todas: o clima observando com a manipulação
+ * decidindo é o caminho natural depois do selo "Novo" e de um clique.
+ */
+function decideEmParte(d: DadosDoJev): boolean {
+  return tarefasDoCartao(d).some((t) => t.estado === "observando");
+}
+
+/**
+ * Decidindo, o sinal desta tarefa se SOMA ao da IA de sempre, em vez de tomar o
+ * lugar dela — "Decide" quer dizer outra coisa ali.
+ */
+const somaSinal = (tarefaId: string) => TAREFAS_DO_JEV.find((x) => x.id === tarefaId)?.familia === "soma";
+
+/**
  * Como o Jev está no ponto `pontoId`, para a linha do cartão do ponto — pelo
  * estado da tarefa dele. `soma`: decidindo numa tarefa da família `soma`, o
  * modelo do ponto segue decidindo e o Jev só acrescenta sinal — "o modelo
@@ -180,7 +195,7 @@ export function jevNoPonto(
   // A IA de sempre é a do clima (`tem_ia_de_sempre`), e só o clima decide sem ela (DEC-012 #5).
   if (!d.tem_ia_de_sempre && tarefa.id === TAREFA_DO_CLIMA.id) return "sozinho";
   if (tarefa.estado !== "decidindo") return "observacao";
-  return TAREFAS_DO_JEV.find((t) => t.id === tarefa.id)?.familia === "soma" ? "soma" : "decide";
+  return somaSinal(tarefa.id) ? "soma" : "decide";
 }
 
 type Resposta = { data?: DadosDoJev; error?: { message?: string } };
@@ -271,7 +286,7 @@ export function CartaoDoJev({
       <div className="grid gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto]">
         <h2 className="text-base font-semibold">{t("Jev — decisões rápidas")}</h2>
         <div className="sm:col-start-2 sm:row-start-1">
-          <SeloDoEstado estado={estado} />
+          <SeloDoEstado estado={estado} emParte={estado === "decidindo" && decideEmParte(dados)} />
         </div>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{t(dados.provedor.quandoUsar)}</p>
       </div>
@@ -309,10 +324,10 @@ export function CartaoDoJev({
   );
 }
 
-function SeloDoEstado({ estado }: { estado: Estado }) {
+function SeloDoEstado({ estado, emParte }: { estado: Estado; emParte: boolean }) {
   const t = useT();
   if (estado === "observando") return <Badge variant="info">{t("Observando")}</Badge>;
-  if (estado === "decidindo") return <Badge variant="success">{t("Decidindo")}</Badge>;
+  if (estado === "decidindo") return <Badge variant="success">{emParte ? t("Decide em parte") : t("Decidindo")}</Badge>;
   if (estado === "sozinho") return <Badge variant="warning">{t("Decidindo sozinho")}</Badge>;
   if (estado === "parado") return <Badge variant="warning">{t("Parado")}</Badge>;
   if (estado === "em_pausa") return <Badge variant="neutral">{t("Em pausa")}</Badge>;
@@ -590,7 +605,9 @@ function Ligado({
         {estado === "observando" &&
           t("Observando — a sua IA de sempre ainda decide. Compare os dois antes de deixar o Jev decidir.")}
         {estado === "decidindo" &&
-          t("Decidindo — o Jev mede primeiro, e a sua IA de sempre só entra se ele não responder.")}
+          (decideEmParte(dados)
+            ? t("Decidindo em parte — cada tarefa abaixo diz se o Jev decide ou só observa nela.")
+            : t("Decidindo — cada tarefa abaixo diz o que o Jev decide nela."))}
         {estado === "sozinho" &&
           t("Decidindo sozinho — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva.")}
         {estado === "parado" &&
@@ -623,6 +640,14 @@ function Ligado({
               )}
               {tarefa.novo && <Badge variant="info">{t("Novo")}</Badge>}
             </div>
+
+            {rodando && tarefa.estado === "decidindo" && (
+              <p className="text-sm text-muted-foreground" data-testid={`jev-decide-${tarefa.id}`}>
+                {somaSinal(tarefa.id)
+                  ? t("A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela, sem nunca apagá-lo.")
+                  : t("O Jev mede primeiro; a sua IA de sempre só entra se ele não responder.")}
+              </p>
+            )}
 
             {/* A concordância de cada tarefa com a IA de sempre — o que se lê antes
                 de deixar o Jev decidir. O clima conta "chamariam uma pessoa"; as

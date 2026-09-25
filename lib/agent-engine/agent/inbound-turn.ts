@@ -43,6 +43,7 @@ import { withFields, type Logger } from '../obs/logger';
 import {
   corpoDaMensagem,
   getLeadContext,
+  textoDoClienteNaUltimaMensagem,
   type CorpoDaMensagemRow,
   type LeadContext,
   type LeadContextMessage,
@@ -3914,10 +3915,17 @@ async function executarTurnoDoAgente(
     //
     // A TERCEIRA perna é o Jev na mesma pergunta do jailbreak
     // (`lib/ai/decisao/manipulacao.ts`), e só existe onde ela tem com quem
-    // comparar e o que medir: a camada ligada para a organização e fora da
-    // prévia — simulação não vira concordância (R5). A tarefa desligada, o
+    // comparar e o que medir: a camada ligada para a organização, fora da
+    // prévia — simulação não vira concordância (R5) — e no turno da mensagem
+    // NOVA (`inbound_turn`): o `case_reply_turn` responde a ação de um humano
+    // sobre uma mensagem que o turno dela já perguntou. A tarefa desligada, o
     // interruptor e o aceite são conferidos lá dentro. Em paralelo, o turno só
     // espera por ele o que ele passar do mais lento dos dois.
+    //
+    // O Jev recebe o que o CLIENTE digitou, e não o `skillSignal`: numa mídia, o
+    // `skillSignal` leva a transcrição, a descrição ou o texto do PDF e a moldura
+    // de instrução do agente, que o aceite ("cada mensagem, sozinha") não cobre
+    // (R4). Mídia fica de fora da pergunta dele.
     const manipulacaoLigada = camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined);
     const [stageResultado, jailbreakVerdict, manipulacaoDoJev] = await Promise.all([
       deps.knobs.stageClassifier !== undefined
@@ -3951,8 +3959,17 @@ async function executarTurnoDoAgente(
             { registry: deps.registry, log: runLog },
           )
         : Promise.resolve(null),
-      manipulacaoLigada && !preview
-        ? perguntarManipulacaoAoJev(pool, { organizationId: tenantId, mensagem: skillSignal }, deps.jev)
+      manipulacaoLigada && !preview && job?.kind === 'inbound_turn'
+        ? perguntarManipulacaoAoJev(
+            pool,
+            {
+              organizationId: tenantId,
+              mensagem: textoDoClienteNaUltimaMensagem(effectiveContext.messages),
+              contactId: leadId || null,
+              jobId: job.id,
+            },
+            deps.jev,
+          )
         : Promise.resolve(null),
     ]);
 
