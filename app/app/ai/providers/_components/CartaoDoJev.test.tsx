@@ -5,7 +5,7 @@
  * e "por que ele decide sozinho?". Os dados vêm de `GET /api/v1/ai/jev`.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
@@ -297,8 +297,8 @@ describe("CartaoDoJev — (5) ligado, decidindo", () => {
     expect(numero("Vezes que a IA de sempre cobriu o Jev")).toBe("2");
     // O número que mostra o valor do Jev: quantos clientes irritados ele percebeu.
     expect(numero("Clientes irritados percebidos")).toBe("7");
-    // "Mensagens medidas" segue o primeiro: é o que a spec do e2e lê.
-    expect(numeros.querySelector("dt")).toHaveTextContent("Mensagens medidas");
+    // "Respostas do Jev" segue o primeiro: é o que a spec do e2e lê.
+    expect(numeros.querySelector("dt")).toHaveTextContent("Respostas do Jev");
   });
 
   it("a chave que passou no teste se diz conferida, em palavras", () => {
@@ -583,5 +583,56 @@ describe("CartaoDoJev — por tarefa", () => {
     // Só o clima decide sem a IA de sempre (DEC-012 #5); a tarefa nova, não.
     const semIa = dados({ config: { ligado: true }, tem_ia_de_sempre: false, por_tarefa: [NOVA] });
     expect(jevNoPonto(semIa, "jailbreak_detect")).toBe("observacao");
+  });
+
+  it("jevNoPonto: a manipulação decidindo SOMA — o modelo do ponto segue decidindo, não vira reserva", () => {
+    const d = dados({ config: { ligado: true }, por_tarefa: [{ ...NOVA, estado: "decidindo" }] });
+    expect(jevNoPonto(d, "jailbreak_detect")).toBe("soma");
+  });
+
+  it("a tarefa nova mostra a concordância dela (de jev_observacoes), e o clima a dele", () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        numeros: { observacao: { dias: 30, comparadas: 10, concordaram: 9 } },
+        por_tarefa: [
+          { ...CLIMA, estado: "observando", observacao: { dias: 30, comparadas: 10, concordaram: 9 } },
+          { ...NOVA, observacao: { dias: 30, comparadas: 4, concordaram: 3 } },
+        ],
+      }),
+    );
+    expect(screen.getByTestId("jev-concordancia")).toHaveTextContent(/9 de 10/);
+    const daNova = screen.getByTestId("jev-concordancia-manipulacao");
+    expect(daNova).toHaveTextContent(/concordou com a sua IA de sempre em 3 de 4 mensagens/);
+    // A frase da passagem para humano é do clima, e só dele.
+    expect(daNova).not.toHaveTextContent(/chamariam/);
+  });
+
+  it("pausar uma tarefa só: a nova (que começou sozinha) e o clima, cada um pela tarefa — o Jev segue ligado", async () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        por_tarefa: [{ ...CLIMA, estado: "observando" }, NOVA],
+      }),
+    );
+    const pausar = within(screen.getByTestId("jev-tarefa-manipulacao")).getByRole("button", {
+      name: "Pausar esta tarefa",
+    });
+    fireEvent.click(pausar);
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(1));
+    fireEvent.click(
+      within(screen.getByTestId("jev-tarefa-clima")).getByRole("button", { name: "Pausar esta tarefa" }),
+    );
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(2));
+    // "Desligada" não tem nome no `modo`: o clima também vai pela tarefa.
+    expect(chamadas.map((c) => c.corpo)).toEqual([
+      { tarefa: "manipulacao", estado: "desligada" },
+      { tarefa: "clima", estado: "desligada" },
+    ]);
+  });
+
+  it("tarefa nova sem observação na resposta não inventa concordância", () => {
+    montar(dados({ config: { ligado: true, modo: "observacao" }, por_tarefa: [NOVA] }));
+    expect(screen.queryByTestId("jev-concordancia-manipulacao")).toBeNull();
   });
 });

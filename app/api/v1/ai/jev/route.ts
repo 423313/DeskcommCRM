@@ -9,8 +9,10 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * sempre.
  *
  * GET também responde, por tarefa (`por_tarefa`, de `TAREFAS_DO_JEV`), o estado
- * que vale agora, o que ela vira ao ligar o Jev (`ao_ligar`) e se ela é nova —
- * começou sozinha e ninguém escolheu ainda.
+ * que vale agora, o que ela vira ao ligar o Jev (`ao_ligar`), se ela é nova —
+ * começou sozinha e ninguém escolheu ainda — e a concordância dela com a IA de
+ * sempre (`observacao`): a do clima, das notas em `messages.metadata`; a das
+ * outras, de `jev_observacoes`.
  *
  * PATCH liga, desliga, troca o modo do clima (`modo`, o nome da onda 1) e o
  * estado de uma tarefa (`tarefa` + `estado`). Ligar manda cada mensagem que o cliente
@@ -74,7 +76,9 @@ const TAREFAS = TAREFAS_DO_JEV.flatMap((t) =>
   t.ponto ? [{ id: t.ponto, rotulo: t.rotulo, oQueOJevFaz: t.oQueFaz }] : [],
 );
 
-function porTarefa(c: ConfigDoJev) {
+type Concordancia = { dias: number; comparadas: number; concordaram: number };
+
+function porTarefa(c: ConfigDoJev, observacao: Readonly<Record<string, Concordancia>>) {
   return TAREFAS_DO_JEV.map((t) => ({
     id: t.id,
     ponto: t.ponto ?? null,
@@ -83,6 +87,7 @@ function porTarefa(c: ConfigDoJev) {
     estado: estadoEfetivoDaTarefa(c, t),
     ao_ligar: estadoAoLigar(c, t),
     novo: tarefaEhNova(c, t),
+    observacao: observacao[t.id] ?? null,
   }));
 }
 
@@ -157,7 +162,7 @@ const abaixo = (n: number) => n < DEFAULT_SENTIMENT_THRESHOLD;
  * decide a passagem para humano? É a pergunta que importa antes de deixar o Jev
  * decidir — "chamou uma pessoa quando a IA de sempre chamaria".
  */
-function concordancia(linhas: ReadonlyArray<{ nota: unknown; nota_do_jev: unknown }>) {
+function concordancia(linhas: ReadonlyArray<{ nota: unknown; nota_do_jev: unknown }>): Concordancia {
   const pares = linhas.flatMap((l) =>
     typeof l.nota === "number" && typeof l.nota_do_jev === "number"
       ? [[l.nota, l.nota_do_jev] as const]
@@ -220,7 +225,39 @@ export async function GET(): Promise<Response> {
     return { linhas, erro: null };
   };
 
-  const [orgRes, credsRes, semana, comparadasRes, iaDeSempre, percebidasRes] = await Promise.all([
+  /**
+   * A concordância das tarefas que gravam em `jev_observacoes` — todas menos o
+   * clima, que a guarda nas notas das mensagens desde a onda 1. Contagem no
+   * banco (`head`), sem trazer linha: "sem par" (`concordou` nulo, a IA de
+   * sempre não decidiu) não entra no denominador.
+   */
+  const lerObservacoes = async (): Promise<{ porTarefa: Record<string, Concordancia>; erro: string | null }> => {
+    const desde = diasAtras(DIAS_DA_CONCORDANCIA);
+    const contar = (tarefa: string) =>
+      db
+        .from("jev_observacoes")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", org.orgId)
+        .eq("tarefa", tarefa)
+        .gte("created_at", desde);
+    const porTarefa: Record<string, Concordancia> = {};
+    for (const t of TAREFAS_DO_JEV.filter((x) => x.id !== TAREFA_DO_CLIMA.id)) {
+      const [comparadas, concordaram] = await Promise.all([
+        contar(t.id).not("concordou", "is", null),
+        contar(t.id).eq("concordou", true),
+      ]);
+      const erro = comparadas.error?.message ?? concordaram.error?.message;
+      if (erro) return { porTarefa, erro };
+      porTarefa[t.id] = {
+        dias: DIAS_DA_CONCORDANCIA,
+        comparadas: comparadas.count ?? 0,
+        concordaram: concordaram.count ?? 0,
+      };
+    }
+    return { porTarefa, erro: null };
+  };
+
+  const [orgRes, credsRes, semana, comparadasRes, iaDeSempre, percebidasRes, observacoes] = await Promise.all([
     db.from("organizations").select("settings").eq("id", org.orgId).maybeSingle(),
     db
       .from("ai_provider_credentials")
@@ -256,6 +293,7 @@ export async function GET(): Promise<Response> {
       .not(`metadata->${CHAVES_DO_CLIMA.notaDoJev}`, "is", null)
       .order("created_at", { ascending: false })
       .limit(PAGINA),
+    lerObservacoes(),
   ]);
 
   const erro =
@@ -263,7 +301,8 @@ export async function GET(): Promise<Response> {
     credsRes.error?.message ??
     semana.erro ??
     comparadasRes.error?.message ??
-    percebidasRes.error?.message;
+    percebidasRes.error?.message ??
+    observacoes.erro;
   if (erro) return fail("query_failed", erro, 500, { requestId });
 
   const credenciais = credsRes.data ?? [];
@@ -277,6 +316,7 @@ export async function GET(): Promise<Response> {
 
   const { numeros, ultima_falha } = numerosDaSemana(semana.linhas);
   const config = lerConfigDoJev(orgRes.data?.settings);
+  const doClima = concordancia(comparadasRes.data ?? []);
 
   return ok(
     {
@@ -295,12 +335,12 @@ export async function GET(): Promise<Response> {
       },
       config: configPublica(config),
       tarefas: TAREFAS,
-      por_tarefa: porTarefa(config),
+      por_tarefa: porTarefa(config, { ...observacoes.porTarefa, [TAREFA_DO_CLIMA.id]: doClima }),
       tem_ia_de_sempre: iaDeSempre !== null,
       numeros: {
         ...numeros,
         irritados: irritadosPercebidos(percebidasRes.data ?? []),
-        observacao: concordancia(comparadasRes.data ?? []),
+        observacao: doClima,
       },
       ultima_falha,
       pode_editar: roleAtLeast(org.role, "admin"),

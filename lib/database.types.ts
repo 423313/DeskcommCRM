@@ -5932,6 +5932,68 @@ export type Database = {
           },
         ]
       }
+      jev_observacoes: {
+        Row: {
+          concordou: boolean | null
+          confianca_jev: number | null
+          conversation_id: string | null
+          created_at: string
+          estado: string
+          id: string
+          job_id: string | null
+          latencia_ms: number | null
+          message_id: string | null
+          modelo: string | null
+          organization_id: string
+          probabilidade_jev: number | null
+          rotulo_atual: string | null
+          rotulo_jev: string | null
+          tarefa: string
+        }
+        Insert: {
+          concordou?: never
+          confianca_jev?: number | null
+          conversation_id?: string | null
+          created_at?: string
+          estado: string
+          id?: string
+          job_id?: string | null
+          latencia_ms?: number | null
+          message_id?: string | null
+          modelo?: string | null
+          organization_id: string
+          probabilidade_jev?: number | null
+          rotulo_atual?: string | null
+          rotulo_jev?: string | null
+          tarefa: string
+        }
+        Update: {
+          concordou?: never
+          confianca_jev?: number | null
+          conversation_id?: string | null
+          created_at?: string
+          estado?: string
+          id?: string
+          job_id?: string | null
+          latencia_ms?: number | null
+          message_id?: string | null
+          modelo?: string | null
+          organization_id?: string
+          probabilidade_jev?: number | null
+          rotulo_atual?: string | null
+          rotulo_jev?: string | null
+          tarefa?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jev_observacoes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_queue: {
         Row: {
           attempts: number

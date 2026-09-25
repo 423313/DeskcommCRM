@@ -108,6 +108,32 @@ describe("PainelDeProvedores — o Jev no painel", () => {
     );
   });
 
+  it("a manipulação decidindo: o cartão do ponto diz que o Jev SOMA, e não que o modelo virou reserva", async () => {
+    const ponto = PROVEDORES.pontos[0]!;
+    const jailbreak = { ...ponto, id: "jailbreak_detect", rotulo: "Barrar tentativa de manipulação", papel: "proteger" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const data =
+          url === "/api/v1/ai/jev"
+            ? {
+                ...jev(true),
+                por_tarefa: [
+                  { id: "manipulacao", ponto: "jailbreak_detect", rotulo: "x", oQueFaz: "x", estado: "decidindo", novo: false },
+                ],
+              }
+            : { ...PROVEDORES, pontos: [jailbreak] };
+        return new Response(JSON.stringify({ data }), { status: 200 });
+      }),
+    );
+    montar();
+    await screen.findByTestId("cartao-do-jev");
+    fireEvent.click(screen.getByTestId("avancado-proteger"));
+    expect(screen.getByTestId("jev-no-ponto-jailbreak_detect")).toHaveTextContent(
+      "O modelo abaixo decide; o Jev soma o sinal dele, sem nunca apagar o do modelo.",
+    );
+  });
+
   it("com o Jev desligado, o cartão do ponto não fala dele", async () => {
     jevLigado = false;
     montar();

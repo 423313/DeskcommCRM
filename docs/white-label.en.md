@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@ca7f3c3481e2 -->
+<!-- traduzido-de: docs/white-label.md@397131f0d50b -->
 
 [🇧🇷 Português](white-label.md) · 🇺🇸 English · [🇪🇸 Español](white-label.es.md)
 
@@ -167,7 +167,7 @@ If your client asks "where does my data live?", the dedicated installation has t
 
 Every client of yours who uses a foreign CRM performs such a transfer and needs the contractual artifact. Hosting on a VPS in Brazil, **the CRM itself transfers no data out of the country** — and, for the CRM, the obligation does not apply.
 
-⚠️ **The caveat is AI, and it applies to almost every installation.** The sentence above only holds while no foreign AI provider is switched on. Automated customer service sends the conversation to the provider the client connected (Anthropic, OpenAI, Google, DeepSeek or OpenRouter, all outside Brazil). Jev, once the administrator switches it on under AI › Providers, sends every message a customer writes to TypeSafe AI, in the United States, one at a time and without the rest of the conversation, after stripping CPF, phone number and email. Those flows are international transfers, and the standard clauses apply to them. Jev ships switched off and asks for the administrator's consent before sending anything; the customer-service AI does not.
+⚠️ **The caveat is AI, and it applies to almost every installation.** The sentence above only holds while no foreign AI provider is switched on. Automated customer service sends the conversation to the provider the client connected (Anthropic, OpenAI, Google, DeepSeek or OpenRouter, all outside Brazil). Jev, once the administrator switches it on under AI › Providers, sends every message a customer writes to TypeSafe AI, in the United States, one at a time and without the rest of the conversation, after stripping CPF, phone number and email. Each Jev task has its own purpose — measuring the mood of the conversation and noticing attempts to manipulate the automated service — and all of them use only that one message, on its own. Those flows are international transfers, and the standard clauses apply to them. Jev ships switched off and asks for the administrator's consent before sending anything; the customer-service AI does not.
 
 ⚠️ **Do not sell this as "server in Brazil = LGPD compliance".** That is false, and a lawyer takes it apart on the first question: compliance depends on legal basis, purpose, security and data-subject rights. The correct and defensible argument is the one above: with no international transfer, there is no requirement for standard clauses.
 

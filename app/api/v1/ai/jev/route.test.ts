@@ -42,6 +42,8 @@ interface Consulta {
   cliente: "admin" | "sessao";
   tabela: string;
   eq: Array<[string, unknown]>;
+  /** `.not(col, "is", valor)` — só `jev_observacoes` os aplica (as outras leituras não dependem deles aqui). */
+  nao: Array<[string, unknown]>;
   gte: Array<[string, unknown]>;
   range: [number, number] | null;
   patch: Linha | null;
@@ -52,6 +54,7 @@ interface Estado {
   credenciais: Linha[];
   llmCalls: Linha[];
   mensagens: Linha[];
+  observacoes: Linha[];
   consultas: Consulta[];
 }
 
@@ -64,7 +67,7 @@ const MAX_ROWS = 1000;
 function cliente(tipo: Consulta["cliente"]) {
   return {
     from(tabela: string) {
-      const c: Consulta = { cliente: tipo, tabela, eq: [], gte: [], range: null, patch: null };
+      const c: Consulta = { cliente: tipo, tabela, eq: [], nao: [], gte: [], range: null, patch: null };
       estado.consultas.push(c);
       const linhasDaTabela = (): Linha[] => {
         const base =
@@ -72,13 +75,18 @@ function cliente(tipo: Consulta["cliente"]) {
             ? estado.credenciais
             : tabela === "llm_calls"
               ? estado.llmCalls
-              : estado.mensagens;
+              : tabela === "jev_observacoes"
+                ? estado.observacoes.filter((l) => c.nao.every(([col, v]) => l[col] !== v))
+                : estado.mensagens;
         const filtradas = base.filter((l) => c.eq.every(([col, v]) => !(col in l) || l[col] === v));
         return c.range ? filtradas.slice(c.range[0], c.range[1] + 1) : filtradas.slice(0, MAX_ROWS);
       };
       const chain = {
         select: () => chain,
-        not: () => chain,
+        not: (col: string, _op: string, v: unknown) => {
+          c.nao.push([col, v]);
+          return chain;
+        },
         or: () => chain,
         gte: (col: string, v: unknown) => {
           c.gte.push([col, v]);
@@ -103,8 +111,13 @@ function cliente(tipo: Consulta["cliente"]) {
           if (c.patch) estado.settings = c.patch.settings as Linha;
           return { data: { settings: estado.settings }, error: null };
         },
+        // `jev_observacoes` é lida por contagem (`head`): o PostgREST devolve `count`, sem linhas.
         then: (ok: (r: unknown) => unknown, erro?: (e: unknown) => unknown) =>
-          Promise.resolve({ data: linhasDaTabela(), error: null }).then(ok, erro),
+          Promise.resolve(
+            tabela === "jev_observacoes"
+              ? { data: null, count: linhasDaTabela().length, error: null }
+              : { data: linhasDaTabela(), error: null },
+          ).then(ok, erro),
       };
       return chain;
     },
@@ -146,6 +159,7 @@ beforeEach(() => {
     credenciais: [],
     llmCalls: [],
     mensagens: [],
+    observacoes: [],
     consultas: [],
   };
   vi.mocked(requireRole).mockImplementation(async (min) =>
@@ -202,7 +216,7 @@ describe("GET /api/v1/ai/jev", () => {
       erro_de_validacao: null,
     });
     expect(d.config).toEqual({ ligado: false, modo: "observacao", aceite: null });
-    expect(d.tarefas.map((t: { id: string }) => t.id)).toEqual(["sentiment_classify"]);
+    expect(d.tarefas.map((t: { id: string }) => t.id)).toEqual(["sentiment_classify", "jailbreak_detect"]);
     expect(d.tem_ia_de_sempre).toBe(true);
     expect(d.numeros).toEqual({
       dias: 7,
@@ -532,6 +546,7 @@ describe("o Jev por tarefa na rota", () => {
   it("GET: cada tarefa com o estado que vale agora — o clima, pelo `modo`, sem nada gravado", async () => {
     expect((await ler()).corpo.data.por_tarefa).toEqual([
       expect.objectContaining({ id: "clima", ponto: "sentiment_classify", estado: "desligada", novo: false }),
+      expect.objectContaining({ id: "manipulacao", ponto: "jailbreak_detect", estado: "desligada", novo: false }),
     ]);
 
     estado.settings = { jev: { ligado: true, modo: "decide", aceite: ACEITE_ANTIGO } };
@@ -552,7 +567,40 @@ describe("o Jev por tarefa na rota", () => {
   it("GET: `tarefas` continua na forma da onda 1 (a página aberta durante a atualização a lê)", async () => {
     expect((await ler()).corpo.data.tarefas).toEqual([
       expect.objectContaining({ id: "sentiment_classify", rotulo: "Medir o clima da conversa" }),
+      expect.objectContaining({ id: "jailbreak_detect", rotulo: "Barrar tentativa de manipulação" }),
     ]);
+  });
+
+  it("GET: a manipulação, nova, começa observando sozinha com o Jev ligado no aceite de cada mensagem (R7)", async () => {
+    estado.settings = { jev: { ligado: true, modo: "decide", aceite: ACEITE_ANTIGO } };
+    const manipulacao = (await ler()).corpo.data.por_tarefa.find((t: { id: string }) => t.id === "manipulacao");
+    // O clima decidindo não faz a tarefa nova decidir.
+    expect(manipulacao).toMatchObject({ estado: "observando", novo: true });
+  });
+
+  /**
+   * A concordância das tarefas novas vem de `jev_observacoes`, contada no banco.
+   * "Sem par" (`concordou` nulo: a IA de sempre não decidiu) fica fora do
+   * denominador, e a linha de outra organização fora de tudo.
+   */
+  it("GET: a concordância da manipulação sai de jev_observacoes, sem par fora da conta", async () => {
+    const obs = (concordou: boolean | null, organization_id = ORG): Linha => ({
+      organization_id,
+      tarefa: "manipulacao",
+      concordou,
+    });
+    estado.settings = { jev: { ligado: true, aceite: ACEITE_ANTIGO } };
+    estado.observacoes = [obs(true), obs(true), obs(false), obs(null), obs(true, OUTRA_ORG)];
+
+    const d = (await ler()).corpo.data;
+    const manipulacao = d.por_tarefa.find((t: { id: string }) => t.id === "manipulacao");
+    expect(manipulacao.observacao).toEqual({ dias: 30, comparadas: 3, concordaram: 2 });
+    // A do clima continua sendo a das notas, também em `numeros` (a forma da onda 1).
+    const clima = d.por_tarefa.find((t: { id: string }) => t.id === "clima");
+    expect(clima.observacao).toEqual(d.numeros.observacao);
+    const lidas = estado.consultas.filter((c) => c.tabela === "jev_observacoes");
+    expect(lidas.every((c) => c.cliente === "sessao" && c.eq.some(([col, v]) => col === "organization_id" && v === ORG))).toBe(true);
+    expect(lidas.every((c) => c.gte.some(([col]) => col === "created_at"))).toBe(true);
   });
 
   it("PATCH de uma tarefa: grava só ela, espelha o clima no `modo` e audita com a tarefa", async () => {

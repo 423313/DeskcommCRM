@@ -30,7 +30,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { descreverErroDeValidacao } from "@/lib/ai/credenciais/erro-de-validacao";
 import type { EstadoDaTarefa } from "@/lib/ai/decisao/config";
 import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
-import { TAREFA_DO_CLIMA } from "@/lib/ai/decisao/tarefas";
+import { TAREFA_DO_CLIMA, TAREFAS_DO_JEV } from "@/lib/ai/decisao/tarefas";
 import { O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
 
 /** O corpo de `GET /api/v1/ai/jev` (`app/api/v1/ai/jev/route.ts`). */
@@ -83,6 +83,18 @@ export interface TarefaNoCartao {
   ao_ligar?: EstadoDaTarefa;
   /** Começou sozinha e ninguém escolheu nada ainda. */
   novo: boolean;
+  /**
+   * A concordância dela com a IA de sempre nos últimos dias. Ausente na
+   * resposta da imagem anterior: lá só o clima a tinha, em `numeros.observacao`.
+   */
+  observacao?: Concordancia | null;
+}
+
+type Concordancia = DadosDoJev["numeros"]["observacao"];
+
+/** A concordância da tarefa — a do clima ainda vem em `numeros` na imagem anterior. */
+function concordanciaDa(tarefa: TarefaNoCartao, d: DadosDoJev): Concordancia | null {
+  return tarefa.observacao ?? (tarefa.id === TAREFA_DO_CLIMA.id ? d.numeros.observacao : null);
 }
 
 /**
@@ -112,9 +124,12 @@ function tarefasDoCartao(d: DadosDoJev): TarefaNoCartao[] {
  * O corpo do PATCH que põe a tarefa num estado. O clima muda pelo `modo`, o
  * nome da onda 1: com a página aberta durante um rollback, a imagem anterior
  * entende o pedido — e `{ tarefa: "clima" }` chegaria ao mesmo lugar nesta.
+ * Pausar não tem nome no `modo`, e vai sempre por `tarefa`.
  */
-function corpoDaMudanca(tarefa: TarefaNoCartao, estado: "observando" | "decidindo") {
-  if (tarefa.id === TAREFA_DO_CLIMA.id) return { modo: estado === "decidindo" ? "decide" : "observacao" };
+function corpoDaMudanca(tarefa: TarefaNoCartao, estado: EstadoDaTarefa) {
+  if (tarefa.id === TAREFA_DO_CLIMA.id && estado !== "desligada") {
+    return { modo: estado === "decidindo" ? "decide" : "observacao" };
+  }
   return { tarefa: tarefa.id, estado };
 }
 
@@ -149,17 +164,23 @@ function estadoDoJev(d: DadosDoJev): Estado {
   return "pronto";
 }
 
-/** Como o Jev está no ponto `pontoId`, para a linha do cartão do ponto — pelo estado da tarefa dele. */
+/**
+ * Como o Jev está no ponto `pontoId`, para a linha do cartão do ponto — pelo
+ * estado da tarefa dele. `soma`: decidindo numa tarefa da família `soma`, o
+ * modelo do ponto segue decidindo e o Jev só acrescenta sinal — "o modelo
+ * abaixo é a reserva" seria falso ali.
+ */
 export function jevNoPonto(
   d: DadosDoJev | null,
   pontoId: string,
-): "observacao" | "decide" | "sozinho" | null {
+): "observacao" | "decide" | "soma" | "sozinho" | null {
   if (!d?.config.ligado || !d.chave.validada) return null;
   const tarefa = tarefasDoCartao(d).find((t) => t.ponto === pontoId);
   if (!tarefa || tarefa.estado === "desligada") return null;
   // A IA de sempre é a do clima (`tem_ia_de_sempre`), e só o clima decide sem ela (DEC-012 #5).
   if (!d.tem_ia_de_sempre && tarefa.id === TAREFA_DO_CLIMA.id) return "sozinho";
-  return tarefa.estado === "decidindo" ? "decide" : "observacao";
+  if (tarefa.estado !== "decidindo") return "observacao";
+  return TAREFAS_DO_JEV.find((t) => t.id === tarefa.id)?.familia === "soma" ? "soma" : "decide";
 }
 
 type Resposta = { data?: DadosDoJev; error?: { message?: string } };
@@ -545,7 +566,6 @@ function Ligado({
   const tagDoIdioma = useTagDeIdioma();
   const { mudar, enviando } = useMudarOJev(recarregar);
   const n = dados.numeros;
-  const o = n.observacao;
 
   // `cost_cents` é centavo de DÓLAR, e o Jev custa fração de centavo por
   // mensagem: com 2 casas a semana inteira mostraria "US$ 0,00".
@@ -604,21 +624,15 @@ function Ligado({
               {tarefa.novo && <Badge variant="info">{t("Novo")}</Badge>}
             </div>
 
-            {/* A concordância medida é a do clima (as notas em messages.metadata). */}
-            {rodando && tarefa.estado === "observando" && tarefa.id === TAREFA_DO_CLIMA.id && (
-              <p className="text-sm" data-testid="jev-concordancia">
-                {o.comparadas === 0 ? (
-                  t("Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.")
-                ) : (
-                  <>
-                    {t("Nos últimos")} {o.dias} {t("dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em")}{" "}
-                    <span className="font-mono font-medium">
-                      {inteiro.format(o.concordaram)} {t("de")} {inteiro.format(o.comparadas)}
-                    </span>{" "}
-                    {t("mensagens — os dois chamariam, ou não, uma pessoa para a conversa.")}
-                  </>
-                )}
-              </p>
+            {/* A concordância de cada tarefa com a IA de sempre — o que se lê antes
+                de deixar o Jev decidir. O clima conta "chamariam uma pessoa"; as
+                outras, o mesmo rótulo (em `jev_observacoes`). */}
+            {rodando && tarefa.estado === "observando" && concordanciaDa(tarefa, dados) !== null && (
+              <ConcordanciaDaTarefa
+                tarefa={tarefa}
+                o={concordanciaDa(tarefa, dados)!}
+                formatar={(n) => inteiro.format(n)}
+              />
             )}
 
             {dados.pode_editar && rodando && (
@@ -644,6 +658,19 @@ function Ligado({
                     }
                   >
                     {t("Voltar a só observar")}
+                  </Button>
+                )}
+                {/* Uma tarefa só, sem desligar o Jev: a tarefa nova começa
+                    observando sozinha (R7), e quem não a quer precisa de uma
+                    saída que não leve as outras junto. */}
+                {tarefa.estado !== "desligada" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={enviando}
+                    onClick={() => void mudar(corpoDaMudanca(tarefa, "desligada"), t("A tarefa foi pausada."))}
+                  >
+                    {t("Pausar esta tarefa")}
                   </Button>
                 )}
                 {/* Desligada, a tarefa volta observando — nunca direto a decidir. */}
@@ -675,7 +702,9 @@ function Ligado({
           className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-x-6 gap-y-3 border-t border-border pt-3"
           data-testid="jev-numeros"
         >
-          <Numero rotulo={t("Mensagens medidas")} valor={inteiro.format(n.decisoes)} />
+          {/* Respostas, e não mensagens: com mais de uma tarefa, cada mensagem
+              do cliente rende uma resposta por tarefa. */}
+          <Numero rotulo={t("Respostas do Jev")} valor={inteiro.format(n.decisoes)} />
           <Numero rotulo={t("Clientes irritados percebidos")} valor={inteiro.format(n.irritados)} />
           <Numero
             rotulo={t("Custo")}
@@ -728,6 +757,38 @@ function Ligado({
         )}
       </div>
     </div>
+  );
+}
+
+function ConcordanciaDaTarefa({
+  tarefa,
+  o,
+  formatar,
+}: {
+  tarefa: TarefaNoCartao;
+  o: Concordancia;
+  formatar: (n: number) => string;
+}) {
+  const t = useT();
+  const doClima = tarefa.id === TAREFA_DO_CLIMA.id;
+  // O testid do clima é o da onda 1: as specs o leem.
+  return (
+    <p className="text-sm" data-testid={doClima ? "jev-concordancia" : `jev-concordancia-${tarefa.id}`}>
+      {o.comparadas === 0 ? (
+        t("Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.")
+      ) : (
+        <>
+          {t("Nos últimos")} {o.dias}{" "}
+          {doClima
+            ? t("dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em")
+            : t("dias, o Jev concordou com a sua IA de sempre em")}{" "}
+          <span className="font-mono font-medium">
+            {formatar(o.concordaram)} {t("de")} {formatar(o.comparadas)}
+          </span>{" "}
+          {doClima ? t("mensagens — os dois chamariam, ou não, uma pessoa para a conversa.") : t("mensagens.")}
+        </>
+      )}
+    </p>
   );
 }
 

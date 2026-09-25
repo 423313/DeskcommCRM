@@ -518,9 +518,11 @@ function CartaoDoPonto({
             <p className="mt-1 text-xs text-accent" data-testid={`jev-no-ponto-${ponto.id}`}>
               {oJevAqui === "decide"
                 ? t("O Jev mede primeiro; o modelo abaixo é a reserva.")
-                : oJevAqui === "observacao"
-                  ? t("O Jev observa; o modelo abaixo ainda decide.")
-                  : t("O Jev mede sozinho: não há modelo de reserva.")}
+                : oJevAqui === "soma"
+                  ? t("O modelo abaixo decide; o Jev soma o sinal dele, sem nunca apagar o do modelo.")
+                  : oJevAqui === "observacao"
+                    ? t("O Jev observa; o modelo abaixo ainda decide.")
+                    : t("O Jev mede sozinho: não há modelo de reserva.")}
             </p>
           )}
         </div>

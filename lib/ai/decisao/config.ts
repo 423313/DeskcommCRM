@@ -33,6 +33,13 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 
 export const ESTADOS_DA_TAREFA = ["observando", "decidindo", "desligada"] as const;
 export type EstadoDaTarefa = (typeof ESTADOS_DA_TAREFA)[number];
+/**
+ * Os estados em que a tarefa pergunta ao Jev — desligada não pergunta nada. É o
+ * CHECK de `jev_observacoes.estado` (migration 0416), cobrado pelo invariante
+ * `vocabulario-banco-x-typescript`.
+ */
+export const ESTADOS_QUE_PERGUNTAM = ["observando", "decidindo"] as const satisfies readonly EstadoDaTarefa[];
+export type EstadoQuePergunta = (typeof ESTADOS_QUE_PERGUNTAM)[number];
 
 /**
  * O que sai para o fornecedor, do mais estreito ao mais largo — a ORDEM é a
@@ -57,6 +64,7 @@ export type TarefaGravada = z.infer<typeof tarefaGravadaSchema>;
 const tarefaIlegivel = (): TarefaGravada => ({ estado: "desligada" });
 const tarefasSchema = z.object({
   clima: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
+  manipulacao: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
 });
 
 export const idDaTarefaSchema = tarefasSchema.keyof();

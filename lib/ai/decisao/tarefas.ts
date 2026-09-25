@@ -40,10 +40,11 @@ export interface TarefaDoJev {
   alcance: Alcance;
   /**
    * Como ela convive com o que já existe: `substitui` (o Jev pode decidir no
-   * lugar do mecanismo de hoje), `cascata` (só pergunta onde a regra disse não)
-   * ou `novo` (não há mecanismo hoje).
+   * lugar do mecanismo de hoje), `soma` (decidindo, o sinal dele se SOMA ao do
+   * mecanismo de hoje e nunca o apaga), `cascata` (só pergunta onde a regra
+   * disse não) ou `novo` (não há mecanismo hoje).
    */
-  familia: "substitui" | "cascata" | "novo";
+  familia: "substitui" | "soma" | "cascata" | "novo";
   /** Para quem não é engenheiro: vão à tela por `t()`. */
   rotulo: string;
   oQueFaz: string;
@@ -64,7 +65,25 @@ export const TAREFA_DO_CLIMA = {
     "Percebe, geralmente em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
 } as const satisfies TarefaDoJev;
 
-export const TAREFAS_DO_JEV: readonly TarefaDoJev[] = [TAREFA_DO_CLIMA];
+/**
+ * A manipulação (`./manipulacao.ts`): a mesma pergunta do classificador
+ * anti-manipulação do turno, com os mesmos três níveis. É `soma`, e não
+ * `substitui`: o classificador de hoje é advisório e nunca veta, e o Jev
+ * decidindo só pode ACRESCENTAR sinal ao dele — o maior dos dois vale, e sem a
+ * IA de sempre vale "nenhum sinal", como hoje (R2).
+ */
+export const TAREFA_DA_MANIPULACAO = {
+  id: "manipulacao",
+  ponto: "jailbreak_detect",
+  primitiva: "choice",
+  alcance: "mensagem",
+  familia: "soma",
+  rotulo: "Barrar tentativa de manipulação",
+  oQueFaz:
+    "Percebe, na mensagem do cliente, quem tenta enganar o agente para ele fugir das suas regras — e soma esse sinal ao da sua IA de sempre, sem nunca apagá-lo.",
+} as const satisfies TarefaDoJev;
+
+export const TAREFAS_DO_JEV: readonly TarefaDoJev[] = [TAREFA_DO_CLIMA, TAREFA_DA_MANIPULACAO];
 
 /**
  * O estado que a EMPRESA escolheu para a tarefa, sem olhar o interruptor nem o

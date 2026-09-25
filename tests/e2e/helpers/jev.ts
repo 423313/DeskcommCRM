@@ -124,16 +124,21 @@ export async function ligarOJev(page: Page): Promise<string> {
   // tem chave falsa, então o bloco diz que ainda não há comparação — o que se
   // prova é que ele está na tela, no estado em que a decisão é tomada.
   await expect(cartao.getByTestId("jev-concordancia")).toBeVisible();
-  await clicarEEsperarAMudanca(page, cartao.getByRole("button", { name: "Deixar o Jev decidir" }));
+  // O botão DO CLIMA: cada tarefa tem o seu, e a manipulação, nova, também
+  // começa observando (R7) — no cartão inteiro seriam dois.
+  await clicarEEsperarAMudanca(
+    page,
+    cartao.getByTestId("jev-tarefa-clima").getByRole("button", { name: "Deixar o Jev decidir" }),
+  );
   return esperarNoCartao(page, ["decidindo"]);
 }
 
-/** "Mensagens medidas" do cartão — o primeiro número da grade. */
+/** "Respostas do Jev" do cartão — o primeiro número da grade. */
 export async function mensagensMedidas(page: Page): Promise<number> {
   const cartao = await abrirOCartao(page);
   const texto = await cartao.getByTestId("jev-numeros").locator("dd").first().innerText();
   const n = Number(texto.replace(/\D/g, ""));
-  expect(Number.isInteger(n), `"Mensagens medidas" ilegível: ${texto}`).toBe(true);
+  expect(Number.isInteger(n), `"Respostas do Jev" ilegível: ${texto}`).toBe(true);
   return n;
 }
 

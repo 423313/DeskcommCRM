@@ -29,7 +29,12 @@ import { describe, expect, it } from "vitest";
 import ts from "typescript";
 
 const INBOUND = join(process.cwd(), "lib/agent-engine/agent/inbound-turn.ts");
-const CLASSIFICADORES = ["classifyStage", "classifyJailbreak"] as const;
+/**
+ * O Jev na camada anti-manipulação (`perguntarManipulacaoAoJev`) entra na lista:
+ * ele é "latência adicional zero" só enquanto for elemento do MESMO array — o
+ * turno espera o mais lento dos três, nunca a soma.
+ */
+const CLASSIFICADORES = ["classifyStage", "classifyJailbreak", "perguntarManipulacaoAoJev"] as const;
 
 /**
  * Para cada chamada a um classificador, devolve o `Promise.all` que a contém
@@ -84,7 +89,7 @@ describe("classificadores auxiliares do turno — em paralelo, nunca em série",
     expect(achados.map((a) => a.nome).sort()).toEqual([...CLASSIFICADORES].sort());
   });
 
-  it("os dois são elementos do MESMO Promise.all", () => {
+  it("todos são elementos do MESMO Promise.all", () => {
     const achados = paralelismoDosClassificadores(fonte);
     expect(achados.every((a) => a.promiseAll !== null)).toBe(true);
     expect(new Set(achados.map((a) => a.promiseAll)).size).toBe(1);
@@ -102,7 +107,7 @@ describe("classificadores auxiliares do turno — em paralelo, nunca em série",
 
   it("controle negativo: dois Promise.all separados (um por classificador) são acusados", () => {
     const sabotado = fonte.replace(
-      "const [stageResultado, jailbreakVerdict] = await Promise.all([",
+      "const [stageResultado, jailbreakVerdict, manipulacaoDoJev] = await Promise.all([",
       "const [stageResultado] = await Promise.all([",
     );
     expect(sabotado).not.toBe(fonte);

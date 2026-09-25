@@ -188,6 +188,12 @@ import {
   type JailbreakLevel,
 } from '../guardrails/jailbreak/classifier';
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
+import {
+  nivelFinalDaManipulacao,
+  perguntarManipulacaoAoJev,
+  registrarManipulacaoDoJev,
+} from '@/lib/ai/decisao/manipulacao';
+import type { DependenciasDoPonto } from '@/lib/ai/decisao/ponto';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
@@ -1247,6 +1253,12 @@ export interface InboundTurnDeps {
    * anti-ban observável no artefato de trace de forma determinística.
    */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * O Jev na camada anti-manipulação — injetável só para teste (chave e `fetch`
+   * dublês). Default = a chave da organização e o egress com allowlist
+   * (`lib/ai/decisao/ponto.ts`).
+   */
+  jev?: DependenciasDoPonto;
 }
 
 /** Checkpoint mais recente do lead — a memória que atravessa sessões. */
@@ -3899,7 +3911,15 @@ async function executarTurnoDoAgente(
     // concorrente entre turnos de leads diferentes), nenhuma decisão de
     // guardrail depende de ordem entre os dois, e o `jailbreak` segue sem vetar
     // o inbound — só flagra o turno no trace.
-    const [stageResultado, jailbreakVerdict] = await Promise.all([
+    //
+    // A TERCEIRA perna é o Jev na mesma pergunta do jailbreak
+    // (`lib/ai/decisao/manipulacao.ts`), e só existe onde ela tem com quem
+    // comparar e o que medir: a camada ligada para a organização e fora da
+    // prévia — simulação não vira concordância (R5). A tarefa desligada, o
+    // interruptor e o aceite são conferidos lá dentro. Em paralelo, o turno só
+    // espera por ele o que ele passar do mais lento dos dois.
+    const manipulacaoLigada = camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined);
+    const [stageResultado, jailbreakVerdict, manipulacaoDoJev] = await Promise.all([
       deps.knobs.stageClassifier !== undefined
         ? classifyStage(
             pool,
@@ -3917,7 +3937,7 @@ async function executarTurnoDoAgente(
       // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
       // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
       // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
-      camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)
+      manipulacaoLigada
         ? classifyJailbreak(
             pool,
             deps.llmCfg,
@@ -3931,6 +3951,9 @@ async function executarTurnoDoAgente(
             { registry: deps.registry, log: runLog },
           )
         : Promise.resolve(null),
+      manipulacaoLigada && !preview
+        ? perguntarManipulacaoAoJev(pool, { organizationId: tenantId, mensagem: skillSignal }, deps.jev)
+        : Promise.resolve(null),
     ]);
 
     stageSuggestion = stageResultado;
@@ -3938,15 +3961,28 @@ async function executarTurnoDoAgente(
       stageHintBlock = renderStageHint(stageSuggestion, currentStage);
     }
 
-    if (jailbreakVerdict !== null) {
-      jailbreakLevel = jailbreakVerdict.level;
-      if (jailbreakVerdict.flag) {
-        // trace do turno: só flag/level (não PII) — a mensagem e o reason nunca são logados.
-        runLog.warn('jailbreak: sinal detectado na mensagem do lead', {
-          jailbreak_flag: true,
-          jailbreak_level: jailbreakVerdict.level,
-        });
-      }
+    // Observando, vale o nível da IA de sempre; decidindo, o maior dos dois; e
+    // sem veredito da IA de sempre, `none` — nunca o Jev no lugar dela (R2).
+    jailbreakLevel = nivelFinalDaManipulacao(jailbreakVerdict, manipulacaoDoJev);
+    if (jailbreakLevel !== 'none') {
+      // trace do turno: só flag/level (não PII) — a mensagem e o reason nunca são logados.
+      runLog.warn('jailbreak: sinal detectado na mensagem do lead', {
+        jailbreak_flag: true,
+        jailbreak_level: jailbreakLevel,
+        ...(jailbreakLevel !== jailbreakVerdict?.level ? { jailbreak_somado_pelo_jev: true } : {}),
+      });
+    }
+    if (manipulacaoDoJev !== null) {
+      await registrarManipulacaoDoJev(pool, {
+        organizationId: tenantId,
+        contactId: leadId || null,
+        conversationId: input.conversationId || null,
+        messageId: input.inboundMessageId ?? null,
+        jobId: job?.id ?? null,
+        jev: manipulacaoDoJev,
+        nivelDaIa: jailbreakVerdict === null || jailbreakVerdict.falhou ? null : jailbreakVerdict.level,
+        nivelFinal: jailbreakLevel,
+      });
     }
 
     // Spec 16 §4: a projeção arma quando NENHUMA ferramenta de catálogo entrou —

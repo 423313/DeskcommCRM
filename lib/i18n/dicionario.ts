@@ -3120,6 +3120,9 @@ export const DICIONARIO: Traducoes = {
   "Percebe, geralmente em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.": {
     es: "Nota, normalmente en menos de un segundo, si el cliente está molesto, y avisa para pasar la conversación a una persona.",
   },
+  "Percebe, na mensagem do cliente, quem tenta enganar o agente para ele fugir das suas regras — e soma esse sinal ao da sua IA de sempre, sem nunca apagá-lo.": {
+    es: "Nota, en el mensaje del cliente, quién intenta engañar al agente para que se salga de sus reglas, y suma esa señal a la de tu IA de siempre, sin borrarla nunca.",
+  },
   "Validar a resposta do fluxo": { es: "Validar la respuesta del flujo" },
   "Quando o fluxo está esperando uma resposta, lê a mensagem do cliente com o contexto da conversa e devolve SÓ o dado que deve ser salvo — ou diz que ele não respondeu.": {
     es: "Cuando el flujo espera una respuesta, lee el mensaje del cliente con el contexto de la conversación y devuelve SOLO el dato que debe guardarse, o indica que no respondió.",
@@ -3435,6 +3438,8 @@ export const DICIONARIO: Traducoes = {
   "Em pausa": { es: "En pausa" },
   Religar: { es: "Reactivar" },
   "A tarefa foi religada.": { es: "La tarea se reactivó." },
+  "Pausar esta tarefa": { es: "Pausar esta tarea" },
+  "A tarefa foi pausada.": { es: "La tarea se pausó." },
   "Parte das medições veio de uma versão do Jev sem preço conhecido: o custo mostrado soma só as outras.": {
     es: "Parte de las mediciones vino de una versión de Jev sin precio conocido: el costo mostrado suma solo las demás.",
   },
@@ -3502,10 +3507,15 @@ export const DICIONARIO: Traducoes = {
   "dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em": {
     es: "días, Jev y tu IA de siempre llegaron a la misma conclusión en",
   },
+  // A concordância das tarefas que não são o clima (CartaoDoJev.tsx).
+  "dias, o Jev concordou com a sua IA de sempre em": {
+    es: "días, Jev coincidió con tu IA de siempre en",
+  },
+  "mensagens.": { es: "mensajes." },
   "mensagens — os dois chamariam, ou não, uma pessoa para a conversa.": {
     es: "mensajes: los dos llamarían, o no, a una persona para la conversación.",
   },
-  "Mensagens medidas": { es: "Mensajes medidos" },
+  "Respostas do Jev": { es: "Respuestas de Jev" },
   "Chave conferida com a TypeSafe": { es: "Clave verificada con TypeSafe" },
   "Clientes irritados percebidos": { es: "Clientes molestos detectados" },
   "Tempo médio": { es: "Tiempo promedio" },
@@ -3520,6 +3530,9 @@ export const DICIONARIO: Traducoes = {
   },
   "O Jev observa; o modelo abaixo ainda decide.": {
     es: "Jev observa; el modelo de abajo todavía decide.",
+  },
+  "O modelo abaixo decide; o Jev soma o sinal dele, sem nunca apagar o do modelo.": {
+    es: "El modelo de abajo decide; Jev suma su señal, sin borrar nunca la del modelo.",
   },
   "O Jev mede sozinho: não há modelo de reserva.": {
     es: "Jev mide solo: no hay modelo de respaldo.",
@@ -6873,8 +6886,8 @@ export const DICIONARIO: Traducoes = {
   "o provedor de inteligência artificial contratado pelo operador, que recebe o trecho da conversa necessário para gerar a resposta ou avaliar a conversa;": {
     es: "el proveedor de inteligencia artificial contratado por el operador, que recibe el fragmento de la conversación necesario para generar la respuesta o evaluar la conversación;",
   },
-  "quando o operador liga a análise automática do humor das mensagens pelo Jev (desligada por padrão), a TypeSafe AI, nos Estados Unidos, que recebe cada mensagem do cliente, sozinha e já sem CPF, telefone e e-mail, para avaliar se ele está irritado;": {
-    es: "cuando el operador activa el análisis automático del ánimo de los mensajes con Jev (desactivado por defecto), TypeSafe AI, en Estados Unidos, que recibe cada mensaje del cliente, por separado y ya sin CPF, teléfono ni correo, para evaluar si está molesto;",
+  "quando o operador liga o Jev (desligado por padrão), a TypeSafe AI, nos Estados Unidos, que recebe cada mensagem do cliente, sozinha e já sem CPF, telefone e e-mail, para avaliar se ele está irritado e se a mensagem tenta manipular o atendimento automático;": {
+    es: "cuando el operador activa Jev (desactivado por defecto), TypeSafe AI, en Estados Unidos, que recibe cada mensaje del cliente, por separado y ya sin CPF, teléfono ni correo, para evaluar si está molesto y si el mensaje intenta manipular la atención automática;",
   },
   "o provedor de infraestrutura onde o servidor está hospedado.": {
     es: "el proveedor de infraestructura donde el servidor está alojado.",
