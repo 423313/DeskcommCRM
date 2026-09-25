@@ -47,6 +47,23 @@ export interface FalhaDeEntrega {
   erro: { codigo: string; titulo: string | null };
 }
 
+/** O embed `contacts:contact_id(phone_number)` como pode chegar. */
+export type EmbedDoContato =
+  | { phone_number: string | null }
+  | { phone_number: string | null }[]
+  | null
+  | undefined;
+
+/**
+ * O telefone do embed N:1 do contato. Em tempo de execução o PostgREST devolve
+ * OBJETO (a FK aponta para uma linha só), mas a tipagem gerada diz lista — ler
+ * `[0]` de um objeto dá `undefined` e o aviso sairia sempre sem telefone.
+ */
+export function telefoneDoEmbed(embed: EmbedDoContato): string | null {
+  const contato = Array.isArray(embed) ? embed[0] : embed;
+  return contato?.phone_number ?? null;
+}
+
 export interface EmitirFalhaArgs {
   organizationId: string;
   falha: FalhaDeEntrega;

@@ -23,6 +23,7 @@ import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { deriveActor } from "@/lib/mcp/auth";
 import type { SendMessageInput } from "@/lib/schemas";
+import { telefoneDoEmbed } from "@/lib/messaging/falha-de-entrega";
 import { ENTIDADE_ESPERADA_POR_GATILHO } from "@/lib/schemas/webhooks";
 import { criarDubleDoHandler } from "@/tests/helpers/duble-do-handler";
 
@@ -130,5 +131,14 @@ describe("falha de entrega emite message.failed", () => {
     expect(ramo).toContain('.neq("status", "failed")');
     expect(ramo).toContain("emitirFalhaDeEntrega");
     expect(ramo).toContain(".maybeSingle()");
+    expect(ramo, "o telefone precisa ler o embed como objeto").toContain("telefoneDoEmbed(");
+  });
+
+  it("o telefone sai do embed N:1 como OBJETO (o que o PostgREST devolve) e como lista", () => {
+    // Ler `contacts?.[0]` de um objeto dá undefined: o aviso saía sempre sem telefone.
+    expect(telefoneDoEmbed({ phone_number: TELEFONE })).toBe(TELEFONE);
+    expect(telefoneDoEmbed([{ phone_number: TELEFONE }])).toBe(TELEFONE);
+    expect(telefoneDoEmbed(null)).toBeNull();
+    expect(telefoneDoEmbed([])).toBeNull();
   });
 });

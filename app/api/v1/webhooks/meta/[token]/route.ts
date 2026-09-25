@@ -37,7 +37,11 @@ import { statusUpdate } from "@/lib/channels/meta/status-update";
 import { ingestMetaEcho, ingestMetaInbound } from "@/lib/channels/meta/ingest";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import { logger } from "@/lib/logger";
-import { emitirFalhaDeEntrega } from "@/lib/messaging/falha-de-entrega";
+import {
+  emitirFalhaDeEntrega,
+  telefoneDoEmbed,
+  type EmbedDoContato,
+} from "@/lib/messaging/falha-de-entrega";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -206,10 +210,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           sent_via: string | null;
           error_code: string | null;
           error_message: string | null;
-          // O embed vem como LISTA na tipagem do PostgREST (FK é de N para 1,
-          // e o gerador não sabe disso): é uma linha só, e é dela que se lê o
-          // telefone.
-          contacts: { phone_number: string | null }[];
+          // FK de N para 1: o PostgREST devolve OBJETO em tempo de execução,
+          // embora a tipagem gerada diga lista. `telefoneDoEmbed` aceita os dois.
+          contacts: EmbedDoContato;
         };
         await emitirFalhaDeEntrega(admin, {
           organizationId: session.organizationId,
@@ -219,7 +222,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
             message_id: falha.id,
             conversation_id: falha.conversation_id,
             contact_id: falha.contact_id,
-            contact: falha.contacts?.[0]?.phone_number ?? null,
+            contact: telefoneDoEmbed(falha.contacts),
             sent_via: falha.sent_via,
             erro: { codigo: falha.error_code ?? "", titulo: falha.error_message },
           },
