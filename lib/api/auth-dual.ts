@@ -134,6 +134,8 @@ export async function resolveAuthDual(
       actor: auth.actor,
       supabase: createAdminClient(),
       via: "token",
+      scopes: auth.scopes,
+      apiTokenId: auth.apiTokenId,
     };
   }
 
