@@ -1866,6 +1866,18 @@ export async function deteccoesDeterministicasDoAssistido(
     },
   });
 
+  // PLANO B SEM CONTEXTO = SEM `lgpd`: com ele nulo o gate de LGPD passa direto
+  // (`before-send.ts`), e um contato anonimizado receberia o aviso. Nesse ramo o
+  // aviso sai por `avisarLeadLendoOContato`, que lê o contato do banco.
+  const semInsumosDoContexto = ({
+    optedOutThisTurn: _bloqueado,
+    lgpd: _lgpd,
+    ...resto
+  }: Omit<AvisoDeEscalacaoOpts, 'motivo'>): Omit<
+    AvisoDeEscalacaoOpts,
+    'motivo' | 'optedOutThisTurn' | 'lgpd'
+  > => resto;
+
   if (
     inboundsPendentes.some(
       (texto) =>
@@ -1879,10 +1891,12 @@ export async function deteccoesDeterministicasDoAssistido(
       motivo: { codigo: 'requested_human' },
     });
     const aviso = avisoDaEscalacao();
-    const desfecho = await avisarLeadDaEscalacao(pool, aviso.ids, {
-      ...aviso.base,
-      motivo: 'pediu_humano',
-    });
+    const desfecho = contextoLido
+      ? await avisarLeadDaEscalacao(pool, aviso.ids, { ...aviso.base, motivo: 'pediu_humano' })
+      : await avisarLeadLendoOContato(pool, aviso.ids, {
+          ...semInsumosDoContexto(aviso.base),
+          motivo: 'pediu_humano',
+        });
     await performHumanHandoff(
       pool,
       { tenantId, leadId, conversationId },
@@ -1910,10 +1924,12 @@ export async function deteccoesDeterministicasDoAssistido(
       motivo: { codigo: 'suspected_optout' },
     });
     const aviso = avisoDaEscalacao();
-    const desfecho = await avisarLeadDaEscalacao(pool, aviso.ids, {
-      ...aviso.base,
-      motivo: 'suspeita_de_opt_out',
-    });
+    const desfecho = contextoLido
+      ? await avisarLeadDaEscalacao(pool, aviso.ids, { ...aviso.base, motivo: 'suspeita_de_opt_out' })
+      : await avisarLeadLendoOContato(pool, aviso.ids, {
+          ...semInsumosDoContexto(aviso.base),
+          motivo: 'suspeita_de_opt_out',
+        });
     await performHumanHandoff(
       pool,
       { tenantId, leadId, conversationId },

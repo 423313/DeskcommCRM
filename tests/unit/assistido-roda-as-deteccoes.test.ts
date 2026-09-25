@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   draft: vi.fn(),
   passagem: vi.fn(),
   aviso: vi.fn(),
+  avisoLendo: vi.fn(),
   cancel: vi.fn(),
   emHandoff: vi.fn(),
   elegibilidade: vi.fn(),
@@ -70,6 +71,7 @@ vi.mock('@/lib/agent-engine/agent/human-handoff', async (importOriginal) => ({
 vi.mock('@/lib/agent-engine/agent/aviso-de-escalacao', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   avisarLeadDaEscalacao: mocks.aviso,
+  avisarLeadLendoOContato: mocks.avisoLendo,
 }));
 vi.mock('@/lib/agent-engine/cron/scheduler', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -198,6 +200,7 @@ beforeEach(() => {
   mocks.emHandoff.mockResolvedValue(false);
   mocks.elegibilidade.mockResolvedValue({ permite: true, motivo: 'gate_aberto' });
   mocks.aviso.mockResolvedValue({ avisado: true });
+  mocks.avisoLendo.mockResolvedValue({ avisado: true });
   mocks.passagem.mockResolvedValue(undefined);
   mocks.cancel.mockResolvedValue(2);
   mocks.leadContext.mockResolvedValue(contexto([{ direction: 'inbound', body: 'oi, tudo bem?' }]));
@@ -258,6 +261,36 @@ describe('modo assistido: as detecções determinísticas rodam antes do rascunh
     await createInboundTurnHandler(deps)(inbound as never, p as never, { workerId: 'w' });
 
     expect(mocks.passagem).toHaveBeenCalledTimes(1);
+    expect(mocks.draft).not.toHaveBeenCalled();
+  });
+
+  // (1, plano B) CONTEXTO NÃO LIDO: a detecção cai na mensagem fixada no job, e
+  // sem o contexto não há `lgpd` — com ele nulo o gate de LGPD passa direto e um
+  // contato anonimizado receberia o aviso. O aviso tem de sair pelo emissor que
+  // lê o contato do banco.
+  it('STOP com o CRM fora → aviso lendo o contato do banco, e a passagem acontece', async () => {
+    mocks.leadContext.mockResolvedValue({ ok: false, error: { code: 'crm_unavailable' } });
+    const p = pool();
+    p.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('lead_checkpoints')) return { rows: [] };
+      if (sql.includes('from messages') && sql.includes('and id = $3')) {
+        return { rows: [{ type: 'text', body: 'SAIR' }] };
+      }
+      return { rows: [{ active_ai_agent_id: null, active_intent: null, body: 'oi' }] };
+    });
+    await createInboundTurnHandler(deps)(inbound as never, p as never, { workerId: 'w' });
+
+    expect(mocks.avisoLendo).toHaveBeenCalledTimes(1);
+    expect(mocks.avisoLendo.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({ motivo: 'suspeita_de_opt_out' }),
+    );
+    expect(mocks.avisoLendo.mock.calls[0]?.[2]).not.toHaveProperty('lgpd');
+    expect(mocks.aviso, 'sem contexto, o aviso sem lgpd não pode sair').not.toHaveBeenCalled();
+    expect(mocks.passagem).toHaveBeenCalledWith(
+      p,
+      { tenantId: ids.org, leadId: ids.contact, conversationId: ids.conversation },
+      expect.objectContaining({ reason: 'suspected_optout' }),
+    );
     expect(mocks.draft).not.toHaveBeenCalled();
   });
 
