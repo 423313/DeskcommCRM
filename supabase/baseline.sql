@@ -1212,6 +1212,14 @@ CREATE TABLE IF NOT EXISTS "public"."ai_provider_credentials" (
 ALTER TABLE "public"."ai_provider_credentials" OWNER TO "postgres";
 
 
+-- (migration 0413) `base_url` entra AQUI, antes da view do dump, e não só no
+-- apêndice: o `update.sh`/modo UPDATE reaplica este bloco num banco em que a
+-- view já tem `base_url`, e `create or replace view` não remove coluna
+-- ("cannot drop columns from view"). Com a coluna no fim das duas definições,
+-- a reaplicação é no-op e o clone antigo ganha a coluna no fim (permitido).
+ALTER TABLE "public"."ai_provider_credentials" ADD COLUMN IF NOT EXISTS "base_url" "text";
+
+
 CREATE OR REPLACE VIEW "public"."ai_provider_credentials_safe" WITH ("security_invoker"='true') AS
  SELECT "id",
     "organization_id",
@@ -1224,7 +1232,8 @@ CREATE OR REPLACE VIEW "public"."ai_provider_credentials_safe" WITH ("security_i
     "is_active",
     "created_by",
     "created_at",
-    "updated_at"
+    "updated_at",
+    "base_url"
    FROM "public"."ai_provider_credentials";
 
 
@@ -38030,6 +38039,63 @@ comment on column public.ai_knowledge_sources.content_hash is
 -- O vocabulário novo é lido lá onde a constraint mora; esta linha é só o
 -- marcador de que a mudança existe e onde ela foi parar.
 
+-- ---- provedor personalizado: endereço da credencial (migration 0413, #1642) ----
+--
+-- `base_url` na linha da credencial: o endereço do endpoint compatível com a
+-- OpenAI que vai receber a chave, escolha do operador na tela de Credenciais.
+-- Aditiva e idempotente; nenhum provedor nativo muda (`null` em toda linha
+-- existente, e o runtime só lê a coluna quando o provider é `custom`).
+-- Racional inteiro na migration 0413.
+alter table public.ai_provider_credentials
+  add column if not exists base_url text;
+
+-- Forma do dado no banco, igual à da aplicação (zod da rota): http(s) sem
+-- espaço. O CHECK é o que sobra para quem escrever direto no SQL ou pelo
+-- PostgREST — e `null` continua sendo a resposta de todo provedor nativo.
+alter table public.ai_provider_credentials
+  drop constraint if exists ai_provider_credentials_base_url_check;
+alter table public.ai_provider_credentials
+  add constraint ai_provider_credentials_base_url_check
+  check (base_url is null or base_url ~* '^https?://[^[:space:]]+$');
+
+-- A view é a ÚNICA superfície de leitura da tela: expor `base_url` aqui é o
+-- que faz a tela mostrar o endereço cadastrado sem abrir a tabela. Coluna nova
+-- no FIM da lista — `create or replace view` não renomea nem reordena coluna
+-- existente.
+create or replace view public.ai_provider_credentials_safe
+with (security_invoker = true) as
+ select id,
+    organization_id,
+    provider,
+    label,
+    api_key_last4,
+    validated_at,
+    validation_error,
+    models_available,
+    is_active,
+    created_by,
+    created_at,
+    updated_at,
+    base_url
+   from public.ai_provider_credentials;
+
+-- O SELECT é POR COLUNA desde a 0150: as três colunas do segredo ficam fora
+-- de propósito, e `revoke` de tabela inteira é quem as mantém fora. A lista tem
+-- de acompanhar a tabela — sem `base_url` aqui, a view nova responderia
+-- "permission denied for table ai_provider_credentials" para todo manager, e a
+-- tela de Credenciais viraria `[]`. `base_url` não é segredo: é um endpoint.
+revoke select on public.ai_provider_credentials from authenticated, anon;
+grant select (
+  id, organization_id, provider, label, api_key_last4, validated_at,
+  validation_error, models_available, is_active, created_by, created_at, updated_at,
+  base_url
+) on public.ai_provider_credentials to authenticated;
+grant select on public.ai_provider_credentials_safe to authenticated;
+
+-- O PostgREST guarda o schema em cache; sem isto a coluna nova só aparece no
+-- próximo reload.
+notify pgrst, 'reload schema';
+
 -- ---- redact unificado: o portão do botão chama a cascata canônica (migration 0414, issue #1504) ----
 --
 -- Os DOIS caminhos de anonimizar passam a redigir na MESMA função,
@@ -38073,7 +38139,6 @@ begin
 end;$$;
 revoke all on function public.fn_lgpd_anonymize_contact(uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.fn_lgpd_anonymize_contact(uuid,uuid) to authenticated;
-
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
