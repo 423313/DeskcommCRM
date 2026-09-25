@@ -128,6 +128,10 @@ function bancoFalso() {
 /** Estado novo por chamada: um recibo de um teste não pode vazar para o próximo. */
 let banco = bancoFalso();
 
+// Este mock JÁ entrega `scopes` no ramo do token, então não prova que
+// `resolveAuthDual` os preenche. Quem prova é `lib/api/auth-dual.test.ts`
+// ("devolve os scopes e o id da linha do token") — sem ele, o "em nome de"
+// ficou morto em produção com esta suíte verde (#1676).
 function autenticado(via: "session" | "token", scopes?: string[]) {
   banco = bancoFalso();
   mockedAuth.mockResolvedValue({
