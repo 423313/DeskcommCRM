@@ -54,6 +54,26 @@ describe("TemplatesClient", () => {
     busca = "";
   });
 
+  it("agent com o link de um COMPARTILHADO fica na lista: o form de edição não abre", () => {
+    // A RLS (message_templates_write) só deixa manager+ alterar o compartilhado;
+    // abrir o form aqui seria um Salvar que devolve "Template não encontrado.".
+    busca = "modelo=2";
+    render(wrap(<TemplatesClient canShare={false} currentUserId="u1" />));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Política da Equipe")).toBeInTheDocument();
+    busca = "";
+  });
+
+  it("agent com o link do PRÓPRIO pessoal abre a edição", () => {
+    busca = "modelo=1";
+    render(wrap(<TemplatesClient canShare={false} currentUserId="u1" />));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Meu Pessoal")).toBeInTheDocument();
+    busca = "";
+  });
+
   it("agent (não-manager) só vê ações no próprio pessoal, não no compartilhado nem no de outro", () => {
     busca = "";
     render(wrap(<TemplatesClient canShare={false} currentUserId="u1" />));

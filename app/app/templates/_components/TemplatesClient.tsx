@@ -51,6 +51,14 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
   // acontece em teste e em render estático), como no resto do repo.
   const idDoModelo = useSearchParams()?.get("modelo") ?? null;
   const [abertoPelaUrl, setAbertoPelaUrl] = React.useState(false);
+  // Só quem pode editar/apagar pela RLS vê as ações: o dono do pessoal, ou
+  // manager+ no compartilhado (owner null). Sem isto, um agent veria botões
+  // que o backend rejeita (404/nada apagado).
+  const canModify = React.useCallback(
+    (template: MessageTemplate) =>
+      template.owner_user_id === currentUserId || (template.owner_user_id === null && canShare),
+    [canShare, currentUserId],
+  );
 
   React.useEffect(() => {
     if (abertoPelaUrl || !idDoModelo) return;
@@ -58,10 +66,14 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
     // aberto — marcar aqui faria o link depender de o dado já estar em cache.
     const alvo = templates?.find((template) => template.id === idDoModelo);
     if (!alvo) return;
+    setAbertoPelaUrl(true);
+    // O link só abre a EDIÇÃO para quem pode editar — a mesma régua da lista.
+    // Um agent que recebe o link de um compartilhado fica na lista, onde o
+    // modelo está visível: abrir o form ali seria um Salvar que a RLS recusa.
+    if (!canModify(alvo)) return;
     setEditing(alvo);
     setFormOpen(true);
-    setAbertoPelaUrl(true);
-  }, [abertoPelaUrl, idDoModelo, templates]);
+  }, [abertoPelaUrl, idDoModelo, templates, canModify]);
 
   const openNew = () => {
     setEditing(null);
@@ -93,12 +105,6 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
       ) : (
         <ul className="space-y-2">
           {templates.map((template) => {
-            // Só quem pode editar/apagar pela RLS vê as ações: o dono do
-            // pessoal, ou manager+ no compartilhado (owner null). Sem isto, um
-            // agent veria botões que o backend rejeita (404/nada apagado).
-            const canModify =
-              template.owner_user_id === currentUserId ||
-              (template.owner_user_id === null && canShare);
             return (
               <li
                 key={template.id}
@@ -113,7 +119,7 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
                   </div>
                   <p className="line-clamp-2 text-sm text-muted-foreground">{template.body}</p>
                 </div>
-                {canModify && (
+                {canModify(template) && (
                   <div className="flex shrink-0 gap-1">
                     <Button
                       type="button"
