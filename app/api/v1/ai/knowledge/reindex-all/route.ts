@@ -10,13 +10,19 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * a pessoa desiste no meio. O worker PULA a fonte cujo conteúdo não mudou
  * (`content_hash`, migration 0409), então "Preparar tudo" não reembeda à toa.
  *
- * Auth: cookie session, role >= manager. `organization_id` vem do JWT, nunca do
- * corpo.
+ * Auth: cookie session, role >= manager (o mesmo papel do reindexar de UMA
+ * fonte). `organization_id` vem do JWT, nunca do corpo — e a rota não lê corpo
+ * nenhum, então não há entrada externa para validar.
+ *
+ * Audita (`ai.knowledge_reindex_all`) quando há material; sem material não
+ * houve mutação e não há o que auditar.
  */
 import { randomUUID } from "node:crypto";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,7 +42,7 @@ export async function POST(): Promise<Response> {
   const requestId = randomUUID();
   const authz = await requireRole("manager", { requestId, resource: "ai_knowledge" });
   if (!authz.ok) return authz.response;
-  const { org } = authz;
+  const { org, user } = authz;
 
   // RLS via cliente user-scoped; o filtro de organização é explícito e a fonte
   // é a sessão — nunca o corpo.
@@ -47,6 +53,10 @@ export async function POST(): Promise<Response> {
     .eq("organization_id", org.orgId)
     .neq("status", "archived");
   if (error) {
+    logger.error("[ai-knowledge-reindex-all] falha ao listar os materiais", {
+      error: error.message,
+      requestId,
+    });
     return fail("internal_error", "Erro ao listar os materiais.", 500, { requestId });
   }
 
@@ -63,12 +73,19 @@ export async function POST(): Promise<Response> {
   const prioridade2 = fontes.filter((f) => f.last_index_status === "success");
 
   const admin = createAdminClient();
-  // Limpa o erro anterior (o worker vai reescrever o estado).
-  await admin
+  // Limpa o erro anterior (o worker vai reescrever o estado). Não bloqueia: o
+  // reprocessamento sobrescreve o erro de qualquer jeito.
+  const { error: limparErr } = await admin
     .from("ai_knowledge_sources")
     .update({ last_index_error: null })
     .eq("organization_id", org.orgId)
     .neq("status", "archived");
+  if (limparErr) {
+    logger.warn("[ai-knowledge-reindex-all] não limpei o erro anterior dos materiais", {
+      error: limparErr.message,
+      requestId,
+    });
+  }
 
   let emitidos = 0;
   for (const f of [...prioridade1, ...prioridade2]) {
@@ -84,8 +101,32 @@ export async function POST(): Promise<Response> {
       },
       p_organization_id: org.orgId,
     } as never);
-    if (!emitErr) emitidos += 1;
+    if (emitErr) {
+      // Contado na resposta (`emitidos` < `total`) e registrado aqui: a fonte
+      // que não entrou na fila é a que o dono vai achar que "não preparou".
+      logger.warn("[ai-knowledge-reindex-all] evento de reindexação não emitido", {
+        knowledge_source_id: f.id,
+        error: emitErr.message,
+        requestId,
+      });
+    } else {
+      emitidos += 1;
+    }
   }
+
+  void audit({
+    action: "ai.knowledge_reindex_all",
+    actorUserId: user.id,
+    organizationId: org.orgId,
+    resourceType: "ai_knowledge_source",
+    requestId,
+    metadata: {
+      total: fontes.length,
+      prioridade1: prioridade1.length,
+      prioridade2: prioridade2.length,
+      emitidos,
+    },
+  });
 
   return ok(
     {

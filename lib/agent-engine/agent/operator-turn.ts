@@ -37,13 +37,14 @@ import { setExecutionAgentOperation } from '@/lib/atendimento/fronteira-server';
 import { z } from 'zod';
 import type pg from 'pg';
 
-import { withFields } from '../obs/logger';
+import { withFields, type Logger } from '../obs/logger';
 import type { JobRow } from '../queue/queue';
 import type { InboundTurnDeps } from './inbound-turn';
 import { checkpointDoJob } from './inbound-turn';
 import { declaracaoDoTurnoSchema, promessasEmAberto, type DeclaracaoDoTurno } from './declaracao';
 import { loadPublishedAgentConfigById } from './agent-config';
 import { isLeadInHandoff } from './human-handoff';
+import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
 import { insertInboxItem } from '../db/repository';
@@ -155,6 +156,41 @@ export function renderBriefingDoOperador(
   }
   linhas.push('', 'Deixe o sistema refletindo isso. O que já estiver registrado, não repita.');
   return comAgora(linhas);
+}
+
+/**
+ * O CARD do funil (`crm_leads.id`) do contato — que NÃO é o `contact_id`. As
+ * ferramentas de lead do Operador operam sobre o card; sem este id o modelo
+ * inventava UUIDs zerados e `crm_get_lead`/`crm_update_lead` falhavam.
+ *
+ * Qual card é a MESMA regra do resto do motor (`resolveActiveLeadForContact`):
+ * o negócio ABERTO; ambíguo ou nenhum = `null`, e o briefing diz para não chamar
+ * ferramenta de lead. "O mais recente" apontaria para um negócio perdido/ganho.
+ *
+ * Best-effort: falha de leitura vira `null` — mas registrada, não engolida.
+ */
+export async function cardDoFunil(
+  pool: Pick<pg.Pool, 'query'>,
+  tenantId: string,
+  contactId: string,
+  log: Pick<Logger, 'warn'>,
+): Promise<string | null> {
+  try {
+    const { rows } = await pool.query<LeadCandidate>(
+      `select l.id, l.organization_id, l.pipeline_id, l.status,
+              l.last_activity_at, l.created_at
+         from crm_leads l
+        where l.organization_id = $1 and l.contact_id = $2`,
+      [tenantId, contactId],
+    );
+    const alvo = resolveActiveLeadForContact(rows);
+    return alvo.routed ? alvo.leadId : null;
+  } catch (err) {
+    log.warn('card do funil não resolvido — o briefing do operador segue sem lead_id', {
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+    });
+    return null;
+  }
 }
 
 /** O que o Operador decidiu neste turno — vai a `event_log` e, quando muda o que
@@ -480,23 +516,7 @@ export function createOperatorTurnHandler(deps: InboundTurnDeps) {
     // tempo: o desfecho não tinha o que persistir (virou log.info) e o aviso
     // precisou de um proxy — a contagem de promessas DECLARADAS, que é um fato
     // sobre o Conversador, não sobre o Operador.
-    // O CARD do funil (`crm_leads.id`) — que NÃO é o `contact_id`. As ferramentas
-    // de lead do Operador operam sobre o card; sem este id o modelo inventava
-    // UUIDs zerados e `crm_get_lead`/`crm_update_lead` falhavam. Best-effort: sem
-    // card, o briefing diz para não chamar ferramenta de lead.
-    const card =
-      mcp === null
-        ? { rows: [] as Array<{ id: string }> }
-        : await pool
-            .query<{ id: string }>(
-              `select id from crm_leads
-                where organization_id = $1 and contact_id = $2
-                order by updated_at desc nulls last
-                limit 1`,
-              [tenantId, leadId],
-            )
-            .catch(() => ({ rows: [] as Array<{ id: string }> }));
-    const leadCardId = card.rows[0]?.id ?? null;
+    const leadCardId = mcp === null ? null : await cardDoFunil(pool, tenantId, leadId, log);
 
     let saida: Awaited<ReturnType<typeof runModelCall>> | null = null;
     try {

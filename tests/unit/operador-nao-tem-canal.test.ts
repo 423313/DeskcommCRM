@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   SYSTEM_DO_OPERADOR,
+  cardDoFunil,
   renderBriefingDoOperador,
 } from "@/lib/agent-engine/agent/operator-turn";
 import { AGENT_TOOL_DEFS } from "@/lib/agent-engine/agent/inbound-turn";
@@ -111,5 +112,39 @@ describe("briefing do Operador", () => {
     });
     expect(texto).toContain("lead_id=(sem card)");
     expect(texto).toContain("não chame ferramentas de lead");
+  });
+});
+
+describe("cardDoFunil — o lead_id que o briefing leva", () => {
+  const ORG = "org-1";
+  const lead = (id: string, status: string, ultima: string) => ({
+    id,
+    organization_id: ORG,
+    pipeline_id: "p-1",
+    status,
+    last_activity_at: ultima,
+    created_at: "2026-09-01T00:00:00Z",
+  });
+  const pool = (rows: unknown[]) => ({ query: vi.fn(async () => ({ rows })) });
+  const log = () => ({ warn: vi.fn() });
+
+  it("é o negócio ABERTO — não o mais recente, que pode estar perdido", async () => {
+    const p = pool([lead("aberto", "open", "2026-09-10T00:00:00Z"), lead("perdido", "lost", "2026-09-20T00:00:00Z")]);
+    expect(await cardDoFunil(p as never, ORG, "ct-1", log())).toBe("aberto");
+  });
+
+  it("só negócio fechado: sem card", async () => {
+    const p = pool([lead("ganho", "won", "2026-09-20T00:00:00Z")]);
+    expect(await cardDoFunil(p as never, ORG, "ct-1", log())).toBeNull();
+  });
+
+  it("leitura que falha: sem card, e a falha fica no log — não é engolida", async () => {
+    const l = log();
+    const p = { query: vi.fn(async () => Promise.reject(new Error("connection terminated"))) };
+    expect(await cardDoFunil(p as never, ORG, "ct-1", l)).toBeNull();
+    expect(l.warn).toHaveBeenCalledWith(
+      expect.stringContaining("card do funil"),
+      expect.objectContaining({ error: "connection terminated" }),
+    );
   });
 });
