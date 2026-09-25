@@ -157,13 +157,21 @@ export async function POST(req: NextRequest): Promise<Response> {
           : null;
     const [usuario, linhaDoToken] = await Promise.all([
       supabase.auth.admin.getUserById(input.on_behalf_of_user_id).catch(() => null),
-      supabase
-        .from("api_tokens")
-        .select("name")
-        .eq("id", tokenId ?? "")
-        .eq("organization_id", organizationId)
-        .maybeSingle()
-        .catch(() => null),
+      // O builder do PostgREST é thenable, mas o TIPO dele não declara
+      // `.catch` — o envolvimento tem de ser por fora. E é enfeite: se a
+      // leitura falhar, a autoria continua gravada na coluna, e o balão cai
+      // para o rótulo de sempre.
+      Promise.resolve(
+        supabase
+          .from("api_tokens")
+          .select("name")
+          .eq("id", tokenId ?? "")
+          .eq("organization_id", organizationId)
+          .maybeSingle(),
+      ).then(
+        (r) => r,
+        () => null,
+      ),
     ]);
     onBehalf = {
       userId: input.on_behalf_of_user_id,

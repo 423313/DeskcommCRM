@@ -48,7 +48,14 @@ const PESSOA = "99999999-1111-4111-8111-111111111111";
 const CHAVE = "aaaaaaa1-1111-4111-8111-111111111111";
 
 function bancoFalso() {
-  const tabelas: Record<string, Linha[]> = {
+  // Nomeado, e não `Record<string, …>`: com índice de string aberto, o
+  // `noUncheckedIndexedAccess` trata CADA acesso como possivelmente indefinido
+  // — e as três tabelas deste teste sempre existem.
+  const tabelas: {
+    idempotency_keys: Linha[];
+    user_organizations: Linha[];
+    api_tokens: Linha[];
+  } = {
     idempotency_keys: [],
     user_organizations: [
       { user_id: PESSOA, organization_id: ORG_ID, role: "agent", revoked_at: null },
@@ -57,7 +64,7 @@ function bancoFalso() {
   };
 
   const from = (nome: string) => {
-    const linhas = (tabelas[nome] ??= []);
+    const linhas = (tabelas as Record<string, Linha[]>)[nome] ?? [];
     const eq: Array<[string, unknown]> = [];
     const isNull: Array<[string, unknown]> = [];
     let gt: [string, unknown] | null = null;
