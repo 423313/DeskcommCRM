@@ -73,16 +73,15 @@ export async function signInWithGoogle(
   // Antes de qualquer coisa: o GoTrue só diria "provider is not enabled" lá na
   // frente, com o navegador já fora do CRM (issue #1652). Aqui a recusa ainda
   // cabe dentro da tela, embaixo do botão.
+  //
+  // SEM linha de auditoria neste ramo. Esta action é pública e sem limite de
+  // tentativas: com o provedor desligado, cada chamada anônima gravaria 1 linha
+  // em `api_audit_log` — tabela append-only com piso de expurgo de 90 dias.
+  // Mesma doutrina de `app/auth/callback/route.ts` (os ramos antes do gate) e de
+  // `app/api/v1/agenda/google/callback/route.ts`: auditoria só depois de quem
+  // chama provar alguma coisa. Aqui ninguém provou nada; a tela diz o motivo.
   const estado = await estadoDoProvedorGoogle();
   if (estado === "desligado") {
-    await audit({
-      action: "auth.google_signin_failed",
-      metadata: {
-        motivo: "provedor_indisponivel",
-        reason: "external.google: false em GET /auth/v1/settings",
-      },
-      requestId,
-    });
     return { ok: false, error: "google_indisponivel" };
   }
 

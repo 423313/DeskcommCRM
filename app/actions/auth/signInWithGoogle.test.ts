@@ -83,12 +83,9 @@ describe("signInWithGoogle com o provedor Google desligado", () => {
     // fica na tela, que é onde a mensagem embaixo do botão existe.
     expect(signInWithOAuth).not.toHaveBeenCalled();
     expect(redirect).not.toHaveBeenCalled();
-    expect(audit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "auth.google_signin_failed",
-        metadata: expect.objectContaining({ motivo: "provedor_indisponivel" }),
-      }),
-    );
+    // Nem auditoria: a action é pública e sem limite de tentativas, e cada
+    // clique anônimo viraria 1 linha append-only em `api_audit_log`.
+    expect(audit).not.toHaveBeenCalled();
 
     // A leitura é a rota pública certa, com a anon key — não um chute.
     const [url, init] = fetchFalso.mock.calls[0] as unknown as [string, RequestInit];
