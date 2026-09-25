@@ -10,6 +10,7 @@ import {
   idDaTarefaSchema,
   lerConfigDoJev,
   mesclar,
+  type MudancaDaConfig,
   type TarefaGravada,
 } from "@/lib/ai/decisao/config";
 
@@ -258,6 +259,24 @@ describe("gravarConfigDoJev — mescla profunda de `tarefas`", () => {
       });
       const jev = (f.updates[0]!.settings as { jev: { tarefas: Record<string, unknown> } }).jev;
       expect(jev.tarefas[outra], `mudar ${mudada} apagou ${outra}`).toEqual(GRAVADA);
+    }
+  });
+
+  it("a tarefa de uma versão mais nova sobrevive à escrita desta (o rollback que mexe no Jev)", async () => {
+    const DA_VERSAO_NOVA = { estado: "desligada", campo_novo: 1 };
+    const casos: Array<[MudancaDaConfig, string]> = [
+      [{ ligado: false }, "decidindo"],
+      [{ tarefas: { clima: "observando" } }, "observando"],
+    ];
+    for (const [mudanca, clima] of casos) {
+      const f = adminFalso({
+        settings: { jev: { ligado: true, modo: "decide", aceite: ACEITE, tarefas: { clima: GRAVADA, futura: DA_VERSAO_NOVA } } },
+      });
+      const r = await gravarConfigDoJev({ admin: f.admin, orgId: ORG, actorUserId: ADMIN, mudanca, agora: AGORA });
+      expect(r.ok).toBe(true);
+      const jev = (f.updates[0]!.settings as { jev: { tarefas: Record<string, unknown> } }).jev;
+      expect(jev.tarefas.futura, `${JSON.stringify(mudanca)} apagou a tarefa da versão nova`).toEqual(DA_VERSAO_NOVA);
+      expect(jev.tarefas.clima).toMatchObject({ estado: clima });
     }
   });
 

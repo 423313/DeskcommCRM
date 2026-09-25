@@ -51,7 +51,8 @@ export type TarefaGravada = z.infer<typeof tarefaGravadaSchema>;
 /**
  * Uma chave por tarefa de `TAREFAS_DO_JEV` — `./tarefas.test.ts` cobra os dois
  * lados, e `./config.test.ts` cobra o `.catch` de CADA chave. Chave
- * desconhecida (de uma versão mais nova) é descartada.
+ * desconhecida (de uma versão mais nova) é descartada na leitura e devolvida
+ * na escrita (`tarefasDeOutraVersao`).
  */
 const tarefaIlegivel = (): TarefaGravada => ({ estado: "desligada" });
 const tarefasSchema = z.object({
@@ -170,6 +171,21 @@ export function mesclar(
 }
 
 /**
+ * As tarefas que uma versão MAIS NOVA gravou e esta não conhece, como estão no
+ * banco. A leitura as descarta; a escrita as devolve. Sem isso, voltar a imagem
+ * e mexer no Jev apagaria, por exemplo, uma tarefa que a empresa DESLIGOU na
+ * versão nova — e, de volta a ela, a tarefa reapareceria "nova", observando
+ * sozinha (`./tarefas.ts`, item 5).
+ */
+function tarefasDeOutraVersao(settings: Record<string, unknown>): Record<string, unknown> {
+  const jev = settings.jev;
+  const tarefas = jev !== null && typeof jev === "object" ? (jev as Record<string, unknown>).tarefas : undefined;
+  if (tarefas === null || typeof tarefas !== "object" || Array.isArray(tarefas)) return {};
+  const conhecidas: readonly string[] = idDaTarefaSchema.options;
+  return Object.fromEntries(Object.entries(tarefas).filter(([id]) => !conhecidas.includes(id)));
+}
+
+/**
  * Lê, mescla e grava. `settings` é jsonb COMPARTILHADO (marca, MFA, IA padrão,
  * onboarding): gravar `{ jev }` sozinho apagaria o resto em silêncio. O service
  * role passa por cima da RLS, então o `.eq("id", orgId)` é a única cerca entre
@@ -192,9 +208,15 @@ export async function gravarConfigDoJev(p: PedidoDeGravarConfig): Promise<Result
   );
   if (!proxima.success) return { ok: false, motivo: "config_invalida" };
 
+  const alheias = tarefasDeOutraVersao(settingsAtuais);
+  const jev =
+    Object.keys(alheias).length === 0
+      ? proxima.data
+      : { ...proxima.data, tarefas: { ...alheias, ...proxima.data.tarefas } };
+
   const { data: gravado, error: escritaErr } = await p.admin
     .from("organizations")
-    .update({ settings: { ...settingsAtuais, jev: proxima.data } })
+    .update({ settings: { ...settingsAtuais, jev } })
     .eq("id", p.orgId)
     .select("settings")
     .maybeSingle();
