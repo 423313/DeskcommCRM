@@ -39097,6 +39097,19 @@ begin
   end if;
 end $$;
 
+-- ---- autoria "em nome de" na mensagem (migration 0416, issue #1613) ----
+--
+-- Coluna nova, nullable, sem backfill e sem policy nova: a RLS por organização
+-- já cobre a linha de `messages`, e o campo é gravado pelo handler só depois do
+-- gate `messages:on_behalf` na rota. Idempotente porque o `update.sh` do clone
+-- re-executa este bloco inteiro a cada atualização. Não cria função, então o
+-- bloco pode vir depois da varredura de `anon`.
+alter table public.messages
+  add column if not exists sent_on_behalf_of_user_id uuid;
+
+comment on column public.messages.sent_on_behalf_of_user_id is
+  'Autoria "em nome de" (#1613, migration 0416): a PESSOA — membro ativo agent+ da organização — em nome de quem um token enviou esta mensagem. null em todo envio direto. Só a rota POST /api/v1/messages grava, e só com o escopo messages:on_behalf; o balão mostra "Fulano · via {token}" a partir de metadata.sent_on_behalf.';
+
 -- ---- módulo suspenso vira ERRO que o kit reporta (migration 0340) ----
 --
 -- Um comando SEPARADO da reaplicação, de propósito: se ela relançasse, a marca
