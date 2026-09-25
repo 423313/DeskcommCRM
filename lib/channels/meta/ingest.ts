@@ -325,6 +325,7 @@ function previewOfEcho(e: OutboundEchoEvent): string {
   if (e.type === "video") return "🎬 Vídeo";
   if (e.type === "document") return "📎 Documento";
   if (e.type === "audio") return e.media?.voice ? "🎤 Mensagem de voz" : "🎵 Áudio";
+  if (e.type === "contact") return e.sharedContact?.name ? `👤 ${e.sharedContact.name}` : "[contato]";
   return `[${e.type}]`;
 }
 
@@ -415,7 +416,7 @@ export async function ingestMetaEcho(
       status: "sent",
       sent_via: "external_device",
       type: e.type === "text" ? "text" : e.type,
-      body: e.text,
+      body: e.type === "contact" ? (e.sharedContact?.name ?? e.text) : e.text,
       external_id: e.externalId,
       media_url: e.media ? `meta-media:${e.media.id}` : null,
       media_mime: e.media?.mime ?? null,
@@ -423,6 +424,7 @@ export async function ingestMetaEcho(
       metadata: {
         from_business_app: true,
         ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
+        ...(e.sharedContact ? { shared_contact: e.sharedContact } : {}),
       },
     })
     .select("id")

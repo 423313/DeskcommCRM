@@ -176,6 +176,29 @@ describe("parser: smb_message_echoes vira evento de saída", () => {
     });
   });
 
+  it("cartão de contato (`contacts`) vira `contact` com o nome, como na recebida", () => {
+    // O CHECK de `messages.type` aceita `contact`, não `contacts`: sem o mapeamento
+    // o insert falharia e a IA não pausaria.
+    const [e] = parseMetaWebhook(
+      envelopeDeEcos([
+        {
+          to: "5519999999999",
+          id: "wamid.ECO3",
+          timestamp: "1790000000",
+          type: "contacts",
+          contacts: [{ name: { formatted_name: "Ana Souza" }, phones: [{ phone: "+55 11 98888-7777" }] }],
+        },
+      ]) as never,
+    );
+    expect(e).toMatchObject({
+      kind: "outbound_echo",
+      type: "contact",
+      text: "Ana Souza",
+      sharedContact: { name: "Ana Souza" },
+      media: null,
+    });
+  });
+
   it("`revoke`, `edit` e eco sem destinatário ficam de fora", () => {
     const eventos = parseMetaWebhook(
       envelopeDeEcos([
@@ -228,6 +251,21 @@ describe("ingestão do eco", () => {
     expect(r).toEqual({ status: "duplicate" });
     expect(estado.pausas).toEqual([]);
     expect(estado.marcacoes).toEqual([]);
+  });
+
+  it("cartão do eco grava `contact` com o nome no corpo e o cartão no metadata", async () => {
+    const cartao = { name: "Ana Souza", phone_number: "+55 11 98888-7777" };
+    await ingestMetaEcho(
+      adminFalso(),
+      { ...ECO_TEXTO, type: "contact", text: "Ana Souza", sharedContact: cartao },
+      { organizationId: "org-1" },
+    );
+    expect(estado.insert).toMatchObject({
+      type: "contact",
+      body: "Ana Souza",
+      metadata: { from_business_app: true, shared_contact: cartao },
+    });
+    expect(estado.pausas).toHaveLength(1);
   });
 
   it("mídia do eco pede a persistência dos bytes, como na recebida", async () => {

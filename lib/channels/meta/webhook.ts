@@ -162,9 +162,11 @@ export interface OutboundEchoEvent {
   /** `wa_id` do CLIENTE (o destinatário). Mesma ressalva do nono dígito. */
   to: string;
   sentAt: Date;
-  /** `text` | `image` | `video` | `document` | … */
+  /** `text` | `image` | `video` | `document` | `contact` | … */
   type: string;
   text: string | null;
+  /** Preenchido quando `type === "contact"` (cartão compartilhado pelo app). */
+  sharedContact?: SharedContact | null;
   media: {
     id: string;
     url: string | null;
@@ -309,7 +311,11 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
           if (!id || !to) continue; // payload capenga não vira linha meia-boca
           if (tipo === "revoke" || tipo === "edit") continue; // ver `OutboundEchoEvent`
 
-          const corpoMidia = raw[tipo] as Record<string, unknown> | undefined;
+          // Cartão chega como `contacts`, que o CHECK de `messages.type` recusa —
+          // mesmo mapeamento da recebida, senão o insert falha e a IA não pausa.
+          const corpoMidia = tipo !== "contacts" ? (raw[tipo] as Record<string, unknown> | undefined) : undefined;
+          const sharedContact = tipo === "contacts" ? parseMetaInboundContact(raw) : null;
+          const tipoCrm = tipo === "contacts" ? "contact" : tipo;
           out.push({
             kind: "outbound_echo",
             wabaId,
@@ -317,12 +323,13 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             externalId: id,
             to,
             sentAt: new Date(Number(str(raw.timestamp) ?? "0") * 1000),
-            type: tipo,
-            // Texto do balão: o corpo, ou a legenda da mídia (o que a pessoa digitou).
+            type: tipoCrm,
+            // Texto do balão: o corpo, o nome do cartão, ou a legenda da mídia.
             text:
-              tipo === "text"
+              tipoCrm === "text"
                 ? str((raw.text as Record<string, unknown>)?.body)
-                : str(corpoMidia?.caption),
+                : sharedContact?.name ?? str(corpoMidia?.caption),
+            ...(sharedContact ? { sharedContact } : {}),
             media:
               corpoMidia && str(corpoMidia.id)
                 ? {
