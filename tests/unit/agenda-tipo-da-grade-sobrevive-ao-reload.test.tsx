@@ -116,8 +116,10 @@ vi.mock("@/hooks/agenda/useHorariosLivres", () => ({
   },
 }));
 
+/** Vazio por padrão; o caso do card da grade põe um compromisso aqui. */
+const compromissosDaGrade = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock("@/hooks/agenda/useAgendamentos", () => ({
-  useAgendamentos: () => ({ data: [], isError: false, isLoading: false }),
+  useAgendamentos: () => ({ data: compromissosDaGrade, isError: false, isLoading: false }),
 }));
 vi.mock("@/hooks/agenda/useMarcarAgendamento", () => ({
   useMarcarAgendamento: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -181,7 +183,7 @@ function montar() {
   const cliente = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  const tela = () => (
     <QueryClientProvider client={cliente}>
       <AgendaClient
         fusoDeApresentacao="America/Sao_Paulo"
@@ -193,8 +195,12 @@ function montar() {
         usuarioId="u-atendente"
         podeMarcar
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const montada = render(tela());
+  // O que o router faz depois de um `push` que só troca a query: renderiza a
+  // MESMA árvore de novo, e quem lê `useSearchParams` passa a ver a URL nova.
+  return { ...montada, navegou: () => montada.rerender(tela()) };
 }
 
 /** O F5: a URL manda, o React nasce do zero. */
@@ -207,6 +213,7 @@ const botaoDoTipo = (id: string) => screen.getByTestId(`tipo-da-grade-${id}`);
 beforeEach(() => {
   abrirCom("/app/agenda");
   pedidos.length = 0;
+  compromissosDaGrade.length = 0;
 });
 
 afterEach(cleanup);
@@ -275,6 +282,36 @@ describe("o tipo escolhido na grade sobrevive ao reload", () => {
     // Mas o tipo atravessa: apagá-lo aqui devolveria o defeito a um clique de
     // distância de quem só estava lendo um compromisso.
     expect(window.location.search).toContain("tipo=tipo-2");
+  });
+
+  // O caso acima parte de uma URL montada à mão, com os dois parâmetros. A
+  // jornada real é outra: o tipo está na URL, a pessoa TOCA NUM CARD da grade,
+  // e é o `router.push` do card que monta a URL do detalhe. Enquanto ele
+  // montava só `?compromisso=`, o fecho não tinha tipo nenhum para manter.
+  it("abrir um compromisso pelo card da grade e fechar mantém o tipo", () => {
+    compromissosDaGrade.push({
+      id: "c1",
+      titulo: "Avaliação",
+      responsavelId: "u-atendente",
+      comeca: "2026-09-16T11:00:00-03:00",
+      termina: "2026-09-16T11:45:00-03:00",
+      origem: "ui",
+      situacao: "confirmed",
+    });
+    abrirCom("/app/agenda?tipo=tipo-2");
+    const tela = montar();
+
+    fireEvent.click(screen.getByTestId("agendamento-c1"));
+
+    const aberta = new URLSearchParams(window.location.search);
+    expect(aberta.get("compromisso")).toBe("c1");
+    expect(aberta.get("tipo")).toBe("tipo-2");
+
+    tela.navegou();
+    expect(botaoDoTipo("tipo-2")).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByTestId("fechar-detalhe"));
+
+    expect(window.location.search).toBe("?tipo=tipo-2");
   });
 
   it("?tipo= de um tipo que não existe mais cai no primeiro — a tela segue de pé", () => {

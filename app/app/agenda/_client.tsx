@@ -1153,8 +1153,16 @@ export function AgendaClient({
            o detalhe só abria por `?compromisso=`, que apenas o Histórico e o Radar
            linkavam. Reusa o MESMO parâmetro que `EntradaDaAgenda` já lê — e `push`,
            não `replace`, porque é o que o Histórico faz com `<Link>` e é o que faz
-           o botão voltar do celular fechar o detalhe. */
-        onAbrirAgendamento={(id) => router.push(`/app/agenda?compromisso=${id}`)}
+           o botão voltar do celular fechar o detalhe. E o `?tipo=` vai JUNTO:
+           sem ele, abrir um card trocava a URL por só `?compromisso=`, o fecho
+           não achava tipo nenhum para manter e o F5 seguinte voltava ao
+           primeiro (#1657). */
+        onAbrirAgendamento={(id) => {
+          const parametros = new URLSearchParams();
+          if (tipo) parametros.set("tipo", tipo.id);
+          parametros.set("compromisso", id);
+          router.push(`/app/agenda?${parametros.toString()}`);
+        }}
         className="min-h-0 flex-1"
       />
     </div>
