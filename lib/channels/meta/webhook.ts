@@ -142,7 +142,42 @@ export interface MessageStatusEvent {
   errorTitle: string | null;
 }
 
-export type MetaWebhookEvent = TemplateStatusEvent | MessageStatusEvent | InboundMessageEvent;
+/**
+ * Mensagem que a EMPRESA enviou pelo app WhatsApp Business, num número em
+ * coexistência (o mesmo número no app e na Cloud API). A Meta entrega no campo
+ * `smb_message_echoes` — só o que saiu PELO APP; o que sai pela API não volta
+ * como eco. Sem este evento a conversa no CRM fica sem as respostas dadas pelo
+ * celular, e o agente responde por cima de um humano que já respondeu.
+ *
+ * `revoke` e `edit` também chegam por este campo e ficam de fora de propósito:
+ * não são mensagem nova, e sim alteração de uma que talvez nem tenhamos gravado.
+ */
+export interface OutboundEchoEvent {
+  kind: "outbound_echo";
+  wabaId: string;
+  /** Qual número NOSSO enviou — amarra o eco à sessão, como no recebimento. */
+  phoneNumberId: string;
+  /** `wamid` — mesma chave de idempotência das mensagens recebidas. */
+  externalId: string;
+  /** `wa_id` do CLIENTE (o destinatário). Mesma ressalva do nono dígito. */
+  to: string;
+  sentAt: Date;
+  /** `text` | `image` | `video` | `document` | … */
+  type: string;
+  text: string | null;
+  media: {
+    id: string;
+    url: string | null;
+    mime: string | null;
+    voice: boolean;
+  } | null;
+}
+
+export type MetaWebhookEvent =
+  | TemplateStatusEvent
+  | MessageStatusEvent
+  | InboundMessageEvent
+  | OutboundEchoEvent;
 
 /**
  * O formato do fio mora em `./envelope.ts`, onde é um schema Zod — e o tipo
@@ -263,6 +298,43 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             errorTitle: str(first.title),
           });
         }
+      }
+      // Coexistência: o que a empresa enviou pelo app WhatsApp Business.
+      if (change.field === "smb_message_echoes" && Array.isArray(v.message_echoes)) {
+        const meta = (v.metadata ?? {}) as Record<string, unknown>;
+        for (const raw of v.message_echoes as Record<string, unknown>[]) {
+          const id = str(raw.id);
+          const to = str(raw.to);
+          const tipo = str(raw.type) ?? "unknown";
+          if (!id || !to) continue; // payload capenga não vira linha meia-boca
+          if (tipo === "revoke" || tipo === "edit") continue; // ver `OutboundEchoEvent`
+
+          const corpoMidia = raw[tipo] as Record<string, unknown> | undefined;
+          out.push({
+            kind: "outbound_echo",
+            wabaId,
+            phoneNumberId: str(meta.phone_number_id) ?? "",
+            externalId: id,
+            to,
+            sentAt: new Date(Number(str(raw.timestamp) ?? "0") * 1000),
+            type: tipo,
+            // Texto do balão: o corpo, ou a legenda da mídia (o que a pessoa digitou).
+            text:
+              tipo === "text"
+                ? str((raw.text as Record<string, unknown>)?.body)
+                : str(corpoMidia?.caption),
+            media:
+              corpoMidia && str(corpoMidia.id)
+                ? {
+                    id: str(corpoMidia.id)!,
+                    url: str(corpoMidia.url),
+                    mime: str(corpoMidia.mime_type),
+                    voice: corpoMidia.voice === true,
+                  }
+                : null,
+          });
+        }
+        continue;
       }
       // Qualquer outro `field` cai fora de propósito — ver o comentário acima.
     }
