@@ -68,17 +68,17 @@ describe("lerConfigPublicaDoGoTrue", () => {
 
   it("rede fora → `null` (nunca lança: isto roda no meio do cadastro)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("fetch failed"); }));
-    await expect((await convite()).lerConfigPublicaDoGoTrue()).resolves.toNull();
+    await expect((await convite()).lerConfigPublicaDoGoTrue()).resolves.toBeNull();
   });
 
   it("resposta sem o campo → `null`: não sei não vira 'aberto'", async () => {
     responderSettings({ external: {} });
-    await expect((await convite()).lerConfigPublicaDoGoTrue()).resolves.toNull();
+    await expect((await convite()).lerConfigPublicaDoGoTrue()).resolves.toBeNull();
   });
 
   it("HTTP 500 do GoTrue → `null`", async () => {
     responderSettings({ disable_signup: true }, false);
-    await expect((await convite()).lerConfigPublicaDoGoTrue()).resolves.toNull();
+    await expect((await convite()).lerConfigPublicaDoGoTrue()).resolves.toBeNull();
   });
 });
 
