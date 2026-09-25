@@ -206,6 +206,63 @@ describe("listar modelos de mensagem — a régua da policy, sob service-role", 
   });
 });
 
+describe("preencher pelo id — a mesma régua de dono da lista", () => {
+  // A lista fechada não basta: o id de um modelo pessoal alheio (os que a lista
+  // devolvia antes deste conserto, por exemplo) abria o corpo pelo preenchimento.
+  const AGENTE: Actor = { type: "ai_agent", id: "run-1", role: "agent" };
+
+  it("⭐ token preenchendo o modelo pessoal do colega recebe 404, não o corpo", async () => {
+    const db = comModelos();
+
+    const err = await recusa(() =>
+      crmRenderMessageTemplate.handler({ template_id: "t-do-colega" }, ctx(db)),
+    );
+
+    expect(err.status).toBe(404);
+    expect(JSON.stringify(err)).not.toContain("Anotação particular");
+  });
+
+  it("token não preenche modelo pessoal de ninguém, nem o do usuário que o criou", async () => {
+    const db = comModelos();
+
+    expect((await recusa(() => preencherModeloDeMensagem(deps(db), { templateId: "t-meu" }))).status).toBe(404);
+    expect(
+      (await recusa(() => preencherModeloDeMensagem(deps(db, AGENTE), { templateId: "t-meu" }))).status,
+    ).toBe(404);
+  });
+
+  it("a pessoa preenche o próprio modelo pessoal", async () => {
+    const db = comModelos();
+
+    const r = await preencherModeloDeMensagem(deps(db, PESSOA), { templateId: "t-meu" });
+
+    expect(r.id).toBe("t-meu");
+    expect(r.lacunas).toEqual(["nome"]);
+  });
+
+  it("⭐ a pessoa NÃO preenche o modelo pessoal do colega", async () => {
+    const db = comModelos();
+
+    const err = await recusa(() =>
+      preencherModeloDeMensagem(deps(db, PESSOA), { templateId: "t-do-colega" }),
+    );
+
+    expect(err.status).toBe(404);
+  });
+
+  it("o compartilhado continua preenchível por token, agente e pessoa", async () => {
+    const db = comModelos();
+
+    for (const ator of [TOKEN, AGENTE, PESSOA]) {
+      const r = await preencherModeloDeMensagem(deps(db, ator), {
+        templateId: "t-compartilhado",
+        valores: { dias: "7" },
+      });
+      expect(r.texto).toBe("A troca vale por 7 dias.");
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 2. e 3. preencher: o que veio do contato, o que veio de fora, o que foi recusado
 // ---------------------------------------------------------------------------
@@ -214,7 +271,7 @@ describe("preencher modelo com as variáveis do integrador", () => {
   function comModelo(corpo: string, contato?: Record<string, unknown>) {
     const db = makeDb();
     (db.tabelas as unknown as Record<string, unknown[]>).message_templates = [
-      { id: "t1", organization_id: ORG_ID, title: "Cobrança", body: corpo },
+      { id: "t1", organization_id: ORG_ID, owner_user_id: null, title: "Cobrança", body: corpo },
     ];
     (db.tabelas as unknown as Record<string, unknown[]>).contacts = contato ? [contato] : [];
     return db;
@@ -362,7 +419,13 @@ describe("a ferramenta da integração", () => {
   it("crm_render_message_template leva `valores` até o render", async () => {
     const db = makeDb();
     (db.tabelas as unknown as Record<string, unknown[]>).message_templates = [
-      { id: FONTE, organization_id: ORG_ID, title: "Cobrança", body: "Pague em {{link_formulario}}" },
+      {
+        id: FONTE,
+        organization_id: ORG_ID,
+        owner_user_id: null,
+        title: "Cobrança",
+        body: "Pague em {{link_formulario}}",
+      },
     ];
 
     const r = (await crmRenderMessageTemplate.handler(

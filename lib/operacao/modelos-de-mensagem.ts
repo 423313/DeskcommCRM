@@ -81,16 +81,13 @@ export async function listarModelosDeMensagem(
   const dono = deps.actor.type === "user" ? deps.actor.id : null;
   const incluirPessoais = opts.incluirPessoais === true && dono !== null;
 
-  let consulta = deps.supabase
-    .from("message_templates")
-    .select("id, title, body, shortcut, owner_user_id")
-    .eq("organization_id", deps.organizationId);
-  // O predicado é o da policy, em SQL e não em memória: ler a linha pessoal de
-  // outra pessoa para descartá-la depois deixaria o vazamento a uma edição de
-  // distância (e o corpo do modelo é dado do cliente, não metadado).
-  consulta = incluirPessoais
-    ? consulta.or(`owner_user_id.is.null,owner_user_id.eq.${dono}`)
-    : consulta.is("owner_user_id", null);
+  const consulta = visivelPara(
+    deps.supabase
+      .from("message_templates")
+      .select("id, title, body, shortcut, owner_user_id")
+      .eq("organization_id", deps.organizationId),
+    incluirPessoais ? dono : null,
+  );
 
   const { data, error } = await consulta.order("updated_at", { ascending: false });
   if (error) throw new ApiError(500, "internal_error", undefined, deps.requestId, error.message);
@@ -106,6 +103,21 @@ export async function listarModelosDeMensagem(
       variaveis: variaveisDoCorpo(corpo),
     };
   });
+}
+
+/**
+ * A régua da policy `message_templates_select`, em SQL e não em memória: o
+ * compartilhado sempre, o pessoal só do `dono` (e nenhum quando `dono` é null).
+ * Ler a linha pessoal de outra pessoa para descartá-la depois deixaria o
+ * vazamento a uma edição de distância — o corpo do modelo é dado, não metadado.
+ */
+function visivelPara<C extends { or(filtro: string): C; is(coluna: string, valor: null): C }>(
+  consulta: C,
+  dono: string | null,
+): C {
+  return dono === null
+    ? consulta.is("owner_user_id", null)
+    : consulta.or(`owner_user_id.is.null,owner_user_id.eq.${dono}`);
 }
 
 export interface ModeloPreenchido {
@@ -140,12 +152,17 @@ export async function preencherModeloDeMensagem(
   deps: DepsDaOperacao,
   input: PedidoDePreenchimento,
 ): Promise<ModeloPreenchido> {
-  const { data: modelo, error } = await deps.supabase
-    .from("message_templates")
-    .select("id, title, body")
-    .eq("id", input.templateId)
-    .eq("organization_id", deps.organizationId)
-    .maybeSingle();
+  // A MESMA régua da lista: sem ela, um id de modelo pessoal alheio (os que a
+  // lista devolvia antes, por exemplo) abria o corpo pelo preenchimento. Fora da
+  // régua cai no 404 abaixo, que não diz se o modelo existe.
+  const { data: modelo, error } = await visivelPara(
+    deps.supabase
+      .from("message_templates")
+      .select("id, title, body")
+      .eq("id", input.templateId)
+      .eq("organization_id", deps.organizationId),
+    deps.actor.type === "user" ? deps.actor.id : null,
+  ).maybeSingle();
   if (error) throw new ApiError(500, "internal_error", undefined, deps.requestId, error.message);
   if (!modelo) {
     throw new ApiError(
