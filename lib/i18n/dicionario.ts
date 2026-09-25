@@ -4900,6 +4900,9 @@ export const DICIONARIO: Traducoes = {
   "Criar e editar leads": { es: "Crear y editar leads" },
   "Ler mensagens": { es: "Leer mensajes" },
   "Enviar mensagens": { es: "Enviar mensajes" },
+  "Integração pode enviar em nome de um atendente": {
+    es: "La integración puede enviar en nombre de un asesor",
+  },
   "Ler o log de auditoria": { es: "Leer el registro de auditoría" },
   // ─── Configurações: Distribuição de atendimento ───
   "Distribuição de atendimento salva.": { es: "Distribución de atención guardada." },
