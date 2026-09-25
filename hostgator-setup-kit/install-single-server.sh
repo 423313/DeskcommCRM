@@ -183,9 +183,11 @@ step "Configurando o CRM sem perguntas adicionais"
 cd "$ROOT_DIR"
 bash "$KIT_DIR/install.sh" --yes
 
-# Cadastro público do GoTrue (#1653): `GOTRUE_DISABLE_SIGNUP` acompanha o
-# `signup_mode` da instalação. Em instalação nova o modo é `aberto` (false) e a
-# função nem mexe no arquivo — o passo existe para reinstalação por cima de um
+# Cadastro público do GoTrue (#1653): `DISABLE_SIGNUP` (chave oficial do .env
+# do Supabase) acompanha o modo de cadastro da instalação. Em instalação nova
+# sem `SIGNUP_MODE` o modo é `aberto`, o .env copiado do Supabase já traz
+# `DISABLE_SIGNUP=false` e a função nem mexe no arquivo — o passo existe para
+# `SIGNUP_MODE=so_convite` declarado no .env e para reinstalação por cima de um
 # banco que já está em "só convite".
 if sincronizar_signup_mode_do_gotrue; then
   dc_supabase up -d --no-deps auth

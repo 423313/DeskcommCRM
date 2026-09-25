@@ -73,36 +73,54 @@ check "sem SMTP, o fim da instalacao avisa" grep -q "sem SMTP, 'esqueci a senha'
 # GoTrue (`POST /auth/v1/signup` com a anon key). O que se prova aqui é o
 # comportamento da função no kit, com `psql_run` e `dir_do_supabase` dublados:
 # sem este passo, `so_convite` só fecha o CRM e o GoTrue segue criando conta.
-sync_signup_mode() {  # sync_signup_mode <modo no banco> <valor atual no .env | vazio>
-  local tmp modo="$1" atual="$2" saida valor
+sync_signup_mode() {  # sync_signup_mode <modo no banco | __falha__> <DISABLE_SIGNUP no .env | vazio> [SIGNUP_MODE do .env do CRM]
+  local tmp modo="$1" atual="$2" piso="${3:-}" saida valor
   tmp="$(mktemp -d)"
+  mkdir -p "$tmp/app"
   printf 'COMPOSE_PROJECT_NAME=projeto\n' > "$tmp/.env"
-  if [ -n "$atual" ]; then printf 'GOTRUE_DISABLE_SIGNUP=%s\n' "$atual" >> "$tmp/.env"; fi
-  saida="$(MODE_DB="$modo" SB_DIR="$tmp" bash -c '
+  if [ -n "$atual" ]; then printf 'DISABLE_SIGNUP=%s\n' "$atual" >> "$tmp/.env"; fi
+  printf 'APP_NAME=x\n' > "$tmp/app/.env"
+  if [ -n "$piso" ]; then printf 'SIGNUP_MODE=%s\n' "$piso" >> "$tmp/app/.env"; fi
+  saida="$(MODE_DB="$modo" SB_DIR="$tmp" PROJECT_DIR="$tmp/app" bash -c '
     set -euo pipefail
     . "$1/_common.sh"
     dir_do_supabase() { printf %s "$SB_DIR"; }
-    psql_run() { printf %s "$MODE_DB"; }
+    psql_run() { [ "$MODE_DB" = __falha__ ] && return 1; printf %s "$MODE_DB"; }
+    c_ylw() { :; }
     if sincronizar_signup_mode_do_gotrue; then printf MUDOU; else printf IGUAL; fi
   ' _ "$ROOT_DIR/hostgator-setup-kit" "$tmp" 2>&1)" || saida="ERRO:$saida"
-  valor="$(grep -E '^GOTRUE_DISABLE_SIGNUP=' "$tmp/.env" | cut -d= -f2- || true)"
+  valor="$(grep -E '^DISABLE_SIGNUP=' "$tmp/.env" | cut -d= -f2- || true)"
+  if grep -q '^GOTRUE_DISABLE_SIGNUP=' "$tmp/.env"; then valor="$valor+sombra"; fi
   rm -rf "$tmp"
   printf '%s|%s' "$saida" "${valor:-vazio}"
 }
-check "so_convite escreve GOTRUE_DISABLE_SIGNUP=true" \
-  test "$(sync_signup_mode so_convite '')" = 'MUDOU|true'
+check "so_convite escreve DISABLE_SIGNUP=true (chave oficial do Supabase)" \
+  test "$(sync_signup_mode so_convite false)" = 'MUDOU|true'
 check "ja no valor do modo nao mexe no .env (idempotente, sem reiniciar o auth)" \
   test "$(sync_signup_mode so_convite true)" = 'IGUAL|true'
 check "voltar para aberto reabre o caminho direto" \
   test "$(sync_signup_mode aberto true)" = 'MUDOU|false'
-check "banco fora ou sem a coluna: nao mexe em nada" \
-  test "$(sync_signup_mode '' '')" = 'IGUAL|vazio'
-check "update.sh entrega a sincronizacao ao Supabase" \
-  grep -q 'sincronizar_signup_mode_do_gotrue' "$ROOT_DIR/hostgator-setup-kit/update.sh"
+check ".env novo do Supabase em modo aberto: nada muda, nada reinicia" \
+  test "$(sync_signup_mode aberto false)" = 'IGUAL|false'
+check "sem linha no banco, o piso SIGNUP_MODE=so_convite do CRM fecha" \
+  test "$(sync_signup_mode '' false so_convite)" = 'MUDOU|true'
+check "sem linha e sem piso vale aberto" \
+  test "$(sync_signup_mode '' false)" = 'IGUAL|false'
+check "piso irreconhecivel vale aberto (nao fecha por erro de digitacao)" \
+  test "$(sync_signup_mode '' false so_convit)" = 'IGUAL|false'
+check "banco fora ou sem a coluna: nao mexe em nada, nem cai no piso" \
+  test "$(sync_signup_mode __falha__ false so_convite)" = 'IGUAL|false'
+posicao_no_update() {  # a sincronizacao roda DEPOIS do checkout, com o kit novo
+  awk '/git checkout --quiet "\$TARGET_TAG"/ { depois = 1 }
+       depois && /^[[:space:]]*if sincronizar_signup_mode_do_gotrue; then/ { achou = 1 }
+       END { exit achou ? 0 : 1 }' "$ROOT_DIR/hostgator-setup-kit/update.sh"
+}
+check "update.sh sincroniza DEPOIS do checkout (senao o fechamento so chega no update seguinte)" \
+  posicao_no_update
 check "instalador entrega a sincronizacao ao Supabase" \
   grep -q 'sincronizar_signup_mode_do_gotrue' "$INSTALLER"
-check "override leva GOTRUE_DISABLE_SIGNUP para o container auth" \
-  grep -q 'GOTRUE_DISABLE_SIGNUP' "$OVERRIDE"
+check "override leva a chave oficial DISABLE_SIGNUP ao container auth" \
+  grep -qF 'GOTRUE_DISABLE_SIGNUP: "${DISABLE_SIGNUP:-false}"' "$OVERRIDE"
 
 if [[ "$FAILS" -ne 0 ]]; then
   printf '\n%d teste(s) falharam.\n' "$FAILS"

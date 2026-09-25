@@ -27,13 +27,13 @@ services:
     container_name: !reset null
     environment:
       # #1653 — o `disable_signup` que fecha `POST /auth/v1/signup` (caminho
-      # direto, com a anon key) mora no .env do Supabase, escrito pela função
-      # `sincronizar_signup_mode_do_gotrue` do kit a partir de
-      # `platform_settings.signup_mode`. Sem esta passagem o valor ficaria no
-      # .env sem chegar ao GoTrue: o compose só repassa o que está listado.
-      # Default `false` = toda instalação nasce com o cadastro público aberto,
-      # que é o comportamento de sempre (Regra 6 da doutrina de packaging).
-      GOTRUE_DISABLE_SIGNUP: "${GOTRUE_DISABLE_SIGNUP:-false}"
+      # direto, com a anon key) mora na chave OFICIAL `DISABLE_SIGNUP` do .env
+      # do Supabase, escrita pela função `sincronizar_signup_mode_do_gotrue` do
+      # kit a partir do modo de cadastro da instalação. O compose do Supabase já
+      # faz este mesmo mapeamento; repeti-lo aqui prende o nome contra mudança
+      # no upstream sem criar uma segunda variável. Default `false` = o
+      # comportamento de sempre para .env que não tem a chave.
+      GOTRUE_DISABLE_SIGNUP: "${DISABLE_SIGNUP:-false}"
 
   rest:
     container_name: !reset null

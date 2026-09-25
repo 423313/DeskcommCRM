@@ -47,8 +47,10 @@ if [ "${SINGLE_SERVER:-0}" = "1" ]; then
   # Antes do SMTP de propósito: é o caminho que roda MESMO quando o update não
   # tem nada a atualizar (a saída "você já está na versão mais recente" fica
   # mais abaixo), então quem trocou "só convite" na tela e rodou o update leva
-  # o `GOTRUE_DISABLE_SIGNUP` no mesmo comando — e é ele que fecha
-  # `POST /auth/v1/signup` para quem tem a anon key.
+  # o `DISABLE_SIGNUP` no mesmo comando — e é ele que fecha
+  # `POST /auth/v1/signup` para quem tem a anon key. Esta chamada roda com o
+  # kit ANTERIOR ao checkout; a da versão nova fica logo depois de
+  # `atualizar_supabase_single_server`, mais abaixo.
   if sincronizar_signup_mode_do_gotrue; then
     dc_supabase up -d --no-deps auth >/dev/null 2>&1 || c_ylw "⚠ Não consegui reiniciar o auth do Supabase com o modo de cadastro (#1653)."
   fi
@@ -226,6 +228,15 @@ source "$KIT_DIR/manutencao.sh"
 # banco (o passo 4 pausa peças dele, e um `up` depois as religaria).
 if [ "${SINGLE_SERVER:-0}" = "1" ]; then
   atualizar_supabase_single_server || die "O Supabase desta VPS não subiu (erro acima). NÃO mexi no banco do CRM."
+  # De novo, e com o kit da versão NOVA (#1653): a chamada do topo roda com as
+  # funções de antes do checkout — na atualização que traz a sincronização ela
+  # nem existe —, e o `up` acima sobe o auth com o que o .env tiver. Sem esta
+  # linha, "só convite" só fecharia o GoTrue no update.sh SEGUINTE: duas
+  # passadas, que é o passo manual que o comentário da releitura acima recusa.
+  # Falha aqui é aviso, não saída 1: o CRM segue atualizável.
+  if sincronizar_signup_mode_do_gotrue; then
+    dc_supabase up -d --no-deps auth >/dev/null 2>&1 || c_ylw "⚠ Não consegui reiniciar o auth do Supabase com o modo de cadastro (#1653)."
+  fi
 fi
 
 [ -n "${DESKCOMM_AGENT_REPORT:-}" ] && eval "${DESKCOMM_AGENT_REPORT_CMD}" codigo

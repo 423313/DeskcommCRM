@@ -184,34 +184,50 @@ sincronizar_smtp_do_gotrue() {
 # A única trava que fecha esse caminho é o `disable_signup` do próprio GoTrue, e
 # ele NÃO tem API de configuração no self-hosted: medido no fonte
 # supabase/auth v2.196.0, as rotas `/admin` são audit, users, generate_link, sso
-# e oauth — nenhuma de config. Então o valor mora no `.env` do Supabase
-# (`GOTRUE_DISABLE_SIGNUP`), e o override do kit (`supabase-single-server.override.yml`)
-# é quem o entrega ao container `auth`. Sem o GoTrue fechado, fechar só o CRM é
-# o defeito da issue; sem este passo, o `disable_signup` nunca muda sozinho.
+# e oauth — nenhuma de config. Então o valor mora no `.env` do Supabase, na
+# chave OFICIAL `DISABLE_SIGNUP`: o compose do Supabase no ref pinado já a
+# mapeia (`GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP}`) e o `.env.example` dele a
+# traz como `false`. Uma variável nossa ao lado seria sombra: o override passaria
+# a ignorar a oficial, e quem fechou o cadastro pela receita do Supabase seria
+# reaberto em silêncio.
 #
-# Quem manda é `platform_settings.signup_mode` — a mesma fonte da tela de
-# `/admin/cadastro`: `so_convite` → true, qualquer outro modo → false.
+# Quem manda é o modo que o APP enxerga, na mesma precedência de
+# lib/auth/politica-de-cadastro.ts: a linha de `platform_settings` (a tela de
+# `/admin/cadastro`); sem linha, o piso `SIGNUP_MODE` do `.env` do CRM; valor
+# irreconhecível no piso vale `aberto`. `so_convite` → true, os outros → false.
+# Usar `aberto` quando falta a linha deixaria justamente a instalação que
+# declarou `SIGNUP_MODE=so_convite` com o CRM fechado e o GoTrue aberto.
 #
 # Idempotente, e quem chama só reinicia o `auth` quando o arquivo MUDOU. Devolve
 # 1 (sem tocar em nada) quando o valor já é o do modo, quando o banco não
 # respondeu ou quando a coluna ainda não existe (instalação anterior à 0253):
 # reabrir ou fechar o cadastro de uma instalação por causa de um soluço do
 # banco seria o mesmo defeito que o memo pegajoso de `modoDeCadastro()` existe
-# para evitar.
+# para evitar. "Banco falhou" e "sem linha" são respostas diferentes: a primeira
+# não mexe, a segunda cai no piso.
 sincronizar_signup_mode_do_gotrue() {
   local env_sb modo alvo atual
   env_sb="$(dir_do_supabase)/.env"
   [ -f "$env_sb" ] || return 1
-  modo="$(psql_run -tA -c "select coalesce((select signup_mode from public.platform_settings where id = 1), 'aberto')" 2>/dev/null || true)"
+  modo="$(psql_run -tA -c "select signup_mode from public.platform_settings where id = 1" 2>/dev/null)" || return 1
   modo="$(printf '%s' "$modo" | tr -d '[:space:]')"
+  if [ -z "$modo" ]; then
+    modo="$(sed -n 's/^SIGNUP_MODE=//p' "${PROJECT_DIR:-$PWD}/.env" 2>/dev/null | tail -n 1 | tr -d "\"' \t\r")"
+    case "$modo" in aberto|com_aprovacao|so_convite) ;; *) modo=aberto ;; esac
+  fi
   case "$modo" in
     so_convite) alvo=true ;;
     aberto|com_aprovacao) alvo=false ;;
     *) return 1 ;;
   esac
-  atual="$(grep -E '^GOTRUE_DISABLE_SIGNUP=' "$env_sb" | tail -n 1 | cut -d= -f2- || true)"
+  atual="$(sed -n 's/^DISABLE_SIGNUP=//p' "$env_sb" | tail -n 1 | tr -d "\"' \t\r")"
   [ "$atual" = "$alvo" ] && return 1
-  set_env_var "$env_sb" GOTRUE_DISABLE_SIGNUP "$alvo"
+  set_env_var "$env_sb" DISABLE_SIGNUP "$alvo"
+  if [ "$alvo" = true ]; then
+    c_ylw "Cadastro direto no Supabase: FECHADO (a instalação está em 'só convite'; convites seguem funcionando)."
+  else
+    c_ylw "Cadastro direto no Supabase: ABERTO (acompanha o modo '$modo' da instalação)."
+  fi
   return 0
 }
 
