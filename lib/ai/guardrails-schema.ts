@@ -156,6 +156,28 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
 // PATCH / CREATE schemas
 // ---------------------------------------------------------------------------
 
+// Parcial SEM defaults. No Zod 4, `.partial()` mantém o `.default()` de cada
+// campo: `agentConfigSchema.partial().parse({ rag_top_k: 10 })` devolve os DEZ
+// campos, e a junção da rota (`{ ...atual, ...patch.config }`) regravava os
+// ajustes que o cliente nem mandou. O cartão "Comandos pelo celular" manda uma
+// chave só e zerava temperatura/RAG. Todo campo com default entra aqui — o teste
+// `patch-de-config-grava-so-o-que-veio` reprova o que ficar de fora.
+const cfg = agentConfigSchema.shape;
+export const agentConfigPatchSchema = agentConfigSchema
+  .extend({
+    temperature: cfg.temperature.removeDefault(),
+    max_tokens: cfg.max_tokens.removeDefault(),
+    context_message_window: cfg.context_message_window.removeDefault(),
+    rag_top_k: cfg.rag_top_k.removeDefault(),
+    rag_similarity_threshold: cfg.rag_similarity_threshold.removeDefault(),
+    confidence_threshold: cfg.confidence_threshold.removeDefault(),
+    voice: cfg.voice.removeDefault(),
+    voice_speed: cfg.voice_speed.removeDefault(),
+    voice_model: cfg.voice_model.removeDefault(),
+    aceita_comandos_celular: cfg.aceita_comandos_celular.removeDefault(),
+  })
+  .partial();
+
 export const agentPatchSchema = z
   .object({
     operation_mode: z.enum(["automatic", "assisted"]).optional(),
@@ -165,7 +187,7 @@ export const agentPatchSchema = z
     is_active: z.boolean().optional(),
     model: agentModelSchema.optional(),
     system_prompt: z.string().min(20).max(10000).optional(),
-    config: agentConfigSchema.partial().optional(),
+    config: agentConfigPatchSchema.optional(),
     guardrails: guardrailsSchema.optional(),
   })
   .strict();
