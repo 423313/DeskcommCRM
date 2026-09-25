@@ -16,32 +16,21 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Contribuição de @vgamkt (#1130).
 
-- **No canal oficial com coexistência, as respostas dadas pelo app WhatsApp Business aparecem na conversa** Quem usa o mesmo número no app WhatsApp Business e na API oficial (coexistência) passa a ver no CRM as mensagens que a equipe envia pelo celular. Elas entram na conversa como resposta de uma pessoa fora do CRM, e o agente de IA pausa naquela conversa para não responder por cima, como já acontecia no canal por QR. Para ativar, marque o campo `smb_message_echoes` nos webhooks do app na Meta; a aba API Oficial (Meta) já o lista entre os campos a assinar. Quem não usa coexistência não precisa fazer nada. Crédito: @tratham-oficial.
+- **No canal oficial com coexistência, as respostas dadas pelo app WhatsApp Business aparecem na conversa** Quem usa o mesmo número no app WhatsApp Business e na API oficial (coexistência) passa a ver no CRM as mensagens que a equipe envia pelo celular. Elas entram na conversa como resposta de uma pessoa fora do CRM, e o agente de IA pausa naquela conversa para não responder por cima, como já acontecia no canal por QR. Para ativar, marque o campo `smb_message_echoes` nos webhooks do app na Meta; a aba API Oficial (Meta) já o lista entre os campos a assinar. Quem não usa coexistência não precisa fazer nada.
+
+  Contribuição de @tratham-oficial (#1633).
 
 - **O Testar do agente consegue consultar o banco de dados conectado** Na aba Teste do agente, as capacidades "Ver as tabelas do banco conectado" e "Buscar dados no banco conectado" eram sempre recusadas com "Esta consulta precisa de um contato real autorizado", e o agente respondia "vou confirmar e te retorno", o que parecia erro de configuração da conexão. Agora o Teste executa as duas consultas como o atendimento real: só leitura, com os mesmos limites de linhas, filtros e tamanho da conexão, e só quando o módulo de banco externo está ligado e há conexão ativa.
 
   Contribuição de @webtecnica (#1636), a partir do relato de @caicoia (#1608).
 
-- **Ligar e desligar o agente pelo celular (#on/#off)** - **Comandos pelo celular:** o atendente pode pausar e devolver o atendimento
-    automático digitando `#off` e `#on` no próprio WhatsApp do celular vinculado
-    à organização, quando o agente que atende a conversa tem o recurso ligado.
-    Vale **por conversa**, só quando a mensagem inteira é o
-    comando, e a pausa é durável — só `#on` (ou o botão "devolver ao automático"
-    na tela) religam a IA.
-  - **Configurável na tela do agente:** cartão **"Comandos pelo celular"** com um
-    interruptor. Desligado (padrão), `#on`/`#off` são tratados como texto comum, e
-    responder pelo celular apenas pausa a IA como qualquer mensagem.
-  - **Pausa durável por atendimento manual, só com o recurso ligado:** para o
-    agente que ligou os comandos, responder o cliente direto do celular (fora do
-    CRM) pausa a IA até alguém mandar `#on` ou devolver pela tela. Com o recurso
-    desligado — o padrão —, nada muda: a pausa continua expirando sozinha em 60
-    minutos. O registro das mensagens continua normal.
-  - O comando é revogado do WhatsApp do cliente logo após ser aplicado, para não
-    aparecer como fala de atendimento.
+- **Ligar e desligar o agente pelo celular (#on/#off)** O atendente pode pausar e devolver o atendimento automático de uma conversa digitando `#off` e `#on` no próprio WhatsApp do celular vinculado à organização. Vale por conversa, só quando a mensagem inteira é o comando, e a pausa dura até alguém mandar `#on` ou apertar "devolver ao automático" na tela. O comando é apagado do WhatsApp do cliente logo depois de aplicado, para não aparecer como fala do atendimento. O recurso se liga por agente, no cartão novo **"Comandos pelo celular"** da tela do agente. Com ele ligado, responder o cliente direto pelo celular também pausa a IA até o `#on`. Desligado, que é o padrão, nada muda: `#on` e `#off` são texto comum e a pausa por resposta no celular continua acabando sozinha em 60 minutos. A atualização não pede nenhuma ação.
 
-  Nada exige ação de quem opera: a atualização entra sem editar `.env` ou compose.
+  Contribuição de @vgamkt (#1130).
 
-- **Link direto para cada conversa da Inbox** Ao abrir uma conversa, o endereço da Inbox passa a incluir o identificador dela. O atendente pode copiar esse link para a equipe; quem tiver acesso à conversa abre o mesmo atendimento, mesmo que ele esteja fora do filtro atual. Crédito: @raphaelmartins.
+- **Link direto para cada conversa da Inbox** Ao abrir uma conversa, o endereço da Inbox passa a incluir o identificador dela. O atendente pode copiar esse link para a equipe; quem tiver acesso à conversa abre o mesmo atendimento, mesmo que ele esteja fora do filtro atual.
+
+  Contribuição de @raphaelmartins (#1629).
 
 - **A Requesty entra como empresa de inteligência artificial do atendente** A Requesty agora aparece na lista de empresas de IA, junto de Anthropic, OpenAI, Google, OpenRouter e DeepSeek. Dá para cadastrar a chave em "IA › Credenciais" ou no passo de treinar durante a instalação, escolher o modelo na tela do assistente e publicar. O agente atende pela Requesty do mesmo jeito que atende pelas outras, com ferramentas (cria o lead, move o card) e com a mesma conferência de chave ao cadastrar.
 
