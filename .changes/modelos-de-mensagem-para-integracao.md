@@ -8,4 +8,4 @@ Um sistema de fora que usa as respostas prontas da equipe — para montar um tex
 
 Não há ação para quem opera a VPS.
 
-Contribuição de @webtecnica (#1674).
+Contribuição de @webtecnica (#1673).
