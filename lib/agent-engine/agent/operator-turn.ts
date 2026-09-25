@@ -112,9 +112,25 @@ export function renderBriefingDoOperador(
   declaracao: DeclaracaoDoTurno | null,
   promessas: ReturnType<typeof promessasEmAberto>,
   agoraBlock = '',
+  ids?: { leadId: string | null; contactId: string; conversationId: string },
 ): string {
+  // Identificadores REAIS do atendimento. Sem eles o modelo inventava UUIDs
+  // zerados (`00000000-…`) em `crm_get_lead`/`crm_get_conversation_history` a
+  // cada turno — chamadas inúteis que falhavam ("Lead não encontrado") e
+  // gastavam modelo. ATENÇÃO ao par: `lead_id` é o CARD do funil (`crm_leads.id`),
+  // não o contato — passar o contato fazia `crm_get_lead` falhar mesmo com o id
+  // "real". O Operador não fala com o cliente; expor ids aqui é seguro.
+  const idsLinhas =
+    ids === undefined
+      ? []
+      : [
+          '',
+          `Identificadores deste atendimento: lead_id=${ids.leadId ?? '(sem card)'} · contact_id=${ids.contactId} · conversation_id=${ids.conversationId}.`,
+          'Ao usar ferramentas de lead, use o `lead_id` acima (o card do funil) — nunca invente UUID. ' +
+            (ids.leadId === null ? 'Não há card para este contato: não chame ferramentas de lead.' : ''),
+        ];
   const comAgora = (linhas: string[]): string =>
-    (agoraBlock === '' ? linhas : [agoraBlock, '', ...linhas]).join('\n');
+    (agoraBlock === '' ? linhas : [agoraBlock, '', ...linhas]).concat(idsLinhas).join('\n');
   if (declaracao === null) {
     // Ausente ≠ vazia, de novo — e aqui a diferença vira instrução. Dizer ao
     // modelo "não houve declaração" e pedir que ele olhe o estado é diferente de
@@ -464,6 +480,24 @@ export function createOperatorTurnHandler(deps: InboundTurnDeps) {
     // tempo: o desfecho não tinha o que persistir (virou log.info) e o aviso
     // precisou de um proxy — a contagem de promessas DECLARADAS, que é um fato
     // sobre o Conversador, não sobre o Operador.
+    // O CARD do funil (`crm_leads.id`) — que NÃO é o `contact_id`. As ferramentas
+    // de lead do Operador operam sobre o card; sem este id o modelo inventava
+    // UUIDs zerados e `crm_get_lead`/`crm_update_lead` falhavam. Best-effort: sem
+    // card, o briefing diz para não chamar ferramenta de lead.
+    const card =
+      mcp === null
+        ? { rows: [] as Array<{ id: string }> }
+        : await pool
+            .query<{ id: string }>(
+              `select id from crm_leads
+                where organization_id = $1 and contact_id = $2
+                order by updated_at desc nulls last
+                limit 1`,
+              [tenantId, leadId],
+            )
+            .catch(() => ({ rows: [] as Array<{ id: string }> }));
+    const leadCardId = card.rows[0]?.id ?? null;
+
     let saida: Awaited<ReturnType<typeof runModelCall>> | null = null;
     try {
       if (mcp !== null) {
@@ -489,6 +523,7 @@ export function createOperatorTurnHandler(deps: InboundTurnDeps) {
                     deps.clock?.() ?? new Date(),
                     await fusoDaOrganizacao(pool, tenantId, log),
                   ),
+                  { leadId: leadCardId, contactId: leadId, conversationId: payload.conversation_id },
                 ),
               },
             ],
