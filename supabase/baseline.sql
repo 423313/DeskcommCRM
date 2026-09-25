@@ -1212,6 +1212,14 @@ CREATE TABLE IF NOT EXISTS "public"."ai_provider_credentials" (
 ALTER TABLE "public"."ai_provider_credentials" OWNER TO "postgres";
 
 
+-- (migration 0413) `base_url` entra AQUI, antes da view do dump, e não só no
+-- apêndice: o `update.sh`/modo UPDATE reaplica este bloco num banco em que a
+-- view já tem `base_url`, e `create or replace view` não remove coluna
+-- ("cannot drop columns from view"). Com a coluna no fim das duas definições,
+-- a reaplicação é no-op e o clone antigo ganha a coluna no fim (permitido).
+ALTER TABLE "public"."ai_provider_credentials" ADD COLUMN IF NOT EXISTS "base_url" "text";
+
+
 CREATE OR REPLACE VIEW "public"."ai_provider_credentials_safe" WITH ("security_invoker"='true') AS
  SELECT "id",
     "organization_id",
@@ -1224,7 +1232,8 @@ CREATE OR REPLACE VIEW "public"."ai_provider_credentials_safe" WITH ("security_i
     "is_active",
     "created_by",
     "created_at",
-    "updated_at"
+    "updated_at",
+    "base_url"
    FROM "public"."ai_provider_credentials";
 
 
