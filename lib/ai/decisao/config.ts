@@ -143,7 +143,7 @@ export const ESTADO_DO_MODO = { observacao: "observando", decide: "decidindo" } 
  *    nome no `modo` e o deixa como está (a imagem anterior não sabe desligar
  *    uma tarefa só).
  */
-function mesclar(
+export function mesclar(
   atual: ConfigDoJev,
   mudanca: MudancaDaConfig,
   carimbo: { em: string; por: string },

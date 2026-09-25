@@ -5,7 +5,13 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { gravarConfigDoJev, idDaTarefaSchema, lerConfigDoJev } from "@/lib/ai/decisao/config";
+import {
+  gravarConfigDoJev,
+  idDaTarefaSchema,
+  lerConfigDoJev,
+  mesclar,
+  type TarefaGravada,
+} from "@/lib/ai/decisao/config";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const ADMIN = "22222222-2222-4222-8222-222222222222";
@@ -214,10 +220,26 @@ describe("gravarConfigDoJev — mescla profunda de `tarefas`", () => {
   });
 
   /**
-   * Com só o clima não há par de tarefas, e mesclar raso passaria em todos os
-   * casos acima (medido: trocar a cópia de `atual.tarefas` por `{}` deixa este
-   * arquivo verde). O caso fica declarado e PULADO — não verde — até a segunda
-   * tarefa existir; aí ele passa a valer sem ninguém editá-lo.
+   * Com só o clima não há par de tarefas no schema, e mesclar raso passaria em
+   * todos os casos acima: o `...atual` já devolve `tarefas` quando nenhuma é
+   * escrita. A mescla em si (`mesclar`, antes do schema) se prova aqui com uma
+   * segunda tarefa que só existe no teste — a trava do achado: trocar a cópia
+   * de `atual.tarefas` por `{}` reprova este caso.
+   */
+  it("mudar uma tarefa nunca apaga outra (a mescla, com uma segunda tarefa de mentira)", () => {
+    const gravada: TarefaGravada = { estado: "desligada", alterado_em: "2026-09-24T10:00:00.000Z", alterado_por: ADMIN };
+    const tarefas = { clima: gravada, segunda: gravada };
+    const atual = { ...lerConfigDoJev({ jev: { ligado: true, modo: "decide", aceite: ACEITE } }), tarefas };
+    const proxima = mesclar(atual, { tarefas: { clima: "observando" } }, { em: AGORA.toISOString(), por: ADMIN });
+    expect(proxima).toMatchObject({
+      modo: "observacao",
+      tarefas: { clima: { estado: "observando", alterado_em: AGORA.toISOString() }, segunda: gravada },
+    });
+  });
+
+  /**
+   * O mesmo, pelo caminho inteiro (schema e banco): PULADO — não verde — até a
+   * segunda tarefa existir; aí ele passa a valer sem ninguém editá-lo.
    */
   const pares = idDaTarefaSchema.options.flatMap((a) =>
     idDaTarefaSchema.options.filter((b) => b !== a).map((b) => [a, b] as const),
