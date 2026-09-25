@@ -12,7 +12,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ### Adicionado
 
-- **Data de nascimento na ficha do contato e no agente** A data de nascimento agora entra pela tela e pela conversa: o diálogo "Editar contato" ganhou o campo "Data de nascimento", a ficha do contato passou a mostrá-la, e o agente de IA consegue propor a data ouvida na conversa pelo mesmo fluxo de aprovação humana que já existe para nome, e-mail e telefone — nada é gravado sem alguém confirmar. Com a data no cadastro, o cron de aniversários encontra quem parabenizar sem depender de digitação manual. Crédito: @webtecnica.
+- **Data de nascimento na ficha do contato e no agente** A data de nascimento agora entra pela tela e pela conversa: o diálogo "Editar contato" ganhou o campo "Data de nascimento", a ficha do contato passou a mostrá-la, e o agente de IA consegue propor a data ouvida na conversa pelo mesmo fluxo de aprovação humana que já existe para nome, e-mail e telefone — nada é gravado sem alguém confirmar. Com a data no cadastro, a rotina de aniversários encontra quem parabenizar sem depender de digitação manual. Crédito: @webtecnica (#1650).
 
 - **A tela de credenciais ganha o provedor personalizado compatível com OpenAI** Quem roteia a própria IA por um endpoint próprio — OmniRouter, 9Router, FreellmAPI, LiteLLM hospedado, proxy corporativo — agora encontra a opção **"Provedor personalizado (compatível com OpenAI)"** em **IA › Credenciais**, junto dos provedores de sempre. Dá para informar a base URL e a chave, escolher o modelo no assistente e publicar: o agente conversa por aquele endpoint do mesmo jeito que conversa pelos outros.
 
@@ -28,15 +28,13 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ### Alterado
 
-- **Cada organização passa a ter um teto de 50 tokens de API ativos** A emissão de tokens de API (Configurações › API Tokens) passa a parar em 50 tokens ativos por organização, e a trava fica no banco, então vale para a tela, para chamadas diretas e para os tokens temporários que o agente de IA usa em cada atendimento. Tokens revogados ou vencidos não contam: revogar um antigo e emitir um novo sempre funciona, e quem já tem mais de 50 hoje não perde nenhum, só não emite outro até revogar. Ao bater no teto, a tela mostra o limite e como liberar espaço, em vez de um erro interno. Isso fecha a brecha em que emitir mais tokens multiplicava o limite de uso da API. Crédito: @webtecnica.
+- **Cada organização passa a ter um teto de 50 tokens de API ativos** A emissão de tokens de API (Configurações › API Tokens) passa a parar em 50 tokens ativos por organização, e a trava fica no banco, então vale para a tela, para chamadas diretas e para os tokens temporários que o agente de IA usa em cada atendimento. Tokens revogados ou vencidos não contam: revogar um antigo e emitir um novo sempre funciona, e quem já tem mais de 50 hoje não perde nenhum, só não emite outro até revogar. Ao bater no teto, a tela mostra o limite e como liberar espaço, em vez de um erro interno. Isso fecha a brecha em que emitir mais tokens multiplicava o limite de uso da API. Crédito: @webtecnica (#1658).
 
 ### Corrigido
 
-- **O botão "Anonimizar contato" da ficha passa a apagar tudo o que o pedido formal de LGPD apaga** Anonimizar um contato pelo botão da ficha agora usa a mesma redação completa do pedido formal de LGPD: além do contato, das conversas e das mensagens, passam a ser redigidos os pedidos e as vendas (valores e datas continuam, só sai o dado pessoal), as chamadas de voz, a prospecção, os casos do agente e seus avisos, as demandas, as passagens de atendimento, e o consentimento, a origem e as etiquetas do contato. O nome do contato passa a ficar como "Cliente Anonimizado #…", o mesmo rótulo do pedido formal. Contatos anonimizados antes desta versão não são reprocessados. Crédito: @webtecnica.
+- **O botão "Anonimizar contato" da ficha passa a apagar tudo o que o pedido formal de LGPD apaga** Anonimizar um contato pelo botão da ficha agora usa a mesma redação completa do pedido formal de LGPD: além do contato, das conversas e das mensagens, passam a ser redigidos os pedidos e as vendas (valores e datas continuam, só sai o dado pessoal), as chamadas de voz, a prospecção, os casos do agente e seus avisos, as demandas, as passagens de atendimento, e o consentimento, a origem e as etiquetas do contato. O nome do contato passa a ficar como "Cliente Anonimizado #…", o mesmo rótulo do pedido formal. Contatos anonimizados antes desta versão não são reprocessados. Crédito: @webtecnica (#1659).
 
 - **O Testar do agente consulta o catálogo e o acervo de conhecimento** Na aba Teste do agente, as capacidades "Procurar produto na loja" e "Consultar o que a empresa já sabe" eram recusadas com "Esta consulta precisa de um contato real autorizado". Quem perguntava preço, agenda ou disponibilidade recebia "vou confirmar e já te retorno", como se o catálogo estivesse vazio, embora o mesmo agente respondesse certo no WhatsApp. Agora o Teste faz essas duas consultas como o atendimento real, só leitura. Consultas sobre um contato ou lead continuam exigindo um contato real.
-
-  Contribuição de @automatikpg-ux.
 
 ## [1.49.0] — 2026-09-25
 
