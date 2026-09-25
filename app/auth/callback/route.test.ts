@@ -44,7 +44,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 // A marca da ponte vem do banco (instalação → `.env` → padrão). Aqui é fixa:
 // o caso é da PONTE, e sem o mock cada teste esperava a leitura que não responde.
 vi.mock("@/lib/branding/saida", () => ({
-  marcaDaSaida: vi.fn(async () => ({ nome: "DeskcommCRM" })),
+  marcaDaSaida: vi.fn(async () => ({ nome: "Central de Teste" })),
 }));
 vi.mock("@/lib/env", () => ({ env: { NEXT_PUBLIC_APP_URL: "http://localhost:3000" } }));
 
