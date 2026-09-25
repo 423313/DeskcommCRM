@@ -82,3 +82,52 @@ describe("disjuntor do Jev", () => {
     expect(podeTentar(b, T0)).toBe(true);
   });
 });
+
+/**
+ * POR (ORGANIZAÇÃO, TAREFA) SÓ NA PERGUNTA RECUSADA: a API derruba a chamada
+ * inteira por uma pergunta malformada, e a das outras tarefas está certa. Chave,
+ * crédito, limite e queda são da CONTA e param toda tarefa.
+ */
+describe("disjuntor do Jev por tarefa", () => {
+  const na = (organizationId: string, tarefa: string) => ({ organizationId, tarefa });
+
+  it("pergunta recusada abre só a tarefa: a outra tarefa e o resto da organização seguem", () => {
+    const org = novaOrg();
+    for (let i = 0; i < 3; i++) registrarFalha(na(org, "roteador"), "contrato_invalido", T0);
+    expect(podeTentar(na(org, "roteador"), T0)).toBe(false);
+    expect(podeTentar(na(org, "clima"), T0)).toBe(true);
+    expect(podeTentar(org, T0)).toBe(true);
+  });
+
+  it.each(["credencial_invalida", "sem_credito", "provedor_indisponivel"] as const)(
+    "%s numa tarefa abre a organização inteira",
+    (motivo) => {
+      const org = novaOrg();
+      for (let i = 0; i < 3; i++) registrarFalha(na(org, "clima"), motivo, T0);
+      expect(podeTentar(na(org, "roteador"), T0)).toBe(false);
+      expect(podeTentar(org, T0)).toBe(false);
+    },
+  );
+
+  it("limite de taxa numa tarefa segura todas, na hora", () => {
+    const org = novaOrg();
+    registrarFalha(na(org, "clima"), "limite_de_taxa", T0, 30_000);
+    expect(podeTentar(na(org, "manipulacao"), T0)).toBe(false);
+  });
+
+  it("o sucesso de uma tarefa não fecha o disjuntor da pergunta de outra", () => {
+    const org = novaOrg();
+    for (let i = 0; i < 3; i++) registrarFalha(na(org, "roteador"), "contrato_invalido", T0);
+    registrarSucesso(na(org, "clima"));
+    expect(podeTentar(na(org, "roteador"), T0)).toBe(false);
+    registrarSucesso(na(org, "roteador"));
+    expect(podeTentar(na(org, "roteador"), T0)).toBe(true);
+  });
+
+  it("quem chama só com a organização (a onda 1) segue no disjuntor dela para tudo", () => {
+    const org = novaOrg();
+    for (let i = 0; i < 3; i++) registrarFalha(org, "contrato_invalido", T0);
+    expect(podeTentar(org, T0)).toBe(false);
+    expect(podeTentar(na(org, "clima"), T0)).toBe(false);
+  });
+});

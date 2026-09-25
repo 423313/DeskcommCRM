@@ -1,0 +1,132 @@
+/**
+ * O ESTADO DE CADA TAREFA DO JEV — a regra que o worker, a rota e o cartão
+ * obedecem. A ordem do cabeçalho de `./tarefas.ts` é o que se prova aqui, com
+ * uma tarefa de mentira para os casos que o clima sozinho não alcança (tarefa
+ * nova, alcance maior que o aceite).
+ */
+import { describe, expect, it } from "vitest";
+
+import { idDaTarefaSchema, lerConfigDoJev, type ConfigDoJev } from "@/lib/ai/decisao/config";
+import {
+  estadoEfetivoDaTarefa,
+  estadoGravadoDaTarefa,
+  TAREFA_DO_CLIMA,
+  TAREFAS_DO_JEV,
+  tarefaEhNova,
+} from "@/lib/ai/decisao/tarefas";
+import { PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
+
+const ADMIN = "22222222-2222-4222-8222-222222222222";
+const ACEITE = { em: "2026-09-23T12:00:00.000Z", por: ADMIN };
+const QUANDO = { alterado_em: "2026-09-24T12:00:00.000Z", alterado_por: ADMIN };
+
+/** Uma tarefa que ainda não existe, só com o que a regra lê. */
+const NOVA_DA_MENSAGEM = { id: "futura", alcance: "mensagem" } as const;
+const NOVA_DA_CONVERSA = { id: "futura_da_conversa", alcance: "conversa" } as const;
+
+function config(jev: unknown): ConfigDoJev {
+  return lerConfigDoJev({ jev });
+}
+
+describe("TAREFAS_DO_JEV", () => {
+  it("uma chave gravável por tarefa, e uma tarefa por chave", () => {
+    expect(TAREFAS_DO_JEV.map((t) => t.id).sort()).toEqual([...idDaTarefaSchema.options].sort());
+  });
+
+  it("a tarefa com ponto fala o que o registro fala, na primitiva que o registro declara", () => {
+    const divergentes = TAREFAS_DO_JEV.flatMap((t) => {
+      if (!t.ponto) return [];
+      const p = PONTOS_DE_IA.find((x) => x.id === t.ponto);
+      const igual =
+        p?.decisaoRapida !== undefined &&
+        p.decisaoRapida.primitiva === t.primitiva &&
+        p.decisaoRapida.oQueOJevFaz === t.oQueFaz &&
+        p.rotulo === t.rotulo;
+      return igual ? [] : [t.id];
+    });
+    expect(divergentes).toEqual([]);
+  });
+});
+
+describe("estadoEfetivoDaTarefa", () => {
+  it("interruptor mestre desligado ⇒ toda tarefa desligada, qualquer que seja o gravado", () => {
+    const c = config({ ligado: false, modo: "decide", aceite: ACEITE, tarefas: { clima: { estado: "decidindo" } } });
+    expect(estadoEfetivoDaTarefa(c, TAREFA_DO_CLIMA)).toBe("desligada");
+    expect(estadoEfetivoDaTarefa(c, NOVA_DA_MENSAGEM)).toBe("desligada");
+  });
+
+  it("ligado sem aceite é desligado (a leitura já recusa)", () => {
+    expect(estadoEfetivoDaTarefa(config({ ligado: true }), TAREFA_DO_CLIMA)).toBe("desligada");
+  });
+
+  it("clima sem estado gravado ⇒ o `modo` da onda 1, sem reescrever nada", () => {
+    expect(estadoEfetivoDaTarefa(config({ ligado: true, modo: "observacao", aceite: ACEITE }), TAREFA_DO_CLIMA)).toBe(
+      "observando",
+    );
+    expect(estadoEfetivoDaTarefa(config({ ligado: true, modo: "decide", aceite: ACEITE }), TAREFA_DO_CLIMA)).toBe(
+      "decidindo",
+    );
+  });
+
+  it("o estado gravado da tarefa vence o `modo`", () => {
+    const c = config({ ligado: true, modo: "decide", aceite: ACEITE, tarefas: { clima: { estado: "desligada", ...QUANDO } } });
+    expect(estadoEfetivoDaTarefa(c, TAREFA_DO_CLIMA)).toBe("desligada");
+  });
+
+  it("valor ruim na tarefa ⇒ ela cai no `modo`, e o resto da config segue de pé", () => {
+    const c = config({ ligado: true, modo: "decide", aceite: ACEITE, tarefas: { clima: { estado: "turbo" } } });
+    expect(c.ligado).toBe(true);
+    expect(estadoEfetivoDaTarefa(c, TAREFA_DO_CLIMA)).toBe("decidindo");
+  });
+
+  it("tarefa nova de alcance 'mensagem' começa observando sozinha (DEC-012 #3), com o selo Novo", () => {
+    const c = config({ ligado: true, modo: "decide", aceite: ACEITE });
+    expect(estadoEfetivoDaTarefa(c, NOVA_DA_MENSAGEM)).toBe("observando");
+    expect(tarefaEhNova(c, NOVA_DA_MENSAGEM)).toBe(true);
+  });
+
+  it("tarefa nova nunca herda o `modo`: o clima decidindo não faz a nova decidir", () => {
+    const c = config({ ligado: true, modo: "decide", aceite: ACEITE, tarefas: { clima: { estado: "decidindo" } } });
+    expect(estadoEfetivoDaTarefa(c, NOVA_DA_MENSAGEM)).toBe("observando");
+  });
+
+  it("tarefa que pede a conversa, com o aceite de 'cada mensagem', fica desligada — mesmo gravada decidindo", () => {
+    const semAlcance = config({ ligado: true, aceite: ACEITE });
+    const comAlcance = config({ ligado: true, aceite: { ...ACEITE, alcance: "mensagem" } });
+    for (const c of [semAlcance, comAlcance]) {
+      expect(estadoEfetivoDaTarefa(c, NOVA_DA_CONVERSA)).toBe("desligada");
+      expect(tarefaEhNova(c, NOVA_DA_CONVERSA)).toBe(false);
+    }
+    const gravadaDecidindo: ConfigDoJev = { ...comAlcance, tarefas: { clima: { estado: "decidindo" } } };
+    const naConversa = { ...NOVA_DA_CONVERSA, id: "clima" };
+    expect(estadoEfetivoDaTarefa(gravadaDecidindo, naConversa), "falha fechada pelo alcance").toBe("desligada");
+  });
+
+  it("com o aceite da conversa, a tarefa da conversa vale o gravado — mas nunca começa sozinha", () => {
+    const c = config({ ligado: true, aceite: { ...ACEITE, alcance: "conversa", versao: 2 } });
+    expect(estadoEfetivoDaTarefa(c, NOVA_DA_CONVERSA)).toBe("desligada");
+    const gravada: ConfigDoJev = { ...c, tarefas: { clima: { estado: "observando" } } };
+    expect(estadoEfetivoDaTarefa(gravada, { ...NOVA_DA_CONVERSA, id: "clima" })).toBe("observando");
+  });
+
+  it("aceite com alcance desconhecido é aceite nenhum: tudo desligado", () => {
+    const c = config({ ligado: true, aceite: { ...ACEITE, alcance: "tudo" } });
+    expect(c.ligado).toBe(false);
+    expect(estadoEfetivoDaTarefa(c, TAREFA_DO_CLIMA)).toBe("desligada");
+  });
+});
+
+describe("tarefaEhNova / estadoGravadoDaTarefa", () => {
+  it("o clima nunca é novo: o `modo` já é a escolha dele", () => {
+    expect(tarefaEhNova(config({ ligado: true, aceite: ACEITE }), TAREFA_DO_CLIMA)).toBe(false);
+    expect(estadoGravadoDaTarefa(config({ ligado: true, aceite: ACEITE }), "clima")).toBe("observando");
+  });
+
+  it("desligado não é novo — o selo só aparece em tarefa que está rodando", () => {
+    expect(tarefaEhNova(config({ ligado: false, aceite: ACEITE }), NOVA_DA_MENSAGEM)).toBe(false);
+  });
+
+  it("tarefa sem nada gravado não tem estado escolhido", () => {
+    expect(estadoGravadoDaTarefa(config({ ligado: true, aceite: ACEITE }), "futura")).toBeUndefined();
+  });
+});

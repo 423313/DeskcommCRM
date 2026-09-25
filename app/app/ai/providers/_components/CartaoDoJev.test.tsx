@@ -448,3 +448,83 @@ describe("useDadosDoJev — falha de rede", () => {
     expect(result.current.erro).toBe("Não consegui falar com o servidor. Confira a internet e tente de novo.");
   });
 });
+
+describe("CartaoDoJev — por tarefa", () => {
+  const CLIMA = {
+    id: "clima",
+    ponto: "sentiment_classify",
+    rotulo: "Medir o clima da conversa",
+    oQueFaz: "Percebe se o cliente está irritado.",
+    novo: false,
+  } as const;
+  /** Uma tarefa que a rota ainda não devolve: o cartão desenha o que vier. */
+  const NOVA = {
+    id: "manipulacao",
+    ponto: "jailbreak_detect",
+    rotulo: "Perceber manipulação",
+    oQueFaz: "Percebe quem tenta enganar o agente.",
+    estado: "observando",
+    novo: true,
+  } as const;
+
+  it("resposta sem `por_tarefa` (a imagem anterior): o clima numa linha, pelo `modo`", () => {
+    montar(dados({ config: { ligado: true, modo: "decide" } }));
+    expect(cartao()).toHaveAttribute("data-estado", "decidindo");
+    expect(screen.getByTestId("jev-tarefa-clima")).toHaveAttribute("data-estado", "decidindo");
+  });
+
+  it("cada tarefa na sua linha, com o seu estado, o selo Novo e o seu botão", async () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "decide" },
+        por_tarefa: [{ ...CLIMA, estado: "decidindo" }, NOVA],
+      }),
+    );
+    expect(cartao()).toHaveAttribute("data-estado", "decidindo");
+    const nova = screen.getByTestId("jev-tarefa-manipulacao");
+    expect(nova).toHaveAttribute("data-estado", "observando");
+    expect(nova).toHaveTextContent("Novo");
+    expect(screen.getByTestId("jev-tarefa-clima")).not.toHaveTextContent("Novo");
+
+    // Deixar decidir a tarefa nova não é deixar decidir o clima (que já decide).
+    fireEvent.click(screen.getByRole("button", { name: "Deixar o Jev decidir" }));
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar a só observar" }));
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(2));
+    expect(chamadas.map((c) => c.corpo)).toEqual([
+      { tarefa: "manipulacao", estado: "decidindo" },
+      // O clima segue pelo `modo`, o nome que a imagem anterior também entende.
+      { modo: "observacao" },
+    ]);
+  });
+
+  it("tarefa desligada não oferece botão nem concordância", () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        por_tarefa: [{ ...CLIMA, estado: "desligada" }],
+      }),
+    );
+    expect(screen.getByTestId("jev-tarefa-clima")).toHaveAttribute("data-estado", "desligada");
+    expect(screen.queryByRole("button", { name: "Deixar o Jev decidir" })).toBeNull();
+    expect(screen.queryByTestId("jev-concordancia")).toBeNull();
+  });
+
+  it("o selo de cada tarefa sai em espanhol", () => {
+    montar(dados({ config: { ligado: true, modo: "observacao" }, por_tarefa: [{ ...CLIMA, estado: "observando" }] }), {
+      idioma: "es",
+    });
+    expect(screen.getByTestId("jev-tarefa-clima")).toHaveTextContent("Solo observa");
+  });
+
+  it("jevNoPonto segue o estado da tarefa daquele ponto", () => {
+    const d = (estado: "observando" | "decidindo" | "desligada") =>
+      dados({ config: { ligado: true, modo: "decide" }, por_tarefa: [{ ...CLIMA, estado }] });
+    expect(jevNoPonto(d("desligada"), "sentiment_classify")).toBeNull();
+    expect(jevNoPonto(d("observando"), "sentiment_classify")).toBe("observacao");
+    expect(jevNoPonto(d("decidindo"), "sentiment_classify")).toBe("decide");
+    // Só o clima decide sem a IA de sempre (DEC-012 #5); a tarefa nova, não.
+    const semIa = dados({ config: { ligado: true }, tem_ia_de_sempre: false, por_tarefa: [NOVA] });
+    expect(jevNoPonto(semIa, "jailbreak_detect")).toBe("observacao");
+  });
+});

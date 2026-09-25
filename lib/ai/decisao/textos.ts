@@ -55,11 +55,13 @@ export const AO_EXCLUIR_A_CHAVE_DO_JEV = {
 
 /**
  * O aviso da Central, para falha que não passa sozinha (`exigeAcao`) e, sem IA
- * de linguagem, para a que deveria passar e não passou. O título é FIXO porque é a chave do dedupe: uma chave recusada vira UM aviso,
- * não um por mensagem do dia.
+ * de linguagem, para a que deveria passar e não passou. O título é FIXO porque
+ * é a chave do dedupe (`./aviso.ts`): uma chave recusada vira UM aviso, não um
+ * por mensagem do dia. E é do Jev, não do clima: a chave recusada para toda
+ * tarefa dele de uma vez.
  */
 export const AVISO_DO_JEV = {
-  titulo: "O Jev parou de medir o clima das conversas",
+  titulo: "O Jev parou de funcionar",
   comReserva: "Enquanto isso, a IA de sempre mede o clima no lugar dele.",
   semReserva:
     "Enquanto isso, o clima não está sendo medido: ninguém da equipe é chamado quando um cliente se irrita.",
@@ -71,6 +73,13 @@ export const AVISO_DO_JEV = {
     "Já foram várias falhas seguidas. O sistema segue tentando sozinho; se continuar assim, confira na sua conta da TypeSafe se o serviço do Jev está no ar.",
   rearme: "Este aviso se fecha sozinho quando o Jev voltar a medir.",
 } as const;
+
+/**
+ * Títulos que este aviso já teve. Continuam na busca de `./aviso.ts`: o aviso
+ * aberto com um deles numa instalação que atualizou é o MESMO aviso — é
+ * atualizado para o título de agora e se fecha quando o Jev volta. Só cresce.
+ */
+export const TITULOS_ANTIGOS_DO_AVISO_DO_JEV: readonly string[] = ["O Jev parou de medir o clima das conversas"];
 
 export function avisoDoJevNaCentral(
   motivo: MotivoComRede,

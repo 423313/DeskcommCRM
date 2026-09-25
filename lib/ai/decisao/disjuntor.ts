@@ -22,6 +22,16 @@
  * O dreno é um processo Node de vida longa na VPS, então o estado sobrevive
  * entre rodadas. Reiniciar o processo zera o disjuntor, e o pior efeito disso é
  * UMA tentativa a mais — não vale uma tabela.
+ *
+ * ═══ POR ORGANIZAÇÃO, E POR TAREFA SÓ NA PERGUNTA RECUSADA ═══
+ *
+ * Chave recusada, crédito esgotado, limite de taxa e fornecedor fora do ar são
+ * da CONTA: valem para toda tarefa, e o disjuntor delas é da organização. Já a
+ * pergunta recusada (`contrato_invalido`) é de UMA tarefa — a API derruba a
+ * chamada inteira quando uma pergunta vem malformada, e a pergunta das outras
+ * tarefas está certa. Por isso ela abre só o disjuntor de (organização,
+ * tarefa). Quem chama sem tarefa (a string da organização) fica no disjuntor
+ * da organização para tudo, como antes.
  */
 import type { MotivoDaAusencia } from "./cliente";
 
@@ -35,13 +45,27 @@ interface EstadoDoDisjuntor {
   abertoAte: number;
 }
 
-// ponytail: um Map por processo, chave = organização. Cresce até o número de
-// organizações da instalação e encolhe a cada sucesso.
+/** A organização, ou a organização numa tarefa. */
+export type AlvoDoDisjuntor = string | { organizationId: string; tarefa: string };
+
+// ponytail: um Map por processo. Chave = organização, ou organização+tarefa
+// para a pergunta recusada. Cresce até organizações × tarefas e encolhe a cada
+// sucesso.
 const estados = new Map<string, EstadoDoDisjuntor>();
 
-export function podeTentar(organizationId: string, agora: number = Date.now()): boolean {
-  const estado = estados.get(organizationId);
+function chaves(alvo: AlvoDoDisjuntor): { daOrganizacao: string; daTarefa: string | null } {
+  if (typeof alvo === "string") return { daOrganizacao: alvo, daTarefa: null };
+  return { daOrganizacao: alvo.organizationId, daTarefa: `${alvo.organizationId}:${alvo.tarefa}` };
+}
+
+function fechado(chave: string | null, agora: number): boolean {
+  const estado = chave === null ? undefined : estados.get(chave);
   return estado === undefined || agora >= estado.abertoAte;
+}
+
+export function podeTentar(alvo: AlvoDoDisjuntor, agora: number = Date.now()): boolean {
+  const { daOrganizacao, daTarefa } = chaves(alvo);
+  return fechado(daOrganizacao, agora) && fechado(daTarefa, agora);
 }
 
 /**
@@ -53,19 +77,24 @@ export function falhasSeguidas(organizationId: string): number {
   return estados.get(organizationId)?.falhasSeguidas ?? 0;
 }
 
-export function registrarSucesso(organizationId: string): void {
-  estados.delete(organizationId);
+/** O sucesso prova a conta e a pergunta DESTA tarefa — nunca a de outra. */
+export function registrarSucesso(alvo: AlvoDoDisjuntor): void {
+  const { daOrganizacao, daTarefa } = chaves(alvo);
+  estados.delete(daOrganizacao);
+  if (daTarefa !== null) estados.delete(daTarefa);
 }
 
 export function registrarFalha(
-  organizationId: string,
+  alvo: AlvoDoDisjuntor,
   motivo: MotivoDaAusencia,
   agora: number = Date.now(),
   retryAfterMs?: number,
 ): void {
   if (motivo === "sem_credencial" || motivo === "disjuntor_aberto") return;
 
-  const estado = estados.get(organizationId) ?? { falhasSeguidas: 0, abertoAte: 0 };
+  const { daOrganizacao, daTarefa } = chaves(alvo);
+  const chave = motivo === "contrato_invalido" && daTarefa !== null ? daTarefa : daOrganizacao;
+  const estado = estados.get(chave) ?? { falhasSeguidas: 0, abertoAte: 0 };
   estado.falhasSeguidas += 1;
 
   if (motivo === "limite_de_taxa" || motivo === "provedor_sobrecarregado") {
@@ -73,5 +102,5 @@ export function registrarFalha(
   } else if (estado.falhasSeguidas >= FALHAS_PARA_ABRIR) {
     estado.abertoAte = agora + ABERTO_POR_FALHAS_MS;
   }
-  estados.set(organizationId, estado);
+  estados.set(chave, estado);
 }

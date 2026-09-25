@@ -12,6 +12,10 @@
  *
  * Os dados vêm de `GET /api/v1/ai/jev`; o estado mostrado é derivado deles, e
  * nunca guardado aqui, para a tela não discordar da rota que o worker obedece.
+ *
+ * Ligado, ele lista as TAREFAS (`lib/ai/decisao/tarefas.ts`), cada uma com o
+ * seu estado e o seu "Deixar o Jev decidir": deixar decidir o clima não é
+ * deixar decidir a tarefa seguinte.
  */
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -24,7 +28,9 @@ import { Card } from "@/components/ui/card";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { descreverErroDeValidacao } from "@/lib/ai/credenciais/erro-de-validacao";
+import type { EstadoDaTarefa } from "@/lib/ai/decisao/config";
 import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
+import { TAREFA_DO_CLIMA } from "@/lib/ai/decisao/tarefas";
 import { O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
 
 /** O corpo de `GET /api/v1/ai/jev` (`app/api/v1/ai/jev/route.ts`). */
@@ -43,6 +49,12 @@ export interface DadosDoJev {
     aceite: { em: string; por: string } | null;
   };
   tarefas: Array<{ id: string; rotulo: string; oQueOJevFaz: string }>;
+  /**
+   * O estado de cada tarefa, como a rota o resolve. Ausente na resposta da
+   * imagem anterior (a página aberta durante um rollback): nela a única tarefa
+   * é o clima, e o estado dele é o `modo`.
+   */
+  por_tarefa?: TarefaNoCartao[];
   tem_ia_de_sempre: boolean;
   numeros: {
     dias: number;
@@ -59,6 +71,40 @@ export interface DadosDoJev {
   };
   ultima_falha: { motivo: string | null; em: string } | null;
   pode_editar: boolean;
+}
+
+export interface TarefaNoCartao {
+  id: string;
+  ponto: string | null;
+  rotulo: string;
+  oQueFaz: string;
+  estado: EstadoDaTarefa;
+  /** Começou sozinha e ninguém escolheu nada ainda. */
+  novo: boolean;
+}
+
+function tarefasDoCartao(d: DadosDoJev): TarefaNoCartao[] {
+  if (d.por_tarefa) return d.por_tarefa;
+  return [
+    {
+      id: TAREFA_DO_CLIMA.id,
+      ponto: TAREFA_DO_CLIMA.ponto,
+      rotulo: TAREFA_DO_CLIMA.rotulo,
+      oQueFaz: TAREFA_DO_CLIMA.oQueFaz,
+      estado: d.config.modo === "decide" ? "decidindo" : "observando",
+      novo: false,
+    },
+  ];
+}
+
+/**
+ * O corpo do PATCH que põe a tarefa num estado. O clima muda pelo `modo`, o
+ * nome da onda 1: com a página aberta durante um rollback, a imagem anterior
+ * entende o pedido — e `{ tarefa: "clima" }` chegaria ao mesmo lugar nesta.
+ */
+function corpoDaMudanca(tarefa: TarefaNoCartao, estado: "observando" | "decidindo") {
+  if (tarefa.id === TAREFA_DO_CLIMA.id) return { modo: estado === "decidindo" ? "decide" : "observacao" };
+  return { tarefa: tarefa.id, estado };
 }
 
 type Estado =
@@ -85,14 +131,17 @@ function estadoDoJev(d: DadosDoJev): Estado {
   return "pronto";
 }
 
-/** Como o Jev está no ponto `pontoId`, para a linha do cartão do ponto. */
+/** Como o Jev está no ponto `pontoId`, para a linha do cartão do ponto — pelo estado da tarefa dele. */
 export function jevNoPonto(
   d: DadosDoJev | null,
   pontoId: string,
 ): "observacao" | "decide" | "sozinho" | null {
-  if (!d?.config.ligado || !d.chave.validada || !d.tarefas.some((t) => t.id === pontoId)) return null;
-  if (!d.tem_ia_de_sempre) return "sozinho";
-  return d.config.modo;
+  if (!d?.config.ligado || !d.chave.validada) return null;
+  const tarefa = tarefasDoCartao(d).find((t) => t.ponto === pontoId);
+  if (!tarefa || tarefa.estado === "desligada") return null;
+  // A IA de sempre é a do clima (`tem_ia_de_sempre`), e só o clima decide sem ela (DEC-012 #5).
+  if (!d.tem_ia_de_sempre && tarefa.id === TAREFA_DO_CLIMA.id) return "sozinho";
+  return tarefa.estado === "decidindo" ? "decide" : "observacao";
 }
 
 type Resposta = { data?: DadosDoJev; error?: { message?: string } };
@@ -489,6 +538,8 @@ function Ligado({
   });
   const segundos = new Intl.NumberFormat(tagDoIdioma, { maximumFractionDigits: 1 });
   const inteiro = new Intl.NumberFormat(tagDoIdioma);
+  // Só com o Jev medindo de verdade a linha de cada tarefa mostra o estado e o botão.
+  const rodando = estado === "observando" || estado === "decidindo";
   const falha = dados.ultima_falha;
   const frasesDeFalha: Readonly<Record<string, string>> = O_QUE_FAZER_DO_JEV;
   const oQueFazer = falha?.motivo ? frasesDeFalha[falha.motivo] : undefined;
@@ -506,21 +557,81 @@ function Ligado({
           t("Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.")}
       </p>
 
-      {estado === "observando" && (
-        <p className="text-sm" data-testid="jev-concordancia">
-          {o.comparadas === 0 ? (
-            t("Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.")
-          ) : (
-            <>
-              {t("Nos últimos")} {o.dias} {t("dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em")}{" "}
-              <span className="font-mono font-medium">
-                {inteiro.format(o.concordaram)} {t("de")} {inteiro.format(o.comparadas)}
-              </span>{" "}
-              {t("mensagens — os dois chamariam, ou não, uma pessoa para a conversa.")}
-            </>
-          )}
-        </p>
-      )}
+      {/* Uma linha por tarefa: o estado dela e o "Deixar o Jev decidir" dela.
+          Com a chave parada ou sem a IA de sempre, o selo do cartão já diz o
+          estado de todas, e a linha não repete nem oferece o botão. */}
+      <ul className="divide-y divide-border rounded-md border border-border" data-testid="jev-tarefas">
+        {tarefasDoCartao(dados).map((tarefa) => {
+          const aqui = rodando && tarefa.estado !== "desligada";
+          return (
+            <li
+              key={tarefa.id}
+              className="space-y-2 p-3"
+              data-testid={`jev-tarefa-${tarefa.id}`}
+              data-estado={tarefa.estado}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">{t(tarefa.rotulo)}</span>
+                {rodando && (
+                  <Badge variant={tarefa.estado === "decidindo" ? "success" : "neutral"}>
+                    {tarefa.estado === "observando"
+                      ? t("Só observa")
+                      : tarefa.estado === "decidindo"
+                        ? t("Decide")
+                        : t("Desligada")}
+                  </Badge>
+                )}
+                {tarefa.novo && <Badge variant="info">{t("Novo")}</Badge>}
+              </div>
+
+              {/* A concordância medida é a do clima (as notas em messages.metadata). */}
+              {aqui && tarefa.estado === "observando" && tarefa.id === TAREFA_DO_CLIMA.id && (
+                <p className="text-sm" data-testid="jev-concordancia">
+                  {o.comparadas === 0 ? (
+                    t("Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.")
+                  ) : (
+                    <>
+                      {t("Nos últimos")} {o.dias} {t("dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em")}{" "}
+                      <span className="font-mono font-medium">
+                        {inteiro.format(o.concordaram)} {t("de")} {inteiro.format(o.comparadas)}
+                      </span>{" "}
+                      {t("mensagens — os dois chamariam, ou não, uma pessoa para a conversa.")}
+                    </>
+                  )}
+                </p>
+              )}
+
+              {dados.pode_editar && aqui && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {tarefa.estado === "observando" && (
+                    <Button
+                      size="sm"
+                      disabled={enviando}
+                      onClick={() => void mudar(corpoDaMudanca(tarefa, "decidindo"), t("Agora o Jev decide."))}
+                    >
+                      {t("Deixar o Jev decidir")}
+                    </Button>
+                  )}
+                  {/* Sem este caminho, quem deixou o Jev decidir só voltaria a
+                      comparar desligando — e religar mantém o estado gravado. */}
+                  {tarefa.estado === "decidindo" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={enviando}
+                      onClick={() =>
+                        void mudar(corpoDaMudanca(tarefa, "observando"), t("O Jev voltou a só observar."))
+                      }
+                    >
+                      {t("Voltar a só observar")}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
 
       <div>
         <p className="text-xs text-muted-foreground">
@@ -576,37 +687,14 @@ function Ligado({
           {t("Ver as decisões do Jev")}
         </Link>
         {dados.pode_editar && (
-          <>
-            {estado === "observando" && (
-              <Button
-                size="sm"
-                disabled={enviando}
-                onClick={() => void mudar({ modo: "decide" }, t("Agora o Jev decide."))}
-              >
-                {t("Deixar o Jev decidir")}
-              </Button>
-            )}
-            {/* Sem este caminho, quem deixou o Jev decidir só voltaria a
-                comparar desligando — e religar mantém o modo gravado. */}
-            {estado === "decidindo" && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={enviando}
-                onClick={() => void mudar({ modo: "observacao" }, t("O Jev voltou a só observar."))}
-              >
-                {t("Voltar a só observar")}
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={enviando}
-              onClick={() => void mudar({ ligado: false }, t("O Jev foi desligado."))}
-            >
-              {t("Desligar")}
-            </Button>
-          </>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={enviando}
+            onClick={() => void mudar({ ligado: false }, t("O Jev foi desligado."))}
+          >
+            {t("Desligar")}
+          </Button>
         )}
       </div>
     </div>

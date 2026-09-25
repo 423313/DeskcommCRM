@@ -7,9 +7,9 @@ import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { contarUsoQueBloqueia, type VersaoVinculada } from "@/lib/ai/credenciais/uso";
 import { lerConfigDoJev } from "@/lib/ai/decisao/config";
+import { estadoEfetivoDaTarefa, TAREFAS_DO_JEV } from "@/lib/ai/decisao/tarefas";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
-import { PONTOS_DO_JEV } from "@/lib/ai/pontos/registro";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
 import { tagDeIdioma } from "@/lib/i18n/datas";
@@ -62,11 +62,15 @@ export default async function CredentialsPage() {
     .select("settings")
     .eq("id", activeOrg.orgId)
     .maybeSingle();
-  const jevLigado = lerConfigDoJev(orgRow?.settings).ligado;
+  const configDoJev = lerConfigDoJev(orgRow?.settings);
+  const jevLigado = configDoJev.ligado;
   // A mesma pergunta que o worker faz: sem a chave do Jev, há IA principal para medir?
   const jev = jevLigado
     ? {
-        tarefas: PONTOS_DO_JEV.map((p) => p.rotulo),
+        // Só as tarefas que a chave de fato serve agora.
+        tarefas: TAREFAS_DO_JEV.filter((t) => estadoEfetivoDaTarefa(configDoJev, t) !== "desligada").map(
+          (t) => t.rotulo,
+        ),
         temIaPrincipal:
           (await resolverModeloDoPonto("sentiment_classify", activeOrg.orgId, DEFAULT_CLASSIFIER_MODEL, {
             naFaltaUsarOPadraoDaOrganizacao: true,

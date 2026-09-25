@@ -3380,6 +3380,9 @@ export const DICIONARIO: Traducoes = {
   "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa deixa de ser medido: ninguém da equipe é chamado quando um cliente se irrita.": {
     es: "Jev usa esta clave. Sin ella, Jev se desactiva y el clima de la conversación deja de medirse: nadie del equipo recibe aviso cuando un cliente se molesta.",
   },
+  "O Jev parou de funcionar": { es: "Jev dejó de funcionar" },
+  // Título antigo do mesmo aviso: segue aqui para a busca achar o aviso aberto
+  // em espanhol numa instalação que atualizou (`lib/ai/decisao/aviso.ts`).
   "O Jev parou de medir o clima das conversas": {
     es: "Jev dejó de medir el clima de las conversaciones",
   },
@@ -3434,6 +3437,9 @@ export const DICIONARIO: Traducoes = {
   Observando: { es: "Observando" },
   Decidindo: { es: "Decidiendo" },
   "Decidindo sozinho": { es: "Decidiendo solo" },
+  // O selo de cada tarefa do Jev no cartão (CartaoDoJev.tsx).
+  "Só observa": { es: "Solo observa" },
+  Decide: { es: "Decide" },
   "Pegar a chave na TypeSafe": { es: "Obtener la clave en TypeSafe" },
   "Colar a chave": { es: "Pegar la clave" },
   "Só quem administra a empresa pode colar a chave e ligar o Jev.": {

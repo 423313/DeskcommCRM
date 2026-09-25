@@ -8,7 +8,11 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * de reserva? e, ligado, o que ele fez na semana e quanto concordou com a IA de
  * sempre.
  *
- * PATCH liga, desliga e troca o modo. Ligar manda cada mensagem que o cliente
+ * GET também responde, por tarefa (`por_tarefa`, de `TAREFAS_DO_JEV`), o estado
+ * que vale agora e se ela é nova — começou sozinha e ninguém escolheu ainda.
+ *
+ * PATCH liga, desliga, troca o modo do clima (`modo`, o nome da onda 1) e o
+ * estado de uma tarefa (`tarefa` + `estado`). Ligar manda cada mensagem que o cliente
  * escreve, uma de cada vez e sem o resto da conversa, a um fornecedor nos EUA, então exige chave validada e, na primeira
  * vez, o aceite explícito do administrador (LGPD, D6), que fica gravado com
  * quem e quando. O interruptor mora em `organizations.settings.jev`
@@ -20,12 +24,26 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { credencialEmUsoPeloJev, PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
-import { gravarConfigDoJev, lerConfigDoJev, type ConfigDoJev } from "@/lib/ai/decisao/config";
+import {
+  ESTADO_DO_MODO,
+  ESTADOS_DA_TAREFA,
+  gravarConfigDoJev,
+  idDaTarefaSchema,
+  lerConfigDoJev,
+  type ConfigDoJev,
+  type MudancaDaConfig,
+} from "@/lib/ai/decisao/config";
 import { CHAVES_DO_CLIMA, type MotorDoClima } from "@/lib/ai/decisao/metadados-do-clima";
+import {
+  estadoEfetivoDaTarefa,
+  estadoGravadoDaTarefa,
+  TAREFA_DO_CLIMA,
+  TAREFAS_DO_JEV,
+  tarefaEhNova,
+} from "@/lib/ai/decisao/tarefas";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { PROVEDORES_DE_DECISAO } from "@/lib/ai/pontos/provedores";
-import { PONTOS_DO_JEV } from "@/lib/ai/pontos/registro";
 import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
@@ -49,9 +67,21 @@ const PAGINA = 1000;
 // migration) é o passo seguinte, quando alguma instalação chegar lá.
 const PAGINAS_MAX = 50;
 
-const TAREFAS = PONTOS_DO_JEV.flatMap((p) =>
-  p.decisaoRapida ? [{ id: p.id, rotulo: p.rotulo, oQueOJevFaz: p.decisaoRapida.oQueOJevFaz }] : [],
+/** Os pontos em que o Jev trabalha — a lista da onda 1, que o cartão do ponto ainda lê. */
+const TAREFAS = TAREFAS_DO_JEV.flatMap((t) =>
+  t.ponto ? [{ id: t.ponto, rotulo: t.rotulo, oQueOJevFaz: t.oQueFaz }] : [],
 );
+
+function porTarefa(c: ConfigDoJev) {
+  return TAREFAS_DO_JEV.map((t) => ({
+    id: t.id,
+    ponto: t.ponto ?? null,
+    rotulo: t.rotulo,
+    oQueFaz: t.oQueFaz,
+    estado: estadoEfetivoDaTarefa(c, t),
+    novo: tarefaEhNova(c, t),
+  }));
+}
 
 interface LinhaDaSemana {
   provider: string;
@@ -243,6 +273,7 @@ export async function GET(): Promise<Response> {
     null;
 
   const { numeros, ultima_falha } = numerosDaSemana(semana.linhas);
+  const config = lerConfigDoJev(orgRes.data?.settings);
 
   return ok(
     {
@@ -259,8 +290,9 @@ export async function GET(): Promise<Response> {
         rotulo: mostrada?.label ?? null,
         erro_de_validacao: mostrada?.validation_error ?? null,
       },
-      config: configPublica(lerConfigDoJev(orgRes.data?.settings)),
+      config: configPublica(config),
       tarefas: TAREFAS,
+      por_tarefa: porTarefa(config),
       tem_ia_de_sempre: iaDeSempre !== null,
       numeros: {
         ...numeros,
@@ -279,13 +311,22 @@ export async function GET(): Promise<Response> {
 const corpoDoPatch = z
   .object({
     ligado: z.boolean().optional(),
+    /** O estado do clima, no nome da onda 1 — a imagem anterior também o entende. */
     modo: z.enum(["observacao", "decide"]).optional(),
     /** A caixa marcada na tela. Só pesa ao ligar pela primeira vez. */
     aceite_lgpd: z.literal(true).optional(),
+    tarefa: idDaTarefaSchema.optional(),
+    estado: z.enum(ESTADOS_DA_TAREFA).optional(),
   })
   .strict()
-  .refine((c) => c.ligado !== undefined || c.modo !== undefined, {
-    message: "informe `ligado` ou `modo`",
+  .refine((c) => (c.tarefa === undefined) === (c.estado === undefined), {
+    message: "`tarefa` e `estado` vão juntos",
+  })
+  .refine((c) => c.modo === undefined || c.tarefa === undefined, {
+    message: "informe `modo` ou `tarefa`, não os dois",
+  })
+  .refine((c) => c.ligado !== undefined || c.modo !== undefined || c.tarefa !== undefined, {
+    message: "informe `ligado`, `modo` ou `tarefa`",
   });
 
 export async function PATCH(req: NextRequest): Promise<Response> {
@@ -316,8 +357,16 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   if (orgErr) return fail("query_failed", orgErr.message, 500, { requestId });
   const atual = lerConfigDoJev(orgAtual?.settings);
 
-  const mudanca: Partial<Pick<ConfigDoJev, "ligado" | "modo" | "aceite">> = {};
-  if (corpo.modo !== undefined && corpo.modo !== atual.modo) mudanca.modo = corpo.modo;
+  const mudanca: MudancaDaConfig = {};
+  // `modo` é o clima com o nome antigo: os dois pedidos chegam ao mesmo lugar.
+  const pedido =
+    corpo.tarefa !== undefined && corpo.estado !== undefined
+      ? { tarefa: corpo.tarefa, estado: corpo.estado }
+      : corpo.modo !== undefined
+        ? { tarefa: TAREFA_DO_CLIMA.id, estado: ESTADO_DO_MODO[corpo.modo] }
+        : null;
+  const estadoAnterior = pedido ? estadoGravadoDaTarefa(atual, pedido.tarefa) : undefined;
+  if (pedido && pedido.estado !== estadoAnterior) mudanca.tarefas = { [pedido.tarefa]: pedido.estado };
   if (corpo.ligado === false && atual.ligado) mudanca.ligado = false;
   if (corpo.ligado === true && !atual.ligado) {
     const { data: creds, error: credsErr } = await admin
@@ -346,7 +395,9 @@ export async function PATCH(req: NextRequest): Promise<Response> {
           { requestId },
         );
       }
-      mudanca.aceite = { em: new Date().toISOString(), por: user.id };
+      // O texto aceito é o de "cada mensagem, sozinha": o alcance fica gravado
+      // para a tarefa que pedir mais nunca valer com ele (`./tarefas`).
+      mudanca.aceite = { em: new Date().toISOString(), por: user.id, alcance: "mensagem" };
     }
     mudanca.ligado = true;
   }
@@ -370,7 +421,9 @@ export async function PATCH(req: NextRequest): Promise<Response> {
         ? "ai.jev.ligado"
         : mudanca.ligado === false
           ? "ai.jev.desligado"
-          : "ai.jev.modo_alterado",
+          : corpo.modo !== undefined
+            ? "ai.jev.modo_alterado"
+            : "ai.jev.tarefa_alterada",
     organizationId: org.orgId,
     actorUserId: user.id,
     resourceType: "organization",
@@ -378,7 +431,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     requestId,
     metadata: {
       modo: gravado.config.modo,
-      ...(mudanca.modo !== undefined ? { modo_anterior: atual.modo } : {}),
+      ...(gravado.config.modo !== atual.modo ? { modo_anterior: atual.modo } : {}),
+      ...(mudanca.tarefas !== undefined && pedido
+        ? { tarefa: pedido.tarefa, estado: pedido.estado, estado_anterior: estadoAnterior ?? null }
+        : {}),
       aceite_registrado: mudanca.aceite !== undefined,
     },
   });

@@ -552,7 +552,7 @@
       "col": 1,
       "type": "api",
       "label": "GET/PATCH /api/v1/ai/jev",
-      "sublabel": "admin liga, desliga e troca o modo; ligar exige chave validada e, na 1ª vez, o aceite; audit ai.jev.*"
+      "sublabel": "admin liga, desliga e troca o estado de cada tarefa (o clima também pelo modo); ligar exige chave validada e, na 1ª vez, o aceite; audit ai.jev.* com a tarefa"
     },
     {
       "id": "jevConfig",
@@ -560,7 +560,7 @@
       "col": 1,
       "type": "database",
       "label": "organizations.settings.jev",
-      "sublabel": "ligado · modo (observacao | decide) · aceite {em, por} — Zod em lib/ai/decisao/config.ts, sem migration"
+      "sublabel": "ligado (mestre) · tarefas.<id>.estado · modo (o clima, na língua da onda 1) · aceite {em, por, alcance} — Zod em lib/ai/decisao/config.ts, estado efetivo em tarefas.ts, sem migration"
     },
     {
       "id": "jevChave",
@@ -576,7 +576,7 @@
       "col": 1,
       "type": "external",
       "label": "Jev (System One) — lib/ai/decisao",
-      "sublabel": "medirClima: cada mensagem recebida, sozinha e sem o histórico, passada por scrubMessage; teto de 1,5 s; disjuntor por organização; nunca lança"
+      "sublabel": "medirClima: cada mensagem recebida, sozinha e sem o histórico, passada por scrubMessage; teto de 1,5 s; disjuntor por organização (e por tarefa na pergunta recusada); nunca lança"
     },
     {
       "id": "jevLlmCalls",

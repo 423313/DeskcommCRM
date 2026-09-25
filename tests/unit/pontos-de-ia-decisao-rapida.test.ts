@@ -73,7 +73,8 @@ describe("decisão rápida: registro × chamador do Jev", () => {
     const semConsumidor = marcados.flatMap((p) =>
       (porPonto.get(p.id) ?? [])
         .map((c) => c.arquivo.replace(/\.tsx?$/, ""))
-        .filter((modulo) => !fora.some((fonte) => fonte.includes(`"@/${modulo}"`)))
+        // As duas aspas: o agent-engine importa com aspas simples.
+        .filter((modulo) => !fora.some((fonte) => fonte.includes(`"@/${modulo}"`) || fonte.includes(`'@/${modulo}'`)))
         .map((modulo) => `${p.id} (${modulo})`),
     );
     expect(semConsumidor, "o Jev é chamado num módulo que nenhum worker ou rota importa").toEqual([]);

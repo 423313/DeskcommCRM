@@ -3,6 +3,7 @@
  * resto de `settings` e só alcança a própria organização.
  */
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { gravarConfigDoJev, lerConfigDoJev } from "@/lib/ai/decisao/config";
 
@@ -117,5 +118,132 @@ describe("gravarConfigDoJev", () => {
     const r = await gravarConfigDoJev({ admin: f.admin, orgId: ORG, actorUserId: ADMIN, mudanca: { modo: "decide" } });
     expect(r).toEqual({ ok: false, motivo: "leitura_falhou" });
     expect(f.updates).toEqual([]);
+  });
+});
+
+describe("lerConfigDoJev — por tarefa", () => {
+  const LIGADO = { ligado: true, modo: "decide", aceite: ACEITE };
+
+  it.each([
+    ["estado desconhecido", { clima: { estado: "turbo" } }],
+    ["carimbo torto", { clima: { estado: "decidindo", alterado_por: "eu" } }],
+    ["tarefa não é objeto", { clima: "decidindo" }],
+    ["tarefas não é objeto", "clima"],
+  ])("%s: só a tarefa cai, o interruptor e o `modo` ficam de pé", (_caso, tarefas) => {
+    const c = lerConfigDoJev({ jev: { ...LIGADO, tarefas } });
+    expect(c.ligado).toBe(true);
+    expect(c.modo).toBe("decide");
+    expect(c.tarefas?.clima).toBeUndefined();
+  });
+
+  it("a tarefa ruim não leva a boa junto: chave de versão mais nova é descartada, o clima fica", () => {
+    const c = lerConfigDoJev({
+      jev: { ...LIGADO, tarefas: { clima: { estado: "observando" }, futura: { estado: "decidindo" } } },
+    });
+    expect(c.tarefas).toEqual({ clima: { estado: "observando" } });
+  });
+
+  it("o aceite da onda 1 (sem alcance nem versão) continua valendo", () => {
+    expect(lerConfigDoJev({ jev: LIGADO }).aceite).toEqual(ACEITE);
+    expect(lerConfigDoJev({ jev: { ...LIGADO, aceite: { ...ACEITE, alcance: "mensagem", versao: 1 } } }).ligado).toBe(
+      true,
+    );
+  });
+});
+
+describe("gravarConfigDoJev — mescla profunda de `tarefas`", () => {
+  const GRAVADA = { estado: "decidindo", alterado_em: "2026-09-24T10:00:00.000Z", alterado_por: ADMIN };
+  const AGORA = new Date("2026-09-25T13:00:00.000Z");
+
+  it("mudar o interruptor não apaga o estado de nenhuma tarefa", async () => {
+    const f = adminFalso({ settings: { jev: { ligado: true, modo: "decide", aceite: ACEITE, tarefas: { clima: GRAVADA } } } });
+    const r = await gravarConfigDoJev({ admin: f.admin, orgId: ORG, actorUserId: ADMIN, mudanca: { ligado: false }, agora: AGORA });
+    expect(r.ok).toBe(true);
+    const jev = (f.updates[0]!.settings as { jev: Record<string, unknown> }).jev;
+    expect(jev.ligado).toBe(false);
+    expect(jev.tarefas).toEqual({ clima: GRAVADA });
+  });
+
+  it("mudar uma tarefa carimba só ela, e o clima espelha no `modo` (o que a imagem anterior lê)", async () => {
+    const f = adminFalso({ settings: { jev: { ligado: true, modo: "observacao", aceite: ACEITE } } });
+    await gravarConfigDoJev({
+      admin: f.admin,
+      orgId: ORG,
+      actorUserId: ADMIN,
+      mudanca: { tarefas: { clima: "decidindo" } },
+      agora: AGORA,
+    });
+    const jev = (f.updates[0]!.settings as { jev: Record<string, unknown> }).jev;
+    expect(jev.modo).toBe("decide");
+    expect(jev.tarefas).toEqual({
+      clima: { estado: "decidindo", alterado_em: AGORA.toISOString(), alterado_por: ADMIN },
+    });
+  });
+
+  it("o `modo` da onda 1 também grava a tarefa do clima", async () => {
+    const f = adminFalso({ settings: { jev: { ligado: true, modo: "decide", aceite: ACEITE, tarefas: { clima: GRAVADA } } } });
+    await gravarConfigDoJev({ admin: f.admin, orgId: ORG, actorUserId: ADMIN, mudanca: { modo: "observacao" }, agora: AGORA });
+    const jev = (f.updates[0]!.settings as { jev: Record<string, unknown> }).jev;
+    expect(jev.modo).toBe("observacao");
+    expect(jev.tarefas).toMatchObject({ clima: { estado: "observando" } });
+  });
+
+  it("desligar só o clima não inventa um `modo`: a imagem anterior segue com o de antes", async () => {
+    const f = adminFalso({ settings: { jev: { ligado: true, modo: "decide", aceite: ACEITE } } });
+    await gravarConfigDoJev({ admin: f.admin, orgId: ORG, actorUserId: ADMIN, mudanca: { tarefas: { clima: "desligada" } } });
+    const jev = (f.updates[0]!.settings as { jev: Record<string, unknown> }).jev;
+    expect(jev.modo).toBe("decide");
+    expect(jev.tarefas).toMatchObject({ clima: { estado: "desligada" } });
+  });
+
+  it("nada de tarefa gravada, nada de `tarefas` escrito", async () => {
+    const f = adminFalso({ settings: {} });
+    await gravarConfigDoJev({ admin: f.admin, orgId: ORG, actorUserId: ADMIN, mudanca: { ligado: true, aceite: ACEITE } });
+    expect((f.updates[0]!.settings as { jev: Record<string, unknown> }).jev).not.toHaveProperty("tarefas");
+  });
+});
+
+/**
+ * O ROLLBACK: o `agent.sh` volta a imagem, nunca o banco. A imagem da onda 1
+ * lê o que esta grava — com o schema DELA, congelado aqui como estava na
+ * v1.48 (`git show aaf1b3bce:lib/ai/decisao/config.ts`). É cópia de propósito:
+ * o que se prova é a convivência com o código que já está nas VPS, que não
+ * muda quando este muda.
+ */
+const schemaDaOnda1 = z
+  .object({
+    ligado: z.boolean().default(false),
+    modo: z.enum(["observacao", "decide"]).default("observacao"),
+    aceite: z.object({ em: z.string().datetime(), por: z.string().uuid() }).nullable().default(null),
+    alterado_em: z.string().datetime().optional(),
+    alterado_por: z.string().uuid().optional(),
+  })
+  .refine((c) => !c.ligado || c.aceite !== null);
+
+describe("rollback para a imagem da onda 1", () => {
+  it("a imagem anterior lê o que esta grava: ligada, no mesmo `modo`, sem erro", async () => {
+    const f = adminFalso({ settings: {} });
+    await gravarConfigDoJev({
+      admin: f.admin,
+      orgId: ORG,
+      actorUserId: ADMIN,
+      mudanca: { ligado: true, aceite: { ...ACEITE, alcance: "mensagem" }, tarefas: { clima: "decidindo" } },
+    });
+    const gravado = (f.updates[0]!.settings as { jev: unknown }).jev;
+    const naImagemVelha = schemaDaOnda1.safeParse(gravado);
+    expect(naImagemVelha.success).toBe(true);
+    expect(naImagemVelha.data).toMatchObject({ ligado: true, modo: "decide", aceite: ACEITE });
+    // O que ela não conhece, ela descarta — não recusa.
+    expect(naImagemVelha.data).not.toHaveProperty("tarefas");
+  });
+
+  it("o primeiro clique na imagem velha apaga `tarefas`; de volta nesta, o clima vale o `modo` que ela gravou", () => {
+    const antes = { ligado: true, modo: "decide", aceite: ACEITE, tarefas: { clima: { estado: "decidindo" } } };
+    // A gravação da onda 1: lê com o schema dela e espalha a mudança por cima.
+    const peloCartaoVelho = { ...schemaDaOnda1.parse(antes), modo: "observacao" };
+    const c = lerConfigDoJev({ jev: peloCartaoVelho });
+    expect(c.tarefas).toBeUndefined();
+    expect(c.modo).toBe("observacao");
+    expect(c.ligado).toBe(true);
   });
 });

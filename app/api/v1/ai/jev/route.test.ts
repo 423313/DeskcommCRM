@@ -527,3 +527,96 @@ describe("PATCH /api/v1/ai/jev", () => {
     expect((await mudar({ aceite_lgpd: true })).status).toBe(422);
   });
 });
+
+describe("o Jev por tarefa na rota", () => {
+  it("GET: cada tarefa com o estado que vale agora — o clima, pelo `modo`, sem nada gravado", async () => {
+    expect((await ler()).corpo.data.por_tarefa).toEqual([
+      expect.objectContaining({ id: "clima", ponto: "sentiment_classify", estado: "desligada", novo: false }),
+    ]);
+
+    estado.settings = { jev: { ligado: true, modo: "decide", aceite: ACEITE_ANTIGO } };
+    const [clima] = (await ler()).corpo.data.por_tarefa;
+    expect(clima).toMatchObject({ id: "clima", estado: "decidindo", novo: false, rotulo: "Medir o clima da conversa" });
+  });
+
+  it("GET: `tarefas` continua na forma da onda 1 (a página aberta durante a atualização a lê)", async () => {
+    expect((await ler()).corpo.data.tarefas).toEqual([
+      expect.objectContaining({ id: "sentiment_classify", rotulo: "Medir o clima da conversa" }),
+    ]);
+  });
+
+  it("PATCH de uma tarefa: grava só ela, espelha o clima no `modo` e audita com a tarefa", async () => {
+    estado.settings = { jev: { ligado: true, modo: "observacao", aceite: ACEITE_ANTIGO } };
+    const { status, corpo } = await mudar({ tarefa: "clima", estado: "decidindo" });
+
+    expect(status).toBe(200);
+    expect(corpo.data.alterado).toBe(true);
+    expect(estado.settings.jev).toMatchObject({
+      ligado: true,
+      modo: "decide",
+      aceite: ACEITE_ANTIGO,
+      tarefas: { clima: { estado: "decidindo", alterado_por: USUARIO } },
+    });
+    expect(audit).toHaveBeenCalledTimes(1);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ai.jev.tarefa_alterada",
+        organizationId: ORG,
+        metadata: expect.objectContaining({
+          tarefa: "clima",
+          estado: "decidindo",
+          estado_anterior: "observando",
+          modo: "decide",
+          modo_anterior: "observacao",
+        }),
+      }),
+    );
+  });
+
+  it("PATCH de uma tarefa já naquele estado não escreve nem audita", async () => {
+    estado.settings = { jev: { ligado: true, modo: "decide", aceite: ACEITE_ANTIGO } };
+    const { status, corpo } = await mudar({ tarefa: "clima", estado: "decidindo" });
+    expect(status).toBe(200);
+    expect(corpo.data.alterado).toBe(false);
+    expect(escritas()).toEqual([]);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("trocar o `modo` depois de gravar por tarefa leva a tarefa junto", async () => {
+    estado.settings = { jev: { ligado: true, modo: "observacao", aceite: ACEITE_ANTIGO } };
+    await mudar({ tarefa: "clima", estado: "decidindo" });
+    await mudar({ modo: "observacao" });
+    expect(estado.settings.jev).toMatchObject({ modo: "observacao", tarefas: { clima: { estado: "observando" } } });
+    expect(audit).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: "ai.jev.modo_alterado",
+        metadata: expect.objectContaining({ tarefa: "clima", estado_anterior: "decidindo" }),
+      }),
+    );
+  });
+
+  it.each([
+    ["tarefa sem estado", { tarefa: "clima" }],
+    ["estado sem tarefa", { estado: "decidindo" }],
+    ["tarefa e `modo` juntos", { tarefa: "clima", estado: "decidindo", modo: "decide" }],
+    ["tarefa que não existe", { tarefa: "futura", estado: "observando" }],
+    ["estado que não existe", { tarefa: "clima", estado: "turbo" }],
+  ])("%s é recusado, sem escrever", async (_caso, corpo) => {
+    estado.settings = { jev: { ligado: true, modo: "observacao", aceite: ACEITE_ANTIGO } };
+    expect((await mudar(corpo)).status).toBe(422);
+    expect(escritas()).toEqual([]);
+  });
+
+  it("gerente não muda tarefa", async () => {
+    papel = "manager";
+    estado.settings = { jev: { ligado: true, modo: "observacao", aceite: ACEITE_ANTIGO } };
+    expect((await mudar({ tarefa: "clima", estado: "decidindo" })).status).toBe(403);
+    expect(escritas()).toEqual([]);
+  });
+
+  it("o aceite novo grava o alcance que o texto da tela descreve: cada mensagem, sozinha", async () => {
+    estado.credenciais = [credencial()];
+    await mudar({ ligado: true, aceite_lgpd: true });
+    expect((estado.settings.jev as Linha).aceite).toMatchObject({ por: USUARIO, alcance: "mensagem" });
+  });
+});
