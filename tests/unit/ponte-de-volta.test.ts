@@ -19,7 +19,7 @@ function scriptDe(html: string): string {
 
 describe("a ponte de volta", () => {
   it("entrega 200 same-origin, sem `Location`, com o destino no script e no fallback", async () => {
-    const res = respostaDePonte("/app/inbox?aba=1", "DeskcommCRM", "Voltando para o sistema…");
+    const res = respostaDePonte("/app/inbox?aba=1", "Central de Teste", "Voltando para o sistema…");
     const html = await res.text();
     const script = scriptDe(html);
 
@@ -38,7 +38,7 @@ describe("a ponte de volta", () => {
     // Sem JS não há `location.replace`: o `<a>` é o caminho que sobra.
     expect(html).toContain('href="/app/inbox?aba=1"');
     expect(html).toContain("Voltando para o sistema…");
-    expect(html).toContain("DeskcommCRM");
+    expect(html).toContain("Central de Teste");
   });
 
   it("escapa marca, mensagem e destino — nada de fora entra como HTML", async () => {
@@ -66,7 +66,7 @@ describe("a ponte de volta", () => {
     // barra o ESQUEMA e não sanitiza o conteúdo — `</script><script>…` é caminho
     // relativo-na-raiz válido para ele.
     const sujo = "/app/</script><script>alert(1)</script>";
-    const res = respostaDePonte(sujo, "DeskcommCRM", "Voltando para o sistema…");
+    const res = respostaDePonte(sujo, "Central de Teste", "Voltando para o sistema…");
     const html = await res.text();
     const script = scriptDe(html);
 
