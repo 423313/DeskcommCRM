@@ -366,13 +366,13 @@ check "  e a orientação é a ÚLTIMA coisa da saída, depois do passo 7" \
 
 # Lista grande (role sem dono: milhares de "must be owner") com a disputa no topo.
 # `printf | head -20` sob pipefail levava SIGPIPE e o set -e matava o update.sh
-# com 141 — antes do aviso de PERMISSÃO, que existe para este caso, e antes do pull.
+# com 141 — antes do aviso de PERMISSÃO, que existe para este caso e agora o encerra.
 rm -rf "$ROTEIRO_UG"; mkdir -p "$ROTEIRO_UG"
 { printf '%s\n' "$DEADLOCK_UG"; for i in $(seq 1 4000); do printf 'psql:/b.sql:%s: ERROR:  must be owner of table tabela_%s\n' "$i" "$i"; done; } > "$ROTEIRO_UG/passada.1"
 cp "$ROTEIRO_UG/passada.1" "$ROTEIRO_UG/passada.2"; cp "$ROTEIRO_UG/passada.1" "$ROTEIRO_UG/passada.3"
 : > "$DOCKER_LOG"
 BASELINE_ROTEIRO="$ROTEIRO_UG" BASELINE_ESPERA_S=0 run_update --to v1.1.0 --force
-check "lista de erros maior que o buffer do pipe não mata o update.sh" test "$RC" -eq 0
+check "lista de erros maior que o buffer do pipe não mata o update.sh (para com 1)" test "$RC" -eq 1
 check "  a disputa no topo foi reconhecida (3 passadas)" test "$(grep -c -- '-f /b.sql' "$DOCKER_LOG")" -eq 3
 check "  o aviso de PERMISSÃO chegou à tela" grep -q "erros de PERMISSÃO" "$OUTFILE"
 check "  e o fim diz que o banco NÃO terminou limpo" grep -q "banco NÃO terminou limpo" "$OUTFILE"

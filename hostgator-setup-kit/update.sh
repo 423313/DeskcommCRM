@@ -323,6 +323,9 @@ if [ -f supabase/baseline.sql ]; then
     listar_erros_do_banco "$BANCO_INCOMPLETO" 20
     c_ylw "  O app pode ainda funcionar."
     orientar_banco_incompleto
+    # Retentativa não cura estes: a migration NÃO chegou, e seguir daqui trocava o
+    # app por cima de um banco pela metade com status 0 — o "deu certo" do cron.
+    [ -z "$BANCO_RESTANTE" ] || die "O banco NÃO terminou limpo e os erros acima repetir não cura: a migration NÃO chegou. A atualização PARA aqui."
   fi
   # ── E AS REGRAS DE ISOLAMENTO SÃO CONFERIDAS ──────────────────────────────
   #
