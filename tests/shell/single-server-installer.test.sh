@@ -69,6 +69,41 @@ check "8 GB seguem recomendados na mensagem" grep -q 'recomenda 8 GB' "$INSTALLE
 check "instalador entrega o SMTP do CRM ao GoTrue" grep -q 'sincronizar_smtp_do_gotrue' "$INSTALLER"
 check "sem SMTP, o fim da instalacao avisa" grep -q "sem SMTP, 'esqueci a senha'" "$INSTALLER"
 
+# (c3) #1653 — o `signup_mode` da instalação fecha e reabre o caminho DIRETO do
+# GoTrue (`POST /auth/v1/signup` com a anon key). O que se prova aqui é o
+# comportamento da função no kit, com `psql_run` e `dir_do_supabase` dublados:
+# sem este passo, `so_convite` só fecha o CRM e o GoTrue segue criando conta.
+sync_signup_mode() {  # sync_signup_mode <modo no banco> <valor atual no .env | vazio>
+  local tmp modo="$1" atual="$2" saida valor
+  tmp="$(mktemp -d)"
+  printf 'COMPOSE_PROJECT_NAME=projeto\n' > "$tmp/.env"
+  if [ -n "$atual" ]; then printf 'GOTRUE_DISABLE_SIGNUP=%s\n' "$atual" >> "$tmp/.env"; fi
+  saida="$(MODE_DB="$modo" SB_DIR="$tmp" bash -c '
+    set -euo pipefail
+    . "$1/_common.sh"
+    dir_do_supabase() { printf %s "$SB_DIR"; }
+    psql_run() { printf %s "$MODE_DB"; }
+    if sincronizar_signup_mode_do_gotrue; then printf MUDOU; else printf IGUAL; fi
+  ' _ "$ROOT_DIR/hostgator-setup-kit" "$tmp" 2>&1)" || saida="ERRO:$saida"
+  valor="$(grep -E '^GOTRUE_DISABLE_SIGNUP=' "$tmp/.env" | cut -d= -f2- || true)"
+  rm -rf "$tmp"
+  printf '%s|%s' "$saida" "${valor:-vazio}"
+}
+check "so_convite escreve GOTRUE_DISABLE_SIGNUP=true" \
+  test "$(sync_signup_mode so_convite '')" = 'MUDOU|true'
+check "ja no valor do modo nao mexe no .env (idempotente, sem reiniciar o auth)" \
+  test "$(sync_signup_mode so_convite true)" = 'IGUAL|true'
+check "voltar para aberto reabre o caminho direto" \
+  test "$(sync_signup_mode aberto true)" = 'MUDOU|false'
+check "banco fora ou sem a coluna: nao mexe em nada" \
+  test "$(sync_signup_mode '' '')" = 'IGUAL|vazio'
+check "update.sh entrega a sincronizacao ao Supabase" \
+  grep -q 'sincronizar_signup_mode_do_gotrue' "$ROOT_DIR/hostgator-setup-kit/update.sh"
+check "instalador entrega a sincronizacao ao Supabase" \
+  grep -q 'sincronizar_signup_mode_do_gotrue' "$INSTALLER"
+check "override leva GOTRUE_DISABLE_SIGNUP para o container auth" \
+  grep -q 'GOTRUE_DISABLE_SIGNUP' "$OVERRIDE"
+
 if [[ "$FAILS" -ne 0 ]]; then
   printf '\n%d teste(s) falharam.\n' "$FAILS"
   exit 1
