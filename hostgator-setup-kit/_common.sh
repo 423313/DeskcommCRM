@@ -174,6 +174,47 @@ sincronizar_smtp_do_gotrue() {
   set_env_var "$env_sb" SMTP_SENDER_NAME "$(valor_compose "${nome:-${APP_NAME:-DeskcommCRM}}")"
 }
 
+# ── `so_convite` fecha o caminho DIRETO do GoTrue (#1653) ────────────────────
+#
+# O CRM já recusava cadastro sem convite na tela, na server action e na volta do
+# Google, mas o GoTrue continuava aceitando `POST /auth/v1/signup` — com a anon
+# key que vai para o navegador. A instalação que escolheu "só convite" acumulava
+# conta que ninguém autorizou, e o dono não tinha porta para fechar.
+#
+# A única trava que fecha esse caminho é o `disable_signup` do próprio GoTrue, e
+# ele NÃO tem API de configuração no self-hosted: medido no fonte
+# supabase/auth v2.196.0, as rotas `/admin` são audit, users, generate_link, sso
+# e oauth — nenhuma de config. Então o valor mora no `.env` do Supabase
+# (`GOTRUE_DISABLE_SIGNUP`), e o override do kit (`supabase-single-server.override.yml`)
+# é quem o entrega ao container `auth`. Sem o GoTrue fechado, fechar só o CRM é
+# o defeito da issue; sem este passo, o `disable_signup` nunca muda sozinho.
+#
+# Quem manda é `platform_settings.signup_mode` — a mesma fonte da tela de
+# `/admin/cadastro`: `so_convite` → true, qualquer outro modo → false.
+#
+# Idempotente, e quem chama só reinicia o `auth` quando o arquivo MUDOU. Devolve
+# 1 (sem tocar em nada) quando o valor já é o do modo, quando o banco não
+# respondeu ou quando a coluna ainda não existe (instalação anterior à 0253):
+# reabrir ou fechar o cadastro de uma instalação por causa de um soluço do
+# banco seria o mesmo defeito que o memo pegajoso de `modoDeCadastro()` existe
+# para evitar.
+sincronizar_signup_mode_do_gotrue() {
+  local env_sb modo alvo atual
+  env_sb="$(dir_do_supabase)/.env"
+  [ -f "$env_sb" ] || return 1
+  modo="$(psql_run -tA -c "select coalesce((select signup_mode from public.platform_settings where id = 1), 'aberto')" 2>/dev/null || true)"
+  modo="$(printf '%s' "$modo" | tr -d '[:space:]')"
+  case "$modo" in
+    so_convite) alvo=true ;;
+    aberto|com_aprovacao) alvo=false ;;
+    *) return 1 ;;
+  esac
+  atual="$(grep -E '^GOTRUE_DISABLE_SIGNUP=' "$env_sb" | tail -n 1 | cut -d= -f2- || true)"
+  [ "$atual" = "$alvo" ] && return 1
+  set_env_var "$env_sb" GOTRUE_DISABLE_SIGNUP "$alvo"
+  return 0
+}
+
 # ── O update.sh leva o Supabase até a versão pinada ──────────────────────────
 #
 # O `update.sh` oficial do Supabase faz o merge de três vias dos arquivos dele

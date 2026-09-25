@@ -183,6 +183,14 @@ step "Configurando o CRM sem perguntas adicionais"
 cd "$ROOT_DIR"
 bash "$KIT_DIR/install.sh" --yes
 
+# Cadastro público do GoTrue (#1653): `GOTRUE_DISABLE_SIGNUP` acompanha o
+# `signup_mode` da instalação. Em instalação nova o modo é `aberto` (false) e a
+# função nem mexe no arquivo — o passo existe para reinstalação por cima de um
+# banco que já está em "só convite".
+if sincronizar_signup_mode_do_gotrue; then
+  dc_supabase up -d --no-deps auth
+fi
+
 # E-mail de acesso (esqueci a senha, confirmar cadastro): o GoTrue passa a usar
 # o SMTP do CRM. Sem SMTP no CRM, o aviso fica no fim, onde o dono o lê.
 load_env "$app_env"

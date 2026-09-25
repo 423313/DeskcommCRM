@@ -43,6 +43,15 @@ recusar_projeto_de_outra_arvore || die "Atualização interrompida para não que
 # "já está na versão mais recente" sairia sem entregar a troca.
 if [ "${SINGLE_SERVER:-0}" = "1" ]; then
   recusar_supabase_de_outra_arvore || die "Atualização interrompida para não mexer no Supabase de outra instalação."
+  # A porta direta do GoTrue acompanha o `signup_mode` da instalação (#1653).
+  # Antes do SMTP de propósito: é o caminho que roda MESMO quando o update não
+  # tem nada a atualizar (a saída "você já está na versão mais recente" fica
+  # mais abaixo), então quem trocou "só convite" na tela e rodou o update leva
+  # o `GOTRUE_DISABLE_SIGNUP` no mesmo comando — e é ele que fecha
+  # `POST /auth/v1/signup` para quem tem a anon key.
+  if sincronizar_signup_mode_do_gotrue; then
+    dc_supabase up -d --no-deps auth >/dev/null 2>&1 || c_ylw "⚠ Não consegui reiniciar o auth do Supabase com o modo de cadastro (#1653)."
+  fi
   if sincronizar_smtp_do_gotrue; then
     dc_supabase up -d --no-deps auth >/dev/null 2>&1 || c_ylw "⚠ Não consegui reiniciar o auth do Supabase com o SMTP do CRM."
   else
