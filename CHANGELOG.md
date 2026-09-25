@@ -98,15 +98,13 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ### Alterado
 
-- **Suíte de testes do kit hermetiza as chaves de IA do ambiente** A suíte de testes do kit de instalação passa a zerar ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY e AI_GATEWAY_API_KEY no ambiente antes de rodar os casos. O caso que instala sem chave de IA passa a medir só o que o teste escreve, em vez de o que o ambiente de quem executa exporta. Quem roda a suíte com uma chave de IA exportada no terminal deixa de ver uma falha falsa nesse caso. Não há ação para quem opera a VPS.
-
-  Contribuição de @webtecnica (#1599).
+- **A suíte de testes do kit ignora as chaves de IA do terminal de quem a roda** Quem roda a suíte com uma chave de IA exportada no terminal deixa de ver uma falha falsa no caso que instala sem chave. Não há ação para quem opera a VPS. Contribuição de @webtecnica (#1599).
 
 - **A construção das imagens não reinstala as dependências só porque o número da versão mudou** As quatro imagens declaravam o número da versão antes das etapas mais demoradas da construção, e isso fazia o Docker refazer essas etapas em toda versão nova: no worker e no agente de voz, a instalação inteira das dependências; no app e no scheduler, a instalação dos pacotes do sistema. Agora o número entra no fim, e essas etapas são reaproveitadas de uma versão para a outra. Nada muda no que a imagem contém nem no que quem opera precisa fazer. Contribuição de @bonito-system (#1569).
 
 - **Abrir uma conversa no Inbox ancora no final de forma instantânea em vez de rolar suave (#1590)** Ao abrir uma conversa, o operador via a tela rolar animada (`smooth`) desde o topo até a mensagem mais recente, o que causava atraso visual e sensação de lentidão em conversas com histórico longo. A primeira ancoragem agora acontece de forma instantânea (`auto`), mantendo o comportamento de rolagem suave apenas para novas mensagens que chegam após o carregamento inicial.
 
-  Contribuição de @webtecnica (#1590).
+  Contribuição de @webtecnica (#1617).
 
 ### Corrigido
 
@@ -128,9 +126,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **O backup só dá o banco como salvo depois de conferir que o arquivo pode ser lido** O backup do banco agora confere o arquivo inteiro antes de dizer que terminou. Se a gravação falhar no meio ou o arquivo sair ilegível, o backup falha e o arquivo é apagado para ninguém confiar nele, e a atualização não segue sem um backup válido. Antes, quando a gravação falhava no meio, o backup acusava a falha, mas o arquivo cortado ficava na pasta de backups junto dos bons. Contribuição de @bonito-system (#1589).
 
-- **A caixa de streaming SSR (S:N) ganha instrumento e porta — caixa órfã não passa mais em silêncio** Quando o stream do React terminava antes do revelador da caixa `S:N`, o HTML ficava com a caixa órfã pendurada no `<body>`, com uma cópia da página dentro, e todo `getByTestId` passava a casar dois elementos — sem nenhum log do navegador para apontar o problema, porque nenhuma spec escutava o console. A spec nova roda o experimento da issue em duas pernas (documento servido SEM JavaScript, e página viva COM JavaScript), anexa o estado da caixa e o instrumento (`pageerror` + `console`) ao relatório em ambas, e reprova nominalmente tanto o servidor que manda dois quanto a caixa que sobra sem drenar. Não há mudança de comportamento para quem opera: isto é portão de teste, e o próximo run vermelho da classe nasce com a evidência na mão.
-
-  Contribuição de @webtecnica (#1600).
+- **Teste novo registra a evidência quando a página chega duplicada** Teste interno, para quem desenvolve: se a página terminar de carregar com uma cópia de si mesma pendurada no fim, o teste guarda o estado e os erros do navegador e reprova. Nada muda para quem opera a VPS. Contribuição de @webtecnica (#1600).
 
 - **O texto digitado na busca de telas mantém contraste nos temas claro e escuro** O campo de busca da paleta agora usa a cor de texto do tema. Isso evita que o texto digitado herde uma cor com pouco contraste, inclusive em instalações com marca própria.
 
@@ -143,9 +139,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   O botão "X" que fecha diálogos e painéis laterais era anunciado como "Close", em inglês, para
   quem usa leitor de tela. Agora é anunciado como "Fechar" (em espanhol, "Cerrar").
 
-- **Cerca de escrita em organizations fecha pontos cegos de escopo léxico e exportações** A cerca de escrita em `organizations` (`tests/unit/escrita-em-organizations-usa-cliente-admin.test.ts`) passa a resolver a identidade do cliente admin por escopo léxico da declaração em vez de apenas pelo nome no escopo do arquivo. Além disso, funções com declaração `export { ... }`, `export default` ou que escapam como valor agora são devidamente tratadas como exportadas, impedindo que parâmetros sem anotação explícita de tipo passem despercebidos com falso-verde.
-
-  Contribuição de @webtecnica (#1557).
+- **O teste que vigia a escrita na tabela de organizações fecha dois pontos cegos** Teste interno, para quem desenvolve: ele passa a reconhecer funções exportadas de outras formas e o cliente declarado em escopo local. Nada muda para quem opera a VPS. Contribuição de @webtecnica (#1557).
 
 - **A tela Execuções deixa de poder mostrar a chave do provedor de IA numa mensagem de erro** Quando um provedor de IA recusava uma chamada e repetia a chave de acesso no texto do
   erro, a tela IA › Execuções podia mostrar essa chave inteira. O filtro que deveria
@@ -173,13 +167,9 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
   arquivo de configuração. Esse modelo costuma ser mais caro que o de classificação; para
   gastar menos, escolha um modelo menor nesse mesmo lugar.
 
-- **Membro revogado da empresa tem conversas abertas desatribuídas de volta para a fila** Ao revogar um membro da organização, suas conversas abertas não eram desatribuídas pelo trigger `fn_routing_member_revoked`: conversas que haviam sido assumidas permaneciam vinculadas a um usuário revogado e com o robô silenciado sem prazo (`bot_silenced_until = 'infinity'`), tornando-as mudas para a IA e invisíveis na fila dos demais atendentes até uma intervenção manual. Agora, a revogação desatribui automaticamente todas as conversas abertas do membro (`status in ('open','pending','claimed','ai_handling')`), limpa as informações de responsável, solta o silenciamento do bot (exceto quando a conversa foi passada pela IA a um humano, que continua na fila humana), registra o evento em `conversation_assignment_events`, acorda o roteamento por canal e emite a atividade de liberação na linha do tempo com a respectiva auditoria. Contribuição de @webtecnica (#1619).
+- **Quem sai da empresa devolve as conversas abertas para a fila** Ao remover alguém da organização, as conversas abertas que estavam com essa pessoa continuavam presas a ela, com a IA calada e fora da vista dos outros atendentes, até alguém intervir à mão. Agora elas voltam sozinhas para a fila, a IA volta a atender (menos nas conversas que a própria IA passou para uma pessoa) e a linha do tempo registra a liberação. Contribuição de @webtecnica (#1619).
 
-- **A reconciliação do Vitest ensina a checar Failed Suites antes de alertar sonda cega** Documentação interna em `CLAUDE.md`, para quem desenvolve: o Vitest imprime erros de coleta de arquivo e timeouts de hooks na seção dedicada `Failed Suites`, que soma linhas `FAIL` sem aparecer no rodapé `Tests N failed`.
-
-  A doutrina agora ensina a ler `Failed Suites` no log antes de sugerir re-rodar a suíte com `--reporter=verbose`. Nada muda para quem opera uma instalação.
-
-  Contribuição de @webtecnica.
+- **A documentação interna ensina a ler as falhas de carregamento dos testes** Só para quem desenvolve; nada muda para quem opera uma instalação. Contribuição de @webtecnica (#1572).
 
 - **Funil com algumas centenas de negócios volta a abrir** O quadro de um funil com cerca de 400 negócios ou mais parava de carregar. O servidor buscava os dados dos cards (score, próxima ação, contato, conversa) passando todos os ids numa consulta só, e a resposta do banco trazia um cabeçalho maior que o limite do Node — a busca falhava como "fetch failed" e o quadro não abria. Agora essas consultas saem em lotes de 100 ids, e o tamanho do funil não derruba mais o quadro.
 
@@ -191,11 +181,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Contribuição de @webtecnica (#1602), a partir da medição de @rogercampel (#1571).
 
-- **Invariante garante que a configuração de SMTP da instalação é estritamente server-side** Adiciona o teste de invariante `tests/invariants/configuracao-de-smtp-e-server-side.test.ts` para a tabela `platform_smtp_settings`, espelhando a proteção de suas irmãs (`platform_meta_app`, `platform_google_oauth`).
-
-  O teste afere privilégios revogados para `anon` e `authenticated`, permissão estrita ao `service_role`, ativação de RLS sem policies públicas, isolamento da senha criptografada via `fn_encrypt_oauth`/`fn_decrypt_oauth` e garantia de integridade do singleton.
-
-  Contribuição de @webtecnica.
+- **Teste novo garante que a configuração de e-mail (SMTP) da instalação só é lida pelo servidor** O teste confere que a tabela, e a senha guardada nela, ficam fora do alcance do navegador, como já acontecia com as configurações irmãs. Nada muda para quem opera a VPS. Contribuição de @webtecnica (#1574).
 
 - **O assistente consegue gravar o pedido no negócio do cliente que está atendendo** Ao fechar um pedido, o assistente chamava a atualização do negócio com o id do contato em vez do id do negócio, e a gravação era recusada: o pedido confirmado ficava sem valor e sem os dados de entrega. Quando o id recebido é o do contato da conversa em curso e ele tem um único negócio aberto, a gravação agora vai para esse negócio. Com dois negócios abertos, nada muda: a escolha continua sendo de quem opera.
 
@@ -205,7 +191,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Na atualização, negócios que já apontavam para um contato de outra empresa, ou para um responsável que nunca foi membro dela, perdem esse vínculo, e a linha do tempo de cada um registra o porquê. Negócios de quem foi desligado continuam com essa pessoa como responsável. Mover um negócio de funil não falha mais quando o responsável saiu da empresa: a cópia nasce sem responsável e a linha do tempo explica.
 
-- **A descrição de imagem usa o modelo escolhido para visão mesmo quando o provedor padrão da empresa está sem chave** Organizações que usavam binding específico em `visao_de_imagem` mas não tinham credencial configurada no modelo de chat padrão (por exemplo, durante onboarding ou com Gemini sem chave cadastrada) falhavam prematuramente ao tentar derivar mídias de imagem, porque o worker resolvia a configuração padrão da organização antes de inspecionar o binding dedicado do ponto. Agora, o binding da visão é consultado e resolvido prioritariamente, recorrendo ao padrão da organização apenas como fallback. Crédito: @webtecnica. Relato: @rogercampel.
+- **A descrição de imagem usa o modelo escolhido para visão mesmo quando o provedor padrão da empresa está sem chave** Quem escolheu um modelo só para ler imagens, mas não tinha chave no provedor padrão da empresa, via a leitura da imagem falhar. Agora o modelo escolhido para imagens é usado primeiro, e o padrão da empresa só entra quando não há escolha. Crédito: @webtecnica (#1618). Relato: @rogercampel.
 
 - **Quem escolheu outra IA na instalação deixa de pedir a ela um modelo da Anthropic** Ao escolher na instalação uma IA diferente da Anthropic (a OpenAI, por exemplo), o
   sistema trocava o provedor da empresa mas deixava gravado o modelo padrão da Anthropic.
@@ -229,13 +215,9 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Contribuição de @rogercampel (#1605).
 
-- **Os candidatos da prospecção nativa agora têm prazo, e é o cron quem apaga** A tabela `prospecting_candidates` nascia sem dono de expurgo: nome, telefone e endereço de pessoas pesquisadas e nunca contatados ficavam para sempre, e uma campanha montada e abandonada deixava esse dado parado sem nenhum evento que o expirasse.
+- **Os candidatos da prospecção nativa agora têm prazo, e é o cron quem apaga** Nome, telefone e endereço de pessoas pesquisadas pela prospecção ficavam guardados para sempre. Agora o apagador diário (`data-retention`) remove o que passou de **365 dias** (mínimo de 90), contando da criação para quem nunca foi contatado e da última tentativa para quem já recebeu mensagem. Quem pediu para não ser contatado continua registrado, para que uma nova importação não traga a pessoa de volta. Nada a fazer na VPS; o prazo muda com `PROSPECCAO_RETENTION_DAYS` no `.env`.
 
-  A política de retenção passa a valer de verdade: **365 dias de padrão (piso de 90)** — decisão do dono, alinhada ao horizonte da conversa do caso e da captação — aplicados pela nova função `fn_expurgar_prospeccao_vencida`, chamada em lotes pelo cron diário `data-retention`, com o piso dentro do corpo da função como os demais prazos da casa. O relógio conta da criação para quem nunca foi contatado e da última tentativa para quem já recebeu mensagem; `queued` e `sending` nunca entram, e os tokens de supressão (`suppression_*`) de quem pediu opt-out/exclusão são preservados para sempre, garantindo que uma reimportação futura não traga a pessoa de volta.
-
-  Quem opera a VPS não faz nada: a correção chega na próxima atualização. O valor pode ser ajustado com `PROSPECCAO_RETENTION_DAYS` no `.env`, como os demais prazos de retenção.
-
-  Contribuição de @webtecnica.
+  Contribuição de @webtecnica (#1577).
 
 - **O aviso de que o automático volta em instantes não empurra mais os botões da conversa para baixo** Quando aparecia o aviso "Automático volta em instantes" (ou outro aviso de que o atendimento automático está pausado), ele ficava na mesma linha do nome do contato. O cabeçalho da conversa ficava mais largo e a barra de botões inteira descia para a linha de baixo. Agora o aviso fica logo abaixo dos botões, e todos os botões de quem atende continuam visíveis; quando a tela é estreita, eles passam para uma segunda linha em vez de sumir. Contribuição de @raphaelmartins (#1625).
 
@@ -245,9 +227,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Contribuição de @saraivabr (#1579).
 
-- **As specs do token de servidor declaram o mesmo prefixo que o código emite** As especificações do token de servidor (Spec 01 e Spec 11) descreviam um prefixo e um formato que o código nunca emitiu; agora as duas declaram o formato implementado (`dsk_` + 8 hex aleatórios + segredo, com os 12 primeiros caracteres virando o prefixo que a tela exibe), e a Spec 01 registra por que o prefixo não carrega ambiente. Nenhum token é emitido, revogado ou regravado por isso: é alinhamento de documentação, e não há ação para quem opera a VPS.
-
-  Contribuição de @webtecnica (#1601).
+- **A documentação do token de servidor descreve o formato que o sistema de fato emite** Só documentação (`dsk_` e o prefixo que a tela mostra); nenhum token muda e não há ação para quem opera a VPS. Contribuição de @webtecnica (#1601).
 
 - **Mensagem de WhatsApp que chega com o banco indisponível não se perde mais** Se o banco de dados demorava ou ficava fora por um instante (reinício, backup, sobrecarga) no momento em que um cliente mandava mensagem, ela era descartada em silêncio: não aparecia no Inbox e a IA não respondia. Agora o CRM pede ao WhatsApp que reenvie a mensagem, e o que ainda assim não entrar é reprocessado automaticamente a cada minuto, por até cerca de 20 minutos. Se mesmo assim a mensagem não puder ser gravada, um aviso aparece na Central pedindo para conferir as conversas no celular do número. Crédito: @Gervanno.
 
