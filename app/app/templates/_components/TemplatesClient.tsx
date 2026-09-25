@@ -3,6 +3,7 @@
 import { useT } from "@/hooks/i18n/useT";
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,24 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
   });
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<MessageTemplate | null>(null);
+  // Deep link: `/app/templates?modelo=<id>` abre aquele modelo. É o link que a
+  // integração devolve ("use o modelo X") e que a tela não tinha — sem ele, quem
+  // recebe a mensagem cai na lista e tem de caçar de qual texto se falava.
+  // `?.` porque o hook devolve null fora de um contexto de navegação (o que
+  // acontece em teste e em render estático), como no resto do repo.
+  const idDoModelo = useSearchParams()?.get("modelo") ?? null;
+  const [abertoPelaUrl, setAbertoPelaUrl] = React.useState(false);
+
+  React.useEffect(() => {
+    if (abertoPelaUrl || !idDoModelo) return;
+    // A lista chega depois: enquanto ela não tem o modelo pedido, NÃO marca como
+    // aberto — marcar aqui faria o link depender de o dado já estar em cache.
+    const alvo = templates?.find((template) => template.id === idDoModelo);
+    if (!alvo) return;
+    setEditing(alvo);
+    setFormOpen(true);
+    setAbertoPelaUrl(true);
+  }, [abertoPelaUrl, idDoModelo, templates]);
 
   const openNew = () => {
     setEditing(null);
