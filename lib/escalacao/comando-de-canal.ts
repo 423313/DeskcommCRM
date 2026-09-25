@@ -28,10 +28,14 @@
  *
  * A função é CONFIGURÁVEL: `ai_agents.config.aceita_comandos_celular` (default
  * `false`). Desligada, o ingest trata `#on`/`#off` como texto comum — a mensagem
- * do operador apenas pausa a IA, como qualquer outra. Quem lê a flag é
- * `agenteAceitaComandoDeCelular` (abaixo), FAIL-CLOSED.
+ * do operador apenas pausa a IA com prazo, como qualquer outra. Ligada, além dos
+ * comandos, a resposta pelo celular pausa DURÁVEL (só `#on` ou a tela religam).
+ * Quem lê a flag é `agenteAceitaComandoDeCelular` (abaixo), FAIL-CLOSED.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { resolverAgenteDaConversa, type CandidatoDeAgente } from "@/lib/ai/agents/agente-da-conversa";
+import { logger } from "@/lib/logger";
 
 export type ComandoDeCanal = "on" | "off";
 
@@ -57,35 +61,69 @@ export function lerComandoDeControle(body: string | null | undefined): ComandoDe
 }
 
 /**
- * A ORG/agente aceita comandos de celular (`#on`/`#off`)?
+ * O agente que atende ESTA conversa aceita comandos de celular (`#on`/`#off`)?
  *
- * Lê `ai_agents.config.aceita_comandos_celular` do agente PUBLICADO para a
- * sessão. FAIL-CLOSED: sem agente publicado, sem a chave, ou se a leitura falhar,
- * a resposta é `false` — o comando NÃO é aplicado. Isso é uma decisão de
- * segurança, não de conveniência: aceitar um comando por não ter conseguido ler
- * a configuração seria agir com base no que não se sabe.
+ * Lê `ai_agents.config.aceita_comandos_celular` do agente resolvido por
+ * `resolverAgenteDaConversa` — a mesma régua do motor (stickiness da conversa →
+ * versão publicada no número → agente único). Com dois agentes, o interruptor
+ * de um não vale para as conversas do outro.
  *
- * Custo: uma consulta por mensagem `fromMe` que TENHA a forma de comando (não
- * roda para mensagem normal). O caminho comum não paga nada.
+ * FAIL-CLOSED: sem agente resolvido, sem a chave, ou se a leitura falhar, a
+ * resposta é `false` — e `false` é o comportamento de quem nunca ligou o
+ * recurso: o comando não vale e a resposta pelo celular pausa com prazo.
+ *
+ * Custo: três leituras por mensagem enviada pelo celular que NÃO é eco de um
+ * envio nosso — um humano digitando, nunca a IA.
  */
 export async function agenteAceitaComandoDeCelular(
   supabase: SupabaseClient,
   organizationId: string,
+  conversationId: string,
 ): Promise<boolean> {
   try {
-    const { data, error } = await supabase
-      .from("ai_agents")
-      .select("config")
+    const { data: conversa, error: convErr } = await supabase
+      .from("conversations")
+      .select("channel_session_id, active_ai_agent_id")
       .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .is("archived_at", null)
-      .order("priority", { ascending: false })
-      .limit(1)
+      .eq("id", conversationId)
       .maybeSingle();
-    if (error || !data) return false;
-    const cfg = (data.config ?? {}) as { aceita_comandos_celular?: unknown };
+    if (convErr) throw new Error(convErr.message);
+    if (!conversa) return false;
+
+    let versoesPublicadasNaSessao: string[] = [];
+    if (conversa.channel_session_id) {
+      const { data: versoes, error: versErr } = await supabase
+        .from("ai_agent_versions")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("channel_session_id", conversa.channel_session_id)
+        .eq("status", "published");
+      if (versErr) throw new Error(versErr.message);
+      versoesPublicadasNaSessao = (versoes ?? []).map((v) => v.id as string);
+    }
+
+    const { data: candidatos, error: agErr } = await supabase
+      .from("ai_agents")
+      .select("id, config, kind, is_active, paused_at, published_version_id, archived_at, priority, created_at")
+      .eq("organization_id", organizationId)
+      .is("archived_at", null);
+    if (agErr) throw new Error(agErr.message);
+
+    const { agente } = resolverAgenteDaConversa(
+      (candidatos ?? []) as Array<CandidatoDeAgente & { config: unknown }>,
+      {
+        active_ai_agent_id: conversa.active_ai_agent_id as string | null,
+        versoesPublicadasNaSessao,
+      },
+    );
+    const cfg = (agente?.config ?? {}) as { aceita_comandos_celular?: unknown };
     return cfg.aceita_comandos_celular === true;
-  } catch {
+  } catch (err) {
+    logger.warn("[comando-de-canal] configuração do agente ilegível — comando não aplicado", {
+      organization_id: organizationId,
+      conversation_id: conversationId,
+      detail: err instanceof Error ? err.message.slice(0, 160) : "erro",
+    });
     return false;
   }
 }

@@ -107,5 +107,9 @@ describe("fiação — resposta manual pelo WhatsApp silencia o bot temporariame
     );
     expect(corpo).toMatch(/if \(!ehEco\) \{[\s\S]{0,700}?pausarIaDuravelmente\(/);
     expect(corpo).toMatch(/if \(!ehEco\) \{[\s\S]{0,700}?devolverAtendimentoAoAgente\(/);
+    // A pausa da mensagem comum também, e o interruptor do agente (que decide
+    // se a pausa é durável) é lido DENTRO da guarda — nunca para o eco.
+    expect(corpo).toMatch(/if \(!ehEco\) \{[\s\S]{0,2000}?pausarIaPorAtendimentoManual\(/);
+    expect(corpo).toMatch(/if \(!ehEco\) \{[\s\S]{0,400}?agenteAceitaComandoDeCelular\(/);
   });
 });

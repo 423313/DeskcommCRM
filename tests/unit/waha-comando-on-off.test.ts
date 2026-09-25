@@ -31,7 +31,11 @@ vi.mock("@/lib/env", () => ({
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}), isServiceRoleConfigured: () => false }));
 vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/channels/health", () => ({ sincronizarSaudeDaConexao: vi.fn(async () => {}) }));
+// O transporte de volta (revogar o comando no WhatsApp do cliente).
+const deleteMessage = vi.fn(async () => {});
+vi.mock("@/lib/waha/client", () => ({ getWahaClient: () => ({ deleteMessage }) }));
 
+import { audit } from "@/lib/audit";
 import { dispatchWahaEvent } from "@/lib/waha/ingest";
 
 const ORG = "org-1";
@@ -49,10 +53,38 @@ interface Captura {
   rpcs: Array<{ fn: string; args: unknown }>;
 }
 
+/** Updates em `contacts` da última chamada de `makeAdmin` (o opt-out mora lá). */
+const contactUpdates: Array<Record<string, unknown>> = [];
+
+interface AgenteFalso {
+  id: string;
+  aceita?: boolean;
+  pausado?: boolean;
+}
+
 function makeAdmin(
   cap: Captura,
-  opts: { jaRegistrada?: boolean; aceitaComandos?: boolean } = {},
+  opts: {
+    jaRegistrada?: boolean;
+    aceitaComandos?: boolean;
+    /** Agentes da org; sem isto, um único agente no ar com `aceitaComandos`. */
+    agentes?: AgenteFalso[];
+    /** `conversations.active_ai_agent_id` — a stickiness gravada pelo router. */
+    agenteDaConversa?: string | null;
+  } = {},
 ) {
+  contactUpdates.length = 0;
+  const agentes = (opts.agentes ?? [{ id: "ag-1", aceita: opts.aceitaComandos === true }]).map((a) => ({
+    id: a.id,
+    config: { aceita_comandos_celular: a.aceita === true },
+    kind: "mcp_agent",
+    is_active: true,
+    paused_at: a.pausado ? "2026-09-24T12:00:00Z" : null,
+    published_version_id: `v-${a.id}`,
+    archived_at: null,
+    priority: 0,
+    created_at: "2026-09-01T00:00:00Z",
+  }));
   const table = (name: string) => {
     let mode: "select" | "insert" | "update" = "select";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,6 +98,7 @@ function makeAdmin(
       update: (p: Record<string, unknown>) => {
         mode = "update";
         if (name === "conversations") cap.conversationUpdates.push(p);
+        if (name === "contacts") contactUpdates.push(p);
         return chain;
       },
       eq: () => chain,
@@ -89,18 +122,22 @@ function makeAdmin(
           return Promise.resolve({ data: { id: "conv-1" }, error: null });
         }
         if (name === "conversations" && mode === "select") {
-          return Promise.resolve({ data: { bot_silenced_until: null }, error: null });
-        }
-        // C-076: consulta da flag `config.aceita_comandos_celular`.
-        if (name === "ai_agents" && mode === "select") {
           return Promise.resolve({
-            data: { config: { aceita_comandos_celular: opts.aceitaComandos === true } },
+            data: {
+              bot_silenced_until: null,
+              channel_session_id: null,
+              active_ai_agent_id: opts.agenteDaConversa ?? null,
+            },
             error: null,
           });
         }
         return Promise.resolve({ data: null, error: null });
       },
-      then: (r: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(r),
+      // Lista sem `maybeSingle`: os candidatos de `resolverAgenteDaConversa`.
+      then: (r: (v: unknown) => unknown) =>
+        Promise.resolve(
+          name === "ai_agents" && mode === "select" ? { data: agentes, error: null } : { data: null, error: null },
+        ).then(r),
     };
     return chain;
   };
@@ -194,6 +231,85 @@ describe("C-075 · comando do celular controla o automático", () => {
 });
 
 describe("C-076 · o comando só VALE se o agente aceitar (config da UI)", () => {
+  const auditado = () =>
+    vi.mocked(audit).mock.calls.map((c) => (c[0] as { metadata?: Record<string, unknown> }).metadata ?? {});
+
+  it("DESLIGADO: '#off' é texto comum — pausa COM PRAZO, não revoga, nada de comando no rastro", async () => {
+    const cap: Captura = { conversationUpdates: [], insertedMessages: [], rpcs: [] };
+    await dispatchWahaEvent(makeAdmin(cap), SESSION, comando("#off"), "req-off-igual");
+
+    const pausa = cap.conversationUpdates.find((u) => u.last_handoff_reason !== undefined);
+    expect(pausa!.bot_silenced_until).not.toBe("infinity");
+    expect(Number.isFinite(new Date(String(pausa!.bot_silenced_until)).getTime())).toBe(true);
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(cap.insertedMessages[0]!.metadata).toEqual({ raw_type: "text", fromMe: true });
+    expect(auditado().some((m) => "control_command" in m)).toBe(false);
+  });
+
+  it("LIGADO: '#off' silencia DURÁVEL, revoga o comando e deixa rastro no audit", async () => {
+    const cap: Captura = { conversationUpdates: [], insertedMessages: [], rpcs: [] };
+    await dispatchWahaEvent(makeAdmin(cap, { aceitaComandos: true }), SESSION, comando("#off"), "req-off-ligado");
+
+    const pausa = cap.conversationUpdates.find((u) => u.last_handoff_reason !== undefined);
+    expect(pausa!.bot_silenced_until).toBe("infinity");
+    expect(String(pausa!.last_handoff_reason)).toMatch(/#off/);
+    expect(deleteMessage).toHaveBeenCalledTimes(1);
+    expect(auditado().some((m) => m.control_command === "off")).toBe(true);
+  });
+
+  it("LIGADO: '#on' religa (devolve ao agente) e revoga o comando", async () => {
+    const cap: Captura = { conversationUpdates: [], insertedMessages: [], rpcs: [] };
+    await dispatchWahaEvent(makeAdmin(cap, { aceitaComandos: true }), SESSION, comando("#on"), "req-on-ligado");
+
+    expect(cap.rpcs.some((r) => r.fn === "emit_event")).toBe(true);
+    expect(cap.conversationUpdates.some((u) => u.bot_silenced_until === null)).toBe(true);
+    expect(cap.conversationUpdates.some((u) => u.bot_silenced_until === "infinity")).toBe(false);
+    expect(deleteMessage).toHaveBeenCalledTimes(1);
+    // STOP/opt-out é do CLIENTE: o #on do operador nunca o desfaz.
+    expect(contactUpdates.some((u) => "is_blocked" in u)).toBe(false);
+  });
+
+  it("LIGADO: resposta NORMAL pelo celular pausa DURÁVEL (o #on é quem religa)", async () => {
+    const cap: Captura = { conversationUpdates: [], insertedMessages: [], rpcs: [] };
+    await dispatchWahaEvent(makeAdmin(cap, { aceitaComandos: true }), SESSION, comando("Oi, já te respondo"), "req-n-ligado");
+
+    const pausa = cap.conversationUpdates.find((u) => u.last_handoff_reason !== undefined);
+    expect(pausa!.bot_silenced_until).toBe("infinity");
+    expect(String(pausa!.last_handoff_reason)).toMatch(/manual/i);
+    expect(deleteMessage).not.toHaveBeenCalled();
+  });
+
+  it("o interruptor é do agente DA CONVERSA: ligado no vizinho não vale aqui", async () => {
+    const cap: Captura = { conversationUpdates: [], insertedMessages: [], rpcs: [] };
+    await dispatchWahaEvent(
+      makeAdmin(cap, {
+        agentes: [
+          { id: "ag-ligado", aceita: true },
+          { id: "ag-desta-conversa", aceita: false },
+        ],
+        agenteDaConversa: "ag-desta-conversa",
+      }),
+      SESSION,
+      comando("#off"),
+      "req-vizinho",
+    );
+    const pausa = cap.conversationUpdates.find((u) => u.last_handoff_reason !== undefined);
+    expect(pausa!.bot_silenced_until).not.toBe("infinity");
+    expect(deleteMessage).not.toHaveBeenCalled();
+  });
+
+  it("agente PAUSADO não atende — o interruptor dele não vale", async () => {
+    const cap: Captura = { conversationUpdates: [], insertedMessages: [], rpcs: [] };
+    await dispatchWahaEvent(
+      makeAdmin(cap, { agentes: [{ id: "ag-1", aceita: true, pausado: true }] }),
+      SESSION,
+      comando("#on"),
+      "req-pausado",
+    );
+    expect(cap.rpcs.some((r) => r.fn === "emit_event")).toBe(false);
+    expect(deleteMessage).not.toHaveBeenCalled();
+  });
+
   it("DESLIGADO (default): '#off' NÃO pausa por comando — só a pausa normal da mensagem", async () => {
     const cap: Captura = { conversationUpdates: [], insertedMessages: [], rpcs: [] };
     await dispatchWahaEvent(makeAdmin(cap), SESSION, comando("#off"), "req-off-desligado");

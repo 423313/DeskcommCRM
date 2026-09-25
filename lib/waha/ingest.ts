@@ -945,8 +945,8 @@ async function handleOutboundFromUserPhone(
   if (!conversationId) return;
 
   // Comando de controle vindo do celular (`#on`/`#off`). Só a mensagem INTEIRA
-  // conta (ver `lib/escalacao/comando-de-canal.ts`). Lido ANTES do insert para a
-  // própria linha carregar o metadata do comando.
+  // conta (ver `lib/escalacao/comando-de-canal.ts`). Reconhecer não é aplicar:
+  // quem decide se vale é o interruptor do agente, lá embaixo.
   const comando = lerComandoDeControle(bodyOf(p));
 
   const now = new Date().toISOString();
@@ -967,7 +967,7 @@ async function handleOutboundFromUserPhone(
       media_mime: mediaMimeOf(p),
       sent_via: "external_device",
       sent_at: dataDoTimestamp(p.timestamp, now),
-      metadata: { raw_type: p.type, fromMe: true, ...(comando ? { control_command: comando } : {}) },
+      metadata: { raw_type: p.type, fromMe: true },
     })
     .select("id")
     .maybeSingle();
@@ -991,7 +991,10 @@ async function handleOutboundFromUserPhone(
   // Três desfechos para uma mensagem `fromMe` que NÃO é eco:
   //   - `#off`         → pausa DURÁVEL (só `#on` ou a tela do CRM religam)
   //   - `#on`          → devolve o atendimento à IA (limpa as 3 travas)
-  //   - mensagem normal → pausa com prazo (uma pessoa assumiu pelo celular)
+  //   - mensagem normal → pausa (uma pessoa assumiu pelo celular)
+  // Os dois comandos e a pausa DURÁVEL da mensagem normal só existem para o
+  // agente que ligou "Comandos pelo celular". Desligado (o padrão), nada muda:
+  // `#on`/`#off` são texto comum e a pausa tem prazo (`PRAZO_DO_SILENCIO_MS`).
   //
   // ⚠️ A GUARDA DE ECO VEM PRIMEIRO, e a ordem importa. O eco de um envio nosso
   // (composer/IA) chega por este mesmo caminho com `fromMe`, e não pode ser lido
@@ -1009,20 +1012,21 @@ async function handleOutboundFromUserPhone(
   //                                  engano é pior que não agir)
   // Quem reaproveitar esta condição para pular o INSERT reabre o #108.
   const ehEco = await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p);
+  let comandoAplicado: typeof comando = null;
   if (!ehEco) {
-    // C-076: o comando APENAS VALE se o agente o aceita
-    // (`ai_agents.config.aceita_comandos_celular`, ligado na tela). Desligado
-    // (default), `#on`/`#off` são texto comum e a mensagem só pausa, como
-    // qualquer outra. FAIL-CLOSED: falha de leitura ⇒ não aplica o comando.
-    const comandoVale = comando !== null && (await agenteAceitaComandoDeCelular(admin, session.organization_id));
-    if (comandoVale && comando === "off") {
+    // C-076: o interruptor é do agente que atende ESTA conversa
+    // (`ai_agents.config.aceita_comandos_celular`, ligado na tela). FAIL-CLOSED:
+    // falha de leitura ⇒ desligado ⇒ o comportamento de antes do recurso.
+    const aceita = await agenteAceitaComandoDeCelular(admin, session.organization_id, conversationId);
+    comandoAplicado = aceita ? comando : null;
+    if (comandoAplicado === "off") {
       await pausarIaDuravelmente(admin, {
         organizationId: session.organization_id,
         conversationId,
         canal: "waha",
         motivo: MOTIVO_COMANDO_OFF,
       });
-    } else if (comandoVale && comando === "on") {
+    } else if (comandoAplicado === "on") {
       await devolverAtendimentoAoAgente(
         {
           supabase: admin,
@@ -1037,10 +1041,11 @@ async function handleOutboundFromUserPhone(
         organizationId: session.organization_id,
         conversationId,
         canal: "waha",
+        duravel: aceita,
       });
     }
     // O comando não é fala de atendimento: esconde do cliente depois de aplicar.
-    if (comandoVale) await revogarComando(session, chatId, p.id);
+    if (comandoAplicado) await revogarComando(session, chatId, p.id);
   }
 
   await audit({
@@ -1053,7 +1058,7 @@ async function handleOutboundFromUserPhone(
       type: p.type,
       external_id: p.id,
       from_user_phone: true,
-      ...(comando ? { control_command: comando } : {}),
+      ...(comandoAplicado ? { control_command: comandoAplicado } : {}),
     },
   });
 
