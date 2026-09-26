@@ -376,6 +376,17 @@ describe("POST /api/v1/ai/routers/:id/test", () => {
       expect(d.jev).toMatchObject({ agent_id: SUPORTE, decide: false });
     });
 
+    it("decidindo, e a sua IA devolve algo que não é resposta: ela 'não respondeu', e o Jev não decide sozinho (R2)", async () => {
+      roteadorComDoisMembros();
+      vi.mocked(classifyIntent).mockResolvedValue({ intentName: null, confidence: 0, falhou: true });
+      jevCom("decidindo", escolhaDoJev("suporte", 0.99, "decidindo"));
+
+      const d = await testar();
+      expect(d.confidence, "a tela lê null como 'não respondeu'").toBeNull();
+      expect(d.agent_id, "o lixo segue 'nenhuma': o de reserva").toBe(FALLBACK);
+      expect(d.jev).toMatchObject({ agent_id: SUPORTE, decide: false });
+    });
+
     it("a probabilidade do Jev abaixo do mínimo leva ao de reserva — a mesma régua da sua IA", async () => {
       roteadorComDoisMembros();
       vi.mocked(classifyIntent).mockResolvedValue({ intentName: "vendas", confidence: 0.8 });

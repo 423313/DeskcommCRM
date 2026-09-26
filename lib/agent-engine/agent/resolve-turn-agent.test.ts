@@ -536,11 +536,21 @@ describe('o Jev no roteador (onda 2 do Jev, bloco 2.2)', () => {
       expect(out.config?.agentId).toBe('agent-vendas');
     });
 
-    // Decisão declarada no turno: resposta ilegível da IA é "nenhuma" (o
-    // `parseIntentVerdict` a devolve assim), não falha — a IA respondeu.
-    it('a IA de sempre responde lixo ("nenhuma", confiança 0): não é falha, e decidindo vale o Jev', async () => {
+    // A saída ilegível da IA (`parseIntentVerdict` marca `falhou`) não é
+    // resposta: um modelo que nunca devolve JSON deixava o Jev rotear sozinho,
+    // sem alarme — o contrário da manipulação, que já lia o lixo como falha.
+    it('a IA de sempre responde lixo: é falha — decidindo vale a regra de hoje, e não o Jev', async () => {
       const jev = jevFalso('decidindo', Promise.resolve(escolha('suporte', 0.8, 'decidindo')));
-      const { out } = await rodar({ daIa: { intentName: null, confidence: 0 }, jev });
+      const { out } = await rodar({ daIa: { intentName: null, confidence: 0, falhou: true }, jev });
+      // O lixo segue "nenhuma" para o roteamento de hoje: sem sticky, o de reserva.
+      expect(out.config?.agentId).toBe('agent-reserva');
+      expect(out.outcome).toBe('fallback');
+      expect(jev.jev.observar.mock.calls[0]![0]).toMatchObject({ vereditoDaIa: null, decidiu: false });
+    });
+
+    it('controle: a IA diz "nenhuma" de verdade — é resposta, e decidindo vale o Jev', async () => {
+      const jev = jevFalso('decidindo', Promise.resolve(escolha('suporte', 0.8, 'decidindo')));
+      const { out } = await rodar({ daIa: { intentName: null, confidence: 0.7 }, jev });
       expect(out.config?.agentId).toBe('agent-suporte');
       expect(jev.jev.observar.mock.calls[0]![0]).toMatchObject({ decidiu: true });
     });

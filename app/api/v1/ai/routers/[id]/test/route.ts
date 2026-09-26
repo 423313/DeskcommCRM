@@ -150,19 +150,23 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return agentRow?.name ?? null;
   };
 
+  // A saída ilegível segue "nenhuma" para o agente (a régua do turno), mas não
+  // é resposta da IA: a tela a mostra como "não respondeu", e o Jev decidindo
+  // não vale no lugar dela (R2).
+  const iaRespondeu = verdict !== null && verdict.falhou !== true;
   const agentId = agenteDo(verdict);
   const agentName = await nomeDoAgente(agentId);
   const agenteDoJev = escolhaDoJev === null ? null : agenteDo(escolhaDoJev.veredito);
 
   return ok(
     {
-      intent_name: verdict?.intentName ?? null,
+      intent_name: iaRespondeu ? verdict.intentName : null,
       // `?? null`, nunca `?? 0`: sem veredito não houve medição, e zero é uma
       // AFIRMAÇÃO ("o classificador tem certeza de que não é nada"). A tela local
       // escapa por checar `intent_name` antes de exibir, mas isto é contrato de
       // API pública — todo outro consumidor leria a invenção. Doutrina em
       // `lib/kanban/card-state.ts`: null é "sinal insuficiente", 0 é "calculei e deu zero".
-      confidence: verdict?.confidence ?? null,
+      confidence: iaRespondeu ? verdict.confidence : null,
       min_confidence: loaded.minConfidence,
       agent_id: agentId,
       agent_name: agentName,
@@ -180,7 +184,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
               agent_name: agenteDoJev === agentId ? agentName : await nomeDoAgente(agenteDoJev),
               // Em produção vale a escolha dele: decidindo, respondendo, e com a
               // IA de sempre respondendo também (R2).
-              decide: estadoDoJev === "decidindo" && escolhaDoJev !== null && verdict !== null,
+              decide: estadoDoJev === "decidindo" && escolhaDoJev !== null && iaRespondeu,
             },
     },
     { requestId },
