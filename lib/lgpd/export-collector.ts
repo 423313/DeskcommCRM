@@ -1132,7 +1132,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   // um `limit` faria as mais antigas sumirem do relatório sem ninguém saber. A
   // chave é `id` (única) — ordenar por `proposed_at` deixaria empates decidirem a
   // página. Mesma forma do bloco dos rascunhos, logo acima.
-  let contact_field_proposals: NonNullable<ExportPayload["contact_field_proposals"]> = [];
+  const contact_field_proposals: NonNullable<ExportPayload["contact_field_proposals"]> = [];
   if (contactId) {
     for (let offset = 0; ; offset += 500) {
       const { data, error } = await admin
