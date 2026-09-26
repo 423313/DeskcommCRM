@@ -340,7 +340,8 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         // MESMO aviso (mesmo título, mesmo dedupe, fecha no próximo sucesso).
         if (
           !jevFalhouNaRede.exigeAcao &&
-          falhasSeguidas(event.organization_id) >= FALHAS_SEGUIDAS_PARA_AVISAR_SEM_RESERVA
+          falhasSeguidas({ organizationId: event.organization_id, tarefa: TAREFA_DO_CLIMA.id }) >=
+            FALHAS_SEGUIDAS_PARA_AVISAR_SEM_RESERVA
         ) {
           await avisarNaCentral(admin, {
             organizationId: event.organization_id,

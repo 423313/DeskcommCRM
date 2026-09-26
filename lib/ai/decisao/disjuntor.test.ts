@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { podeTentar, registrarFalha, registrarSucesso } from "@/lib/ai/decisao/disjuntor";
+import { falhasSeguidas, podeTentar, registrarFalha, registrarSucesso } from "@/lib/ai/decisao/disjuntor";
 
 const T0 = 1_000_000;
 const MIN = 60_000;
@@ -99,7 +99,7 @@ describe("disjuntor do Jev por tarefa", () => {
     expect(podeTentar(org, T0)).toBe(true);
   });
 
-  it.each(["credencial_invalida", "sem_credito", "provedor_indisponivel"] as const)(
+  it.each(["credencial_invalida", "sem_credito"] as const)(
     "%s numa tarefa abre a organização inteira",
     (motivo) => {
       const org = novaOrg();
@@ -108,6 +108,42 @@ describe("disjuntor do Jev por tarefa", () => {
       expect(podeTentar(org, T0)).toBe(false);
     },
   );
+
+  it.each(["provedor_indisponivel", "resposta_ilegivel"] as const)(
+    "%s é da tarefa: três só do roteador não cortam o clima nem a manipulação",
+    (motivo) => {
+      const org = novaOrg();
+      for (let i = 0; i < 3; i++) registrarFalha(na(org, "roteador"), motivo, T0);
+      expect(podeTentar(na(org, "roteador"), T0)).toBe(false);
+      expect(podeTentar(na(org, "clima"), T0)).toBe(true);
+      expect(podeTentar(na(org, "manipulacao"), T0)).toBe(true);
+    },
+  );
+
+  /**
+   * O roteador estoura o teto em todo turno, e a manipulação responde no mesmo
+   * turno. Com a demora na conta da organização, o sucesso da manipulação a
+   * zerava: medido, `podeTentar(roteador)` ficava `true` dez turnos seguidos.
+   */
+  it("o sucesso de outra tarefa não zera a demora do roteador: com as tarefas alternadas, o dele abre", () => {
+    const org = novaOrg();
+    for (let turno = 0; turno < 3; turno++) {
+      registrarFalha(na(org, "roteador"), "provedor_indisponivel", T0);
+      registrarSucesso(na(org, "manipulacao"));
+    }
+    expect(podeTentar(na(org, "roteador"), T0)).toBe(false);
+    expect(podeTentar(na(org, "manipulacao"), T0)).toBe(true);
+  });
+
+  it("as falhas seguidas de uma tarefa somam as da conta e as dela, e o sucesso dela zera as duas", () => {
+    const org = novaOrg();
+    registrarFalha(na(org, "clima"), "provedor_indisponivel", T0);
+    registrarFalha(na(org, "roteador"), "sem_credito", T0);
+    expect(falhasSeguidas(na(org, "clima"))).toBe(2);
+    expect(falhasSeguidas(na(org, "manipulacao"))).toBe(1);
+    registrarSucesso(na(org, "clima"));
+    expect(falhasSeguidas(na(org, "clima"))).toBe(0);
+  });
 
   it("limite de taxa numa tarefa segura todas, na hora", () => {
     const org = novaOrg();

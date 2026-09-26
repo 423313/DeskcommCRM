@@ -23,17 +23,29 @@
  * entre rodadas. Reiniciar o processo zera o disjuntor, e o pior efeito disso é
  * UMA tentativa a mais — não vale uma tabela.
  *
- * ═══ POR ORGANIZAÇÃO, E POR TAREFA SÓ NA PERGUNTA RECUSADA ═══
+ * ═══ O QUE É DA CONTA, E O QUE É DA TAREFA ═══
  *
- * Chave recusada, crédito esgotado, limite de taxa e fornecedor fora do ar são
- * da CONTA: valem para toda tarefa, e o disjuntor delas é da organização. Já a
- * pergunta recusada (`contrato_invalido`) é de UMA tarefa — a API derruba a
- * chamada inteira quando uma pergunta vem malformada, e a pergunta das outras
- * tarefas está certa. Por isso ela abre só o disjuntor de (organização,
- * tarefa). Quem chama sem tarefa (a string da organização) fica no disjuntor
- * da organização para tudo, como antes.
+ * Chave recusada, crédito esgotado, limite de taxa e sobrecarga são da CONTA:
+ * valem para toda tarefa, e o disjuntor delas é da organização. O resto é de
+ * UMA tarefa: a pergunta recusada (`contrato_invalido` — a API derruba a
+ * chamada inteira quando uma pergunta vem malformada, e a das outras está
+ * certa), a demora (`provedor_indisponivel`) e a resposta ilegível. A demora
+ * era da organização, e o sucesso de uma tarefa a zerava: o roteador, a
+ * pergunta mais pesada, podia estourar o teto em todo turno sem o disjuntor
+ * dele abrir nunca, enquanto três demoras só dele cortavam o clima e a
+ * manipulação. Numa queda de verdade cada tarefa abre o seu depois das três
+ * dela. Quem chama sem tarefa (a string da organização) fica no disjuntor da
+ * organização para tudo, como antes.
  */
 import type { MotivoDaAusencia } from "./cliente";
+
+/** As falhas da CONTA — ver o cabeçalho. */
+const DA_CONTA: ReadonlySet<MotivoDaAusencia> = new Set([
+  "credencial_invalida",
+  "sem_credito",
+  "limite_de_taxa",
+  "provedor_sobrecarregado",
+]);
 
 const FALHAS_PARA_ABRIR = 3;
 const ABERTO_POR_FALHAS_MS = 5 * 60_000;
@@ -69,12 +81,14 @@ export function podeTentar(alvo: AlvoDoDisjuntor, agora: number = Date.now()): b
 }
 
 /**
- * Quantas falhas seguidas o Jev acumula nesta organização — zera no sucesso.
- * Com o disjuntor aberto nada sai para a rede e a conta não sobe, então ela
- * mede tentativas reais: é o que o worker usa para separar tropeço de queda.
+ * Quantas falhas seguidas o Jev acumula para quem chama — as da conta e as da
+ * tarefa, que o sucesso da tarefa zera juntas. Com o disjuntor aberto nada sai
+ * para a rede e a conta não sobe, então ela mede tentativas reais: é o que o
+ * worker usa para separar tropeço de queda.
  */
-export function falhasSeguidas(organizationId: string): number {
-  return estados.get(organizationId)?.falhasSeguidas ?? 0;
+export function falhasSeguidas(alvo: AlvoDoDisjuntor): number {
+  const { daOrganizacao, daTarefa } = chaves(alvo);
+  return (estados.get(daOrganizacao)?.falhasSeguidas ?? 0) + (daTarefa ? (estados.get(daTarefa)?.falhasSeguidas ?? 0) : 0);
 }
 
 /** O sucesso prova a conta e a pergunta DESTA tarefa — nunca a de outra. */
@@ -93,7 +107,7 @@ export function registrarFalha(
   if (motivo === "sem_credencial" || motivo === "disjuntor_aberto") return;
 
   const { daOrganizacao, daTarefa } = chaves(alvo);
-  const chave = motivo === "contrato_invalido" && daTarefa !== null ? daTarefa : daOrganizacao;
+  const chave = DA_CONTA.has(motivo) || daTarefa === null ? daOrganizacao : daTarefa;
   const estado = estados.get(chave) ?? { falhasSeguidas: 0, abertoAte: 0 };
   estado.falhasSeguidas += 1;
 
