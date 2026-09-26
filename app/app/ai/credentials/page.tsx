@@ -7,11 +7,18 @@ import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { contarUsoQueBloqueia, type VersaoVinculada } from "@/lib/ai/credenciais/uso";
 import { lerConfigDoJev } from "@/lib/ai/decisao/config";
-import { estadoEfetivoDaTarefa, TAREFAS_DO_JEV, tarefaSemCamada, tarefaSemRoteador } from "@/lib/ai/decisao/tarefas";
+import {
+  algumRoteadorQuePergunta,
+  estadoEfetivoDaTarefa,
+  TAREFAS_DO_JEV,
+  tarefaSemCamada,
+  tarefaSemRoteador,
+} from "@/lib/ai/decisao/tarefas";
 import { camadasEfetivas } from "@/lib/agent-engine/guardrails/camadas-da-org";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
+import { logger } from "@/lib/logger";
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import { CredentialsList } from "./_components/CredentialsList";
@@ -65,21 +72,30 @@ export default async function CredentialsPage() {
     .maybeSingle();
   const configDoJev = lerConfigDoJev(orgRow?.settings);
   const jevLigado = configDoJev.ligado;
-  // A camada que a manipulação acompanha: desligada, a tarefa não roda.
-  const { data: linhasDasCamadas } = jevLigado
+  // A camada que a manipulação acompanha: desligada, a tarefa não roda. Leitura
+  // que falha não cai no padrão do ambiente (que liga a camada): a tela deixa a
+  // tarefa de fora em vez de afirmar que ela roda — falha fechada na afirmação.
+  const { data: linhasDasCamadas, error: erroDasCamadas } = jevLigado
     ? await supabase.from("org_guardrail_layers").select("layer, enabled").eq("organization_id", activeOrg.orgId)
-    : { data: null };
-  const camadas = camadasEfetivas(linhasDasCamadas ?? []);
-  // O roteador: sem um ativo, o Jev não escolhe agente nenhum.
-  const { data: roteadoresAtivos } = jevLigado
+    : { data: null, error: null };
+  const camadas = erroDasCamadas ? null : camadasEfetivas(linhasDasCamadas ?? []);
+  // O roteador: sem um ativo que o Jev possa perguntar, ele não escolhe agente
+  // nenhum. Leitura que falha: a tarefa sai da lista, pelo mesmo motivo.
+  const { data: roteadoresAtivos, error: erroDosRoteadores } = jevLigado
     ? await supabase
         .from("ai_routers")
-        .select("id")
+        .select("id, intencoes:ai_router_members(count)")
         .eq("organization_id", activeOrg.orgId)
         .eq("is_active", true)
-        .limit(1)
-    : { data: null };
-  const temRoteadorAtivo = (roteadoresAtivos ?? []).length > 0;
+    : { data: null, error: null };
+  const temRoteadorQuePergunta = !erroDosRoteadores && algumRoteadorQuePergunta(roteadoresAtivos ?? []);
+  if (erroDasCamadas || erroDosRoteadores) {
+    logger.warn("credenciais: o \"Usada em\" do Jev saiu sem conferir a camada ou o roteador", {
+      organization_id: activeOrg.orgId,
+      camadas: erroDasCamadas?.message ?? null,
+      roteadores: erroDosRoteadores?.message ?? null,
+    });
+  }
   // A mesma pergunta que o worker faz: sem a chave do Jev, há IA principal para medir?
   const jev = jevLigado
     ? {
@@ -87,8 +103,8 @@ export default async function CredentialsPage() {
         tarefas: TAREFAS_DO_JEV.filter(
           (t) =>
             estadoEfetivoDaTarefa(configDoJev, t) !== "desligada" &&
-            !tarefaSemCamada(t, camadas) &&
-            !tarefaSemRoteador(t, temRoteadorAtivo),
+            (camadas === null ? t.camada === undefined : !tarefaSemCamada(t, camadas)) &&
+            !tarefaSemRoteador(t, temRoteadorQuePergunta),
         ).map((t) => t.rotulo),
         temIaPrincipal:
           (await resolverModeloDoPonto("sentiment_classify", activeOrg.orgId, DEFAULT_CLASSIFIER_MODEL, {

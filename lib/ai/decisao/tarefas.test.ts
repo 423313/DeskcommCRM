@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { idDaTarefaSchema, lerConfigDoJev, type ConfigDoJev } from "@/lib/ai/decisao/config";
 import {
+  algumRoteadorQuePergunta,
   estadoAoLigar,
   estadoEfetivoDaTarefa,
   estadoGravadoDaTarefa,
@@ -16,6 +17,9 @@ import {
   TAREFAS_DO_JEV,
   tarefaEhNova,
   tarefaSemCamada,
+  tarefaSemRoteador,
+  TAREFA_DO_ROTEADOR,
+  MEMBROS_NO_MAXIMO,
 } from "@/lib/ai/decisao/tarefas";
 import { CONFERENCIA_DE_ENTRADA, CONFERENCIAS_DE_SAIDA } from "@/lib/ai/guardrails/lista-de-conferencia";
 import { PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
@@ -35,6 +39,19 @@ function config(jev: unknown): ConfigDoJev {
 describe("TAREFAS_DO_JEV", () => {
   it("uma chave gravável por tarefa, e uma tarefa por chave", () => {
     expect(TAREFAS_DO_JEV.map((t) => t.id).sort()).toEqual([...idDaTarefaSchema.options].sort());
+  });
+
+  /**
+   * O sentido inverso do caso abaixo. Um ponto marcado com `decisaoRapida`, com
+   * chamador, e sem tarefa passava todos os gates: `chaveDaOrganizacao` devolve
+   * `null` em silêncio para ponto sem tarefa, e a tela (que deriva desta lista)
+   * não o mostra — um chamador que nunca dispara, sem log.
+   */
+  it("todo ponto marcado como decisão rápida tem uma tarefa do Jev", () => {
+    const pontosComTarefa = new Set(TAREFAS_DO_JEV.flatMap((t) => (t.ponto ? [t.ponto] : [])));
+    const marcados = PONTOS_DE_IA.filter((p) => p.decisaoRapida !== undefined);
+    expect(marcados.length, "a varredura enxerga os pontos marcados").toBeGreaterThan(0);
+    expect(marcados.filter((p) => !pontosComTarefa.has(p.id)).map((p) => p.id)).toEqual([]);
   });
 
   it("a tarefa com ponto fala o que o registro fala, na primitiva que o registro declara", () => {
@@ -178,5 +195,29 @@ describe("tarefaEhNova / estadoGravadoDaTarefa", () => {
 
   it("tarefa sem nada gravado não tem estado escolhido", () => {
     expect(estadoGravadoDaTarefa(config({ ligado: true, aceite: ACEITE }), "futura")).toBeUndefined();
+  });
+});
+
+/**
+ * O roteador que o Jev pode perguntar: ativo E com 1 a 254 intenções. Antes,
+ * `sem_roteador` só olhava `is_active`, e o roteador recém-criado (sem
+ * intenção) deixava a tarefa "Só observa" esperando uma comparação que nunca vem.
+ */
+describe("o roteador que o Jev pode perguntar", () => {
+  const com = (n: number) => ({ intencoes: [{ count: n }] });
+  it("de 1 a MEMBROS_NO_MAXIMO intenções", () => {
+    expect(algumRoteadorQuePergunta([com(0)])).toBe(false);
+    expect(algumRoteadorQuePergunta([com(1)])).toBe(true);
+    expect(algumRoteadorQuePergunta([com(MEMBROS_NO_MAXIMO)])).toBe(true);
+    expect(algumRoteadorQuePergunta([com(MEMBROS_NO_MAXIMO + 1)])).toBe(false);
+  });
+  it("basta um; nenhum, ou a contagem ilegível, é não", () => {
+    expect(algumRoteadorQuePergunta([com(0), com(3)])).toBe(true);
+    expect(algumRoteadorQuePergunta([])).toBe(false);
+    expect(algumRoteadorQuePergunta([{ intencoes: null }, { intencoes: [{ count: "2" }] }])).toBe(false);
+  });
+  it("só a tarefa do roteador depende dele", () => {
+    expect(tarefaSemRoteador(TAREFA_DO_ROTEADOR, false)).toBe(true);
+    expect(tarefaSemRoteador(TAREFA_DO_CLIMA, false)).toBe(false);
   });
 });

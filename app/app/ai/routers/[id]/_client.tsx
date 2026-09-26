@@ -772,6 +772,10 @@ function EscolhasLadoALado({
   const t = useT();
   const porcento = (n: number) => `${(n * 100).toFixed(0)}%`;
   const jevAbaixoDoMinimo = jev.intent_name !== null && jev.confidence !== null && jev.confidence < result.min_confidence;
+  // A mesma marca dos dois lados: decidindo, o bloco de cima lê só o Jev, e a
+  // escolha da IA abaixo do mínimo (que leva ao de reserva) ficava sem motivo.
+  const iaAbaixoDoMinimo =
+    result.intent_name !== null && result.confidence !== null && result.confidence < result.min_confidence;
   return (
     <div className="grid gap-2 sm:grid-cols-2" data-testid="teste-com-o-jev">
       <div className="rounded-md border border-border/60 p-3 text-sm" data-testid="teste-escolha-da-ia">
@@ -782,6 +786,7 @@ function EscolhasLadoALado({
         {result.confidence !== null && (
           <p className="text-xs text-muted-foreground">
             {result.intent_name ?? t("nenhuma intenção")} · {porcento(result.confidence)}
+            {iaAbaixoDoMinimo && ` — ${t("abaixo do mínimo")}`}
           </p>
         )}
       </div>
@@ -790,6 +795,13 @@ function EscolhasLadoALado({
         <p className="font-medium">
           {jev.respondeu ? (jev.agent_name ?? t("nenhum (sem fallback)")) : t("não respondeu")}
         </p>
+        {/* Sem motivo, "não respondeu" não levava a lugar nenhum: o porquê (a
+            chave, o crédito, o roteador sem intenções) está no cartão dele. */}
+        {!jev.respondeu && (
+          <Link className="text-xs underline underline-offset-4" href="/app/ai/providers">
+            {t("Ver o motivo no cartão do Jev")}
+          </Link>
+        )}
         {jev.respondeu && jev.confidence !== null && (
           <p className="text-xs text-muted-foreground">
             {jev.intent_name ?? t("nenhuma intenção")} · {porcento(jev.confidence)}
@@ -801,7 +813,12 @@ function EscolhasLadoALado({
         {jev.decide
           ? t("O Jev decide esta tarefa: em produção, vale a escolha dele, e a sua IA fica de reserva.")
           : jev.estado === "observando"
-            ? t("O Jev só observa esta tarefa: em produção, vale a escolha da sua IA.")
+            ? // Sem a resposta da IA não há "escolha da sua IA": vale a regra de sempre.
+              result.confidence === null
+              ? t(
+                  "O Jev só observa esta tarefa. Sem a resposta da sua IA, em produção vale a regra de sempre: o agente que já atendia a conversa ou o “Agente de fallback” do roteador.",
+                )
+              : t("O Jev só observa esta tarefa: em produção, vale a escolha da sua IA.")
             : // Sem a resposta da IA, vale a regra de sempre, tenha o Jev respondido ou não (R2).
               result.confidence === null
               ? t("O Jev decide esta tarefa, mas sem a resposta da sua IA vale a regra de sempre — nunca só o Jev.")

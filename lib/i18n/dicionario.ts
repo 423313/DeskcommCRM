@@ -2333,9 +2333,6 @@ export const DICIONARIO: Traducoes = {
   "Credencial removida.": { es: "Credencial eliminada." },
   "Credencial removida. O Jev foi desligado.": { es: "Credencial eliminada. Jev se desactivó." },
   "Usada em": { es: "Usada en" },
-  "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa volta a ser medido só pela sua IA principal.": {
-    es: "Jev usa esta clave. Sin ella, Jev se desactiva y el clima de la conversación vuelve a medirlo solo tu IA principal.",
-  },
   "Excluir credencial": { es: "Eliminar credencial" },
   Modelos: { es: "Modelos" },
   "Em uso por": { es: "En uso por" },
@@ -3095,7 +3092,7 @@ export const DICIONARIO: Traducoes = {
   },
   // A mesma pergunta, como tarefa do Jev (lib/ai/decisao/tarefas.ts).
   "Lê a última mensagem do cliente, sozinha, e escolhe entre as intenções do seu roteador qual agente deve atender.": {
-    es: "Lee el último mensaje del cliente, solo, y elige entre las intenciones de tu enrutador qué agente debe atender.",
+    es: "Lee el último mensaje del cliente, por separado, y elige entre las intenciones de tu enrutador qué agente debe atender.",
   },
   "Lê a mensagem que chegou e decide qual dos seus agentes deve pegar aquela conversa.": {
     es: "Lee el mensaje que llegó y decide cuál de tus agentes debe tomar esa conversación.",
@@ -3125,7 +3122,7 @@ export const DICIONARIO: Traducoes = {
     es: "Nota, normalmente en menos de un segundo, si el cliente está molesto, y avisa para pasar la conversación a una persona.",
   },
   "Percebe, na mensagem do cliente, quem tenta enganar o agente para ele fugir das suas regras — e soma esse sinal ao da sua IA de sempre, sem nunca apagá-lo.": {
-    es: "Nota, en el mensaje del cliente, quién intenta engañar al agente para que se salga de sus reglas, y suma esa señal a la de tu IA de siempre, sin borrarla nunca.",
+    es: "Detecta, en el mensaje del cliente, cuándo alguien intenta engañar al agente para que se salga de sus reglas, y suma esa señal a la de tu IA de siempre, sin borrarla nunca.",
   },
   "Validar a resposta do fluxo": { es: "Validar la respuesta del flujo" },
   "Quando o fluxo está esperando uma resposta, lê a mensagem do cliente com o contexto da conversa e devolve SÓ o dado que deve ser salvo — ou diz que ele não respondeu.": {
@@ -3393,11 +3390,20 @@ export const DICIONARIO: Traducoes = {
   "O Jev respondeu de um jeito que o sistema não entendeu. Se continuar acontecendo, avise o suporte.": {
     es: "Jev respondió de una forma que el sistema no entendió. Si sigue pasando, avisa al soporte.",
   },
+  "O Jev usa esta chave. Sem ela, o Jev é desligado e as tarefas em “Usada em” param.": {
+    es: "Jev usa esta clave. Sin ella, Jev se desactiva y las tareas de “Usada en” se detienen.",
+  },
+  "O Jev está ligado, mas nenhuma tarefa dele usa esta chave agora. Sem ela, o Jev é desligado.": {
+    es: "Jev está activado, pero ninguna de sus tareas usa esta clave ahora. Sin ella, Jev se desactiva.",
+  },
+  "O clima da conversa volta a ser medido só pela sua IA principal.": {
+    es: "El clima de la conversación vuelve a medirse solo con tu IA principal.",
+  },
+  "O clima da conversa deixa de ser medido: ninguém da equipe é chamado quando um cliente se irrita.": {
+    es: "El clima de la conversación deja de medirse: nadie del equipo recibe aviso cuando un cliente se molesta.",
+  },
   "O Jev usa esta chave. Sem ela, ele passa a usar a outra chave dele que já passou no teste.": {
     es: "Jev usa esta clave. Sin ella, pasa a usar su otra clave que ya pasó la prueba.",
-  },
-  "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa deixa de ser medido: ninguém da equipe é chamado quando um cliente se irrita.": {
-    es: "Jev usa esta clave. Sin ella, Jev se desactiva y el clima de la conversación deja de medirse: nadie del equipo recibe aviso cuando un cliente se molesta.",
   },
   "O Jev parou de funcionar": { es: "Jev dejó de funcionar" },
   // Título antigo do mesmo aviso: segue aqui para a busca achar o aviso aberto
@@ -3442,8 +3448,8 @@ export const DICIONARIO: Traducoes = {
   "Pegar uma chave nova na TypeSafe": {
     es: "Obtener una clave nueva en TypeSafe",
   },
-  "Sem uma IA principal que meça o clima, ele já começa decidindo sozinho: não há com quem comparar nem quem cubra uma falha dele.": {
-    es: "Sin una IA principal que mida el clima, empieza decidiendo solo: no hay con quién comparar ni quién cubra una falla suya.",
+  "Sem uma IA principal que meça o clima, o Jev já começa decidindo sozinho nessa tarefa: não há com quem comparar nem quem cubra uma falha dele.": {
+    es: "Sin una IA principal que mida el clima, Jev empieza decidiendo por su cuenta en esa tarea: no hay con quién comparar ni quién cubra una falla suya.",
   },
   "Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.": {
     es: "Activado, pero detenido: Jev solo vuelve a medir cuando la clave pase la prueba.",
@@ -3468,12 +3474,27 @@ export const DICIONARIO: Traducoes = {
   "Decide em parte": { es: "Decide en parte" },
   // O selo de cada tarefa do Jev no cartão (CartaoDoJev.tsx).
   "Só observa": { es: "Solo observa" },
-  "Não roda": { es: "No funciona" },
-  "Não roda agora: a verificação “Detectar tentativa de manipular o assistente” está desligada na Segurança do agente, e o Jev só pergunta onde a sua IA de sempre também pergunta.": {
-    es: "No funciona ahora: la verificación “Detectar intento de manipular al asistente” está desactivada en la Seguridad del agente, y Jev solo pregunta donde tu IA de siempre también pregunta.",
+  "Decide sozinho": { es: "Decide por su cuenta" },
+  "Nova": { es: "Nueva" },
+  "Começou sozinha, só observando: nada muda para o cliente até você deixar o Jev decidir.": {
+    es: "Empezó por su cuenta, solo observando: nada cambia para el cliente hasta que dejes que Jev decida.",
   },
-  "Não roda agora: nenhum roteador de intenção está ativo. O Jev só escolhe o agente onde um roteador já escolhe — ative um em IA › Roteadores.": {
-    es: "No funciona ahora: ningún enrutador de intención está activo. Jev solo elige el agente donde un enrutador ya elige — activa uno en IA › Enrutadores.",
+  "Manter só observando": { es: "Mantener solo observando" },
+  "A tarefa segue só observando.": { es: "La tarea sigue solo observando." },
+  "Abrir os agentes": { es: "Abrir los agentes" },
+  "Abrir os roteadores": { es: "Abrir los enrutadores" },
+  "Sem uma IA principal, o clima religado volta decidindo sozinho: não há com quem comparar nem quem cubra uma falha do Jev.": {
+    es: "Sin una IA principal, el clima reactivado vuelve decidiendo por su cuenta: no hay con quién comparar ni quién cubra una falla de Jev.",
+  },
+  "Ligado, mas nenhuma tarefa está rodando agora: o Jev não mede nada. Veja abaixo o que falta nas que dizem “Não roda”, ou religue uma pausada.": {
+    es: "Activado, pero ninguna tarea se está ejecutando ahora: Jev no mide nada. Mira abajo qué falta en las que dicen “No se ejecuta”, o reactiva una pausada.",
+  },
+  "Não roda": { es: "No se ejecuta" },
+  "Não roda agora: a verificação “Detectar tentativa de manipular o assistente” está desligada. Ela vale para a empresa toda: ligue-a abrindo qualquer agente, na aba “Confere antes de enviar”, em “Antes de o assistente ler”. O Jev só pergunta onde a sua IA de sempre também pergunta.": {
+    es: "No se ejecuta ahora: la verificación “Detectar intento de manipular al asistente” está desactivada. Vale para toda la empresa: actívala abriendo cualquier agente, en la pestaña “Revisa antes de enviar”, en “Antes de que el asistente lea”. Jev solo pregunta donde tu IA de siempre también pregunta.",
+  },
+  "Não roda agora: nenhum roteador de intenção ativo tem intenções para o Jev escolher. O Jev só escolhe o agente onde um roteador já escolhe — ative um, com as intenções dele, em Roteadores.": {
+    es: "No se ejecuta ahora: ningún enrutador de intención activo tiene intenciones para que Jev elija. Jev solo elige el agente donde un enrutador ya elige — activa uno, con sus intenciones, en Enrutadores.",
   },
   Decide: { es: "Decide" },
   // "Testar classificação" do roteador, com o Jev lado a lado (app/app/ai/routers/[id]/_client.tsx).
@@ -3488,6 +3509,10 @@ export const DICIONARIO: Traducoes = {
   "O Jev só observa esta tarefa: em produção, vale a escolha da sua IA.": {
     es: "Jev solo observa esta tarea: en producción vale la elección de tu IA.",
   },
+  "O Jev só observa esta tarefa. Sem a resposta da sua IA, em produção vale a regra de sempre: o agente que já atendia a conversa ou o “Agente de fallback” do roteador.": {
+    es: "Jev solo observa esta tarea. Sin la respuesta de tu IA, en producción vale la regla de siempre: el agente que ya atendía la conversación o el “Agente de fallback” del enrutador.",
+  },
+  "Ver o motivo no cartão do Jev": { es: "Ver el motivo en la tarjeta de Jev" },
   "O Jev decide esta tarefa, mas não respondeu: em produção, a sua IA decidiria no lugar dele.": {
     es: "Jev decide esta tarea, pero no respondió: en producción, tu IA decidiría en su lugar.",
   },
@@ -3513,14 +3538,14 @@ export const DICIONARIO: Traducoes = {
   "Testar de novo": { es: "Probar de nuevo" },
   "Trocar a chave em Credenciais": { es: "Cambiar la clave en Credenciales" },
   "O que o Jev vai fazer": { es: "Qué va a hacer Jev" },
-  "Ele começa só observando: a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.": {
-    es: "Empieza solo observando: tu IA de siempre sigue decidiendo, y comparas los dos antes de dejar que Jev decida.",
+  "Onde ele só observa, a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.": {
+    es: "Donde solo observa, tu IA de siempre sigue decidiendo, y comparas los dos antes de dejar que Jev decida.",
   },
-  "Ele volta decidindo, como estava antes de ser desligado.": {
-    es: "Vuelve decidiendo, como estaba antes de desactivarlo.",
+  "Onde ele decide, vale a escolha que você fez antes de desligá-lo; onde só observa, a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.": {
+    es: "Donde decide, vale la elección que hiciste antes de desactivarlo; donde solo observa, tu IA de siempre sigue decidiendo, y comparas los dos antes de dejar que Jev decida.",
   },
-  "A medição do clima está desligada e continua assim: depois de ligar o Jev, religue-a na lista de tarefas que aparece aqui.": {
-    es: "La medición del clima está desactivada y sigue así: después de activar Jev, reactívala en la lista de tareas que aparece aquí.",
+  "As tarefas pausadas continuam assim: depois de ligar o Jev, religue-as na lista que aparece aqui.": {
+    es: "Las tareas pausadas siguen así: después de activar Jev, reactívalas en la lista que aparece aquí.",
   },
   "Ao ligar, cada mensagem que o cliente manda vai para a TypeSafe AI, nos Estados Unidos, uma de cada vez e sem o resto da conversa, para o Jev avaliar. Antes de sair, o sistema apaga CPF, telefone e e-mail do texto. Com o Jev desligado, nada é enviado.": {
     es: "Al activarlo, cada mensaje que envía el cliente va a TypeSafe AI, en Estados Unidos, uno por vez y sin el resto de la conversación, para que Jev lo evalúe. Antes de salir, el sistema borra del texto el CPF, el teléfono y el correo. Con Jev desactivado, no se envía nada.",
@@ -3547,14 +3572,14 @@ export const DICIONARIO: Traducoes = {
   "O Jev mede primeiro; a sua IA de sempre só entra se ele não responder.": {
     es: "Jev mide primero; tu IA de siempre solo entra si él no responde.",
   },
-  "A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela, sem nunca apagá-lo.": {
-    es: "Tu IA de siempre sigue decidiendo; Jev solo suma su alerta a la de ella, sin borrarla nunca.",
+  "O alerta do Jev passa a contar junto com o da sua IA de sempre: vale o mais forte dos dois, e o Jev nunca apaga o dela.": {
+    es: "La alerta de Jev pasa a contar junto con la de tu IA de siempre: vale la más fuerte de las dos, y Jev nunca borra la de ella.",
   },
-  "A sua IA de sempre continua sendo perguntada a cada mensagem, ao mesmo tempo que o Jev, e continua custando: vale a escolha do Jev, e a dela entra quando ele não responde. Sem a resposta da sua IA de sempre, vale o agente de antes ou o de reserva do roteador — nunca só o Jev.": {
-    es: "A tu IA de siempre se le sigue preguntando en cada mensaje, al mismo tiempo que a Jev, y sigue costando: vale la elección de Jev, y la de ella entra cuando él no responde. Sin la respuesta de tu IA de siempre, vale el agente de antes o el de respaldo del enrutador — nunca solo Jev.",
+  "A sua IA de sempre continua sendo perguntada a cada mensagem, ao mesmo tempo que o Jev, e continua custando: vale a escolha do Jev, e a dela entra quando ele não responde. Sem a resposta da sua IA de sempre, vale o agente de antes ou o “Agente de fallback” do roteador — nunca só o Jev.": {
+    es: "A tu IA de siempre se le sigue preguntando en cada mensaje, al mismo tiempo que a Jev, y sigue costando: vale la elección de Jev, y la de ella entra cuando él no responde. Sin la respuesta de tu IA de siempre, vale el agente de antes o el “Agente de fallback” del enrutador — nunca solo Jev.",
   },
-  "Decidindo sozinho — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva.": {
-    es: "Decidiendo solo: la empresa todavía no tiene una IA principal que mida el clima, así que Jev mide sin respaldo.",
+  "Decidindo sozinho no clima — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva. As outras tarefas dizem abaixo o que fazem.": {
+    es: "Decidiendo por su cuenta en el clima: la empresa todavía no tiene una IA principal que mida el clima, así que Jev mide sin respaldo. Las otras tareas dicen abajo qué hacen.",
   },
   "Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.": {
     es: "Todavía no hay mensajes medidos por los dos. La comparación aparece aquí en cuanto los haya.",
@@ -3564,9 +3589,14 @@ export const DICIONARIO: Traducoes = {
     es: "días, Jev y tu IA de siempre llegaron a la misma conclusión en",
   },
   // A concordância das tarefas que não são o clima (CartaoDoJev.tsx).
-  "dias, o Jev concordou com a sua IA de sempre em": {
-    es: "días, Jev coincidió con tu IA de siempre en",
+  "dias, o Jev e a sua IA de sempre deram o mesmo alerta (nenhum, leve ou forte) em": {
+    es: "días, Jev y tu IA de siempre dieron la misma alerta (ninguna, leve o fuerte) en",
   },
+  "dias, o Jev e a sua IA de sempre levariam o cliente ao mesmo agente em": {
+    es: "días, Jev y tu IA de siempre llevarían al cliente al mismo agente en",
+  },
+  "Só o Jev daria o alerta forte em": { es: "Solo Jev daría la alerta fuerte en" },
+  "delas — é o que muda se você deixar o Jev decidir.": { es: "de ellos: es lo que cambia si dejas que Jev decida." },
   "mensagens.": { es: "mensajes." },
   "mensagens — os dois chamariam, ou não, uma pessoa para a conversa.": {
     es: "mensajes: los dos llamarían, o no, a una persona para la conversación.",

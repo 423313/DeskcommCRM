@@ -3,7 +3,7 @@
  * intenção aparecia com o módulo DESLIGADO — amarrar a um roteiro que a
  * instalação não roda.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { authMock, flowsMock, testeMock } = vi.hoisted(() => ({
@@ -194,6 +194,24 @@ describe("Testar classificação com o Jev (onda 2 do Jev, bloco 2.2)", () => {
     expect(screen.getByTestId("teste-agente-que-atenderia").textContent).toBe("Agente Financiamento");
   });
 
+  /**
+   * Observando, com a sua IA sem responder (o cenário do e2e no CI, de chave
+   * falsa): a tela dizia "vale a escolha da sua IA" logo abaixo de "Sua IA
+   * escolheu: não respondeu".
+   */
+  it("observando, e a sua IA não respondeu: vale a regra de sempre, e não 'a escolha da sua IA'", () => {
+    comResultado({ ...RESULTADO, intent_name: null, confidence: null, agent_id: "a9", agent_name: "Agente Reserva", jev: DO_JEV });
+    const quemDecide = screen.getByTestId("teste-quem-decide").textContent;
+    expect(quemDecide).toMatch(/só observa/);
+    expect(quemDecide).toMatch(/regra de sempre/);
+    expect(quemDecide).not.toMatch(/vale a escolha da sua IA/);
+  });
+
+  it("a escolha da sua IA abaixo do mínimo leva a marca, como a do Jev", () => {
+    comResultado({ ...RESULTADO, confidence: 0.42, jev: { ...DO_JEV, estado: "decidindo", decide: true } });
+    expect(screen.getByTestId("teste-escolha-da-ia").textContent).toMatch(/42% — abaixo do mínimo/);
+  });
+
   it("ligado e sem resposta: o lado dele diz que não respondeu, sem número inventado", () => {
     comResultado({
       ...RESULTADO,
@@ -201,5 +219,10 @@ describe("Testar classificação com o Jev (onda 2 do Jev, bloco 2.2)", () => {
     });
     expect(screen.getByTestId("teste-escolha-do-jev").textContent).toContain("não respondeu");
     expect(screen.getByTestId("teste-escolha-do-jev").textContent).not.toContain("%");
+    // E leva ao motivo, que mora no cartão dele.
+    expect(within(screen.getByTestId("teste-escolha-do-jev")).getByRole("link", { name: "Ver o motivo no cartão do Jev" })).toHaveAttribute(
+      "href",
+      "/app/ai/providers",
+    );
   });
 });

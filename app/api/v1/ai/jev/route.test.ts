@@ -44,6 +44,8 @@ interface Consulta {
   eq: Array<[string, unknown]>;
   /** `.not(col, "is", valor)` — só `jev_observacoes` os aplica (as outras leituras não dependem deles aqui). */
   nao: Array<[string, unknown]>;
+  /** `.neq(col, valor)` — idem; como no SQL, o nulo não passa. */
+  neq: Array<[string, unknown]>;
   gte: Array<[string, unknown]>;
   range: [number, number] | null;
   patch: Linha | null;
@@ -71,7 +73,7 @@ const MAX_ROWS = 1000;
 function cliente(tipo: Consulta["cliente"]) {
   return {
     from(tabela: string) {
-      const c: Consulta = { cliente: tipo, tabela, eq: [], nao: [], gte: [], range: null, patch: null };
+      const c: Consulta = { cliente: tipo, tabela, eq: [], nao: [], neq: [], gte: [], range: null, patch: null };
       estado.consultas.push(c);
       const linhasDaTabela = (): Linha[] => {
         const base =
@@ -80,7 +82,11 @@ function cliente(tipo: Consulta["cliente"]) {
             : tabela === "llm_calls"
               ? estado.llmCalls
               : tabela === "jev_observacoes"
-                ? estado.observacoes.filter((l) => c.nao.every(([col, v]) => l[col] !== v))
+                ? estado.observacoes.filter(
+                    (l) =>
+                      c.nao.every(([col, v]) => l[col] !== v) &&
+                      c.neq.every(([col, v]) => l[col] !== null && l[col] !== undefined && l[col] !== v),
+                  )
                 : tabela === "org_guardrail_layers"
                   ? estado.camadas
                   : tabela === "ai_routers"
@@ -104,6 +110,10 @@ function cliente(tipo: Consulta["cliente"]) {
         limit: () => chain,
         eq: (col: string, v: unknown) => {
           c.eq.push([col, v]);
+          return chain;
+        },
+        neq: (col: string, v: unknown) => {
+          c.neq.push([col, v]);
           return chain;
         },
         range: (de: number, ate: number) => {
@@ -639,17 +649,31 @@ describe("o Jev por tarefa na rota", () => {
    * denominador, e a linha de outra organização fora de tudo.
    */
   it("GET: a concordância da manipulação sai de jev_observacoes, sem par fora da conta", async () => {
-    const obs = (concordou: boolean | null, organization_id = ORG): Linha => ({
+    const obs = (concordou: boolean | null, organization_id = ORG, rotulos: Linha = {}): Linha => ({
       organization_id,
       tarefa: "manipulacao",
       concordou,
+      rotulo_jev: "none",
+      rotulo_atual: concordou === null ? null : "none",
+      ...rotulos,
     });
     estado.settings = { jev: { ligado: true, aceite: ACEITE_ANTIGO } };
-    estado.observacoes = [obs(true), obs(true), obs(false), obs(null), obs(true, OUTRA_ORG)];
+    estado.observacoes = [
+      obs(true),
+      obs(true),
+      // Só o Jev deu o forte: é o que decidir muda na manipulação.
+      obs(false, ORG, { rotulo_jev: "high", rotulo_atual: "low" }),
+      // Sem par: não conta em nada.
+      obs(null, ORG, { rotulo_jev: "high" }),
+      obs(true, OUTRA_ORG),
+    ];
 
     const d = (await ler()).corpo.data;
     const manipulacao = d.por_tarefa.find((t: { id: string }) => t.id === "manipulacao");
-    expect(manipulacao.observacao).toEqual({ dias: 30, comparadas: 3, concordaram: 2 });
+    expect(manipulacao.observacao).toEqual({ dias: 30, comparadas: 3, concordaram: 2, so_o_jev_alto: 1 });
+    // O roteador não tem essa conta: decidir nele troca a escolha, não soma alerta.
+    const roteador = d.por_tarefa.find((t: { id: string }) => t.id === "roteador");
+    expect(roteador.observacao).not.toHaveProperty("so_o_jev_alto");
     // A do clima continua sendo a das notas, também em `numeros` (a forma da onda 1).
     const clima = d.por_tarefa.find((t: { id: string }) => t.id === "clima");
     expect(clima.observacao).toEqual(d.numeros.observacao);
@@ -689,13 +713,21 @@ describe("o Jev por tarefa na rota", () => {
       ["roteador", true],
     ]);
     // O ativo de OUTRA empresa não conta — o filtro é o da sessão.
-    estado.roteadores = [{ organization_id: OUTRA_ORG, is_active: true, id: "r-outra" }];
+    const intencoes = (n: number) => [{ count: n }];
+    estado.roteadores = [{ organization_id: OUTRA_ORG, is_active: true, id: "r-outra", intencoes: intencoes(2) }];
     expect(await semRoteador()).toEqual([
       ["clima", false],
       ["manipulacao", false],
       ["roteador", true],
     ]);
-    estado.roteadores.push({ organization_id: ORG, is_active: true, id: "r-nossa" });
+    // Ativo, mas sem intenção nenhuma (o estado logo depois de criar um) ou com
+    // mais do que cabe numa pergunta: o Jev nunca é perguntado, e "Só observa"
+    // prometeria uma comparação que nunca vem.
+    estado.roteadores.push({ organization_id: ORG, is_active: true, id: "r-vazio", intencoes: intencoes(0) });
+    expect((await semRoteador())[2]).toEqual(["roteador", true]);
+    estado.roteadores.push({ organization_id: ORG, is_active: true, id: "r-cheio", intencoes: intencoes(255) });
+    expect((await semRoteador())[2]).toEqual(["roteador", true]);
+    estado.roteadores.push({ organization_id: ORG, is_active: true, id: "r-nossa", intencoes: intencoes(2) });
     expect(await semRoteador()).toEqual([
       ["clima", false],
       ["manipulacao", false],

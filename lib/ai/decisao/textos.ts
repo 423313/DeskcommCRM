@@ -11,6 +11,7 @@
  * não serve ao Jev, que não se escolhe por ponto.
  */
 import type { MotivoComRede } from "./cliente";
+import { TAREFA_DO_CLIMA } from "./tarefas";
 
 export function codigoDoErroDoJev(motivo: MotivoComRede): `jev_${MotivoComRede}` {
   return `jev_${motivo}`;
@@ -58,17 +59,35 @@ export const JEV_FALHOU_AO_LADO =
 export const JEV_FALHOU_E_A_IA_COBRIU = "O Jev decide esta tarefa e não respondeu: a sua IA de sempre decidiu no lugar dele.";
 
 /**
- * O que o diálogo de exclusão diz sobre a chave que o Jev usa. São três
- * desfechos, e a frase única de antes era falsa em dois: sobrando outra chave
- * apta, o Jev não desliga; sem IA principal, ninguém volta a medir o clima.
+ * O que o diálogo de exclusão diz sobre a chave que o Jev usa — frase a frase,
+ * cada uma traduzida sozinha (`avisoAoExcluirAChaveDoJev`).
  */
 export const AO_EXCLUIR_A_CHAVE_DO_JEV = {
   outraChave: "O Jev usa esta chave. Sem ela, ele passa a usar a outra chave dele que já passou no teste.",
-  iaPrincipalAssume:
-    "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa volta a ser medido só pela sua IA principal.",
-  climaPara:
-    "O Jev usa esta chave. Sem ela, o Jev é desligado e o clima da conversa deixa de ser medido: ninguém da equipe é chamado quando um cliente se irrita.",
+  usada: "O Jev usa esta chave. Sem ela, o Jev é desligado e as tarefas em “Usada em” param.",
+  nenhumaTarefa: "O Jev está ligado, mas nenhuma tarefa dele usa esta chave agora. Sem ela, o Jev é desligado.",
+  climaComIa: "O clima da conversa volta a ser medido só pela sua IA principal.",
+  climaSemIa: "O clima da conversa deixa de ser medido: ninguém da equipe é chamado quando um cliente se irrita.",
 } as const;
+
+/**
+ * O aviso, a partir das tarefas que a chave SERVE agora — as mesmas do "Usada
+ * em" (`app/app/ai/credentials/page.tsx`, por rótulo). Antes ele olhava só a
+ * chave e a IA principal: com o clima pausado, afirmava que "o clima deixa de
+ * ser medido", um efeito que já valia, e dizia "O Jev usa esta chave" com o
+ * "Usada em" vazio. Sobrando outra chave apta, o Jev não desliga.
+ */
+export function avisoAoExcluirAChaveDoJev(c: {
+  temOutraChave: boolean;
+  tarefas: readonly string[];
+  temIaPrincipal: boolean;
+}): string[] {
+  const t = AO_EXCLUIR_A_CHAVE_DO_JEV;
+  if (c.temOutraChave) return [t.outraChave];
+  if (c.tarefas.length === 0) return [t.nenhumaTarefa];
+  if (!c.tarefas.includes(TAREFA_DO_CLIMA.rotulo)) return [t.usada];
+  return [t.usada, c.temIaPrincipal ? t.climaComIa : t.climaSemIa];
+}
 
 /**
  * O aviso da Central, para falha que não passa sozinha (`exigeAcao`) e, sem IA

@@ -5398,5 +5398,8 @@
   "Não dá para remarcar para esse horário — {motivo}.": "无法改期到该时间 — {motivo}。",
   "o compromisso": "该日程",
   "Entendi": "明白了",
-  "e-mail do convidado inválido": "受邀者邮箱无效"
+  "e-mail do convidado inválido": "受邀者邮箱无效",
+  "O Jev só observa esta tarefa. Sem a resposta da sua IA, em produção vale a regra de sempre: o agente que já atendia a conversa ou o “Agente de fallback” do roteador.": "Jev 仅观察此任务。没有您的 AI 的回应时，在生产环境中沿用原有规则：继续由已在接待该对话的 AI 智能体处理，或交给分配规则的“回退 AI 智能体”。",
+  "Ver o motivo no cartão do Jev": "在 Jev 卡片中查看原因",
+  "Nova": "新"
 }

@@ -1,10 +1,11 @@
 /**
  * PONTO MARCADO COMO "DECISÃO RÁPIDA" TEM CHAMADOR DO JEV — e vice-versa.
  *
- * `decisaoRapida` no registro é o que a tela vai oferecer como "tarefa do Jev".
- * Marcado sem chamador, é botão que não controla nada: o dono liga o Jev, paga,
- * e nada muda. Chamador sem marca é o avesso: o Jev decide num ponto que a tela
- * não mostra. Mesmo molde de `pontos-de-ia-completude.test.ts`, lendo o
+ * `decisaoRapida` no registro diz que o ponto tem uma pergunta para o Jev; a
+ * tela oferece as TAREFAS (`TAREFAS_DO_JEV`, e todo ponto marcado tem uma —
+ * `lib/ai/decisao/tarefas.test.ts`). Marcado sem chamador, é tarefa que não
+ * controla nada: o dono liga o Jev, paga, e nada muda. Chamador sem marca é o
+ * avesso: o Jev decide num ponto que a tela não mostra. Mesmo molde de `pontos-de-ia-completude.test.ts`, lendo o
  * CÓDIGO-FONTE de `lib/ai/decisao/`, onde mora todo chamador do Jev.
  *
  * Escrever `ponto: "x"` numa função que ninguém chama também é botão que não

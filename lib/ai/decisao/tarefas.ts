@@ -58,6 +58,12 @@ export interface TarefaDoJev {
   aoDecidir: string;
   aoDecidirNoPonto: string;
   /**
+   * A frase da concordância no cartão, antes e depois do "X de Y": diz EM QUE
+   * os dois concordaram. Sem ela, a manipulação e o roteador liam "o Jev
+   * concordou com a sua IA de sempre", e o leigo não sabia no quê.
+   */
+  concordancia: { antes: string; depois: string };
+  /**
    * A camada de segurança que ela ACOMPANHA, quando há uma: desligada para a
    * organização, o turno não pergunta nem à IA de sempre nem ao Jev, e a tarefa
    * não roda qualquer que seja o estado dela (`tarefaSemCamada`).
@@ -85,6 +91,11 @@ export const TAREFA_DO_CLIMA = {
   // A IA de sempre só é chamada quando o Jev falha (`workers/ai-sentiment-worker.ts`).
   aoDecidir: "O Jev mede primeiro; a sua IA de sempre só entra se ele não responder.",
   aoDecidirNoPonto: "O Jev mede primeiro; o modelo abaixo é a reserva.",
+  // A régua do clima é o corte da passagem para humano (`app/api/v1/ai/jev/route.ts`).
+  concordancia: {
+    antes: "dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em",
+    depois: "mensagens — os dois chamariam, ou não, uma pessoa para a conversa.",
+  },
   rotulo: "Medir o clima da conversa",
   oQueFaz:
     "Percebe, geralmente em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
@@ -103,8 +114,17 @@ export const TAREFA_DA_MANIPULACAO = {
   primitiva: "choice",
   alcance: "mensagem",
   familia: "soma",
-  aoDecidir: "A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela, sem nunca apagá-lo.",
+  // Sem "a sua IA segue decidindo" ao lado do selo "Decide": o verbo era o
+  // mesmo para os dois, e o leigo não sabia o que tinha ligado.
+  aoDecidir:
+    "O alerta do Jev passa a contar junto com o da sua IA de sempre: vale o mais forte dos dois, e o Jev nunca apaga o dela.",
   aoDecidirNoPonto: "O modelo abaixo decide; o Jev soma o sinal dele, sem nunca apagar o do modelo.",
+  // A régua é o nível exato (nenhum, leve, forte) — e o cartão mostra junto
+  // quantas vezes só o Jev daria o forte, que é o que decidir muda.
+  concordancia: {
+    antes: "dias, o Jev e a sua IA de sempre deram o mesmo alerta (nenhum, leve ou forte) em",
+    depois: "mensagens.",
+  },
   camada: "jailbreak",
   // O nome do ponto ("Barrar…") é o do classificador; o Jev não barra nada —
   // percebe e soma o sinal. Dizer "barrar" ao leigo prometeria um bloqueio.
@@ -129,10 +149,17 @@ export const TAREFA_DO_ROTEADOR = {
   familia: "substitui",
   // Os dois perguntam a cada mensagem (`resolve-turn-agent.ts`), e sem a
   // resposta da IA de sempre a do Jev não vale (R2) — ao contrário do clima.
+  // "Agente de fallback" é o nome do campo na tela do roteador: "o de reserva
+  // do roteador" não levava o leigo ao campo que ele precisa conferir.
   aoDecidir:
-    "A sua IA de sempre continua sendo perguntada a cada mensagem, ao mesmo tempo que o Jev, e continua custando: vale a escolha do Jev, e a dela entra quando ele não responde. Sem a resposta da sua IA de sempre, vale o agente de antes ou o de reserva do roteador — nunca só o Jev.",
+    "A sua IA de sempre continua sendo perguntada a cada mensagem, ao mesmo tempo que o Jev, e continua custando: vale a escolha do Jev, e a dela entra quando ele não responde. Sem a resposta da sua IA de sempre, vale o agente de antes ou o “Agente de fallback” do roteador — nunca só o Jev.",
   aoDecidirNoPonto:
     "Vale a escolha do Jev, mas o modelo abaixo continua sendo chamado a cada mensagem: é a reserva quando o Jev não responde, e sem ele o Jev não escolhe sozinho.",
+  // A régua é o MESMO AGENTE FINAL (`./roteador.ts`), não a mesma intenção.
+  concordancia: {
+    antes: "dias, o Jev e a sua IA de sempre levariam o cliente ao mesmo agente em",
+    depois: "mensagens.",
+  },
   rotulo: "Escolher qual agente atende",
   oQueFaz:
     "Lê a última mensagem do cliente, sozinha, e escolhe entre as intenções do seu roteador qual agente deve atender.",
@@ -200,11 +227,38 @@ export function tarefaSemCamada(
   return tarefa.camada !== undefined && !camadas[tarefa.camada];
 }
 
+/** O fornecedor aceita até 255 opções numa escolha, e uma delas é "nenhuma". */
+export const MEMBROS_NO_MAXIMO = 254;
+
 /**
- * A tarefa do roteador numa organização sem roteador de intenção ativo: o turno
- * não escolhe agente, e o Jev não tem com quem comparar. `temRoteadorAtivo` é
- * lido por quem chama (`ai_routers.is_active`).
+ * Um roteador com esta quantidade de intenções pode ser perguntado ao Jev? Sem
+ * nenhuma, ou com mais do que cabe numa escolha, a pergunta não sai
+ * (`perguntaDoRoteador`, `./roteador.ts`).
  */
-export function tarefaSemRoteador(tarefa: Pick<TarefaDoJev, "id">, temRoteadorAtivo: boolean): boolean {
-  return tarefa.id === TAREFA_DO_ROTEADOR.id && !temRoteadorAtivo;
+export function roteadorCabeNaPergunta(intencoes: number): boolean {
+  return intencoes >= 1 && intencoes <= MEMBROS_NO_MAXIMO;
+}
+
+/**
+ * Das linhas de `ai_routers` ativos lidas com `intencoes:ai_router_members(count)`
+ * (o PostgREST devolve `[{ count }]`), alguma pode ser perguntada ao Jev?
+ */
+export function algumRoteadorQuePergunta(roteadores: ReadonlyArray<{ intencoes?: unknown }>): boolean {
+  return roteadores.some((r) => {
+    const [contagem] = Array.isArray(r.intencoes) ? (r.intencoes as Array<{ count?: unknown }>) : [];
+    return typeof contagem?.count === "number" && roteadorCabeNaPergunta(contagem.count);
+  });
+}
+
+/**
+ * A tarefa do roteador numa organização sem um roteador de intenção ativo que o
+ * Jev possa perguntar: o turno não escolhe agente (ou o Jev nunca é perguntado,
+ * com o roteador sem intenções ou com mais do que cabe), e "observando"
+ * prometeria uma comparação que nunca vem. `temRoteadorQuePergunta` é lido por
+ * quem chama: algum `ai_routers.is_active` com `roteadorCabeNaPergunta`.
+ * ponytail: vale "algum" roteador da organização, e o turno usa o do número; a
+ * organização com um roteador bom e outro vazio vê a tarefa rodando.
+ */
+export function tarefaSemRoteador(tarefa: Pick<TarefaDoJev, "id">, temRoteadorQuePergunta: boolean): boolean {
+  return tarefa.id === TAREFA_DO_ROTEADOR.id && !temRoteadorQuePergunta;
 }

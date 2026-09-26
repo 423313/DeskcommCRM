@@ -67,7 +67,13 @@ export interface DadosDoJev {
     reservas: number;
     /** Conversas em que a nota do Jev ficou abaixo do corte da passagem para humano. */
     irritados: number;
-    observacao: { dias: number; comparadas: number; concordaram: number };
+    observacao: {
+      dias: number;
+      comparadas: number;
+      concordaram: number;
+      /** Só a manipulação: em quantas das comparadas SÓ o Jev deu o alerta forte. */
+      so_o_jev_alto?: number;
+    };
   };
   /** `tarefa`: o rótulo da tarefa que falhou. Ausente na imagem anterior. */
   ultima_falha: { motivo: string | null; em: string; tarefa?: string | null } | null;
@@ -115,12 +121,14 @@ function concordanciaDa(tarefa: TarefaNoCartao, d: DadosDoJev): Concordancia | n
 }
 
 /**
- * Como o clima volta ao ligar o Jev. O `modo` sozinho mentia: o clima desligado
- * guarda o `modo` de antes, e o cartão prometia "volta decidindo".
+ * Como a tarefa volta ao ligar o Jev (`ao_ligar`, da rota). Na resposta da
+ * imagem anterior só o clima existe, pelo `modo` — que sozinho mentia: o clima
+ * desligado guarda o `modo` de antes, e o cartão prometia "volta decidindo".
  */
-function climaAoLigar(d: DadosDoJev): EstadoDaTarefa {
-  const clima = d.por_tarefa?.find((t) => t.id === TAREFA_DO_CLIMA.id);
-  return clima?.ao_ligar ?? (d.config.modo === "decide" ? "decidindo" : "observando");
+function estadoAoLigar(tarefa: TarefaNoCartao, d: DadosDoJev): EstadoDaTarefa {
+  if (tarefa.ao_ligar) return tarefa.ao_ligar;
+  if (tarefa.id === TAREFA_DO_CLIMA.id) return d.config.modo === "decide" ? "decidindo" : "observando";
+  return "observando";
 }
 
 function tarefasDoCartao(d: DadosDoJev): TarefaNoCartao[] {
@@ -511,34 +519,56 @@ function ProntoParaLigar({ dados, recarregar }: { dados: DadosDoJev; recarregar:
   // O aceite é da empresa, e vale uma vez (D6): religar não pergunta de novo.
   const aceite = dados.config.aceite;
   const pedeAceite = aceite === null;
-  const clima = climaAoLigar(dados);
+  // Cada tarefa diz como volta — a frase única de antes falava do clima como se
+  // fosse o Jev inteiro, e errava quando as outras tarefas voltavam diferentes.
+  const tarefas = tarefasDoCartao(dados).map((tarefa) => ({ tarefa, aoLigar: estadoAoLigar(tarefa, dados) }));
+  const doClima = tarefas.find(({ tarefa }) => tarefa.id === TAREFA_DO_CLIMA.id);
+  const climaSozinho = !dados.tem_ia_de_sempre && doClima !== undefined && doClima.aoLigar !== "desligada";
+  const climaPausadoSemIa = !dados.tem_ia_de_sempre && doClima?.aoLigar === "desligada";
+  const algumaDecide = tarefas.some(({ tarefa, aoLigar }) => aoLigar === "decidindo" && !parada(tarefa));
+  const algumaPausada = tarefas.some(({ aoLigar }) => aoLigar === "desligada");
 
   return (
     <div className="mt-4 space-y-4">
       <div>
         <p className="text-sm font-medium">{t("O que o Jev vai fazer")}</p>
         <ul className="mt-1 space-y-1 text-sm">
-          {dados.tarefas.map((tarefa) => (
-            <li key={tarefa.id}>
-              <span className="font-medium">{t(tarefa.rotulo)}</span>
-              <span className="text-muted-foreground"> — {t(tarefa.oQueOJevFaz)}</span>
+          {tarefas.map(({ tarefa, aoLigar }) => (
+            <li key={tarefa.id} data-testid={`jev-ao-ligar-${tarefa.id}`}>
+              <span className="font-medium">{t(tarefa.rotulo)}</span>{" "}
+              <span className="text-xs text-muted-foreground">
+                (
+                {aoLigar === "desligada"
+                  ? t("Pausada")
+                  : parada(tarefa)
+                    ? t("Não roda")
+                    : tarefa.id === TAREFA_DO_CLIMA.id && climaSozinho
+                      ? t("Decide sozinho")
+                      : aoLigar === "decidindo"
+                        ? t("Decide")
+                        : t("Só observa")}
+                )
+              </span>
+              <span className="text-muted-foreground"> — {t(tarefa.oQueFaz)}</span>
             </li>
           ))}
         </ul>
         <p className="mt-2 text-xs text-muted-foreground" data-testid="jev-ao-ligar">
-          {clima === "desligada"
+          {climaSozinho
             ? t(
-                "A medição do clima está desligada e continua assim: depois de ligar o Jev, religue-a na lista de tarefas que aparece aqui.",
+                "Sem uma IA principal que meça o clima, o Jev já começa decidindo sozinho nessa tarefa: não há com quem comparar nem quem cubra uma falha dele.",
               )
-            : !dados.tem_ia_de_sempre
+            : algumaDecide
               ? t(
-                  "Sem uma IA principal que meça o clima, ele já começa decidindo sozinho: não há com quem comparar nem quem cubra uma falha dele.",
+                  "Onde ele decide, vale a escolha que você fez antes de desligá-lo; onde só observa, a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.",
                 )
-              : clima === "decidindo"
-                ? t("Ele volta decidindo, como estava antes de ser desligado.")
-                : t(
-                    "Ele começa só observando: a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.",
-                  )}
+              : t(
+                  "Onde ele só observa, a sua IA de sempre continua decidindo, e você compara os dois antes de deixar o Jev decidir.",
+                )}{" "}
+          {algumaPausada &&
+            t("As tarefas pausadas continuam assim: depois de ligar o Jev, religue-as na lista que aparece aqui.")}{" "}
+          {climaPausadoSemIa &&
+            t("Sem uma IA principal, o clima religado volta decidindo sozinho: não há com quem comparar nem quem cubra uma falha do Jev.")}
         </p>
       </div>
 
@@ -612,8 +642,12 @@ function Ligado({
   const segundos = new Intl.NumberFormat(tagDoIdioma, { maximumFractionDigits: 1 });
   const inteiro = new Intl.NumberFormat(tagDoIdioma);
   // Só com o Jev medindo de verdade a linha de cada tarefa mostra o estado e o
-  // botão — e em pausa também, que é de onde se religa a tarefa desligada.
-  const rodando = estado === "observando" || estado === "decidindo" || estado === "em_pausa";
+  // botão — e em pausa também, que é de onde se religa a tarefa desligada. E
+  // decidindo sozinho: o clima decide sem reserva, mas as outras tarefas rodam
+  // como sempre, e sem a linha delas a única saída de uma tarefa nova era
+  // desligar o Jev inteiro.
+  const rodando = estado === "observando" || estado === "decidindo" || estado === "em_pausa" || estado === "sozinho";
+  const todasPausadas = tarefasDoCartao(dados).every((t) => t.estado === "desligada");
   const falha = dados.ultima_falha;
   const frasesDeFalha: Readonly<Record<string, string>> = O_QUE_FAZER_DO_JEV;
   const oQueFazer = falha?.motivo ? frasesDeFalha[falha.motivo] : undefined;
@@ -628,19 +662,28 @@ function Ligado({
             ? t("Decidindo em parte — cada tarefa abaixo diz se o Jev decide ou só observa nela.")
             : t("Decidindo — cada tarefa abaixo diz o que o Jev decide nela."))}
         {estado === "sozinho" &&
-          t("Decidindo sozinho — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva.")}
+          t(
+            "Decidindo sozinho no clima — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva. As outras tarefas dizem abaixo o que fazem.",
+          )}
         {estado === "parado" &&
           t("Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.")}
         {estado === "em_pausa" &&
-          t("Ligado, mas com todas as tarefas desligadas: o Jev não mede nada até você religar uma abaixo.")}
+          (todasPausadas
+            ? t("Ligado, mas com todas as tarefas desligadas: o Jev não mede nada até você religar uma abaixo.")
+            : t(
+                "Ligado, mas nenhuma tarefa está rodando agora: o Jev não mede nada. Veja abaixo o que falta nas que dizem “Não roda”, ou religue uma pausada.",
+              ))}
       </p>
 
       {/* Uma linha por tarefa: o estado dela e o "Deixar o Jev decidir" dela.
-          Com a chave parada ou sem a IA de sempre, o selo do cartão já diz o
-          estado de todas, e a linha não repete nem oferece o botão. */}
+          Com a chave parada, o selo do cartão já diz o estado de todas, e a
+          linha não repete nem oferece o botão. Sem a IA de sempre, o clima
+          decide sozinho e só se pausa; as outras seguem como sempre. */}
       <ul className="divide-y divide-border rounded-md border border-border" data-testid="jev-tarefas">
         {tarefasDoCartao(dados).map((tarefa) => {
           const aoDecidir = doRegistro(tarefa.id)?.aoDecidir;
+          const climaSozinho = estado === "sozinho" && tarefa.id === TAREFA_DO_CLIMA.id;
+          const climaSemIa = tarefa.id === TAREFA_DO_CLIMA.id && !dados.tem_ia_de_sempre;
           return (
           <li
             key={tarefa.id}
@@ -651,34 +694,58 @@ function Ligado({
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{t(tarefa.rotulo)}</span>
               {rodando && (
-                <Badge variant={roda(tarefa) && tarefa.estado === "decidindo" ? "success" : "neutral"}>
+                <Badge
+                  variant={
+                    climaSozinho ? "warning" : roda(tarefa) && tarefa.estado === "decidindo" ? "success" : "neutral"
+                  }
+                >
+                  {/* "Pausada", o verbo do botão: "Desligada" ao lado de "Pausar
+                      esta tarefa" e do "Desligar" do Jev inteiro confundia os dois. */}
                   {tarefa.estado === "desligada"
-                    ? t("Desligada")
+                    ? t("Pausada")
                     : parada(tarefa)
                       ? t("Não roda")
-                      : tarefa.estado === "observando"
-                        ? t("Só observa")
-                        : t("Decide")}
+                      : climaSozinho
+                        ? t("Decide sozinho")
+                        : tarefa.estado === "observando"
+                          ? t("Só observa")
+                          : t("Decide")}
                 </Badge>
               )}
-              {tarefa.novo && <Badge variant="info">{t("Novo")}</Badge>}
+              {/* "Nova": a tarefa é feminina. A chave "Novo" é a do agente novo. */}
+              {tarefa.novo && <Badge variant="info">{t("Nova")}</Badge>}
             </div>
+
+            {/* O selo sozinho não explicava nada e nunca sumia: diz o que ele
+                quer dizer, e "Manter só observando" (abaixo) o tira. */}
+            {rodando && tarefa.novo && tarefa.estado === "observando" && (
+              <p className="text-sm text-muted-foreground" data-testid={`jev-nova-${tarefa.id}`}>
+                {t("Começou sozinha, só observando: nada muda para o cliente até você deixar o Jev decidir.")}
+              </p>
+            )}
 
             {/* Sem esta linha, a tarefa ficava "Só observa" esperando uma
                 comparação que nunca vem: o turno só pergunta ao Jev onde a IA
-                de sempre também pergunta. Hoje só a manipulação acompanha camada. */}
+                de sempre também pergunta. Hoje só a manipulação acompanha camada.
+                O nome é o que a tela do agente mostra — "Segurança" é só o nosso. */}
             {rodando && tarefa.estado !== "desligada" && tarefa.sem_camada && (
               <p className="text-sm text-muted-foreground" data-testid={`jev-sem-camada-${tarefa.id}`}>
                 {t(
-                  "Não roda agora: a verificação “Detectar tentativa de manipular o assistente” está desligada na Segurança do agente, e o Jev só pergunta onde a sua IA de sempre também pergunta.",
-                )}
+                  "Não roda agora: a verificação “Detectar tentativa de manipular o assistente” está desligada. Ela vale para a empresa toda: ligue-a abrindo qualquer agente, na aba “Confere antes de enviar”, em “Antes de o assistente ler”. O Jev só pergunta onde a sua IA de sempre também pergunta.",
+                )}{" "}
+                <Link className="underline underline-offset-4" href="/app/ai/agents">
+                  {t("Abrir os agentes")}
+                </Link>
               </p>
             )}
             {rodando && tarefa.estado !== "desligada" && tarefa.sem_roteador && (
               <p className="text-sm text-muted-foreground" data-testid={`jev-sem-roteador-${tarefa.id}`}>
                 {t(
-                  "Não roda agora: nenhum roteador de intenção está ativo. O Jev só escolhe o agente onde um roteador já escolhe — ative um em IA › Roteadores.",
-                )}
+                  "Não roda agora: nenhum roteador de intenção ativo tem intenções para o Jev escolher. O Jev só escolhe o agente onde um roteador já escolhe — ative um, com as intenções dele, em Roteadores.",
+                )}{" "}
+                <Link className="underline underline-offset-4" href="/app/ai/routers">
+                  {t("Abrir os roteadores")}
+                </Link>
               </p>
             )}
 
@@ -691,7 +758,7 @@ function Ligado({
             {/* A concordância de cada tarefa com a IA de sempre — o que se lê antes
                 de deixar o Jev decidir. O clima conta "chamariam uma pessoa"; as
                 outras, o mesmo rótulo (em `jev_observacoes`). */}
-            {rodando && roda(tarefa) && tarefa.estado === "observando" && concordanciaDa(tarefa, dados) !== null && (
+            {rodando && roda(tarefa) && tarefa.estado === "observando" && !climaSozinho && concordanciaDa(tarefa, dados) !== null && (
               <ConcordanciaDaTarefa
                 tarefa={tarefa}
                 o={concordanciaDa(tarefa, dados)!}
@@ -701,8 +768,9 @@ function Ligado({
 
             {dados.pode_editar && rodando && (
               <div className="flex flex-wrap items-center gap-3">
-                {/* Parada pela camada ou sem roteador, não há o que comparar antes de decidir. */}
-                {tarefa.estado === "observando" && !parada(tarefa) && (
+                {/* Parada pela camada ou sem roteador, não há o que comparar antes
+                    de decidir; e o clima sem a IA de sempre já decide sozinho. */}
+                {tarefa.estado === "observando" && !parada(tarefa) && !climaSozinho && (
                   <Button
                     size="sm"
                     disabled={enviando}
@@ -713,7 +781,7 @@ function Ligado({
                 )}
                 {/* Sem este caminho, quem deixou o Jev decidir só voltaria a
                     comparar desligando — e religar mantém o estado gravado. */}
-                {tarefa.estado === "decidindo" && (
+                {tarefa.estado === "decidindo" && !climaSozinho && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -723,6 +791,22 @@ function Ligado({
                     }
                   >
                     {t("Voltar a só observar")}
+                  </Button>
+                )}
+                {/* Grava o estado que já vale: o selo "Nova" sai, e nada muda. */}
+                {tarefa.novo && tarefa.estado === "observando" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={enviando}
+                    onClick={() =>
+                      void mudar(
+                        { tarefa: tarefa.id, estado: "observando" },
+                        t("A tarefa segue só observando."),
+                      )
+                    }
+                  >
+                    {t("Manter só observando")}
                   </Button>
                 )}
                 {/* Uma tarefa só, sem desligar o Jev: a tarefa nova começa
@@ -738,7 +822,10 @@ function Ligado({
                     {t("Pausar esta tarefa")}
                   </Button>
                 )}
-                {/* Desligada, a tarefa volta observando — nunca direto a decidir. */}
+                {/* Pausada, a tarefa volta observando — nunca direto a decidir.
+                    A exceção é o clima sem a IA de sempre: não há com quem
+                    comparar, e o worker o deixa decidir sozinho (DEC-012 #5). O
+                    aviso vem ANTES do clique. */}
                 {tarefa.estado === "desligada" && (
                   <Button
                     size="sm"
@@ -750,6 +837,13 @@ function Ligado({
                   </Button>
                 )}
               </div>
+            )}
+            {dados.pode_editar && rodando && tarefa.estado === "desligada" && climaSemIa && (
+              <p className="text-xs text-muted-foreground" data-testid="jev-religar-clima-sozinho">
+                {t(
+                  "Sem uma IA principal, o clima religado volta decidindo sozinho: não há com quem comparar nem quem cubra uma falha do Jev.",
+                )}
+              </p>
             )}
           </li>
           );
@@ -840,6 +934,8 @@ function ConcordanciaDaTarefa({
 }) {
   const t = useT();
   const doClima = tarefa.id === TAREFA_DO_CLIMA.id;
+  // Cada tarefa diz EM QUE os dois concordaram — a régua dela, do registro.
+  const frase = (doRegistro(tarefa.id) ?? TAREFA_DO_CLIMA).concordancia;
   // O testid do clima é o da onda 1: as specs o leem.
   return (
     <p className="text-sm" data-testid={doClima ? "jev-concordancia" : `jev-concordancia-${tarefa.id}`}>
@@ -847,14 +943,20 @@ function ConcordanciaDaTarefa({
         t("Ainda não há mensagens medidas pelos dois. A comparação aparece aqui assim que houver.")
       ) : (
         <>
-          {t("Nos últimos")} {o.dias}{" "}
-          {doClima
-            ? t("dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em")
-            : t("dias, o Jev concordou com a sua IA de sempre em")}{" "}
+          {t("Nos últimos")} {o.dias} {t(frase.antes)}{" "}
           <span className="font-mono font-medium">
             {formatar(o.concordaram)} {t("de")} {formatar(o.comparadas)}
           </span>{" "}
-          {doClima ? t("mensagens — os dois chamariam, ou não, uma pessoa para a conversa.") : t("mensagens.")}
+          {t(frase.depois)}
+          {/* O que decidir muda na manipulação: o alerta forte que só ele daria. */}
+          {o.so_o_jev_alto !== undefined && (
+            <>
+              {" "}
+              {t("Só o Jev daria o alerta forte em")}{" "}
+              <span className="font-mono font-medium">{formatar(o.so_o_jev_alto)}</span>{" "}
+              {t("delas — é o que muda se você deixar o Jev decidir.")}
+            </>
+          )}
         </>
       )}
     </p>

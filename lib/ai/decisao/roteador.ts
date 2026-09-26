@@ -55,11 +55,10 @@ import type { EstadoDaTarefa, EstadoQuePergunta } from "./config";
 import { podeTentar, registrarFalha, registrarSucesso } from "./disjuntor";
 import { estadoDaTarefaNoPool, registrarFalhaQuePedeAcao } from "./pool";
 import { decidirNoPonto, type DependenciasDoPonto } from "./ponto";
-import { TAREFA_DO_ROTEADOR } from "./tarefas";
+import { roteadorCabeNaPergunta, TAREFA_DO_ROTEADOR } from "./tarefas";
 import { codigoDoErroDoJev } from "./textos";
 
-/** O fornecedor aceita até 255 opções numa escolha, e uma delas é "nenhuma". */
-export const MEMBROS_NO_MAXIMO = 254;
+export { MEMBROS_NO_MAXIMO } from "./tarefas";
 
 /** "Nenhuma se aplica" — a mesma palavra do classificador de sempre (`parseIntentVerdict`). */
 const NENHUMA = "none";
@@ -78,7 +77,7 @@ const INSTRUCAO =
  * "nenhuma".
  */
 export function perguntaDoRoteador(membros: readonly RouterMember[]): Pergunta | null {
-  if (membros.length < 1 || membros.length > MEMBROS_NO_MAXIMO) return null;
+  if (!roteadorCabeNaPergunta(membros.length)) return null;
   const criterios: Record<string, string> = {};
   for (const m of membros) {
     const exemplos = m.examples.length > 0 ? ` Exemplos: ${m.examples.join("; ")}.` : "";

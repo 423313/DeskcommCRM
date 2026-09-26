@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AO_EXCLUIR_A_CHAVE_DO_JEV,
+  avisoAoExcluirAChaveDoJev,
   AVISO_DO_JEV,
   avisoDoJevNaCentral,
   JEV_FALHOU_AO_LADO,
@@ -17,6 +18,7 @@ import {
   JEV_FALHOU_SEM_RESERVA,
   O_QUE_FAZER_DO_JEV,
 } from "@/lib/ai/decisao/textos";
+import { TAREFA_DO_CLIMA, TAREFA_DO_ROTEADOR } from "@/lib/ai/decisao/tarefas";
 import { EXPLICACAO_DA_ORIGEM } from "@/lib/ai/pontos/resolver";
 import { DICIONARIO, traduzir } from "@/lib/i18n/dicionario";
 
@@ -63,6 +65,41 @@ describe("textos do Jev para quem opera", () => {
   // (`./pool.ts`): um clique de teste não atendeu ninguém.
   it("a falha do Jev ao lado não afirma que houve atendimento", () => {
     expect(JEV_FALHOU_AO_LADO).not.toMatch(/atendimento/i);
+  });
+
+  /**
+   * O aviso de exclusão sai das tarefas que a chave serve agora (o "Usada em"),
+   * e não só da chave: com o clima pausado, ele afirmava que "o clima deixa de
+   * ser medido" — efeito que já valia — e dizia "O Jev usa esta chave" com o
+   * "Usada em" vazio.
+   */
+  describe("o aviso ao excluir a chave do Jev", () => {
+    const CLIMA = TAREFA_DO_CLIMA.rotulo;
+    const ROTEADOR = TAREFA_DO_ROTEADOR.rotulo;
+    it("sobrando outra chave apta, o Jev não desliga", () => {
+      expect(avisoAoExcluirAChaveDoJev({ temOutraChave: true, tarefas: [CLIMA], temIaPrincipal: false })).toEqual([
+        AO_EXCLUIR_A_CHAVE_DO_JEV.outraChave,
+      ]);
+    });
+    it("clima entre as tarefas: diz quem mede sem ele", () => {
+      expect(avisoAoExcluirAChaveDoJev({ temOutraChave: false, tarefas: [CLIMA, ROTEADOR], temIaPrincipal: true })).toEqual([
+        AO_EXCLUIR_A_CHAVE_DO_JEV.usada,
+        AO_EXCLUIR_A_CHAVE_DO_JEV.climaComIa,
+      ]);
+      expect(avisoAoExcluirAChaveDoJev({ temOutraChave: false, tarefas: [CLIMA], temIaPrincipal: false })).toContain(
+        AO_EXCLUIR_A_CHAVE_DO_JEV.climaSemIa,
+      );
+    });
+    it("clima pausado: não fala do clima", () => {
+      const aviso = avisoAoExcluirAChaveDoJev({ temOutraChave: false, tarefas: [ROTEADOR], temIaPrincipal: false });
+      expect(aviso).toEqual([AO_EXCLUIR_A_CHAVE_DO_JEV.usada]);
+      expect(aviso.join(" ")).not.toMatch(/clima/);
+    });
+    it("nenhuma tarefa rodando: não diz que o Jev usa a chave", () => {
+      const aviso = avisoAoExcluirAChaveDoJev({ temOutraChave: false, tarefas: [], temIaPrincipal: true });
+      expect(aviso).toEqual([AO_EXCLUIR_A_CHAVE_DO_JEV.nenhumaTarefa]);
+      expect(aviso.join(" ")).not.toMatch(/O Jev usa esta chave/);
+    });
   });
 
   it("o aviso sai no idioma da organização", () => {

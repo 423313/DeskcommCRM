@@ -47,6 +47,8 @@ import {
   TAREFA_DO_CLIMA,
   TAREFAS_DO_JEV,
   tarefaEhNova,
+  algumRoteadorQuePergunta,
+  TAREFA_DA_MANIPULACAO,
   tarefaSemCamada,
   tarefaSemRoteador,
 } from "@/lib/ai/decisao/tarefas";
@@ -76,18 +78,32 @@ const PAGINA = 1000;
 // migration) é o passo seguinte, quando alguma instalação chegar lá.
 const PAGINAS_MAX = 50;
 
-/** Os pontos em que o Jev trabalha — a lista da onda 1, que o cartão do ponto ainda lê. */
+/**
+ * Os pontos em que o Jev trabalha, no formato da onda 1. O cartão desta versão
+ * lê `por_tarefa`; este campo fica para a página da imagem anterior, aberta
+ * durante uma atualização ou um rollback, que ainda o lê.
+ */
 const TAREFAS = TAREFAS_DO_JEV.flatMap((t) =>
   t.ponto ? [{ id: t.ponto, rotulo: t.rotulo, oQueOJevFaz: t.oQueFaz }] : [],
 );
 
-type Concordancia = { dias: number; comparadas: number; concordaram: number };
+type Concordancia = {
+  dias: number;
+  comparadas: number;
+  concordaram: number;
+  /**
+   * Só a manipulação: em quantas das comparadas SÓ o Jev deu o alerta forte.
+   * É o que decidir muda nela (o maior dos dois vale), e a concordância exata
+   * de três níveis, dominada por "nenhum" dos dois lados, não mostra isso.
+   */
+  so_o_jev_alto?: number;
+};
 
 function porTarefa(
   c: ConfigDoJev,
   observacao: Readonly<Record<string, Concordancia>>,
   camadas: ReturnType<typeof camadasEfetivas>,
-  temRoteadorAtivo: boolean,
+  temRoteadorQuePergunta: boolean,
 ) {
   return TAREFAS_DO_JEV.map((t) => ({
     id: t.id,
@@ -101,9 +117,9 @@ function porTarefa(
     // A camada de segurança que ela acompanha está desligada: o turno não
     // pergunta, e "observando" sem mais nada prometeria uma comparação que nunca vem.
     sem_camada: tarefaSemCamada(t, camadas),
-    // Sem roteador ativo o turno não classifica, e o Jev não tem o que escolher:
-    // "observando" prometeria uma comparação que nunca vem.
-    sem_roteador: tarefaSemRoteador(t, temRoteadorAtivo),
+    // Sem roteador ativo que o Jev possa perguntar (nenhum, ou sem intenções, ou
+    // com mais do que cabe), "observando" prometeria uma comparação que nunca vem.
+    sem_roteador: tarefaSemRoteador(t, temRoteadorQuePergunta),
   }));
 }
 
@@ -275,16 +291,20 @@ export async function GET(): Promise<Response> {
         .gte("created_at", desde);
     const porTarefa: Record<string, Concordancia> = {};
     for (const t of TAREFAS_DO_JEV.filter((x) => x.id !== TAREFA_DO_CLIMA.id)) {
-      const [comparadas, concordaram] = await Promise.all([
+      const daManipulacao = t.id === TAREFA_DA_MANIPULACAO.id;
+      const [comparadas, concordaram, soDoJev] = await Promise.all([
         contar(t.id).not("concordou", "is", null),
         contar(t.id).eq("concordou", true),
+        // `neq` também deixa de fora o "sem par" (`rotulo_atual` nulo).
+        daManipulacao ? contar(t.id).eq("rotulo_jev", "high").neq("rotulo_atual", "high") : null,
       ]);
-      const erro = comparadas.error?.message ?? concordaram.error?.message;
+      const erro = comparadas.error?.message ?? concordaram.error?.message ?? soDoJev?.error?.message;
       if (erro) return { porTarefa, erro };
       porTarefa[t.id] = {
         dias: DIAS_DA_CONCORDANCIA,
         comparadas: comparadas.count ?? 0,
         concordaram: concordaram.count ?? 0,
+        ...(soDoJev ? { so_o_jev_alto: soDoJev.count ?? 0 } : {}),
       };
     }
     return { porTarefa, erro: null };
@@ -328,7 +348,13 @@ export async function GET(): Promise<Response> {
       .limit(PAGINA),
     lerObservacoes(),
     db.from("org_guardrail_layers").select("layer, enabled").eq("organization_id", org.orgId),
-    db.from("ai_routers").select("id").eq("organization_id", org.orgId).eq("is_active", true).limit(1),
+    // Com a contagem das intenções: o roteador ativo sem nenhuma (o estado logo
+    // depois de criar um) ou com mais do que cabe nunca é perguntado ao Jev.
+    db
+      .from("ai_routers")
+      .select("id, intencoes:ai_router_members(count)")
+      .eq("organization_id", org.orgId)
+      .eq("is_active", true),
   ]);
 
   const erro =
@@ -376,7 +402,7 @@ export async function GET(): Promise<Response> {
         config,
         { ...observacoes.porTarefa, [TAREFA_DO_CLIMA.id]: doClima },
         camadasEfetivas(camadasRes.data ?? []),
-        (roteadoresRes.data ?? []).length > 0,
+        algumRoteadorQuePergunta(roteadoresRes.data ?? []),
       ),
       tem_ia_de_sempre: iaDeSempre !== null,
       numeros: {

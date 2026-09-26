@@ -233,7 +233,9 @@ test.describe("Jev no roteador — Testar classificação, pela tela", () => {
       await expect(roteador).toHaveAttribute("data-estado", "observando");
       await expect(roteador).toContainText("Escolher qual agente atende");
       await expect(roteador).toContainText("Só observa");
-      await expect(roteador).toContainText("Novo");
+      // "Nova", e com o que ela quer dizer: o selo sozinho não explicava nada.
+      await expect(roteador).toContainText("Nova");
+      await expect(cartao.getByTestId("jev-nova-roteador")).toContainText("nada muda para o cliente");
       // Há roteador ativo: a tarefa roda, e não aparece "Não roda".
       await expect(cartao.getByTestId("jev-sem-roteador-roteador")).toHaveCount(0);
       await page.screenshot({ path: ".superpowers/evidence/jev/cartao-tres-tarefas.png", fullPage: true });
