@@ -14,9 +14,9 @@
  *  - decidindo: vale a escolha dele, com o `min_confidence` do roteador sobre a
  *    probabilidade dele, e a IA de sempre é a reserva quando ele não responde.
  *    O turno espera por ele o que ele passar da IA de sempre, que roda junto:
- *    a leitura do estado e da chave (consultas ao banco, sem teto próprio, como
- *    as demais do turno) e a resposta, esta com no máximo o teto do cliente
- *    (`TETO_PADRAO_MS`) — o teto cobre só a chamada ao fornecedor.
+ *    a leitura do estado (pelo banco do turno, como as demais consultas dele) e,
+ *    num prazo só de no máximo `TETO_PADRAO_MS`, a busca da chave e a resposta
+ *    (`decidirNoPonto`).
  *  - sem a IA de sempre (o classificador falhou ou a empresa não tem um): vale
  *    a regra de hoje — o agente de antes, ou o de reserva do roteador —, nunca
  *    o Jev (R2). Quem aplica é o turno; aqui só se pergunta e se grava.

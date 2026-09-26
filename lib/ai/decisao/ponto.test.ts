@@ -168,6 +168,54 @@ describe("decidirNoPonto", () => {
   });
 });
 
+/**
+ * O teto é UM prazo para a busca da chave e a chamada juntas. Antes ele armava
+ * só em volta da chamada: com a leitura da chave lenta (o PostgREST degradado),
+ * o turno esperava a leitura inteira — medido, 2,5 s de leitura davam 2,5 s de
+ * turno com o roteador decidindo — e a leitura lenta nunca contava no disjuntor.
+ */
+describe("decidirNoPonto — o teto cobre a busca da chave", () => {
+  it("chave que não volta dentro do teto: o Jev não respondeu a tempo, sem esperar a leitura", async () => {
+    const fetchImpl = vi.fn();
+    const inicio = Date.now();
+    const r = await decidirNoPonto(
+      { ponto: "sentiment_classify", organizationId: "org-1", estado: "x", perguntas: PERGUNTAS, tetoMs: 50 },
+      { buscarChave: () => new Promise((resolver) => setTimeout(() => resolver("tsk_x"), 2_500)), fetchImpl },
+    );
+    expect(Date.now() - inicio).toBeLessThan(1_000);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    // Conta no disjuntor (`sem_credencial` não contaria), e nada saiu para a rede.
+    expect(r.motivo).toBe("provedor_indisponivel");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("a chamada ganha só o que sobrou do prazo", async () => {
+    const inicio = Date.now();
+    const r = await decidirNoPonto(
+      { ponto: "sentiment_classify", organizationId: "org-1", estado: "x", perguntas: PERGUNTAS, tetoMs: 300 },
+      {
+        buscarChave: () => new Promise((resolver) => setTimeout(() => resolver("tsk_x"), 200)),
+        // O fornecedor que nunca responde: só o relógio o corta.
+        fetchImpl: (_u, init) =>
+          new Promise((_ok, falhar) => init?.signal?.addEventListener("abort", () => falhar(new Error("abortado")))),
+      },
+    );
+    expect(Date.now() - inicio).toBeLessThan(600);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivo).toBe("provedor_indisponivel");
+  });
+
+  it("controle: chave rápida, fornecedor rápido — responde normalmente", async () => {
+    const r = await decidirNoPonto(
+      { ponto: "sentiment_classify", organizationId: "org-1", estado: "x", perguntas: PERGUNTAS, tetoMs: 300 },
+      { buscarChave: async () => "tsk_x", fetchImpl: vi.fn().mockResolvedValue(ok(CORPO_OK)) },
+    );
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe("chaveDaOrganizacao — a chave do Jev daquela empresa, e só dela", () => {
   const ORG = "33333333-3333-4333-8333-333333333333";
   const PONTO_DO_CLIMA = "sentiment_classify";

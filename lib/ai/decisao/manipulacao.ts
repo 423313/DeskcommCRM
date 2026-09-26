@@ -7,9 +7,9 @@
  * resposta é advisória: só marca o turno e, junto de uma promessa fora da
  * tabela, abre um item na Central. O Jev responde a MESMA pergunta, com os
  * mesmos três níveis, em paralelo: o turno só espera por ele o que ele passar
- * do modelo — a leitura do estado e da chave (consultas ao banco, sem teto
- * próprio) e a resposta, esta com no máximo o teto do cliente
- * (`TETO_PADRAO_MS`) —, mais a gravação.
+ * do modelo — a leitura do estado (pelo banco do turno) e, num prazo só de no
+ * máximo `TETO_PADRAO_MS`, a busca da chave e a resposta (`decidirNoPonto`) —,
+ * mais a gravação.
  *
  * ═══ O QUE ELE PODE, EM CADA ESTADO ═══
  *

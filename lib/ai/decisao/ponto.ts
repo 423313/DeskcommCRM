@@ -38,7 +38,7 @@ import { byteaToBuffer, decryptKey } from "@/lib/crypto/aes_gcm";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { baseDaApiDoJev, decidir, type Pergunta, type ResultadoDaDecisao } from "./cliente";
+import { baseDaApiDoJev, decidir, TETO_PADRAO_MS, type Pergunta, type ResultadoDaDecisao } from "./cliente";
 import { lerConfigDoJev } from "./config";
 import { PROVEDOR_DO_JEV } from "./credencial";
 import { estadoEfetivoDaTarefa, TAREFAS_DO_JEV } from "./tarefas";
@@ -128,17 +128,36 @@ export async function chaveDaOrganizacao(organizationId: string, ponto: string):
   }
 }
 
+/** A busca da chave que não voltou dentro do teto. */
+const CHAVE_ATRASADA = Symbol("chave_atrasada");
+
 /**
- * O teto (`tetoMs`, ou `TETO_PADRAO_MS` do cliente) vale só para a chamada ao
- * fornecedor: a leitura da chave, antes dela, são consultas ao banco sem teto
- * próprio — quem promete um tempo máximo ao turno conta com as duas.
+ * O teto (`tetoMs`, ou `TETO_PADRAO_MS` do cliente) é UM prazo para a busca da
+ * chave e a chamada ao fornecedor juntas. Antes ele cobria só a chamada: com o
+ * banco lento pelo PostgREST (duas leituras pelo cliente admin), o turno
+ * esperava a leitura inteira e só então armava o relógio — e a leitura lenta
+ * nunca contava como falha no disjuntor. Agora a leitura que estoura o prazo é
+ * o Jev que não respondeu a tempo (`provedor_indisponivel`), e o que sobrar do
+ * prazo é o teto da chamada.
  */
 export async function decidirNoPonto(
   entrada: EntradaDoPonto,
   deps: DependenciasDoPonto = {},
 ): Promise<ResultadoDaDecisao> {
   const buscarChave = deps.buscarChave ?? ((org: string) => chaveDaOrganizacao(org, entrada.ponto));
-  const chave = await buscarChave(entrada.organizationId);
+  const teto = entrada.tetoMs ?? TETO_PADRAO_MS;
+  const inicio = Date.now();
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const prazo = new Promise<typeof CHAVE_ATRASADA>((resolver) => {
+    relogio = setTimeout(() => resolver(CHAVE_ATRASADA), teto);
+  });
+  // `chaveDaOrganizacao` nunca rejeita; a injetada, no teste, pode — e rejeitada
+  // ela é "sem chave", como uma leitura que falha.
+  const chave = await Promise.race([buscarChave(entrada.organizationId).catch(() => null), prazo]);
+  clearTimeout(relogio);
+  if (chave === CHAVE_ATRASADA) {
+    return { ok: false, motivo: "provedor_indisponivel", exigeAcao: false, defeitoNosso: false, status: null };
+  }
   if (chave === null || chave.trim() === "") {
     return { ok: false, motivo: "sem_credencial", exigeAcao: false, defeitoNosso: false, status: null };
   }
@@ -157,7 +176,8 @@ export async function decidirNoPonto(
       chave,
       estado: entrada.estado,
       perguntas: entrada.perguntas,
-      ...(entrada.tetoMs !== undefined ? { tetoMs: entrada.tetoMs } : {}),
+      // O que sobrou do prazo — o turno espera, no máximo, o teto inteiro.
+      tetoMs: Math.max(1, teto - (Date.now() - inicio)),
     },
     { fetchImpl: fetchContido, baseUrl: base },
   );
