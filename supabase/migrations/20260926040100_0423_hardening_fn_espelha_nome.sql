@@ -1,4 +1,4 @@
--- 0420 — Corrige uma função de gatilho deixada por instalações legadas.
+-- 0423 — Corrige uma função de gatilho deixada por instalações legadas.
 --
 -- A função não faz parte do baseline atual, mas existe em bancos que vieram
 -- do CRM anterior. Sem search_path fixo, objetos criados no schema da sessão

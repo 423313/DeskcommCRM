@@ -15,7 +15,8 @@ describe("versões de skills legadas", () => {
     const saida = sql(`
       begin;
 
-      alter table public.skill_pointers add column if not exists id uuid default gen_random_uuid();
+      alter table public.skill_pointers add column if not exists id uuid default gen_random_uuid() unique;
+      alter table public.skill_pointers alter column version_id drop not null;
       alter table public.skill_versions add column if not exists pointer_id uuid;
       alter table public.skill_versions alter column pointer_id drop not null;
       alter table public.skill_versions drop constraint if exists skill_versions_pointer_id_fkey;
