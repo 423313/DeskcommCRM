@@ -9,7 +9,7 @@ import {
 } from "@/lib/retencao/politica";
 
 /**
- * AS OBSERVAÇÕES DO JEV (migration 0416) — isolamento, escrita, vocabulário e prazo.
+ * AS OBSERVAÇÕES DO JEV (migration 0418) — isolamento, escrita, vocabulário e prazo.
  *
  * ═══ Por que um arquivo próprio, e não uma linha em rls-isolation.test.ts ═══
  *

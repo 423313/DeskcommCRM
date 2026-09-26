@@ -65,7 +65,7 @@ const DONO_NO_SQL: Record<string, string> = {
   // e este par é a prova: a razão escrita não correspondia ao código, e ninguém
   // percebeu até a revisão medir o repo.
   PROSPECCAO: "fn_expurgar_prospeccao_vencida",
-  // migration 0416 — as observações do Jev. Entra no MESMO commit da migration.
+  // migration 0418 — as observações do Jev. Entra no MESMO commit da migration.
   OBSERVACOES_DO_JEV: "fn_expurgar_observacoes_do_jev",
 };
 

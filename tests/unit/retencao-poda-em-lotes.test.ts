@@ -194,7 +194,7 @@ describe("podarHistorico — o laço de lotes", () => {
     // do piso é ELEVADO, como todas as irmãs — e o aviso acompanha.
     const { db, chamadas } = bancoQueDevolve({ fila: [0], auditoria: [0] });
     const r = await podarHistorico(db, { PROSPECCAO_RETENTION_DAYS: "5" });
-    // Pelo NOME, e não pela posição: a nona poda (0416) entrou depois dela.
+    // Pelo NOME, e não pela posição: a nona poda (0418) entrou depois dela.
     const daProspeccao = chamadas.find((c) => c.nome === "fn_expurgar_prospeccao_vencida");
     expect(daProspeccao?.dias).toBe(RETENCAO_PROSPECCAO_DIAS_PISO);
     expect(r.retencao_prospeccao_dias).toBe(RETENCAO_PROSPECCAO_DIAS_PISO);
@@ -202,7 +202,7 @@ describe("podarHistorico — o laço de lotes", () => {
     expect(r.avisos[0]).toContain("PROSPECCAO_RETENTION_DAYS");
   });
 
-  it("drena as observações do Jev com o padrão 90 e eleva o knob de 7 ao piso 30 (0416)", async () => {
+  it("drena as observações do Jev com o padrão 90 e eleva o knob de 7 ao piso 30 (0418)", async () => {
     const semKnob = bancoQueDevolve({ fila: [0], auditoria: [0] });
     await podarHistorico(semKnob.db, {});
     expect(semKnob.chamadas.find((c) => c.nome === "fn_expurgar_observacoes_do_jev")?.dias).toBe(
@@ -264,7 +264,7 @@ describe("houveEfeito — as duas direções", () => {
     lotes_prospeccao: 0,
     prospeccao_tem_resto: false,
     retencao_prospeccao_dias: RETENCAO_PROSPECCAO_DIAS_PADRAO,
-    // Nona poda (migration 0416): as observações do Jev.
+    // Nona poda (migration 0418): as observações do Jev.
     observacoes_do_jev_apagadas: 0,
     lotes_observacoes_do_jev: 0,
     observacoes_do_jev_tem_resto: false,
@@ -292,7 +292,7 @@ describe("houveEfeito — as duas direções", () => {
     expect(houveEfeito({ ...base, prospeccao_apagada: 1 })).toBe(true);
   });
 
-  it("...e apagou observação do Jev vencida → TAMBÉM audita (0416)", () => {
+  it("...e apagou observação do Jev vencida → TAMBÉM audita (0418)", () => {
     expect(houveEfeito({ ...base, observacoes_do_jev_apagadas: 1 })).toBe(true);
   });
 

@@ -607,7 +607,7 @@
       "lane": "dados",
       "col": 5,
       "type": "table",
-      "label": "jev_observacoes (0416)",
+      "label": "jev_observacoes (0418)",
       "sublabel": "por resposta do Jev: tarefa, estado, rótulo dele × rótulo de hoje, concordou (gerada), ponteiros sem FK, sem texto — poda de 90 dias no cron data-retention"
     }
   ],

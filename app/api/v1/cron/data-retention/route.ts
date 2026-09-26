@@ -128,7 +128,7 @@ export interface ResultadoDaRetencao {
   prospeccao_apagada: number;
   lotes_prospeccao: number;
   prospeccao_tem_resto: boolean;
-  /** A observação do Jev vencida — rótulos, sem texto de cliente (migration 0416). */
+  /** A observação do Jev vencida — rótulos, sem texto de cliente (migration 0418). */
   observacoes_do_jev_apagadas: number;
   lotes_observacoes_do_jev: number;
   observacoes_do_jev_tem_resto: boolean;
@@ -290,7 +290,7 @@ export async function podarHistorico(
   // reimportação. É a primeira poda da casa cujo dado é de uma pessoa que
   // NUNCA falou com a empresa, então as duas guardas são a regra, não enfeite.
   const prospeccaoDrenada = await drenar(db, "fn_expurgar_prospeccao_vencida", prospeccao.dias);
-  // Nona poda: as observações do Jev (0416). Padrão 90 / piso 30, a janela da
+  // Nona poda: as observações do Jev (0418). Padrão 90 / piso 30, a janela da
   // concordância que o cartão mostra — o piso mora no CORPO da função.
   const observacoesDrenadas = await drenar(db, "fn_expurgar_observacoes_do_jev", observacoesDoJev.dias);
 
