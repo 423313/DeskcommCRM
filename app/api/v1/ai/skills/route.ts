@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
+import { temPonteiroCanonico } from "@/lib/ai/skills/ponteiro-canonico";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -34,12 +35,6 @@ interface VersionRow {
   id: string;
   description: string;
   forked_from_version_id: string | null;
-}
-
-function temPonteiroCanonico<T extends { name: string | null; version_id: string | null }>(
-  pointer: T,
-): pointer is T & { name: string; version_id: string } {
-  return Boolean(pointer.name && pointer.version_id);
 }
 
 export async function GET(_req: NextRequest): Promise<Response> {
