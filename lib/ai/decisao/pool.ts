@@ -46,10 +46,12 @@ export async function estadoDaTarefaNoPool(
  * recusada) — a mesma forma da do clima (`workers/ai-sentiment-worker.ts`), com
  * uma diferença: a origem é `jev_observacao`, e não `jev`. No clima, a linha de
  * erro com `jev` só existe quando ninguém mediu, e Execuções mostra a
- * consequência; nas tarefas do turno o atendimento segue exatamente como
- * seguiria sem o Jev (a IA de sempre decide, ou, sem ela, a regra de antes), e
- * a tela diz isso (`JEV_FALHOU_AO_LADO`). É dela que o cartão tira a "Última
- * falha" da tarefa. Nunca lança: é telemetria.
+ * consequência; nas tarefas do turno nada depende só do Jev (a IA de sempre
+ * decide, ou, sem ela, a regra de antes), e a tela diz isso
+ * (`JEV_FALHOU_AO_LADO`) — com palavras que valem também para a tela "Testar
+ * classificação" do roteador, que grava a mesma linha sem atender ninguém: a
+ * chave recusada num teste é a mesma recusada no atendimento. É dela que o
+ * cartão tira a "Última falha" da tarefa. Nunca lança: é telemetria.
  */
 export async function registrarFalhaQuePedeAcao(
   pool: pg.Pool,

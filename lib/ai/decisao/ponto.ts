@@ -128,6 +128,11 @@ export async function chaveDaOrganizacao(organizationId: string, ponto: string):
   }
 }
 
+/**
+ * O teto (`tetoMs`, ou `TETO_PADRAO_MS` do cliente) vale só para a chamada ao
+ * fornecedor: a leitura da chave, antes dela, são consultas ao banco sem teto
+ * próprio — quem promete um tempo máximo ao turno conta com as duas.
+ */
 export async function decidirNoPonto(
   entrada: EntradaDoPonto,
   deps: DependenciasDoPonto = {},

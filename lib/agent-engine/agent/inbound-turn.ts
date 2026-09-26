@@ -2118,6 +2118,11 @@ async function executarTurnoDoAgente(
           [tenantId, input.conversationId, agentConfig.agentId, routed.intentName],
         );
       }
+      // A intenção e a confiança que ROTEARAM — do classificador, ou do Jev
+      // quando a tarefa do roteador dele decide (`resolve-turn-agent.ts`). Quem
+      // decidiu mora em `llm_calls` do mesmo `job_id` (purpose `intent_router`,
+      // `origem_da_escolha = 'jev'`); o único leitor desta tabela
+      // (`app/api/v1/ai/evolution`) conta roteamento, não quem o fez.
       await pool.query(
         `insert into ai_router_decisions
            (organization_id, router_id, conversation_id, intent_name, confidence, agent_id, outcome, job_id)

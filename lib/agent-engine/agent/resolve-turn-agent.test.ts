@@ -535,6 +535,15 @@ describe('o Jev no roteador (onda 2 do Jev, bloco 2.2)', () => {
       expect(out.outcome).toBe('sticky');
       expect(out.config?.agentId).toBe('agent-vendas');
     });
+
+    // Decisão declarada no turno: resposta ilegível da IA é "nenhuma" (o
+    // `parseIntentVerdict` a devolve assim), não falha — a IA respondeu.
+    it('a IA de sempre responde lixo ("nenhuma", confiança 0): não é falha, e decidindo vale o Jev', async () => {
+      const jev = jevFalso('decidindo', Promise.resolve(escolha('suporte', 0.8, 'decidindo')));
+      const { out } = await rodar({ daIa: { intentName: null, confidence: 0 }, jev });
+      expect(out.config?.agentId).toBe('agent-suporte');
+      expect(jev.jev.observar.mock.calls[0]![0]).toMatchObject({ decidiu: true });
+    });
   });
 
   it('a observação compara o AGENTE FINAL: duas intenções do mesmo agente concordam; o mínimo leva ao de reserva', async () => {

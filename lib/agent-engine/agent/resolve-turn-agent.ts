@@ -361,7 +361,11 @@ export async function resolveTurnAgent(
 
     // Decidindo, vale a escolha do Jev, e a IA de sempre é a reserva. Sem a IA
     // de sempre (falhou, ou a empresa não tem), vale a regra de hoje, nunca o
-    // Jev (R2) — e aí nem se espera por ele.
+    // Jev (R2) — e aí nem se espera por ele. "Falhou" é a chamada falhar
+    // (`null`): uma resposta ilegível ou uma intenção fora da lista o
+    // `parseIntentVerdict` já lê como "nenhuma", e é assim que o roteamento de
+    // hoje a trata (sticky ou `no_match`, nunca `classifier_failed`) — a IA
+    // respondeu, e a escolha do Jev vale ao lado dela.
     const doJev = verdict !== null && (await jev.estado) === 'decidindo' ? await jev.escolha : null;
     const destino = destinoDoVeredito(router, stickyMember, input.stickyIntent, doJev?.veredito ?? verdict);
 

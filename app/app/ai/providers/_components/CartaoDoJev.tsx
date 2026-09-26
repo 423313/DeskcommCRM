@@ -192,28 +192,28 @@ function decideEmParte(d: DadosDoJev): boolean {
 }
 
 /**
- * Decidindo, o sinal desta tarefa se SOMA ao da IA de sempre, em vez de tomar o
- * lugar dela — "Decide" quer dizer outra coisa ali.
+ * A tarefa no registro: é dela a frase do "Decide" (`aoDecidir`,
+ * `aoDecidirNoPonto`) — o que decidir quer dizer muda de uma tarefa para outra.
  */
-const somaSinal = (tarefaId: string) => TAREFAS_DO_JEV.find((x) => x.id === tarefaId)?.familia === "soma";
+const doRegistro = (tarefaId: string) => TAREFAS_DO_JEV.find((x) => x.id === tarefaId);
 
 /**
  * Como o Jev está no ponto `pontoId`, para a linha do cartão do ponto — pelo
- * estado da tarefa dele. `soma`: decidindo numa tarefa da família `soma`, o
- * modelo do ponto segue decidindo e o Jev só acrescenta sinal — "o modelo
- * abaixo é a reserva" seria falso ali.
+ * estado da tarefa dele. Decidindo, a linha é a da tarefa (`aoDecidirNoPonto`):
+ * "o modelo abaixo é a reserva" só é verdade no clima.
  */
 export function jevNoPonto(
   d: DadosDoJev | null,
   pontoId: string,
-): "observacao" | "decide" | "soma" | "sozinho" | null {
+): "observacao" | "sozinho" | { decide: string } | null {
   if (!d?.config.ligado || !d.chave.validada) return null;
   const tarefa = tarefasDoCartao(d).find((t) => t.ponto === pontoId);
   if (!tarefa || !roda(tarefa)) return null;
   // A IA de sempre é a do clima (`tem_ia_de_sempre`), e só o clima decide sem ela (DEC-012 #5).
   if (!d.tem_ia_de_sempre && tarefa.id === TAREFA_DO_CLIMA.id) return "sozinho";
   if (tarefa.estado !== "decidindo") return "observacao";
-  return somaSinal(tarefa.id) ? "soma" : "decide";
+  const frase = doRegistro(tarefa.id)?.aoDecidirNoPonto;
+  return frase === undefined ? null : { decide: frase };
 }
 
 type Resposta = { data?: DadosDoJev; error?: { message?: string } };
@@ -638,7 +638,9 @@ function Ligado({
           Com a chave parada ou sem a IA de sempre, o selo do cartão já diz o
           estado de todas, e a linha não repete nem oferece o botão. */}
       <ul className="divide-y divide-border rounded-md border border-border" data-testid="jev-tarefas">
-        {tarefasDoCartao(dados).map((tarefa) => (
+        {tarefasDoCartao(dados).map((tarefa) => {
+          const aoDecidir = doRegistro(tarefa.id)?.aoDecidir;
+          return (
           <li
             key={tarefa.id}
             className="space-y-2 p-3"
@@ -679,11 +681,9 @@ function Ligado({
               </p>
             )}
 
-            {rodando && roda(tarefa) && tarefa.estado === "decidindo" && (
+            {rodando && roda(tarefa) && tarefa.estado === "decidindo" && aoDecidir !== undefined && (
               <p className="text-sm text-muted-foreground" data-testid={`jev-decide-${tarefa.id}`}>
-                {somaSinal(tarefa.id)
-                  ? t("A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela, sem nunca apagá-lo.")
-                  : t("O Jev mede primeiro; a sua IA de sempre só entra se ele não responder.")}
+                {t(aoDecidir)}
               </p>
             )}
 
@@ -751,7 +751,8 @@ function Ligado({
               </div>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       <div>

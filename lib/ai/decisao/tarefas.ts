@@ -48,6 +48,16 @@ export interface TarefaDoJev {
    */
   familia: "substitui" | "soma" | "cascata" | "novo";
   /**
+   * O que muda quando ela DECIDE, dito ao leigo: no cartão do Jev (`aoDecidir`)
+   * e no cartão do ponto, sobre o modelo que ele mostra logo abaixo
+   * (`aoDecidirNoPonto`). É por tarefa, e não pela família: o clima e o
+   * roteador são os dois `substitui`, e a IA de sempre é chamada só quando o
+   * Jev falha num, e a cada mensagem no outro. Uma frase por família fez o
+   * roteador herdar a do clima.
+   */
+  aoDecidir: string;
+  aoDecidirNoPonto: string;
+  /**
    * A camada de segurança que ela ACOMPANHA, quando há uma: desligada para a
    * organização, o turno não pergunta nem à IA de sempre nem ao Jev, e a tarefa
    * não roda qualquer que seja o estado dela (`tarefaSemCamada`).
@@ -72,6 +82,9 @@ export const TAREFA_DO_CLIMA = {
   primitiva: "score",
   alcance: "mensagem",
   familia: "substitui",
+  // A IA de sempre só é chamada quando o Jev falha (`workers/ai-sentiment-worker.ts`).
+  aoDecidir: "O Jev mede primeiro; a sua IA de sempre só entra se ele não responder.",
+  aoDecidirNoPonto: "O Jev mede primeiro; o modelo abaixo é a reserva.",
   rotulo: "Medir o clima da conversa",
   oQueFaz:
     "Percebe, geralmente em menos de um segundo, se o cliente está irritado — e avisa para passar a conversa a uma pessoa.",
@@ -90,6 +103,8 @@ export const TAREFA_DA_MANIPULACAO = {
   primitiva: "choice",
   alcance: "mensagem",
   familia: "soma",
+  aoDecidir: "A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela, sem nunca apagá-lo.",
+  aoDecidirNoPonto: "O modelo abaixo decide; o Jev soma o sinal dele, sem nunca apagar o do modelo.",
   camada: "jailbreak",
   // O nome do ponto ("Barrar…") é o do classificador; o Jev não barra nada —
   // percebe e soma o sinal. Dizer "barrar" ao leigo prometeria um bloqueio.
@@ -112,6 +127,12 @@ export const TAREFA_DO_ROTEADOR = {
   primitiva: "choice",
   alcance: "mensagem",
   familia: "substitui",
+  // Os dois perguntam a cada mensagem (`resolve-turn-agent.ts`), e sem a
+  // resposta da IA de sempre a do Jev não vale (R2) — ao contrário do clima.
+  aoDecidir:
+    "A sua IA de sempre continua sendo perguntada a cada mensagem, ao mesmo tempo que o Jev, e continua custando: vale a escolha do Jev, e a dela entra quando ele não responde. Sem a resposta da sua IA de sempre, vale o agente de antes ou o de reserva do roteador — nunca só o Jev.",
+  aoDecidirNoPonto:
+    "Vale a escolha do Jev, mas o modelo abaixo continua sendo chamado a cada mensagem: é a reserva quando o Jev não responde, e sem ele o Jev não escolhe sozinho.",
   rotulo: "Escolher qual agente atende",
   oQueFaz:
     "Lê a última mensagem do cliente, sozinha, e escolhe entre as intenções do seu roteador qual agente deve atender.",

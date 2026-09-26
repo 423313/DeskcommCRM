@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TAREFA_DA_MANIPULACAO, TAREFA_DO_CLIMA, TAREFA_DO_ROTEADOR } from "@/lib/ai/decisao/tarefas";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
 import { CartaoDoJev, jevNoPonto, useDadosDoJev, type DadosDoJev } from "./CartaoDoJev";
@@ -453,9 +454,9 @@ describe("jevNoPonto — a linha do cartão do ponto", () => {
     const ligado = dados({ config: { ligado: true } });
     expect(jevNoPonto(ligado, "stage_classify")).toBeNull();
     expect(jevNoPonto(ligado, "sentiment_classify")).toBe("observacao");
-    expect(jevNoPonto(dados({ config: { ligado: true, modo: "decide" } }), "sentiment_classify")).toBe(
-      "decide",
-    );
+    expect(jevNoPonto(dados({ config: { ligado: true, modo: "decide" } }), "sentiment_classify")).toEqual({
+      decide: TAREFA_DO_CLIMA.aoDecidirNoPonto,
+    });
     expect(
       jevNoPonto(dados({ config: { ligado: true }, tem_ia_de_sempre: false }), "sentiment_classify"),
     ).toBe("sozinho");
@@ -579,7 +580,7 @@ describe("CartaoDoJev — por tarefa", () => {
       dados({ config: { ligado: true, modo: "decide" }, por_tarefa: [{ ...CLIMA, estado }] });
     expect(jevNoPonto(d("desligada"), "sentiment_classify")).toBeNull();
     expect(jevNoPonto(d("observando"), "sentiment_classify")).toBe("observacao");
-    expect(jevNoPonto(d("decidindo"), "sentiment_classify")).toBe("decide");
+    expect(jevNoPonto(d("decidindo"), "sentiment_classify")).toEqual({ decide: TAREFA_DO_CLIMA.aoDecidirNoPonto });
     // Só o clima decide sem a IA de sempre (DEC-012 #5); a tarefa nova, não.
     const semIa = dados({ config: { ligado: true }, tem_ia_de_sempre: false, por_tarefa: [NOVA] });
     expect(jevNoPonto(semIa, "jailbreak_detect")).toBe("observacao");
@@ -587,7 +588,34 @@ describe("CartaoDoJev — por tarefa", () => {
 
   it("jevNoPonto: a manipulação decidindo SOMA — o modelo do ponto segue decidindo, não vira reserva", () => {
     const d = dados({ config: { ligado: true }, por_tarefa: [{ ...NOVA, estado: "decidindo" }] });
-    expect(jevNoPonto(d, "jailbreak_detect")).toBe("soma");
+    expect(jevNoPonto(d, "jailbreak_detect")).toEqual({ decide: TAREFA_DA_MANIPULACAO.aoDecidirNoPonto });
+    expect(TAREFA_DA_MANIPULACAO.aoDecidirNoPonto).not.toMatch(/reserva/);
+  });
+
+  /**
+   * O roteador decidindo herdava a frase do clima ("o Jev mede primeiro; a sua
+   * IA de sempre só entra se ele não responder"). Falsa: no roteador os dois
+   * são perguntados a cada mensagem, e sem a IA de sempre a escolha do Jev não
+   * vale (R2). Quem acreditasse tiraria a IA de sempre — e o roteamento voltaria
+   * ao agente de antes com o cartão dizendo que o Jev decide.
+   */
+  it("o roteador decidindo diz que a IA de sempre segue sendo perguntada, e que sem ela o Jev não escolhe", () => {
+    const ROTEADOR = {
+      id: "roteador",
+      ponto: "intent_router",
+      rotulo: "Escolher qual agente atende",
+      oQueFaz: "Escolhe o agente.",
+      estado: "decidindo",
+      novo: false,
+    } as const;
+    const d = dados({ config: { ligado: true, modo: "decide" }, por_tarefa: [{ ...CLIMA, estado: "decidindo" }, ROTEADOR] });
+    montar(d);
+    const linha = screen.getByTestId("jev-decide-roteador");
+    expect(linha).not.toHaveTextContent(/mede primeiro|só entra se ele não responder/);
+    expect(linha).toHaveTextContent(/a cada mensagem/);
+    expect(linha).toHaveTextContent(/nunca só o Jev/);
+    expect(jevNoPonto(d, "intent_router")).toEqual({ decide: TAREFA_DO_ROTEADOR.aoDecidirNoPonto });
+    expect(TAREFA_DO_ROTEADOR.aoDecidirNoPonto).not.toMatch(/mede primeiro/);
   });
 
   it("a tarefa nova mostra a concordância dela (de jev_observacoes), e o clima a dele", () => {

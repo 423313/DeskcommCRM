@@ -57,6 +57,12 @@ describe("textos do Jev para quem opera", () => {
     expect(semReserva.body).not.toContain(AVISO_DO_JEV.comReserva);
   });
 
+  // A mesma linha vem do turno e da tela "Testar classificação" do roteador
+  // (`./pool.ts`): um clique de teste não atendeu ninguém.
+  it("a falha do Jev ao lado não afirma que houve atendimento", () => {
+    expect(JEV_FALHOU_AO_LADO).not.toMatch(/atendimento/i);
+  });
+
   it("o aviso sai no idioma da organização", () => {
     const es = avisoDoJevNaCentral("contrato_invalido", true, (t) => traduzir(t, "es"));
     expect(es.title).toBe(DICIONARIO[AVISO_DO_JEV.titulo]?.es);

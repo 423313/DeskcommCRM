@@ -683,11 +683,15 @@ function TestPanel({
   // definição de padrão que volta pela porta dos fundos. A cerca em
   // `tests/unit/confianca-do-handoff-nao-e-similaridade.test.ts` passou a cobrir
   // `app/app/ai` por causa desta linha.
-  const confianca = result?.confidence ?? null;
+  //
+  // Decidindo (e com a IA de sempre respondendo), em produção vale a escolha do
+  // Jev — e este bloco diz o que ACONTECERIA, então lê inteiro o lado que vale.
+  // Lendo a intenção e a confiança da IA ao lado do agente do Jev, ele dizia
+  // "cairia no atendimento padrão" com o agente do Jev logo abaixo.
+  const vale = result?.jev?.decide ? result.jev : result;
+  const confianca = vale?.confidence ?? null;
   const abaixoDoMinimo =
     confianca !== null && result !== undefined && confianca < result.min_confidence;
-  // Decidindo (e com a IA de sempre respondendo), em produção vale a escolha do Jev.
-  const quemAtende = result?.jev?.decide ? result.jev.agent_name : result?.agent_name;
   return (
     <Card className="space-y-3 p-4">
       <CardHeader className="p-0">
@@ -723,9 +727,9 @@ function TestPanel({
           {!pending && <ArrowRight />}
         </Button>
         {result && (
-          <div className="rounded-md border border-border/60 p-3 text-sm">
+          <div className="rounded-md border border-border/60 p-3 text-sm" data-testid="teste-resultado">
             <p>
-              {t("Intenção")}: <span className="font-medium">{result.intent_name ?? t("nenhuma casou")}</span>
+              {t("Intenção")}: <span className="font-medium">{vale?.intent_name ?? t("nenhuma casou")}</span>
               {confianca !== null && (
                 <span className="ml-2 text-xs text-muted-foreground">
                   {t("confiança")} {(confianca * 100).toFixed(0)}%
@@ -741,7 +745,7 @@ function TestPanel({
             <p>
               {t("Agente que atenderia")}:{" "}
               <span className="font-medium" data-testid="teste-agente-que-atenderia">
-                {quemAtende ?? t("nenhum (sem fallback)")}
+                {vale?.agent_name ?? t("nenhum (sem fallback)")}
               </span>
             </p>
           </div>
@@ -798,9 +802,10 @@ function EscolhasLadoALado({
           ? t("O Jev decide esta tarefa: em produção, vale a escolha dele, e a sua IA fica de reserva.")
           : jev.estado === "observando"
             ? t("O Jev só observa esta tarefa: em produção, vale a escolha da sua IA.")
-            : !jev.respondeu
-              ? t("O Jev decide esta tarefa, mas não respondeu: em produção, a sua IA decidiria no lugar dele.")
-              : t("O Jev decide esta tarefa, mas sem a resposta da sua IA vale a regra de sempre — nunca só o Jev.")}
+            : // Sem a resposta da IA, vale a regra de sempre, tenha o Jev respondido ou não (R2).
+              result.confidence === null
+              ? t("O Jev decide esta tarefa, mas sem a resposta da sua IA vale a regra de sempre — nunca só o Jev.")
+              : t("O Jev decide esta tarefa, mas não respondeu: em produção, a sua IA decidiria no lugar dele.")}
       </p>
     </div>
   );

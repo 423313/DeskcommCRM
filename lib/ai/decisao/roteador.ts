@@ -13,7 +13,10 @@
  *    NÃO espera por ele — a resposta vai para `jev_observacoes` quando chegar.
  *  - decidindo: vale a escolha dele, com o `min_confidence` do roteador sobre a
  *    probabilidade dele, e a IA de sempre é a reserva quando ele não responde.
- *    O turno espera por ele no máximo o teto do cliente (`TETO_PADRAO_MS`).
+ *    O turno espera por ele o que ele passar da IA de sempre, que roda junto:
+ *    a leitura do estado e da chave (consultas ao banco, sem teto próprio, como
+ *    as demais do turno) e a resposta, esta com no máximo o teto do cliente
+ *    (`TETO_PADRAO_MS`) — o teto cobre só a chamada ao fornecedor.
  *  - sem a IA de sempre (o classificador falhou ou a empresa não tem um): vale
  *    a regra de hoje — o agente de antes, ou o de reserva do roteador —, nunca
  *    o Jev (R2). Quem aplica é o turno; aqui só se pergunta e se grava.

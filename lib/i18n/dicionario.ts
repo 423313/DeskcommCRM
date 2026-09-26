@@ -3364,8 +3364,8 @@ export const DICIONARIO: Traducoes = {
   "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.": {
     es: "Jev estaba activado y no respondió, y no había otra IA para medir en su lugar.",
   },
-  "O Jev não respondeu, e o atendimento seguiu exatamente como seguiria sem ele: a sua IA de sempre decidiu, ou, sem ela, valeu a regra de antes.": {
-    es: "Jev no respondió, y la atención siguió exactamente como seguiría sin él: decidió tu IA de siempre o, sin ella, valió la regla de antes.",
+  "O Jev não respondeu, e nada dependia só dele: valeu o que a sua IA de sempre decidiu ou, sem ela, a regra de antes.": {
+    es: "Jev no respondió, y nada dependía solo de él: valió lo que decidió tu IA de siempre o, sin ella, la regla de antes.",
   },
   "A TypeSafe não aceitou a chave do Jev. Confira em Credenciais se ela ainda vale, ou cole uma nova.": {
     es: "TypeSafe no aceptó la clave de Jev. Revisa en Credenciales si todavía es válida o pega una nueva.",
@@ -3545,6 +3545,9 @@ export const DICIONARIO: Traducoes = {
   "A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela, sem nunca apagá-lo.": {
     es: "Tu IA de siempre sigue decidiendo; Jev solo suma su alerta a la de ella, sin borrarla nunca.",
   },
+  "A sua IA de sempre continua sendo perguntada a cada mensagem, ao mesmo tempo que o Jev, e continua custando: vale a escolha do Jev, e a dela entra quando ele não responde. Sem a resposta da sua IA de sempre, vale o agente de antes ou o de reserva do roteador — nunca só o Jev.": {
+    es: "A tu IA de siempre se le sigue preguntando en cada mensaje, al mismo tiempo que a Jev, y sigue costando: vale la elección de Jev, y la de ella entra cuando él no responde. Sin la respuesta de tu IA de siempre, vale el agente de antes o el de respaldo del enrutador — nunca solo Jev.",
+  },
   "Decidindo sozinho — a empresa ainda não tem uma IA principal que meça o clima, então o Jev mede sem reserva.": {
     es: "Decidiendo solo: la empresa todavía no tiene una IA principal que mida el clima, así que Jev mide sin respaldo.",
   },
@@ -3581,6 +3584,9 @@ export const DICIONARIO: Traducoes = {
   },
   "O modelo abaixo decide; o Jev soma o sinal dele, sem nunca apagar o do modelo.": {
     es: "El modelo de abajo decide; Jev suma su señal, sin borrar nunca la del modelo.",
+  },
+  "Vale a escolha do Jev, mas o modelo abaixo continua sendo chamado a cada mensagem: é a reserva quando o Jev não responde, e sem ele o Jev não escolhe sozinho.": {
+    es: "Vale la elección de Jev, pero el modelo de abajo se sigue llamando en cada mensaje: es el respaldo cuando Jev no responde, y sin él Jev no elige solo.",
   },
   "O Jev mede sozinho: não há modelo de reserva.": {
     es: "Jev mide solo: no hay modelo de respaldo.",
