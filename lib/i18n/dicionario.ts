@@ -97,6 +97,25 @@ export const DICIONARIO: Traducoes = {
   "Integração anterior do Google Ads. Novas contas podem precisar autorizar a Data Manager API.": { es: "Integración anterior de Google Ads. Las cuentas nuevas pueden necesitar autorizar la Data Manager API." },
 
   "Sobre a empresa": { es: "Sobre la empresa" },
+  // Rascunho sugerido por integração (issue #1611) — a faixa do Composer.
+  "Texto sugerido por": { es: "Texto sugerido por" },
+  "Revise antes de enviar.": { es: "Revise antes de enviar." },
+  "O texto sugerido não foi encontrado. A conversa abriu sem ele.": {
+    es: "El texto sugerido no se encontró. La conversación se abrió sin él.",
+  },
+  "O texto sugerido pertence a outra conversa. A conversa abriu sem ele.": {
+    es: "El texto sugerido pertenece a otra conversación. La conversación se abrió sin él.",
+  },
+  "O texto sugerido já foi usado. A conversa abriu sem ele.": {
+    es: "El texto sugerido ya fue usado. La conversación se abrió sin él.",
+  },
+  "O texto sugerido expirou. A conversa abriu sem ele.": {
+    es: "El texto sugerido expiró. La conversación se abrió sin él.",
+  },
+  // As mensagens de erro das rotas .../drafts e .../drafts/consume.
+  "Conversa inválida.": { es: "Conversación inválida." },
+  "Origem do rascunho inválida.": { es: "Origen del borrador inválido." },
+  "Texto do rascunho inválido.": { es: "Texto del borrador inválido." },
   "Não foi possível carregar o enriquecimento.": { es: "No se pudo cargar el enriquecimiento." },
   "Sem dados de enriquecimento para este contato.": { es: "Sin datos de enriquecimiento para este contacto." },
   "Avaliações no Google": { es: "Reseñas en Google" },
