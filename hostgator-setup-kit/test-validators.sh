@@ -568,6 +568,10 @@ sim_ok "sim por extenso"         sim "sim"
 sim_ok "SIM em caixa alta"       sim "SIM"
 sim_ok "y (teclado em inglês)"   sim "y"
 sim_ok "yes"                     sim "yes"
+sim_ok "si (español)"            sim "si"
+sim_ok "sí com acento"           sim "sí"
+sim_ok "Sí maiúsculo"            sim "Sí"
+sim_ok "SÍ em caixa alta"        sim "SÍ"
 sim_ok "espaço em volta"         sim "  s  "
 sim_ok "Enter (vazio) é não"     nao ""
 sim_ok "n"                       nao "n"
@@ -593,6 +597,7 @@ gemea_ok() {  # gemea_ok <arquivo> <entrada> <sim|nao>
 for arquivo in install.sh _common.sh; do
   gemea_ok "$arquivo" "S"      sim
   gemea_ok "$arquivo" "sim"    sim
+  gemea_ok "$arquivo" "sí"     sim
   gemea_ok "$arquivo" "nao"    nao
   gemea_ok "$arquivo" ""       nao
 done

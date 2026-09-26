@@ -88,7 +88,7 @@ die()   { c_red "✖ $*"; exit 1; }
 step()  { printf '\n'; paint 1 "▶ $*"; }
 
 # A resposta é sim? Aceita o que gente digita de verdade: s, S, sim, SIM, y,
-# yes, com espaço em volta. Cada prompt comparava a resposta com uma string
+# yes, si/sí (o instalador também fala espanhol), com espaço em volta. Cada prompt comparava a resposta com uma string
 # exata, então "S" e "sim" — a resposta certa, com a tecla errada — caíam no
 # ramo do NÃO. No gate do DNS isso encerrava a instalação com uma frase que nem
 # correspondia à escolha da pessoa. Gêmea da de _common.sh: se mexer numa,
@@ -96,7 +96,7 @@ step()  { printf '\n'; paint 1 "▶ $*"; }
 resposta_sim() {
   local r
   r="$(printf '%s' "${1:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
-  case "$r" in s|sim|y|yes) return 0;; *) return 1;; esac
+  case "$r" in s|sim|si|sí|sÍ|y|yes) return 0;; *) return 1;; esac
 }
 
 # ── Fases da jornada ────────────────────────────────────────────────────────
@@ -1839,7 +1839,7 @@ else
     if ! read -r -p "  > " a; then a="s"; fi
     case "$(printf '%s' "$a" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')" in
       c|continuar) c_ylw "$(t "  Seguindo sem o DNS pronto — lembre de apontar o A-record.")"; break;;
-      s|sair|n|nao) die "$(t "Ajuste o A-record de {1} para {2} e rode o instalador de novo." "$DOMAIN" "${public_ip:-$(t "o IP deste servidor")}")";;
+      s|sair|salir|n|nao|no) die "$(t "Ajuste o A-record de {1} para {2} e rode o instalador de novo." "$DOMAIN" "${public_ip:-$(t "o IP deste servidor")}")";;
       *)
         resolved="$(getent ahosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | sort -u | tr '\n' ' ' || echo '')"
         if [ -n "$public_ip" ] && case " $resolved " in *" $public_ip "*) true;; *) false;; esac; then

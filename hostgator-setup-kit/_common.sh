@@ -766,7 +766,7 @@ step()  { printf '\n'; paint 1 "▶ $*"; }
 resposta_sim() {
   local r
   r="$(printf '%s' "${1:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
-  case "$r" in s|sim|y|yes) return 0;; *) return 1;; esac
+  case "$r" in s|sim|si|sí|sÍ|y|yes) return 0;; *) return 1;; esac
 }
 
 # Saúde do app pela rota que ele responde de verdade, não pela porta. A porta
