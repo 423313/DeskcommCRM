@@ -44,3 +44,39 @@ create policy tenant_isolation_conversation_drafts_all
   for all to authenticated
   using (organization_id in (select public.fn_user_org_ids()))
   with check (organization_id in (select public.fn_user_org_ids()));
+
+-- LGPD: a anonimização do contato apaga os rascunhos das conversas dele. O
+-- `body` é o texto escrito PARA a pessoa ("Oi Maria, seu boleto de R$ 320
+-- venceu") e a tabela não tem FK para `contacts`, então nem a cascata nem o
+-- invariante de cascata a enxergam. Apagar, e não redigir: o rascunho é uma
+-- proposta que ninguém enviou (o que foi enviado está em `messages`, que a
+-- cascata já redige), e o que houve de operação fica no audit
+-- (`conversation.draft_created` / `draft_used`). Trigger na transição
+-- `is_anonymized false → true`, no molde de trg_redigir_tarefas_ao_anonimizar.
+create or replace function public.fn_apagar_rascunhos_do_contato_anonimizado()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  delete from public.conversation_drafts
+   where organization_id = new.organization_id
+     and conversation_id in (
+       select id from public.conversations
+        where organization_id = new.organization_id
+          and contact_id = new.id
+     );
+  return new;
+end;
+$$;
+
+revoke execute on function public.fn_apagar_rascunhos_do_contato_anonimizado() from public, anon, authenticated;
+grant  execute on function public.fn_apagar_rascunhos_do_contato_anonimizado() to service_role;
+
+drop trigger if exists trg_apagar_rascunhos_ao_anonimizar on public.contacts;
+create trigger trg_apagar_rascunhos_ao_anonimizar
+  after update of is_anonymized on public.contacts
+  for each row
+  when (new.is_anonymized is true and old.is_anonymized is distinct from true)
+  execute function public.fn_apagar_rascunhos_do_contato_anonimizado();
