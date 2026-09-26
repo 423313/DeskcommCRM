@@ -7,7 +7,8 @@ import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { contarUsoQueBloqueia, type VersaoVinculada } from "@/lib/ai/credenciais/uso";
 import { lerConfigDoJev } from "@/lib/ai/decisao/config";
-import { estadoEfetivoDaTarefa, TAREFAS_DO_JEV } from "@/lib/ai/decisao/tarefas";
+import { estadoEfetivoDaTarefa, TAREFAS_DO_JEV, tarefaSemCamada } from "@/lib/ai/decisao/tarefas";
+import { camadasEfetivas } from "@/lib/agent-engine/guardrails/camadas-da-org";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
@@ -64,13 +65,18 @@ export default async function CredentialsPage() {
     .maybeSingle();
   const configDoJev = lerConfigDoJev(orgRow?.settings);
   const jevLigado = configDoJev.ligado;
+  // A camada que a manipulação acompanha: desligada, a tarefa não roda.
+  const { data: linhasDasCamadas } = jevLigado
+    ? await supabase.from("org_guardrail_layers").select("layer, enabled").eq("organization_id", activeOrg.orgId)
+    : { data: null };
+  const camadas = camadasEfetivas(linhasDasCamadas ?? []);
   // A mesma pergunta que o worker faz: sem a chave do Jev, há IA principal para medir?
   const jev = jevLigado
     ? {
         // Só as tarefas que a chave de fato serve agora.
-        tarefas: TAREFAS_DO_JEV.filter((t) => estadoEfetivoDaTarefa(configDoJev, t) !== "desligada").map(
-          (t) => t.rotulo,
-        ),
+        tarefas: TAREFAS_DO_JEV.filter(
+          (t) => estadoEfetivoDaTarefa(configDoJev, t) !== "desligada" && !tarefaSemCamada(t, camadas),
+        ).map((t) => t.rotulo),
         temIaPrincipal:
           (await resolverModeloDoPonto("sentiment_classify", activeOrg.orgId, DEFAULT_CLASSIFIER_MODEL, {
             naFaltaUsarOPadraoDaOrganizacao: true,

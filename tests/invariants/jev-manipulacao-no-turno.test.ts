@@ -7,6 +7,7 @@ import { loadAgentVersionConfig } from "@/lib/agent-engine/agent/agent-config";
 import { createInboundTurnHandler, runAgentPreview } from "@/lib/agent-engine/agent/inbound-turn";
 import { newPreviewResult, scenarioContext, type TurnPreview } from "@/lib/agent-engine/agent/preview";
 import { createFakeRegistry } from "@/lib/agent-engine/edge/llm/providers";
+import { LlmBudgetExceededError } from "@/lib/agent-engine/edge/llm/run-model-call";
 import type { Logger } from "@/lib/agent-engine/obs/logger";
 import { claimJobs, completeJob, enqueueJob, failJob } from "@/lib/agent-engine/queue/queue";
 import { registrarManipulacaoDoJev } from "@/lib/ai/decisao/manipulacao";
@@ -53,7 +54,8 @@ const USO = {
   outputTokens: { total: 1, text: 1, reasoning: 0 },
 };
 
-type NivelDaIa = "none" | "low" | "high" | "falha";
+/** `orcamento`: o teto de gasto recusa o classificador de sempre (o erro SOBE, não degrada). */
+type NivelDaIa = "none" | "low" | "high" | "falha" | "orcamento";
 
 interface Rodada {
   /** Quantas vezes o classificador de sempre foi chamado. */
@@ -71,6 +73,7 @@ function modelo(nivelDaIa: NivelDaIa, r: Rodada) {
     if (texto.includes(MARCA_DO_JAILBREAK)) {
       r.jailbreakDaIa += 1;
       if (nivelDaIa === "falha") throw new Error("upstream 503");
+      if (nivelDaIa === "orcamento") throw new LlmBudgetExceededError();
       return {
         content: [{ type: "text" as const, text: JSON.stringify({ level: nivelDaIa, reason: "teste" }) }],
         finishReason: { unified: "stop" as const, raw: undefined },
@@ -445,6 +448,33 @@ describe("o Jev na camada anti-manipulação, pelo turno real", () => {
         contact_id: c.contato,
       },
     ]);
+  });
+
+  it("chave recusada: a linha de erro diz que a IA de sempre decidiu (jev_observacao), e não que ninguém mediu", async () => {
+    const c = await cenario(settingsDoJev());
+    const r = novaRodada();
+    await rodaTurno(c, deps("low", "high", r, 401));
+
+    // Controle: a IA de sempre decidiu neste turno.
+    expect(nivelNoTrace(r)).toBe("low");
+    // Com `jev`, Execuções afirmaria a consequência de ninguém ter medido
+    // (`app/api/v1/ai/runs/route.test.ts`, "a falha do Jev na manipulação…").
+    expect(await chamadasDoJev(c.org)).toMatchObject([{ status: "erro", origem_da_escolha: "jev_observacao" }]);
+  });
+
+  it("o teto de gasto derruba o classificador de sempre, mas o custo do Jev já cobrado entra (R8)", async () => {
+    const c = await cenario(settingsDoJev());
+    const r = novaRodada();
+    await expect(rodaTurno(c, deps("orcamento", "high", r))).rejects.toBeInstanceOf(LlmBudgetExceededError);
+
+    // Controle: o erro veio do classificador de sempre, e o Jev já tinha sido chamado.
+    expect(r.jailbreakDaIa).toBe(1);
+    expect(r.pedidosAoJev).toHaveLength(1);
+    expect(await chamadasDoJev(c.org)).toMatchObject([
+      { purpose: "jailbreak_detect", status: "ok", origem_da_escolha: "jev_observacao", input_tokens: 410 },
+    ]);
+    // Sem par: a IA de sempre não decidiu, e isso não conta como discordância.
+    expect(await observacoes(c.org)).toMatchObject([{ rotulo_jev: "high", rotulo_atual: null, concordou: null }]);
   });
 
   it("a mesma mensagem gravada duas vezes (retry do job) é UMA observação, e o custo das duas", async () => {

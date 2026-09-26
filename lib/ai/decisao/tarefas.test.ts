@@ -11,10 +11,13 @@ import {
   estadoAoLigar,
   estadoEfetivoDaTarefa,
   estadoGravadoDaTarefa,
+  TAREFA_DA_MANIPULACAO,
   TAREFA_DO_CLIMA,
   TAREFAS_DO_JEV,
   tarefaEhNova,
+  tarefaSemCamada,
 } from "@/lib/ai/decisao/tarefas";
+import { CONFERENCIA_DE_ENTRADA, CONFERENCIAS_DE_SAIDA } from "@/lib/ai/guardrails/lista-de-conferencia";
 import { PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
 
 const ADMIN = "22222222-2222-4222-8222-222222222222";
@@ -45,6 +48,24 @@ describe("TAREFAS_DO_JEV", () => {
       return igual ? [] : [t.id];
     });
     expect(divergentes).toEqual([]);
+  });
+
+  it("a camada que a tarefa acompanha é a da verificação do MESMO ponto na Segurança", () => {
+    const conferencias = [CONFERENCIA_DE_ENTRADA, ...CONFERENCIAS_DE_SAIDA];
+    const comCamada = TAREFAS_DO_JEV.filter((t) => t.camada !== undefined);
+    expect(comCamada.map((t) => t.id)).toEqual([TAREFA_DA_MANIPULACAO.id]);
+    expect(
+      comCamada.filter((t) => conferencias.find((c) => c.nome === t.ponto)?.camada !== t.camada).map((t) => t.id),
+    ).toEqual([]);
+  });
+
+  it("tarefaSemCamada: só a camada desligada para a organização para a tarefa", () => {
+    const ligadas = { jailbreak: true, promessa_semantica: false };
+    const semManipulacao = { jailbreak: false, promessa_semantica: true };
+    expect(tarefaSemCamada(TAREFA_DA_MANIPULACAO, ligadas)).toBe(false);
+    expect(tarefaSemCamada(TAREFA_DA_MANIPULACAO, semManipulacao)).toBe(true);
+    // O clima não acompanha camada nenhuma.
+    expect(tarefaSemCamada(TAREFA_DO_CLIMA, semManipulacao)).toBe(false);
   });
 });
 

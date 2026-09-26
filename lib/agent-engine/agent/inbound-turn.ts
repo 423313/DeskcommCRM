@@ -193,6 +193,7 @@ import {
   nivelFinalDaManipulacao,
   perguntarManipulacaoAoJev,
   registrarManipulacaoDoJev,
+  type ManipulacaoDoJev,
 } from '@/lib/ai/decisao/manipulacao';
 import type { DependenciasDoPonto } from '@/lib/ai/decisao/ponto';
 import { fusoDaOrganizacao } from './fuso-da-org';
@@ -3927,6 +3928,36 @@ async function executarTurnoDoAgente(
     // de instrução do agente, que o aceite ("cada mensagem, sozinha") não cobre
     // (R4). Mídia fica de fora da pergunta dele.
     const manipulacaoLigada = camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined);
+    const perguntaAoJev =
+      manipulacaoLigada && !preview && job?.kind === 'inbound_turn'
+        ? perguntarManipulacaoAoJev(
+            pool,
+            {
+              organizationId: tenantId,
+              mensagem: textoDoClienteNaUltimaMensagem(effectiveContext.messages),
+              contactId: leadId || null,
+              jobId: job.id,
+            },
+            deps.jev,
+          )
+        : Promise.resolve(null);
+    const gravarOJev = async (
+      doJev: ManipulacaoDoJev | null,
+      nivelDaIa: JailbreakLevel | null,
+      nivelFinal: JailbreakLevel,
+    ): Promise<void> => {
+      if (doJev === null) return;
+      await registrarManipulacaoDoJev(pool, {
+        organizationId: tenantId,
+        contactId: leadId || null,
+        conversationId: input.conversationId || null,
+        messageId: input.inboundMessageId ?? null,
+        jobId: job?.id ?? null,
+        jev: doJev,
+        nivelDaIa,
+        nivelFinal,
+      });
+    };
     const [stageResultado, jailbreakVerdict, manipulacaoDoJev] = await Promise.all([
       deps.knobs.stageClassifier !== undefined
         ? classifyStage(
@@ -3959,19 +3990,15 @@ async function executarTurnoDoAgente(
             { registry: deps.registry, log: runLog },
           )
         : Promise.resolve(null),
-      manipulacaoLigada && !preview && job?.kind === 'inbound_turn'
-        ? perguntarManipulacaoAoJev(
-            pool,
-            {
-              organizationId: tenantId,
-              mensagem: textoDoClienteNaUltimaMensagem(effectiveContext.messages),
-              contactId: leadId || null,
-              jobId: job.id,
-            },
-            deps.jev,
-          )
-        : Promise.resolve(null),
-    ]);
+      perguntaAoJev,
+    ]).catch(async (err: unknown) => {
+      // O teto de orçamento derruba o classificador de sempre (`LlmBudgetExceededError`
+      // sobe para a escolta do turno), mas não o Jev (R8): a chamada dele já saiu
+      // e foi cobrada, e o custo entra em `llm_calls` — a observação vai sem par,
+      // porque a IA de sempre não decidiu. `perguntaAoJev` nunca rejeita.
+      await gravarOJev(await perguntaAoJev, null, 'none');
+      throw err;
+    });
 
     stageSuggestion = stageResultado;
     if (stageSuggestion !== null) {
@@ -3989,18 +4016,11 @@ async function executarTurnoDoAgente(
         ...(jailbreakLevel !== jailbreakVerdict?.level ? { jailbreak_somado_pelo_jev: true } : {}),
       });
     }
-    if (manipulacaoDoJev !== null) {
-      await registrarManipulacaoDoJev(pool, {
-        organizationId: tenantId,
-        contactId: leadId || null,
-        conversationId: input.conversationId || null,
-        messageId: input.inboundMessageId ?? null,
-        jobId: job?.id ?? null,
-        jev: manipulacaoDoJev,
-        nivelDaIa: jailbreakVerdict === null || jailbreakVerdict.falhou ? null : jailbreakVerdict.level,
-        nivelFinal: jailbreakLevel,
-      });
-    }
+    await gravarOJev(
+      manipulacaoDoJev,
+      jailbreakVerdict === null || jailbreakVerdict.falhou ? null : jailbreakVerdict.level,
+      jailbreakLevel,
+    );
 
     // Spec 16 §4: a projeção arma quando NENHUMA ferramenta de catálogo entrou —
     // é exatamente o turno em que os ids do contexto não têm uso, e portanto o

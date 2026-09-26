@@ -675,6 +675,44 @@ describe("CartaoDoJev — por tarefa", () => {
     expect(screen.getByTestId("jev-decide-manipulacao")).not.toHaveTextContent(/mede primeiro/);
   });
 
+  /**
+   * A camada anti-manipulação desligada pela empresa: o turno não pergunta ao
+   * Jev, e o cartão dizia "Só observa" esperando uma comparação que nunca vem.
+   */
+  it("tarefa parada pela camada desligada: diz que não roda, sem comparação nem 'Deixar decidir', e não faz o cartão observar", () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "decide" },
+        por_tarefa: [
+          { ...CLIMA, estado: "decidindo" },
+          { ...NOVA, sem_camada: true, observacao: { dias: 30, comparadas: 0, concordaram: 0 } },
+        ],
+      }),
+    );
+    const nova = screen.getByTestId("jev-tarefa-manipulacao");
+    expect(nova).toHaveTextContent("Não roda");
+    expect(nova).not.toHaveTextContent("Só observa");
+    expect(screen.getByTestId("jev-sem-camada-manipulacao")).toHaveTextContent(
+      /Detectar tentativa de manipular o assistente.*desligada na Segurança do agente/,
+    );
+    expect(screen.queryByTestId("jev-concordancia-manipulacao")).toBeNull();
+    expect(within(nova).queryByRole("button", { name: "Deixar o Jev decidir" })).toBeNull();
+    // A saída de quem não a quer continua lá.
+    expect(within(nova).getByRole("button", { name: "Pausar esta tarefa" })).toBeInTheDocument();
+    // O clima decide; a tarefa parada não faz o selo virar "Decide em parte".
+    expect(screen.getByText("Decidindo")).toBeInTheDocument();
+    expect(screen.queryByText("Decide em parte")).toBeNull();
+    expect(jevNoPonto(dados({ config: { ligado: true }, por_tarefa: [{ ...NOVA, sem_camada: true }] }), "jailbreak_detect")).toBeNull();
+  });
+
+  it("controle: com a camada ligada, a mesma tarefa só observa e oferece decidir", () => {
+    montar(dados({ config: { ligado: true, modo: "observacao" }, por_tarefa: [{ ...NOVA, sem_camada: false }] }));
+    const nova = screen.getByTestId("jev-tarefa-manipulacao");
+    expect(nova).toHaveTextContent("Só observa");
+    expect(screen.queryByTestId("jev-sem-camada-manipulacao")).toBeNull();
+    expect(within(nova).getByRole("button", { name: "Deixar o Jev decidir" })).toBeInTheDocument();
+  });
+
   it("tarefa nova sem observação na resposta não inventa concordância", () => {
     montar(dados({ config: { ligado: true, modo: "observacao" }, por_tarefa: [NOVA] }));
     expect(screen.queryByTestId("jev-concordancia-manipulacao")).toBeNull();

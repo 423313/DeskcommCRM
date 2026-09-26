@@ -88,7 +88,15 @@ export interface TarefaNoCartao {
    * resposta da imagem anterior: lá só o clima a tinha, em `numeros.observacao`.
    */
   observacao?: Concordancia | null;
+  /**
+   * A camada de segurança que ela acompanha está desligada para a empresa: o
+   * turno não pergunta, e ela não roda em estado nenhum. Ausente na imagem anterior.
+   */
+  sem_camada?: boolean;
 }
+
+/** A tarefa pode rodar agora — não está desligada nem parada pela camada que acompanha. */
+const roda = (t: TarefaNoCartao) => t.estado !== "desligada" && t.sem_camada !== true;
 
 type Concordancia = DadosDoJev["numeros"]["observacao"];
 
@@ -155,8 +163,10 @@ function estadoDoJev(d: DadosDoJev): Estado {
     // Sem a IA de sempre não há com quem comparar nem quem cubra: o worker
     // deixa o Jev decidir o clima qualquer que seja o estado — menos desligado.
     if (!d.tem_ia_de_sempre && clima && clima.estado !== "desligada") return "sozinho";
-    if (tarefas.some((t) => t.estado === "decidindo")) return "decidindo";
-    if (tarefas.some((t) => t.estado === "observando")) return "observando";
+    // A tarefa parada pela camada não mede nada: não faz o cartão observar nem decidir.
+    const rodando = tarefas.filter(roda);
+    if (rodando.some((t) => t.estado === "decidindo")) return "decidindo";
+    if (rodando.some((t) => t.estado === "observando")) return "observando";
     return "em_pausa";
   }
   if (!d.chave.existe) return "sem_chave";
@@ -170,7 +180,7 @@ function estadoDoJev(d: DadosDoJev): Estado {
  * decidindo é o caminho natural depois do selo "Novo" e de um clique.
  */
 function decideEmParte(d: DadosDoJev): boolean {
-  return tarefasDoCartao(d).some((t) => t.estado === "observando");
+  return tarefasDoCartao(d).some((t) => roda(t) && t.estado === "observando");
 }
 
 /**
@@ -191,7 +201,7 @@ export function jevNoPonto(
 ): "observacao" | "decide" | "soma" | "sozinho" | null {
   if (!d?.config.ligado || !d.chave.validada) return null;
   const tarefa = tarefasDoCartao(d).find((t) => t.ponto === pontoId);
-  if (!tarefa || tarefa.estado === "desligada") return null;
+  if (!tarefa || !roda(tarefa)) return null;
   // A IA de sempre é a do clima (`tem_ia_de_sempre`), e só o clima decide sem ela (DEC-012 #5).
   if (!d.tem_ia_de_sempre && tarefa.id === TAREFA_DO_CLIMA.id) return "sozinho";
   if (tarefa.estado !== "decidindo") return "observacao";
@@ -630,18 +640,31 @@ function Ligado({
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{t(tarefa.rotulo)}</span>
               {rodando && (
-                <Badge variant={tarefa.estado === "decidindo" ? "success" : "neutral"}>
-                  {tarefa.estado === "observando"
-                    ? t("Só observa")
-                    : tarefa.estado === "decidindo"
-                      ? t("Decide")
-                      : t("Desligada")}
+                <Badge variant={roda(tarefa) && tarefa.estado === "decidindo" ? "success" : "neutral"}>
+                  {tarefa.estado === "desligada"
+                    ? t("Desligada")
+                    : tarefa.sem_camada
+                      ? t("Não roda")
+                      : tarefa.estado === "observando"
+                        ? t("Só observa")
+                        : t("Decide")}
                 </Badge>
               )}
               {tarefa.novo && <Badge variant="info">{t("Novo")}</Badge>}
             </div>
 
-            {rodando && tarefa.estado === "decidindo" && (
+            {/* Sem esta linha, a tarefa ficava "Só observa" esperando uma
+                comparação que nunca vem: o turno só pergunta ao Jev onde a IA
+                de sempre também pergunta. Hoje só a manipulação acompanha camada. */}
+            {rodando && tarefa.estado !== "desligada" && tarefa.sem_camada && (
+              <p className="text-sm text-muted-foreground" data-testid={`jev-sem-camada-${tarefa.id}`}>
+                {t(
+                  "Não roda agora: a verificação “Detectar tentativa de manipular o assistente” está desligada na Segurança do agente, e o Jev só pergunta onde a sua IA de sempre também pergunta.",
+                )}
+              </p>
+            )}
+
+            {rodando && roda(tarefa) && tarefa.estado === "decidindo" && (
               <p className="text-sm text-muted-foreground" data-testid={`jev-decide-${tarefa.id}`}>
                 {somaSinal(tarefa.id)
                   ? t("A sua IA de sempre segue decidindo; o Jev só soma o alerta dele ao dela, sem nunca apagá-lo.")
@@ -652,7 +675,7 @@ function Ligado({
             {/* A concordância de cada tarefa com a IA de sempre — o que se lê antes
                 de deixar o Jev decidir. O clima conta "chamariam uma pessoa"; as
                 outras, o mesmo rótulo (em `jev_observacoes`). */}
-            {rodando && tarefa.estado === "observando" && concordanciaDa(tarefa, dados) !== null && (
+            {rodando && roda(tarefa) && tarefa.estado === "observando" && concordanciaDa(tarefa, dados) !== null && (
               <ConcordanciaDaTarefa
                 tarefa={tarefa}
                 o={concordanciaDa(tarefa, dados)!}
@@ -662,7 +685,8 @@ function Ligado({
 
             {dados.pode_editar && rodando && (
               <div className="flex flex-wrap items-center gap-3">
-                {tarefa.estado === "observando" && (
+                {/* Parada pela camada, não há o que comparar antes de decidir. */}
+                {tarefa.estado === "observando" && !tarefa.sem_camada && (
                   <Button
                     size="sm"
                     disabled={enviando}

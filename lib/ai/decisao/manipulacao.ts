@@ -6,8 +6,8 @@
  * tenta manipular o agente (`classifyJailbreak`, ponto `jailbreak_detect`), e a
  * resposta é advisória: só marca o turno e, junto de uma promessa fora da
  * tabela, abre um item na Central. O Jev responde a MESMA pergunta, com os
- * mesmos três níveis, em paralelo, e o turno não espera nada a mais enquanto
- * ele for mais rápido que o modelo.
+ * mesmos três níveis, em paralelo: o turno só espera por ele o que ele passar
+ * do modelo (no máximo o teto do cliente, `TETO_PADRAO_MS`), mais a gravação.
  *
  * ═══ O QUE ELE PODE, EM CADA ESTADO ═══
  *
@@ -174,8 +174,12 @@ export async function perguntarManipulacaoAoJev(
 
 /**
  * A linha de erro da falha que pede ação (chave recusada, sem crédito, pergunta
- * recusada) — a mesma forma da do clima (`workers/ai-sentiment-worker.ts`).
- * Nunca lança: é telemetria.
+ * recusada) — a mesma forma da do clima (`workers/ai-sentiment-worker.ts`), com
+ * uma diferença: a origem é `jev_observacao`, e não `jev`. No clima, a linha de
+ * erro com `jev` só existe quando ninguém mediu, e Execuções mostra a
+ * consequência; aqui a IA de sempre segue decidindo (ou, sem ela, vale "nenhum
+ * sinal", como sem o Jev), e a tela diz que o atendimento seguiu como sem ele
+ * (`JEV_FALHOU_AO_LADO`). Nunca lança: é telemetria.
  */
 async function registrarFalhaQuePedeAcao(
   pool: pg.Pool,
@@ -188,7 +192,7 @@ async function registrarFalhaQuePedeAcao(
       `insert into public.llm_calls
          (organization_id, contact_id, job_id, purpose, provider, model,
           input_tokens, output_tokens, cost_cents, latency_ms, status, error_code, http_status, origem_da_escolha)
-       values ($1, $2, $3, 'jailbreak_detect', 'typesafe', $4, 0, 0, 0, $5, 'erro', $6, $7, 'jev')`,
+       values ($1, $2, $3, 'jailbreak_detect', 'typesafe', $4, 0, 0, 0, $5, 'erro', $6, $7, 'jev_observacao')`,
       [
         entrada.organizationId,
         entrada.contactId ?? null,

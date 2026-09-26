@@ -45,9 +45,13 @@ export type OrigemDaEscolha =
   | "variavel_de_ambiente"
   | "herdado_de_quem_chamou"
   | "padrao_da_organizacao"
-  /** O Jev mediu e a nota dele decidiu. Também a linha de falha do Jev (ver Execuções). */
+  /** O Jev mediu e a nota dele decidiu. Também a linha de falha do clima sem reserva (ver Execuções). */
   | "jev"
-  /** Observação: o Jev mediu ao lado da IA de sempre, e quem decidiu foi ela. */
+  /**
+   * O Jev mediu ao lado da IA de sempre, e quem decidiu foi ela. Também a linha
+   * de falha do Jev numa tarefa em que ele só opina ao lado dela (a manipulação):
+   * o turno seguiu como sem ele (ver Execuções).
+   */
   | "jev_observacao"
   /** O Jev estava ligado e não respondeu: a IA de sempre mediu no lugar dele. */
   | "reserva_do_jev"

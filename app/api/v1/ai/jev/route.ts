@@ -12,7 +12,8 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * que vale agora, o que ela vira ao ligar o Jev (`ao_ligar`), se ela é nova —
  * começou sozinha e ninguém escolheu ainda — e a concordância dela com a IA de
  * sempre (`observacao`): a do clima, das notas em `messages.metadata`; a das
- * outras, de `jev_observacoes`.
+ * outras, de `jev_observacoes`. E `sem_camada`: a tarefa acompanha uma camada de
+ * segurança que a organização desligou, e não roda.
  *
  * PATCH liga, desliga, troca o modo do clima (`modo`, o nome da onda 1) e o
  * estado de uma tarefa (`tarefa` + `estado`). Ligar manda cada mensagem que o cliente
@@ -26,6 +27,7 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 
+import { camadasEfetivas } from "@/lib/agent-engine/guardrails/camadas-da-org";
 import { credencialEmUsoPeloJev, PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
 import {
   ESTADO_DO_MODO,
@@ -44,6 +46,7 @@ import {
   TAREFA_DO_CLIMA,
   TAREFAS_DO_JEV,
   tarefaEhNova,
+  tarefaSemCamada,
 } from "@/lib/ai/decisao/tarefas";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
@@ -78,7 +81,11 @@ const TAREFAS = TAREFAS_DO_JEV.flatMap((t) =>
 
 type Concordancia = { dias: number; comparadas: number; concordaram: number };
 
-function porTarefa(c: ConfigDoJev, observacao: Readonly<Record<string, Concordancia>>) {
+function porTarefa(
+  c: ConfigDoJev,
+  observacao: Readonly<Record<string, Concordancia>>,
+  camadas: ReturnType<typeof camadasEfetivas>,
+) {
   return TAREFAS_DO_JEV.map((t) => ({
     id: t.id,
     ponto: t.ponto ?? null,
@@ -88,6 +95,9 @@ function porTarefa(c: ConfigDoJev, observacao: Readonly<Record<string, Concordan
     ao_ligar: estadoAoLigar(c, t),
     novo: tarefaEhNova(c, t),
     observacao: observacao[t.id] ?? null,
+    // A camada de segurança que ela acompanha está desligada: o turno não
+    // pergunta, e "observando" sem mais nada prometeria uma comparação que nunca vem.
+    sem_camada: tarefaSemCamada(t, camadas),
   }));
 }
 
@@ -262,7 +272,7 @@ export async function GET(): Promise<Response> {
     return { porTarefa, erro: null };
   };
 
-  const [orgRes, credsRes, semana, comparadasRes, iaDeSempre, percebidasRes, observacoes] = await Promise.all([
+  const [orgRes, credsRes, semana, comparadasRes, iaDeSempre, percebidasRes, observacoes, camadasRes] = await Promise.all([
     db.from("organizations").select("settings").eq("id", org.orgId).maybeSingle(),
     db
       .from("ai_provider_credentials")
@@ -299,6 +309,7 @@ export async function GET(): Promise<Response> {
       .order("created_at", { ascending: false })
       .limit(PAGINA),
     lerObservacoes(),
+    db.from("org_guardrail_layers").select("layer, enabled").eq("organization_id", org.orgId),
   ]);
 
   const erro =
@@ -307,7 +318,8 @@ export async function GET(): Promise<Response> {
     semana.erro ??
     comparadasRes.error?.message ??
     percebidasRes.error?.message ??
-    observacoes.erro;
+    observacoes.erro ??
+    camadasRes.error?.message;
   if (erro) return fail("query_failed", erro, 500, { requestId });
 
   const credenciais = credsRes.data ?? [];
@@ -340,7 +352,11 @@ export async function GET(): Promise<Response> {
       },
       config: configPublica(config),
       tarefas: TAREFAS,
-      por_tarefa: porTarefa(config, { ...observacoes.porTarefa, [TAREFA_DO_CLIMA.id]: doClima }),
+      por_tarefa: porTarefa(
+        config,
+        { ...observacoes.porTarefa, [TAREFA_DO_CLIMA.id]: doClima },
+        camadasEfetivas(camadasRes.data ?? []),
+      ),
       tem_ia_de_sempre: iaDeSempre !== null,
       numeros: {
         ...numeros,

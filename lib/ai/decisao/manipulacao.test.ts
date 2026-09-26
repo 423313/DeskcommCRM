@@ -171,6 +171,10 @@ describe("perguntarManipulacaoAoJev", () => {
     const erro = consultas.find((c) => /insert into public\.llm_calls/.test(c.sql));
     expect(erro?.sql).toMatch(/'jailbreak_detect', 'typesafe'/);
     expect(erro?.sql).toMatch(/'erro'/);
+    // `jev_observacao`, e não `jev`: com `jev`, Execuções afirma a consequência de
+    // ninguém ter medido — e aqui a IA de sempre seguiu decidindo.
+    expect(erro?.sql).toMatch(/'jev_observacao'\)/);
+    expect(erro?.sql).not.toMatch(/'jev'\)/);
     expect(erro?.params).toEqual(expect.arrayContaining(["contato-1", "job-1", "jev_credencial_invalida", 401]));
   });
 

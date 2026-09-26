@@ -3360,6 +3360,9 @@ export const DICIONARIO: Traducoes = {
   "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.": {
     es: "Jev estaba activado y no respondió, y no había otra IA para medir en su lugar.",
   },
+  "O Jev não respondeu. Nesta tarefa ele só opina ao lado da IA de sempre, então o atendimento seguiu como seguiria sem ele.": {
+    es: "Jev no respondió. En esta tarea solo opina junto a la IA de siempre, así que la atención siguió como seguiría sin él.",
+  },
   "A TypeSafe não aceitou a chave do Jev. Confira em Credenciais se ela ainda vale, ou cole uma nova.": {
     es: "TypeSafe no aceptó la clave de Jev. Revisa en Credenciales si todavía es válida o pega una nueva.",
   },
@@ -3456,6 +3459,10 @@ export const DICIONARIO: Traducoes = {
   "Decide em parte": { es: "Decide en parte" },
   // O selo de cada tarefa do Jev no cartão (CartaoDoJev.tsx).
   "Só observa": { es: "Solo observa" },
+  "Não roda": { es: "No funciona" },
+  "Não roda agora: a verificação “Detectar tentativa de manipular o assistente” está desligada na Segurança do agente, e o Jev só pergunta onde a sua IA de sempre também pergunta.": {
+    es: "No funciona ahora: la verificación “Detectar intento de manipular al asistente” está desactivada en la Seguridad del agente, y Jev solo pregunta donde tu IA de siempre también pregunta.",
+  },
   Decide: { es: "Decide" },
   "Pegar a chave na TypeSafe": { es: "Obtener la clave en TypeSafe" },
   "Colar a chave": { es: "Pegar la clave" },

@@ -20,6 +20,8 @@
  *     cliente e usa o dado já aceito. Uma que pede a conversa nunca começa
  *     sozinha.
  */
+import type { CamadaSemantica } from "@/lib/agent-engine/guardrails/camadas-da-org";
+
 import {
   ALCANCES,
   ESTADO_DO_MODO,
@@ -45,6 +47,12 @@ export interface TarefaDoJev {
    * disse não) ou `novo` (não há mecanismo hoje).
    */
   familia: "substitui" | "soma" | "cascata" | "novo";
+  /**
+   * A camada de segurança que ela ACOMPANHA, quando há uma: desligada para a
+   * organização, o turno não pergunta nem à IA de sempre nem ao Jev, e a tarefa
+   * não roda qualquer que seja o estado dela (`tarefaSemCamada`).
+   */
+  camada?: CamadaSemantica;
   /**
    * Para quem não é engenheiro: vão à tela por `t()`. O `rotulo` é o nome do que
    * o JEV faz, e pode diferir do nome do ponto; o `oQueFaz` é o `oQueOJevFaz` do
@@ -82,6 +90,7 @@ export const TAREFA_DA_MANIPULACAO = {
   primitiva: "choice",
   alcance: "mensagem",
   familia: "soma",
+  camada: "jailbreak",
   // O nome do ponto ("Barrar…") é o do classificador; o Jev não barra nada —
   // percebe e soma o sinal. Dizer "barrar" ao leigo prometeria um bloqueio.
   rotulo: "Perceber tentativa de manipulação",
@@ -136,4 +145,17 @@ export function estadoAoLigar(config: ConfigDoJev, tarefa: TarefaNaRegra): Estad
 /** Começou sozinha e ninguém escolheu nada ainda: é o selo "Novo" do cartão. */
 export function tarefaEhNova(config: ConfigDoJev, tarefa: TarefaNaRegra): boolean {
   return estadoGravadoDaTarefa(config, tarefa.id) === undefined && estadoEfetivoDaTarefa(config, tarefa) !== "desligada";
+}
+
+/**
+ * A tarefa acompanha uma camada que está desligada para a organização? Então ela
+ * não roda: o turno só pergunta ao Jev onde a IA de sempre também pergunta
+ * (`lib/agent-engine/agent/inbound-turn.ts`). `camadas` é o efetivo da
+ * organização (`camadasEfetivas`).
+ */
+export function tarefaSemCamada(
+  tarefa: TarefaDoJev,
+  camadas: Readonly<Record<CamadaSemantica, boolean>>,
+): boolean {
+  return tarefa.camada !== undefined && !camadas[tarefa.camada];
 }

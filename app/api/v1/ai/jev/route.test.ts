@@ -55,6 +55,8 @@ interface Estado {
   llmCalls: Linha[];
   mensagens: Linha[];
   observacoes: Linha[];
+  /** `org_guardrail_layers`. */
+  camadas: Linha[];
   consultas: Consulta[];
 }
 
@@ -77,7 +79,9 @@ function cliente(tipo: Consulta["cliente"]) {
               ? estado.llmCalls
               : tabela === "jev_observacoes"
                 ? estado.observacoes.filter((l) => c.nao.every(([col, v]) => l[col] !== v))
-                : estado.mensagens;
+                : tabela === "org_guardrail_layers"
+                  ? estado.camadas
+                  : estado.mensagens;
         const filtradas = base.filter((l) => c.eq.every(([col, v]) => !(col in l) || l[col] === v));
         return c.range ? filtradas.slice(c.range[0], c.range[1] + 1) : filtradas.slice(0, MAX_ROWS);
       };
@@ -161,6 +165,7 @@ beforeEach(() => {
     llmCalls: [],
     mensagens: [],
     observacoes: [],
+    camadas: [],
     consultas: [],
   };
   vi.mocked(requireRole).mockImplementation(async (min) =>
@@ -616,6 +621,25 @@ describe("o Jev por tarefa na rota", () => {
     const lidas = estado.consultas.filter((c) => c.tabela === "jev_observacoes");
     expect(lidas.every((c) => c.cliente === "sessao" && c.eq.some(([col, v]) => col === "organization_id" && v === ORG))).toBe(true);
     expect(lidas.every((c) => c.gte.some(([col]) => col === "created_at"))).toBe(true);
+  });
+
+  it("GET: a manipulação com a camada anti-manipulação desligada pela organização diz que não roda", async () => {
+    estado.settings = { jev: { ligado: true, aceite: ACEITE_ANTIGO } };
+    const semCamada = async () =>
+      (await ler()).corpo.data.por_tarefa.map((t: { id: string; sem_camada: boolean }) => [t.id, t.sem_camada]);
+    // Sem escolha da organização, vale o padrão do worker: a camada roda.
+    expect(await semCamada()).toEqual([
+      ["clima", false],
+      ["manipulacao", false],
+    ]);
+    estado.camadas = [
+      { organization_id: ORG, layer: "jailbreak", enabled: false },
+      { organization_id: OUTRA_ORG, layer: "jailbreak", enabled: true },
+    ];
+    expect(await semCamada()).toEqual([
+      ["clima", false],
+      ["manipulacao", true],
+    ]);
   });
 
   it("PATCH de uma tarefa: grava só ela, espelha o clima no `modo` e audita com a tarefa", async () => {
