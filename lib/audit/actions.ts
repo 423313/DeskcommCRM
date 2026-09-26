@@ -356,6 +356,12 @@ export const AUDIT_ACTIONS = [
   "conversation.handoff_auto_return_run",
   "conversation.note_added",
   "conversation.note_deleted",
+  // Rascunho sugerido por integração (issue #1611): quem criou o texto que a
+  // pessoa vai revisar, e — separado — quem clicou em enviar. O envio em si já
+  // é `messages` com `sent_via='user'`; estas duas linhas contam a metade que
+  // ficava invisível (o ERP sugeriu, o atendente decidiu).
+  "conversation.draft_created",
+  "conversation.draft_used",
   "ai.case_replied",
   // O agente participando do chamado — separado de `ai.case_replied` (a pessoa
   // respondendo) porque juntar os dois apagaria justamente quem agiu.
