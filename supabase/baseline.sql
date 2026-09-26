@@ -39304,8 +39304,10 @@ create index if not exists conversation_drafts_conversation
 
 alter table public.conversation_drafts enable row level security;
 
-drop policy if exists tenant_isolation_conversation_drafts_all
-  on public.conversation_drafts;
+-- Uma linha só, como o resto do apêndice: a régua de
+-- tests/unit/baseline-reaplicavel.test.ts casa `drop policy if exists <nome> <espaço>`
+-- DENTRO da linha, e `on` na linha seguinte escondia o drop dela.
+drop policy if exists tenant_isolation_conversation_drafts_all on public.conversation_drafts;
 create policy tenant_isolation_conversation_drafts_all
   on public.conversation_drafts
   for all to authenticated
