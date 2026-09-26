@@ -35,7 +35,7 @@ export const ESTADOS_DA_TAREFA = ["observando", "decidindo", "desligada"] as con
 export type EstadoDaTarefa = (typeof ESTADOS_DA_TAREFA)[number];
 /**
  * Os estados em que a tarefa pergunta ao Jev — desligada não pergunta nada. É o
- * CHECK de `jev_observacoes.estado` (migration 0418), cobrado por
+ * CHECK de `jev_observacoes.estado` (migration 0420), cobrado por
  * `tests/invariants/jev-observacoes.test.ts` ("o CHECK de `estado` aceita…").
  */
 export const ESTADOS_QUE_PERGUNTAM = ["observando", "decidindo"] as const satisfies readonly EstadoDaTarefa[];

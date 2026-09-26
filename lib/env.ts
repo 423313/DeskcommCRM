@@ -400,7 +400,7 @@ const schema = z.object({
    */
   PROSPECCAO_RETENTION_DAYS: z.string().optional().default(""),
   /**
-   * Observações do Jev (migration 0418): o par Jev × mecanismo de hoje que o
+   * Observações do Jev (migration 0420): o par Jev × mecanismo de hoje que o
    * cartão compara, sem texto de cliente. `z.string()` pela MESMA razão das
    * irmãs acima — quem interpreta é `lib/retencao/politica.ts`. Padrão 90, piso
    * 30 (a janela da concordância).

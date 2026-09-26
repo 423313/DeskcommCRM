@@ -38097,12 +38097,12 @@ grant select on public.ai_provider_credentials_safe to authenticated;
 notify pgrst, 'reload schema';
 
 
--- ---- as observações do Jev, tarefa a tarefa (migration 0418) ----
+-- ---- as observações do Jev, tarefa a tarefa (migration 0420) ----
 --
 -- O Jev ao lado do mecanismo de hoje: o rótulo de cada um e se concordaram, sem
 -- texto de cliente. ANTES da varredura de anon (cria função) e, por isso também,
 -- antes da reaplicação de módulos e das proteções e travas do fim do arquivo,
--- que precisam ver a tabela nova. Racional inteiro na migration 0418.
+-- que precisam ver a tabela nova. Racional inteiro na migration 0420.
 create table if not exists public.jev_observacoes (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,

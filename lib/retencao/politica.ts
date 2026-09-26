@@ -193,14 +193,14 @@ export const RETENCAO_PROSPECCAO_DIAS_PADRAO = 365;
 export const RETENCAO_PROSPECCAO_DIAS_PISO = 90;
 
 /**
- * 90 dias para as OBSERVAÇÕES DO JEV (`jev_observacoes`, migration 0418).
+ * 90 dias para as OBSERVAÇÕES DO JEV (`jev_observacoes`, migration 0420).
  *
  * A linha não guarda texto de cliente — só os rótulos do Jev e do mecanismo de
  * hoje e se concordaram. Ela existe para uma pergunta só: "posso deixar o Jev
  * decidir esta tarefa?", respondida pela concordância recente. Três meses é
  * folga sobre a janela que o cartão mostra.
  *
- * Quem aplica é `fn_expurgar_observacoes_do_jev` (0418), em lotes pelo cron
+ * Quem aplica é `fn_expurgar_observacoes_do_jev` (0420), em lotes pelo cron
  * `data-retention`, com o piso no CORPO da função, como as irmãs.
  */
 export const RETENCAO_OBSERVACOES_DO_JEV_DIAS_PADRAO = 90;
