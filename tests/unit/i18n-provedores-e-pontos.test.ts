@@ -47,8 +47,8 @@ describe("espanhol dos textos que vêm de lista, não de literal", () => {
     expect(semEspanhol(textos)).toEqual([]);
   });
 
-  it("toda tarefa do Jev — o nome e o que muda quando ela decide, nos dois cartões", () => {
-    const textos = TAREFAS_DO_JEV.flatMap((x) => [x.rotulo, x.oQueFaz, x.aoDecidir, x.aoDecidirNoPonto]);
+  it("toda tarefa do Jev — o nome, o que muda quando ela decide e o que o diálogo avisa antes", () => {
+    const textos = TAREFAS_DO_JEV.flatMap((x) => [x.rotulo, x.oQueFaz, x.aoDecidir, x.aoDecidirNoPonto, x.aoConfirmarDecidir]);
     expect(textos.length, "a varredura não enxergou as tarefas").toBeGreaterThan(8);
     expect(semEspanhol(textos)).toEqual([]);
   });

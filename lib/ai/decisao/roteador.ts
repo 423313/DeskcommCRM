@@ -50,7 +50,7 @@ import { costCents } from "@/lib/agent-engine/edge/llm/pricing";
 import { logger } from "@/lib/logger";
 import { scrubMessage } from "@/lib/sentry/scrub";
 
-import { MODELO_DO_JEV, type MotivoComRede, type Pergunta } from "./cliente";
+import { MODELO_DO_JEV, type MotivoDaAusencia, type Pergunta } from "./cliente";
 import type { EstadoDaTarefa, EstadoQuePergunta } from "./config";
 import { podeTentar, registrarFalha, registrarSucesso } from "./disjuntor";
 import { estadoDaTarefaNoPool, registrarFalhaQuePedeAcao } from "./pool";
@@ -105,12 +105,14 @@ export interface EscolhaDoJev {
 }
 
 /**
- * Por que ele não opinou, quando a pergunta chegou a sair — é o que a
- * cobertura grava. `linhaId` é a linha de erro que a falha que pede ação já
- * deixou (`registrarFalhaQuePedeAcao`): a cobertura a remarca, sem duplicar.
+ * Por que ele não opinou — é o que a cobertura grava. Também quando nada saiu
+ * para a rede (sem chave, disjuntor aberto): decidindo, a IA de sempre cobriu
+ * do mesmo jeito, e numa queda longa eram centenas de coberturas sem rastro.
+ * `linhaId` é a linha de erro que a falha que pede ação já deixou
+ * (`registrarFalhaQuePedeAcao`): a cobertura a remarca, sem duplicar.
  */
 interface FalhaDoJev {
-  motivo: MotivoComRede;
+  motivo: MotivoDaAusencia;
   status: number | null;
   latenciaMs: number | null;
   linhaId: string | null;
@@ -119,6 +121,12 @@ interface FalhaDoJev {
 type RespostaDoJev = { escolha: EscolhaDoJev; falha: null } | { escolha: null; falha: FalhaDoJev | null };
 
 const SEM_OPINIAO: RespostaDoJev = { escolha: null, falha: null };
+
+/** A pergunta não saiu — mas, se ele decide, a IA de sempre o cobre, e isso deixa rastro. */
+const semRede = (motivo: "sem_credencial" | "disjuntor_aberto"): RespostaDoJev => ({
+  escolha: null,
+  falha: { motivo, status: null, latenciaMs: null, linhaId: null },
+});
 
 export interface EntradaDoRoteador {
   organizationId: string;
@@ -132,7 +140,7 @@ export interface EntradaDoRoteador {
 /**
  * Pergunta ao Jev com a tarefa já lida (`estado`). Sem escolha quando ele não
  * opina: disjuntor aberto, sem chave, falha do fornecedor, resposta que não é
- * uma escolha — e, quando a pergunta chegou a sair, o porquê. Uma escolha fora
+ * uma escolha — e sempre com o porquê. Uma escolha fora
  * das intenções do roteador vale "nenhuma" — a mesma defesa do classificador
  * de sempre contra intenção inventada: o roteamento dá ao cliente as
  * ferramentas do agente escolhido.
@@ -145,7 +153,7 @@ async function perguntar(
   deps: DependenciasDoPonto,
 ): Promise<RespostaDoJev> {
   const alvo = { organizationId: entrada.organizationId, tarefa: TAREFA_DO_ROTEADOR.id };
-  if (!podeTentar(alvo)) return SEM_OPINIAO;
+  if (!podeTentar(alvo)) return semRede("disjuntor_aberto");
 
   const r = await decidirNoPonto(
     {
@@ -167,7 +175,7 @@ async function perguntar(
     const linhaId = r.exigeAcao
       ? await registrarFalhaQuePedeAcao(pool, { ...entrada, purpose: "intent_router" }, r)
       : null;
-    if (r.motivo === "sem_credencial" || r.motivo === "disjuntor_aberto") return SEM_OPINIAO;
+    if (r.motivo === "sem_credencial" || r.motivo === "disjuntor_aberto") return semRede(r.motivo);
     return {
       escolha: null,
       falha: { motivo: r.motivo, status: r.status, latenciaMs: r.latenciaMs ?? null, linhaId },
@@ -290,7 +298,9 @@ export async function registrarRoteadorDoJev(pool: pg.Pool, r: RegistroDoRoteado
       cacheWriteTokens: 0,
     }),
     r.jev.latenciaMs,
-    r.decidiu ? "jev" : "jev_observacao",
+    // Sem observação é o clique de teste: dizer "registrada para comparar" em
+    // Execuções seria falso.
+    r.observacao === null ? "jev_teste" : r.decidiu ? "jev" : "jev_observacao",
   ];
   const insertDoCusto = `insert into public.llm_calls
        (organization_id, contact_id, job_id, purpose, provider, model,

@@ -10,14 +10,25 @@
  * existe lá com outra frase ("troque de provedor nesse ponto") — conselho que
  * não serve ao Jev, que não se escolhe por ponto.
  */
-import type { MotivoComRede } from "./cliente";
+import type { MotivoComRede, MotivoDaAusencia } from "./cliente";
 import { TAREFA_DO_CLIMA } from "./tarefas";
 
-export function codigoDoErroDoJev(motivo: MotivoComRede): `jev_${MotivoComRede}` {
+export function codigoDoErroDoJev<M extends MotivoDaAusencia>(motivo: M): `jev_${M}` {
   return `jev_${motivo}`;
 }
 
-export const O_QUE_FAZER_DO_JEV: Readonly<Record<`jev_${MotivoComRede}`, string>> = {
+/**
+ * Os motivos em que nada saiu para a rede. Só viram linha na cobertura do
+ * roteador decidindo (`./roteador.ts`) — a IA de sempre escolheu no lugar de um
+ * Jev que nem foi perguntado — e nunca são a "Última falha" do cartão: não são
+ * falha nova, e a que abriu o disjuntor é a que diz o que fazer.
+ */
+export const CODIGOS_SEM_REDE: ReadonlySet<string> = new Set([
+  codigoDoErroDoJev("sem_credencial"),
+  codigoDoErroDoJev("disjuntor_aberto"),
+]);
+
+export const O_QUE_FAZER_DO_JEV: Readonly<Record<`jev_${MotivoDaAusencia}`, string>> = {
   jev_credencial_invalida:
     "A TypeSafe não aceitou a chave do Jev. Confira em Credenciais se ela ainda vale, ou cole uma nova.",
   jev_sem_credito:
@@ -31,6 +42,10 @@ export const O_QUE_FAZER_DO_JEV: Readonly<Record<`jev_${MotivoComRede}`, string>
   jev_provedor_indisponivel: "O Jev não respondeu a tempo ou está fora do ar. Costuma se resolver sozinho.",
   jev_resposta_ilegivel:
     "O Jev respondeu de um jeito que o sistema não entendeu. Se continuar acontecendo, avise o suporte.",
+  jev_sem_credencial:
+    "O Jev está ligado, mas sem uma chave que passou no teste: ele nem foi perguntado. Confira a chave dele em Credenciais.",
+  jev_disjuntor_aberto:
+    "O Jev falhou há pouco e ficou alguns minutos sem ser perguntado, para não atrasar o atendimento. Ele volta sozinho.",
 };
 
 /**

@@ -364,6 +364,31 @@ describe("GET /api/v1/ai/jev", () => {
     expect(corpo.data.numeros.decisoes, "a falha não é uma resposta do Jev").toBe(0);
   });
 
+  /**
+   * Sem chave ou com o disjuntor aberto, nada sai para a rede — mas decidindo a
+   * IA de sempre cobre do mesmo jeito, e isso conta. Só não é a "Última falha":
+   * a linha mais nova tomaria o lugar da que abriu o disjuntor, que diz o que fazer.
+   */
+  it("a cobertura sem rede conta como reserva, e não esconde a falha que abriu o disjuntor", async () => {
+    const semRede = (error_code: string, created_at: string) =>
+      chamada({ purpose: "intent_router", status: "erro", error_code, origem_da_escolha: "reserva_do_jev", cost_cents: 0, latency_ms: null, created_at });
+    estado.llmCalls = [
+      chamada({
+        purpose: "intent_router",
+        status: "erro",
+        error_code: "jev_limite_de_taxa",
+        origem_da_escolha: "reserva_do_jev",
+        cost_cents: 0,
+        created_at: "2026-09-22T13:00:00.000Z",
+      }),
+      semRede("jev_disjuntor_aberto", "2026-09-22T13:01:00.000Z"),
+      semRede("jev_sem_credencial", "2026-09-22T13:02:00.000Z"),
+    ];
+    const { corpo } = await ler();
+    expect(corpo.data.numeros.reservas).toBe(3);
+    expect(corpo.data.ultima_falha).toMatchObject({ motivo: "jev_limite_de_taxa", em: "2026-09-22T13:00:00.000Z" });
+  });
+
   it("nenhuma medição com preço: o custo é desconhecido, não um zero ao lado de N decisões", async () => {
     estado.llmCalls = [chamada({ cost_cents: null }), chamada({ cost_cents: null })];
     const { corpo } = await ler();

@@ -3413,6 +3413,15 @@ export const DICIONARIO: Traducoes = {
   "O Jev observou: a resposta dele ficou registrada para comparar, e não decidiu nada.": {
     es: "Jev observó: su respuesta quedó registrada para comparar y no decidió nada.",
   },
+  "Teste na tela do roteador — não entra na comparação.": {
+    es: "Prueba en la pantalla del enrutador: no entra en la comparación.",
+  },
+  "O Jev está ligado, mas sem uma chave que passou no teste: ele nem foi perguntado. Confira a chave dele em Credenciais.": {
+    es: "Jev está activado, pero sin una clave que haya pasado la prueba: ni siquiera se le preguntó. Revisa su clave en Credenciales.",
+  },
+  "O Jev falhou há pouco e ficou alguns minutos sem ser perguntado, para não atrasar o atendimento. Ele volta sozinho.": {
+    es: "Jev falló hace poco y quedó unos minutos sin que se le preguntara, para no retrasar la atención. Vuelve solo.",
+  },
   "O Jev não respondeu; a IA de sempre mediu no lugar dele.": {
     es: "Jev no respondió; la IA de siempre midió en su lugar.",
   },
@@ -3513,8 +3522,8 @@ export const DICIONARIO: Traducoes = {
   "Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.": {
     es: "Activado, pero detenido: Jev solo vuelve a medir cuando la clave pase la prueba.",
   },
-  "Ligado, mas com todas as tarefas desligadas: o Jev não mede nada até você religar uma abaixo.": {
-    es: "Activado, pero con todas las tareas desactivadas: Jev no mide nada hasta que reactives una abajo.",
+  "Ligado, mas com todas as tarefas pausadas: o Jev não mede nada até você religar uma abaixo.": {
+    es: "Activado, pero con todas las tareas en pausa: Jev no mide nada hasta que reactives una abajo.",
   },
   "Em pausa": { es: "En pausa" },
   Religar: { es: "Reactivar" },
@@ -3617,6 +3626,18 @@ export const DICIONARIO: Traducoes = {
   "O Jev foi ligado.": { es: "Jev se activó." },
   "O Jev foi desligado.": { es: "Jev se desactivó." },
   "Agora o Jev decide.": { es: "Ahora Jev decide." },
+  // O diálogo antes de "Deixar o Jev decidir": o efeito de cada tarefa e a volta.
+  "Deixar o Jev decidir?": { es: "¿Dejar que Jev decida?" },
+  "Dá para voltar a só observar quando quiser.": { es: "Puedes volver a solo observar cuando quieras." },
+  "A partir de agora é o Jev que percebe o cliente irritado e chama uma pessoa; a sua IA de sempre só entra se ele falhar.": {
+    es: "A partir de ahora es Jev quien nota al cliente molesto y llama a una persona; tu IA de siempre solo entra si él falla.",
+  },
+  "O alerta do Jev passa a somar ao da sua IA — ele nunca apaga um alerta dela.": {
+    es: "La alerta de Jev pasa a sumarse a la de tu IA: él nunca borra una alerta de ella.",
+  },
+  "É o Jev que escolhe o agente de cada mensagem; a sua IA de sempre continua sendo perguntada ao mesmo tempo e assume se ele falhar.": {
+    es: "Es Jev quien elige el agente de cada mensaje; a tu IA de siempre se le sigue preguntando al mismo tiempo y asume si él falla.",
+  },
   "O Jev voltou a só observar.": { es: "Jev volvió a solo observar." },
   "Observando — a sua IA de sempre ainda decide. Compare os dois antes de deixar o Jev decidir.": {
     es: "Observando: tu IA de siempre todavía decide. Compara los dos antes de dejar que Jev decida.",

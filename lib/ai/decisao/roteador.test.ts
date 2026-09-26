@@ -9,6 +9,7 @@ import type pg from "pg";
 import { describe, expect, it, vi } from "vitest";
 
 import type { RouterMember } from "@/lib/agent-engine/agent/router-config";
+import { registrarFalha } from "@/lib/ai/decisao/disjuntor";
 import {
   consultarJevNoRoteador,
   MEMBROS_NO_MAXIMO,
@@ -328,6 +329,40 @@ describe("o que se grava", () => {
     expect(consultas.find((c) => /^update/.test(c.sql.trim()))!.params).toEqual(["linha-da-falha", org]);
   });
 
+  /**
+   * Nada saiu para a rede — sem chave, ou o disjuntor segurou —, mas decidindo a
+   * IA de sempre cobriu do mesmo jeito. Numa queda longa eram 3 linhas e depois
+   * uma a cada 5 minutos, com centenas de mensagens cobertas sem rastro.
+   */
+  const casosSemRede: Array<{ caso: string; codigo: string; chave: string | null; disjuntorAberto: boolean }> = [
+    { caso: "sem chave", codigo: "jev_sem_credencial", chave: null, disjuntorAberto: false },
+    { caso: "com o disjuntor aberto", codigo: "jev_disjuntor_aberto", chave: "tsk_x", disjuntorAberto: true },
+  ];
+  it.each(casosSemRede)("decidindo e $caso: a cobertura deixa linha, sem observação de concordância", async ({ codigo, chave, disjuntorAberto }) => {
+    const { pool, consultas } = poolCom(LIGADO);
+    const org = novaOrg();
+    // O fornecedor pediu pausa: o disjuntor abre na hora, e nada sai para a rede.
+    if (disjuntorAberto) registrarFalha({ organizationId: org, tarefa: "roteador" }, "limite_de_taxa");
+    const fetchImpl = vi.fn();
+    const jev = consultarJevNoRoteador(pool, entrada(org), { buscarChave: async () => chave, fetchImpl });
+    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: false, aIaCobriu: true });
+    await vi.waitFor(() => expect(consultas.some((c) => /'reserva_do_jev'/.test(c.sql))).toBe(true));
+    const cobertura = consultas.find((c) => /'reserva_do_jev'/.test(c.sql))!;
+    expect(cobertura.sql).toMatch(/insert into public\.llm_calls/);
+    expect(cobertura.params).toEqual([org, "contato-1", "job-1", "typesafe/jev-1.13.0", null, codigo, null]);
+    expect(consultas.filter((c) => /jev_observacoes/.test(c.sql))).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("controle: sem chave e observando, nada a registrar — a IA de sempre não cobriu ninguém", async () => {
+    const { pool, consultas } = poolCom(LIGADO);
+    const jev = consultarJevNoRoteador(pool, entrada(novaOrg()), { buscarChave: async () => null });
+    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: false, aIaCobriu: false });
+    await jev.escolha;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(consultas.filter((c) => /insert|update/.test(c.sql))).toEqual([]);
+  });
+
   it("controle: observando, a falha que passa sozinha não vira linha nenhuma", async () => {
     const { pool, consultas } = poolCom(LIGADO);
     const jev = consultarJevNoRoteador(pool, entrada(novaOrg()), {
@@ -353,6 +388,8 @@ describe("o que se grava", () => {
     expect(consultas).toHaveLength(1);
     expect(consultas[0]!.sql).toMatch(/insert into public\.llm_calls/);
     expect(consultas[0]!.sql).not.toMatch(/jev_observacoes/);
+    // A origem é a do teste: "registrada para comparar" seria falso em Execuções.
+    expect(consultas[0]!.params[8]).toBe("jev_teste");
   });
 
   it("falha do banco na gravação não lança", async () => {

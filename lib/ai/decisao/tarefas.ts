@@ -58,6 +58,12 @@ export interface TarefaDoJev {
   aoDecidir: string;
   aoDecidirNoPonto: string;
   /**
+   * O que o diálogo de "Deixar o Jev decidir" diz ANTES do clique valer: o
+   * efeito concreto em produção, na língua de quem não é engenheiro. Um clique
+   * sem explicação mudava o atendimento de todas as mensagens seguintes.
+   */
+  aoConfirmarDecidir: string;
+  /**
    * A frase da concordância no cartão, antes e depois do "X de Y": diz EM QUE
    * os dois concordaram. Sem ela, a manipulação e o roteador liam "o Jev
    * concordou com a sua IA de sempre", e o leigo não sabia no quê.
@@ -91,6 +97,8 @@ export const TAREFA_DO_CLIMA = {
   // A IA de sempre só é chamada quando o Jev falha (`workers/ai-sentiment-worker.ts`).
   aoDecidir: "O Jev mede primeiro; a sua IA de sempre só entra se ele não responder.",
   aoDecidirNoPonto: "O Jev mede primeiro; o modelo abaixo é a reserva.",
+  aoConfirmarDecidir:
+    "A partir de agora é o Jev que percebe o cliente irritado e chama uma pessoa; a sua IA de sempre só entra se ele falhar.",
   // A régua do clima é o corte da passagem para humano (`app/api/v1/ai/jev/route.ts`).
   concordancia: {
     antes: "dias, o Jev e a sua IA de sempre chegaram à mesma conclusão em",
@@ -119,6 +127,7 @@ export const TAREFA_DA_MANIPULACAO = {
   aoDecidir:
     "O alerta do Jev passa a contar junto com o da sua IA de sempre: vale o mais forte dos dois, e o Jev nunca apaga o dela.",
   aoDecidirNoPonto: "O modelo abaixo decide; o Jev soma o sinal dele, sem nunca apagar o do modelo.",
+  aoConfirmarDecidir: "O alerta do Jev passa a somar ao da sua IA — ele nunca apaga um alerta dela.",
   // A régua é o nível exato (nenhum, leve, forte) — e o cartão mostra junto
   // quantas vezes só o Jev daria o forte, que é o que decidir muda.
   concordancia: {
@@ -155,6 +164,8 @@ export const TAREFA_DO_ROTEADOR = {
     "A sua IA de sempre continua sendo perguntada a cada mensagem, ao mesmo tempo que o Jev, e continua custando: vale a escolha do Jev, e a dela entra quando ele não responde. Sem a resposta da sua IA de sempre, vale o agente de antes ou o “Agente de fallback” do roteador — nunca só o Jev.",
   aoDecidirNoPonto:
     "Vale a escolha do Jev, mas o modelo abaixo continua sendo chamado a cada mensagem: é a reserva quando o Jev não responde, e sem ele o Jev não escolhe sozinho.",
+  aoConfirmarDecidir:
+    "É o Jev que escolhe o agente de cada mensagem; a sua IA de sempre continua sendo perguntada ao mesmo tempo e assume se ele falhar.",
   // A régua é o MESMO AGENTE FINAL (`./roteador.ts`), não a mesma intenção.
   concordancia: {
     antes: "dias, o Jev e a sua IA de sempre levariam o cliente ao mesmo agente em",

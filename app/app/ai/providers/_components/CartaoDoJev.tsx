@@ -22,6 +22,16 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { AddCredentialDialog } from "@/app/app/ai/credentials/_components/AddCredentialDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -631,6 +641,10 @@ function Ligado({
   const t = useT();
   const tagDoIdioma = useTagDeIdioma();
   const { mudar, enviando } = useMudarOJev(recarregar);
+  // A tarefa cujo "Deixar o Jev decidir" espera confirmação. Só decidir pede:
+  // pausar e voltar a observar só tiram o Jev do caminho do cliente. Fechado, o
+  // diálogo guarda a tarefa: o texto não some durante a animação de saída.
+  const [aConfirmar, setAConfirmar] = useState<{ tarefa: TarefaNoCartao; aberto: boolean } | null>(null);
   const n = dados.numeros;
 
   // `cost_cents` é centavo de DÓLAR, e o Jev custa fração de centavo por
@@ -671,7 +685,7 @@ function Ligado({
           t("Ligado, mas parado: o Jev só volta a medir quando a chave passar no teste.")}
         {estado === "em_pausa" &&
           (todasPausadas
-            ? t("Ligado, mas com todas as tarefas desligadas: o Jev não mede nada até você religar uma abaixo.")
+            ? t("Ligado, mas com todas as tarefas pausadas: o Jev não mede nada até você religar uma abaixo.")
             : t(
                 "Ligado, mas nenhuma tarefa está rodando agora: o Jev não mede nada. Veja abaixo o que falta nas que dizem “Não roda”, ou religue uma pausada.",
               ))}
@@ -776,7 +790,7 @@ function Ligado({
                   <Button
                     size="sm"
                     disabled={enviando}
-                    onClick={() => void mudar(corpoDaMudanca(tarefa, "decidindo"), t("Agora o Jev decide."))}
+                    onClick={() => setAConfirmar({ tarefa, aberto: true })}
                   >
                     {t("Deixar o Jev decidir")}
                   </Button>
@@ -921,7 +935,52 @@ function Ligado({
           </Button>
         )}
       </div>
+
+      <ConfirmarDecidir
+        pedido={aConfirmar}
+        aoFechar={() => setAConfirmar((p) => p && { ...p, aberto: false })}
+        aoConfirmar={(tarefa) => void mudar(corpoDaMudanca(tarefa, "decidindo"), t("Agora o Jev decide."))}
+      />
     </div>
+  );
+}
+
+/**
+ * "Deixar o Jev decidir" muda o atendimento de toda mensagem seguinte: antes de
+ * o clique valer, o efeito daquela tarefa (do registro, `aoConfirmarDecidir`) e
+ * o caminho de volta.
+ */
+function ConfirmarDecidir({
+  pedido,
+  aoFechar,
+  aoConfirmar,
+}: {
+  pedido: { tarefa: TarefaNoCartao; aberto: boolean } | null;
+  aoFechar: () => void;
+  aoConfirmar: (tarefa: TarefaNoCartao) => void;
+}) {
+  const t = useT();
+  const tarefa = pedido?.tarefa ?? null;
+  const efeito = tarefa ? doRegistro(tarefa.id)?.aoConfirmarDecidir : undefined;
+  return (
+    <AlertDialog open={pedido?.aberto === true} onOpenChange={(aberto) => !aberto && aoFechar()}>
+      <AlertDialogContent data-testid="jev-confirmar-decidir" data-tarefa={tarefa?.id}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("Deixar o Jev decidir?")}</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              {tarefa && <p className="font-medium text-foreground">{t(tarefa.rotulo)}</p>}
+              {efeito !== undefined && <p>{t(efeito)}</p>}
+              <p>{t("Dá para voltar a só observar quando quiser.")}</p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+          <AlertDialogAction onClick={() => tarefa && aoConfirmar(tarefa)}>{t("Deixar o Jev decidir")}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -946,7 +1005,9 @@ function ConcordanciaDaTarefa({
       ) : (
         <>
           {t("Nos últimos")} {o.dias} {t(frase.antes)}{" "}
-          <span className="font-mono font-medium">
+          {/* A fonte do texto, com algarismos de largura igual: a mono, no meio
+              da frase, abria "5  de  7" com espaços largos. */}
+          <span className="font-medium tabular-nums" data-testid="jev-concordancia-numeros">
             {formatar(o.concordaram)} {t("de")} {formatar(o.comparadas)}
           </span>{" "}
           {t(frase.depois)}
@@ -961,7 +1022,7 @@ function ConcordanciaDaTarefa({
             <>
               {" "}
               {t("Só o Jev daria o alerta forte em")}{" "}
-              <span className="font-mono font-medium">{formatar(o.so_o_jev_alto)}</span>{" "}
+              <span className="font-medium tabular-nums">{formatar(o.so_o_jev_alto)}</span>{" "}
               {t("delas — é o que muda se você deixar o Jev decidir.")}
             </>
           )}

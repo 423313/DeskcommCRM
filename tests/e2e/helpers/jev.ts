@@ -125,11 +125,13 @@ export async function ligarOJev(page: Page): Promise<string> {
   // prova é que ele está na tela, no estado em que a decisão é tomada.
   await expect(cartao.getByTestId("jev-concordancia")).toBeVisible();
   // O botão DO CLIMA: cada tarefa tem o seu, e a manipulação, nova, também
-  // começa observando (R7) — no cartão inteiro seriam dois.
-  await clicarEEsperarAMudanca(
-    page,
-    cartao.getByTestId("jev-tarefa-clima").getByRole("button", { name: "Deixar o Jev decidir" }),
-  );
+  // começa observando (R7) — no cartão inteiro seriam dois. Ele só abre a
+  // confirmação, que diz o efeito da tarefa; quem muda é o botão do diálogo.
+  await cartao.getByTestId("jev-tarefa-clima").getByRole("button", { name: "Deixar o Jev decidir" }).click();
+  const dialogo = page.getByRole("alertdialog");
+  await expect(dialogo).toHaveAttribute("data-tarefa", "clima");
+  await expect(dialogo).toContainText("Dá para voltar a só observar quando quiser.");
+  await clicarEEsperarAMudanca(page, dialogo.getByRole("button", { name: "Deixar o Jev decidir" }));
   return esperarNoCartao(page, ["decidindo"]);
 }
 

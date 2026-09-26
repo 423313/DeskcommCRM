@@ -52,6 +52,7 @@ import {
   tarefaSemCamada,
   tarefaSemRoteador,
 } from "@/lib/ai/decisao/tarefas";
+import { CODIGOS_SEM_REDE } from "@/lib/ai/decisao/textos";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { PROVEDORES_DE_DECISAO } from "@/lib/ai/pontos/provedores";
@@ -170,8 +171,10 @@ function numerosDaSemana(linhas: readonly LinhaDaSemana[]) {
     ultimaMedida.set(m.purpose, Math.max(ultimaMedida.get(m.purpose) ?? 0, Date.parse(m.created_at)));
   }
   const naoSuperada = (f: LinhaDaSemana) => Date.parse(f.created_at) > (ultimaMedida.get(f.purpose) ?? 0);
+  // A cobertura em que nada saiu para a rede (sem chave, disjuntor aberto) não
+  // é falha nova: tomaria o lugar da que abriu o disjuntor, que diz o que fazer.
   const falha = doJev
-    .filter((l) => l.status === "erro" && naoSuperada(l))
+    .filter((l) => l.status === "erro" && naoSuperada(l) && !CODIGOS_SEM_REDE.has(l.error_code ?? ""))
     .reduce<LinhaDaSemana | null>(maisNova, null);
   return {
     numeros: {

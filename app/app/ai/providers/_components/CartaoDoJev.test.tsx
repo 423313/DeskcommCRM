@@ -108,6 +108,20 @@ function montar(d: DadosDoJev | null, opcoes: { erro?: string; idioma?: string }
 
 const cartao = () => screen.getByTestId("cartao-do-jev");
 
+/**
+ * "Deixar o Jev decidir" pede confirmação: o clique no cartão abre o diálogo, e
+ * só o do diálogo muda alguma coisa. Devolve o diálogo, já confirmado.
+ */
+async function confirmarDecidir(botao: HTMLElement): Promise<HTMLElement> {
+  fireEvent.click(botao);
+  const dialogo = await screen.findByRole("alertdialog");
+  // Antes de confirmar, nada foi enviado.
+  expect(chamadas.filter((c) => c.metodo === "PATCH")).toEqual([]);
+  fireEvent.click(within(dialogo).getByRole("button", { name: "Deixar o Jev decidir" }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  return dialogo;
+}
+
 describe("CartaoDoJev — (1) sem chave", () => {
   const semChave = () =>
     dados({ chave: { existe: false, validada: false, credencial_id: null, rotulo: null } });
@@ -289,9 +303,41 @@ describe("CartaoDoJev — (4) ligado, observando", () => {
     expect(cartao()).toHaveAttribute("data-estado", "observando");
     expect(screen.getByTestId("jev-concordancia")).toHaveTextContent(/3 de 4/);
 
-    fireEvent.click(screen.getByRole("button", { name: "Deixar o Jev decidir" }));
+    const dialogo = await confirmarDecidir(screen.getByRole("button", { name: "Deixar o Jev decidir" }));
+    // O efeito concreto daquela tarefa, e a volta.
+    expect(dialogo).toHaveTextContent(TAREFA_DO_CLIMA.aoConfirmarDecidir);
+    expect(dialogo).toHaveTextContent("Dá para voltar a só observar quando quiser.");
     await waitFor(() => expect(recarregar).toHaveBeenCalled());
     expect(chamadas[0]).toEqual({ url: "/api/v1/ai/jev", metodo: "PATCH", corpo: { modo: "decide" } });
+  });
+
+  it("cancelar o diálogo não muda nada", async () => {
+    montar(dados({ config: { ligado: true, modo: "observacao" } }));
+    fireEvent.click(screen.getByRole("button", { name: "Deixar o Jev decidir" }));
+    const dialogo = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(chamadas).toEqual([]);
+    expect(recarregar).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Os números da concordância no meio da frase: na fonte mono cada espaço tinha
+   * a largura de um algarismo, e a frase lia "5  de  7". jsdom não carrega o CSS
+   * do Tailwind, então o que se mede aqui é a classe; a fonte calculada é da
+   * prova em tela.
+   */
+  it("os números da concordância usam a fonte do texto, com algarismos de largura igual", () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        numeros: { observacao: { dias: 30, comparadas: 7, concordaram: 5 } },
+      }),
+    );
+    const numeros = screen.getByTestId("jev-concordancia-numeros");
+    expect(numeros).toHaveTextContent("5 de 7");
+    expect(numeros).toHaveClass("tabular-nums");
+    expect(numeros).not.toHaveClass("font-mono");
   });
 
   it("sem nada comparado ainda, não inventa porcentagem", () => {
@@ -554,8 +600,9 @@ describe("CartaoDoJev — por tarefa", () => {
     expect(screen.getByTestId("jev-tarefa-clima")).not.toHaveTextContent("Nova");
 
     // Deixar decidir a tarefa nova não é deixar decidir o clima (que já decide).
-    fireEvent.click(screen.getByRole("button", { name: "Deixar o Jev decidir" }));
+    await confirmarDecidir(screen.getByRole("button", { name: "Deixar o Jev decidir" }));
     await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(1));
+    // Voltar a só observar não pede confirmação: tira o Jev do caminho do cliente.
     fireEvent.click(screen.getByRole("button", { name: "Voltar a só observar" }));
     await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(2));
     expect(chamadas.map((c) => c.corpo)).toEqual([
@@ -563,6 +610,28 @@ describe("CartaoDoJev — por tarefa", () => {
       // O clima segue pelo `modo`, o nome que a imagem anterior também entende.
       { modo: "observacao" },
     ]);
+  });
+
+  /** Cada tarefa diz no diálogo o que muda NELA — decidir o clima não é decidir o roteador. */
+  it.each([
+    [TAREFA_DO_CLIMA, { modo: "decide" }],
+    [TAREFA_DA_MANIPULACAO, { tarefa: "manipulacao", estado: "decidindo" }],
+    [TAREFA_DO_ROTEADOR, { tarefa: "roteador", estado: "decidindo" }],
+  ])("o diálogo de $id diz o efeito dela antes de mudar", async (tarefa, corpo) => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        por_tarefa: [
+          { id: tarefa.id, ponto: tarefa.ponto, rotulo: tarefa.rotulo, oQueFaz: tarefa.oQueFaz, estado: "observando", novo: false },
+        ],
+      }),
+    );
+    const dialogo = await confirmarDecidir(screen.getByRole("button", { name: "Deixar o Jev decidir" }));
+    expect(dialogo).toHaveAttribute("data-tarefa", tarefa.id);
+    expect(dialogo).toHaveTextContent(tarefa.rotulo);
+    expect(dialogo).toHaveTextContent(tarefa.aoConfirmarDecidir);
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(1));
+    expect(chamadas.map((c) => c.corpo)).toEqual([corpo]);
   });
 
   it("'Manter só observando' grava o estado que já vale — e o selo 'Nova' sai sem mudar nada", async () => {
@@ -591,7 +660,8 @@ describe("CartaoDoJev — por tarefa", () => {
       }),
     );
     expect(cartao()).toHaveAttribute("data-estado", "em_pausa");
-    expect(cartao()).toHaveTextContent("Ligado, mas com todas as tarefas desligadas");
+    // "pausadas", o verbo que cada linha já usa ("Pausada").
+    expect(cartao()).toHaveTextContent("Ligado, mas com todas as tarefas pausadas");
     expect(screen.getByTestId("jev-tarefa-clima")).toHaveAttribute("data-estado", "desligada");
     expect(screen.queryByRole("button", { name: "Deixar o Jev decidir" })).toBeNull();
     expect(screen.queryByTestId("jev-concordancia")).toBeNull();
@@ -907,7 +977,7 @@ describe("CartaoDoJev — sem a IA de sempre, as tarefas seguem com a linha dela
       }),
     );
     expect(cartao()).toHaveAttribute("data-estado", "em_pausa");
-    expect(cartao()).not.toHaveTextContent(/todas as tarefas desligadas/);
+    expect(cartao()).not.toHaveTextContent(/todas as tarefas pausadas/);
     expect(cartao()).toHaveTextContent(/nenhuma tarefa está rodando agora/);
   });
 });
