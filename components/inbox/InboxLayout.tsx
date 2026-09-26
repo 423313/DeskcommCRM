@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
+import type { AvisoDeRascunho } from "@/lib/inbox/rascunho-sugerido";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 
@@ -123,9 +124,11 @@ function parseFilterParam(v: string | null): InboxTab {
 
 interface InboxLayoutProps {
   initialSelectedId?: string | null;
+  /** Rascunho sugerido por integração (issue #1611) — `null` é o caso comum. */
+  rascunho?: AvisoDeRascunho | null;
 }
 
-export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {}) {
+export function InboxLayout({ initialSelectedId = null, rascunho = null }: InboxLayoutProps = {}) {
   const t = useT();
   const { activeOrg, user } = useAuth();
   const supportReadonly = user.support?.access_mode === "support_readonly";
@@ -553,6 +556,18 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               respondendo={respondendo}
               onCancelarResposta={() => setRespondendo(null)}
               currentContactId={selectedConversation.contact_id}
+              // O aviso é DA conversa da URL: trocar de conversa dentro da inbox
+              // não pode deixar um texto sugerido no campo de outra pessoa.
+              rascunho={
+                rascunho && rascunho.conversationId === selectedConversation.id ? rascunho : null
+              }
+              initialDraft={
+                rascunho &&
+                rascunho.conversationId === selectedConversation.id &&
+                rascunho.leitura.estado === "sugerido"
+                  ? rascunho.leitura.texto
+                  : ""
+              }
             />
           </>
         ) : selectionNotFound ? (
