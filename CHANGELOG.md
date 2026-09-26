@@ -24,9 +24,9 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ### Alterado
 
-- **Em "Cadastro", a tela avisa quando a troca de modo ainda não chegou ao cadastro direto do Supabase** Trocar o modo em /admin/cadastro valia na hora para as regras do CRM, mas o cadastro direto do Supabase continuava como estava: no kit de servidor único ele só acompanha no install e no update.sh, e com Supabase separado ele nunca acompanha sozinho. Agora /admin/cadastro confere o que o GoTrue está aplicando e avisa quando isso difere do modo gravado. No servidor único, o aviso traz o comando para aplicar já (bash hostgator-setup-kit/update.sh). Com Supabase separado, ele diz o que mudar no painel (Authentication → Sign In / Up → Allow new users to sign up) ou no DISABLE_SIGNUP de um GoTrue próprio. Se não der para perguntar ao GoTrue, não há aviso, e nada é corrigido sozinho: a tela só avisa.
+- **Em "Cadastro", a tela avisa quando a troca de modo ainda não chegou ao cadastro direto do Supabase** Trocar o modo em /admin/cadastro valia na hora para as regras do CRM, mas o cadastro direto do Supabase continuava como estava: no kit de servidor único ele só acompanha no install e no update.sh, e com Supabase separado ele nunca acompanha sozinho. Agora /admin/cadastro confere o que o servidor de login do Supabase está aplicando e avisa quando isso difere do modo gravado. No servidor único, o aviso traz o comando para aplicar já (bash hostgator-setup-kit/update.sh). Com Supabase separado, ele diz o que mudar no painel (Authentication → Sign In / Up → Allow new users to sign up) ou no DISABLE_SIGNUP de um GoTrue próprio. Se não der para perguntar ao GoTrue, não há aviso, e nada é corrigido sozinho: a tela só avisa.
 
-  Contribuição de @webtecnica (#1668).
+  Contribuição de @webtecnica (#1675), a partir da issue #1668.
 
 - **Envio fora da janela de 24 horas é recusado na hora e a falha de entrega vira gatilho** Quem integra por token em canal oficial passa a receber `422 janela_fechada` ao mandar texto livre com a janela de 24 horas fechada, em vez de `201` seguido de recusa silenciosa da plataforma (código 131047). A resposta traz `use: "template"`, `ultima_mensagem_do_cliente` e `codigo_plataforma`; nada é gravado como enviado. Modelo aprovado, canais sem janela (QR) e quem digita na tela continuam iguais.
 
@@ -46,7 +46,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Contribuição de @raphaelmartins (#1663).
 
-- **A Agenda lembra o tipo de compromisso escolhido depois de recarregar a página** Escolher o tipo de compromisso na grade da Agenda morria no recarregamento da página: a tela voltava ao primeiro tipo em ordem alfabética e, quando ele não tinha jornada publicada, mostrava "a jornada de atendimento ainda não foi publicada" para quem estava olhando outro tipo. A escolha passa a ficar na URL (`?tipo=`), no mesmo formato do `?id=` da Inbox — o link aberto em outra aba chega com o mesmo tipo selecionado, e fechar o detalhe de um compromisso não apaga mais a escolha. Quem não escolhe nada continua vendo o primeiro tipo, como sempre. Não há ação para quem opera a VPS.
+- **A Agenda lembra o tipo de compromisso escolhido depois de recarregar a página** Escolher o tipo de compromisso na grade da Agenda morria no recarregamento da página: a tela voltava ao primeiro tipo em ordem alfabética e, quando ele não tinha jornada publicada, mostrava "a jornada de atendimento ainda não foi publicada" para quem estava olhando outro tipo. A escolha passa a ficar no endereço da página, como já acontece com a conversa aberta na Inbox — o link aberto em outra aba chega com o mesmo tipo selecionado, e fechar o detalhe de um compromisso não apaga mais a escolha. Quem não escolhe nada continua vendo o primeiro tipo, como sempre. Não há ação para quem opera a VPS.
 
   Contribuição de @webtecnica (#1669).
 
@@ -56,9 +56,11 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **O controle Confidence threshold sai do editor de agente — ele não controlava nada** Na aba RAG do editor de agente havia um campo "Confidence threshold (0–1)" que prometia passar a conversa para uma pessoa quando a resposta ficasse abaixo do limiar. Ele gravava o valor, mostrava "salvo" e não mudava nada: o único trecho do produto que lia esse número era um bloco do motor antigo que não roda mais desde 07/09. Quem editava um agente de voz mexia num botão que não controlava nada. O campo saiu da tela e o número saiu do formulário; o motor antigo, se algum dia voltar, segue com o limiar que ele já usava quando o campo estava vazio. Nada muda na operação de quem usa o produto hoje.
 
-  Contribuição de @webtecnica.
+  Contribuição de @webtecnica (#1670).
 
-- **Corrige convites filtrados por identificação SMTP local em instalações Docker** Corrige uma falha em que o servidor de e-mail aceitava os convites, mas podia filtrá-los depois porque o CRM se identificava como localhost. O envio SMTP passa a usar o domínio já configurado na instalação, sem exigir ajustes manuais no contêiner. A falha foi observada na hospedagem de e-mail HostGator; a correção se aplica ao transporte SMTP em geral. Crédito: @vitorlacerdadigital.
+- **Corrige convites filtrados por identificação SMTP local em instalações Docker** Corrige uma falha em que o servidor de e-mail aceitava os convites, mas podia filtrá-los depois porque o CRM se identificava como localhost. O envio SMTP passa a usar o domínio já configurado na instalação, sem exigir ajustes manuais no contêiner. A falha foi observada na hospedagem de e-mail HostGator; a correção se aplica ao transporte SMTP em geral.
+
+  Contribuição de @vitorlacerdadigital (#1666).
 
 - **A conexão do dono do banco não entra mais no processo do CRM** Quem declara `SUPABASE_DB_ADMIN_URL` no `.env` (o caso de quem usa Supabase próprio e deixa a atualização rodar sozinha pelo cron) tinha essa conexão, a do dono do banco, entregue também aos contêineres `app`, `worker` e `voice-agent`, porque o compose passa o `.env` inteiro a eles. Nenhum código do CRM a usava, mas ela ficava ao alcance do processo que atende requisição. Agora esses serviços a recebem vazia, e ela continua no `.env` só para o kit (`install.sh`, `update.sh`, backup), que roda no servidor, fora dos contêineres.
 
@@ -66,9 +68,13 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Contribuição de @hiro-nikaitou (#1680).
 
-- **Entrar com Google numa instalação sem o Google ligado mostra o aviso na tela de login, em vez de uma página de erro fora do CRM** Numa instalação sem o provedor Google ligado, clicar em Entrar com Google no login ou no cadastro levava a pessoa para uma página de erro técnica do servidor de autenticação, fora do CRM e sem caminho de volta. Agora o CRM confere antes se o Google está ligado e, se não estiver, a pessoa continua na tela e vê o aviso de que o Google não está habilitado nesta instalação, com o caminho do e-mail e senha. Se a conferência falhar, o botão segue funcionando como antes. Crédito: @webtecnica.
+- **Entrar com Google numa instalação sem o Google ligado mostra o aviso na tela de login, em vez de uma página de erro fora do CRM** Numa instalação sem o provedor Google ligado, clicar em Entrar com Google no login ou no cadastro levava a pessoa para uma página de erro técnica do servidor de autenticação, fora do CRM e sem caminho de volta. Agora o CRM confere antes se o Google está ligado e, se não estiver, a pessoa continua na tela e vê o aviso de que o Google não está habilitado nesta instalação, com o caminho do e-mail e senha. Se a conferência falhar, o botão segue funcionando como antes.
 
-- **O agente com o provedor personalizado passa a publicar** Quem cadastrou um provedor personalizado compatível com OpenAI (um Ollama exposto, um LiteLLM, um proxy próprio), escolheu o modelo no assistente e clicou em Publicar recebia "Falha ao publicar: model_not_found", mesmo com a credencial validada. Agora a publicação confere o modelo na lista que o próprio endpoint devolveu no teste de conexão: se o modelo está lá, o agente publica; se não está, a recusa continua. Para Anthropic, OpenAI, Google, OpenRouter, DeepSeek e Requesty nada muda. Crédito: @fillipe-felix.
+  Contribuição de @webtecnica (#1664).
+
+- **O agente com o provedor personalizado passa a publicar** Quem cadastrou um provedor personalizado compatível com OpenAI (um Ollama exposto, um LiteLLM, um proxy próprio), escolheu o modelo no assistente e clicou em Publicar recebia "Falha ao publicar: model_not_found", mesmo com a credencial validada. Agora a publicação confere o modelo na lista que o próprio endpoint devolveu no teste de conexão: se o modelo está lá, o agente publica; se não está, a recusa continua. Para Anthropic, OpenAI, Google, OpenRouter, DeepSeek e Requesty nada muda.
+
+  Contribuição de @fillipe-felix (#1679).
 
 - **Em "Cadastro apenas por convite", ninguém mais cria conta direto pelo Supabase** Com "Cadastro apenas por convite" ligado, o CRM recusava cadastro sem convite, mas o Supabase continuava aceitando conta nova criada direto pela chave pública do navegador. Agora a atualização fecha também essa porta no Supabase desta VPS (instalação de servidor único), e quem recebeu convite continua criando a conta normalmente. Quem usa o Supabase na nuvem ou em outro servidor pode desligar "Allow new users to sign up" no painel do Supabase, e o convite segue funcionando. Se trocar o modo em /admin/cadastro, rode a atualização para o Supabase desta VPS acompanhar. Relato de @spoliagency na issue #1653.
 
