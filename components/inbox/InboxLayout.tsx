@@ -178,6 +178,15 @@ export function InboxLayout({ initialSelectedId = null, rascunho = null }: Inbox
    * quem MOSTRA é o composer — são irmãos, e o estado comum é do pai.
    */
   const [respondendo, setRespondendo] = useState<ConversationMensagem | null>(null);
+  /**
+   * O rascunho sugerido (#1611) vale para a conversa da URL e só enquanto ela
+   * está aberta: sair dela — clique, atalho ou voltar do navegador — o descarta
+   * de vez. Sem isto o texto escrito para um cliente ficava no campo do próximo,
+   * já sem a faixa de origem. Ajuste de estado durante o render, o padrão do
+   * React para "estado que depende de outro estado".
+   */
+  const [rascunhoVivo, setRascunhoVivo] = useState(rascunho);
+  if (rascunhoVivo && selectedId !== rascunhoVivo.conversationId) setRascunhoVivo(null);
 
   useEffect(() => {
     if (ultimoIdNaUrl.current === idNaUrl) return;
@@ -297,6 +306,8 @@ export function InboxLayout({ initialSelectedId = null, rascunho = null }: Inbox
     const params = new URLSearchParams(searchParams.toString());
     if (id) params.set("id", id);
     else params.delete("id");
+    // O ?rascunho= é da conversa que ficou para trás (ver `rascunhoVivo`).
+    params.delete("rascunho");
     const query = params.toString();
     window.history.pushState(null, "", query ? `${pathname}?${query}` : pathname);
   }, [selectedId, searchParams, pathname]);
@@ -547,6 +558,10 @@ export function InboxLayout({ initialSelectedId = null, rascunho = null }: Inbox
               />
             )}
             <Composer
+              // Trocar a chave quando o rascunho sai REMONTA o composer: o texto
+              // nasce de `useState(initialDraft)`, e só a prop mudar não o limparia.
+              // Sem rascunho a chave é fixa e a troca de conversa segue como antes.
+              key={rascunhoVivo ? `rascunho:${rascunhoVivo.conversationId}` : "composer"}
               ref={composerRef}
               conversationId={selectedConversation.id}
               blockedReason={supportReadonly ? "Acompanhamento somente leitura" : blockedReason}
@@ -558,15 +573,9 @@ export function InboxLayout({ initialSelectedId = null, rascunho = null }: Inbox
               currentContactId={selectedConversation.contact_id}
               // O aviso é DA conversa da URL: trocar de conversa dentro da inbox
               // não pode deixar um texto sugerido no campo de outra pessoa.
-              rascunho={
-                rascunho && rascunho.conversationId === selectedConversation.id ? rascunho : null
-              }
+              rascunho={rascunhoVivo}
               initialDraft={
-                rascunho &&
-                rascunho.conversationId === selectedConversation.id &&
-                rascunho.leitura.estado === "sugerido"
-                  ? rascunho.leitura.texto
-                  : ""
+                rascunhoVivo?.leitura.estado === "sugerido" ? rascunhoVivo.leitura.texto : ""
               }
             />
           </>
