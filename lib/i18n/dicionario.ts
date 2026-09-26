@@ -112,6 +112,10 @@ export const DICIONARIO: Traducoes = {
   "O texto sugerido expirou. A conversa abriu sem ele.": {
     es: "El texto sugerido expiró. La conversación se abrió sin él.",
   },
+  // As mensagens de erro das rotas .../drafts e .../drafts/consume.
+  "Conversa inválida.": { es: "Conversación inválida." },
+  "Origem do rascunho inválida.": { es: "Origen del borrador inválido." },
+  "Texto do rascunho inválido.": { es: "Texto del borrador inválido." },
   "Não foi possível carregar o enriquecimento.": { es: "No se pudo cargar el enriquecimiento." },
   "Sem dados de enriquecimento para este contato.": { es: "Sin datos de enriquecimiento para este contacto." },
   "Avaliações no Google": { es: "Reseñas en Google" },
