@@ -166,6 +166,34 @@ describe("LGPD: dados da prospecção no pedido de acesso", () => {
     ]);
   });
 
+  it("pagina as propostas de campo do titular, sem teto", async () => {
+    // A fila de propostas é alimentada pela IA enquanto a conversa dura: um `limit`
+    // aqui entregaria um relatório de acesso incompleto — e em silêncio.
+    rows.contact_field_proposals = Array.from({ length: 501 }, (_, index) => ({
+      id: `proposta-${index}`,
+      organization_id: ORG,
+      contact_id: CONTACT,
+      campo: "phone_number",
+      valor_proposto: "+5511988887777",
+      valor_anterior: null,
+      conversation_id: "conversation-a",
+      trecho: "meu celular e esse",
+      status: "pending",
+      proposed_at: "2026-09-16T00:00:00Z",
+      decided_at: null,
+      motivo_recusa: null,
+    }));
+    const payload = await collectExportData(request);
+    expect(payload.contact_field_proposals).toHaveLength(501);
+    expect(payload.contact_field_proposals?.at(-1)?.id).toBe("proposta-500");
+    expect(
+      reads.filter((read) => read.table === "contact_field_proposals").map((read) => read.range),
+    ).toEqual([
+      [0, 499],
+      [500, 999],
+    ]);
+  });
+
   it("sem titular mantém a seção vazia e não consulta registros pessoais", async () => {
     const payload = await collectExportData({ ...request, contactId: null });
     expect(payload.prospecting_candidates).toEqual([]);

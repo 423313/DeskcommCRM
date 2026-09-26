@@ -1127,20 +1127,28 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
 
   // Propostas de campo do contato: a anonimização as APAGA, e o valor proposto é
   // dado do titular. Mesmo escopo da função que apaga, com os ids internos fora.
+  //
+  // POR PÁGINA, não por teto: esta fila a IA alimenta enquanto a conversa dura, e
+  // um `limit` faria as mais antigas sumirem do relatório sem ninguém saber. A
+  // chave é `id` (única) — ordenar por `proposed_at` deixaria empates decidirem a
+  // página. Mesma forma do bloco dos rascunhos, logo acima.
   let contact_field_proposals: NonNullable<ExportPayload["contact_field_proposals"]> = [];
   if (contactId) {
-    const { data, error } = await admin
-      .from("contact_field_proposals")
-      .select(
-        "id, campo, valor_proposto, valor_anterior, conversation_id, trecho, status, proposed_at, decided_at, motivo_recusa",
-      )
-      .eq("organization_id", organizationId)
-      .eq("contact_id", contactId)
-      .order("proposed_at", { ascending: false })
-      .limit(500);
-    // Uma falha não pode virar um relatório que diz que não guardamos dados.
-    if (error) throw error;
-    contact_field_proposals = data ?? [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await admin
+        .from("contact_field_proposals")
+        .select(
+          "id, campo, valor_proposto, valor_anterior, conversation_id, trecho, status, proposed_at, decided_at, motivo_recusa",
+        )
+        .eq("organization_id", organizationId)
+        .eq("contact_id", contactId)
+        .order("id")
+        .range(offset, offset + 499);
+      // Uma falha não pode virar um relatório que diz que não guardamos dados.
+      if (error) throw error;
+      contact_field_proposals.push(...(data ?? []));
+      if (!data || data.length < 500) break;
+    }
   }
 
   // Audit log extract (best-effort: rows where metadata.contact_id matches).
