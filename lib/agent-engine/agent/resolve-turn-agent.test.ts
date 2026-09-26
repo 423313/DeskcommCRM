@@ -5,6 +5,7 @@ import type { EscolhaDoJev, JevNoRoteador } from '@/lib/ai/decisao/roteador';
 
 import { agenteDoDestino, destinoDoVeredito, resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
 import type { PublishedAgentConfig } from './agent-config';
+import type { IntentVerdict } from './intent-classifier';
 import type { LoadedRouter } from './router-config';
 
 /** Config mínima válida — só o agentId importa pros testes (identidade). */
@@ -433,7 +434,7 @@ describe('o Jev no roteador (onda 2 do Jev, bloco 2.2)', () => {
   const semSticky = { ...baseInput, signal: 'meu pedido não chegou', stickyAgentId: null, stickyIntent: null };
 
   async function rodar(opts: {
-    daIa: { intentName: string | null; confidence: number } | null;
+    daIa: IntentVerdict | null;
     jev: ReturnType<typeof jevFalso>;
     entrada?: Parameters<typeof resolveTurnAgent>[2];
     r?: LoadedRouter;
