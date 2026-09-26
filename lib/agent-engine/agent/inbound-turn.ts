@@ -4666,6 +4666,57 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
   return async (job: JobRow, pool: pg.Pool, ctx: { workerId: string }): Promise<void> => {
     const payload = inboundTurnPayloadSchema.parse(job.payload);
     if (!job.contact_id) throw new Error('reply_without_contact');
+    // AS TRAVAS VÊM ANTES DE ESCOLHER O AGENTE, e é aqui que elas precisam estar.
+    //
+    // Escolher o agente pergunta à IA de sempre e, com a tarefa do roteador do
+    // Jev rodando, manda a mensagem ao Jev — um fornecedor nos EUA, com aceite
+    // próprio — e grava a observação. Com as travas depois, a conversa que
+    // nenhum agente vai atender (lead em handoff, `force_human`, bot
+    // silenciado, dono humano, número fora da lista de teste no pré-go-live)
+    // saía mesmo assim: o drain só barra a conversa não elegível quando NÃO há
+    // agente assistido (`canAssist`, drain.ts), e o operador que limitou a IA a
+    // números de teste via a mensagem de cliente real ir para fora.
+    //
+    // O ASSISTIDO também passa por aqui: o drain desliga o gate quando a org
+    // tem agente assistido publicado no canal — de propósito, o rascunho é o
+    // produto do modo assistido e barrar no drain o mataria —, e o ramo
+    // assistido abaixo devolve ANTES de `runAgentTurn`, onde moram as mesmas
+    // duas guardas. Sem elas aqui, conversa com dono humano recebia rascunho.
+    //
+    // ponytail: o caminho automático refaz as duas em `runAgentTurn` (que
+    // também serve follow-up e caso) — duas consultas a mais por turno, contra
+    // a IA de sempre e o Jev que elas poupam numa conversa calada.
+    if (await isLeadInHandoff(pool, job.organization_id, job.contact_id)) {
+      deps.log.info('turno pulado — lead em handoff humano (bot silenciado)', {
+        job_id: job.id,
+        conversation_id: payload.conversation_id,
+      });
+      return;
+    }
+    try {
+      const elegib = await decidirElegibilidadeDaConversa(pool, {
+        organizationId: job.organization_id,
+        conversationId: payload.conversation_id,
+        agora: deps.clock?.() ?? new Date(),
+        ttlMs: deps.knobs.allowlistTtlMs ?? ALLOWLIST_TTL_MS_PADRAO,
+      });
+      if (elegib !== null && !elegib.permite) {
+        deps.log.info('turno pulado — conversa não elegível para IA', {
+          job_id: job.id,
+          conversation_id: payload.conversation_id,
+          motivo: elegib.motivo,
+        });
+        return;
+      }
+    } catch (err) {
+      // Degrada ABERTO, igual ao gêmeo de `runAgentTurn`: falha da consulta
+      // não pode calar um agente cuja conversa está liberada. Quem barra de
+      // verdade — handoff — já rodou acima e falha fechado.
+      deps.log.warn('checagem de elegibilidade falhou — seguindo', {
+        job_id: job.id,
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+      });
+    }
     const resolvedAgent = await resolveConversationTurn(pool, deps.llmCfg, {
       tenantId: job.organization_id,
       leadId: job.contact_id,
@@ -4676,51 +4727,8 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
     }, { log: deps.log, jev: deps.jev });
     const operationAgent = resolvedAgent.config;
     if (operationAgent?.operationMode === 'assisted') {
-      // O GATE VALE TAMBÉM NO ASSISTIDO, e é aqui que ele precisa estar.
-      //
-      // O drain desliga a checagem antes de enfileirar quando a org tem agente
-      // assistido publicado no canal (`canAssist`, drain.ts) — de propósito: o
-      // rascunho é o produto do modo assistido, e barrar no drain o mataria. Só
-      // que este ramo devolve ANTES de `runAgentTurn`, onde moram as duas
-      // guardas (isLeadInHandoff + decidirElegibilidadeDaConversa). Resultado
-      // medido: conversa com dono humano (`assignee_kind`), com `force_human`
-      // ou com o bot silenciado (`bot_silenced_until`) recebia rascunho assim
-      // mesmo — o gêmeo do fluxo automático não alcança este caminho.
-      //
-      // Fica no ramo, não antes dele: o caminho automático já refaz as duas
-      // checagens em `runAgentTurn`, e antecipá-las custaria duas queries por
-      // turno sem mudar nenhum desfecho.
-      if (await isLeadInHandoff(pool, job.organization_id, job.contact_id)) {
-        deps.log.info('rascunho pulado — lead em handoff humano (bot silenciado)', {
-          job_id: job.id,
-          conversation_id: payload.conversation_id,
-        });
-        return;
-      }
-      try {
-        const elegib = await decidirElegibilidadeDaConversa(pool, {
-          organizationId: job.organization_id,
-          conversationId: payload.conversation_id,
-          agora: new Date(),
-          ttlMs: deps.knobs.allowlistTtlMs ?? ALLOWLIST_TTL_MS_PADRAO,
-        });
-        if (elegib !== null && !elegib.permite) {
-          deps.log.info('rascunho pulado — conversa não elegível para IA', {
-            job_id: job.id,
-            conversation_id: payload.conversation_id,
-            motivo: elegib.motivo,
-          });
-          return;
-        }
-      } catch (err) {
-        // Degrada ABERTO, igual ao gêmeo de `runAgentTurn`: falha da consulta
-        // não pode calar um assistido cuja conversa está liberada. Quem barra
-        // de verdade — handoff — já rodou acima e falha fechado.
-        deps.log.warn('checagem de elegibilidade falhou — seguindo para o rascunho', {
-          job_id: job.id,
-          error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
-        });
-      }
+      // As travas do assistido (handoff e elegibilidade) já rodaram acima, antes
+      // de escolher o agente.
       const { generateReplyDraft } = await import('./reply-drafts');
       if (!job.contact_id) throw new Error('reply_without_contact');
       await generateReplyDraft(pool, deps, {

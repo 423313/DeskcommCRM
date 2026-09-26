@@ -4,6 +4,7 @@ import type { PublishedAgentConfig } from '@/lib/agent-engine/agent/agent-config
 const mocks = vi.hoisted(() => ({
   router: vi.fn(), classify: vi.fn(), byId: vi.fn(), bySession: vi.fn(), conversationAgent: vi.fn(),
   draft: vi.fn(), operation: vi.fn(),
+  handoff: vi.fn(async () => false), elegibilidade: vi.fn(async (): Promise<unknown> => null),
   // O Jev no roteador, desligado: a seleção medida aqui é a de sempre.
   jev: vi.fn(() => ({ estado: Promise.resolve('desligada'), escolha: Promise.resolve(null), observar: vi.fn() })),
 }));
@@ -20,13 +21,13 @@ vi.mock('@/lib/atendimento/fronteira-server', () => ({
   guardServiceEffect: vi.fn(),
 }));
 vi.mock('@/lib/agent-engine/agent/human-handoff', async importOriginal => ({
-  ...await importOriginal<Record<string, unknown>>(), isLeadInHandoff: vi.fn(async () => false),
+  ...await importOriginal<Record<string, unknown>>(), isLeadInHandoff: mocks.handoff,
 }));
 vi.mock('@/lib/agent-engine/guardrails/camadas-da-org', () => ({
   lerCamadasDaOrg: vi.fn(async () => ({})), camadaLigada: vi.fn(() => false),
 }));
 vi.mock('@/lib/agent-engine/agent/fuso-da-org', () => ({ fusoDaOrganizacao: vi.fn(async () => 'UTC') }));
-vi.mock('@/lib/ai/elegibilidade/consulta-pg', () => ({ decidirElegibilidadeDaConversa: vi.fn(async () => null) }));
+vi.mock('@/lib/ai/elegibilidade/consulta-pg', () => ({ decidirElegibilidadeDaConversa: mocks.elegibilidade }));
 // "Outro turno já respondeu?" fica fora da seleção medida aqui — tem invariante
 // próprio contra o banco (tests/invariants/turno-nao-responde-duas-vezes.test.ts).
 vi.mock('@/lib/agent-engine/agent/turno-ja-respondido', () => ({
@@ -79,7 +80,11 @@ function setup(a: PublishedAgentConfig, b: PublishedAgentConfig, sticky: boolean
   });
   return { query };
 }
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.handoff.mockResolvedValue(false);
+  mocks.elegibilidade.mockResolvedValue(null);
+});
 
 describe('operação segue a identidade escolhida pelo router canônico', () => {
   it.each(['assisted', 'paused'] as const)('A %s não captura a assistência selecionada de B', async state => {
@@ -129,5 +134,43 @@ describe('o Jev do turno chega ao roteador', () => {
     const [, entrada, depsDoJev] = mocks.jev.mock.calls[0]! as unknown as [unknown, { mensagem: string }, unknown];
     expect(depsDoJev).toBe(jev);
     expect(entrada.mensagem).toBe('Agora preciso de suporte técnico');
+  });
+});
+
+/**
+ * A conversa que nenhum agente vai atender não sai para o Jev — um fornecedor
+ * nos EUA com aceite próprio — nem para a IA de sempre. As travas rodavam
+ * DEPOIS de escolher o agente, e o drain só barra a conversa não elegível
+ * quando não há agente assistido: medido pela revisão, com B assistido, o Jev
+ * era perguntado sobre lead em handoff e sobre número fora da lista de teste.
+ */
+describe('as travas vêm antes de escolher o agente', () => {
+  it.each(['assisted', 'automatic'] as const)('lead em handoff (%s): nem a IA de sempre nem o Jev são perguntados', async modo => {
+    mocks.handoff.mockResolvedValue(true);
+    const pool = setup(agent('A', 'automatic'), agent('B', modo), false);
+    await createInboundTurnHandler(deps)(job as never, pool as never, { workerId: 'worker' });
+    expect(mocks.jev).not.toHaveBeenCalled();
+    expect(mocks.classify).not.toHaveBeenCalled();
+    expect(mocks.draft).not.toHaveBeenCalled();
+  });
+
+  it.each(['fora_da_lista_de_teste', 'force_human', 'conversa_de_humano'])(
+    'conversa não elegível (%s), com agente assistido: o Jev não é perguntado',
+    async motivo => {
+      mocks.elegibilidade.mockResolvedValue({ permite: false, motivo });
+      const pool = setup(agent('A', 'automatic'), agent('B', 'assisted'), false);
+      await createInboundTurnHandler(deps)(job as never, pool as never, { workerId: 'worker' });
+      expect(mocks.jev).not.toHaveBeenCalled();
+      expect(mocks.draft).not.toHaveBeenCalled();
+    },
+  );
+
+  // Controle: sem este caso, um `return` cedo demais deixaria os de cima verdes por ausência.
+  it('conversa liberada: o Jev é perguntado e o rascunho sai', async () => {
+    mocks.elegibilidade.mockResolvedValue({ permite: true, motivo: 'gate_aberto' });
+    const pool = setup(agent('A', 'automatic'), agent('B', 'assisted'), false);
+    await createInboundTurnHandler(deps)(job as never, pool as never, { workerId: 'worker' });
+    expect(mocks.jev).toHaveBeenCalledOnce();
+    expect(mocks.draft).toHaveBeenCalledOnce();
   });
 });
