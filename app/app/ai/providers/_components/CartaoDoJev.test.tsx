@@ -334,7 +334,7 @@ describe("CartaoDoJev — (4) ligado, observando", () => {
         numeros: { observacao: { dias: 30, comparadas: 7, concordaram: 5 } },
       }),
     );
-    const numeros = screen.getByTestId("jev-concordancia-numeros");
+    const numeros = screen.getByTestId("jev-concordancia-numeros-clima");
     expect(numeros).toHaveTextContent("5 de 7");
     expect(numeros).toHaveClass("tabular-nums");
     expect(numeros).not.toHaveClass("font-mono");

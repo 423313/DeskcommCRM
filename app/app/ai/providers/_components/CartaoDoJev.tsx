@@ -1007,7 +1007,7 @@ function ConcordanciaDaTarefa({
           {t("Nos últimos")} {o.dias} {t(frase.antes)}{" "}
           {/* A fonte do texto, com algarismos de largura igual: a mono, no meio
               da frase, abria "5  de  7" com espaços largos. */}
-          <span className="font-medium tabular-nums" data-testid="jev-concordancia-numeros">
+          <span className="font-medium tabular-nums" data-testid={`jev-concordancia-numeros-${tarefa.id}`}>
             {formatar(o.concordaram)} {t("de")} {formatar(o.comparadas)}
           </span>{" "}
           {t(frase.depois)}
