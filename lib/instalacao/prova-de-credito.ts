@@ -142,9 +142,19 @@ export function montarRequisicaoDeProva(
   }
 }
 
+/**
+ * A frase que o provedor devolve quando o único token permitido acabou: um modelo
+ * de raciocínio gasta esse token pensando. É a prova DANDO CERTO — só se chega
+ * nela com a chave aceita e a cobrança atravessada (chave recusada é 401, modelo
+ * inexistente é 404). Casar pelo TEXTO: os outros 400 seguem falha.
+ */
+export const LIMITE_DE_SAIDA_ATINGIDO = "max_tokens or model output limit was reached";
+
 /** Traduz a resposta HTTP no mesmo vocabulário de erro do runtime. */
 export function classificarResposta(status: number, corpo: string): ResultadoDaProva {
   if (status >= 200 && status < 300) return { ok: true };
+  // Ver `LIMITE_DE_SAIDA_ATINGIDO`: este 400 é a prova passando, não a chave falhando.
+  if (status === 400 && corpo.toLowerCase().includes(LIMITE_DE_SAIDA_ATINGIDO)) return { ok: true };
   // `normalizarErro` lê `status` do objeto — é a régua canônica, compartilhada
   // com a tela de Execuções, e ela também redige a mensagem do provedor (que
   // pode ecoar header de autorização em endpoint próprio).

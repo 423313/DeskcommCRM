@@ -8,12 +8,32 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
+import { explicacaoParaQuemInstala } from "@/lib/instalacao/explicacao-da-falha";
 import {
   classificarResposta,
+  LIMITE_DE_SAIDA_ATINGIDO,
   montarRequisicaoDeProva,
   provarSaldo,
 } from "@/lib/instalacao/prova-de-credito";
 import { IDS_DE_PROVEDOR } from "@/lib/ai/pontos/provedores";
+
+/** O corpo REAL do 400 que derrubava o onboarding, montado a partir da constante. */
+const TETO_DE_SAIDA = JSON.stringify({
+  error: {
+    message: `Could not finish the message because ${LIMITE_DE_SAIDA_ATINGIDO}. Please try again with higher max_tokens.`,
+    type: "invalid_request_error",
+    param: null,
+    code: null,
+  },
+});
+
+/** As formas de falha que a guarda nova NÃO pode passar a aceitar. */
+const NAO_VIRAM_SUCESSO = [
+  ["400 outro motivo", 400, '{"error":{"message":"Unsupported parameter: \'temperature\' is not supported with this model."}}', "erro_desconhecido"],
+  ["400 quase a frase", 400, '{"error":{"message":"Unsupported parameter: max_tokens is not supported with this model."}}', "erro_desconhecido"],
+  ["401 chave inválida", 401, '{"error":{"message":"Incorrect API key provided"}}', "credencial_recusada"],
+  ["429 sem saldo", 429, '{"error":{"message":"insufficient_quota"}}', "limite_ou_saldo"],
+] as const;
 
 describe("montarRequisicaoDeProva", () => {
   it("sabe cobrar TODOS os provedores que a lista oferece", () => {
@@ -97,6 +117,42 @@ describe("classificarResposta", () => {
     const r = classificarResposta(404, "model not found");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.codigo).toBe("modelo_inexistente");
+  });
+
+  it("o 400 de teto de saída é a prova PASSANDO: a chave foi aceita e o modelo gerou", () => {
+    // O modelo curado padrão é de raciocínio: gasta o único token pensando e
+    // devolve este 400, que já provou o que a prova queria provar — a cobrança
+    // atravessou. Lido como falha, deixava sem atendente no ar toda instalação
+    // nova que escolheu OpenAI.
+    expect(classificarResposta(400, TETO_DE_SAIDA)).toEqual({ ok: true });
+  });
+
+  it("e é SÓ esse 400 — o resto continua falha, com o balde certo", () => {
+    // A guarda não pode virar "qualquer 400 passa": trocaria um falso negativo
+    // por um falso positivo e o selo verde voltaria a mentir. `max_tokens`
+    // sozinho aparece em recusa de PARÂMETRO, e casar por ele daria sucesso a
+    // uma chave que não funciona.
+    for (const [nome, status, corpo, esperado] of NAO_VIRAM_SUCESSO) {
+      const r = classificarResposta(status, corpo);
+      expect(r.ok, nome).toBe(false);
+      if (!r.ok) expect(r.codigo, nome).toBe(esperado);
+    }
+  });
+});
+
+describe("explicacaoParaQuemInstala", () => {
+  it("nunca devolve o corpo do provedor — e cada balde pede a SUA ação", () => {
+    // Era o JSON cru do provedor, em inglês, que a tela mostrava — e trocar dois
+    // baldes de conselho manda a pessoa mexer no que está certo.
+    const BALDES = ["limite_ou_saldo", "credencial_recusada", "modelo_inexistente", "provedor_indisponivel", "erro_desconhecido", "balde_novo"];
+    for (const codigo of BALDES) {
+      const texto = explicacaoParaQuemInstala(codigo);
+      expect(texto.length, codigo).toBeGreaterThan(20);
+      expect(texto, codigo).not.toMatch(/[{}\[\]"]|max_tokens|invalid_request_error/);
+    }
+    expect(explicacaoParaQuemInstala("credencial_recusada")).not.toBe(explicacaoParaQuemInstala("limite_ou_saldo"));
+    expect(explicacaoParaQuemInstala("limite_ou_saldo")).toMatch(/saldo|crédito/i);
+    expect(explicacaoParaQuemInstala("balde_novo")).toBe(explicacaoParaQuemInstala("erro_desconhecido"));
   });
 });
 
