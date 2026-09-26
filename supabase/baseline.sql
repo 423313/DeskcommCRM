@@ -24499,8 +24499,7 @@ as $$
     'tenant.reactivated',
     'tenant.suspended',
     'user.profile_updated',
-    -- mensagem
-    'message.failed',
+    -- mensagem ('message.failed' saiu aqui na 0417: ele ganhou consumidor)
     'message.outbound',
     'message.sending',
     'message.sent',
