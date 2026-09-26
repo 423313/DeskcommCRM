@@ -112,6 +112,8 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 
 ## Chaves de acesso à IA `[P0]`
 
+- Orçamento do E2E: 60 s para login com MFA, validação e limpeza; o polling da validação continua limitado a 15 s. Na execução CI `36079389278` do PR #1566, o trace registrou 24,6 s aguardando a próxima janela TOTP, consumindo quase todo o antigo limite global de 30 s. A nova execução do E2E deve confirmar o ajuste.
+
 - `[P0]` Colar chave inválida e entender o motivo — `tests/e2e/credenciais-de-ia.spec.ts`. Achados corrigidos em 2026-09-02: lista de modelos colada por vírgula no card; "Validando…" eterno após restart; erro em código (`auth_failed_401`, no card e no toast); diálogo sem dizer quando usar cada provedor nem onde pegar a chave; contagem "em uso" divergente do DELETE. **PASS** — executada de verdade contra browser real (Supabase local pg17 + baseline + Chromium) em 2026-09-02, depois que o Docker da máquina (antes indisponível) voltou. A própria execução achou um SEXTO defeito que a leitura de código não tinha achado: `descreverErroDeValidacao` não classificava `TypeError` (o nome que o `fetch()` do Node usa para falha de rede/DNS) como erro de rede, e o card mostrava "Falha na validação (TypeError)." cru em vez da frase amigável — corrigido em `lib/ai/credenciais/erro-de-validacao.ts`, com caso de teste. Evidência em `.superpowers/evidence/credenciais-de-ia.png`.
 
 ## J32 — Ligar o Jev para perceber o cliente irritado `[P1]` (2026-09-23)
@@ -268,6 +270,30 @@ consertos estão em commits próprios desta branch — procure pelas palavras ab
 | J5.12 | Admin **revoga** um convite pendente | `POST /api/v1/team/invites/[id]/revoke` marca `revoked_at`; o aceite passa a recusar o token mesmo dentro da validade; audita `member.invite_revoked` |
 | J5.13 | Admin **reenvia** um convite | `POST /api/v1/team/invites/[id]/resend` re-assina o mesmo `invite_id`, renova 24h, audita `member.invited`; reconvidar o mesmo e-mail pendente pela tela de convite RENOVA a linha (índice único parcial) |
 | J5.14 | Manager vê a lista, mas não as ações | leitura é `team_invites_select` (manager+); reenviar/revogar são admin-only (403) |
+
+### J5.15 `[P0]` — Convite SMTP em Docker com hostname curto
+
+Falha observada na release 1.48.0: conexão e autenticação SMTP passavam, mas seis
+convites aceitos pelo servidor foram classificados como `filtered` pelo router
+HostGator `fightspamHG`. O Nodemailer, sem `name` explícito e com hostname Docker
+curto, usava EHLO `[127.0.0.1]`. `email_dispatched=true` atesta aceitação SMTP,
+não entrega na caixa de entrada.
+
+Correção: `lib/email/smtp.ts` identifica envio e verificação com o hostname de
+`env.NEXT_PUBLIC_APP_URL`, já configurado pelo instalador. A opção é lida do
+ambiente validado em runtime; não exige novo campo nem ajuste de compose.
+`tests/unit/smtp-identifica-a-instalacao.test.ts` usa Nodemailer real e receptor
+TCP local: mede EHLO, envio de mensagem, verificação sem envio, URL com porta/caminho,
+literais IPv4/IPv6, fallback local, cache e ausência de configuração.
+
+**Evidência externa em 25/09/2026:** teste controlado com FQDN recebeu `success` no
+rastreamento do provedor e confirmação de recebimento pelo destinatário. Após o
+workaround equivalente de hostname no contêiner da instalação, quatro convites
+reenviados pelo endpoint oficial tiveram `success` no gateway. Isso valida o
+mecanismo; o patch de código deste PR foi exercitado no receptor local. **Não medido:**
+entrega desses quatro convites nas caixas finais, todos os provedores e uma nova
+jornada Playwright em instalação fresca. Nenhum endereço ou token real é necessário
+para reproduzir o teste local.
 
 ## J6 — Webhooks: receber, automatizar, provar `[P0]`
 
@@ -2944,6 +2970,20 @@ que dirige o browser resolviam `E2E_PORT` para valores **diferentes** — servid
 `page.goto` em outra, e `ERR_CONNECTION_REFUSED` com um servidor saudável no ar. O CI nunca
 pisou nisso porque o gerador não escreve `E2E_PORT`; quem monta bancada em porta própria,
 sim. Consertado pela ordem: publicar primeiro, decidir a porta depois.
+
+
+## Conversões de anúncios — reprocessamento
+
+[P1] `tests/e2e/conversoes-reprocessamento.spec.ts`: administrador abre Conversões sem credenciais opcionais, vê o que falta, identifica origem de uma venda pendente e agenda reprocessamento pela tela. A spec confere o evento exclusivo e captura screenshot; integra o CI. O teste não prova aceite/atribuição por contas reais de anúncios.
+
+### Conversões Google: captura e qualificação
+
+- [P1] `tests/e2e/conversoes-reprocessamento.spec.ts`: salvar captura Google pela tela, recarregar configuração, abrir endereço com wbraid e verificar a referência criada. Destino WhatsApp interceptado; não envia mensagem nem comprova atribuição externa.
+- Componentes: `tests/unit/conversoes-formularios.test.tsx` cobre escolha de etapa/ação, bloqueio da mesma ação de compra e formulário de captura.
+- Banco: `tests/invariants/conversoes-qualificacao-isolada.test.ts` cobre identificadores, isolamento da etapa, snapshot e reprocessamento por evento.
+- Piloto real ainda necessário: anúncio → mensagem → etapa → recibo e diagnóstico da plataforma.
+
+- Script do site: `tests/unit/script-do-site.test.ts` executa o JS distribuído, cobre navegação, filtros, storage bloqueado, links dinâmicos e exclusão. `tests/e2e/conversoes-reprocessamento.spec.ts` instala o snippet copiado da tela em uma página de teste, navega sem query e segue até a captura real, com WhatsApp interceptado.
 
 ## J33 — Um roteiro de atendimento coleta dados e a ficha mostra `[P1]` (2026-09-24)
 

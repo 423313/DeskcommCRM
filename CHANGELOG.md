@@ -8,6 +8,110 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.51.0] — 2026-09-26
+
+### Adicionado
+
+- **O envio de mensagem pela API aceita chave de idempotência e registra o atendente em nome de quem a integração enviou** Integrações que enviam mensagens pelo `POST /api/v1/messages` podem mandar o cabeçalho `Idempotency-Key` (um UUID): uma retentativa com a mesma chave devolve a mesma resposta sem enviar de novo, e a mesma chave com outro conteúdo é recusada. Um token com o novo escopo "Integração pode enviar em nome de um atendente" (marcado na tela de tokens por um administrador) pode informar `on_behalf_of_user_id`; a conversa passa a mostrar "Fulano · via {nome do token}" no lugar de "Sistema". Só atendentes ativos da mesma organização são aceitos. Nada muda para quem não usa esses campos, e não há ação para quem opera a VPS: a coluna nova chega pela atualização normal.
+
+  Contribuição de @webtecnica (#1676).
+
+- **As respostas prontas chegam à integração com as variáveis do próprio integrador** Um sistema de fora que usa as respostas prontas da equipe — para montar um texto, ou para um procedimento interno apontar "use o modelo X" — agora tem o que faltava nas três pontas. A lista das respostas prontas passou a devolver só as compartilhadas com a equipe: um token de integração lia também os rascunhos pessoais que cada atendente escreveu para si, e isso acabou. O preenchimento segue a mesma regra: pedir um rascunho pessoal de outra pessoa pelo id responde que ele não existe, e o agente de IA passa a usar só as respostas compartilhadas. Cada resposta traz agora a lista das variáveis que o texto usa, e quem preenche pode mandar os valores que só o sistema de fora sabe — o link do formulário, o valor em aberto, o número do protocolo (`valores: { link_formulario: "…" }`). Variável fora do formato, variável que vem do contato ou do negócio, ou variável que o modelo não usa é recusada dizendo o nome dela, em vez de sair em branco no meio do texto. E o endereço `/app/templates?modelo=<id>` abre aquele modelo direto, para o link que a integração devolve cair na tela certa — na edição para quem pode editá-lo, e na lista, com o modelo à vista, para quem não pode.
+
+  Não há ação para quem opera a VPS.
+
+  Contribuição de @webtecnica (#1673).
+
+### Alterado
+
+- **Em "Cadastro", a tela avisa quando a troca de modo ainda não chegou ao cadastro direto do Supabase** Trocar o modo em /admin/cadastro valia na hora para as regras do CRM, mas o cadastro direto do Supabase continuava como estava: no kit de servidor único ele só acompanha no install e no update.sh, e com Supabase separado ele nunca acompanha sozinho. Agora /admin/cadastro confere o que o servidor de login do Supabase está aplicando e avisa quando isso difere do modo gravado. No servidor único, o aviso traz o comando para aplicar já (bash hostgator-setup-kit/update.sh). Com Supabase separado, ele diz o que mudar no painel (Authentication → Sign In / Up → Allow new users to sign up) ou no DISABLE_SIGNUP de um GoTrue próprio. Se não der para perguntar ao GoTrue, não há aviso, e nada é corrigido sozinho: a tela só avisa.
+
+  Contribuição de @webtecnica (#1675), a partir da issue #1668.
+
+- **Envio fora da janela de 24 horas é recusado na hora e a falha de entrega vira gatilho** Quem integra por token em canal oficial passa a receber `422 janela_fechada` ao mandar texto livre com a janela de 24 horas fechada, em vez de `201` seguido de recusa silenciosa da plataforma (código 131047). A resposta traz `use: "template"`, `ultima_mensagem_do_cliente` e `codigo_plataforma`; nada é gravado como enviado. Modelo aprovado, canais sem janela (QR) e quem digita na tela continuam iguais.
+
+  A falha de entrega passa a ser visível de fora: a recusa que chega pelo webhook de status e a falha de pré-voo do próprio envio emitem o gatilho `message.failed` uma vez por falha, com `message_id`, `conversation_id`, `contact`, `sent_via` e `erro { codigo, titulo }`. A mensagem que fica presa em "enviando" e é marcada como falha depois de 5 minutos emite o mesmo formato, com `erro.codigo = send_timeout`. Quem precisar ser avisado cria uma regra de automação com ação de webhook sobre esse gatilho.
+
+  A mudança de resposta vale para quem envia texto livre fora da janela: de `201` para `422`. É a correção do defeito, e a troca é usar modelo aprovado — o mesmo caminho que a tela já sugere.
+
+  Contribuição de @webtecnica (#1677).
+
+- **Logo acima de 512 KB passa a ser recortado e reduzido no navegador em vez de recusado** Em Configurações › Marca, um logo acima de 512 KB não é mais recusado de cara: antes do envio, o próprio navegador recorta a margem totalmente transparente em volta do logo e, se ainda não couber, reduz a largura para 800, 640 ou 512 px, mantendo a proporção e a transparência do PNG. Só quando nem assim cabe a tela mostra a recusa, sem enviar o arquivo. O limite de 512 KB continua o mesmo, e o servidor segue conferindo tamanho e tipo.
+
+  Contribuição de @webtecnica (#1671), a partir do relato de @spoliagency na #1655.
+
+### Corrigido
+
+- **Aba ativa da Inbox visível em colunas estreitas** Na Inbox, a faixa de abas mantém o sublinhado compacto. Ao trocar de aba ou redimensionar a coluna, a visão ativa fica centralizada sempre que possível. Setas discretas indicam abas fora da área visível e avançam para a aba vizinha sem cobrir os nomes.
+
+  Contribuição de @raphaelmartins (#1663).
+
+- **A Agenda lembra o tipo de compromisso escolhido depois de recarregar a página** Escolher o tipo de compromisso na grade da Agenda morria no recarregamento da página: a tela voltava ao primeiro tipo em ordem alfabética e, quando ele não tinha jornada publicada, mostrava "a jornada de atendimento ainda não foi publicada" para quem estava olhando outro tipo. A escolha passa a ficar no endereço da página, como já acontece com a conversa aberta na Inbox — o link aberto em outra aba chega com o mesmo tipo selecionado, e fechar o detalhe de um compromisso não apaga mais a escolha. Quem não escolhe nada continua vendo o primeiro tipo, como sempre. Não há ação para quem opera a VPS.
+
+  Contribuição de @webtecnica (#1669).
+
+- **No modo assistido, o pedido para parar e o pedido de falar com uma pessoa passam a valer na hora** Com o agente no modo assistido, quando o contato pede para parar de receber mensagens, o atendimento automático agora é silenciado na hora e os follow-ups agendados são cancelados, sem esperar a aprovação de um rascunho. Quando o contato pede para falar com uma pessoa (ou usa a palavra-chave de passagem configurada no agente), abre-se o item de atendimento humano na Central em vez de só um rascunho. Nesses dois casos o contato recebe o mesmo aviso curto de sistema que já recebia no modo automático; nenhuma resposta escrita pela IA sai sem aprovação. O follow-up de um agente assistido, que antes sumia sem aviso, passa a virar rascunho para aprovação.
+
+  Contribuição de @webtecnica (#1667).
+
+- **O controle Confidence threshold sai do editor de agente — ele não controlava nada** Na aba RAG do editor de agente havia um campo "Confidence threshold (0–1)" que prometia passar a conversa para uma pessoa quando a resposta ficasse abaixo do limiar. Ele gravava o valor, mostrava "salvo" e não mudava nada: o único trecho do produto que lia esse número era um bloco do motor antigo que não roda mais desde 07/09. Quem editava um agente de voz mexia num botão que não controlava nada. O campo saiu da tela e o número saiu do formulário; o motor antigo, se algum dia voltar, segue com o limiar que ele já usava quando o campo estava vazio. Nada muda na operação de quem usa o produto hoje.
+
+  Contribuição de @webtecnica (#1670).
+
+- **Corrige convites filtrados por identificação SMTP local em instalações Docker** Corrige uma falha em que o servidor de e-mail aceitava os convites, mas podia filtrá-los depois porque o CRM se identificava como localhost. O envio SMTP passa a usar o domínio já configurado na instalação, sem exigir ajustes manuais no contêiner. A falha foi observada na hospedagem de e-mail HostGator; a correção se aplica ao transporte SMTP em geral.
+
+  Contribuição de @vitorlacerdadigital (#1666).
+
+- **A conexão do dono do banco não entra mais no processo do CRM** Quem declara `SUPABASE_DB_ADMIN_URL` no `.env` (o caso de quem usa Supabase próprio e deixa a atualização rodar sozinha pelo cron) tinha essa conexão, a do dono do banco, entregue também aos contêineres `app`, `worker` e `voice-agent`, porque o compose passa o `.env` inteiro a eles. Nenhum código do CRM a usava, mas ela ficava ao alcance do processo que atende requisição. Agora esses serviços a recebem vazia, e ela continua no `.env` só para o kit (`install.sh`, `update.sh`, backup), que roda no servidor, fora dos contêineres.
+
+  Nada muda na operação: não é preciso editar o `.env` nem rodar nada, e a atualização aplica a mudança sozinha.
+
+  Contribuição de @hiro-nikaitou (#1680).
+
+- **Entrar com Google numa instalação sem o Google ligado mostra o aviso na tela de login, em vez de uma página de erro fora do CRM** Numa instalação sem o provedor Google ligado, clicar em Entrar com Google no login ou no cadastro levava a pessoa para uma página de erro técnica do servidor de autenticação, fora do CRM e sem caminho de volta. Agora o CRM confere antes se o Google está ligado e, se não estiver, a pessoa continua na tela e vê o aviso de que o Google não está habilitado nesta instalação, com o caminho do e-mail e senha. Se a conferência falhar, o botão segue funcionando como antes.
+
+  Contribuição de @webtecnica (#1664).
+
+- **O agente com o provedor personalizado passa a publicar** Quem cadastrou um provedor personalizado compatível com OpenAI (um Ollama exposto, um LiteLLM, um proxy próprio), escolheu o modelo no assistente e clicou em Publicar recebia "Falha ao publicar: model_not_found", mesmo com a credencial validada. Agora a publicação confere o modelo na lista que o próprio endpoint devolveu no teste de conexão: se o modelo está lá, o agente publica; se não está, a recusa continua. Para Anthropic, OpenAI, Google, OpenRouter, DeepSeek e Requesty nada muda.
+
+  Contribuição de @fillipe-felix (#1679).
+
+- **Em "Cadastro apenas por convite", ninguém mais cria conta direto pelo Supabase** Com "Cadastro apenas por convite" ligado, o CRM recusava cadastro sem convite, mas o Supabase continuava aceitando conta nova criada direto pela chave pública do navegador. Agora a atualização fecha também essa porta no Supabase desta VPS (instalação de servidor único), e quem recebeu convite continua criando a conta normalmente. Quem usa o Supabase na nuvem ou em outro servidor pode desligar "Allow new users to sign up" no painel do Supabase, e o convite segue funcionando. Se trocar o modo em /admin/cadastro, rode a atualização para o Supabase desta VPS acompanhar. Relato de @spoliagency na issue #1653.
+
+  Contribuição de @webtecnica (#1665).
+
+- **Entrar com Google entra no CRM direto, em vez de voltar para a tela de login com a sessão já criada** Quem entrava com Google terminava na tela de login, como se o login tivesse falhado — mesmo com a sessão já criada: abrindo o CRM de novo, a pessoa estava logada. A volta do Google passou a entregar uma página do próprio CRM antes de seguir para a tela pedida, o que faz o navegador tratar a navegação seguinte como sendo do próprio site e enviar o cookie de sessão. Os cookies de sessão continuam restritos como estavam, e nenhuma configuração precisa ser mexida. Não há ação para quem opera a VPS.
+
+  Contribuição de @webtecnica (#1674).
+
+## [1.50.0] — 2026-09-25
+
+### Adicionado
+
+- **Data de nascimento na ficha do contato e no agente** A data de nascimento agora entra pela tela e pela conversa: o diálogo "Editar contato" ganhou o campo "Data de nascimento", a ficha do contato passou a mostrá-la, e o agente de IA consegue propor a data ouvida na conversa pelo mesmo fluxo de aprovação humana que já existe para nome, e-mail e telefone — nada é gravado sem alguém confirmar. Com a data no cadastro, a rotina de aniversários encontra quem parabenizar sem depender de digitação manual. Crédito: @webtecnica (#1650).
+
+- **A tela de credenciais ganha o provedor personalizado compatível com OpenAI** Quem roteia a própria IA por um endpoint próprio — OmniRouter, 9Router, FreellmAPI, LiteLLM hospedado, proxy corporativo — agora encontra a opção **"Provedor personalizado (compatível com OpenAI)"** em **IA › Credenciais**, junto dos provedores de sempre. Dá para informar a base URL e a chave, escolher o modelo no assistente e publicar: o agente conversa por aquele endpoint do mesmo jeito que conversa pelos outros.
+
+  O endereço fica guardado na própria credencial, cifrada como todas as outras — na tela só aparecem os quatro últimos caracteres da chave, e o endereço nunca é impresso em log. Cadastro, teste, validação e o turno do agente leem a mesma escolha.
+
+  Antes de salvar, a tela testa a conexão (`GET {base}/models`, 10 segundos): acertou, mostra a confirmação e quantos modelos o endpoint devolveu; errou, não grava nada e mostra o erro no campo. Depois de gravada, a validação em segundo plano repete a mesma chamada sobre a linha salva.
+
+  O endereço precisa ser público e, em produção, `https://`: como é escolhido por uma empresa, ele passa pela mesma régua dos webhooks e é recusado quando aponta para a rede interna do servidor (localhost, IP privado, metadados de nuvem, serviços do compose) ou quando redireciona. A régua vale no teste, na validação e em cada chamada do agente.
+
+  Nada muda para quem já usa Anthropic, OpenAI, Google ou OpenRouter: a opção nova nasce disponível, não ligada.
+
+  Contribuição de @webtecnica (#1651).
+
+### Alterado
+
+- **Cada organização passa a ter um teto de 50 tokens de API ativos** A emissão de tokens de API (Configurações › API Tokens) passa a parar em 50 tokens ativos por organização, e a trava fica no banco, então vale para a tela, para chamadas diretas e para os tokens temporários que o agente de IA usa em cada atendimento. Tokens revogados ou vencidos não contam: revogar um antigo e emitir um novo sempre funciona, e quem já tem mais de 50 hoje não perde nenhum, só não emite outro até revogar. Ao bater no teto, a tela mostra o limite e como liberar espaço, em vez de um erro interno. Isso fecha a brecha em que emitir mais tokens multiplicava o limite de uso da API. Crédito: @webtecnica (#1658).
+
+### Corrigido
+
+- **O botão "Anonimizar contato" da ficha passa a apagar tudo o que o pedido formal de LGPD apaga** Anonimizar um contato pelo botão da ficha agora usa a mesma redação completa do pedido formal de LGPD: além do contato, das conversas e das mensagens, passam a ser redigidos os pedidos e as vendas (valores e datas continuam, só sai o dado pessoal), as chamadas de voz, a prospecção, os casos do agente e seus avisos, as demandas, as passagens de atendimento, e o consentimento, a origem e as etiquetas do contato. O nome do contato passa a ficar como "Cliente Anonimizado #…", o mesmo rótulo do pedido formal. Contatos anonimizados antes desta versão não são reprocessados. Crédito: @webtecnica (#1659).
+
+- **O Testar do agente consulta o catálogo e o acervo de conhecimento** Na aba Teste do agente, as capacidades "Procurar produto na loja" e "Consultar o que a empresa já sabe" eram recusadas com "Esta consulta precisa de um contato real autorizado". Quem perguntava preço, agenda ou disponibilidade recebia "vou confirmar e já te retorno", como se o catálogo estivesse vazio, embora o mesmo agente respondesse certo no WhatsApp. Agora o Teste faz essas duas consultas como o atendimento real, só leitura. Consultas sobre um contato ou lead continuam exigindo um contato real.
+
 ## [1.49.0] — 2026-09-25
 
 ### Adicionado
@@ -8024,7 +8128,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.49.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.51.0...HEAD
+[1.51.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.50.0...v1.51.0
+[1.50.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.49.0...v1.50.0
 [1.49.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.48.0...v1.49.0
 [1.48.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.47.0...v1.48.0
 [1.47.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.46.0...v1.47.0

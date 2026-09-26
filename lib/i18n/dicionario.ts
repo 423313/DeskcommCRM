@@ -37,6 +37,65 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Script para instalar no site": { es: "Script para instalar en el sitio" },
+  "Salve e ligue a captura do Google ou do site. Depois, copie este script uma única vez para todas as páginas do seu site, antes de fechar o head. Se trocar os números configurados, copie o script novamente.": { es: "Guarde y active la captura de Google o del sitio. Después, copie este script una sola vez en todas las páginas de su sitio, antes de cerrar el head. Si cambia los números configurados, vuelva a copiar el script." },
+  "Script copiado.": { es: "Script copiado." },
+  "Copiar script do site": { es: "Copiar script del sitio" },
+  "O script aparece depois que uma captura ativa estiver salva.": { es: "El script aparece después de guardar una captura activa." },
+  "Mantenha os links normais de WhatsApp nos botões. O script ajusta apenas os links dos números configurados, inclusive os adicionados depois. Sem origem reconhecida, o link original permanece.": { es: "Mantenga los enlaces normales de WhatsApp en los botones. El script ajusta solo los enlaces de los números configurados, incluidos los añadidos después. Sin un origen reconocido, el enlace original se mantiene." },
+  "A origem fica na mesma aba e no mesmo domínio durante a navegação. Uma nova campanha substitui a anterior. Ao clicar, o CRM gera o código na mensagem; ele precisa ser enviado pelo visitante. A mensagem usada é a que você salvou na captura.": { es: "El origen se conserva en la misma pestaña y dominio durante la navegación. Una nueva campaña sustituye a la anterior. Al hacer clic, el CRM genera el código en el mensaje; el visitante debe enviarlo. Se usa el mensaje guardado en la captura." },
+  "Para não guardar a origem na aba, adicione data-storage=\"none\" ao script. Para excluir um link, adicione data-rastreio-ignorar nele. Botões controlados apenas por JavaScript e links abreviados precisam de adaptação no site.": { es: "Para no guardar el origen en la pestaña, añada data-storage=\"none\" al script. Para excluir un enlace, añada data-rastreio-ignorar. Los botones controlados solo por JavaScript y los enlaces acortados necesitan adaptación en el sitio." },
+  "Teste abrindo o site com os parâmetros de uma campanha, navegando para outra página e clicando no WhatsApp. Confira o código na mensagem e a origem no contato. UTMs identificam a campanha no CRM; não garantem atribuição de conversão pela Meta.": { es: "Pruebe abriendo el sitio con los parámetros de una campaña, navegando a otra página y haciendo clic en WhatsApp. Compruebe el código del mensaje y el origen del contacto. Las UTM identifican la campaña en el CRM; no garantizan atribución de conversión por Meta." },
+  "Enviar conversões para o Google Ads ainda não está disponível nesta instalação — não é nada que você tenha feito. Quem instalou o sistema precisa configurar": { es: "El envío de conversiones a Google Ads aún no está disponible en esta instalación. No se debe a nada que hayas hecho. Quien instaló el sistema debe configurar" },
+  "Enviar conversões para o Google Ads": { es: "Enviar conversiones a Google Ads" },
+  "O botão do site precisa repassar gclid, gbraid ou wbraid recebidos na página. Um endereço fixo sem esses parâmetros não identifica o clique. Mantenha o código na mensagem enviada ao WhatsApp.":
+    {
+      es: "El botón del sitio debe transmitir el gclid, gbraid o wbraid recibido en la página. Una dirección fija sin estos parámetros no identifica el clic. Mantenga el código en el mensaje enviado a WhatsApp.",
+    },
+  "Lead qualificado (opcional)": { es: "Lead cualificado (opcional)" },
+  "Lead qualificado": { es: "Lead cualificado" },
+  Compra: { es: "Compra" },
+  "Captura de origem do Google Ads": { es: "Captura de origen de Google Ads" },
+  "Ao entrar na etapa escolhida, o negócio envia uma qualificação sem valor monetário. A compra continua sendo enviada ao ganhar o negócio com valor. Cada evento é contado uma vez por negócio.":
+    {
+      es: "Al entrar en la etapa elegida, el negocio envía una cualificación sin valor monetario. La compra se sigue enviando al ganar el negocio con un valor. Cada evento se cuenta una vez por negocio.",
+    },
+  "Etapa de qualificação": { es: "Etapa de cualificación" },
+  "Não enviar qualificação": { es: "No enviar cualificación" },
+  "Etapa indisponível — escolha outra": { es: "Etapa no disponible — elija otra" },
+  "Não foi possível carregar as etapas. Atualize a página antes de salvar.": {
+    es: "No se pudieron cargar las etapas. Actualice la página antes de guardar.",
+  },
+  "Ação de conversão de lead qualificado": { es: "Acción de conversión de lead cualificado" },
+  "Informe uma ação do Google diferente da compra. Configure a categoria de lead qualificado e o uso na otimização no Google Ads. Salvar não envia qualificações antigas.":
+    {
+      es: "Introduzca una acción de Google distinta de la compra. Configure la categoría de lead cualificado y su uso en la optimización en Google Ads. Guardar no envía cualificaciones anteriores.",
+    },
+  "Conversões que não foram reportadas": { es: "Conversiones que no se han enviado" },
+  "conversões aceitas pela plataforma": { es: "conversiones aceptadas por la plataforma" },
+  "Nenhuma pendência. Ainda pode não haver vendas ou qualificações com origem em anúncio.": {
+    es: "No hay envíos pendientes. Puede que aún no haya ventas o cualificaciones procedentes de anuncios.",
+  },
+  Evento: { es: "Evento" },
+  "A plataforma recebeu o envio. A confirmação será consultada automaticamente.": { es: "La plataforma recibió el envío. La confirmación se consultará automáticamente." },
+  "A plataforma não concluiu em 24 horas. Consulte o gerenciador e use o botão para verificar novamente.": { es: "La plataforma no terminó en 24 horas. Consulta el administrador y usa el botón para verificar de nuevo." },
+  "Falha temporária. Uma nova tentativa foi agendada automaticamente.": { es: "Fallo temporal. Se programó automáticamente un nuevo intento." },
+  "Evento recebido em modo de teste. Desative o teste antes de reportar a venda real.": { es: "Evento recibido en modo de prueba. Desactiva la prueba antes de reportar la venta real." },
+  "A venda fechou sem valor preenchido. A plataforma exige valor e moeda em uma compra — preencha o valor do negócio e use o botão de reprocessamento.": { es: "La venta se cerró sin importe. La plataforma exige importe y moneda en una compra: completa el valor del negocio y usa el botón para reprocesar." },
+
+  // Conversões de anúncios: recebimento, diagnóstico e recuperação.
+  "Autorizar nova integração do Google": { es: "Autorizar nueva integración de Google" },
+  "Não foi possível reprocessar. Confira sua sessão e tente novamente.": { es: "No se pudo reprocesar. Comprueba tu sesión e inténtalo de nuevo." },
+  "Aceite da API não confirma atribuição ao anúncio. Confira os diagnósticos no gerenciador da plataforma. Depois de corrigir uma pendência, use o botão de reprocessamento.": { es: "La aceptación de la API no confirma la atribución al anuncio. Revisa los diagnósticos en el administrador de la plataforma. Después de corregir un problema pendiente, usa el botón para reprocesar." },
+  "aceitas pela plataforma": { es: "aceptadas por la plataforma" },
+  "Próximo passo": { es: "Próximo paso" },
+  "Reprocessamento agendado. Acompanhe o resultado nesta tela.": { es: "Reprocesamiento programado. Sigue el resultado en esta pantalla." },
+  "Não há novo envio a agendar. Atualizamos a lista.": { es: "No hay un nuevo envío que programar. Actualizamos la lista." },
+  "Agendando...": { es: "Programando..." },
+  "Verificar ou tentar novamente": { es: "Verificar o volver a intentar" },
+  "Integração atual: Data Manager. Ative a Data Manager API no projeto Google Cloud usado na autorização. A confirmação pode levar alguns minutos.": { es: "Integración actual: Data Manager. Activa la Data Manager API en el proyecto Google Cloud usado en la autorización. La confirmación puede tardar unos minutos." },
+  "Integração anterior do Google Ads. Novas contas podem precisar autorizar a Data Manager API.": { es: "Integración anterior de Google Ads. Las cuentas nuevas pueden necesitar autorizar la Data Manager API." },
+
   "Sobre a empresa": { es: "Sobre la empresa" },
   "Não foi possível carregar o enriquecimento.": { es: "No se pudo cargar el enriquecimiento." },
   "Sem dados de enriquecimento para este contato.": { es: "Sin datos de enriquecimiento para este contacto." },
@@ -2218,9 +2277,9 @@ export const DICIONARIO: Traducoes = {
   "Agent ativo": { es: "Agente activo" },
   "read-only — gerenciado pelo backend": { es: "solo lectura — gestionado por el backend" },
   "Janela de contexto (msgs, 1–50)": { es: "Ventana de contexto (msgs, 1–50)" },
-  "Top K = quantos trechos buscar. Similarity threshold = mínimo de relevância (cosine). Confidence = limiar abaixo do qual o agent escala para humano.":
+  "Top K = quantos trechos buscar. Similarity threshold = mínimo de relevância (cosine).":
     {
-      es: "Top K = cuántos fragmentos buscar. Similarity threshold = relevancia mínima (cosine). Confidence = umbral por debajo del cual el agente escala a un humano.",
+      es: "Top K = cuántos fragmentos buscar. Similarity threshold = relevancia mínima (cosine).",
     },
   "Chaves de acesso à IA": { es: "Claves de acceso a la IA" },
   "A conta de inteligência artificial é sua: você contrata direto com {provedores} e cola a chave aqui. A chave fica guardada criptografada e nunca mais aparece na tela depois de salva — nem para você. O Jev (TypeSafe) não conversa com o cliente: a chave dele serve só para decisões rápidas.": {
@@ -4539,6 +4598,11 @@ export const DICIONARIO: Traducoes = {
   "Quando entrar um contato novo (webhook)": { es: "Cuando entre un contacto nuevo (webhook)" },
   "Quando um lead mudar de etapa": { es: "Cuando un lead cambie de etapa" },
   "Quando chegar mensagem no WhatsApp": { es: "Cuando llegue un mensaje por WhatsApp" },
+  "Quando uma mensagem não for entregue": { es: "Cuando un mensaje no se entregue" },
+  "Código do erro": { es: "Código del error" },
+  "Janela de 24 horas fechada: texto livre é recusado pela plataforma (131047). Envie um modelo aprovado ou aguarde o cliente escrever.": {
+    es: "Ventana de 24 horas cerrada: la plataforma rechaza el texto libre (131047). Envía una plantilla aprobada o espera a que el cliente escriba.",
+  },
   "Quando um lead ganhar uma tag": { es: "Cuando un lead reciba una etiqueta" },
   "Quando um contato ganhar uma tag": { es: "Cuando un contacto reciba una etiqueta" },
   "alterado pelo assistente": { es: "cambiado por el asistente" },
@@ -5019,6 +5083,9 @@ export const DICIONARIO: Traducoes = {
   "Criar e editar leads": { es: "Crear y editar leads" },
   "Ler mensagens": { es: "Leer mensajes" },
   "Enviar mensagens": { es: "Enviar mensajes" },
+  "Integração pode enviar em nome de um atendente": {
+    es: "La integración puede enviar en nombre de un asesor",
+  },
   "Ler o log de auditoria": { es: "Leer el registro de auditoría" },
   // ─── Configurações: Distribuição de atendimento ───
   "Distribuição de atendimento salva.": { es: "Distribución de atención guardada." },
@@ -6727,6 +6794,17 @@ export const DICIONARIO: Traducoes = {
   "Atividade registrada": { es: "Actividad registrada" },
   "Você/time": { es: "Tú/equipo" },
   "Sistema": { es: "Sistema" },
+  // #1613 — autoria "em nome de" no balão e os recusos da rota.
+  "via": { es: "vía" },
+  "Envio em nome de outro usuário exige o escopo messages:on_behalf.": {
+    es: "El envío en nombre de otro usuario requiere el alcance messages:on_behalf.",
+  },
+  "on_behalf_of_user_id precisa apontar para um atendente ativo desta organização.": {
+    es: "on_behalf_of_user_id debe apuntar a un asesor activo de esta organización.",
+  },
+  "Não foi possível ler o membro apontado em on_behalf_of_user_id.": {
+    es: "No fue posible leer el miembro indicado en on_behalf_of_user_id.",
+  },
   "Autor não registrado": { es: "Autor no registrado" },
 
   // ─── Contacts: lista, ficha, timeline, LGPD ───
@@ -6814,8 +6892,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Contato anonimizado.": { es: "Contacto anonimizado." },
   "Anonimizar contato (LGPD)": { es: "Anonimizar contacto (LGPD)" },
-  "Esta ação é irreversível. O nome será substituído por \"Contato Anonimizado #N\", email/telefone/CPF serão limpos, e atividades terão conteúdo redigido.": {
-    es: "Esta acción es irreversible. El nombre se reemplazará por \"Contacto Anonimizado #N\", se borrarán el email, el teléfono y el CPF, y se redactará el contenido de las actividades.",
+  "Esta ação é irreversível. O nome será substituído por \"Cliente Anonimizado #N\", email/telefone/CPF serão limpos, e atividades terão conteúdo redigido.": {
+    es: "Esta acción es irreversible. El nombre se reemplazará por \"Cliente Anonimizado #N\", se borrarán el email, el teléfono y el CPF, y se redactará el contenido de las actividades.",
   },
   "Justificativa (mínimo 10 caracteres)": { es: "Justificación (mínimo 10 caracteres)" },
   "Ex.: Solicitação formal do titular via email em DD/MM/YYYY": {
@@ -7125,6 +7203,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Anterior": { es: "Anterior" },
   "Próxima": { es: "Siguiente" },
+  "Aba anterior": { es: "Pestaña anterior" },
+  "Próxima aba": { es: "Pestaña siguiente" },
   "solicitação crítica": { es: "solicitud crítica" },
   "solicitações críticas": { es: "solicitudes críticas" },
   "SLA vencido ou inferior a 2 dias. Ação imediata requerida.": {
@@ -7545,6 +7625,28 @@ export const DICIONARIO: Traducoes = {
   },
   "Com isto ligado, a única porta de entrada é o convite — inclusive para você, se um dia precisar de uma conta nova. Convide pela tela de Equipe antes de precisar.": {
     es: "Con esto activado, la única puerta de entrada es la invitación, incluso para ti si algún día necesitas una cuenta nueva. Invita desde la pantalla de Equipo antes de que haga falta.",
+  },
+  // ── Aviso da troca que ainda não chegou ao GoTrue (issue #1668) ───────────
+  "A troca de modo ainda não chegou ao servidor.": {
+    es: "El cambio de modo aún no llegó al servidor.",
+  },
+  "A troca só vale para o cadastro direto depois da próxima atualização do servidor: o CRM já segue o modo novo, mas o GoTrue da VPS continua com o modo anterior. Esta tela só avisa — nada é corrigido aqui.": {
+    es: "El cambio solo vale para el registro directo después de la próxima actualización del servidor: el CRM ya sigue el modo nuevo, pero el GoTrue del VPS sigue con el modo anterior. Esta pantalla solo avisa: aquí no se corrige nada.",
+  },
+  "Para aplicar agora, rode isto na VPS:": {
+    es: "Para aplicar ahora, ejecuta esto en el VPS:",
+  },
+  "Com o Supabase separado, o cadastro direto não acompanha a troca sozinho: o CRM já segue o modo novo, mas o Supabase continua com o modo anterior. Esta tela só avisa — nada é corrigido aqui.": {
+    es: "Con Supabase separado, el registro directo no acompaña el cambio por sí solo: el CRM ya sigue el modo nuevo, pero Supabase sigue con el modo anterior. Esta pantalla solo avisa: aquí no se corrige nada.",
+  },
+  'No painel do Supabase, em Authentication → Sign In / Up, desligue "Allow new users to sign up".': {
+    es: 'En el panel de Supabase, en Authentication → Sign In / Up, desactiva "Allow new users to sign up".',
+  },
+  'No painel do Supabase, em Authentication → Sign In / Up, ligue "Allow new users to sign up".': {
+    es: 'En el panel de Supabase, en Authentication → Sign In / Up, activa "Allow new users to sign up".',
+  },
+  "Em GoTrue próprio, a chave equivalente é:": {
+    es: "En un GoTrue propio, la clave equivalente es:",
   },
   "Não deu para salvar. Tente de novo em instantes.": {
     es: "No se pudo guardar. Inténtalo de nuevo en unos instantes.",
@@ -9977,8 +10079,8 @@ export const DICIONARIO: Traducoes = {
   "Lista os compromissos com hora marcada de um cliente ou de um dia, com a situação de cada um: marcado, realizado ou desmarcado.": {
     es: "Lista los compromisos con fecha y hora de un cliente o de un día, con el estado de cada uno: programado, realizado o cancelado.",
   },
-  "Lista os textos que a empresa já escreveu para responder as situações de sempre, com o atalho de cada um.": {
-    es: "Lista los textos que la empresa ya escribió para responder a las situaciones de siempre, con el atajo de cada uno.",
+  "Lista os textos que a empresa compartilhou com a equipe para responder as situações de sempre, com o atalho de cada um e as variáveis que cada texto usa.": {
+    es: "Lista los textos que la empresa compartió con el equipo para responder a las situaciones de siempre, con el atajo de cada uno y las variables que usa cada texto.",
   },
   "Listar conversas": { es: "Listar conversaciones" },
   "Lê as mensagens já trocadas com o cliente, para o agente responder sem pedir que ele repita o que já contou.": {
@@ -10055,8 +10157,8 @@ export const DICIONARIO: Traducoes = {
   "Passa a conversa para um atendente, transfere para outra pessoa ou devolve o cliente para a fila de espera.": {
     es: "Pasa la conversación a un asesor, la transfiere a otra persona o devuelve al cliente a la fila de espera.",
   },
-  "Pega uma resposta pronta e troca as lacunas pelos dados do cliente, avisando se sobrou alguma sem preencher. Não envia nada.": {
-    es: "Toma una respuesta predefinida y reemplaza los espacios en blanco por los datos del cliente, y avisa si quedó alguno sin llenar. No envía nada.",
+  "Pega uma resposta pronta e troca as lacunas pelos dados do cliente e pelos valores que o sistema de fora informar, avisando se sobrou alguma sem preencher. Não envia nada.": {
+    es: "Toma una respuesta predefinida y reemplaza los espacios en blanco por los datos del cliente y por los valores que informe el sistema externo, y avisa si quedó alguno sin llenar. No envía nada.",
   },
   "Preencher uma resposta pronta": { es: "Completar una respuesta predefinida" },
   "Privacidade e dados do cliente": { es: "Privacidad y datos del cliente" },
