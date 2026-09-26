@@ -26,7 +26,7 @@ const banco = vi.hoisted(() => ({
   settings: {} as Record<string, unknown>,
   /** A IA principal mede o clima? (a mesma pergunta do worker) */
   iaPrincipal: true,
-  /** `ai_routers` ativos — sem nenhum, a tarefa do roteador do Jev não roda. */
+  /** `ai_routers` ativos, com a contagem das intenções — sem um com 1 a 254, a tarefa do roteador do Jev não roda. */
   roteadores: [] as unknown[],
 }));
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn(), delete: vi.fn() }));
@@ -193,8 +193,15 @@ describe("tela de Credenciais — onde a chave do Jev trabalha", () => {
     await abrir([JEV, ANTHROPIC]);
     expect(screen.getByTestId("credencial-usada-em")).not.toHaveTextContent("Escolher qual agente atende");
 
+    // Ativo, mas sem intenção nenhuma (o estado logo depois de criar um): o Jev
+    // nunca é perguntado, e a chave não trabalha nisso.
     cleanup();
-    banco.roteadores = [{ id: "roteador-ativo" }];
+    banco.roteadores = [{ id: "roteador-vazio", intencoes: [{ count: 0 }] }];
+    await abrir([JEV, ANTHROPIC]);
+    expect(screen.getByTestId("credencial-usada-em")).not.toHaveTextContent("Escolher qual agente atende");
+
+    cleanup();
+    banco.roteadores = [{ id: "roteador-ativo", intencoes: [{ count: 2 }] }];
     await abrir([JEV, ANTHROPIC]);
     expect(screen.getByTestId("credencial-usada-em")).toHaveTextContent("Escolher qual agente atende");
   });
