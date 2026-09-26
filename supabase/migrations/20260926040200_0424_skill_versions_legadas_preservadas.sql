@@ -20,6 +20,11 @@ begin
 end;
 $fn$;
 
+-- É função exclusiva de trigger. Revogar EXECUTE não impede o gatilho já
+-- criado de rodar e evita expor uma RPC sem função de negócio.
+revoke execute on function public.fn_agent_versions_immutable()
+  from public, anon, authenticated, service_role;
+
 do $skill_versions_legadas$
 begin
   if to_regclass('public.skill_versions') is null

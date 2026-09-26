@@ -6383,6 +6383,10 @@ begin
 end;
 $fn$;
 
+-- Função exclusiva de trigger: nenhuma sessão deve chamá-la como RPC.
+revoke execute on function public.fn_agent_versions_immutable()
+  from public, anon, authenticated, service_role;
+
 -- ============================================================================
 -- 0004 — playbook em camadas versionado + carga por ponteiro. 1 linha por CAMADA
 -- (platform|tenant|campaign); o runtime carrega por ponteiro no início de cada
