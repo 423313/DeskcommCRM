@@ -225,6 +225,8 @@ test.describe("Jev no roteador — Testar classificação, pela tela", () => {
 
     await test.step("o cartão: três tarefas, e a do roteador nova, só observando (R7)", async () => {
       const cartao = await abrirOCartao(page);
+      // Recém-ligado com a IA de sempre cadastrada (a do seed, de chave falsa): observando.
+      await expect(cartao).toHaveAttribute("data-estado", "observando");
       await expect(cartao.getByTestId("jev-tarefa-clima")).toBeVisible();
       await expect(cartao.getByTestId("jev-tarefa-manipulacao")).toBeVisible();
       const roteador = cartao.getByTestId("jev-tarefa-roteador");
