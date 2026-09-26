@@ -38528,17 +38528,76 @@ create table if not exists public.conversation_drafts (
 create index if not exists conversation_drafts_conversation
   on public.conversation_drafts (organization_id, conversation_id, created_at desc);
 
+-- RLS: organização + papel + VISIBILIDADE DA CONVERSA, por operação (o molde
+-- de `passagens_de_atendimento` e `ai_reply_drafts`). Cada condição fecha uma
+-- porta: `fn_user_org_ids` — o vizinho não lê; `fn_role_at_least('agent')` —
+-- `viewer` não envia, então não lê nem consome o texto que outro sistema
+-- escreveu PARA o cliente; `fn_can_view_conversation` — em `visibility_mode =
+-- 'own'` o atendente não lê o rascunho de uma conversa que não é dele.
+-- Quem escreve pela SESSÃO: a rota de criação (INSERT, sem token — a origem de
+-- token é só do service role) e o consumo (UPDATE de uma linha ainda não usada,
+-- que só pode virar "usada por MIM"). DELETE não tem caminho de sessão: quem
+-- apaga é o trigger definer da LGPD. `for all` só-tenancy deixava um `viewer`
+-- escrever e apagar pelo PostgREST (gate `0150` de rbac-config-ia-canais).
 alter table public.conversation_drafts enable row level security;
 
--- Uma linha só, como o resto do apêndice: a régua de
--- tests/unit/baseline-reaplicavel.test.ts casa `drop policy if exists <nome> <espaço>`
--- DENTRO da linha, e `on` na linha seguinte escondia o drop dela.
+revoke all on public.conversation_drafts from anon, authenticated;
+grant select, insert, update on public.conversation_drafts to authenticated;
+grant all on public.conversation_drafts to service_role;
+
 drop policy if exists tenant_isolation_conversation_drafts_all on public.conversation_drafts;
-create policy tenant_isolation_conversation_drafts_all
+drop policy if exists conversation_drafts_select on public.conversation_drafts;
+create policy conversation_drafts_select
   on public.conversation_drafts
-  for all to authenticated
-  using (organization_id in (select public.fn_user_org_ids()))
-  with check (organization_id in (select public.fn_user_org_ids()));
+  for select to authenticated
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and exists (
+      select 1 from public.conversations c
+       where c.organization_id = conversation_drafts.organization_id
+         and c.id = conversation_drafts.conversation_id
+         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+drop policy if exists conversation_drafts_insert on public.conversation_drafts;
+create policy conversation_drafts_insert
+  on public.conversation_drafts
+  for insert to authenticated
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and created_by_api_token_id is null
+    and exists (
+      select 1 from public.conversations c
+       where c.organization_id = conversation_drafts.organization_id
+         and c.id = conversation_drafts.conversation_id
+         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+drop policy if exists conversation_drafts_update on public.conversation_drafts;
+create policy conversation_drafts_update
+  on public.conversation_drafts
+  for update to authenticated
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and consumed_at is null
+    and exists (
+      select 1 from public.conversations c
+       where c.organization_id = conversation_drafts.organization_id
+         and c.id = conversation_drafts.conversation_id
+         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  )
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and consumed_at is not null
+    and consumed_by_user_id = (select auth.uid())
+  );
 
 -- LGPD: a anonimização do contato apaga os rascunhos das conversas dele. O
 -- `body` é o texto escrito PARA a pessoa ("Oi Maria, seu boleto de R$ 320
