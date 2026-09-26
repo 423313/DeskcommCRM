@@ -12,7 +12,8 @@
  *
  *  1. qualquer menção CÓDIGO às três colunas nos módulos do Jev — comentário
  *     não conta, lido pelo scanner do TypeScript, que descarta comentário (o
- *     comentário que explica a proibição contém a palavra proibida);
+ *     comentário que explica a proibição contém a palavra proibida) — como
+ *     identificador, como texto inteiro, ou DENTRO de um texto (o SQL cru);
  *  2. import de módulo que envia algo a alguém ou passa a conversa adiante —
  *     pelo alias `@/` OU por caminho relativo (`../../waha/send`), que o repo
  *     também usa entre módulos: o especificador é resolvido contra a pasta do
@@ -20,7 +21,12 @@
  *  3. escrita (insert/update/upsert/delete) nas tabelas da conversa, inclusive
  *     com a consulta guardada numa variável; escrita numa tabela que não é um
  *     texto fixo (não se sabe qual é) e toda chamada `.rpc()` (a cerca não vê
- *     o que a função escreve) também reprovam.
+ *     o que a função escreve) também reprovam. E a escrita em SQL CRU — o
+ *     `pool.query("update public.conversations …")` —, que é como os módulos
+ *     da onda 2 escrevem: a cerca só via a cadeia do supabase-js, e um
+ *     `update … set bot_silenced_until` por `pool.query` passava pelos três
+ *     detectores (achado da revisão, medido). O SQL é lido nos textos do código
+ *     — literal, template com e sem `${}` —, nunca nos comentários.
  *     ponytail: a consulta que chega por PARÂMETRO de função não é seguida — o
  *     próximo passo, se um módulo do Jev passar a receber um cliente de fora,
  *     é seguir a chamada até quem o criou.
@@ -50,6 +56,10 @@ import { describe, expect, it } from "vitest";
 import { arquivosDeCodigo, caminhoRelativo } from "./helpers/varrer-codigo";
 
 const COLUNAS_QUE_CALAM = /^(is_blocked|force_human|bot_silenced_until)$/;
+/** As mesmas colunas no MEIO de um texto — o SQL cru que as escreve. */
+const COLUNAS_NO_TEXTO = /\b(is_blocked|force_human|bot_silenced_until)\b/;
+/** Escrita em SQL cru numa tabela da conversa. */
+const ESCRITA_EM_SQL = /\b(update|insert\s+into|delete\s+from)\s+(public\.)?(messages|conversations|contacts)\b/i;
 
 /**
  * Módulos que mandam mensagem, e-mail ou notificação, ou que passam a conversa
@@ -122,6 +132,32 @@ function tokensDoCodigo(texto: string): string[] {
     }
   }
   return tokens;
+}
+
+/**
+ * O texto de todo literal do CÓDIGO — aspas, crase sem `${}` e crase com `${}`
+ * (as partes fixas entre as substituições). Pela árvore, e não pelo scanner:
+ * o scanner lê o que vem depois do `}` de um template como código.
+ */
+function textosDoCodigo(texto: string): string[] {
+  const textos: string[] = [];
+  const visitar = (no: ts.Node): void => {
+    if (ts.isStringLiteral(no) || ts.isNoSubstitutionTemplateLiteral(no)) textos.push(no.text);
+    else if (ts.isTemplateExpression(no)) {
+      textos.push([no.head.text, ...no.templateSpans.map((s) => s.literal.text)].join(" "));
+    }
+    ts.forEachChild(no, visitar);
+  };
+  visitar(fonteDe(texto));
+  return textos;
+}
+
+/** `pool.query("update public.contacts …")` e afins, em qualquer literal do código. */
+function escritasEmSqlCru(texto: string): string[] {
+  return textosDoCodigo(texto).flatMap((t) => {
+    const achado = ESCRITA_EM_SQL.exec(t);
+    return achado ? [`SQL cru: ${achado[0]}`] : [];
+  });
 }
 
 /** Os módulos que o arquivo carrega ao rodar — `import type`/`export type` não contam. */
@@ -246,7 +282,19 @@ function violacoesDeEnvio(alcance: ReturnType<typeof alcancados>): string[] {
 }
 
 function violacoesDeEscrita(alcance: ReturnType<typeof alcancados>): string[] {
-  return alcance.flatMap((m) => escritasNaConversa(m.texto).map((e) => `${m.cadeia.join(" → ")}: ${e}`));
+  return alcance.flatMap((m) =>
+    [...escritasNaConversa(m.texto), ...escritasEmSqlCru(m.texto)].map((e) => `${m.cadeia.join(" → ")}: ${e}`),
+  );
+}
+
+/** As três colunas num módulo do Jev: identificador, texto inteiro ou dentro de um texto. */
+function colunasQueCalam(texto: string): string[] {
+  const noCodigo = tokensDoCodigo(texto).filter((t) => COLUNAS_QUE_CALAM.test(t));
+  const nosTextos = textosDoCodigo(texto).flatMap((t) => {
+    const achado = COLUNAS_NO_TEXTO.exec(t);
+    return achado ? [achado[1]!] : [];
+  });
+  return [...new Set([...noCodigo, ...nosTextos])];
 }
 
 const modulosDoJev: Modulo[] = arquivosDeCodigo(["lib/ai/decisao"]).map((abs) => ({
@@ -290,6 +338,30 @@ describe("o Jev nunca cala, bloqueia nem responde o cliente", () => {
     expect(escritasNaConversa(`await admin.rpc("fn_qualquer", { p: 1 });`)).toHaveLength(1);
     // Um `Set.delete` não é escrita no banco (o aviso tem um).
     expect(escritasNaConversa(`const vistos = new Set<string>();\nvistos.delete(id);`)).toEqual([]);
+
+    // SQL cru pelo `pg.Pool` — o jeito como a onda 2 escreve. Medido pela
+    // revisão: os três casos abaixo passavam pelos três detectores antigos.
+    const calar = `await pool.query("update public.conversations set bot_silenced_until = now() where id = $1", [id]);`;
+    expect(escritasEmSqlCru(calar)).toHaveLength(1);
+    expect(colunasQueCalam(calar)).toEqual(["bot_silenced_until"]);
+    const bloquear = "await pool.query(`update public.contacts set is_blocked = true where id = ${id}`);";
+    expect(escritasEmSqlCru(bloquear)).toHaveLength(1);
+    expect(colunasQueCalam(bloquear)).toEqual(["is_blocked"]);
+    expect(escritasEmSqlCru("await pool.query(`insert into public.messages (body) values ($1)`, [b]);")).toHaveLength(1);
+    expect(escritasEmSqlCru(`await pool.query("delete from messages where id = $1", [id]);`)).toHaveLength(1);
+    // O comentário que explica a proibição não reprova, e LER não é escrever.
+    expect(escritasEmSqlCru(`// nunca "update public.conversations"\nconst x = 1;`)).toEqual([]);
+    expect(escritasEmSqlCru(`await pool.query("select settings from public.organizations where id = $1");`)).toEqual([]);
+    expect(escritasEmSqlCru(`await pool.query("select is_blocked from public.contacts where id = $1");`)).toEqual([]);
+  });
+
+  it("o SQL cru dos módulos do Jev é lido — e as escritas dele são nas tabelas do Jev (controle positivo)", () => {
+    const manipulacao = modulosDoJev.find((m) => m.arquivo === "lib/ai/decisao/manipulacao.ts")!;
+    const escritas = textosDoCodigo(manipulacao.texto).filter((t) => /\binsert\s+into\b/i.test(t));
+    // Sem este controle, um `textosDoCodigo` quebrado devolveria zero e o caso de baixo passaria vazio.
+    expect(escritas.join(" ")).toMatch(/insert into public\.jev_observacoes/);
+    expect(escritas.join(" ")).toMatch(/insert into public\.llm_calls/);
+    expect(escritasEmSqlCru(manipulacao.texto)).toEqual([]);
   });
 
   it("o import é seguido até quem envia e quem escreve, com a cadeia (sabotagem com código real)", () => {
@@ -329,7 +401,7 @@ describe("o Jev nunca cala, bloqueia nem responde o cliente", () => {
 
   it("nenhum módulo do Jev toca is_blocked, force_human ou bot_silenced_until", () => {
     const tocam = modulosDoJev.flatMap((m) => {
-      const colunas = [...new Set(tokensDoCodigo(m.texto).filter((t) => COLUNAS_QUE_CALAM.test(t)))];
+      const colunas = colunasQueCalam(m.texto);
       return colunas.length > 0 ? [`${m.arquivo}: ${colunas.join(", ")}`] : [];
     });
     expect(tocam, "o Jev só dá o sinal; quem cala, passa ou bloqueia é o mecanismo de sempre").toEqual([]);
