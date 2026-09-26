@@ -142,12 +142,9 @@ export function montarRequisicaoDeProva(
   }
 }
 
-/**
- * A frase que o provedor devolve quando o único token permitido acabou: um modelo
- * de raciocínio gasta esse token pensando. É a prova DANDO CERTO — só se chega
- * nela com a chave aceita e a cobrança atravessada (chave recusada é 401, modelo
- * inexistente é 404). Casar pelo TEXTO: os outros 400 seguem falha.
- */
+/** A frase que o provedor devolve ao gastar o único token da prova: um modelo de
+ * raciocínio gasta-o pensando. É a prova DANDO CERTO — chave recusada é 401 e
+ * modelo inexistente é 404, então este 400 prova a cobrança atravessada. */
 export const LIMITE_DE_SAIDA_ATINGIDO = "max_tokens or model output limit was reached";
 
 /** Traduz a resposta HTTP no mesmo vocabulário de erro do runtime. */

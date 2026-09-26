@@ -221,7 +221,6 @@ export function InteligenciaDele({ inicial }: { inicial: EstadoDaChave }) {
         {prova?.estado === "problema" && (
           <>
             {t("A chave foi aceita, mas o teste não passou:")}{" "}
-            {/* O corpo cru do provedor não entra aqui: em inglês, em JSON. */}
             <span className="text-amber-700 dark:text-amber-500">
               {t(explicacaoParaQuemInstala(prova.codigo))}
             </span>
