@@ -65,6 +65,7 @@ const tarefaIlegivel = (): TarefaGravada => ({ estado: "desligada" });
 const tarefasSchema = z.object({
   clima: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
   manipulacao: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
+  roteador: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
 });
 
 export const idDaTarefaSchema = tarefasSchema.keyof();

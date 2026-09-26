@@ -195,7 +195,7 @@ describe("chaveDaOrganizacao — a chave do Jev daquela empresa, e só dela", ()
 
     it("ponto sem tarefa do Jev: nada sai, sem nem consultar o banco", async () => {
       banco.linha = CREDENCIAL;
-      expect(await chaveDaOrganizacao(ORG, "intent_router")).toBeNull();
+      expect(await chaveDaOrganizacao(ORG, "stage_classifier")).toBeNull();
       expect(banco.chamadas).toEqual([]);
     });
 

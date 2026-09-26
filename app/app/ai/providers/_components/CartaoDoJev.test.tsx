@@ -5,7 +5,7 @@
  * e "por que ele decide sozinho?". Os dados vêm de `GET /api/v1/ai/jev`.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
@@ -711,6 +711,45 @@ describe("CartaoDoJev — por tarefa", () => {
     expect(nova).toHaveTextContent("Só observa");
     expect(screen.queryByTestId("jev-sem-camada-manipulacao")).toBeNull();
     expect(within(nova).getByRole("button", { name: "Deixar o Jev decidir" })).toBeInTheDocument();
+  });
+
+  /**
+   * O roteador numa empresa sem roteador de intenção ativo: o turno não escolhe
+   * agente, e "Só observa" prometeria uma comparação que nunca vem.
+   */
+  it("roteador sem roteador ativo: diz que não roda e aponta onde ativar, sem comparação nem 'Deixar decidir'", () => {
+    const ROTEADOR = {
+      id: "roteador",
+      ponto: "intent_router",
+      rotulo: "Escolher qual agente atende",
+      oQueFaz: "Escolhe o agente.",
+      estado: "observando",
+      novo: true,
+    } as const;
+    montar(
+      dados({
+        config: { ligado: true, modo: "decide" },
+        por_tarefa: [
+          { ...CLIMA, estado: "decidindo" },
+          { ...ROTEADOR, sem_roteador: true, observacao: { dias: 30, comparadas: 0, concordaram: 0 } },
+        ],
+      }),
+    );
+    const roteador = screen.getByTestId("jev-tarefa-roteador");
+    expect(roteador).toHaveTextContent("Não roda");
+    expect(screen.getByTestId("jev-sem-roteador-roteador")).toHaveTextContent(/nenhum roteador de intenção está ativo.*IA › Roteadores/);
+    expect(screen.queryByTestId("jev-concordancia-roteador")).toBeNull();
+    expect(within(roteador).queryByRole("button", { name: "Deixar o Jev decidir" })).toBeNull();
+    expect(screen.queryByText("Decide em parte")).toBeNull();
+    expect(jevNoPonto(dados({ config: { ligado: true }, por_tarefa: [{ ...ROTEADOR, sem_roteador: true }] }), "intent_router")).toBeNull();
+
+    // Controle: com roteador ativo, a mesma tarefa observa e oferece decidir.
+    cleanup();
+    montar(dados({ config: { ligado: true, modo: "observacao" }, por_tarefa: [{ ...ROTEADOR, sem_roteador: false }] }));
+    const ativa = screen.getByTestId("jev-tarefa-roteador");
+    expect(ativa).toHaveTextContent("Só observa");
+    expect(screen.queryByTestId("jev-sem-roteador-roteador")).toBeNull();
+    expect(within(ativa).getByRole("button", { name: "Deixar o Jev decidir" })).toBeInTheDocument();
   });
 
   it("tarefa nova sem observação na resposta não inventa concordância", () => {

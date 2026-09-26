@@ -3093,6 +3093,10 @@ export const DICIONARIO: Traducoes = {
   "Escolher qual agente atende": {
     es: "Elegir qué agente atiende",
   },
+  // A mesma pergunta, como tarefa do Jev (lib/ai/decisao/tarefas.ts).
+  "Lê a última mensagem do cliente, sozinha, e escolhe entre as intenções do seu roteador qual agente deve atender.": {
+    es: "Lee el último mensaje del cliente, solo, y elige entre las intenciones de tu enrutador qué agente debe atender.",
+  },
   "Lê a mensagem que chegou e decide qual dos seus agentes deve pegar aquela conversa.": {
     es: "Lee el mensaje que llegó y decide cuál de tus agentes debe tomar esa conversación.",
   },
@@ -3360,8 +3364,8 @@ export const DICIONARIO: Traducoes = {
   "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.": {
     es: "Jev estaba activado y no respondió, y no había otra IA para medir en su lugar.",
   },
-  "O Jev não respondeu. Nesta tarefa ele só opina ao lado da IA de sempre, então o atendimento seguiu como seguiria sem ele.": {
-    es: "Jev no respondió. En esta tarea solo opina junto a la IA de siempre, así que la atención siguió como seguiría sin él.",
+  "O Jev não respondeu, e o atendimento seguiu exatamente como seguiria sem ele: a sua IA de sempre decidiu, ou, sem ela, valeu a regra de antes.": {
+    es: "Jev no respondió, y la atención siguió exactamente como seguiría sin él: decidió tu IA de siempre o, sin ella, valió la regla de antes.",
   },
   "A TypeSafe não aceitou a chave do Jev. Confira em Credenciais se ela ainda vale, ou cole uma nova.": {
     es: "TypeSafe no aceptó la clave de Jev. Revisa en Credenciales si todavía es válida o pega una nueva.",
@@ -3463,7 +3467,28 @@ export const DICIONARIO: Traducoes = {
   "Não roda agora: a verificação “Detectar tentativa de manipular o assistente” está desligada na Segurança do agente, e o Jev só pergunta onde a sua IA de sempre também pergunta.": {
     es: "No funciona ahora: la verificación “Detectar intento de manipular al asistente” está desactivada en la Seguridad del agente, y Jev solo pregunta donde tu IA de siempre también pregunta.",
   },
+  "Não roda agora: nenhum roteador de intenção está ativo. O Jev só escolhe o agente onde um roteador já escolhe — ative um em IA › Roteadores.": {
+    es: "No funciona ahora: ningún enrutador de intención está activo. Jev solo elige el agente donde un enrutador ya elige — activa uno en IA › Enrutadores.",
+  },
   Decide: { es: "Decide" },
+  // "Testar classificação" do roteador, com o Jev lado a lado (app/app/ai/routers/[id]/_client.tsx).
+  "Sua IA escolheu": { es: "Tu IA eligió" },
+  "O Jev escolheu": { es: "Jev eligió" },
+  "não respondeu": { es: "no respondió" },
+  "nenhuma intenção": { es: "ninguna intención" },
+  "abaixo do mínimo": { es: "por debajo del mínimo" },
+  "O Jev decide esta tarefa: em produção, vale a escolha dele, e a sua IA fica de reserva.": {
+    es: "Jev decide esta tarea: en producción vale su elección, y tu IA queda de reserva.",
+  },
+  "O Jev só observa esta tarefa: em produção, vale a escolha da sua IA.": {
+    es: "Jev solo observa esta tarea: en producción vale la elección de tu IA.",
+  },
+  "O Jev decide esta tarefa, mas não respondeu: em produção, a sua IA decidiria no lugar dele.": {
+    es: "Jev decide esta tarea, pero no respondió: en producción, tu IA decidiría en su lugar.",
+  },
+  "O Jev decide esta tarefa, mas sem a resposta da sua IA vale a regra de sempre — nunca só o Jev.": {
+    es: "Jev decide esta tarea, pero sin la respuesta de tu IA vale la regla de siempre — nunca solo Jev.",
+  },
   "Pegar a chave na TypeSafe": { es: "Obtener la clave en TypeSafe" },
   "Colar a chave": { es: "Pegar la clave" },
   "Só quem administra a empresa pode colar a chave e ligar o Jev.": {

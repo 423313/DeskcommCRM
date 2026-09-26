@@ -138,8 +138,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       // só quando alguém ficou sem decisão. Não ficou em dois casos:
       //  - `jev_cobriu`: a IA de sempre caiu em observação, mas a nota do Jev
       //    já estava na mão e decidiu;
-      //  - `jev_observacao`: o Jev falhou numa tarefa em que ele só opina ao
-      //    lado da IA de sempre (a manipulação) — o turno seguiu como sem ele.
+      //  - `jev_observacao`: o Jev falhou numa tarefa do turno (a manipulação,
+      //    o roteador) — o turno seguiu como sem ele.
       // A falha do Jev com origem `jev` é a do clima sem reserva: aí é real.
       consequencia:
         l.status === "erro" && l.origem_da_escolha !== "jev_cobriu" && l.origem_da_escolha !== "jev_observacao"

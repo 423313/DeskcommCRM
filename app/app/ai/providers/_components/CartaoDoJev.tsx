@@ -93,10 +93,18 @@ export interface TarefaNoCartao {
    * turno não pergunta, e ela não roda em estado nenhum. Ausente na imagem anterior.
    */
   sem_camada?: boolean;
+  /**
+   * A do roteador numa empresa sem roteador de intenção ativo: o turno não
+   * escolhe agente, e ela não tem o que comparar. Ausente na imagem anterior.
+   */
+  sem_roteador?: boolean;
 }
 
-/** A tarefa pode rodar agora — não está desligada nem parada pela camada que acompanha. */
-const roda = (t: TarefaNoCartao) => t.estado !== "desligada" && t.sem_camada !== true;
+/** Algo fora do Jev a impede de rodar em qualquer estado — a camada, ou o roteador. */
+const parada = (t: TarefaNoCartao) => t.sem_camada === true || t.sem_roteador === true;
+
+/** A tarefa pode rodar agora — não está desligada nem parada. */
+const roda = (t: TarefaNoCartao) => t.estado !== "desligada" && !parada(t);
 
 type Concordancia = DadosDoJev["numeros"]["observacao"];
 
@@ -643,7 +651,7 @@ function Ligado({
                 <Badge variant={roda(tarefa) && tarefa.estado === "decidindo" ? "success" : "neutral"}>
                   {tarefa.estado === "desligada"
                     ? t("Desligada")
-                    : tarefa.sem_camada
+                    : parada(tarefa)
                       ? t("Não roda")
                       : tarefa.estado === "observando"
                         ? t("Só observa")
@@ -660,6 +668,13 @@ function Ligado({
               <p className="text-sm text-muted-foreground" data-testid={`jev-sem-camada-${tarefa.id}`}>
                 {t(
                   "Não roda agora: a verificação “Detectar tentativa de manipular o assistente” está desligada na Segurança do agente, e o Jev só pergunta onde a sua IA de sempre também pergunta.",
+                )}
+              </p>
+            )}
+            {rodando && tarefa.estado !== "desligada" && tarefa.sem_roteador && (
+              <p className="text-sm text-muted-foreground" data-testid={`jev-sem-roteador-${tarefa.id}`}>
+                {t(
+                  "Não roda agora: nenhum roteador de intenção está ativo. O Jev só escolhe o agente onde um roteador já escolhe — ative um em IA › Roteadores.",
                 )}
               </p>
             )}
@@ -685,8 +700,8 @@ function Ligado({
 
             {dados.pode_editar && rodando && (
               <div className="flex flex-wrap items-center gap-3">
-                {/* Parada pela camada, não há o que comparar antes de decidir. */}
-                {tarefa.estado === "observando" && !tarefa.sem_camada && (
+                {/* Parada pela camada ou sem roteador, não há o que comparar antes de decidir. */}
+                {tarefa.estado === "observando" && !parada(tarefa) && (
                   <Button
                     size="sm"
                     disabled={enviando}

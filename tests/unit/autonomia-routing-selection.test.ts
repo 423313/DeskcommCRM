@@ -4,7 +4,10 @@ import type { PublishedAgentConfig } from '@/lib/agent-engine/agent/agent-config
 const mocks = vi.hoisted(() => ({
   router: vi.fn(), classify: vi.fn(), byId: vi.fn(), bySession: vi.fn(), conversationAgent: vi.fn(),
   draft: vi.fn(), operation: vi.fn(),
+  // O Jev no roteador, desligado: a seleção medida aqui é a de sempre.
+  jev: vi.fn(() => ({ estado: Promise.resolve('desligada'), escolha: Promise.resolve(null), observar: vi.fn() })),
 }));
+vi.mock('@/lib/ai/decisao/roteador', () => ({ consultarJevNoRoteador: mocks.jev }));
 vi.mock('@/lib/agent-engine/agent/router-config', () => ({ loadActiveRouter: mocks.router }));
 vi.mock('@/lib/agent-engine/agent/intent-classifier', () => ({ classifyIntent: mocks.classify }));
 vi.mock('@/lib/agent-engine/agent/agent-config', () => ({
@@ -114,5 +117,17 @@ describe('operação segue a identidade escolhida pelo router canônico', () => 
     expect(mocks.classify).toHaveBeenCalledOnce();
     expect(mocks.draft).not.toHaveBeenCalled();
     expect(mocks.operation).not.toHaveBeenCalled();
+  });
+});
+
+describe('o Jev do turno chega ao roteador', () => {
+  it('as dependências do Jev do handler (chave e fetch) são as que o roteador usa — e ele vê só a mensagem', async () => {
+    const pool = setup(agent('A', 'automatic'), agent('B', 'automatic', true), false);
+    const jev = { buscarChave: async () => 'tsk_x' };
+    await createInboundTurnHandler({ ...deps, jev } as InboundTurnDeps)(job as never, pool as never, { workerId: 'worker' });
+    expect(mocks.jev).toHaveBeenCalledOnce();
+    const [, entrada, depsDoJev] = mocks.jev.mock.calls[0]! as unknown as [unknown, { mensagem: string }, unknown];
+    expect(depsDoJev).toBe(jev);
+    expect(entrada.mensagem).toBe('Agora preciso de suporte técnico');
   });
 });

@@ -49,8 +49,8 @@ export type OrigemDaEscolha =
   | "jev"
   /**
    * O Jev mediu ao lado da IA de sempre, e quem decidiu foi ela. Também a linha
-   * de falha do Jev numa tarefa em que ele só opina ao lado dela (a manipulação):
-   * o turno seguiu como sem ele (ver Execuções).
+   * de falha do Jev numa tarefa do turno (a manipulação, o roteador): o turno
+   * seguiu como sem ele (ver Execuções).
    */
   | "jev_observacao"
   /** O Jev estava ligado e não respondeu: a IA de sempre mediu no lugar dele. */

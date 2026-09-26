@@ -37,16 +37,17 @@ export const O_QUE_FAZER_DO_JEV: Readonly<Record<`jev_${MotivoComRede}`, string>
  * a frase da origem ("O Jev decidiu.", "O Jev observou…") seria falsa nas duas:
  *
  *  - origem `jev`: o clima, quando ninguém mediu — a falha tem consequência;
- *  - origem `jev_observacao`: uma tarefa em que ele só opina AO LADO da IA de
- *    sempre (a manipulação, `./manipulacao.ts`). A falha que pede ação vira
- *    linha para a "Última falha" do cartão, mas o turno seguiu exatamente como
- *    seguiria sem o Jev — com ou sem a IA de sempre (R2) —, e a tela não pode
- *    afirmar consequência nenhuma.
+ *  - origem `jev_observacao`: uma tarefa do turno (a manipulação, o roteador —
+ *    `./pool.ts`). A falha que pede ação vira linha para a "Última falha" do
+ *    cartão, mas o turno seguiu exatamente como seguiria sem o Jev: a IA de
+ *    sempre decidiu (observando, ou decidindo como reserva do roteador), ou,
+ *    sem ela, a regra de antes (R2). A tela não pode afirmar consequência
+ *    nenhuma — nem que ele "só opina": no roteador, decidindo, ele decide.
  */
 export const JEV_FALHOU_SEM_RESERVA =
   "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.";
 export const JEV_FALHOU_AO_LADO =
-  "O Jev não respondeu. Nesta tarefa ele só opina ao lado da IA de sempre, então o atendimento seguiu como seguiria sem ele.";
+  "O Jev não respondeu, e o atendimento seguiu exatamente como seguiria sem ele: a sua IA de sempre decidiu, ou, sem ela, valeu a regra de antes.";
 
 /**
  * O que o diálogo de exclusão diz sobre a chave que o Jev usa. São três

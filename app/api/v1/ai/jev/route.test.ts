@@ -57,6 +57,8 @@ interface Estado {
   observacoes: Linha[];
   /** `org_guardrail_layers`. */
   camadas: Linha[];
+  /** `ai_routers`. */
+  roteadores: Linha[];
   consultas: Consulta[];
 }
 
@@ -81,7 +83,9 @@ function cliente(tipo: Consulta["cliente"]) {
                 ? estado.observacoes.filter((l) => c.nao.every(([col, v]) => l[col] !== v))
                 : tabela === "org_guardrail_layers"
                   ? estado.camadas
-                  : estado.mensagens;
+                  : tabela === "ai_routers"
+                    ? estado.roteadores
+                    : estado.mensagens;
         const filtradas = base.filter((l) => c.eq.every(([col, v]) => !(col in l) || l[col] === v));
         return c.range ? filtradas.slice(c.range[0], c.range[1] + 1) : filtradas.slice(0, MAX_ROWS);
       };
@@ -166,6 +170,7 @@ beforeEach(() => {
     mensagens: [],
     observacoes: [],
     camadas: [],
+    roteadores: [],
     consultas: [],
   };
   vi.mocked(requireRole).mockImplementation(async (min) =>
@@ -222,7 +227,7 @@ describe("GET /api/v1/ai/jev", () => {
       erro_de_validacao: null,
     });
     expect(d.config).toEqual({ ligado: false, modo: "observacao", aceite: null });
-    expect(d.tarefas.map((t: { id: string }) => t.id)).toEqual(["sentiment_classify", "jailbreak_detect"]);
+    expect(d.tarefas.map((t: { id: string }) => t.id)).toEqual(["sentiment_classify", "jailbreak_detect", "intent_router"]);
     expect(d.tem_ia_de_sempre).toBe(true);
     expect(d.numeros).toEqual({
       dias: 7,
@@ -567,6 +572,7 @@ describe("o Jev por tarefa na rota", () => {
     expect((await ler()).corpo.data.por_tarefa).toEqual([
       expect.objectContaining({ id: "clima", ponto: "sentiment_classify", estado: "desligada", novo: false }),
       expect.objectContaining({ id: "manipulacao", ponto: "jailbreak_detect", estado: "desligada", novo: false }),
+      expect.objectContaining({ id: "roteador", ponto: "intent_router", estado: "desligada", novo: false }),
     ]);
 
     estado.settings = { jev: { ligado: true, modo: "decide", aceite: ACEITE_ANTIGO } };
@@ -588,6 +594,7 @@ describe("o Jev por tarefa na rota", () => {
     expect((await ler()).corpo.data.tarefas).toEqual([
       expect.objectContaining({ id: "sentiment_classify", rotulo: "Medir o clima da conversa" }),
       expect.objectContaining({ id: "jailbreak_detect", rotulo: "Perceber tentativa de manipulação" }),
+      expect.objectContaining({ id: "intent_router", rotulo: "Escolher qual agente atende" }),
     ]);
   });
 
@@ -631,6 +638,7 @@ describe("o Jev por tarefa na rota", () => {
     expect(await semCamada()).toEqual([
       ["clima", false],
       ["manipulacao", false],
+      ["roteador", false],
     ]);
     estado.camadas = [
       { organization_id: ORG, layer: "jailbreak", enabled: false },
@@ -639,7 +647,35 @@ describe("o Jev por tarefa na rota", () => {
     expect(await semCamada()).toEqual([
       ["clima", false],
       ["manipulacao", true],
+      ["roteador", false],
     ]);
+  });
+
+  it("GET: o roteador, numa empresa sem roteador de intenção ativo, diz que não roda", async () => {
+    estado.settings = { jev: { ligado: true, aceite: ACEITE_ANTIGO } };
+    const semRoteador = async () =>
+      (await ler()).corpo.data.por_tarefa.map((t: { id: string; sem_roteador: boolean }) => [t.id, t.sem_roteador]);
+    expect(await semRoteador()).toEqual([
+      ["clima", false],
+      ["manipulacao", false],
+      ["roteador", true],
+    ]);
+    // O ativo de OUTRA empresa não conta — o filtro é o da sessão.
+    estado.roteadores = [{ organization_id: OUTRA_ORG, is_active: true, id: "r-outra" }];
+    expect(await semRoteador()).toEqual([
+      ["clima", false],
+      ["manipulacao", false],
+      ["roteador", true],
+    ]);
+    estado.roteadores.push({ organization_id: ORG, is_active: true, id: "r-nossa" });
+    expect(await semRoteador()).toEqual([
+      ["clima", false],
+      ["manipulacao", false],
+      ["roteador", false],
+    ]);
+    // E o cartão segue dizendo que a tarefa observa: é o que ela faz quando há roteador.
+    const roteador = (await ler()).corpo.data.por_tarefa.find((t: { id: string }) => t.id === "roteador");
+    expect(roteador).toMatchObject({ estado: "observando", novo: true });
   });
 
   it("PATCH de uma tarefa: grava só ela, espelha o clima no `modo` e audita com a tarefa", async () => {

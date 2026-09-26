@@ -40,12 +40,11 @@ import type { JailbreakLevel } from "@/lib/agent-engine/guardrails/jailbreak/cla
 import { logger } from "@/lib/logger";
 import { scrubMessage } from "@/lib/sentry/scrub";
 
-import { MODELO_DO_JEV, type FalhaDaDecisao } from "./cliente";
-import { lerConfigDoJev, type EstadoQuePergunta } from "./config";
+import type { EstadoQuePergunta } from "./config";
 import { podeTentar, registrarFalha, registrarSucesso } from "./disjuntor";
+import { estadoDaTarefaNoPool, registrarFalhaQuePedeAcao } from "./pool";
 import { decidirNoPonto, type DependenciasDoPonto } from "./ponto";
-import { estadoEfetivoDaTarefa, TAREFA_DA_MANIPULACAO } from "./tarefas";
-import { codigoDoErroDoJev } from "./textos";
+import { TAREFA_DA_MANIPULACAO } from "./tarefas";
 
 /**
  * Os níveis, do mais brando ao mais grave — a ORDEM é a regra do "o maior dos
@@ -84,26 +83,6 @@ export interface ManipulacaoDoJev {
 const ehNivel = (x: string): x is NivelDeManipulacao => (NIVEIS_DE_MANIPULACAO as readonly string[]).includes(x);
 
 /**
- * O estado da tarefa nesta organização. Leitura que falha vale desligada: sem
- * saber se a empresa consentiu, nada sai para a rede.
- */
-async function estadoDaTarefa(pool: pg.Pool, organizationId: string) {
-  try {
-    const { rows } = await pool.query<{ settings: unknown }>(
-      "select settings from public.organizations where id = $1",
-      [organizationId],
-    );
-    return estadoEfetivoDaTarefa(lerConfigDoJev(rows[0]?.settings), TAREFA_DA_MANIPULACAO);
-  } catch (erro) {
-    logger.warn("estado do Jev não pôde ser lido; a manipulação segue só com a IA de sempre", {
-      organization_id: organizationId,
-      erro: erro instanceof Error ? erro.name : typeof erro,
-    });
-    return "desligada" as const;
-  }
-}
-
-/**
  * Pergunta ao Jev. `null` quando ele não opina: tarefa desligada (ou interruptor,
  * ou aceite), disjuntor aberto, sem chave, falha do fornecedor, resposta fora dos
  * três níveis — em todos, o turno segue exatamente como seguia sem o Jev.
@@ -119,7 +98,7 @@ export async function perguntarManipulacaoAoJev(
   deps: DependenciasDoPonto = {},
 ): Promise<ManipulacaoDoJev | null> {
   if (entrada.mensagem.trim() === "") return null;
-  const estado = await estadoDaTarefa(pool, entrada.organizationId);
+  const estado = await estadoDaTarefaNoPool(pool, entrada.organizationId, TAREFA_DA_MANIPULACAO);
   if (estado === "desligada") return null;
 
   const alvo = { organizationId: entrada.organizationId, tarefa: TAREFA_DA_MANIPULACAO.id };
@@ -146,7 +125,7 @@ export async function perguntarManipulacaoAoJev(
         motivo: r.motivo,
       });
     }
-    if (r.exigeAcao) await registrarFalhaQuePedeAcao(pool, entrada, r);
+    if (r.exigeAcao) await registrarFalhaQuePedeAcao(pool, { ...entrada, purpose: "jailbreak_detect" }, r);
     return null;
   }
 
@@ -170,45 +149,6 @@ export async function perguntarManipulacaoAoJev(
     tokensDeSaida: r.uso.tokensDeSaida,
     latenciaMs: r.latenciaMs,
   };
-}
-
-/**
- * A linha de erro da falha que pede ação (chave recusada, sem crédito, pergunta
- * recusada) — a mesma forma da do clima (`workers/ai-sentiment-worker.ts`), com
- * uma diferença: a origem é `jev_observacao`, e não `jev`. No clima, a linha de
- * erro com `jev` só existe quando ninguém mediu, e Execuções mostra a
- * consequência; aqui a IA de sempre segue decidindo (ou, sem ela, vale "nenhum
- * sinal", como sem o Jev), e a tela diz que o atendimento seguiu como sem ele
- * (`JEV_FALHOU_AO_LADO`). Nunca lança: é telemetria.
- */
-async function registrarFalhaQuePedeAcao(
-  pool: pg.Pool,
-  entrada: { organizationId: string; contactId?: string | null; jobId?: string | null },
-  falha: FalhaDaDecisao,
-): Promise<void> {
-  if (falha.motivo === "sem_credencial" || falha.motivo === "disjuntor_aberto") return;
-  try {
-    await pool.query(
-      `insert into public.llm_calls
-         (organization_id, contact_id, job_id, purpose, provider, model,
-          input_tokens, output_tokens, cost_cents, latency_ms, status, error_code, http_status, origem_da_escolha)
-       values ($1, $2, $3, 'jailbreak_detect', 'typesafe', $4, 0, 0, 0, $5, 'erro', $6, $7, 'jev_observacao')`,
-      [
-        entrada.organizationId,
-        entrada.contactId ?? null,
-        entrada.jobId ?? null,
-        `typesafe/${MODELO_DO_JEV}`,
-        falha.latenciaMs ?? null,
-        codigoDoErroDoJev(falha.motivo),
-        falha.status,
-      ],
-    );
-  } catch (erro) {
-    logger.warn("falha do Jev sobre manipulação não foi gravada", {
-      organization_id: entrada.organizationId,
-      erro: erro instanceof Error ? erro.message.slice(0, 200) : typeof erro,
-    });
-  }
 }
 
 /**

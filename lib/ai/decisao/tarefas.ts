@@ -98,7 +98,26 @@ export const TAREFA_DA_MANIPULACAO = {
     "Percebe, na mensagem do cliente, quem tenta enganar o agente para ele fugir das suas regras — e soma esse sinal ao da sua IA de sempre, sem nunca apagá-lo.",
 } as const satisfies TarefaDoJev;
 
-export const TAREFAS_DO_JEV: readonly TarefaDoJev[] = [TAREFA_DO_CLIMA, TAREFA_DA_MANIPULACAO];
+/**
+ * O roteador (`./roteador.ts`): qual agente atende, entre os membros do
+ * roteador de intenção do número. É `substitui`: decidindo, a escolha dele
+ * toma o lugar da do classificador de sempre, que vira a reserva — e sem ele
+ * vale o que vale hoje (o agente de antes, ou o de reserva do roteador),
+ * nunca o Jev (R2). Só roda onde há um roteador ativo: sem ele o turno não
+ * classifica nada (`tarefaSemRoteador`).
+ */
+export const TAREFA_DO_ROTEADOR = {
+  id: "roteador",
+  ponto: "intent_router",
+  primitiva: "choice",
+  alcance: "mensagem",
+  familia: "substitui",
+  rotulo: "Escolher qual agente atende",
+  oQueFaz:
+    "Lê a última mensagem do cliente, sozinha, e escolhe entre as intenções do seu roteador qual agente deve atender.",
+} as const satisfies TarefaDoJev;
+
+export const TAREFAS_DO_JEV: readonly TarefaDoJev[] = [TAREFA_DO_CLIMA, TAREFA_DA_MANIPULACAO, TAREFA_DO_ROTEADOR];
 
 /**
  * O estado que a EMPRESA escolheu para a tarefa, sem olhar o interruptor nem o
@@ -158,4 +177,13 @@ export function tarefaSemCamada(
   camadas: Readonly<Record<CamadaSemantica, boolean>>,
 ): boolean {
   return tarefa.camada !== undefined && !camadas[tarefa.camada];
+}
+
+/**
+ * A tarefa do roteador numa organização sem roteador de intenção ativo: o turno
+ * não escolhe agente, e o Jev não tem com quem comparar. `temRoteadorAtivo` é
+ * lido por quem chama (`ai_routers.is_active`).
+ */
+export function tarefaSemRoteador(tarefa: Pick<TarefaDoJev, "id">, temRoteadorAtivo: boolean): boolean {
+  return tarefa.id === TAREFA_DO_ROTEADOR.id && !temRoteadorAtivo;
 }

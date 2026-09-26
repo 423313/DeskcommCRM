@@ -169,7 +169,8 @@ describe("perguntarManipulacaoAoJev", () => {
       { buscarChave: async () => "tsk_x", fetchImpl: vi.fn().mockResolvedValue(new Response("{}", { status: 401 })) },
     );
     const erro = consultas.find((c) => /insert into public\.llm_calls/.test(c.sql));
-    expect(erro?.sql).toMatch(/'jailbreak_detect', 'typesafe'/);
+    expect(erro?.sql).toMatch(/'typesafe'/);
+    expect(erro?.params).toContain("jailbreak_detect");
     expect(erro?.sql).toMatch(/'erro'/);
     // `jev_observacao`, e não `jev`: com `jev`, Execuções afirma a consequência de
     // ninguém ter medido — e aqui a IA de sempre seguiu decidindo.

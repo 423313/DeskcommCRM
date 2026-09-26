@@ -12,8 +12,9 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * que vale agora, o que ela vira ao ligar o Jev (`ao_ligar`), se ela é nova —
  * começou sozinha e ninguém escolheu ainda — e a concordância dela com a IA de
  * sempre (`observacao`): a do clima, das notas em `messages.metadata`; a das
- * outras, de `jev_observacoes`. E `sem_camada`: a tarefa acompanha uma camada de
- * segurança que a organização desligou, e não roda.
+ * outras, de `jev_observacoes`. E o que a impede de rodar: `sem_camada`, a
+ * tarefa acompanha uma camada de segurança que a organização desligou;
+ * `sem_roteador`, a do roteador numa empresa sem roteador de intenção ativo.
  *
  * PATCH liga, desliga, troca o modo do clima (`modo`, o nome da onda 1) e o
  * estado de uma tarefa (`tarefa` + `estado`). Ligar manda cada mensagem que o cliente
@@ -47,6 +48,7 @@ import {
   TAREFAS_DO_JEV,
   tarefaEhNova,
   tarefaSemCamada,
+  tarefaSemRoteador,
 } from "@/lib/ai/decisao/tarefas";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
@@ -85,6 +87,7 @@ function porTarefa(
   c: ConfigDoJev,
   observacao: Readonly<Record<string, Concordancia>>,
   camadas: ReturnType<typeof camadasEfetivas>,
+  temRoteadorAtivo: boolean,
 ) {
   return TAREFAS_DO_JEV.map((t) => ({
     id: t.id,
@@ -98,6 +101,9 @@ function porTarefa(
     // A camada de segurança que ela acompanha está desligada: o turno não
     // pergunta, e "observando" sem mais nada prometeria uma comparação que nunca vem.
     sem_camada: tarefaSemCamada(t, camadas),
+    // Sem roteador ativo o turno não classifica, e o Jev não tem o que escolher:
+    // "observando" prometeria uma comparação que nunca vem.
+    sem_roteador: tarefaSemRoteador(t, temRoteadorAtivo),
   }));
 }
 
@@ -272,7 +278,7 @@ export async function GET(): Promise<Response> {
     return { porTarefa, erro: null };
   };
 
-  const [orgRes, credsRes, semana, comparadasRes, iaDeSempre, percebidasRes, observacoes, camadasRes] = await Promise.all([
+  const [orgRes, credsRes, semana, comparadasRes, iaDeSempre, percebidasRes, observacoes, camadasRes, roteadoresRes] = await Promise.all([
     db.from("organizations").select("settings").eq("id", org.orgId).maybeSingle(),
     db
       .from("ai_provider_credentials")
@@ -310,6 +316,7 @@ export async function GET(): Promise<Response> {
       .limit(PAGINA),
     lerObservacoes(),
     db.from("org_guardrail_layers").select("layer, enabled").eq("organization_id", org.orgId),
+    db.from("ai_routers").select("id").eq("organization_id", org.orgId).eq("is_active", true).limit(1),
   ]);
 
   const erro =
@@ -319,7 +326,8 @@ export async function GET(): Promise<Response> {
     comparadasRes.error?.message ??
     percebidasRes.error?.message ??
     observacoes.erro ??
-    camadasRes.error?.message;
+    camadasRes.error?.message ??
+    roteadoresRes.error?.message;
   if (erro) return fail("query_failed", erro, 500, { requestId });
 
   const credenciais = credsRes.data ?? [];
@@ -356,6 +364,7 @@ export async function GET(): Promise<Response> {
         config,
         { ...observacoes.porTarefa, [TAREFA_DO_CLIMA.id]: doClima },
         camadasEfetivas(camadasRes.data ?? []),
+        (roteadoresRes.data ?? []).length > 0,
       ),
       tem_ia_de_sempre: iaDeSempre !== null,
       numeros: {

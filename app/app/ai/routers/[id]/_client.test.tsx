@@ -6,7 +6,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { authMock, flowsMock } = vi.hoisted(() => ({ authMock: vi.fn(), flowsMock: vi.fn() }));
+const { authMock, flowsMock, testeMock } = vi.hoisted(() => ({
+  authMock: vi.fn(),
+  flowsMock: vi.fn(),
+  testeMock: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, data: undefined as unknown })),
+}));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({ useAuth: authMock, usePermission: () => true }));
@@ -19,7 +23,7 @@ vi.mock("@/hooks/ai/useRouters", () => {
     useUpdateRouter: mut,
     useDeleteRouter: mut,
     useSaveMembers: mut,
-    useTestRouter: mut,
+    useTestRouter: testeMock,
   };
 });
 
@@ -75,5 +79,76 @@ describe("seletor de roteiro na intenção × módulo", () => {
     flowsMock.mockReturnValue({ data: [{ id: "f1", name: "Cadastro" }] });
     renderizar();
     expect(screen.getByTestId("seletor-de-roteiro")).toBeTruthy();
+  });
+});
+
+describe("Testar classificação com o Jev (onda 2 do Jev, bloco 2.2)", () => {
+  const RESULTADO = {
+    intent_name: "financiamento",
+    confidence: 0.82,
+    min_confidence: 0.6,
+    agent_id: "a1",
+    agent_name: "Agente Financiamento",
+  };
+  const DO_JEV = {
+    estado: "observando" as const,
+    respondeu: true,
+    intent_name: "suporte",
+    confidence: 0.91,
+    agent_id: "a2",
+    agent_name: "Agente Suporte",
+    decide: false,
+  };
+
+  function comResultado(data: unknown) {
+    authMock.mockReturnValue({ activeOrg: { modulos_ligados: [] } });
+    flowsMock.mockReturnValue({ data: undefined });
+    testeMock.mockReturnValue({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, data });
+    renderizar();
+  }
+
+  it("Jev desligado: a tela é a de sempre, sem o lado dele", () => {
+    comResultado({ ...RESULTADO, jev: null });
+    expect(screen.getByTestId("teste-agente-que-atenderia").textContent).toBe("Agente Financiamento");
+    expect(screen.queryByTestId("teste-com-o-jev")).toBeNull();
+  });
+
+  it("observando: as duas escolhas lado a lado, e quem atende é o da sua IA", () => {
+    comResultado({ ...RESULTADO, jev: DO_JEV });
+    expect(screen.getByTestId("teste-escolha-da-ia").textContent).toContain("Agente Financiamento");
+    expect(screen.getByTestId("teste-escolha-da-ia").textContent).toContain("82%");
+    expect(screen.getByTestId("teste-escolha-do-jev").textContent).toContain("Agente Suporte");
+    expect(screen.getByTestId("teste-escolha-do-jev").textContent).toContain("suporte · 91%");
+    expect(screen.getByTestId("teste-agente-que-atenderia").textContent).toBe("Agente Financiamento");
+    expect(screen.getByTestId("teste-quem-decide").textContent).toMatch(/só observa/);
+  });
+
+  it("decidindo: quem atende é o escolhido pelo Jev", () => {
+    comResultado({ ...RESULTADO, jev: { ...DO_JEV, estado: "decidindo", decide: true } });
+    expect(screen.getByTestId("teste-agente-que-atenderia").textContent).toBe("Agente Suporte");
+    expect(screen.getByTestId("teste-quem-decide").textContent).toMatch(/vale a escolha dele/);
+  });
+
+  it("decidindo sem a sua IA (R2): quem atende NÃO é o do Jev", () => {
+    comResultado({
+      ...RESULTADO,
+      intent_name: null,
+      confidence: null,
+      agent_id: null,
+      agent_name: null,
+      jev: { ...DO_JEV, estado: "decidindo", decide: false },
+    });
+    expect(screen.getByTestId("teste-escolha-da-ia").textContent).toContain("não respondeu");
+    expect(screen.getByTestId("teste-agente-que-atenderia").textContent).not.toContain("Agente Suporte");
+    expect(screen.getByTestId("teste-quem-decide").textContent).toMatch(/nunca só o Jev/);
+  });
+
+  it("ligado e sem resposta: o lado dele diz que não respondeu, sem número inventado", () => {
+    comResultado({
+      ...RESULTADO,
+      jev: { ...DO_JEV, respondeu: false, intent_name: null, confidence: null, agent_id: null, agent_name: null },
+    });
+    expect(screen.getByTestId("teste-escolha-do-jev").textContent).toContain("não respondeu");
+    expect(screen.getByTestId("teste-escolha-do-jev").textContent).not.toContain("%");
   });
 });

@@ -267,6 +267,11 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     sintomaDeFalha:
       "A conversa cai sempre no mesmo agente, ou em nenhum — como se os roteadores que você configurou não existissem.",
     registraEm: "llm_calls",
+    decisaoRapida: {
+      primitiva: "choice",
+      oQueOJevFaz:
+        "Lê a última mensagem do cliente, sozinha, e escolhe entre as intenções do seu roteador qual agente deve atender.",
+    },
   },
   {
     id: "stage_classifier",

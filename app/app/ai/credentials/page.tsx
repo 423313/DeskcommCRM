@@ -7,7 +7,7 @@ import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { contarUsoQueBloqueia, type VersaoVinculada } from "@/lib/ai/credenciais/uso";
 import { lerConfigDoJev } from "@/lib/ai/decisao/config";
-import { estadoEfetivoDaTarefa, TAREFAS_DO_JEV, tarefaSemCamada } from "@/lib/ai/decisao/tarefas";
+import { estadoEfetivoDaTarefa, TAREFAS_DO_JEV, tarefaSemCamada, tarefaSemRoteador } from "@/lib/ai/decisao/tarefas";
 import { camadasEfetivas } from "@/lib/agent-engine/guardrails/camadas-da-org";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
@@ -70,12 +70,25 @@ export default async function CredentialsPage() {
     ? await supabase.from("org_guardrail_layers").select("layer, enabled").eq("organization_id", activeOrg.orgId)
     : { data: null };
   const camadas = camadasEfetivas(linhasDasCamadas ?? []);
+  // O roteador: sem um ativo, o Jev não escolhe agente nenhum.
+  const { data: roteadoresAtivos } = jevLigado
+    ? await supabase
+        .from("ai_routers")
+        .select("id")
+        .eq("organization_id", activeOrg.orgId)
+        .eq("is_active", true)
+        .limit(1)
+    : { data: null };
+  const temRoteadorAtivo = (roteadoresAtivos ?? []).length > 0;
   // A mesma pergunta que o worker faz: sem a chave do Jev, há IA principal para medir?
   const jev = jevLigado
     ? {
         // Só as tarefas que a chave de fato serve agora.
         tarefas: TAREFAS_DO_JEV.filter(
-          (t) => estadoEfetivoDaTarefa(configDoJev, t) !== "desligada" && !tarefaSemCamada(t, camadas),
+          (t) =>
+            estadoEfetivoDaTarefa(configDoJev, t) !== "desligada" &&
+            !tarefaSemCamada(t, camadas) &&
+            !tarefaSemRoteador(t, temRoteadorAtivo),
         ).map((t) => t.rotulo),
         temIaPrincipal:
           (await resolverModeloDoPonto("sentiment_classify", activeOrg.orgId, DEFAULT_CLASSIFIER_MODEL, {

@@ -1256,9 +1256,9 @@ export interface InboundTurnDeps {
    */
   sleep?: (ms: number) => Promise<void>;
   /**
-   * O Jev na camada anti-manipulação — injetável só para teste (chave e `fetch`
-   * dublês). Default = a chave da organização e o egress com allowlist
-   * (`lib/ai/decisao/ponto.ts`).
+   * O Jev no turno — na camada anti-manipulação e no roteador de intenção.
+   * Injetável só para teste (chave e `fetch` dublês). Default = a chave da
+   * organização e o egress com allowlist (`lib/ai/decisao/ponto.ts`).
    */
   jev?: DependenciasDoPonto;
 }
@@ -2039,7 +2039,7 @@ async function executarTurnoDoAgente(
         channelSessionId: input.channelSessionId,
         conversationId: input.conversationId,
         inbound: liveJob().kind === 'inbound_turn',
-      }, { log: runLog });
+      }, { log: runLog, jev: deps.jev });
   const agentConfig = routed.config;
   if (!preview && agentConfig?.operationMode === 'assisted' && job?.kind === 'inbound_turn') {
     const { generateReplyDraft } = await import('./reply-drafts');
@@ -4668,7 +4668,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       conversationId: payload.conversation_id,
       channelSessionId: payload.channel_session_id,
       inbound: true,
-    }, { log: deps.log });
+    }, { log: deps.log, jev: deps.jev });
     const operationAgent = resolvedAgent.config;
     if (operationAgent?.operationMode === 'assisted') {
       // O GATE VALE TAMBÉM NO ASSISTIDO, e é aqui que ele precisa estar.
