@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type * as ReactNS from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -81,7 +82,7 @@ vi.mock("@/components/inbox/ConversationList", () => ({
 vi.mock("@/components/inbox/InboxFilters", () => ({ InboxFilters: () => null }));
 vi.mock("@/components/inbox/ChatThread", () => ({ ChatThread: () => null }));
 vi.mock("@/components/inbox/Composer", async () => {
-  const { useState } = await vi.importActual<typeof import("react")>("react");
+  const { useState } = await vi.importActual<typeof ReactNS>("react");
   function Composer({
     conversationId,
     initialDraft = "",
