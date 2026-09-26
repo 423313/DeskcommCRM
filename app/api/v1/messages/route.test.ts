@@ -363,4 +363,39 @@ describe("POST /api/v1/messages — ritmo por token", () => {
     expect(corpo.error.details?.motivo).toBe("teto_diario");
     expect(mockedSend).not.toHaveBeenCalled();
   });
+
+  it("422 janela_fechada chega ao CORPO com o detalhe — quem integra lê `use` e o código", async () => {
+    // A recusa da janela (#1614) só vale se o detalhe atravessar a rota: sem
+    // ele, o integrador recebe um 422 sem saber que a saída é modelo aprovado.
+    autenticado("token");
+    mockedSend.mockRejectedValue(
+      new ApiError(
+        422,
+        "janela_fechada",
+        {
+          codigo: "janela_fechada",
+          ultima_mensagem_do_cliente: "2026-09-20T10:00:00.000Z",
+          use: "template",
+          codigo_plataforma: "131047",
+        },
+        "req",
+        "Janela de 24 horas fechada.",
+      ),
+    );
+
+    const res = await POST(pedido());
+
+    expect(res.status).toBe(422);
+    const corpo = (await res.json()) as {
+      error: { code: string; message: string; details?: Record<string, unknown> };
+    };
+    expect(corpo.error.code).toBe("janela_fechada");
+    expect(corpo.error.details).toMatchObject({
+      codigo: "janela_fechada",
+      ultima_mensagem_do_cliente: "2026-09-20T10:00:00.000Z",
+      use: "template",
+      codigo_plataforma: "131047",
+    });
+    expect(mockedRegistrar).not.toHaveBeenCalled();
+  });
 });
