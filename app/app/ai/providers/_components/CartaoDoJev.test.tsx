@@ -681,6 +681,16 @@ describe("CartaoDoJev — por tarefa", () => {
     expect(daNova).not.toHaveTextContent(/chamariam/);
   });
 
+  it("o clima que bateu no teto da amostra diz que a conta usa só as mais recentes", () => {
+    montar(
+      dados({
+        config: { ligado: true, modo: "observacao" },
+        por_tarefa: [{ ...CLIMA, estado: "observando", observacao: { dias: 30, comparadas: 500, concordaram: 480, teto_da_amostra: 500 } }],
+      }),
+    );
+    expect(screen.getByTestId("jev-concordancia")).toHaveTextContent(/480 de 500 .* A conta usa só as 500 mensagens mais recentes do período/);
+  });
+
   it("a manipulação mostra quantas vezes só o Jev daria o alerta forte — o que decidir muda nela", () => {
     montar(
       dados({

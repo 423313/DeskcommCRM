@@ -3,8 +3,11 @@
  * fecha sozinho quando o Jev volta a responder.
  *
  * Mora aqui, e não no worker de clima, para servir às duas pilhas pelo cliente
- * admin (o agent-engine já o usa): a próxima tarefa do Jev avisa pelo MESMO
- * aviso, e uma segunda cópia do dedupe abriria dois.
+ * admin (o agent-engine já o usa): a tarefa do Jev que vier a avisar avisa pelo
+ * MESMO aviso, e uma segunda cópia do dedupe abriria dois. HOJE só o worker do
+ * clima abre e fecha: as tarefas do turno (a manipulação, o roteador) deixam a
+ * falha que pede ação na "Última falha" do cartão, com o nome da tarefa. Com o
+ * clima pausado, um aviso aberto antes da pausa só fecha quando ele religar.
  *
  * ═══ O TÍTULO É A CHAVE ═══
  *

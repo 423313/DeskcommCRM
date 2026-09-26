@@ -648,6 +648,20 @@ describe("o Jev por tarefa na rota", () => {
    * "Sem par" (`concordou` nulo: a IA de sempre não decidiu) fica fora do
    * denominador, e a linha de outra organização fora de tudo.
    */
+  /**
+   * O clima conta as 500 mensagens mais recentes; as outras tarefas, os 30 dias
+   * inteiros no banco. Lado a lado, "X de 500" lia-se como "mediu menos".
+   */
+  it("GET: a concordância do clima declara o teto da amostra quando bate nele — e só então", async () => {
+    estado.settings = { jev: { ligado: true, aceite: ACEITE_ANTIGO } };
+    estado.mensagens = Array.from({ length: 500 }, () => ({ nota: 0.9, nota_do_jev: 0.8 }));
+    const cheia = (await ler()).corpo.data.por_tarefa.find((t: { id: string }) => t.id === "clima");
+    expect(cheia.observacao).toMatchObject({ comparadas: 500, teto_da_amostra: 500 });
+    estado.mensagens = Array.from({ length: 499 }, () => ({ nota: 0.9, nota_do_jev: 0.8 }));
+    const abaixo = (await ler()).corpo.data.por_tarefa.find((t: { id: string }) => t.id === "clima");
+    expect(abaixo.observacao).not.toHaveProperty("teto_da_amostra");
+  });
+
   it("GET: a concordância da manipulação sai de jev_observacoes, sem par fora da conta", async () => {
     const obs = (concordou: boolean | null, organization_id = ORG, rotulos: Linha = {}): Linha => ({
       organization_id,

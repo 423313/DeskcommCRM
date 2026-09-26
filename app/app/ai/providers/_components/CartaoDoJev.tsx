@@ -73,6 +73,8 @@ export interface DadosDoJev {
       concordaram: number;
       /** Só a manipulação: em quantas das comparadas SÓ o Jev deu o alerta forte. */
       so_o_jev_alto?: number;
+      /** Só o clima: a conta usou as N mensagens mais recentes, não o período inteiro. */
+      teto_da_amostra?: number;
     };
   };
   /** `tarefa`: o rótulo da tarefa que falhou. Ausente na imagem anterior. */
@@ -948,6 +950,12 @@ function ConcordanciaDaTarefa({
             {formatar(o.concordaram)} {t("de")} {formatar(o.comparadas)}
           </span>{" "}
           {t(frase.depois)}
+          {o.teto_da_amostra !== undefined && (
+            <>
+              {" "}
+              {t("A conta usa só as")} {formatar(o.teto_da_amostra)} {t("mensagens mais recentes do período.")}
+            </>
+          )}
           {/* O que decidir muda na manipulação: o alerta forte que só ele daria. */}
           {o.so_o_jev_alto !== undefined && (
             <>

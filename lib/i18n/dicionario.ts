@@ -3597,6 +3597,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Só o Jev daria o alerta forte em": { es: "Solo Jev daría la alerta fuerte en" },
   "delas — é o que muda se você deixar o Jev decidir.": { es: "de ellos: es lo que cambia si dejas que Jev decida." },
+  "A conta usa só as": { es: "El cálculo usa solo los" },
+  "mensagens mais recentes do período.": { es: "mensajes más recientes del período." },
   "mensagens.": { es: "mensajes." },
   "mensagens — os dois chamariam, ou não, uma pessoa para a conversa.": {
     es: "mensajes: los dos llamarían, o no, a una persona para la conversación.",

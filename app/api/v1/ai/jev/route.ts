@@ -92,6 +92,13 @@ type Concordancia = {
   comparadas: number;
   concordaram: number;
   /**
+   * Só o clima: a conta saiu das `MENSAGENS_COMPARADAS_MAX` mais recentes, e
+   * não do período inteiro. Sem isto, lado a lado com as outras tarefas (que
+   * contam os 30 dias no banco), "X de 500" lia-se como "o Jev mediu o clima em
+   * menos mensagens".
+   */
+  teto_da_amostra?: number;
+  /**
    * Só a manipulação: em quantas das comparadas SÓ o Jev deu o alerta forte.
    * É o que decidir muda nela (o maior dos dois vale), e a concordância exata
    * de três níveis, dominada por "nenhum" dos dois lados, não mostra isso.
@@ -379,7 +386,11 @@ export async function GET(): Promise<Response> {
 
   const { numeros, ultima_falha } = numerosDaSemana(semana.linhas);
   const config = lerConfigDoJev(orgRes.data?.settings);
-  const doClima = concordancia(comparadasRes.data ?? []);
+  const linhasDoClima = comparadasRes.data ?? [];
+  const doClima: Concordancia = {
+    ...concordancia(linhasDoClima),
+    ...(linhasDoClima.length >= MENSAGENS_COMPARADAS_MAX ? { teto_da_amostra: MENSAGENS_COMPARADAS_MAX } : {}),
+  };
 
   return ok(
     {
