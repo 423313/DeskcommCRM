@@ -39273,3 +39273,41 @@ end $$;
 -- a lista de erros benignos do update.sh, então a atualização não diz
 -- "atualizado" com módulo fora do ar. Instalação nova não tem módulo: no-op.
 do $f$ begin perform public.fn_conferir_modulos_instalados(); end $f$;
+
+-- ---- rascunho sugerido por integração (migration 0419, issue #1611) ----
+--
+-- Espelho idempotente da 0419. O kit self-host aplica SÓ o baseline, então sem
+-- este bloco a tabela não existiria em quem instalou numa VPS.
+--
+-- Por que o rascunho vive no servidor e não no link: mensagem a cliente tem
+-- dado pessoal, URL acaba em registro de proxy/histórico, o comprimento é
+-- limitado e um link com texto pronto mandado por qualquer pessoa vira
+-- engenharia social contra o atendente. Com a linha guardada, só quem tem token
+-- da organização cria, e o envio continua sendo um clique de gente.
+create table if not exists public.conversation_drafts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations (id) on delete cascade,
+  conversation_id uuid not null references public.conversations (id) on delete cascade,
+  body text not null,
+  source text not null default 'integracao',
+  created_by_api_token_id uuid references public.api_tokens (id) on delete set null,
+  expires_at timestamptz not null,
+  consumed_at timestamptz,
+  consumed_by_user_id uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  constraint conversation_drafts_body_check
+    check (char_length(body) >= 1 and char_length(body) <= 4096)
+);
+
+create index if not exists conversation_drafts_conversation
+  on public.conversation_drafts (organization_id, conversation_id, created_at desc);
+
+alter table public.conversation_drafts enable row level security;
+
+drop policy if exists tenant_isolation_conversation_drafts_all
+  on public.conversation_drafts;
+create policy tenant_isolation_conversation_drafts_all
+  on public.conversation_drafts
+  for all to authenticated
+  using (organization_id in (select public.fn_user_org_ids()))
+  with check (organization_id in (select public.fn_user_org_ids()));
