@@ -51,20 +51,23 @@ export async function estadoDaTarefaNoPool(
  * (`JEV_FALHOU_AO_LADO`) — com palavras que valem também para a tela "Testar
  * classificação" do roteador, que grava a mesma linha sem atender ninguém: a
  * chave recusada num teste é a mesma recusada no atendimento. É dela que o
- * cartão tira a "Última falha" da tarefa. Nunca lança: é telemetria.
+ * cartão tira a "Última falha" da tarefa. Devolve o id da linha — o roteador
+ * decidindo a remarca quando a IA de sempre cobriu (`./roteador.ts`) — ou
+ * `null`. Nunca lança: é telemetria.
  */
 export async function registrarFalhaQuePedeAcao(
   pool: pg.Pool,
   entrada: { organizationId: string; purpose: string; contactId?: string | null; jobId?: string | null },
   falha: FalhaDaDecisao,
-): Promise<void> {
-  if (falha.motivo === "sem_credencial" || falha.motivo === "disjuntor_aberto") return;
+): Promise<string | null> {
+  if (falha.motivo === "sem_credencial" || falha.motivo === "disjuntor_aberto") return null;
   try {
-    await pool.query(
+    const { rows } = await pool.query<{ id: string }>(
       `insert into public.llm_calls
          (organization_id, contact_id, job_id, purpose, provider, model,
           input_tokens, output_tokens, cost_cents, latency_ms, status, error_code, http_status, origem_da_escolha)
-       values ($1, $2, $3, $4, 'typesafe', $5, 0, 0, 0, $6, 'erro', $7, $8, 'jev_observacao')`,
+       values ($1, $2, $3, $4, 'typesafe', $5, 0, 0, 0, $6, 'erro', $7, $8, 'jev_observacao')
+       returning id`,
       [
         entrada.organizationId,
         entrada.contactId ?? null,
@@ -76,11 +79,13 @@ export async function registrarFalhaQuePedeAcao(
         falha.status,
       ],
     );
+    return rows[0]?.id ?? null;
   } catch (erro) {
     logger.warn("falha do Jev não foi gravada", {
       organization_id: entrada.organizationId,
       purpose: entrada.purpose,
       erro: erro instanceof Error ? erro.message.slice(0, 200) : typeof erro,
     });
+    return null;
   }
 }

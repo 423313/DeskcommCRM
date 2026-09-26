@@ -355,6 +355,14 @@ describe("CartaoDoJev — (5) ligado, decidindo", () => {
     expect(screen.getByTestId("jev-ultima-falha")).not.toHaveTextContent("jev_sem_credito");
   });
 
+  it("a última falha diz de qual tarefa: o disjuntor da pergunta recusada é por tarefa", () => {
+    montar({
+      ...decidindo(),
+      ultima_falha: { motivo: "jev_contrato_invalido", em: "2026-09-22T10:00:00Z", tarefa: "Escolher qual agente atende" },
+    });
+    expect(screen.getByTestId("jev-ultima-falha")).toHaveTextContent(/Última falha — Escolher qual agente atende/);
+  });
+
   it("chave que deixou de valer com o Jev ligado aparece, com o teste à mão", () => {
     montar({ ...decidindo(), chave: { ...decidindo().chave, validada: false } });
     expect(screen.getByRole("button", { name: "Testar de novo" })).toBeInTheDocument();

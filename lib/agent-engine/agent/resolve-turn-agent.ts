@@ -377,6 +377,8 @@ export async function resolveTurnAgent(
       // Sem resposta da IA não há par: a linha fica sem o lado dela, fora da concordância.
       vereditoDaIa: iaRespondeu ? verdict : null,
       decidiu: doJev !== null,
+      // Decidindo, sem a escolha dele, valeu a da IA de sempre: é cobertura, e ela deixa rastro.
+      aIaCobriu: estadoDoJev === 'decidindo' && doJev === null,
     });
 
     return destino.membro !== null

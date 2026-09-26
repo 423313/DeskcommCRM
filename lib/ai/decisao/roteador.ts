@@ -12,7 +12,10 @@
  *  - observando (toda tarefa nova começa assim, R1/R7): só se grava, e o turno
  *    NÃO espera por ele — a resposta vai para `jev_observacoes` quando chegar.
  *  - decidindo: vale a escolha dele, com o `min_confidence` do roteador sobre a
- *    probabilidade dele, e a IA de sempre é a reserva quando ele não responde.
+ *    probabilidade dele, e a IA de sempre é a reserva quando ele não responde —
+ *    e a cobertura deixa rastro: uma linha em `llm_calls` com a origem
+ *    `reserva_do_jev`, a que o cartão conta em "Vezes que a IA de sempre cobriu
+ *    o Jev" (`registrarCobertura`).
  *    O turno espera por ele o que ele passar da IA de sempre, que roda junto:
  *    a leitura do estado (pelo banco do turno, como as demais consultas dele) e,
  *    num prazo só de no máximo `TETO_PADRAO_MS`, a busca da chave e a resposta
@@ -47,12 +50,13 @@ import { costCents } from "@/lib/agent-engine/edge/llm/pricing";
 import { logger } from "@/lib/logger";
 import { scrubMessage } from "@/lib/sentry/scrub";
 
-import type { Pergunta } from "./cliente";
+import { MODELO_DO_JEV, type MotivoComRede, type Pergunta } from "./cliente";
 import type { EstadoDaTarefa, EstadoQuePergunta } from "./config";
 import { podeTentar, registrarFalha, registrarSucesso } from "./disjuntor";
 import { estadoDaTarefaNoPool, registrarFalhaQuePedeAcao } from "./pool";
 import { decidirNoPonto, type DependenciasDoPonto } from "./ponto";
 import { TAREFA_DO_ROTEADOR } from "./tarefas";
+import { codigoDoErroDoJev } from "./textos";
 
 /** O fornecedor aceita até 255 opções numa escolha, e uma delas é "nenhuma". */
 export const MEMBROS_NO_MAXIMO = 254;
@@ -101,6 +105,22 @@ export interface EscolhaDoJev {
   latenciaMs: number;
 }
 
+/**
+ * Por que ele não opinou, quando a pergunta chegou a sair — é o que a
+ * cobertura grava. `linhaId` é a linha de erro que a falha que pede ação já
+ * deixou (`registrarFalhaQuePedeAcao`): a cobertura a remarca, sem duplicar.
+ */
+interface FalhaDoJev {
+  motivo: MotivoComRede;
+  status: number | null;
+  latenciaMs: number | null;
+  linhaId: string | null;
+}
+
+type RespostaDoJev = { escolha: EscolhaDoJev; falha: null } | { escolha: null; falha: FalhaDoJev | null };
+
+const SEM_OPINIAO: RespostaDoJev = { escolha: null, falha: null };
+
 export interface EntradaDoRoteador {
   organizationId: string;
   /** A última mensagem do cliente, sozinha. */
@@ -111,11 +131,12 @@ export interface EntradaDoRoteador {
 }
 
 /**
- * Pergunta ao Jev com a tarefa já lida (`estado`). `null` quando ele não opina:
- * disjuntor aberto, sem chave, falha do fornecedor, resposta que não é uma
- * escolha. Uma escolha fora das intenções do roteador vale "nenhuma" — a mesma
- * defesa do classificador de sempre contra intenção inventada: o roteamento
- * dá ao cliente as ferramentas do agente escolhido.
+ * Pergunta ao Jev com a tarefa já lida (`estado`). Sem escolha quando ele não
+ * opina: disjuntor aberto, sem chave, falha do fornecedor, resposta que não é
+ * uma escolha — e, quando a pergunta chegou a sair, o porquê. Uma escolha fora
+ * das intenções do roteador vale "nenhuma" — a mesma defesa do classificador
+ * de sempre contra intenção inventada: o roteamento dá ao cliente as
+ * ferramentas do agente escolhido.
  */
 async function perguntar(
   pool: pg.Pool,
@@ -123,9 +144,9 @@ async function perguntar(
   estado: EstadoQuePergunta,
   pergunta: Pergunta,
   deps: DependenciasDoPonto,
-): Promise<EscolhaDoJev | null> {
+): Promise<RespostaDoJev> {
   const alvo = { organizationId: entrada.organizationId, tarefa: TAREFA_DO_ROTEADOR.id };
-  if (!podeTentar(alvo)) return null;
+  if (!podeTentar(alvo)) return SEM_OPINIAO;
 
   const r = await decidirNoPonto(
     {
@@ -144,8 +165,14 @@ async function perguntar(
         motivo: r.motivo,
       });
     }
-    if (r.exigeAcao) await registrarFalhaQuePedeAcao(pool, { ...entrada, purpose: "intent_router" }, r);
-    return null;
+    const linhaId = r.exigeAcao
+      ? await registrarFalhaQuePedeAcao(pool, { ...entrada, purpose: "intent_router" }, r)
+      : null;
+    if (r.motivo === "sem_credencial" || r.motivo === "disjuntor_aberto") return SEM_OPINIAO;
+    return {
+      escolha: null,
+      falha: { motivo: r.motivo, status: r.status, latenciaMs: r.latenciaMs ?? null, linhaId },
+    };
   }
 
   const resposta = r.respostas["roteador"];
@@ -154,25 +181,71 @@ async function perguntar(
     logger.warn("Jev respondeu ao roteador fora de uma escolha; vale só a IA de sempre", {
       organization_id: entrada.organizationId,
     });
-    return null;
+    return {
+      escolha: null,
+      falha: { motivo: "resposta_ilegivel", status: null, latenciaMs: r.latenciaMs, linhaId: null },
+    };
   }
 
   registrarSucesso(alvo);
   const conhecida = resposta.escolha !== NENHUMA && entrada.membros.some((m) => m.intentName === resposta.escolha);
   const probabilidade = resposta.probabilidades[resposta.escolha] ?? resposta.confianca;
   return {
-    estado,
-    // Fora da lista, a confiança é zero, como no `parseIntentVerdict`: não há
-    // probabilidade de "nenhuma" que ele tenha de fato dado.
-    veredito: conhecida
-      ? { intentName: resposta.escolha, confidence: probabilidade }
-      : { intentName: null, confidence: resposta.escolha === NENHUMA ? probabilidade : 0 },
-    confianca: resposta.confianca,
-    modelo: r.modelo,
-    tokensDeEntrada: r.uso.tokensDeEntrada,
-    tokensDeSaida: r.uso.tokensDeSaida,
-    latenciaMs: r.latenciaMs,
+    escolha: {
+      estado,
+      // Fora da lista, a confiança é zero, como no `parseIntentVerdict`: não há
+      // probabilidade de "nenhuma" que ele tenha de fato dado.
+      veredito: conhecida
+        ? { intentName: resposta.escolha, confidence: probabilidade }
+        : { intentName: null, confidence: resposta.escolha === NENHUMA ? probabilidade : 0 },
+      confianca: resposta.confianca,
+      modelo: r.modelo,
+      tokensDeEntrada: r.uso.tokensDeEntrada,
+      tokensDeSaida: r.uso.tokensDeSaida,
+      latenciaMs: r.latenciaMs,
+    },
+    falha: null,
   };
+}
+
+/**
+ * Decidindo, o Jev não respondeu e a IA de sempre escolheu no lugar dele: a
+ * linha que o cartão conta em "Vezes que a IA de sempre cobriu o Jev" e que
+ * Execuções mostra. Sem ela, com o Jev estourando o teto em parte das
+ * mensagens, o cartão dizia zero coberturas e nenhuma falha. A falha que pede
+ * ação já deixou a linha dela: é remarcada, e não duplicada. Nunca lança.
+ */
+async function registrarCobertura(pool: pg.Pool, entrada: EntradaDoRoteador, falha: FalhaDoJev): Promise<void> {
+  try {
+    if (falha.linhaId !== null) {
+      await pool.query(
+        `update public.llm_calls set origem_da_escolha = 'reserva_do_jev'
+          where id = $1 and organization_id = $2`,
+        [falha.linhaId, entrada.organizationId],
+      );
+      return;
+    }
+    await pool.query(
+      `insert into public.llm_calls
+         (organization_id, contact_id, job_id, purpose, provider, model,
+          input_tokens, output_tokens, cost_cents, latency_ms, status, error_code, http_status, origem_da_escolha)
+       values ($1, $2, $3, 'intent_router', 'typesafe', $4, 0, 0, 0, $5, 'erro', $6, $7, 'reserva_do_jev')`,
+      [
+        entrada.organizationId,
+        entrada.contactId,
+        entrada.jobId,
+        `typesafe/${MODELO_DO_JEV}`,
+        falha.latenciaMs,
+        codigoDoErroDoJev(falha.motivo),
+        falha.status,
+      ],
+    );
+  } catch (erro) {
+    logger.warn("cobertura do Jev no roteador não foi gravada", {
+      organization_id: entrada.organizationId,
+      erro: erro instanceof Error ? erro.message.slice(0, 200) : typeof erro,
+    });
+  }
 }
 
 export interface RegistroDoRoteador {
@@ -284,6 +357,11 @@ export interface JevNoRoteador {
     /** O veredito da IA de sempre; `null` quando ela não decidiu. */
     vereditoDaIa: IntentVerdict | null;
     decidiu: boolean;
+    /**
+     * Decidindo, e ele não respondeu: a IA de sempre escolheu no lugar dele. É
+     * o turno quem sabe — o estado, e se a IA de sempre respondeu.
+     */
+    aIaCobriu: boolean;
   }): void;
 }
 
@@ -298,10 +376,10 @@ export function consultarJevNoRoteador(
       : estadoDaTarefaNoPool(pool, entrada.organizationId, TAREFA_DO_ROTEADOR);
   // A pergunta só é montada com a tarefa rodando: desligado, o Jev não custa
   // nada ao turno além da leitura do estado.
-  const escolha = estado
+  const resposta: Promise<RespostaDoJev> = estado
     .then((e) => {
       const pergunta = e === "desligada" ? null : perguntaDoRoteador(entrada.membros);
-      return e === "desligada" || pergunta === null ? null : perguntar(pool, entrada, e, pergunta, deps);
+      return e === "desligada" || pergunta === null ? SEM_OPINIAO : perguntar(pool, entrada, e, pergunta, deps);
     })
     // O turno espera esta promessa quando o Jev decide: rejeitada, ela levaria
     // o roteamento inteiro para o caminho de erro. Sem escolha, vale a de sempre.
@@ -310,16 +388,19 @@ export function consultarJevNoRoteador(
         organization_id: entrada.organizationId,
         erro: erro instanceof Error ? erro.name : typeof erro,
       });
-      return null;
+      return SEM_OPINIAO;
     });
+  const escolha = resposta.then((r) => r.escolha);
   return {
     estado,
     escolha,
-    observar: ({ conversationId, messageId, rotuloDe, vereditoDaIa, decidiu }) => {
-      void escolha
-        .then((jev) =>
+    observar: ({ conversationId, messageId, rotuloDe, vereditoDaIa, decidiu, aIaCobriu }) => {
+      void resposta
+        .then(({ escolha: jev, falha }) =>
           jev === null
-            ? undefined
+            ? aIaCobriu && falha !== null
+              ? registrarCobertura(pool, entrada, falha)
+              : undefined
             : registrarRoteadorDoJev(pool, {
                 organizationId: entrada.organizationId,
                 contactId: entrada.contactId,

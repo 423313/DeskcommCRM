@@ -3354,7 +3354,9 @@ export const DICIONARIO: Traducoes = {
   },
   // O Jev em IA › Execuções e na Central (`lib/ai/decisao/textos.ts`).
   "O Jev decidiu.": { es: "Jev decidió." },
-  "O Jev observou; quem decidiu foi a IA de sempre.": { es: "Jev observó; quien decidió fue la IA de siempre." },
+  "O Jev observou: a resposta dele ficou registrada para comparar, e não decidiu nada.": {
+    es: "Jev observó: su respuesta quedó registrada para comparar y no decidió nada.",
+  },
   "O Jev não respondeu; a IA de sempre mediu no lugar dele.": {
     es: "Jev no respondió; la IA de siempre midió en su lugar.",
   },
@@ -3363,6 +3365,9 @@ export const DICIONARIO: Traducoes = {
   },
   "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.": {
     es: "Jev estaba activado y no respondió, y no había otra IA para medir en su lugar.",
+  },
+  "O Jev decide esta tarefa e não respondeu: a sua IA de sempre decidiu no lugar dele.": {
+    es: "Jev decide esta tarea y no respondió: tu IA de siempre decidió en su lugar.",
   },
   "O Jev não respondeu, e nada dependia só dele: valeu o que a sua IA de sempre decidiu ou, sem ela, a regra de antes.": {
     es: "Jev no respondió, y nada dependía solo de él: valió lo que decidió tu IA de siempre o, sin ella, la regla de antes.",

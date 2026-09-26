@@ -14,7 +14,12 @@ import type { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
-import { JEV_FALHOU_AO_LADO, JEV_FALHOU_SEM_RESERVA, O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
+import {
+  JEV_FALHOU_AO_LADO,
+  JEV_FALHOU_E_A_IA_COBRIU,
+  JEV_FALHOU_SEM_RESERVA,
+  O_QUE_FAZER_DO_JEV,
+} from "@/lib/ai/decisao/textos";
 import { rotuloDoProvedor } from "@/lib/ai/pontos/provedores";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM, type OrigemDaEscolha } from "@/lib/ai/pontos/resolver";
@@ -139,10 +144,15 @@ export async function GET(req: NextRequest): Promise<Response> {
       //  - `jev_cobriu`: a IA de sempre caiu em observação, mas a nota do Jev
       //    já estava na mão e decidiu;
       //  - `jev_observacao`: o Jev falhou numa tarefa do turno (a manipulação,
-      //    o roteador) — o turno seguiu como sem ele.
+      //    o roteador) — o turno seguiu como sem ele;
+      //  - `reserva_do_jev` numa linha de erro: o roteador decidindo, e a IA de
+      //    sempre escolheu o agente no lugar do Jev.
       // A falha do Jev com origem `jev` é a do clima sem reserva: aí é real.
       consequencia:
-        l.status === "erro" && l.origem_da_escolha !== "jev_cobriu" && l.origem_da_escolha !== "jev_observacao"
+        l.status === "erro" &&
+        l.origem_da_escolha !== "jev_cobriu" &&
+        l.origem_da_escolha !== "jev_observacao" &&
+        l.origem_da_escolha !== "reserva_do_jev"
           ? (ponto?.sintomaDeFalha ?? null)
           : null,
       oQueFazer: l.status === "erro" ? (O_QUE_FAZER[l.error_code ?? ""] ?? null) : null,
@@ -153,6 +163,8 @@ export async function GET(req: NextRequest): Promise<Response> {
           ? JEV_FALHOU_SEM_RESERVA
           : l.status === "erro" && l.origem_da_escolha === "jev_observacao"
             ? JEV_FALHOU_AO_LADO
+            : l.status === "erro" && l.origem_da_escolha === "reserva_do_jev"
+              ? JEV_FALHOU_E_A_IA_COBRIU
             : l.origem_da_escolha
               ? (EXPLICACAO_DA_ORIGEM[l.origem_da_escolha as OrigemDaEscolha] ?? null)
               : null,

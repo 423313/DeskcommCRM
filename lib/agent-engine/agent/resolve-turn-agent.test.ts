@@ -485,6 +485,7 @@ describe('o Jev no roteador (onda 2 do Jev, bloco 2.2)', () => {
     expect(jev.jev.observar.mock.calls[0]![0]).toMatchObject({
       vereditoDaIa: { intentName: 'vendas', confidence: 0.9 },
       decidiu: false,
+      aIaCobriu: false,
       conversationId: 'conv-1',
     });
     lento.resolver(escolha('suporte', 0.95, 'observando'));
@@ -511,7 +512,8 @@ describe('o Jev no roteador (onda 2 do Jev, bloco 2.2)', () => {
     const jev = jevFalso('decidindo', Promise.resolve(null));
     const { out } = await rodar({ daIa: { intentName: 'vendas', confidence: 0.95 }, jev });
     expect(out.config?.agentId).toBe('agent-vendas');
-    expect(jev.jev.observar.mock.calls[0]![0]).toMatchObject({ decidiu: false });
+    // A cobertura deixa rastro: é ela que o cartão conta.
+    expect(jev.jev.observar.mock.calls[0]![0]).toMatchObject({ decidiu: false, aIaCobriu: true });
   });
 
   describe('R2 — sem a IA de sempre, vale a regra de hoje, NUNCA o Jev', () => {
@@ -521,7 +523,8 @@ describe('o Jev no roteador (onda 2 do Jev, bloco 2.2)', () => {
       const { out } = await rodar({ daIa: null, jev });
       expect(out.outcome).toBe('classifier_failed');
       expect(out.config?.agentId).toBe('agent-reserva');
-      expect(jev.jev.observar.mock.calls[0]![0]).toMatchObject({ vereditoDaIa: null, decidiu: false });
+      // Sem a IA de sempre ninguém cobriu nada: valeu a regra de hoje.
+      expect(jev.jev.observar.mock.calls[0]![0]).toMatchObject({ vereditoDaIa: null, decidiu: false, aIaCobriu: false });
       lento.resolver(escolha('suporte', 0.99, 'decidindo'));
     });
 

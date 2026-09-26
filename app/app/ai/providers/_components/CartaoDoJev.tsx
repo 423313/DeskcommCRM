@@ -69,7 +69,8 @@ export interface DadosDoJev {
     irritados: number;
     observacao: { dias: number; comparadas: number; concordaram: number };
   };
-  ultima_falha: { motivo: string | null; em: string } | null;
+  /** `tarefa`: o rótulo da tarefa que falhou. Ausente na imagem anterior. */
+  ultima_falha: { motivo: string | null; em: string; tarefa?: string | null } | null;
   pode_editar: boolean;
 }
 
@@ -779,8 +780,10 @@ function Ligado({
             rotulo={t("Tempo médio")}
             valor={n.latencia_media_ms === null ? "—" : `${segundos.format(n.latencia_media_ms / 1000)} s`}
           />
-          {/* Sem IA de sempre não há quem cubra: um zero que nunca muda só confunde. */}
-          {dados.tem_ia_de_sempre && (
+          {/* Sem IA de sempre para o clima não há quem o cubra: um zero que nunca
+              muda só confunde. Mas o roteador tem a IA dele, e a cobertura dele
+              conta aqui também. */}
+          {(dados.tem_ia_de_sempre || n.reservas > 0) && (
             <Numero rotulo={t("Vezes que a IA de sempre cobriu o Jev")} valor={inteiro.format(n.reservas)} />
           )}
         </dl>
@@ -796,7 +799,8 @@ function Ligado({
       {falha && (
         <p className="rounded-md bg-warning-bg p-2 text-xs text-warning-fg" data-testid="jev-ultima-falha">
           <span className="font-medium">
-            {t("Última falha")} ({new Date(falha.em).toLocaleString(tagDoIdioma)}):
+            {t("Última falha")}
+            {falha.tarefa ? <> — {t(falha.tarefa)}</> : null} ({new Date(falha.em).toLocaleString(tagDoIdioma)}):
           </span>{" "}
           {oQueFazer ? t(oQueFazer) : t("O Jev não conseguiu medir.")}
         </p>

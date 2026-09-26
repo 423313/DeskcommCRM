@@ -50,6 +50,12 @@ export const JEV_FALHOU_SEM_RESERVA =
   "O Jev estava ligado e não respondeu, e não havia outra IA para medir no lugar dele.";
 export const JEV_FALHOU_AO_LADO =
   "O Jev não respondeu, e nada dependia só dele: valeu o que a sua IA de sempre decidiu ou, sem ela, a regra de antes.";
+/**
+ * A linha de erro do Jev no roteador DECIDINDO, quando a IA de sempre cobriu
+ * (origem `reserva_do_jev`, `./roteador.ts`): a falha teve consequência — a
+ * escolha do agente foi a dela, e não a dele.
+ */
+export const JEV_FALHOU_E_A_IA_COBRIU = "O Jev decide esta tarefa e não respondeu: a sua IA de sempre decidiu no lugar dele.";
 
 /**
  * O que o diálogo de exclusão diz sobre a chave que o Jev usa. São três

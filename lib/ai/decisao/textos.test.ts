@@ -13,6 +13,7 @@ import {
   AVISO_DO_JEV,
   avisoDoJevNaCentral,
   JEV_FALHOU_AO_LADO,
+  JEV_FALHOU_E_A_IA_COBRIU,
   JEV_FALHOU_SEM_RESERVA,
   O_QUE_FAZER_DO_JEV,
 } from "@/lib/ai/decisao/textos";
@@ -28,6 +29,7 @@ const TEXTOS = [
   EXPLICACAO_DA_ORIGEM.jev_cobriu,
   JEV_FALHOU_SEM_RESERVA,
   JEV_FALHOU_AO_LADO,
+  JEV_FALHOU_E_A_IA_COBRIU,
   ...Object.values(AO_EXCLUIR_A_CHAVE_DO_JEV),
 ];
 

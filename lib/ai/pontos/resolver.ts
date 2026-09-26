@@ -48,12 +48,16 @@ export type OrigemDaEscolha =
   /** O Jev mediu e a nota dele decidiu. Também a linha de falha do clima sem reserva (ver Execuções). */
   | "jev"
   /**
-   * O Jev mediu ao lado da IA de sempre, e quem decidiu foi ela. Também a linha
-   * de falha do Jev numa tarefa do turno (a manipulação, o roteador): o turno
+   * O Jev respondeu e a resposta dele não decidiu nada: a IA de sempre decidiu,
+   * ou, sem ela, a regra de antes; ou foi um clique de teste. Também a linha de
+   * falha do Jev numa tarefa do turno (a manipulação, o roteador): o turno
    * seguiu como sem ele (ver Execuções).
    */
   | "jev_observacao"
-  /** O Jev estava ligado e não respondeu: a IA de sempre mediu no lugar dele. */
+  /**
+   * O Jev estava ligado e não respondeu: a IA de sempre mediu no lugar dele. No
+   * roteador decidindo, é a linha de ERRO do Jev que a leva (`lib/ai/decisao/roteador.ts`).
+   */
   | "reserva_do_jev"
   /** Observação: a IA de sempre falhou, e a nota do Jev, já medida, decidiu. */
   | "jev_cobriu";
@@ -69,7 +73,10 @@ export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaEscolha, string> = {
   // Duas origens, uma por desfecho: a frase única ("se ele está em observação,
   // quem decide é…") não dizia o que aconteceu NAQUELA mensagem.
   jev: "O Jev decidiu.",
-  jev_observacao: "O Jev observou; quem decidiu foi a IA de sempre.",
+  // Não "quem decidiu foi a IA de sempre": a mesma origem vale quando ela
+  // falhou (valeu a regra de antes) e para o clique em "Testar classificação"
+  // (ninguém foi atendido). O que é verdade nas três é que ele não decidiu.
+  jev_observacao: "O Jev observou: a resposta dele ficou registrada para comparar, e não decidiu nada.",
   reserva_do_jev: "O Jev não respondeu; a IA de sempre mediu no lugar dele.",
   jev_cobriu: "A IA de sempre falhou, mas o Jev já tinha medido esta mensagem: nada se perdeu.",
 };

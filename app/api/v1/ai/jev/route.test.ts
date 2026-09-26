@@ -328,7 +328,30 @@ describe("GET /api/v1/ai/jev", () => {
     expect(corpo.data.ultima_falha).toEqual({
       motivo: "jev_credencial_invalida",
       em: "2026-09-22T13:00:00.000Z",
+      tarefa: "Medir o clima da conversa",
     });
+  });
+
+  /**
+   * O roteador decidindo: quando o Jev não responde, a IA de sempre escolhe o
+   * agente, e a linha de erro do Jev leva `reserva_do_jev`. Sem ela o cartão
+   * dizia zero coberturas com o Jev estourando o teto em parte das mensagens.
+   */
+  it("a cobertura do roteador decidindo conta em 'Vezes que a IA de sempre cobriu o Jev'", async () => {
+    estado.llmCalls = [
+      chamada({
+        purpose: "intent_router",
+        status: "erro",
+        error_code: "jev_provedor_indisponivel",
+        origem_da_escolha: "reserva_do_jev",
+        cost_cents: 0,
+      }),
+      // Controle: a falha observando (a IA decidiu de qualquer jeito) não é cobertura.
+      chamada({ purpose: "intent_router", status: "erro", error_code: "jev_credencial_invalida", origem_da_escolha: "jev_observacao" }),
+    ];
+    const { corpo } = await ler();
+    expect(corpo.data.numeros.reservas).toBe(1);
+    expect(corpo.data.numeros.decisoes, "a falha não é uma resposta do Jev").toBe(0);
   });
 
   it("nenhuma medição com preço: o custo é desconhecido, não um zero ao lado de N decisões", async () => {
@@ -390,7 +413,12 @@ describe("GET /api/v1/ai/jev", () => {
       chamada({ created_at: "2026-09-22T12:00:00.000Z" }),
     ];
     const { corpo } = await ler();
-    expect(corpo.data.ultima_falha).toEqual({ motivo: "jev_contrato_invalido", em: "2026-09-22T11:00:00.000Z" });
+    // Diz QUAL tarefa parou: o disjuntor da pergunta recusada é por tarefa.
+    expect(corpo.data.ultima_falha).toEqual({
+      motivo: "jev_contrato_invalido",
+      em: "2026-09-22T11:00:00.000Z",
+      tarefa: "Perceber tentativa de manipulação",
+    });
   });
 
   it("pagina: mais de 1000 execuções na semana contam todas", async () => {

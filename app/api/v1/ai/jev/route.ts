@@ -160,11 +160,23 @@ function numerosDaSemana(linhas: readonly LinhaDaSemana[]) {
         latencias.length === 0
           ? null
           : Math.round(latencias.reduce((a, b) => a + b, 0) / latencias.length),
-      // Só a que MEDIU: a reserva que também falhou não assumiu nada.
-      reservas: linhas.filter((l) => l.origem_da_escolha === "reserva_do_jev" && l.status === "ok")
-        .length,
+      // Só a que MEDIU: a reserva que também falhou não assumiu nada. No
+      // clima, a linha é a da IA de sempre (`ok`); no roteador decidindo, é a
+      // linha de erro do Jev (`lib/ai/decisao/roteador.ts`), gravada só quando
+      // a IA de sempre respondeu.
+      reservas: linhas.filter(
+        (l) => l.origem_da_escolha === "reserva_do_jev" && (l.status === "ok" || l.provider === PROVEDOR_DO_JEV),
+      ).length,
     },
-    ultima_falha: falha ? { motivo: falha.error_code, em: falha.created_at } : null,
+    // A tarefa, e não só o motivo: com três tarefas e um disjuntor por tarefa,
+    // "a pergunta foi recusada" não dizia qual parou.
+    ultima_falha: falha
+      ? {
+          motivo: falha.error_code,
+          em: falha.created_at,
+          tarefa: TAREFAS_DO_JEV.find((t) => t.ponto === falha.purpose)?.rotulo ?? null,
+        }
+      : null,
   };
 }
 

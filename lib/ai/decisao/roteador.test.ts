@@ -216,6 +216,7 @@ describe("o que se grava", () => {
       rotuloDe: (v) => (v.intentName === "suporte" ? "agente-suporte" : "agente-vendas"),
       vereditoDaIa: { intentName: "vendas", confidence: 0.7 },
       decidiu: false,
+      aIaCobriu: false,
     });
     await vi.waitFor(() => expect(consultas.some((c) => /jev_observacoes/.test(c.sql))).toBe(true));
 
@@ -242,7 +243,7 @@ describe("o que se grava", () => {
       buscarChave: async () => "tsk_x",
       fetchImpl: vi.fn().mockResolvedValue(respostaCom("suporte")),
     });
-    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: true });
+    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: true, aIaCobriu: false });
     await vi.waitFor(() => expect(consultas.some((c) => /jev_observacoes/.test(c.sql))).toBe(true));
     const { params } = consultas.find((c) => /jev_observacoes/.test(c.sql))!;
     // $17 = rotulo_atual; $9 = origem da linha de custo.
@@ -253,7 +254,7 @@ describe("o que se grava", () => {
   it("observar sem escolha do Jev não grava nada", async () => {
     const { pool, consultas } = poolCom({});
     const jev = consultarJevNoRoteador(pool, entrada(novaOrg()), { buscarChave: async () => "tsk_x" });
-    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: false });
+    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: false, aIaCobriu: false });
     await jev.escolha;
     await new Promise((r) => setTimeout(r, 0));
     expect(consultas.filter((c) => /insert/.test(c.sql))).toEqual([]);
@@ -278,6 +279,7 @@ describe("o que se grava", () => {
         },
         vereditoDaIa: null,
         decidiu: false,
+        aIaCobriu: false,
       });
       await vi.waitFor(() => expect(aviso).toHaveBeenCalledWith(expect.stringContaining("não foi gravada")));
       expect(soltas).toEqual([]);
@@ -285,6 +287,57 @@ describe("o que se grava", () => {
       process.off("unhandledRejection", ouvir);
       aviso.mockRestore();
     }
+  });
+
+  /**
+   * Decidindo, a IA de sempre cobre o Jev que não respondeu. Sem esta linha, o
+   * cartão dizia zero coberturas e nenhuma falha com o Jev estourando o teto em
+   * parte das mensagens — e quem o deixou decidir não tinha como saber.
+   */
+  it("decidindo, o Jev fora do ar e a IA de sempre cobrindo: uma linha de cobertura, com o motivo", async () => {
+    const { pool, consultas } = poolCom(LIGADO);
+    const jev = consultarJevNoRoteador(pool, entrada(novaOrg()), {
+      buscarChave: async () => "tsk_x",
+      fetchImpl: vi.fn().mockResolvedValue(new Response("{}", { status: 503 })),
+    });
+    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: false, aIaCobriu: true });
+    await vi.waitFor(() => expect(consultas.some((c) => /'reserva_do_jev'/.test(c.sql))).toBe(true));
+    const cobertura = consultas.find((c) => /'reserva_do_jev'/.test(c.sql))!;
+    expect(cobertura.sql).toMatch(/insert into public\.llm_calls/);
+    expect(cobertura.sql).toMatch(/'intent_router', 'typesafe'/);
+    expect(cobertura.sql).toMatch(/'erro'/);
+    expect(cobertura.params).toEqual(expect.arrayContaining(["contato-1", "job-1", "jev_provedor_indisponivel", 503]));
+  });
+
+  it("decidindo, a chave recusada: a linha de erro que ela já deixou é remarcada como cobertura, sem duplicar", async () => {
+    const consultas: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = {
+      query: vi.fn(async (sql: string, params: unknown[]) => {
+        consultas.push({ sql, params });
+        return { rows: [{ settings: LIGADO, id: "linha-da-falha" }] };
+      }),
+    } as unknown as pg.Pool;
+    const org = novaOrg();
+    const jev = consultarJevNoRoteador(pool, entrada(org), {
+      buscarChave: async () => "tsk_x",
+      fetchImpl: vi.fn().mockResolvedValue(new Response("{}", { status: 401 })),
+    });
+    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: false, aIaCobriu: true });
+    await vi.waitFor(() => expect(consultas.some((c) => /^update public\.llm_calls/.test(c.sql.trim()))).toBe(true));
+    expect(consultas.filter((c) => /insert into public\.llm_calls/.test(c.sql))).toHaveLength(1);
+    expect(consultas.find((c) => /^update/.test(c.sql.trim()))!.params).toEqual(["linha-da-falha", org]);
+  });
+
+  it("controle: observando, a falha que passa sozinha não vira linha nenhuma", async () => {
+    const { pool, consultas } = poolCom(LIGADO);
+    const jev = consultarJevNoRoteador(pool, entrada(novaOrg()), {
+      buscarChave: async () => "tsk_x",
+      fetchImpl: vi.fn().mockResolvedValue(new Response("{}", { status: 503 })),
+    });
+    jev.observar({ conversationId: null, messageId: null, rotuloDe: () => "a", vereditoDaIa: null, decidiu: false, aIaCobriu: false });
+    await jev.escolha;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(consultas.filter((c) => /insert|update/.test(c.sql))).toEqual([]);
   });
 
   it("sem observação (a tela de teste, R5): só o custo, nenhuma linha de concordância", async () => {

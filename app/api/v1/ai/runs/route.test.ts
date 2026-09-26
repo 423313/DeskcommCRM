@@ -9,7 +9,12 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { JEV_FALHOU_AO_LADO, JEV_FALHOU_SEM_RESERVA, O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
+import {
+  JEV_FALHOU_AO_LADO,
+  JEV_FALHOU_E_A_IA_COBRIU,
+  JEV_FALHOU_SEM_RESERVA,
+  O_QUE_FAZER_DO_JEV,
+} from "@/lib/ai/decisao/textos";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM } from "@/lib/ai/pontos/resolver";
 import { requireRole } from "@/lib/auth/require-role";
@@ -146,8 +151,30 @@ describe("GET /api/v1/ai/runs", () => {
     const { corpo } = await pedir("?provider=typesafe");
     expect(corpo.data.execucoes.map((e: { porQueEsteModelo: string }) => e.porQueEsteModelo)).toEqual([
       "O Jev decidiu.",
-      "O Jev observou; quem decidiu foi a IA de sempre.",
+      "O Jev observou: a resposta dele ficou registrada para comparar, e não decidiu nada.",
     ]);
+  });
+
+  it("a cobertura do roteador decidindo diz que a IA de sempre decidiu no lugar dele, sem inventar consequência", async () => {
+    linhas = [
+      linha({
+        purpose: "intent_router",
+        provider: "typesafe",
+        model: "typesafe/jev-1.13.0",
+        status: "erro",
+        error_code: "jev_provedor_indisponivel",
+        origem_da_escolha: "reserva_do_jev",
+        input_tokens: 0,
+        output_tokens: 0,
+        cost_cents: 0,
+      }),
+    ];
+    const { corpo } = await pedir("?provider=typesafe");
+    const [cobertura] = corpo.data.execucoes;
+    expect(PONTO_POR_ID.get("intent_router")?.sintomaDeFalha).toBeTruthy();
+    expect(cobertura.consequencia).toBeNull();
+    expect(cobertura.porQueEsteModelo).toBe(JEV_FALHOU_E_A_IA_COBRIU);
+    expect(cobertura.oQueFazer).toBe(O_QUE_FAZER_DO_JEV.jev_provedor_indisponivel);
   });
 
   it("a falha do Jev na manipulação não afirma consequência: a IA de sempre seguiu decidindo", async () => {
