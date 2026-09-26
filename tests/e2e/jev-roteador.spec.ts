@@ -56,7 +56,14 @@ interface Chamada {
 let duble: ChildProcess | null = null;
 let creds: CredsE2E;
 let orgId = "";
-const semeado = { sessao: randomUUID(), roteador: randomUUID(), vendas: randomUUID(), suporte: randomUUID() };
+const semeado = {
+  sessao: randomUUID(),
+  roteador: randomUUID(),
+  vendas: randomUUID(),
+  suporte: randomUUID(),
+  /** A credencial da "IA de sempre" que esta spec cadastra (vazia até o passo que a cria). */
+  iaDeSempre: "",
+};
 
 function chamadasAoJev(): Chamada[] {
   if (!fs.existsSync(ARQUIVO_DE_CHAMADAS)) return [];
@@ -147,6 +154,12 @@ async function semearORoteador(): Promise<void> {
 async function apagarORoteador(): Promise<void> {
   // Nesta ordem: o roteador leva as intenções; os agentes levam as versões; e só
   // então o número, que as versões apontam.
+  if (semeado.iaDeSempre) {
+    await ok(
+      admin.from("ai_provider_credentials").delete().eq("id", semeado.iaDeSempre),
+      "apagar a IA de sempre",
+    );
+  }
   await ok(admin.from("ai_routers").delete().eq("id", semeado.roteador), "apagar o roteador");
   await ok(admin.from("ai_agents").delete().in("id", [semeado.vendas, semeado.suporte]), "apagar os agentes");
   await ok(admin.from("channel_sessions").delete().eq("id", semeado.sessao), "apagar o número");
@@ -208,6 +221,45 @@ test.describe("Jev no roteador — Testar classificação, pela tela", () => {
     orgId = credsDoJev().orgId;
     await limparOJev(orgId);
     await semearORoteador();
+
+    // A PRÉ-CONDIÇÃO "a empresa tem IA de sempre" é desta spec, não de quem roda
+    // antes dela. Sem uma chave de conversa VALIDADA e decifrável, o cartão fica
+    // "sozinho" (o Jev decide o clima sem com quem comparar), e o "observando" que
+    // esta spec afirma nunca aparece — medido rodando a spec sozinha e também
+    // depois do seed de follow-up, cuja credencial nasce sem validação e com bytes
+    // de enfeite no lugar da chave. A chave é falsa (o CI não tem IA): cadastrada
+    // pela rota real, ela fica cifrada de verdade; o teste de fundo a recusa, e
+    // só DEPOIS de ele terminar a validação é marcada à mão — senão o resultado
+    // dele sobrescreveria a marca. A mesma chave falsa é a "sua IA" que "não
+    // respondeu" no Testar classificação. O provedor é o da organização do seed
+    // (anthropic): a IA de sempre é a do provedor que a empresa escolheu.
+    await test.step("a IA de sempre da empresa: uma chave de conversa cadastrada e validada", async () => {
+      const criou = await page.request.post("/api/v1/ai/credentials", {
+        data: {
+          provider: "anthropic",
+          label: `IA de sempre ${sufixo}`,
+          api_key: "sk-ant-e2e-ia-de-sempre-0000000000000000000000",
+        },
+      });
+      expect(criou.status(), "a IA de sempre não foi cadastrada").toBe(201);
+      semeado.iaDeSempre = ((await criou.json()) as { data: { id: string } }).data.id;
+      await expect(async () => {
+        const { data } = await admin
+          .from("ai_provider_credentials")
+          .select("validated_at, validation_error")
+          .eq("id", semeado.iaDeSempre)
+          .single();
+        const linha = data as { validated_at: string | null; validation_error: string | null } | null;
+        expect(linha?.validation_error ?? linha?.validated_at, "o teste de fundo da chave ainda não terminou").toBeTruthy();
+      }).toPass({ timeout: 30_000, intervals: [1_000, 2_000] });
+      await ok(
+        admin
+          .from("ai_provider_credentials")
+          .update({ validated_at: new Date().toISOString(), validation_error: null } as never)
+          .eq("id", semeado.iaDeSempre),
+        "marcar a IA de sempre como validada",
+      );
+    });
 
     await test.step("a chave do dublê, testada, e o Jev ligado com o aceite", async () => {
       const criou = await page.request.post("/api/v1/ai/credentials", {
