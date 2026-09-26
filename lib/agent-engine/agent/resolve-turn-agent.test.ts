@@ -78,12 +78,8 @@ const baseInput = {
  * sempre, que é o que os casos 1 a 16 medem.
  */
 function jevFalso(estado: EstadoDaTarefa = 'desligada', escolha: Promise<EscolhaDoJev | null> = Promise.resolve(null)) {
-  const jev: JevNoRoteador & { observar: ReturnType<typeof vi.fn> } = {
-    estado: Promise.resolve(estado),
-    escolha,
-    observar: vi.fn(),
-  };
-  return { jev, consultarJev: vi.fn(() => jev) };
+  const jev = { estado: Promise.resolve(estado), escolha, observar: vi.fn<JevNoRoteador['observar']>() };
+  return { jev, consultarJev: vi.fn((): JevNoRoteador => jev) };
 }
 
 function makeDeps(overrides: {

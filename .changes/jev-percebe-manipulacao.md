@@ -10,7 +10,7 @@ A tarefa nasce **só observando**: quem decide continua sendo a sua IA de sempre
 
 **Quem já tem o Jev ligado** vê a tarefa nova com o selo **"Novo"**, já observando: ela usa o mesmo dado que você já autorizou — cada mensagem, sozinha, sem CPF, telefone e e-mail. Isso é uma chamada a mais ao Jev por mensagem respondida pelo agente (uma fração de centavo de dólar, cobrada na sua conta da TypeSafe). Para não usar, desligue a tarefa no cartão. Ela só roda onde a verificação "Detectar tentativa de manipular o assistente" (na Segurança do agente) está ligada — com ela desligada, o cartão mostra a tarefa como **"Não roda"** —, e nunca nos testes do agente nem nas sugestões do modo assistido (lá a IA só sugere, e o cartão segue sem comparação). Essa verificação vem **ligada** para quem nunca mexeu nela, e a tela de Segurança dizia "Desligada" nesse caso, embora ela rodasse; agora a tela diz o que acontece.
 
-O primeiro número do cartão passa a se chamar **"Respostas do Jev"**: com duas tarefas, cada mensagem do cliente rende uma resposta por tarefa.
+O primeiro número do cartão passa a se chamar **"Respostas do Jev"**: com mais de uma tarefa, cada mensagem do cliente rende uma resposta por tarefa.
 
 As observações ficam numa tabela própria, sem o texto das mensagens, e são apagadas depois de **90 dias** pela limpeza diária. Para mudar o prazo, use `JEV_OBSERVACOES_RETENTION_DAYS` no `.env` (mínimo de 30 dias). Nada precisa ser editado para atualizar.
 

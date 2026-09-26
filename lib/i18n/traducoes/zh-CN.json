@@ -3477,7 +3477,7 @@
   "Os dados ficam no servidor do operador. Para funcionar, o sistema se comunica com terceiros escolhidos e contratados pelo operador:": "数据存储在运营者的服务器上。为正常运行，系统会与运营者选择并签约的第三方通信：",
   "a plataforma de mensagens usada para conversar com o cliente;": "用于与客户对话的消息平台；",
   "o provedor de inteligência artificial contratado pelo operador, que recebe o trecho da conversa necessário para gerar a resposta ou avaliar a conversa;": "运营者签约的 AI 提供商，它会接收生成回复或评估对话所需的对话片段；",
-  "quando o operador liga o Jev (desligado por padrão), a TypeSafe AI, nos Estados Unidos, que recebe cada mensagem do cliente, sozinha e já sem CPF, telefone e e-mail, para avaliar se ele está irritado e se a mensagem tenta manipular o atendimento automático;": "当运营者启用 Jev（默认关闭）时，位于美国的 TypeSafe AI 会逐条接收客户的每一条消息（单独发送，已去除 CPF、电话和电子邮件），用于判断客户是否不满，以及该消息是否试图操纵自动客服；",
+  "quando o operador liga o Jev (desligado por padrão), a TypeSafe AI, nos Estados Unidos, que recebe cada mensagem do cliente, sozinha e já sem CPF, telefone e e-mail, para avaliar se ele está irritado, se a mensagem tenta manipular o atendimento automático e a qual área da empresa ela se destina;": "当运营者启用 Jev（默认关闭）时，位于美国的 TypeSafe AI 会逐条接收客户的每一条消息（单独发送，已去除 CPF、电话和电子邮件），用于判断客户是否不满、该消息是否试图操纵自动客服，以及该消息应由企业的哪个部门处理；",
   "o provedor de infraestrutura onde o servidor está hospedado.": "托管服务器的基础设施提供商。",
   "Os dados não são vendidos nem cedidos para publicidade de terceiros.": "数据不会被出售，也不会提供给第三方用于广告。",
   "5. Por quanto tempo": "5. 保留多久",
