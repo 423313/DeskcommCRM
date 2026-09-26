@@ -9,6 +9,10 @@ import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 let creds = lerCreds();
 
 test.describe("Chaves de acesso à IA", () => {
+  // O login pode esperar até 30 s pela próxima janela TOTP antes de abrir a tela.
+  // Reserve também os 15 s da validação e a limpeza, sem ampliar o polling abaixo.
+  test.setTimeout(60_000);
+
   test("[P0] chave inválida vira frase legível, e a tela diz onde pegar outra", async ({ page }) => {
     creds = await loginComoAdmin(page, creds);
     await page.goto("/app/ai/credentials");
